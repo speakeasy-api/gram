@@ -453,7 +453,7 @@ function ChatInner({
   const m = messagesToDisplay as any;
 
   return (
-    <div className="relative h-full">
+    <div className="relative h-full flex items-center justify-center">
       <AIChatContainer
         messages={m}
         isLoading={status === "streaming" || isChatHistoryLoading}
