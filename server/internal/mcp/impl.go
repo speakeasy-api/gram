@@ -35,14 +35,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -56,7 +55,7 @@ type Service struct {
 	projectsRepo *projects_repo.Queries
 	toolsetsRepo *toolsets_repo.Queries
 	auth         *auth.Auth
-	enc          *encryption.Encryption
+	env          gateway.EnvironmentLoader
 	serverURL    *url.URL
 	posthog      *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	toolProxy    *instances.InstanceToolProxy
@@ -76,13 +75,13 @@ var configSnippetTmplData string
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
 
-func NewService(logger *slog.Logger,
+func NewService(
+	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
-	enc *encryption.Encryption,
-	chatClient *openrouter.ChatClient,
+	env gateway.EnvironmentLoader,
 	posthog *posthog.Posthog,
 	serverURL *url.URL,
 	cacheImpl cache.Cache,
@@ -100,7 +99,7 @@ func NewService(logger *slog.Logger,
 		projectsRepo: projects_repo.New(db),
 		toolsetsRepo: toolsets_repo.New(db),
 		auth:         auth.New(logger, db, sessions),
-		enc:          enc,
+		env:          env,
 		serverURL:    serverURL,
 		posthog:      posthog,
 		toolProxy: instances.NewInstanceToolProxy(
@@ -539,7 +538,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.db, s.enc, payload, req, s.toolProxy)
+		return handleToolsCall(ctx, s.logger, s.db, s.env, payload, req, s.toolProxy)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req)
 	case "prompts/get":

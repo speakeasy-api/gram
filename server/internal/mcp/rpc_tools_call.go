@@ -3,7 +3,6 @@ package mcp
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -19,9 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/environments"
-	er "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -37,7 +34,7 @@ func handleToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
 	db *pgxpool.Pool,
-	enc *encryption.Encryption,
+	env gateway.EnvironmentLoader,
 	payload *mcpInputs,
 	req *rawRequest,
 	toolProxy *instances.InstanceToolProxy,
@@ -58,8 +55,6 @@ func handleToolsCall(
 		return nil, err
 	}
 
-	envRepo := er.New(db)
-	entries := environments.NewEnvironmentEntries(logger, envRepo, enc)
 	toolsetHelpers := toolsets.NewToolsets(db)
 	envSlug := payload.environment
 	var higherOrderTool *types.PromptTemplate
@@ -100,27 +95,12 @@ func handleToolsCall(
 	}
 
 	// Transform environment entries into a map
-	envVars := make(map[string]string)
-	if envSlug != "" {
-		envModel, err := envRepo.GetEnvironmentBySlug(ctx, er.GetEnvironmentBySlugParams{
-			ProjectID: uuid.UUID(projectID),
-			Slug:      strings.ToLower(envSlug),
-		})
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").Log(ctx, logger)
-		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
-		}
-
-		environmentEntries, err := entries.ListEnvironmentEntries(ctx, envModel.ID, false)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, logger)
-		}
-
-		for _, entry := range environmentEntries {
-			envVars[entry.Name] = entry.Value
-		}
+	envVars, err := env.Load(ctx, payload.projectID, gateway.Slug(envSlug))
+	switch {
+	case errors.Is(err, gateway.ErrNotFound):
+		return nil, oops.E(oops.CodeBadRequest, err, "environment not found").Log(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
 	}
 
 	if len(payload.mcpEnvVariables) > 0 {

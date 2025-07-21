@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -212,6 +213,8 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create encryption client: %w", err)
 			}
 
+			env := environments.NewEnvironmentEntries(logger, db, encryptionClient)
+
 			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
 			if err != nil {
 				return fmt.Errorf("failed to create k8s client: %w", err)
@@ -262,7 +265,7 @@ func newWorkerCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
 
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, meterProvider, &background.WorkerOptions{
 				DB:                  db,

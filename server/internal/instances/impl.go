@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -46,7 +45,7 @@ type Service struct {
 	auth             *auth.Auth
 	toolset          *toolsets.Toolsets
 	environmentsRepo *environments_repo.Queries
-	entries          *environments.EnvironmentEntries
+	env              *environments.EnvironmentEntries
 	toolProxy        *InstanceToolProxy
 }
 
@@ -58,7 +57,7 @@ func NewService(
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
-	enc *encryption.Encryption,
+	env *environments.EnvironmentEntries,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 ) *Service {
@@ -74,7 +73,7 @@ func NewService(
 		auth:             auth.New(logger, db, sessions),
 		toolset:          toolsets.NewToolsets(db),
 		environmentsRepo: envRepo,
-		entries:          environments.NewEnvironmentEntries(logger, envRepo, enc),
+		env:              env,
 		toolProxy: NewInstanceToolProxy(
 			logger,
 			tracer,
@@ -130,7 +129,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
 	}
 
-	environmentEntries, err := s.entries.ListEnvironmentEntries(ctx, envModel.ID, true)
+	environmentEntries, err := s.env.ListEnvironmentEntries(ctx, *authCtx.ProjectID, envModel.ID, true)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, s.logger)
 	}
@@ -237,7 +236,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
 		}
 
-		environmentEntries, err := s.entries.ListEnvironmentEntries(ctx, envModel.ID, false)
+		environmentEntries, err := s.env.ListEnvironmentEntries(ctx, *authCtx.ProjectID, envModel.ID, false)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, s.logger)
 		}

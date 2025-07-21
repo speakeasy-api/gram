@@ -210,14 +210,22 @@ func (q *Queries) GetEnvironmentBySlug(ctx context.Context, arg GetEnvironmentBy
 }
 
 const listEnvironmentEntries = `-- name: ListEnvironmentEntries :many
-SELECT name, value, environment_id, created_at, updated_at
+SELECT ee.name, ee.value, ee.environment_id, ee.created_at, ee.updated_at
 FROM environment_entries ee
-WHERE ee.environment_id = $1
+INNER JOIN environments e ON ee.environment_id = e.id
+WHERE 
+    e.project_id = $1 AND
+    ee.environment_id = $2
 ORDER BY ee.name ASC
 `
 
-func (q *Queries) ListEnvironmentEntries(ctx context.Context, environmentID uuid.UUID) ([]EnvironmentEntry, error) {
-	rows, err := q.db.Query(ctx, listEnvironmentEntries, environmentID)
+type ListEnvironmentEntriesParams struct {
+	ProjectID     uuid.UUID
+	EnvironmentID uuid.UUID
+}
+
+func (q *Queries) ListEnvironmentEntries(ctx context.Context, arg ListEnvironmentEntriesParams) ([]EnvironmentEntry, error) {
+	rows, err := q.db.Query(ctx, listEnvironmentEntries, arg.ProjectID, arg.EnvironmentID)
 	if err != nil {
 		return nil, err
 	}

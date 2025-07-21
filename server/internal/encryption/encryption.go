@@ -63,11 +63,11 @@ func (e *decryptionError) Unwrap() error {
 	return e.inner
 }
 
-type Encryption struct {
+type Client struct {
 	key []byte
 }
 
-func New(base64Key string) (*Encryption, error) {
+func New(base64Key string) (*Client, error) {
 	key, err := base64.StdEncoding.DecodeString(base64Key)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode base64 key: %w", err)
@@ -75,11 +75,11 @@ func New(base64Key string) (*Encryption, error) {
 	if len(key) != 32 {
 		return nil, fmt.Errorf("invalid AES-256 key size: %d bytes", len(key))
 	}
-	return &Encryption{key: key}, nil
+	return &Client{key: key}, nil
 }
 
 // Encrypt encrypts the plaintext using AES-GCM and returns a base64 encoded string
-func (e *Encryption) Encrypt(plaintext []byte) (string, error) {
+func (e *Client) Encrypt(plaintext []byte) (string, error) {
 	block, err := aes.NewCipher(e.key)
 	if err != nil {
 		return "", newEncryptionError(errCodeAESNewCipher, err)
@@ -100,7 +100,7 @@ func (e *Encryption) Encrypt(plaintext []byte) (string, error) {
 }
 
 // Decrypt decrypts the base64 encoded ciphertext using AES-GCM
-func (e *Encryption) Decrypt(ciphertextStr string) (string, error) {
+func (e *Client) Decrypt(ciphertextStr string) (string, error) {
 	ciphertext, err := base64.StdEncoding.DecodeString(ciphertextStr)
 	if err != nil {
 		return "", newDecryptionError(errCodeBase64Decode, err)

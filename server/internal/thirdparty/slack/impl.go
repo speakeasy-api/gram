@@ -59,7 +59,7 @@ type Service struct {
 	logger              *slog.Logger
 	db                  *pgxpool.Pool
 	sessions            *sessions.Manager
-	enc                 *encryption.Encryption
+	enc                 *encryption.Client
 	repo                *repo.Queries
 	auth                *auth.Auth
 	toolset             *toolset_repo.Queries
@@ -89,7 +89,7 @@ func SlackClientID(env string) string {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption, redisClient *redis.Client, client *slack_client.SlackClient, temporal client.Client, cfg Configurations) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, redisClient *redis.Client, client *slack_client.SlackClient, temporal client.Client, cfg Configurations) *Service {
 	return &Service{
 		tracer:              otel.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
 		logger:              logger,

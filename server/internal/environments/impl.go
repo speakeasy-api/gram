@@ -38,7 +38,7 @@ type Service struct {
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Encryption) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client) *Service {
 	envRepo := repo.New(db)
 	return &Service{
 		tracer:  otel.Tracer("github.com/speakeasy-api/gram/server/internal/environments"),
@@ -46,7 +46,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		db:      db,
 		repo:    envRepo,
 		auth:    auth.New(logger, db, sessions),
-		entries: NewEnvironmentEntries(logger, envRepo, enc),
+		entries: NewEnvironmentEntries(logger, db, enc),
 	}
 }
 
@@ -133,7 +133,7 @@ func (s *Service) ListEnvironments(ctx context.Context, payload *gen.ListEnviron
 
 	var result []*types.Environment
 	for _, environment := range environments {
-		entries, err := s.entries.ListEnvironmentEntries(ctx, environment.ID, true)
+		entries, err := s.entries.ListEnvironmentEntries(ctx, *authCtx.ProjectID, environment.ID, true)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
 		}
@@ -221,7 +221,7 @@ func (s *Service) UpdateEnvironment(ctx context.Context, payload *gen.UpdateEnvi
 		}
 	}
 
-	entries, err := s.entries.ListEnvironmentEntries(ctx, environment.ID, true)
+	entries, err := s.entries.ListEnvironmentEntries(ctx, projectID, environment.ID, true)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list environment entries").Log(ctx, s.logger)
 	}

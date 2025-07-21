@@ -23,12 +23,12 @@ type SlackClient struct {
 	clientID     string
 	clientSecret string
 	client       *http.Client
-	enc          *encryption.Encryption
+	enc          *encryption.Client
 	repo         *repo.Queries
 	enabled      bool
 }
 
-func NewSlackClient(clientID, clientSecret string, db *pgxpool.Pool, enc *encryption.Encryption) *SlackClient {
+func NewSlackClient(clientID, clientSecret string, db *pgxpool.Pool, enc *encryption.Client) *SlackClient {
 	enabled := clientID != "" && clientSecret != ""
 	return &SlackClient{
 		clientID:     clientID,

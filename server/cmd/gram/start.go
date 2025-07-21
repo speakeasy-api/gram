@@ -348,6 +348,8 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create encryption client: %w", err)
 			}
 
+			env := environments.NewEnvironmentEntries(logger, db, encryptionClient)
+
 			k8sClient, err := k8s.InitializeK8sClient(ctx, logger, c.String("environment"))
 			if err != nil {
 				return fmt.Errorf("failed to create kubernetes client: %w", err)
@@ -418,7 +420,7 @@ func newStartCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
@@ -442,8 +444,8 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger.With(slog.String("component", "keys")), db, sessionManager, c.String("environment")))
 			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
-			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), tracerProvider, meterProvider, db, sessionManager, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy))
-			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), tracerProvider, meterProvider, db, sessionManager, encryptionClient, baseChatClient, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy))
+			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy))
+			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy))
 			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{

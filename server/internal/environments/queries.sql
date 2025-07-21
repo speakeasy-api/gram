@@ -41,9 +41,12 @@ WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
 -- name: ListEnvironmentEntries :many
-SELECT *
+SELECT ee.*
 FROM environment_entries ee
-WHERE ee.environment_id = $1
+INNER JOIN environments e ON ee.environment_id = e.id
+WHERE 
+    e.project_id = @project_id AND
+    ee.environment_id = @environment_id
 ORDER BY ee.name ASC;
 
 -- name: DeleteEnvironment :exec

@@ -16,7 +16,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	env_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -34,7 +33,7 @@ type ChatClient struct {
 	openRouter openrouter.Provisioner
 	chatClient *openrouter.ChatClient
 	db         *pgxpool.Pool
-	enc        *encryption.Encryption
+	env        *environments.EnvironmentEntries
 	cache      cache.Cache
 	toolProxy  *instances.InstanceToolProxy
 }
@@ -45,7 +44,7 @@ func NewChatClient(logger *slog.Logger,
 	db *pgxpool.Pool,
 	openRouter openrouter.Provisioner,
 	chatClient *openrouter.ChatClient,
-	enc *encryption.Encryption,
+	env *environments.EnvironmentEntries,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 ) *ChatClient {
@@ -57,7 +56,7 @@ func NewChatClient(logger *slog.Logger,
 		openRouter: openRouter,
 		chatClient: chatClient,
 		db:         db,
-		enc:        enc,
+		env:        env,
 		cache:      cacheImpl,
 		toolProxy: instances.NewInstanceToolProxy(
 			logger,
@@ -198,7 +197,6 @@ func (c *ChatClient) LoadToolsetTools(
 
 	envRepo := env_repo.New(c.db)
 	toolsRepo := tools_repo.New(c.db)
-	entries := environments.NewEnvironmentEntries(c.logger, envRepo, c.enc)
 	toolsetHelpers := toolsets.NewToolsets(c.db)
 	envSlug := string(*toolset.DefaultEnvironmentSlug)
 
@@ -212,7 +210,7 @@ func (c *ChatClient) LoadToolsetTools(
 	}
 
 	// Load environment entries
-	environmentEntries, err := entries.ListEnvironmentEntries(ctx, envModel.ID, false)
+	environmentEntries, err := c.env.ListEnvironmentEntries(ctx, projectID, envModel.ID, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load environment entries: %w", err)
 	}

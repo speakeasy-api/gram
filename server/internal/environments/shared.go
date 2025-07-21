@@ -2,6 +2,8 @@ package environments
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -9,27 +11,68 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/gateway"
 )
 
 // EnvironmentEntries should be directly accessed through this interface to handle encryption and redaction.
 type EnvironmentEntries struct {
 	logger *slog.Logger
 	repo   *repo.Queries
-	enc    *encryption.Encryption
+	enc    *encryption.Client
 }
 
-func NewEnvironmentEntries(logger *slog.Logger, repo *repo.Queries, enc *encryption.Encryption) *EnvironmentEntries {
+func NewEnvironmentEntries(logger *slog.Logger, db repo.DBTX, enc *encryption.Client) *EnvironmentEntries {
 	return &EnvironmentEntries{
 		logger: logger,
-		repo:   repo,
+		repo:   repo.New(db),
 		enc:    enc,
 	}
 }
 
-func (e *EnvironmentEntries) ListEnvironmentEntries(ctx context.Context, environmentID uuid.UUID, redacted bool) ([]repo.EnvironmentEntry, error) {
-	entries, err := e.repo.ListEnvironmentEntries(ctx, environmentID)
+func (e *EnvironmentEntries) Load(ctx context.Context, projectID uuid.UUID, envIDOrSlug gateway.SlugOrID) (map[string]string, error) {
+	environmentID := envIDOrSlug.ID
+	if envIDOrSlug.IsEmpty() {
+		return nil, fmt.Errorf("environment id or slug is required")
+	}
+
+	if environmentID == uuid.Nil {
+		envModel, err := e.repo.GetEnvironmentBySlug(ctx, repo.GetEnvironmentBySlugParams{
+			ProjectID: projectID,
+			Slug:      strings.ToLower(envIDOrSlug.Slug),
+		})
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return nil, gateway.ErrNotFound
+		case err != nil:
+			return nil, fmt.Errorf("get environment by slug: %w", err)
+		}
+
+		environmentID = envModel.ID
+	}
+
+	if environmentID == uuid.Nil {
+		return nil, fmt.Errorf("environment not found for slug or id: %s", envIDOrSlug)
+	}
+
+	entries, err := e.ListEnvironmentEntries(ctx, projectID, environmentID, false)
 	if err != nil {
 		return nil, fmt.Errorf("list environment entries: %w", err)
+	}
+
+	envMap := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		envMap[entry.Name] = entry.Value
+	}
+	return envMap, nil
+}
+
+func (e *EnvironmentEntries) ListEnvironmentEntries(ctx context.Context, projectID uuid.UUID, environmentID uuid.UUID, redacted bool) ([]repo.EnvironmentEntry, error) {
+	entries, err := e.repo.ListEnvironmentEntries(ctx, repo.ListEnvironmentEntriesParams{
+		ProjectID:     projectID,
+		EnvironmentID: environmentID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("query error: %w", err)
 	}
 
 	decryptedEntries := make([]repo.EnvironmentEntry, len(entries))
