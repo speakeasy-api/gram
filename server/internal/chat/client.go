@@ -18,8 +18,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	env_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
@@ -35,7 +35,7 @@ type ChatClient struct {
 	db         *pgxpool.Pool
 	env        *environments.EnvironmentEntries
 	cache      cache.Cache
-	toolProxy  *instances.InstanceToolProxy
+	toolProxy  *gateway.ToolProxy
 }
 
 func NewChatClient(logger *slog.Logger,
@@ -48,9 +48,6 @@ func NewChatClient(logger *slog.Logger,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 ) *ChatClient {
-	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/chat")
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/chat")
-
 	return &ChatClient{
 		logger:     logger,
 		openRouter: openRouter,
@@ -58,11 +55,11 @@ func NewChatClient(logger *slog.Logger,
 		db:         db,
 		env:        env,
 		cache:      cacheImpl,
-		toolProxy: instances.NewInstanceToolProxy(
+		toolProxy: gateway.NewToolProxy(
 			logger,
-			tracer,
-			meter,
-			instances.ToolCallSourceDirect,
+			tracerProvider,
+			meterProvider,
+			gateway.ToolCallSourceDirect,
 			cacheImpl,
 			guardianPolicy,
 		),

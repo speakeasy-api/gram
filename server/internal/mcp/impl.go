@@ -37,7 +37,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -58,7 +57,7 @@ type Service struct {
 	env          gateway.EnvironmentLoader
 	serverURL    *url.URL
 	posthog      *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	toolProxy    *instances.InstanceToolProxy
+	toolProxy    *gateway.ToolProxy
 }
 
 type mcpInputs struct {
@@ -102,11 +101,11 @@ func NewService(
 		env:          env,
 		serverURL:    serverURL,
 		posthog:      posthog,
-		toolProxy: instances.NewInstanceToolProxy(
+		toolProxy: gateway.NewToolProxy(
 			logger,
-			tracer,
-			meter,
-			instances.ToolCallSourceMCP,
+			tracerProvider,
+			meterProvider,
+			gateway.ToolCallSourceMCP,
 			cacheImpl,
 			guardianPolicy,
 		),

@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -40,13 +41,12 @@ const environmentSlugQueryParam = "environment_slug"
 type Service struct {
 	logger           *slog.Logger
 	tracer           trace.Tracer
-	metrics          *metrics
 	db               *pgxpool.Pool
 	auth             *auth.Auth
 	toolset          *toolsets.Toolsets
 	environmentsRepo *environments_repo.Queries
 	env              *environments.EnvironmentEntries
-	toolProxy        *InstanceToolProxy
+	toolProxy        *gateway.ToolProxy
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -63,22 +63,20 @@ func NewService(
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
-	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/instances")
 
 	return &Service{
 		logger:           logger,
 		tracer:           tracer,
-		metrics:          newMetrics(meter, logger),
 		db:               db,
 		auth:             auth.New(logger, db, sessions),
 		toolset:          toolsets.NewToolsets(db),
 		environmentsRepo: envRepo,
 		env:              env,
-		toolProxy: NewInstanceToolProxy(
+		toolProxy: gateway.NewToolProxy(
 			logger,
-			tracer,
-			meter,
-			ToolCallSourceDirect,
+			traceProvider,
+			meterProvider,
+			gateway.ToolCallSourceDirect,
 			cacheImpl,
 			guardianPolicy,
 		),
@@ -267,7 +265,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	err = s.toolProxy.Do(ctx, interceptor, requestBody, envVars, executionInfo)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}
 
 	// Write the modified response to the original response writer

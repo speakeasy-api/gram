@@ -1,4 +1,4 @@
-package instances
+package gateway
 
 import (
 	"bytes"
@@ -88,7 +88,7 @@ type InstanceToolProxyConfig struct {
 	Cache  cache.Cache
 }
 
-type InstanceToolProxy struct {
+type ToolProxy struct {
 	source  ToolCallSource
 	logger  *slog.Logger
 	tracer  trace.Tracer
@@ -97,15 +97,18 @@ type InstanceToolProxy struct {
 	policy  *guardian.Policy
 }
 
-func NewInstanceToolProxy(
+func NewToolProxy(
 	logger *slog.Logger,
-	tracer trace.Tracer,
-	meter metric.Meter,
+	tracerProivder trace.TracerProvider,
+	meterProvider metric.MeterProvider,
 	source ToolCallSource,
 	cache cache.Cache,
 	policy *guardian.Policy,
-) *InstanceToolProxy {
-	return &InstanceToolProxy{
+) *ToolProxy {
+	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
+	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
+
+	return &ToolProxy{
 		source:  source,
 		logger:  logger,
 		tracer:  tracer,
@@ -115,7 +118,7 @@ func NewInstanceToolProxy(
 	}
 }
 
-func (itp *InstanceToolProxy) Do(
+func (itp *ToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,
 	requestBody io.Reader,
@@ -154,7 +157,7 @@ func (itp *InstanceToolProxy) Do(
 
 	// We are silently failing before we actually start returning errors to the LLM related to body not fitting json schema
 	if len(toolExecutionInfo.Tool.Schema) > 0 {
-		if validateErr := ValidateToolCallBody(ctx, logger, bodyBytes, string(toolExecutionInfo.Tool.Schema)); validateErr != nil {
+		if validateErr := validateToolCallBody(ctx, logger, bodyBytes, string(toolExecutionInfo.Tool.Schema)); validateErr != nil {
 			logger.InfoContext(ctx, "tool call request schema failed validation", slog.String("error", validateErr.Error()))
 			responseStatusCode = http.StatusBadRequest
 			w.Header().Set("Content-Type", "application/json")

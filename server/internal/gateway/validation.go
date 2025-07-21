@@ -1,4 +1,4 @@
-package instances
+package gateway
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 
 var gramAddedFields = []string{"gram-request-summary", "environmentVariables"}
 
-func ValidateToolCallBody(ctx context.Context, logger *slog.Logger, bodyBytes []byte, toolSchema string) error {
+func validateToolCallBody(ctx context.Context, logger *slog.Logger, bodyBytes []byte, toolSchema string) error {
 	compiler := jsonschema.NewCompiler()
 	rawSchema, err := jsonschema.UnmarshalJSON(bytes.NewReader([]byte(toolSchema)))
 	if err != nil {

@@ -1,4 +1,4 @@
-package instances
+package gateway
 
 import (
 	"context"
@@ -17,7 +17,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-func processSecurity(ctx context.Context, logger *slog.Logger, req *http.Request, w http.ResponseWriter, responseStatusCodeCapture *int, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, cacheImpl cache.Cache, envVars *caseInsensitiveEnv, serverURL string) {
+func processSecurity(
+	ctx context.Context,
+	logger *slog.Logger,
+	req *http.Request,
+	w http.ResponseWriter,
+	responseStatusCodeCapture *int,
+	toolExecutionInfo *toolsets.HTTPToolExecutionInfo,
+	cacheImpl cache.Cache,
+	envVars *caseInsensitiveEnv,
+	serverURL string,
+) {
 	for _, security := range toolExecutionInfo.Security {
 		if !security.Type.Valid {
 			logger.ErrorContext(ctx, "invalid security type in tool definition", slog.String("tool", toolExecutionInfo.Tool.Name))

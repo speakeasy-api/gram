@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -37,7 +36,7 @@ func handleToolsCall(
 	env gateway.EnvironmentLoader,
 	payload *mcpInputs,
 	req *rawRequest,
-	toolProxy *instances.InstanceToolProxy,
+	toolProxy *gateway.ToolProxy,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
