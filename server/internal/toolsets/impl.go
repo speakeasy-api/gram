@@ -262,7 +262,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			return nil, oops.E(oops.CodeBadRequest, nil, "mcp slug is required to set mcp is public")
 		}
 		publicServerLimit, ok := allowedPublicServers[authCtx.AccountType]
-		if *payload.McpIsPublic && ok {
+		if *payload.McpIsPublic && !existingToolset.McpIsPublic && ok {
 			publicServers, err := s.repo.ListPublicToolsetsByOrganization(ctx, authCtx.ActiveOrganizationID)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "error listing public toolsets").Log(ctx, logger)
