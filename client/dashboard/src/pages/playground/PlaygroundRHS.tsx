@@ -59,10 +59,7 @@ export function PlaygroundRHS({
             initialMessages={initialMessages}
           />
         </TabsContent>
-        <TabsContent
-          value="agents"
-          className="h-full overflow-scroll pb-4 pr-4"
-        >
+        <TabsContent value="agents" className="h-full overflow-auto pb-4 pr-4">
           <SdkContent
             toolset={configRef.current.toolsetSlug ?? undefined}
             environment={configRef.current.environmentSlug ?? undefined}

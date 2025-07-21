@@ -11,7 +11,10 @@ import { XYFade } from "./ui/xy-fade.tsx";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="h-[98vh] flex flex-col overflow-hidden">{children}</div>
+    // The height calculation accounts for the page body "visual" gutter
+    <div className="h-[calc(100vh-16px)] flex flex-col overflow-hidden">
+      {children}
+    </div>
   );
 }
 
@@ -85,7 +88,9 @@ export function EmptyState({
         >
           {graphic}
         </XYFade>
-        <Heading variant="h5" className="font-medium">{heading}</Heading>
+        <Heading variant="h5" className="font-medium">
+          {heading}
+        </Heading>
         <Type small muted className="mb-4 text-center">
           {description}
         </Type>

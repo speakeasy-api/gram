@@ -131,7 +131,7 @@ const columns: Column<Tool>[] = [
     header: "Description",
     key: "description",
     render: (row) => (
-      <Type muted className="line-clamp-2 overflow-scroll self-start">
+      <Type muted className="line-clamp-2 overflow-auto self-start">
         <span className="text-foreground">
           {row.summary}
           {row.summary && <Dot className="mx-2" />}

@@ -242,7 +242,7 @@ export function ToolsetPanel({
   }
 
   return (
-    <div className="max-h-full overflow-scroll relative">
+    <div className="max-h-full overflow-auto relative">
       <PanelHeader side="left">
         <Stack direction="horizontal" gap={2} justify="space-between">
           <Stack direction="horizontal" gap={2} align="center">
