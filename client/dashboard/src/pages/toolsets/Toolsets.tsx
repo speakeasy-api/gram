@@ -27,38 +27,9 @@ export function ToolsetsRoot() {
 export default function Toolsets() {
   const [createToolsetDialogOpen, setCreateToolsetDialogOpen] = useState(false);
 
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-        <Page.Header.Actions>
-          <AddButton
-            onClick={() => setCreateToolsetDialogOpen(true)}
-            tooltip="New Toolset"
-          />
-        </Page.Header.Actions>
-      </Page.Header>
-      <Page.Body>
-        <ToolsetsContent
-          createToolsetDialogOpen={createToolsetDialogOpen}
-          setCreateToolsetDialogOpen={setCreateToolsetDialogOpen}
-        />
-      </Page.Body>
-    </Page>
-  );
-}
-
-function ToolsetsContent({
-  createToolsetDialogOpen,
-  setCreateToolsetDialogOpen,
-}: {
-  createToolsetDialogOpen: boolean;
-  setCreateToolsetDialogOpen: (open: boolean) => void;
-}) {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { handleApiError } = useApiError();
-  const toolsets = useToolsets();
 
   const [toolsetName, setToolsetName] = useState("");
   const createToolsetMutation = useCreateToolsetMutation({
@@ -85,6 +56,48 @@ function ToolsetsContent({
     });
   };
 
+  return (
+    <Page>
+      <Page.Header>
+        <Page.Header.Breadcrumbs />
+        <Page.Header.Actions>
+          <AddButton
+            onClick={() => setCreateToolsetDialogOpen(true)}
+            tooltip="New Toolset"
+          />
+        </Page.Header.Actions>
+      </Page.Header>
+      <Page.Body>
+        <ToolsetsContent
+          setCreateToolsetDialogOpen={setCreateToolsetDialogOpen}
+        />
+        <InputDialog
+          open={createToolsetDialogOpen}
+          onOpenChange={setCreateToolsetDialogOpen}
+          title="Create a Toolset"
+          description="Give your toolset a name."
+          submitButtonText="Create"
+          inputs={{
+            label: "Toolset name",
+            placeholder: "Toolset name",
+            value: toolsetName,
+            onChange: (value) => setToolsetName(value),
+            onSubmit: createToolset,
+            validate: (value) => value.length > 0,
+          }}
+        />
+      </Page.Body>
+    </Page>
+  );
+}
+
+function ToolsetsContent({
+  setCreateToolsetDialogOpen,
+}: {
+  setCreateToolsetDialogOpen: (open: boolean) => void;
+}) {
+  const toolsets = useToolsets();
+
   if (toolsets.length === 0) {
     return (
       <ToolsetsEmptyState
@@ -101,20 +114,6 @@ function ToolsetsContent({
       <CreateThingCard onClick={() => setCreateToolsetDialogOpen(true)}>
         + New Toolset
       </CreateThingCard>
-      <InputDialog
-        open={createToolsetDialogOpen}
-        onOpenChange={setCreateToolsetDialogOpen}
-        title="Create a Toolset"
-        description="Give your toolset a name."
-        inputs={{
-          label: "Toolset name",
-          placeholder: "Toolset name",
-          value: toolsetName,
-          onChange: (value) => setToolsetName(value),
-          onSubmit: createToolset,
-          validate: (value) => value.length > 0,
-        }}
-      />
     </Cards>
   );
 }

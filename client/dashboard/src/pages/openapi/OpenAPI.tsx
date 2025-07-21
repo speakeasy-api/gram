@@ -33,13 +33,13 @@ export default function OpenAPIDocuments() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <DeploymentCards />
+        <APIsContent />
       </Page.Body>
     </Page>
   );
 }
 
-function DeploymentCards() {
+function APIsContent() {
   const client = useSdkClient();
   const { data: deploymentResult, refetch } = useLatestDeployment();
   const { data: toolsData } = useListTools();

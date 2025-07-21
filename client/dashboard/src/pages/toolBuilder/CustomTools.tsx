@@ -42,11 +42,10 @@ export function CustomToolsRoot() {
 
 export default function CustomTools() {
   const customTools = useCustomTools();
-  const routes = useRoutes();
   const [newToolDialogOpen, setNewToolDialogOpen] = useState(false);
 
   const onNewCustomTool = () => {
-    routes.customTools.toolBuilderNew.goTo();
+    setNewToolDialogOpen(true);
   };
 
   let content = <CustomToolsEmptyState onCreateCustomTool={onNewCustomTool} />;
@@ -57,13 +56,9 @@ export default function CustomTools() {
         {customTools?.map((template) => {
           return <CustomToolCard key={template.id} template={template} />;
         })}
-        <CreateThingCard onClick={() => setNewToolDialogOpen(true)}>
+        <CreateThingCard onClick={onNewCustomTool}>
           + New Custom Tool
         </CreateThingCard>
-        <ToolifyDialog
-          open={newToolDialogOpen}
-          setOpen={setNewToolDialogOpen}
-        />
       </>
     );
   }
@@ -77,6 +72,7 @@ export default function CustomTools() {
         </Page.Header.Actions>
       </Page.Header>
       <Page.Body>{content}</Page.Body>
+      <ToolifyDialog open={newToolDialogOpen} setOpen={setNewToolDialogOpen} />
     </Page>
   );
 }

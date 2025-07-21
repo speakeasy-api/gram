@@ -15,6 +15,7 @@ import {
   useIdentifyUserForTelemetry,
   useRegisterProjectForTelemetry,
 } from "./Telemetry";
+import { useQueryClient } from "@tanstack/react-query";
 
 type Session = Omit<InfoResponseBody, "userEmail" | "userId" | "isAdmin"> & {
   user: User;
@@ -85,6 +86,7 @@ export const ProjectProvider = ({
   const organization = useOrganization();
   const user = useUser();
   const navigate = useNavigate();
+  const client = useQueryClient();
 
   const { projectSlug } = useSlugs();
   const [project, setProject] = useState<ProjectEntry | null>(null);
@@ -126,6 +128,7 @@ export const ProjectProvider = ({
   }
 
   const switchProject = async (slug: string) => {
+    client.clear();
     navigate(`/${organization.slug}/${slug}`);
   };
 
