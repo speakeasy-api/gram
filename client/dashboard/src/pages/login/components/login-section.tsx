@@ -142,8 +142,8 @@ export function RegisterSection() {
       return org;
     },
 
-    onSuccess: (data) => {
-      window.location.replace(routes.onboarding.href(data.slug, "default"));
+    onSuccess: () => {
+      window.location.replace("/")
     },
     onError: (error) => {
       setValidationError(error.message);
