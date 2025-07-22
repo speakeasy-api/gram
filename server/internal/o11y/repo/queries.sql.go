@@ -56,3 +56,28 @@ func (q *Queries) StatHTTPSecuritySchemes(ctx context.Context) ([]StatHTTPSecuri
 	}
 	return items, nil
 }
+
+const statOrganizationsCount = `-- name: StatOrganizationsCount :one
+SELECT COUNT(*) as count
+FROM organization_metadata
+`
+
+func (q *Queries) StatOrganizationsCount(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, statOrganizationsCount)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const statProjectsCount = `-- name: StatProjectsCount :one
+SELECT COUNT(*) as count
+FROM projects
+WHERE deleted = FALSE
+`
+
+func (q *Queries) StatProjectsCount(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, statProjectsCount)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}

@@ -12,7 +12,9 @@ import (
 )
 
 const (
-	observableDeploymentsHttpSecuritySchemes = "deployments.http_security_schemes"
+	observableOrganizationsCount                  = "organizations.count"
+	observableProjectsCount                       = "projects.count"
+	observableDeploymentsHttpSecuritySchemesCount = "deployments.http_security_schemes.count"
 )
 
 var recognizedSecuritySchemeType = map[string]struct{}{
@@ -47,19 +49,37 @@ func StartObservers(provider metric.MeterProvider, db *pgxpool.Pool) error {
 		db:     db,
 	}
 
-	if gauges[observableDeploymentsHttpSecuritySchemes], err = meter.Int64ObservableGauge(
-		observableDeploymentsHttpSecuritySchemes,
+	if gauges[observableOrganizationsCount], err = meter.Int64ObservableGauge(
+		observableOrganizationsCount,
+		metric.WithDescription("Count of Gram organizations"),
+		metric.WithUnit("{#}"),
+		metric.WithInt64Callback(o.observeOrganizationsCount),
+	); err != nil {
+		return fmt.Errorf("create observable gauge %q: %w", observableOrganizationsCount, err)
+	}
+
+	if gauges[observableProjectsCount], err = meter.Int64ObservableGauge(
+		observableProjectsCount,
+		metric.WithDescription("Count of Gram projects that are not deleted"),
+		metric.WithUnit("{#}"),
+		metric.WithInt64Callback(o.observeProjectsCount),
+	); err != nil {
+		return fmt.Errorf("create observable gauge %q: %w", observableProjectsCount, err)
+	}
+
+	if gauges[observableDeploymentsHttpSecuritySchemesCount], err = meter.Int64ObservableGauge(
+		observableDeploymentsHttpSecuritySchemesCount,
 		metric.WithDescription("Count of HTTP security schemes across latest deployments"),
 		metric.WithUnit("{#}"),
-		metric.WithInt64Callback(o.observeDeploymentsHttpSecuritySchemes),
+		metric.WithInt64Callback(o.observeDeploymentsHttpSecuritySchemesCount),
 	); err != nil {
-		return fmt.Errorf("create observable gauge %q: %w", observableDeploymentsHttpSecuritySchemes, err)
+		return fmt.Errorf("create observable gauge %q: %w", observableDeploymentsHttpSecuritySchemesCount, err)
 	}
 
 	return nil
 }
 
-func (o *observers) observeDeploymentsHttpSecuritySchemes(ctx context.Context, observer metric.Int64Observer) error {
+func (o *observers) observeDeploymentsHttpSecuritySchemesCount(ctx context.Context, observer metric.Int64Observer) error {
 	r := repo.New(o.db)
 
 	schemes, err := r.StatHTTPSecuritySchemes(ctx)
@@ -86,6 +106,32 @@ func (o *observers) observeDeploymentsHttpSecuritySchemes(ctx context.Context, o
 			attribute.String("http.security.type", t),
 		))
 	}
+
+	return nil
+}
+
+func (o *observers) observeOrganizationsCount(ctx context.Context, observer metric.Int64Observer) error {
+	r := repo.New(o.db)
+
+	count, err := r.StatOrganizationsCount(ctx)
+	if err != nil {
+		return fmt.Errorf("observer: stat organizations count: %w", err)
+	}
+
+	observer.Observe(count)
+
+	return nil
+}
+
+func (o *observers) observeProjectsCount(ctx context.Context, observer metric.Int64Observer) error {
+	r := repo.New(o.db)
+
+	count, err := r.StatProjectsCount(ctx)
+	if err != nil {
+		return fmt.Errorf("observer: stat projects count: %w", err)
+	}
+
+	observer.Observe(count)
 
 	return nil
 }

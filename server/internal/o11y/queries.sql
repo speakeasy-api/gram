@@ -1,3 +1,13 @@
+-- name: StatOrganizationsCount :one
+SELECT COUNT(*) as count
+FROM organization_metadata;
+
+
+-- name: StatProjectsCount :one
+SELECT COUNT(*) as count
+FROM projects
+WHERE deleted = FALSE;
+
 -- name: StatHTTPSecuritySchemes :many
 WITH latest_deployments AS (
   SELECT DISTINCT ON (project_id) 
