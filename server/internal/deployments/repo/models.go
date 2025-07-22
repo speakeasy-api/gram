@@ -7,6 +7,7 @@ package repo
 import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 )
 
 type Deployment struct {
@@ -80,6 +81,7 @@ type HttpToolDefinition struct {
 	QuerySettings       []byte
 	PathSettings        []byte
 	RequestContentType  pgtype.Text
+	ResponseFilter      *models.ResponseFilter
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz

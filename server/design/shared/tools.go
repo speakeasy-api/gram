@@ -4,6 +4,18 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
+var ResponseFilter = Type("ResponseFilter", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Response filter metadata for the tool")
+	Attribute("type", String, "Response filter type for the tool")
+	Required("type")
+	Attribute("status_codes", ArrayOf(String), "Status codes to filter for")
+	Required("status_codes")
+	Attribute("content_types", ArrayOf(String), "Content types to filter for")
+	Required("content_types")
+})
+
 var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -18,6 +30,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("confirm", String, "Confirmation mode for the tool")
 	Attribute("confirm_prompt", String, "Prompt for the confirmation")
 	Attribute("summarizer", String, "Summarizer for the tool")
+	Attribute("response_filter", ResponseFilter, "Response filter metadata for the tool")
 
 	Attribute("openapiv3_document_id", String, "The ID of the OpenAPI v3 document")
 	Attribute("openapiv3_operation", String, "OpenAPI v3 operation")

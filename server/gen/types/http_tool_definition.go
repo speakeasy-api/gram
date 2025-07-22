@@ -29,6 +29,8 @@ type HTTPToolDefinition struct {
 	ConfirmPrompt *string
 	// Summarizer for the tool
 	Summarizer *string
+	// Response filter metadata for the tool
+	ResponseFilter *ResponseFilter
 	// The ID of the OpenAPI v3 document
 	Openapiv3DocumentID *string
 	// OpenAPI v3 operation

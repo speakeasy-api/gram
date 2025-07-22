@@ -1360,6 +1360,9 @@ func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTT
 		CreatedAt:           v.CreatedAt,
 		UpdatedAt:           v.UpdatedAt,
 	}
+	if v.ResponseFilter != nil {
+		res.ResponseFilter = marshalTypesResponseFilterToResponseFilterResponseBody(v.ResponseFilter)
+	}
 	if v.Tags != nil {
 		res.Tags = make([]string, len(v.Tags))
 		for i, val := range v.Tags {
@@ -1373,6 +1376,35 @@ func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTT
 	}
 	if v.Variation != nil {
 		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
+	}
+
+	return res
+}
+
+// marshalTypesResponseFilterToResponseFilterResponseBody builds a value of
+// type *ResponseFilterResponseBody from a value of type *types.ResponseFilter.
+func marshalTypesResponseFilterToResponseFilterResponseBody(v *types.ResponseFilter) *ResponseFilterResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ResponseFilterResponseBody{
+		Type: v.Type,
+	}
+	if v.StatusCodes != nil {
+		res.StatusCodes = make([]string, len(v.StatusCodes))
+		for i, val := range v.StatusCodes {
+			res.StatusCodes[i] = val
+		}
+	} else {
+		res.StatusCodes = []string{}
+	}
+	if v.ContentTypes != nil {
+		res.ContentTypes = make([]string, len(v.ContentTypes))
+		for i, val := range v.ContentTypes {
+			res.ContentTypes[i] = val
+		}
+	} else {
+		res.ContentTypes = []string{}
 	}
 
 	return res

@@ -236,6 +236,8 @@ type HTTPToolDefinitionResponseBody struct {
 	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
 	// Summarizer for the tool
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// Response filter metadata for the tool
+	ResponseFilter *ResponseFilterResponseBody `form:"response_filter,omitempty" json:"response_filter,omitempty" xml:"response_filter,omitempty"`
 	// The ID of the OpenAPI v3 document
 	Openapiv3DocumentID *string `form:"openapiv3_document_id,omitempty" json:"openapiv3_document_id,omitempty" xml:"openapiv3_document_id,omitempty"`
 	// OpenAPI v3 operation
@@ -264,6 +266,16 @@ type HTTPToolDefinitionResponseBody struct {
 	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
 	// The variation details of a tool. Only includes explicitly varied fields.
 	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
+}
+
+// ResponseFilterResponseBody is used to define fields on response body types.
+type ResponseFilterResponseBody struct {
+	// Response filter type for the tool
+	Type string `form:"type" json:"type" xml:"type"`
+	// Status codes to filter for
+	StatusCodes []string `form:"status_codes" json:"status_codes" xml:"status_codes"`
+	// Content types to filter for
+	ContentTypes []string `form:"content_types" json:"content_types" xml:"content_types"`
 }
 
 // CanonicalToolAttributesResponseBody is used to define fields on response

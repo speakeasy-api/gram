@@ -290,6 +290,9 @@ func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToo
 		CreatedAt:           *v.CreatedAt,
 		UpdatedAt:           *v.UpdatedAt,
 	}
+	if v.ResponseFilter != nil {
+		res.ResponseFilter = unmarshalResponseFilterResponseBodyToTypesResponseFilter(v.ResponseFilter)
+	}
 	res.Tags = make([]string, len(v.Tags))
 	for i, val := range v.Tags {
 		res.Tags[i] = val
@@ -299,6 +302,27 @@ func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToo
 	}
 	if v.Variation != nil {
 		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
+	}
+
+	return res
+}
+
+// unmarshalResponseFilterResponseBodyToTypesResponseFilter builds a value of
+// type *types.ResponseFilter from a value of type *ResponseFilterResponseBody.
+func unmarshalResponseFilterResponseBodyToTypesResponseFilter(v *ResponseFilterResponseBody) *types.ResponseFilter {
+	if v == nil {
+		return nil
+	}
+	res := &types.ResponseFilter{
+		Type: *v.Type,
+	}
+	res.StatusCodes = make([]string, len(v.StatusCodes))
+	for i, val := range v.StatusCodes {
+		res.StatusCodes[i] = val
+	}
+	res.ContentTypes = make([]string, len(v.ContentTypes))
+	for i, val := range v.ContentTypes {
+		res.ContentTypes[i] = val
 	}
 
 	return res

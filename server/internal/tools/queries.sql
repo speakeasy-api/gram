@@ -48,6 +48,7 @@ SELECT
   htd.confirm,
   htd.confirm_prompt,
   htd.summarizer,
+  htd.response_filter,
   htd.path,
   htd.openapiv3_document_id,
   htd.openapiv3_operation,

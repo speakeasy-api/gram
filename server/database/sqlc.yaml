@@ -15,6 +15,12 @@ overrides:
           import: "github.com/google/uuid"
           type: "NullUUID"
         nullable: true
+      - column: http_tool_definitions.response_filter
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/tools/repo/models
+          type: ResponseFilter
+          pointer: true
+
 sql:
   - schema: schema.sql
     queries: ./stub.sql

@@ -182,6 +182,15 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			canonicalName = canonical.Name
 		}
 
+		var responseFilter *types.ResponseFilter
+		if tool.ResponseFilter != nil {
+			responseFilter = &types.ResponseFilter{
+				Type:         string(tool.ResponseFilter.Type),
+				StatusCodes:  tool.ResponseFilter.StatusCodes,
+				ContentTypes: tool.ResponseFilter.ContentTypes,
+			}
+		}
+
 		result.Tools[i] = &types.HTTPToolDefinition{
 			ID:                  tool.ID.String(),
 			DeploymentID:        tool.DeploymentID.String(),
@@ -193,6 +202,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			Confirm:             string(confirm),
 			ConfirmPrompt:       confirmPrompt,
 			Summarizer:          conv.FromPGText[string](tool.Summarizer),
+			ResponseFilter:      responseFilter,
 			HTTPMethod:          tool.HttpMethod,
 			Path:                tool.Path,
 			Tags:                tags,

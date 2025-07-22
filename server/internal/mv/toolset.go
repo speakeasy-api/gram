@@ -149,6 +149,15 @@ func DescribeToolset(
 
 			confirm, _ := SanitizeConfirm(confirmRaw)
 
+			var responseFilter *types.ResponseFilter
+			if def.HttpToolDefinition.ResponseFilter != nil {
+				responseFilter = &types.ResponseFilter{
+					Type:         string(def.HttpToolDefinition.ResponseFilter.Type),
+					StatusCodes:  def.HttpToolDefinition.ResponseFilter.StatusCodes,
+					ContentTypes: def.HttpToolDefinition.ResponseFilter.ContentTypes,
+				}
+			}
+
 			tool := &types.HTTPToolDefinition{
 				ID:                  def.HttpToolDefinition.ID.String(),
 				ProjectID:           def.HttpToolDefinition.Description,
@@ -174,6 +183,7 @@ func DescribeToolset(
 				Canonical:           canonical,
 				Variation:           variation,
 				PackageName:         &def.PackageName,
+				ResponseFilter:      responseFilter,
 			}
 
 			if newSchema, err := variedToolSchema(ctx, logger, tool); err == nil {

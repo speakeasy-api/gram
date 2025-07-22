@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orderedmap"
 	"github.com/speakeasy-api/gram/server/internal/tools"
+	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 )
 
 var preferredRequestTypes = []*regexp.Regexp{
@@ -417,6 +418,16 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		requestContentType = &bodyResult.contentType
 	}
 
+	descriptor := parseToolDescriptor(ctx, logger, docInfo, op)
+
+	responseFilter, responseFilterSchema, err := getResponseFilter(ctx, logger, op, descriptor.responseFilterType)
+	if err != nil {
+		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error getting response filter: %w", err)
+	}
+	if responseFilterSchema != nil {
+		merged.Properties.Set("responseFilter", json.RawMessage(responseFilterSchema))
+	}
+
 	var schemaBytes []byte
 	if merged.Properties.Len() > 0 {
 		schemaBytes, err = json.Marshal(merged)
@@ -444,8 +455,6 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		serverEnvVar = strcase.ToSNAKE(fmt.Sprintf("%s_%s_SERVER_URL", docInfo.Slug, op.OperationId))
 		defaultServer = s.extractDefaultServer(ctx, logger, docInfo, op.Servers)
 	}
-
-	descriptor := parseToolDescriptor(ctx, logger, docInfo, op)
 
 	var confirm *string
 	if descriptor.confirm != nil {
@@ -483,15 +492,17 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		QuerySettings:       querySettings,
 		PathSettings:        pathSettings,
 		RequestContentType:  conv.PtrToPGText(requestContentType),
+		ResponseFilter:      responseFilter,
 	}, nil
 }
 
 type gramExtension struct {
-	Confirm       *string `yaml:"confirm"`
-	ConfirmPrompt *string `yaml:"confirmPrompt"`
-	Name          *string `yaml:"name"`
-	Summary       *string `yaml:"summary"`
-	Description   *string `yaml:"description"`
+	Confirm            *string            `yaml:"confirm"`
+	ConfirmPrompt      *string            `yaml:"confirmPrompt"`
+	Name               *string            `yaml:"name"`
+	Summary            *string            `yaml:"summary"`
+	Description        *string            `yaml:"description"`
+	ResponseFilterType *models.FilterType `yaml:"responseFilterType"`
 }
 
 type speakeasyExtension struct {
@@ -510,6 +521,7 @@ type toolDescriptor struct {
 	originalName        *string
 	originalSummary     *string
 	originalDescription *string
+	responseFilterType  *models.FilterType
 }
 
 func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, op *v3.Operation) toolDescriptor {
@@ -530,6 +542,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 		originalName:        nil,
 		originalSummary:     nil,
 		originalDescription: nil,
+		responseFilterType:  nil,
 	}
 
 	var xgram, xspeakeasy bool
@@ -556,6 +569,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 
 	var extLine, extColumn int
 	var customName, customSummary, customDescription, customConfirm, customConfirmPrompt *string
+	var responseFilterType *models.FilterType
 	switch {
 	case xgram:
 		extLine, extColumn = gramExtNode.Line, gramExtNode.Column
@@ -564,6 +578,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 		customDescription = gramExt.Description
 		customConfirm = gramExt.Confirm
 		customConfirmPrompt = gramExt.ConfirmPrompt
+		responseFilterType = gramExt.ResponseFilterType
 	case xspeakeasy:
 		extLine, extColumn = speakeasyExtNode.Line, speakeasyExtNode.Column
 		customName = speakeasyExt.Name
@@ -601,6 +616,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 		originalDescription: conv.PtrEmpty(description),
 		confirm:             conv.Ptr(confirm),
 		confirmPrompt:       customConfirmPrompt,
+		responseFilterType:  responseFilterType,
 	}
 }
 

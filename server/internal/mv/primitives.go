@@ -9,12 +9,14 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
 
-type ProjectID uuid.UUID
-type DeploymentID uuid.UUID
-type ToolsetSlug types.Slug
-type ToolID uuid.UUID
-type PromptTemplateID uuid.NullUUID
-type PromptTemplateName *string
+type (
+	ProjectID          uuid.UUID
+	DeploymentID       uuid.UUID
+	ToolsetSlug        types.Slug
+	ToolID             uuid.UUID
+	PromptTemplateID   uuid.NullUUID
+	PromptTemplateName *string
+)
 
 type Confirm string
 

@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 )
 
 type BatchLogEventsParams struct {
@@ -305,6 +306,7 @@ INSERT INTO http_tool_definitions (
   , server_env_var
   , default_server_url
   , request_content_type
+  , response_filter
 ) VALUES (
     $1
   , $2
@@ -331,8 +333,9 @@ INSERT INTO http_tool_definitions (
   , $23
   , $24
   , $25
+  , $26
 )
-RETURNING id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenAPIv3ToolDefinitionParams struct {
@@ -361,6 +364,7 @@ type CreateOpenAPIv3ToolDefinitionParams struct {
 	ServerEnvVar        string
 	DefaultServerUrl    pgtype.Text
 	RequestContentType  pgtype.Text
+	ResponseFilter      *models.ResponseFilter
 }
 
 func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateOpenAPIv3ToolDefinitionParams) (HttpToolDefinition, error) {
@@ -390,6 +394,7 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		arg.ServerEnvVar,
 		arg.DefaultServerUrl,
 		arg.RequestContentType,
+		arg.ResponseFilter,
 	)
 	var i HttpToolDefinition
 	err := row.Scan(
@@ -420,6 +425,7 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		&i.QuerySettings,
 		&i.PathSettings,
 		&i.RequestContentType,
+		&i.ResponseFilter,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

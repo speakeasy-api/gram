@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 )
 
 const findToolsByName = `-- name: FindToolsByName :many
@@ -31,7 +32,7 @@ external_deployments AS (
   WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
 )
 SELECT 
-  http_tool_definitions.id, http_tool_definitions.project_id, http_tool_definitions.deployment_id, http_tool_definitions.openapiv3_document_id, http_tool_definitions.confirm, http_tool_definitions.confirm_prompt, http_tool_definitions.summarizer, http_tool_definitions.name, http_tool_definitions.summary, http_tool_definitions.description, http_tool_definitions.openapiv3_operation, http_tool_definitions.tags, http_tool_definitions.x_gram, http_tool_definitions.original_name, http_tool_definitions.original_summary, http_tool_definitions.original_description, http_tool_definitions.server_env_var, http_tool_definitions.default_server_url, http_tool_definitions.security, http_tool_definitions.http_method, http_tool_definitions.path, http_tool_definitions.schema_version, http_tool_definitions.schema, http_tool_definitions.header_settings, http_tool_definitions.query_settings, http_tool_definitions.path_settings, http_tool_definitions.request_content_type, http_tool_definitions.created_at, http_tool_definitions.updated_at, http_tool_definitions.deleted_at, http_tool_definitions.deleted,
+  http_tool_definitions.id, http_tool_definitions.project_id, http_tool_definitions.deployment_id, http_tool_definitions.openapiv3_document_id, http_tool_definitions.confirm, http_tool_definitions.confirm_prompt, http_tool_definitions.summarizer, http_tool_definitions.name, http_tool_definitions.summary, http_tool_definitions.description, http_tool_definitions.openapiv3_operation, http_tool_definitions.tags, http_tool_definitions.x_gram, http_tool_definitions.original_name, http_tool_definitions.original_summary, http_tool_definitions.original_description, http_tool_definitions.server_env_var, http_tool_definitions.default_server_url, http_tool_definitions.security, http_tool_definitions.http_method, http_tool_definitions.path, http_tool_definitions.schema_version, http_tool_definitions.schema, http_tool_definitions.header_settings, http_tool_definitions.query_settings, http_tool_definitions.path_settings, http_tool_definitions.request_content_type, http_tool_definitions.response_filter, http_tool_definitions.created_at, http_tool_definitions.updated_at, http_tool_definitions.deleted_at, http_tool_definitions.deleted,
   (select id from deployment) as owning_deployment_id,
   (CASE
     WHEN http_tool_definitions.project_id = $1 THEN ''
@@ -96,6 +97,7 @@ func (q *Queries) FindToolsByName(ctx context.Context, arg FindToolsByNameParams
 			&i.HttpToolDefinition.QuerySettings,
 			&i.HttpToolDefinition.PathSettings,
 			&i.HttpToolDefinition.RequestContentType,
+			&i.HttpToolDefinition.ResponseFilter,
 			&i.HttpToolDefinition.CreatedAt,
 			&i.HttpToolDefinition.UpdatedAt,
 			&i.HttpToolDefinition.DeletedAt,
@@ -133,7 +135,7 @@ third_party AS (
     AND NOT EXISTS(SELECT 1 FROM first_party)
   LIMIT 1
 )
-SELECT id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
 FROM http_tool_definitions
 WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party))
 `
@@ -175,6 +177,7 @@ func (q *Queries) GetHTTPToolDefinitionByID(ctx context.Context, arg GetHTTPTool
 		&i.QuerySettings,
 		&i.PathSettings,
 		&i.RequestContentType,
+		&i.ResponseFilter,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -195,7 +198,7 @@ WITH deployment AS (
     ORDER BY seq DESC
     LIMIT 1
 )
-SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, created_at, updated_at, deleted_at, deleted, deployment.id
+SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted, deployment.id
 FROM http_tool_definitions
 INNER JOIN deployment ON http_tool_definitions.deployment_id = deployment.id
 WHERE http_tool_definitions.project_id = $1 
@@ -238,6 +241,7 @@ type ListFirstPartyHTTPToolsRow struct {
 	QuerySettings       []byte
 	PathSettings        []byte
 	RequestContentType  pgtype.Text
+	ResponseFilter      *models.ResponseFilter
 	CreatedAt           pgtype.Timestamptz
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
@@ -282,6 +286,7 @@ func (q *Queries) ListFirstPartyHTTPTools(ctx context.Context, arg ListFirstPart
 			&i.QuerySettings,
 			&i.PathSettings,
 			&i.RequestContentType,
+			&i.ResponseFilter,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -328,6 +333,7 @@ SELECT
   htd.confirm,
   htd.confirm_prompt,
   htd.summarizer,
+  htd.response_filter,
   htd.path,
   htd.openapiv3_document_id,
   htd.openapiv3_operation,
@@ -370,6 +376,7 @@ type ListToolsRow struct {
 	Confirm             pgtype.Text
 	ConfirmPrompt       pgtype.Text
 	Summarizer          pgtype.Text
+	ResponseFilter      *models.ResponseFilter
 	Path                string
 	Openapiv3DocumentID uuid.NullUUID
 	Openapiv3Operation  pgtype.Text
@@ -407,6 +414,7 @@ func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToo
 			&i.Confirm,
 			&i.ConfirmPrompt,
 			&i.Summarizer,
+			&i.ResponseFilter,
 			&i.Path,
 			&i.Openapiv3DocumentID,
 			&i.Openapiv3Operation,

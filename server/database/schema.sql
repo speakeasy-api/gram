@@ -287,6 +287,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   query_settings JSONB,
   path_settings JSONB,
   request_content_type TEXT,
+  response_filter JSONB NULL,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

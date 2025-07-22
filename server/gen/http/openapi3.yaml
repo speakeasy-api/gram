@@ -7354,6 +7354,8 @@ components:
                 project_id:
                     type: string
                     description: The ID of the project
+                response_filter:
+                    $ref: '#/components/schemas/ResponseFilter'
                 schema:
                     type: string
                     description: JSON schema for the request
@@ -8082,6 +8084,27 @@ components:
                     description: The rendered prompt
             required:
                 - prompt
+        ResponseFilter:
+            type: object
+            properties:
+                content_types:
+                    type: array
+                    items:
+                        type: string
+                    description: Content types to filter for
+                status_codes:
+                    type: array
+                    items:
+                        type: string
+                    description: Status codes to filter for
+                type:
+                    type: string
+                    description: Response filter type for the tool
+            description: Response filter metadata for the tool
+            required:
+                - type
+                - status_codes
+                - content_types
         ServeImageForm:
             type: object
             properties:

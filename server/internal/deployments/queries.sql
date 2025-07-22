@@ -324,6 +324,7 @@ INSERT INTO http_tool_definitions (
   , server_env_var
   , default_server_url
   , request_content_type
+  , response_filter
 ) VALUES (
     @project_id
   , @deployment_id
@@ -350,6 +351,7 @@ INSERT INTO http_tool_definitions (
   , @server_env_var
   , @default_server_url
   , @request_content_type
+  , @response_filter
 )
 RETURNING *;
 

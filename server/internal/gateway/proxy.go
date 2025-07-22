@@ -47,13 +47,19 @@ var proxiedHeaders = []string{
 	"Pragma",
 }
 
+type ResponseFilterRequest struct {
+	Type   string `json:"type"`
+	Filter string `json:"filter"`
+}
+
 type ToolCallBody struct {
-	PathParameters       map[string]any    `json:"pathParameters"`
-	QueryParameters      map[string]any    `json:"queryParameters"`
-	Headers              map[string]any    `json:"headers"`
-	Body                 json.RawMessage   `json:"body"`
-	EnvironmentVariables map[string]string `json:"environmentVariables"`
-	GramRequestSummary   string            `json:"gram-request-summary"`
+	PathParameters       map[string]any         `json:"pathParameters"`
+	QueryParameters      map[string]any         `json:"queryParameters"`
+	Headers              map[string]any         `json:"headers"`
+	Body                 json.RawMessage        `json:"body"`
+	ResponseFilter       *ResponseFilterRequest `json:"responseFilter"`
+	EnvironmentVariables map[string]string      `json:"environmentVariables"`
+	GramRequestSummary   string                 `json:"gram-request-summary"`
 }
 
 type caseInsensitiveEnv struct {
@@ -313,7 +319,7 @@ func (itp *ToolProxy) Do(
 
 	processSecurity(ctx, logger, req, w, &responseStatusCode, toolExecutionInfo, itp.cache, ciEnv, serverURL)
 
-	return reverseProxyRequest(ctx, logger, itp.tracer, toolExecutionInfo.Tool, w, req, itp.policy, &responseStatusCode)
+	return reverseProxyRequest(ctx, logger, itp.tracer, toolExecutionInfo.Tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode)
 }
 
 type retryConfig struct {
@@ -375,6 +381,7 @@ func reverseProxyRequest(ctx context.Context,
 	logger *slog.Logger,
 	tracer trace.Tracer,
 	tool tools_repo.HttpToolDefinition,
+	responseFilter *ResponseFilterRequest,
 	w http.ResponseWriter,
 	req *http.Request,
 	policy *guardian.Policy,
@@ -436,7 +443,6 @@ func reverseProxyRequest(ctx context.Context,
 			http.MethodGet,
 		},
 	}, executeRequest)
-
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").Log(ctx, logger)
@@ -500,7 +506,16 @@ func reverseProxyRequest(ctx context.Context,
 			}
 		}
 	} else {
-		if _, err := io.Copy(w, resp.Body); err != nil {
+		var body io.Reader = resp.Body
+
+		result := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
+		if result != nil {
+			w.WriteHeader(result.statusCode)
+			w.Header().Set("Content-Type", result.contentType)
+			body = result.resp
+		}
+
+		if _, err := io.Copy(w, body); err != nil {
 			span.SetStatus(codes.Error, err.Error())
 			logger.ErrorContext(ctx, "failed to copy response body", slog.String("error", err.Error()))
 		}

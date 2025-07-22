@@ -11,12 +11,12 @@ import (
 	"maps"
 	"mime"
 	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/contenttypes"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -165,9 +165,6 @@ func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-var jsonRE = regexp.MustCompile(`\bjson\b`)
-var yamlRE = regexp.MustCompile(`\byaml\b`)
-
 func formatHigherOrderToolResult(ctx context.Context, logger *slog.Logger, req *rawRequest, promptData string) (json.RawMessage, error) {
 	content, err := json.Marshal(contentChunk[string, json.RawMessage]{
 		Type:     "text",
@@ -206,7 +203,7 @@ func formatResult(rw toolCallResponseWriter) (json.RawMessage, error) {
 	}
 
 	switch {
-	case strings.HasPrefix(mt, "text/"), jsonRE.MatchString(mt), yamlRE.MatchString(mt):
+	case strings.HasPrefix(mt, "text/"), contenttypes.IsJSON(mt), contenttypes.IsYAML(mt):
 		bs, err := json.Marshal(contentChunk[string, json.RawMessage]{
 			Type:     "text",
 			Text:     string(body),

@@ -226,6 +226,8 @@ type HTTPToolDefinitionResponseBody struct {
 	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
 	// Summarizer for the tool
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// Response filter metadata for the tool
+	ResponseFilter *ResponseFilterResponseBody `form:"response_filter,omitempty" json:"response_filter,omitempty" xml:"response_filter,omitempty"`
 	// The ID of the OpenAPI v3 document
 	Openapiv3DocumentID *string `form:"openapiv3_document_id,omitempty" json:"openapiv3_document_id,omitempty" xml:"openapiv3_document_id,omitempty"`
 	// OpenAPI v3 operation
@@ -254,6 +256,16 @@ type HTTPToolDefinitionResponseBody struct {
 	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
 	// The variation details of a tool. Only includes explicitly varied fields.
 	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
+}
+
+// ResponseFilterResponseBody is used to define fields on response body types.
+type ResponseFilterResponseBody struct {
+	// Response filter type for the tool
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// Status codes to filter for
+	StatusCodes []string `form:"status_codes,omitempty" json:"status_codes,omitempty" xml:"status_codes,omitempty"`
+	// Content types to filter for
+	ContentTypes []string `form:"content_types,omitempty" json:"content_types,omitempty" xml:"content_types,omitempty"`
 }
 
 // CanonicalToolAttributesResponseBody is used to define fields on response
@@ -769,6 +781,11 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
+	if body.ResponseFilter != nil {
+		if err2 := ValidateResponseFilterResponseBody(body.ResponseFilter); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -784,6 +801,21 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 		if err2 := ValidateToolVariationResponseBody(body.Variation); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateResponseFilterResponseBody runs the validations defined on
+// ResponseFilterResponseBody
+func ValidateResponseFilterResponseBody(body *ResponseFilterResponseBody) (err error) {
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
+	}
+	if body.StatusCodes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status_codes", "body"))
+	}
+	if body.ContentTypes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("content_types", "body"))
 	}
 	return
 }
