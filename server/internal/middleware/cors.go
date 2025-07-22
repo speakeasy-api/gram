@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.Handler {
@@ -14,7 +15,15 @@ func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.H
 				if _, err := url.Parse(origin); err == nil {
 					w.Header().Set("Access-Control-Allow-Origin", origin)
 				}
-			case "dev", "prod":
+			case "dev":
+				origin := r.Header.Get("Origin")
+				// support preview urls
+				if _, err := url.Parse(origin); err == nil && strings.Contains(origin, "speakeasyapi.vercel.app") {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+				} else {
+					w.Header().Set("Access-Control-Allow-Origin", serverURL)
+				}
+			case "prod":
 				w.Header().Set("Access-Control-Allow-Origin", serverURL)
 			default:
 				// No CORS headers set for unspecified environments

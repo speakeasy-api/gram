@@ -433,6 +433,7 @@ func newStartCommand() *cli.Command {
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
 				GramServerURL:          c.String("server-url"),
 				SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("site-url")),
+				Environment:            c.String("environment"),
 			}))
 			projects.Attach(mux, projects.NewService(logger.With(slog.String("component", "projects")), db, sessionManager))
 			packages.Attach(mux, packages.NewService(logger.With(slog.String("component", "packages")), db, sessionManager))

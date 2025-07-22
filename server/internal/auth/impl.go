@@ -36,6 +36,7 @@ type AuthConfigurations struct {
 	SpeakeasyServerAddress string
 	GramServerURL          string
 	SignInRedirectURL      string
+	Environment            string
 }
 
 // Service for gram dashboard authentication endpoints
@@ -170,7 +171,15 @@ func (s *Service) Login(ctx context.Context) (res *gen.LoginResult, err error) {
 			Location: fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
 		}, nil
 	}
+
 	returnAddress := strings.TrimRight(s.cfg.GramServerURL, "/")
+
+	// Get the request context to access the Host
+	requestCtx, ok := contextvalues.GetRequestContext(ctx)
+	if ok && requestCtx != nil && strings.Contains(requestCtx.Host, "speakeasyapi.vercel.app") && s.cfg.Environment == "dev" {
+		// For preview builds, use the request host with https protocol
+		returnAddress = "https://" + requestCtx.Host
+	}
 
 	values := url.Values{}
 	values.Add("return_url", returnAddress+"/rpc/auth.callback")

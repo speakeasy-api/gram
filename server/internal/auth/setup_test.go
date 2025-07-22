@@ -274,6 +274,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 		SpeakeasyServerAddress: mockServer.URL,
 		GramServerURL:          "http://localhost:8080",
 		SignInRedirectURL:      "http://localhost:3000/dashboard",
+		Environment:            "test",
 	}
 
 	svc := auth.NewService(logger, conn, sessionManager, authConfigs)
