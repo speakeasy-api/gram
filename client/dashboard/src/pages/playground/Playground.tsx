@@ -228,6 +228,7 @@ export function ToolsetPanel({
       environmentSlug={selectedEnvironment ?? undefined}
       addToolsStyle={"modal"}
       showEnvironmentBadge
+      noGrid
     />
   );
 

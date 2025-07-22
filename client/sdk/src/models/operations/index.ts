@@ -30,6 +30,7 @@ export * from "./gettemplate.js";
 export * from "./gettoolset.js";
 export * from "./integrationsnumberget.js";
 export * from "./listapikeys.js";
+export * from "./listassets.js";
 export * from "./listchats.js";
 export * from "./listdeployments.js";
 export * from "./listenvironments.js";

@@ -5,11 +5,13 @@ import {
 } from "@/components/tools-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { MoreActions } from "@/components/ui/more-actions";
 import { Type } from "@/components/ui/type";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { Toolset } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
+import { useDeleteToolset } from "./Toolset";
 
 export function ToolsetCard({
   toolset,
@@ -19,6 +21,7 @@ export function ToolsetCard({
   className?: string;
 }) {
   const routes = useRoutes();
+  const deleteToolset = useDeleteToolset();
 
   return (
     <Card className={className}>
@@ -30,31 +33,34 @@ export function ToolsetCard({
             </routes.toolsets.toolset.Link>
           </CopyableSlug>
         </Card.Title>
-        <Card.Info>
-          <Stack direction="horizontal" gap={1} align="center">
-            <ToolsetPromptsBadge toolset={toolset} />
-            <ToolsetToolsBadge toolset={toolset} />
-          </Stack>
-        </Card.Info>
-        <Card.Description>
-          <Stack direction="horizontal" gap={3} justify={"space-between"}>
-            <Type small className="max-w-2/3">
-              {toolset.description}
-            </Type>
-            <Type muted small italic>
-              {"Updated "}
-              <HumanizeDateTime date={new Date(toolset.updatedAt)} />
-            </Type>
-          </Stack>
-        </Card.Description>
+        <MoreActions
+          actions={[
+            {
+              label: "Add Tools",
+              onClick: () => routes.toolsets.toolset.update.goTo(toolset.slug),
+              icon: "pencil",
+            },
+            {
+              label: "Delete",
+              onClick: () => deleteToolset(toolset.slug),
+              destructive: true,
+              icon: "trash",
+            },
+          ]}
+        />
       </Card.Header>
+      <Card.Content>
+        <Card.Description>{toolset.description}</Card.Description>
+      </Card.Content>
       <Card.Footer>
-        <Stack direction="horizontal" gap={2}>
-          <ToolsetPlaygroundLink toolset={toolset} />
-          <routes.toolsets.toolset.Link params={[toolset.slug]}>
-            <Button variant="outline">Edit</Button>
-          </routes.toolsets.toolset.Link>
+        <Stack direction="horizontal" gap={1} align="center">
+          <ToolsetToolsBadge toolset={toolset} />
+          <ToolsetPromptsBadge toolset={toolset} />
         </Stack>
+        <Type muted small italic>
+          {"Updated "}
+          <HumanizeDateTime date={new Date(toolset.updatedAt)} />
+        </Type>
       </Card.Footer>
     </Card>
   );
@@ -74,6 +80,7 @@ export function ToolsetPlaygroundLink({
         variant="outline"
         className="group"
         tooltip="Open in chat playground"
+        caps
       >
         Playground
         <routes.playground.Icon className="text-muted-foreground group-hover:text-foreground trans" />

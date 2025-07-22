@@ -26,6 +26,13 @@ type UploadOpenAPIv3ResponseBody struct {
 	Asset *AssetResponseBody `form:"asset" json:"asset" xml:"asset"`
 }
 
+// ListAssetsResponseBody is the type of the "assets" service "listAssets"
+// endpoint HTTP response body.
+type ListAssetsResponseBody struct {
+	// The list of assets
+	Assets []*AssetResponseBody `form:"assets" json:"assets" xml:"assets"`
+}
+
 // ServeImageUnauthorizedResponseBody is the type of the "assets" service
 // "serveImage" endpoint HTTP response body for the "unauthorized" error.
 type ServeImageUnauthorizedResponseBody struct {
@@ -751,6 +758,186 @@ type ServeOpenAPIv3GatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListAssetsUnauthorizedResponseBody is the type of the "assets" service
+// "listAssets" endpoint HTTP response body for the "unauthorized" error.
+type ListAssetsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssetsForbiddenResponseBody is the type of the "assets" service
+// "listAssets" endpoint HTTP response body for the "forbidden" error.
+type ListAssetsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssetsBadRequestResponseBody is the type of the "assets" service
+// "listAssets" endpoint HTTP response body for the "bad_request" error.
+type ListAssetsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssetsNotFoundResponseBody is the type of the "assets" service
+// "listAssets" endpoint HTTP response body for the "not_found" error.
+type ListAssetsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssetsConflictResponseBody is the type of the "assets" service
+// "listAssets" endpoint HTTP response body for the "conflict" error.
+type ListAssetsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssetsUnsupportedMediaResponseBody is the type of the "assets" service
+// "listAssets" endpoint HTTP response body for the "unsupported_media" error.
+type ListAssetsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssetsInvalidResponseBody is the type of the "assets" service
+// "listAssets" endpoint HTTP response body for the "invalid" error.
+type ListAssetsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssetsInvariantViolationResponseBody is the type of the "assets" service
+// "listAssets" endpoint HTTP response body for the "invariant_violation" error.
+type ListAssetsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssetsUnexpectedResponseBody is the type of the "assets" service
+// "listAssets" endpoint HTTP response body for the "unexpected" error.
+type ListAssetsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAssetsGatewayErrorResponseBody is the type of the "assets" service
+// "listAssets" endpoint HTTP response body for the "gateway_error" error.
+type ListAssetsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AssetResponseBody is used to define fields on response body types.
 type AssetResponseBody struct {
 	// The ID of the asset
@@ -784,6 +971,21 @@ func NewUploadOpenAPIv3ResponseBody(res *assets.UploadOpenAPIv3Result) *UploadOp
 	body := &UploadOpenAPIv3ResponseBody{}
 	if res.Asset != nil {
 		body.Asset = marshalAssetsAssetToAssetResponseBody(res.Asset)
+	}
+	return body
+}
+
+// NewListAssetsResponseBody builds the HTTP response body from the result of
+// the "listAssets" endpoint of the "assets" service.
+func NewListAssetsResponseBody(res *assets.ListAssetsResult) *ListAssetsResponseBody {
+	body := &ListAssetsResponseBody{}
+	if res.Assets != nil {
+		body.Assets = make([]*AssetResponseBody, len(res.Assets))
+		for i, val := range res.Assets {
+			body.Assets[i] = marshalAssetsAssetToAssetResponseBody(val)
+		}
+	} else {
+		body.Assets = []*AssetResponseBody{}
 	}
 	return body
 }
@@ -1350,6 +1552,146 @@ func NewServeOpenAPIv3GatewayErrorResponseBody(res *goa.ServiceError) *ServeOpen
 	return body
 }
 
+// NewListAssetsUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "listAssets" endpoint of the "assets" service.
+func NewListAssetsUnauthorizedResponseBody(res *goa.ServiceError) *ListAssetsUnauthorizedResponseBody {
+	body := &ListAssetsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssetsForbiddenResponseBody builds the HTTP response body from the
+// result of the "listAssets" endpoint of the "assets" service.
+func NewListAssetsForbiddenResponseBody(res *goa.ServiceError) *ListAssetsForbiddenResponseBody {
+	body := &ListAssetsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssetsBadRequestResponseBody builds the HTTP response body from the
+// result of the "listAssets" endpoint of the "assets" service.
+func NewListAssetsBadRequestResponseBody(res *goa.ServiceError) *ListAssetsBadRequestResponseBody {
+	body := &ListAssetsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssetsNotFoundResponseBody builds the HTTP response body from the
+// result of the "listAssets" endpoint of the "assets" service.
+func NewListAssetsNotFoundResponseBody(res *goa.ServiceError) *ListAssetsNotFoundResponseBody {
+	body := &ListAssetsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssetsConflictResponseBody builds the HTTP response body from the
+// result of the "listAssets" endpoint of the "assets" service.
+func NewListAssetsConflictResponseBody(res *goa.ServiceError) *ListAssetsConflictResponseBody {
+	body := &ListAssetsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssetsUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "listAssets" endpoint of the "assets" service.
+func NewListAssetsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListAssetsUnsupportedMediaResponseBody {
+	body := &ListAssetsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssetsInvalidResponseBody builds the HTTP response body from the
+// result of the "listAssets" endpoint of the "assets" service.
+func NewListAssetsInvalidResponseBody(res *goa.ServiceError) *ListAssetsInvalidResponseBody {
+	body := &ListAssetsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssetsInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "listAssets" endpoint of the "assets" service.
+func NewListAssetsInvariantViolationResponseBody(res *goa.ServiceError) *ListAssetsInvariantViolationResponseBody {
+	body := &ListAssetsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssetsUnexpectedResponseBody builds the HTTP response body from the
+// result of the "listAssets" endpoint of the "assets" service.
+func NewListAssetsUnexpectedResponseBody(res *goa.ServiceError) *ListAssetsUnexpectedResponseBody {
+	body := &ListAssetsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAssetsGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "listAssets" endpoint of the "assets" service.
+func NewListAssetsGatewayErrorResponseBody(res *goa.ServiceError) *ListAssetsGatewayErrorResponseBody {
+	body := &ListAssetsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewServeImageForm builds a assets service serveImage endpoint payload.
 func NewServeImageForm(id string, sessionToken *string) *assets.ServeImageForm {
 	v := &assets.ServeImageForm{}
@@ -1392,6 +1734,16 @@ func NewServeOpenAPIv3Form(id string, apikeyToken *string, projectSlugInput *str
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
 	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewListAssetsPayload builds a assets service listAssets endpoint payload.
+func NewListAssetsPayload(sessionToken *string, projectSlugInput *string, apikeyToken *string) *assets.ListAssetsPayload {
+	v := &assets.ListAssetsPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ApikeyToken = apikeyToken
 
 	return v
 }

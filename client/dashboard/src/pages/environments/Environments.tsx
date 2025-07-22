@@ -1,10 +1,7 @@
-import { AddButton } from "@/components/add-button";
-import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, Cards } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -77,22 +74,31 @@ export default function Environments() {
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
-        <Page.Header.Actions>
-          <AddButton
-            onClick={() => setCreateEnvironmentDialogOpen(true)}
-            tooltip="New Environment"
-          />
-        </Page.Header.Actions>
       </Page.Header>
       <Page.Body>
-        <>
-          {useEnvironments().map((environment) => (
-            <EnvironmentCard key={environment.id} environment={environment} />
-          ))}
-          <CreateThingCard onClick={() => setCreateEnvironmentDialogOpen(true)}>
-            + New Environment
-          </CreateThingCard>
-        </>
+        <Page.Section>
+          <Page.Section.Title>Environments</Page.Section.Title>
+          <Page.Section.Description>
+            Use environments to manage API keys, allowing Gram to handle
+            authentication for you
+          </Page.Section.Description>
+          <Page.Section.CTA
+            onClick={() => setCreateEnvironmentDialogOpen(true)}
+            icon="plus"
+          >
+            New Environment
+          </Page.Section.CTA>
+          <Page.Section.Body>
+            <Cards>
+              {useEnvironments().map((environment) => (
+                <EnvironmentCard
+                  key={environment.id}
+                  environment={environment}
+                />
+              ))}
+            </Cards>
+          </Page.Section.Body>
+        </Page.Section>
         <InputDialog
           open={createEnvironmentDialogOpen}
           onOpenChange={setCreateEnvironmentDialogOpen}
@@ -118,26 +124,25 @@ function EnvironmentCard({ environment }: { environment: Environment }) {
   return (
     <Card>
       <Card.Header>
-        <routes.environments.environment.Link params={[environment.slug]}>
-          <Card.Title className="hover:underline">
+        <Card.Title>
+          <routes.environments.environment.Link params={[environment.slug]}>
             {environment.name}
-          </Card.Title>
-        </routes.environments.environment.Link>
-        <Card.Info>
-          <Badge>{environment.entries.length || "No"} Entries</Badge>
-        </Card.Info>
-        <Card.Description>
-          {/* TODO: add description */}
-          <Type variant="body" muted className="text-sm italic">
-            {"Updated "}
-            <HumanizeDateTime date={new Date(environment.updatedAt)} />
-          </Type>
-        </Card.Description>
+          </routes.environments.environment.Link>
+        </Card.Title>
       </Card.Header>
+      <Card.Content>
+        <Card.Description>
+          {environment.description || "No description provided"}
+        </Card.Description>
+      </Card.Content>
       <Card.Footer>
-        <routes.environments.environment.Link params={[environment.slug]}>
-          <Button variant="outline">Edit</Button>
-        </routes.environments.environment.Link>
+        <Badge variant="outline">
+          {environment.entries.length || "No"} Entries
+        </Badge>
+        <Type variant="body" muted className="text-sm italic">
+          {"Updated "}
+          <HumanizeDateTime date={new Date(environment.updatedAt)} />
+        </Type>
       </Card.Footer>
     </Card>
   );

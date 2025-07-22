@@ -276,7 +276,7 @@ export function IntegrationCard({
   return (
     <Card>
       <Card.Header>
-        <Stack direction="horizontal" gap={2} justify={"space-between"}>
+        <Card.Title>
           <Stack direction="horizontal" gap={2} align={"center"}>
             {integration.packageImageAssetId && (
               <AssetImage
@@ -284,26 +284,14 @@ export function IntegrationCard({
                 className="w-8 h-8 rounded-md"
               />
             )}
-            <Card.Title>
+            <span>
               {integration.packageTitle}
               <span className="text-muted-foreground text-sm ml-2">
                 v{integration.version}
               </span>
-            </Card.Title>
+            </span>
           </Stack>
-          <ToolsBadge toolNames={integration.toolNames} />
-        </Stack>
-        <Stack direction="horizontal" gap={3} justify={"space-between"}>
-          <Card.Description className="max-w-2/3">
-            {integration.packageSummary}
-          </Card.Description>
-          <Type variant="body" muted className="text-sm italic">
-            {"Updated "}
-            <HumanizeDateTime date={new Date(integration.versionCreatedAt)} />
-          </Type>
-        </Stack>
-      </Card.Header>
-      <Card.Footer>
+        </Card.Title>
         {firstParty ? (
           <Button
             variant="outline"
@@ -324,6 +312,18 @@ export function IntegrationCard({
             )}
           </Button>
         )}
+      </Card.Header>
+      <Card.Content>
+        <Card.Description>
+          {integration.packageSummary}
+        </Card.Description>
+      </Card.Content>
+      <Card.Footer>
+        <ToolsBadge toolNames={integration.toolNames} />
+        <Type variant="body" muted className="text-sm italic">
+          {"Updated "}
+          <HumanizeDateTime date={new Date(integration.versionCreatedAt)} />
+        </Type>
       </Card.Footer>
     </Card>
   );

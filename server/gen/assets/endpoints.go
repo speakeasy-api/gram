@@ -21,6 +21,7 @@ type Endpoints struct {
 	UploadImage     goa.Endpoint
 	UploadOpenAPIv3 goa.Endpoint
 	ServeOpenAPIv3  goa.Endpoint
+	ListAssets      goa.Endpoint
 }
 
 // ServeImageResponseData holds both the result and the HTTP response body
@@ -68,6 +69,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UploadImage:     NewUploadImageEndpoint(s, a.APIKeyAuth),
 		UploadOpenAPIv3: NewUploadOpenAPIv3Endpoint(s, a.APIKeyAuth),
 		ServeOpenAPIv3:  NewServeOpenAPIv3Endpoint(s, a.APIKeyAuth),
+		ListAssets:      NewListAssetsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -77,6 +79,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UploadImage = m(e.UploadImage)
 	e.UploadOpenAPIv3 = m(e.UploadOpenAPIv3)
 	e.ServeOpenAPIv3 = m(e.ServeOpenAPIv3)
+	e.ListAssets = m(e.ListAssets)
 }
 
 // NewServeImageEndpoint returns an endpoint function that calls the method
@@ -284,5 +287,64 @@ func NewServeOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return &ServeOpenAPIv3ResponseData{Result: res, Body: body}, nil
+	}
+}
+
+// NewListAssetsEndpoint returns an endpoint function that calls the method
+// "listAssets" of service "assets".
+func NewListAssetsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAssetsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAssets(ctx, p)
 	}
 }

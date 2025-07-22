@@ -59,7 +59,7 @@ export const ToolsetHeader = ({
         </CopyableSlug>
         {actions}
       </Stack>
-      <Stack direction="horizontal" gap={2} justify="space-between">
+      <div className="flex flex-col gap-4 @2xl:flex-row @2xl:justify-between @2xl:gap-6">
         <EditableText
           value={toolset?.description}
           onSubmit={(newValue) => updateToolset({ description: newValue })}
@@ -76,8 +76,8 @@ export const ToolsetHeader = ({
           </Type>
         </EditableText>
         <Stack direction="horizontal" gap={2}>
-          <ToolsetPromptsBadge toolset={toolset} size="md" variant="outline" />
           <ToolsetToolsBadge toolset={toolset} size="md" variant="outline" />
+          <ToolsetPromptsBadge toolset={toolset} size="md" variant="outline" />
           {showEnvironmentBadge && (
             <ToolsetEnvironmentBadge
               toolset={toolset}
@@ -87,7 +87,7 @@ export const ToolsetHeader = ({
             />
           )}
         </Stack>
-      </Stack>
+      </div>
     </Stack>
   );
 };

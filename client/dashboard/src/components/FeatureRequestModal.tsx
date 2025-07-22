@@ -91,7 +91,7 @@ export function FeatureRequestModal({
                 "rounded-md cursor-pointer",
                 "transition-all outline-none",
                 "w-full rounded-[7px] bg-background border-0",
-                "hover:bg-accent",
+                "hover:bg-background/95",
                 "disabled:cursor-not-allowed",
                 "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-neutral-500"
               )}

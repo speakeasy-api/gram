@@ -1,5 +1,3 @@
-import { AddButton } from "@/components/add-button";
-import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { Cards } from "@/components/ui/card";
@@ -14,6 +12,7 @@ import { useState } from "react";
 import { Outlet } from "react-router";
 import { ToolsetCard } from "./ToolsetCard";
 import { ToolsetsEmptyState } from "./ToolsetsEmptyState";
+import { APIsContent } from "./openapi/OpenAPI";
 
 export function useToolsets() {
   const { data: toolsets, refetch, isLoading } = useListToolsets();
@@ -60,14 +59,9 @@ export default function Toolsets() {
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
-        <Page.Header.Actions>
-          <AddButton
-            onClick={() => setCreateToolsetDialogOpen(true)}
-            tooltip="New Toolset"
-          />
-        </Page.Header.Actions>
       </Page.Header>
       <Page.Body>
+        <APIsContent />
         <ToolsetsContent
           setCreateToolsetDialogOpen={setCreateToolsetDialogOpen}
         />
@@ -98,7 +92,7 @@ function ToolsetsContent({
 }) {
   const toolsets = useToolsets();
 
-  if (toolsets.length === 0) {
+  if (!toolsets.isLoading && toolsets.length === 0) {
     return (
       <ToolsetsEmptyState
         onCreateToolset={() => setCreateToolsetDialogOpen(true)}
@@ -107,13 +101,24 @@ function ToolsetsContent({
   }
 
   return (
-    <Cards loading={toolsets.isLoading}>
-      {toolsets.map((toolset) => (
-        <ToolsetCard key={toolset.id} toolset={toolset} />
-      ))}
-      <CreateThingCard onClick={() => setCreateToolsetDialogOpen(true)}>
-        + New Toolset
-      </CreateThingCard>
-    </Cards>
+    <Page.Section>
+      <Page.Section.Title>Toolsets</Page.Section.Title>
+      <Page.Section.Description>
+        Organized collections of tools and prompts for your AI applications
+      </Page.Section.Description>
+      <Page.Section.CTA
+        onClick={() => setCreateToolsetDialogOpen(true)}
+        icon="plus"
+      >
+        Add Toolset
+      </Page.Section.CTA>
+      <Page.Section.Body>
+        <Cards isLoading={toolsets.isLoading}>
+          {toolsets.map((toolset) => (
+            <ToolsetCard key={toolset.id} toolset={toolset} />
+          ))}
+        </Cards>
+      </Page.Section.Body>
+    </Page.Section>
   );
 }

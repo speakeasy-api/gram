@@ -127,6 +127,7 @@ run();
 
 ### [assets](docs/sdks/assets/README.md)
 
+* [listAssets](docs/sdks/assets/README.md#listassets) - listAssets assets
 * [serveImage](docs/sdks/assets/README.md#serveimage) - serveImage assets
 * [serveOpenAPIv3](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 * [uploadImage](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
@@ -254,6 +255,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 
 <summary>Available standalone functions</summary>
 
+- [`assetsListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
 - [`assetsServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`assetsServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 - [`assetsUploadImage`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
@@ -367,6 +369,7 @@ To learn about this feature and how to get started, check
 - [`useIntegrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`useLatestDeployment`](docs/sdks/deployments/README.md#latest) - getLatestDeployment deployments
 - [`useListAPIKeys`](docs/sdks/keys/README.md#list) - listKeys keys
+- [`useListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
 - [`useListChats`](docs/sdks/chat/README.md#list) - listChats chat
 - [`useListDeployments`](docs/sdks/deployments/README.md#list) - listDeployments deployments
 - [`useListEnvironments`](docs/sdks/environments/README.md#list) - listEnvironments environments
@@ -523,7 +526,7 @@ run();
 ### Error Classes
 **Primary errors:**
 * [`GramError`](./src/models/errors/gramerror.ts): The base class for HTTP error responses.
-  * [`ServiceError`](./src/models/errors/serviceerror.ts): unauthorized access.
+  * [`ServiceError`](docs/models/errors/serviceerror.md): unauthorized access.
 
 <details><summary>Less common errors (6)</summary>
 

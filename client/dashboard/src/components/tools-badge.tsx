@@ -36,7 +36,7 @@ export const ToolsetBadge = ({
 export const ToolsetPromptsBadge = ({
   toolset,
   size = "md",
-  variant = "default",
+  variant = "outline",
 }: {
   toolset: Toolset | undefined;
   size?: "sm" | "md";
@@ -64,7 +64,7 @@ export const ToolsetPromptsBadge = ({
 export const ToolsetToolsBadge = ({
   toolset,
   size = "md",
-  variant = "default",
+  variant = "outline",
   className,
 }: {
   toolset: Toolset | undefined;
@@ -97,7 +97,7 @@ export const ToolsetToolsBadge = ({
 export const ToolsBadge = ({
   toolNames,
   size = "md",
-  variant = "default",
+  variant = "outline",
   className,
   warnOnTooManyTools = false,
 }: {

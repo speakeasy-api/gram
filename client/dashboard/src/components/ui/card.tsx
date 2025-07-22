@@ -1,8 +1,10 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { Grid } from "@speakeasy-api/moonshine";
 import { Heading } from "./heading";
 import { Skeleton, SkeletonParagraph } from "./skeleton";
+import { Type } from "./type";
 
 const CardComponent = ({
   className,
@@ -13,7 +15,7 @@ const CardComponent = ({
     <div
       data-slot="card"
       className={cn(
-        "bg-card max-w-2xl text-card-foreground flex flex-col gap-6 rounded-xl border py-6 shadow-sm group/card last:mb-8",
+        "bg-card text-card-foreground flex flex-col gap-5 rounded-xl border p-4 group/card",
         size === "sm" && "gap-4 py-4",
         className
       )}
@@ -27,7 +29,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "@container/card-header flex flex-wrap items-center gap-2 px-6 [.border-b]:pb-6",
+        "@container/card-header flex items-center justify-between [.border-b]:pb-6",
         className
       )}
       {...props}
@@ -52,11 +54,16 @@ function CardTitle({
   );
 }
 
-function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
+function CardDescription({
+  className,
+  ...props
+}: React.ComponentProps<typeof Type>) {
   return (
-    <div
+    <Type
+      muted
+      small
       data-slot="card-description"
-      className={cn("text-muted-foreground text-sm w-full", className)}
+      className={cn("w-full truncate", className)}
       {...props}
     />
   );
@@ -78,28 +85,12 @@ function CardInfo({ className, ...props }: React.ComponentProps<"div">) {
 
 function CardActions({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div
-      data-slot="card-action"
-      className={cn(
-        "absolute top-[-8px] right-4 bg-card opacity-0 group-hover/card:opacity-100 trans flex",
-        className
-      )}
-      {...props}
-    />
+    <div data-slot="card-action" className={cn("flex", className)} {...props} />
   );
 }
 
-export function CardContent({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
-  return (
-    <div
-      data-slot="card-content"
-      className={cn("px-6", className)}
-      {...props}
-    />
-  );
+function CardContent({ className, ...props }: React.ComponentProps<"div">) {
+  return <div data-slot="card-content" className={className} {...props} />;
 }
 
 function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
@@ -107,7 +98,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center justify-end gap-2 px-6 [.border-t]:pt-6",
+        "flex items-center justify-between [.border-t]:pt-6",
         className
       )}
       {...props}
@@ -127,20 +118,48 @@ export const Card = Object.assign(CardComponent, {
 
 export function Cards({
   className,
-  loading,
+  isLoading: loading,
+  noGrid,
   ...props
-}: React.ComponentProps<"div"> & { loading?: boolean }) {
+}: React.ComponentProps<"div"> & {
+  isLoading?: boolean;
+  noGrid?: boolean;
+}) {
+  let children = React.Children.map(props.children, (child) => (
+    <Grid.Item colSpan={1}>{child}</Grid.Item>
+  ));
+
+  if (loading) {
+    children = [
+      <Grid.Item colSpan={1}>
+        <CardSkeleton />
+      </Grid.Item>,
+      <Grid.Item colSpan={1}>
+        <CardSkeleton />
+      </Grid.Item>,
+      <Grid.Item colSpan={1}>
+        <CardSkeleton />
+      </Grid.Item>,
+    ];
+  }
+
+  if (!children) {
+    return "Nothing found";
+  }
+
   return (
-    <div className={cn("flex flex-col gap-4", className)} {...props}>
-      {loading ? (
-        <>
-          <CardSkeleton />
-          <CardSkeleton />
-          <CardSkeleton />
-        </>
-      ) : (
-        props.children
-      )}
+    <div className="@container/cards">
+      <Grid
+        columns={1}
+        className={cn(
+          "grid-cols-1 gap-x-8 gap-y-4 mb-8",
+          !noGrid && "@2xl/cards:grid-cols-2 @7xl/cards:grid-cols-3",
+          className
+        )}
+        {...props}
+      >
+        {children}
+      </Grid>
     </div>
   );
 }

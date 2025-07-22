@@ -47,6 +47,7 @@ export * from "./integration.js";
 export * from "./integrationentry.js";
 export * from "./integrationversion.js";
 export * from "./key.js";
+export * from "./listassetsresult.js";
 export * from "./listchatsresult.js";
 export * from "./listdeploymentresult.js";
 export * from "./listenvironmentsresult.js";

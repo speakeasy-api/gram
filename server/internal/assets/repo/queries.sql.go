@@ -187,3 +187,40 @@ func (q *Queries) GetProjectAssetBySHA256(ctx context.Context, arg GetProjectAss
 	)
 	return i, err
 }
+
+const listAssets = `-- name: ListAssets :many
+SELECT id, project_id, name, url, kind, content_type, content_length, sha256, created_at, updated_at, deleted_at, deleted FROM assets WHERE project_id = $1
+`
+
+func (q *Queries) ListAssets(ctx context.Context, projectID uuid.UUID) ([]Asset, error) {
+	rows, err := q.db.Query(ctx, listAssets, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Asset
+	for rows.Next() {
+		var i Asset
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Url,
+			&i.Kind,
+			&i.ContentType,
+			&i.ContentLength,
+			&i.Sha256,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

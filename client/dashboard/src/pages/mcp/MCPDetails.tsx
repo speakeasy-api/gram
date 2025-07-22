@@ -1,8 +1,10 @@
 import { CodeBlock } from "@/components/code";
+import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
+import { Link } from "@/components/ui/link";
 import {
   SimpleTooltip,
   Tooltip,
@@ -15,7 +17,6 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
-import { useRoutes } from "@/routes";
 import { Toolset } from "@gram/client/models/components";
 import {
   invalidateAllToolset,
@@ -25,11 +26,10 @@ import {
 } from "@gram/client/react-query";
 import { Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { Globe } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
-import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { Globe } from "lucide-react";
 import { Block, BlockInner } from "../toolBuilder/components";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
 
@@ -53,7 +53,7 @@ export function MCPDetailPage() {
           tools or prompts exposed by this MCP server, update the source toolset
           below."
       >
-        <ToolsetCard toolset={toolset.data} className="m-0!" />
+        <ToolsetCard toolset={toolset.data} className="max-w-3xl" />
       </PageSection>
       <MCPDetails toolset={toolset.data} />
     </Stack>
@@ -61,7 +61,11 @@ export function MCPDetailPage() {
 }
 
 export function useCustomDomain() {
-  const { data: domain, isLoading, refetch } = useGetDomain(undefined, undefined, {
+  const {
+    data: domain,
+    isLoading,
+    refetch,
+  } = useGetDomain(undefined, undefined, {
     refetchOnWindowFocus: false,
     retry: false,
     throwOnError: false,
@@ -101,7 +105,6 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const queryClient = useQueryClient();
   const session = useSession();
   const { orgSlug, projectSlug } = useParams();
-  const routes = useRoutes();
   const { domain } = useCustomDomain();
 
   const updateToolsetMutation = useUpdateToolsetMutation({
@@ -115,7 +118,12 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       });
     },
     onError: (error) => {
-      if (error.message && error.message.includes("maximum number of public MCP servers for your account type")) {
+      if (
+        error.message &&
+        error.message.includes(
+          "maximum number of public MCP servers for your account type"
+        )
+      ) {
         setIsMaxServersModalOpen(true);
       }
 
@@ -253,10 +261,10 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         heading="Hosted URL"
         headingRHS={publicToggle}
         description="The URL you or your users will use to access this MCP server."
-        className="max-w-2xl mb-2"
+        className="max-w-3xl mb-2"
       >
         <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
-        <Block label="Custom Slug" className="max-w-2xl" error={mcpSlugError}>
+        <Block label="Custom Slug" className="max-w-3xl" error={mcpSlugError}>
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Type muted mono variant="small">
@@ -314,12 +322,12 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           description="A simple hosted page for installing your MCP server. Try it in the browser!"
         >
           <Stack direction="horizontal" align="center" gap={2}>
-            <routes.mcp.details.hosted_page.Link params={[toolset.slug]}>
+            <CodeBlock className="max-w-3xl">{`${mcpUrl}/install`}</CodeBlock>
+            <Link external to={`${mcpUrl}/install`} noIcon>
               <Button variant="outline" size="sm" className="px-8">
                 View
               </Button>
-            </routes.mcp.details.hosted_page.Link>
-            <CodeBlock className="max-w-3xl">{`${mcpUrl}/install`}</CodeBlock>
+            </Link>
           </Stack>
         </PageSection>
       )}
@@ -374,7 +382,7 @@ function PageSection({
         <Heading variant="h3">{heading}</Heading>
         {headingRHS}
       </Stack>
-      <Type muted small className="max-w-2xl">
+      <Type muted small className="max-w-3xl">
         {description}
       </Type>
       {children}
@@ -407,17 +415,19 @@ export function MCPJson({
     ((
       <Grid.Item>
         <Type className="font-medium">Public Server</Type>
-        <Type muted small className="max-w-2xl">
+        <Type muted small className="max-w-3xl mb-2!">
           Pass API credentials directly to the MCP server.
         </Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-      </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
-    ) as // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    any);
+      </Grid.Item>
+      // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ) as any);
 
   return (
     <Grid
       gap={4}
+      className="mt-4!"
       columns={
         publicSettingsJson || !fullWidth
           ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 }
@@ -432,15 +442,14 @@ export function MCPJson({
             (with Gram key)
           </span>
         </Type>
-        <Type muted small className="max-w-2xl">
+        <Type muted small className="max-w-3xl mb-2!">
           {toolset.mcpIsPublic ? (
             "Use preset gram environments with an MCP server."
           ) : (
             <>
-              This server can only be accessed using a Gram API Key.
-              <br />
-              Either use a preset Gram environment or pass API credentials
-              directly to the MCP server.
+              This server can only be accessed using a Gram API Key. Either use
+              a preset Gram environment or pass API credentials directly to the
+              MCP server.
             </>
           )}
         </Type>

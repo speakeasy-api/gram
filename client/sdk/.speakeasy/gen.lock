@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 8608c552013fe517a9421721f80a30e4
+  docChecksum: d23bdfec2a5bd708cf7ab5a435ebe44b
   docVersion: 0.0.1
-  speakeasyVersion: 1.582.0
-  generationVersion: 2.657.1
-  releaseVersion: 0.12.37
-  configChecksum: 403eacc417c63efee29518c6197ca800
+  speakeasyVersion: 1.568.2
+  generationVersion: 2.634.2
+  releaseVersion: 0.12.38
+  configChecksum: a812d9e0054cb7dc02517a2227c9a75b
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.14
+    core: 3.21.11
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
@@ -86,6 +86,7 @@ generatedFiles:
   - docs/models/components/integrationversion.md
   - docs/models/components/key.md
   - docs/models/components/kind.md
+  - docs/models/components/listassetsresult.md
   - docs/models/components/listchatsresult.md
   - docs/models/components/listdeploymentresult.md
   - docs/models/components/listenvironmentsresult.md
@@ -212,6 +213,10 @@ generatedFiles:
   - docs/models/operations/integrationsnumbergetsecurity.md
   - docs/models/operations/listapikeysrequest.md
   - docs/models/operations/listapikeyssecurity.md
+  - docs/models/operations/listassetsrequest.md
+  - docs/models/operations/listassetssecurity.md
+  - docs/models/operations/listassetssecurityoption1.md
+  - docs/models/operations/listassetssecurityoption2.md
   - docs/models/operations/listchatsrequest.md
   - docs/models/operations/listchatssecurity.md
   - docs/models/operations/listdeploymentsrequest.md
@@ -337,13 +342,10 @@ generatedFiles:
   - docs/sdks/toolsets/README.md
   - docs/sdks/variations/README.md
   - eslint.config.mjs
-  - examples/.env.template
-  - examples/README.md
-  - examples/package.json
-  - examples/slackSlackLogin.example.ts
   - jsr.json
   - package.json
   - src/core.ts
+  - src/funcs/assetsListAssets.ts
   - src/funcs/assetsServeImage.ts
   - src/funcs/assetsServeOpenAPIv3.ts
   - src/funcs/assetsUploadImage.ts
@@ -472,6 +474,7 @@ generatedFiles:
   - src/models/components/integrationentry.ts
   - src/models/components/integrationversion.ts
   - src/models/components/key.ts
+  - src/models/components/listassetsresult.ts
   - src/models/components/listchatsresult.ts
   - src/models/components/listdeploymentresult.ts
   - src/models/components/listenvironmentsresult.ts
@@ -549,6 +552,7 @@ generatedFiles:
   - src/models/operations/index.ts
   - src/models/operations/integrationsnumberget.ts
   - src/models/operations/listapikeys.ts
+  - src/models/operations/listassets.ts
   - src/models/operations/listchats.ts
   - src/models/operations/listdeployments.ts
   - src/models/operations/listenvironments.ts
@@ -611,6 +615,7 @@ generatedFiles:
   - src/react-query/integrationsIntegrationsNumberGet.ts
   - src/react-query/latestDeployment.ts
   - src/react-query/listAPIKeys.ts
+  - src/react-query/listAssets.ts
   - src/react-query/listChats.ts
   - src/react-query/listDeployments.ts
   - src/react-query/listEnvironments.ts
@@ -1333,5 +1338,14 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listAssets:
+    speakeasy-default-list-assets:
+      responses:
+        "200":
+          application/json: {"assets": [{"content_length": 587737, "content_type": "<value>", "created_at": "2024-07-01T04:27:32.334Z", "id": "<id>", "kind": "unknown", "sha256": "<value>", "updated_at": "2024-04-13T08:54:24.321Z"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

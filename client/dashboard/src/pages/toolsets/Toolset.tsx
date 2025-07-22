@@ -1,5 +1,3 @@
-import { AddButton } from "@/components/add-button";
-import { CreateThingCard } from "@/components/create-thing-card";
 import { DeleteButton } from "@/components/delete-button";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
@@ -11,6 +9,7 @@ import {
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
+import { useApiError } from "@/hooks/useApiError";
 import { useGroupedTools } from "@/lib/toolNames";
 import { useRoutes } from "@/routes";
 import {
@@ -19,7 +18,6 @@ import {
   useToolset,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
-import { useApiError } from "@/hooks/useApiError";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -32,12 +30,45 @@ import { ToolsetPlaygroundLink } from "./ToolsetCard";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
 import { ToolDefinition, useToolDefinitions } from "./types";
-export function ToolsetRoot() {
-  const { toolsetSlug } = useParams();
+
+export function useDeleteToolset({
+  onSuccess,
+}: { onSuccess?: () => void } = {}) {
   const toolsets = useToolsets();
-  const routes = useRoutes();
   const telemetry = useTelemetry();
   const { handleApiError } = useApiError();
+
+  const mutation = useDeleteToolsetMutation({
+    onSuccess: async () => {
+      telemetry.capture("toolset_event", {
+        action: "toolset_deleted",
+      });
+      await toolsets.refetch();
+      onSuccess?.();
+    },
+    onError: (error) => {
+      handleApiError(error, "Failed to delete toolset");
+    },
+  });
+
+  return (slug: string) => {
+    if (
+      confirm(
+        "Are you sure you want to delete this toolset? This action cannot be undone."
+      )
+    ) {
+      mutation.mutate({
+        request: {
+          slug,
+        },
+      });
+    }
+  };
+}
+
+export function ToolsetRoot() {
+  const { toolsetSlug } = useParams();
+  const routes = useRoutes();
 
   const { data: toolset } = useToolset({
     slug: toolsetSlug || "",
@@ -47,16 +78,9 @@ export function ToolsetRoot() {
     toolsetSlug: toolsetSlug ?? "",
   });
 
-  const deleteToolsetMutation = useDeleteToolsetMutation({
-    onSuccess: async () => {
-      telemetry.capture("toolset_event", {
-        action: "toolset_deleted",
-      });
-      await toolsets.refetch();
+  const deleteToolset = useDeleteToolset({
+    onSuccess: () => {
       routes.toolsets.goTo();
-    },
-    onError: (error) => {
-      handleApiError(error, "Failed to delete toolset");
     },
   });
 
@@ -68,17 +92,8 @@ export function ToolsetRoot() {
     <DeleteButton
       tooltip="Delete Toolset"
       onClick={() => {
-        if (
-          toolset &&
-          confirm(
-            "Are you sure you want to delete this toolset? This action cannot be undone."
-          )
-        ) {
-          deleteToolsetMutation.mutate({
-            request: {
-              slug: toolset.slug,
-            },
-          });
+        if (toolset) {
+          deleteToolset(toolset.slug);
         }
       }}
     />
@@ -88,13 +103,7 @@ export function ToolsetRoot() {
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
-        <Page.Header.Actions>
-          {toolset && deleteButton}
-          <AddButton
-            onClick={() => routes.toolsets.toolset.update.goTo(toolsetSlug)}
-            tooltip="Add Tool"
-          />
-        </Page.Header.Actions>
+        <Page.Header.Actions>{toolset && deleteButton}</Page.Header.Actions>
       </Page.Header>
       <Outlet />
     </Page>
@@ -119,12 +128,14 @@ export function ToolsetView({
   environmentSlug,
   addToolsStyle = "link",
   showEnvironmentBadge,
+  noGrid,
 }: {
   toolsetSlug: string;
   className?: string;
   environmentSlug?: string;
   addToolsStyle?: "link" | "modal";
   showEnvironmentBadge?: boolean;
+  noGrid?: boolean;
 }) {
   const queryClient = useQueryClient();
   const routes = useRoutes();
@@ -187,8 +198,10 @@ export function ToolsetView({
 
   const actions = (
     <Stack direction="horizontal" gap={2}>
-      <ToolsetPlaygroundLink toolset={toolset} />
-      <Button icon="plus" onClick={gotoAddTools}>
+      {!routes.playground.active && (
+        <ToolsetPlaygroundLink toolset={toolset} />
+      )}
+      <Button icon="plus" onClick={gotoAddTools} caps>
         Add/Remove Tools
       </Button>
     </Stack>
@@ -224,15 +237,13 @@ export function ToolsetView({
 
   return (
     <Page.Body className={className}>
-      <div className="max-w-2xl">
-        <ToolsetHeader
-          toolsetSlug={toolsetSlug}
-          actions={actions}
-          showEnvironmentBadge={showEnvironmentBadge}
-          environmentSlug={environmentSlug}
-        />
-        {groupFilterItems.length > 1 && filterButton}
-      </div>
+      <ToolsetHeader
+        toolsetSlug={toolsetSlug}
+        actions={actions}
+        showEnvironmentBadge={showEnvironmentBadge}
+        environmentSlug={environmentSlug}
+      />
+      {groupFilterItems.length > 1 && filterButton}
       <Tabs
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as ToolsetTabs)}
@@ -244,7 +255,7 @@ export function ToolsetView({
           <TabsTrigger value="mcp">MCP</TabsTrigger>
         </TabsList>
         <TabsContent value="tools">
-          <Cards loading={!toolset}>
+          <Cards isLoading={!toolset} noGrid={noGrid}>
             {toolsToDisplay.map((tool) => (
               <ToolCard
                 key={tool.canonicalName}
@@ -252,7 +263,6 @@ export function ToolsetView({
                 onUpdate={onUpdate}
               />
             ))}
-            <CreateThingCard onClick={gotoAddTools}>+ Add Tool</CreateThingCard>
           </Cards>
         </TabsContent>
         <TabsContent value="prompts">

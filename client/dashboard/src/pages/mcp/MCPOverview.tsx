@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Card, Cards } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
-import { Heading } from "@/components/ui/heading";
 import {
   Tooltip,
   TooltipContent,
@@ -44,24 +43,24 @@ export function MCPRoot() {
 export function MCPOverview() {
   const toolsets = useToolsets();
 
-  if (toolsets.length === 0) {
+  if (!toolsets.isLoading && toolsets.length === 0) {
     return <MCPEmptyState />;
   }
 
   return (
-    <>
-      <div className="mb-8">
-        <Heading variant="h2">Hosted MCP Servers</Heading>
-        <Type className="text-muted-foreground mt-2">
-          Access any of your Gram toolsets below as a hosted MCP server
-        </Type>
-      </div>
-      <Cards>
-        {toolsets.map((toolset: Toolset) => (
-          <McpToolsetCard key={toolset.id} toolset={toolset} />
-        ))}
-      </Cards>
-    </>
+    <Page.Section>
+      <Page.Section.Title>Hosted MCP Servers</Page.Section.Title>
+      <Page.Section.Description>
+        Access any of your Gram toolsets below as a hosted MCP server
+      </Page.Section.Description>
+      <Page.Section.Body>
+        <Cards>
+          {toolsets.map((toolset: Toolset) => (
+            <McpToolsetCard key={toolset.id} toolset={toolset} />
+          ))}
+        </Cards>
+      </Page.Section.Body>
+    </Page.Section>
   );
 }
 
@@ -111,8 +110,8 @@ export function McpToolsetCard({ toolset }: { toolset: Toolset }) {
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-      <ToolsetPromptsBadge toolset={toolset} variant="outline" />
       <ToolsetToolsBadge toolset={toolset} variant="outline" />
+      <ToolsetPromptsBadge toolset={toolset} variant="outline" />
     </Stack>
   );
 
@@ -126,7 +125,18 @@ export function McpToolsetCard({ toolset }: { toolset: Toolset }) {
             </routes.mcp.details.Link>
           </CopyableSlug>
         </Card.Title>
-        <Card.Info>{badges}</Card.Info>
+        <Stack direction="horizontal" gap={2} align="center">
+          <Button
+            icon="braces"
+            onClick={() => setMcpModalOpen(true)}
+            variant="secondary"
+            size="sm"
+          >
+            Config
+          </Button>
+        </Stack>
+      </Card.Header>
+      <Card.Content>
         <Card.Description className="mt-[-6px]">
           <Stack direction="horizontal" className="group" align="center">
             <Type muted mono small className="break-all text-xs">
@@ -148,23 +158,12 @@ export function McpToolsetCard({ toolset }: { toolset: Toolset }) {
             />
           </Stack>
         </Card.Description>
-      </Card.Header>
+      </Card.Content>
       <Card.Footer>
-        <Stack direction="horizontal" gap={2} align="center">
-          <Button
-            icon="braces"
-            className="ml-auto"
-            onClick={() => setMcpModalOpen(true)}
-            variant="secondary"
-          >
-            View/Copy Config
-          </Button>
-          <routes.mcp.details.Link params={[toolset.slug]}>
-            <Button icon="settings">Edit</Button>
-          </routes.mcp.details.Link>
-        </Stack>
-        {mcpConfigDialog}
+        {badges}
+        <div />
       </Card.Footer>
+      {mcpConfigDialog}
     </Card>
   );
 }

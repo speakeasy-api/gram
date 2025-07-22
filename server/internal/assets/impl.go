@@ -74,6 +74,35 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
+func (s *Service) ListAssets(ctx context.Context, payload *gen.ListAssetsPayload) (*gen.ListAssetsResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	assets, err := s.repo.ListAssets(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("list assets: %w", err), "error listing assets")
+	}
+
+	assetsResult := make([]*gen.Asset, len(assets))
+	for i, asset := range assets {
+		assetsResult[i] = &gen.Asset{
+			ID:            asset.ID.String(),
+			Kind:          asset.Kind,
+			Sha256:        asset.Sha256,
+			ContentType:   asset.ContentType,
+			ContentLength: asset.ContentLength,
+			CreatedAt:     asset.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     asset.UpdatedAt.Time.Format(time.RFC3339),
+		}
+	}
+
+	return &gen.ListAssetsResult{
+		Assets: assetsResult,
+	}, nil
+}
+
 func (s *Service) ServeImage(ctx context.Context, payload *gen.ServeImageForm) (*gen.ServeImageResult, io.ReadCloser, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {

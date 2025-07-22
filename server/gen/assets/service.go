@@ -33,6 +33,8 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	ServeOpenAPIv3(context.Context, *ServeOpenAPIv3Form) (res *ServeOpenAPIv3Result, body io.ReadCloser, err error)
+	// List all assets for a project.
+	ListAssets(context.Context, *ListAssetsPayload) (res *ListAssetsResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -55,7 +57,7 @@ const ServiceName = "assets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [4]string{"serveImage", "uploadImage", "uploadOpenAPIv3", "serveOpenAPIv3"}
+var MethodNames = [5]string{"serveImage", "uploadImage", "uploadOpenAPIv3", "serveOpenAPIv3", "listAssets"}
 
 type Asset struct {
 	// The ID of the asset
@@ -71,6 +73,20 @@ type Asset struct {
 	CreatedAt string
 	// The last update date of the asset.
 	UpdatedAt string
+}
+
+// ListAssetsPayload is the payload type of the assets service listAssets
+// method.
+type ListAssetsPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	ApikeyToken      *string
+}
+
+// ListAssetsResult is the result type of the assets service listAssets method.
+type ListAssetsResult struct {
+	// The list of assets
+	Assets []*Asset
 }
 
 // ServeImageForm is the payload type of the assets service serveImage method.

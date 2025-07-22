@@ -112,6 +112,35 @@ var _ = Service("assets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "serveOpenAPIv3"}`)
 	})
 
+	Method("listAssets", func() {
+		Description("List all assets for a project.")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			security.ByKeyPayload()
+		})
+
+		Result(ListAssetsResult)
+
+		HTTP(func() {
+			GET("/rpc/assets.list")
+			security.SessionHeader()
+			security.ProjectHeader()
+			security.ByKeyHeader()
+		})
+
+		Meta("openapi:operationId", "listAssets")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAssets")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAssets"}`)
+	})
+
+})
+
+var ListAssetsResult = Type("ListAssetsResult", func() {
+	Required("assets")
+
+	Attribute("assets", ArrayOf(Asset), "The list of assets")
 })
 
 var ServeImageForm = Type("ServeImageForm", func() {

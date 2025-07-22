@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils";
-import { Check, ArrowRight } from "lucide-react";
+import { Stack } from "@speakeasy-api/moonshine";
+import { Check } from "lucide-react";
 import { Button } from "./ui/button";
 import { Heading } from "./ui/heading";
 import { Type } from "./ui/type";
-import { Stack } from "@speakeasy-api/moonshine";
 
 // Step number component for the left side
 function StepNumber({
@@ -21,7 +21,7 @@ function StepNumber({
         "flex items-center justify-center w-7 h-7 rounded-full bg-accent mt-1",
         active && "bg-primary text-primary-foreground",
         completed &&
-          "dark:bg-emerald-900 dark:text-emerald-300 bg-emerald-300 text-emerald-900",
+          "dark:bg-emerald-900 dark:text-emerald-300 bg-emerald-300 text-emerald-900"
       )}
     >
       {completed ? <Check className="w-5 h-5" /> : <span>{number}</span>}
@@ -65,11 +65,12 @@ export function Stepper({
       {onComplete && allCompleted && (
         <Button
           onClick={onComplete}
-          className="ml-12 hover:scale-105 trans"
+          className="ml-12"
           size={"lg"}
+          iconAfter
+          icon={"arrow-right"}
         >
           Continue
-          <ArrowRight className="w-4 h-4 ml-2" />
         </Button>
       )}
     </div>
@@ -96,7 +97,7 @@ export function Step({
       direction={"horizontal"}
       className={cn(
         "trans opacity-50 mb-4 w-full",
-        isActive && "opacity-100 mb-10",
+        isActive && "opacity-100 mb-8"
       )}
     >
       <StepNumber

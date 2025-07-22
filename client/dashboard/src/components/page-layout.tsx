@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils.ts";
 import { useIsProjectEmpty } from "@/pages/onboarding/Onboarding.tsx";
 import { useRoutes } from "@/routes.tsx";
 import { Stack } from "@speakeasy-api/moonshine";
+import React from "react"; // Added missing import for React
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
 import { Button } from "./ui/button.tsx";
@@ -37,9 +38,103 @@ function PageBody({
   );
 }
 
+function PageSectionComponent({ children }: { children: React.ReactNode }) {
+  const slots = {
+    title: null as React.ReactElement | null,
+    description: null as React.ReactElement | null,
+    cta: null as React.ReactElement | null,
+    body: null as React.ReactElement | null,
+  };
+
+  // Process children to extract slots by checking component type
+  React.Children.forEach(children, (child) => {
+    if (React.isValidElement(child)) {
+      // Check if the child is one of our slot components
+      if (child.type === PageSectionTitle) {
+        slots.title = child;
+      } else if (child.type === PageSectionDescription) {
+        slots.description = child;
+      } else if (child.type === PageSectionCTA) {
+        slots.cta = child;
+      } else if (child.type === PageSectionBody) {
+        slots.body = child;
+      }
+    }
+  });
+
+  return (
+    <Stack gap={2} className="mb-8">
+      {/* Render header with title, description, and CTA if they exist */}
+      {(slots.title || slots.description || slots.cta) && (
+        <Stack
+          direction="horizontal"
+          justify="space-between"
+          align="center"
+          className="mb-4"
+        >
+          <Stack gap={2}>
+            {slots.title}
+            {slots.description}
+          </Stack>
+          {slots.cta}
+        </Stack>
+      )}
+      {/* Render body */}
+      {slots.body}
+    </Stack>
+  );
+}
+
+function PageSectionTitle({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <Heading variant="h3" className={className}>
+      {children}
+    </Heading>
+  );
+}
+
+function PageSectionDescription({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <Type muted small className={cn("font-normal", className)}>
+      {children}
+    </Type>
+  );
+}
+
+function PageSectionBody({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
+}
+
+function PageSectionCTA({
+  children,
+  ...props
+}: { children: React.ReactNode } & React.ComponentProps<typeof Button>) {
+  return <Button caps {...props}>{children}</Button>;
+}
+
+const PageSection = Object.assign(PageSectionComponent, {
+  Title: PageSectionTitle,
+  Description: PageSectionDescription,
+  Body: PageSectionBody,
+  CTA: PageSectionCTA,
+});
+
 export const Page = Object.assign(PageLayout, {
   Header: PageHeader,
   Body: PageBody,
+  Section: PageSection,
 });
 
 export function EmptyState({

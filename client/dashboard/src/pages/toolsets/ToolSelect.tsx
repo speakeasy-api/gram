@@ -186,7 +186,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     slug: toolsetSlug,
   });
   const { data: tools, isLoading: isLoadingTools } = useListTools();
-  const customTools = useCustomTools();
+  const { customTools } = useCustomTools();
 
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
   const [search, setSearch] = useState("");

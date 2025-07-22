@@ -34,6 +34,10 @@ type Client struct {
 	// serveOpenAPIv3 endpoint.
 	ServeOpenAPIv3Doer goahttp.Doer
 
+	// ListAssets Doer is the HTTP client used to make requests to the listAssets
+	// endpoint.
+	ListAssetsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -58,6 +62,7 @@ func NewClient(
 		UploadImageDoer:     doer,
 		UploadOpenAPIv3Doer: doer,
 		ServeOpenAPIv3Doer:  doer,
+		ListAssetsDoer:      doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -169,5 +174,29 @@ func (c *Client) ServeOpenAPIv3() goa.Endpoint {
 			return nil, err
 		}
 		return &assets.ServeOpenAPIv3ResponseData{Result: res.(*assets.ServeOpenAPIv3Result), Body: resp.Body}, nil
+	}
+}
+
+// ListAssets returns an endpoint that makes HTTP requests to the assets
+// service listAssets server.
+func (c *Client) ListAssets() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAssetsRequest(c.encoder)
+		decodeResponse = DecodeListAssetsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAssetsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAssetsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assets", "listAssets", err)
+		}
+		return decodeResponse(resp)
 	}
 }

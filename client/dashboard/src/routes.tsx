@@ -2,10 +2,14 @@ import { Icon, IconName, IconProps } from "@speakeasy-api/moonshine";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useSlugs } from "./contexts/Sdk";
+import { cn } from "./lib/utils";
+import Deployment from "./pages/deployments/Deployment";
+import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {
   EnvironmentsRoot,
 } from "./pages/environments/Environments";
+import Home from "./pages/home/Home";
 import Integrations from "./pages/integrations/Integrations";
 import Login from "./pages/login/Login";
 import Register from "./pages/login/Register";
@@ -14,14 +18,11 @@ import { MCPHostedPage } from "./pages/mcp/MCPHostedPage";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
 import Onboarding from "./pages/onboarding/Onboarding";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
-import OpenAPIDocuments from "./pages/openapi/OpenAPI";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
 import PromptPage from "./pages/prompts/Prompt";
 import Prompts, { PromptsRoot } from "./pages/prompts/Prompts";
 import SDK from "./pages/sdk/SDK";
-import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
-import Deployment from "./pages/deployments/Deployment";
 import Settings from "./pages/settings/Settings";
 import CustomTools, { CustomToolsRoot } from "./pages/toolBuilder/CustomTools";
 import {
@@ -31,8 +32,6 @@ import {
 import { ToolSelect } from "./pages/toolsets/ToolSelect";
 import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
-import Home from "./pages/home/Home";
-import { cn } from "./lib/utils";
 
 type AppRouteBasic = {
   title: string;
@@ -107,19 +106,13 @@ const ROUTE_STRUCTURE = {
     title: "Onboarding",
     url: "onboarding",
     component: OnboardingWizard,
-    outsideMainLayout: true,  // Break out of normal page structure
+    outsideMainLayout: true, // Break out of normal page structure
   },
   home: {
     title: "Home",
     url: "",
     icon: "house",
     component: Home,
-  },
-  openapi: {
-    title: "Your APIs",
-    url: "apis",
-    icon: "file-json-2",
-    component: OpenAPIDocuments,
   },
   playground: {
     title: "Playground",
@@ -268,7 +261,6 @@ const ROUTE_STRUCTURE = {
     external: true,
   },
 } satisfies Record<string, RouteEntry>;
-
 
 type RouteStructure = typeof ROUTE_STRUCTURE;
 

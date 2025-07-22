@@ -1065,6 +1065,244 @@ func DecodeServeOpenAPIv3Response(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildListAssetsRequest instantiates a HTTP request object with method and
+// path set to call the "assets" service "listAssets" endpoint
+func (c *Client) BuildListAssetsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListAssetsAssetsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assets", "listAssets", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListAssetsRequest returns an encoder for requests sent to the assets
+// listAssets server.
+func EncodeListAssetsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assets.ListAssetsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("assets", "listAssets", "*assets.ListAssetsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListAssetsResponse returns a decoder for responses returned by the
+// assets listAssets endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeListAssetsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListAssetsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListAssetsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+			}
+			err = ValidateListAssetsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+			}
+			res := NewListAssetsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListAssetsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+			}
+			err = ValidateListAssetsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+			}
+			return nil, NewListAssetsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListAssetsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+			}
+			err = ValidateListAssetsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+			}
+			return nil, NewListAssetsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListAssetsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+			}
+			err = ValidateListAssetsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+			}
+			return nil, NewListAssetsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListAssetsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+			}
+			err = ValidateListAssetsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+			}
+			return nil, NewListAssetsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListAssetsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+			}
+			err = ValidateListAssetsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+			}
+			return nil, NewListAssetsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListAssetsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+			}
+			err = ValidateListAssetsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+			}
+			return nil, NewListAssetsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListAssetsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+			}
+			err = ValidateListAssetsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+			}
+			return nil, NewListAssetsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListAssetsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+				}
+				err = ValidateListAssetsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+				}
+				return nil, NewListAssetsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListAssetsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+				}
+				err = ValidateListAssetsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+				}
+				return nil, NewListAssetsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "listAssets", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListAssetsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "listAssets", err)
+			}
+			err = ValidateListAssetsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "listAssets", err)
+			}
+			return nil, NewListAssetsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assets", "listAssets", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAssetResponseBodyToAssetsAsset builds a value of type *assets.Asset
 // from a value of type *AssetResponseBody.
 func unmarshalAssetResponseBodyToAssetsAsset(v *AssetResponseBody) *assets.Asset {

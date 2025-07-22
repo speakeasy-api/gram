@@ -37,3 +37,6 @@ FROM assets
 WHERE
   id = @id AND kind = 'openapiv3'
   AND project_id = @project_id;
+
+-- name: ListAssets :many
+SELECT * FROM assets WHERE project_id = @project_id;

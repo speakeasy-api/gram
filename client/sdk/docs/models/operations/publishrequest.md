@@ -5,14 +5,7 @@
 ```typescript
 import { PublishRequest } from "@gram/client/models/operations";
 
-let value: PublishRequest = {
-  publishPackageForm: {
-    deploymentId: "<id>",
-    name: "<value>",
-    version: "<value>",
-    visibility: "public",
-  },
-};
+let value: PublishRequest = {};
 ```
 
 ## Fields

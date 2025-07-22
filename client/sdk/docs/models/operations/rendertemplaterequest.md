@@ -5,14 +5,7 @@
 ```typescript
 import { RenderTemplateRequest } from "@gram/client/models/operations";
 
-let value: RenderTemplateRequest = {
-  renderTemplateRequestBody: {
-    arguments: {},
-    engine: "mustache",
-    kind: "prompt",
-    prompt: "<value>",
-  },
-};
+let value: RenderTemplateRequest = {};
 ```
 
 ## Fields

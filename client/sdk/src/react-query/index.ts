@@ -30,6 +30,7 @@ export * from "./instance.js";
 export * from "./integrationsIntegrationsNumberGet.js";
 export * from "./latestDeployment.js";
 export * from "./listAPIKeys.js";
+export * from "./listAssets.js";
 export * from "./listChats.js";
 export * from "./listDeployments.js";
 export * from "./listEnvironments.js";

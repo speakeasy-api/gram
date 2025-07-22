@@ -5,11 +5,7 @@
 ```typescript
 import { RegisterRequest } from "@gram/client/models/operations";
 
-let value: RegisterRequest = {
-  registerRequestBody: {
-    orgName: "<value>",
-  },
-};
+let value: RegisterRequest = {};
 ```
 
 ## Fields

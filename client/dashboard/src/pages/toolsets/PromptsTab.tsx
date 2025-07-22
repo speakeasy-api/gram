@@ -20,7 +20,7 @@ export function PromptsTabContent({
   toolset: Toolset;
   updateToolsetMutation: ReturnType<typeof useUpdateToolsetMutation>;
 }) {
-  const allPrompts = usePrompts();
+  const { prompts: allPrompts } = usePrompts();
   const toolsetPrompts = getToolsetPrompts(toolset);
   const [promptSelectPopoverOpen, setPromptSelectPopoverOpen] = useState(false);
   const routes = useRoutes();
@@ -59,13 +59,13 @@ export function PromptsTabContent({
 
   return (
     <>
-      <Cards loading={!toolset}>
+      <Cards isLoading={!toolset}>
         {toolsetPrompts?.map((prompt) => (
           <PromptTemplateCard
             key={prompt.name}
             template={prompt}
             onDelete={() => removePromptFromToolset(prompt.name)}
-            deleteTooltip="Remove prompt from this toolset"
+            deleteLabel="Remove from toolset"
           />
         ))}
       </Cards>

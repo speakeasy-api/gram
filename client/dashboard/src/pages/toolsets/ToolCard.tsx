@@ -2,7 +2,7 @@ import { AutoSummarizeBadge } from "@/components/auto-summarize-badge";
 import { EditableText } from "@/components/editable-text";
 import { HttpRoute } from "@/components/http-route";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import { Card } from "@/components/ui/cardOld";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -134,7 +134,7 @@ export function ToolCard({
   }
 
   return (
-    <Card size="sm">
+    <Card size="sm" className="h-full">
       <Card.Header>
         <Card.Title>{header}</Card.Title>
         <Card.Info>{tags}</Card.Info>
@@ -148,8 +148,8 @@ export function ToolCard({
           )}
         </Card.Description>
       </Card.Header>
-      <Card.Content>
-        <div className="border-l-2 pl-4">
+      <Card.Content className="h-full">
+        <div className="border-l-2 pl-4 h-full">
           <EditableText
             value={tool.description}
             onSubmit={(newValue) => updateVariation({ description: newValue })}

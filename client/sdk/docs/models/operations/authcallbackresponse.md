@@ -5,9 +5,7 @@
 ```typescript
 import { AuthCallbackResponse } from "@gram/client/models/operations";
 
-let value: AuthCallbackResponse = {
-  headers: {},
-};
+let value: AuthCallbackResponse = {};
 ```
 
 ## Fields

@@ -5,11 +5,7 @@
 ```typescript
 import { CreateToolsetRequest } from "@gram/client/models/operations";
 
-let value: CreateToolsetRequest = {
-  createToolsetRequestBody: {
-    name: "<value>",
-  },
-};
+let value: CreateToolsetRequest = {};
 ```
 
 ## Fields
