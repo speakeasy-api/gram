@@ -296,7 +296,16 @@ function ChatInner({
     const result = streamText({
       model: openrouterChat,
       messages,
-      tools,
+      tools: Object.fromEntries(
+        Object.entries(tools).map(([name, tool]) => [
+          name,
+          {
+            description: tool.description,
+            parameters: tool.parameters,
+            // Remove execute function - we handle execution in onToolCall
+          }
+        ])
+      ),
       temperature: 0.5,
       system: systemPrompt,
       experimental_transform: smoothStream({
