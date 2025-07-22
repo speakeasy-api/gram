@@ -26,3 +26,4 @@ go.work.sum
 gram.code-workspace
 
 **/.claude/settings.local.json
+.vercel

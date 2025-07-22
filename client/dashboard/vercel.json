@@ -1,0 +1,12 @@
+{
+  "framework": "vite",
+  "outputDirectory": "dist",
+  "buildCommand": "pnpm run -r build",
+  "installCommand": "pnpm install",
+  "rewrites": [
+    {
+      "source": "/rpc/:path*",
+      "destination": "https://dev.getgram.ai/rpc/:path*"
+    }
+  ]
+}

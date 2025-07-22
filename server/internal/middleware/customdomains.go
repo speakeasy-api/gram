@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -17,6 +18,11 @@ func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string, 
 			host := r.Host
 			// custom domains are not relevant in the local environment
 			if env == "local" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if env == "dev" && strings.Contains(host, "speakeasyapi.vercel.app") {
+				// preview builds are good
 				next.ServeHTTP(w, r)
 				return
 			}
