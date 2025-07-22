@@ -2,7 +2,7 @@ import { HttpRoute } from "@/components/http-route";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, Cards } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dot } from "@/components/ui/dot";
 import { Heading } from "@/components/ui/heading";
@@ -15,22 +15,22 @@ import {
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
-import { HumanizeDateTime } from "@/lib/dates";
 import { useGroupedHttpTools } from "@/lib/toolNames";
+import { useRoutes } from "@/routes";
 import {
   HTTPToolDefinition,
   PromptTemplate,
 } from "@gram/client/models/components";
 import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
-import { Column, Grid, Stack, Table } from "@speakeasy-api/moonshine";
+import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { AlertTriangleIcon, Check, CheckCircleIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { useCustomTools } from "../toolBuilder/CustomTools";
 import { MustacheHighlight } from "../toolBuilder/ToolBuilder";
 import { ToolsetHeader } from "./ToolsetHeader";
-import { useRoutes } from "@/routes";
+import { UpdatedAt } from "@/components/updated-at";
 
 type Tool = HTTPToolDefinition & { displayName: string };
 
@@ -367,18 +367,16 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
       {customTools && customTools.length > 0 && (
         <>
           <Heading variant="h3">Custom Tools</Heading>
-          <Grid columns={{ sm: 1, md: 2, lg: 3 }} gap={4}>
+          <Cards>
             {customTools?.map((template) => (
-              <Grid.Item key={template.id} className="h-52">
-                <CustomToolCard
-                  template={template}
-                  currentTools={toolset?.httpTools ?? []}
-                  currentTemplates={toolset?.promptTemplates ?? []}
-                  toggleEnabled={() => toggleTemplateEnabled(template.name)}
-                />
-              </Grid.Item>
+              <CustomToolCard
+                template={template}
+                currentTools={toolset?.httpTools ?? []}
+                currentTemplates={toolset?.promptTemplates ?? []}
+                toggleEnabled={() => toggleTemplateEnabled(template.name)}
+              />
             ))}
-          </Grid>
+          </Cards>
         </>
       )}
     </Stack>
@@ -499,32 +497,24 @@ function CustomToolCard({
   );
 
   return (
-    <Card className="min-h-52">
+    <Card>
       <Card.Header>
-        <Stack
-          direction="horizontal"
-          gap={2}
-          justify={"space-between"}
-          wrap="wrap"
-        >
-          <routes.customTools.toolBuilder.Link params={[template.name]}>
-            <Card.Title className="normal-case">{template.name}</Card.Title>
-          </routes.customTools.toolBuilder.Link>
-          {badge}
-        </Stack>
-        <Type variant="body" muted className="text-sm italic">
-          {"Updated "}
-          <HumanizeDateTime date={new Date(template.updatedAt)} />
-        </Type>
+        <routes.customTools.toolBuilder.Link params={[template.name]}>
+          <Card.Title className="normal-case">{template.name}</Card.Title>
+        </routes.customTools.toolBuilder.Link>
+        {addButton}
+      </Card.Header>
+      <Card.Content className="h-full w-full flex items-end justify-end">
         {template.description ? (
-          <Card.Description className="line-clamp-2">
+          <Card.Description>
             <MustacheHighlight>{template.description}</MustacheHighlight>
           </Card.Description>
         ) : null}
-      </Card.Header>
-      <Card.Content className="h-full w-full flex items-end justify-end">
-        {addButton}
       </Card.Content>
+      <Card.Footer>
+        {badge}
+        <UpdatedAt date={new Date(template.updatedAt)} />
+      </Card.Footer>
     </Card>
   );
 }

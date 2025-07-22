@@ -85,6 +85,17 @@ export function Button({
     />
   );
 
+  const onClick = props.onClick
+    ? (e: React.MouseEvent<HTMLButtonElement>) => {
+        // Stop propagation generally, but these elements break without it
+        if (props["aria-haspopup"] !== "dialog") {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+        props.onClick?.(e);
+      }
+    : undefined;
+
   const base = (
     <Comp
       data-slot="button"
@@ -94,6 +105,7 @@ export function Button({
         caps && "uppercase font-mono"
       )}
       {...props}
+      onClick={onClick}
     >
       {!iconAfter && icon}
       {props.children}

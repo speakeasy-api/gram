@@ -36,9 +36,10 @@ export default function Home() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        {/* Custom max width is to account for the extra padding which is needed to accomodate the carousel */}
+        <Page.Header.Breadcrumbs className="max-w-[1210px]" /> 
       </Page.Header>
-      <Page.Body>
+      <Page.Body className="overflow-visible px-16">
         <Stack className="mb-4">
           <Heading variant="h2" className="normal-case">
             Welcome to Gram
@@ -90,7 +91,7 @@ function HomeContent() {
   const heroSection = useMemo(() => {
     return toolsets?.toolsets && toolsets.toolsets.length > 1 ? (
       <Carousel
-        className="w-[calc(100%-60px)] self-center"
+        className="w-full self-center"
         onItemChange={(index) => {
           setSelectedToolset(toolsets?.toolsets[index] ?? null);
         }}

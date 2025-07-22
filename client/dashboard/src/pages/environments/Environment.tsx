@@ -1,22 +1,26 @@
-import { Heading } from "@/components/ui/heading";
-import {
-  useDeleteEnvironmentMutation,
-  useUpdateEnvironmentMutation,
-} from "@gram/client/react-query/index.js";
-import { EnvironmentEntry } from "@gram/client/models/components";
-import { useNavigate, useParams } from "react-router";
-import { Button } from "@/components/ui/button";
-import { Page } from "@/components/page-layout";
-import { useEnvironments } from "./Environments";
-import { Stack, Table } from "@speakeasy-api/moonshine";
-import { Type } from "@/components/ui/type";
-import { useEffect, useState } from "react";
 import { DeleteButton } from "@/components/delete-button";
-import { PencilIcon } from "lucide-react";
+import { Page } from "@/components/page-layout";
+import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useListToolsets, useToolset } from "@gram/client/react-query/index.js";
-import { useRegisterEnvironmentTelemetry, useTelemetry } from "@/contexts/Telemetry";
+import { Type } from "@/components/ui/type";
+import {
+  useRegisterEnvironmentTelemetry,
+  useTelemetry,
+} from "@/contexts/Telemetry";
+import { EnvironmentEntry } from "@gram/client/models/components";
+import {
+  useDeleteEnvironmentMutation,
+  useListToolsets,
+  useToolset,
+  useUpdateEnvironmentMutation,
+} from "@gram/client/react-query/index.js";
+import { Stack, Table } from "@speakeasy-api/moonshine";
+import { PencilIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router";
+import { useEnvironments } from "./Environments";
+import { MoreActions } from "@/components/ui/more-actions";
 
 interface EntryDialogProps {
   open: boolean;
@@ -86,11 +90,7 @@ function EntryDialog({
           </div>
           <div className="grid gap-2">
             <Type>Value</Type>
-            <Input
-              value={value}
-              onChange={setValue}
-              onFocus={preventSelect}
-            />
+            <Input value={value} onChange={setValue} onFocus={preventSelect} />
           </div>
         </div>
         <Dialog.Footer>
@@ -145,15 +145,20 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
           <Dialog.Title>Fill for Toolset</Dialog.Title>
           <Dialog.Description>
             <p>
-              Select a toolsets you would like to prefill environment variables for. All relevant env variables will be filled in with empty placeholders.
+              Select a toolsets you would like to prefill environment variables
+              for. All relevant env variables will be filled in with empty
+              placeholders.
             </p>
             <br />
             <p>
-              When an API has multiple optional security options, you only need to provide values for the security scheme relevant to you and you can remove the uneeded entries.
+              When an API has multiple optional security options, you only need
+              to provide values for the security scheme relevant to you and you
+              can remove the uneeded entries.
             </p>
             <br />
             <p>
-              If your API has a default server URL, providing a value for a server URL is not required.
+              If your API has a default server URL, providing a value for a
+              server URL is not required.
             </p>
           </Dialog.Description>
         </Dialog.Header>
@@ -324,24 +329,6 @@ export default function EnvironmentPage() {
     });
   };
 
-  const deleteButton = (
-    <DeleteButton
-      tooltip="Delete Environment"
-      onClick={() => {
-        if (
-          confirm(
-            "Are you sure you want to delete this environment? This action cannot be undone."
-          )
-        ) {
-          deleteEnvironmentMutation.mutate({
-            request: {
-              slug: environment.slug,
-            },
-          });
-        }
-      }}
-    />
-  );
 
   const validateEntryName = (name: string) => {
     return (
@@ -390,108 +377,110 @@ export default function EnvironmentPage() {
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
-        <Page.Header.Actions>{deleteButton}</Page.Header.Actions>
       </Page.Header>
       <Page.Body>
-        <Stack gap={6}>
-          <Heading variant="h2">{environment.name}</Heading>
-          <Stack direction="horizontal" gap={2}>
-            {hasChanges ? (
-              <>
-                <Button onClick={commitUpdates}>Save</Button>
+        <Page.Section>
+          <Page.Section.Title>{environment.name}</Page.Section.Title>
+          <Page.Section.CTA
+            onClick={() => {
+              setEditingEntry(undefined);
+              setDialogOpen(true);
+            }}
+          >
+            New Variable
+          </Page.Section.CTA>
+          <MoreActions
+            actions={[
+              {
+                label: "Fill for Toolset",
+                onClick: () => setToolsetDialogOpen(true),
+                icon: "copy-plus",
+              },
+              {
+                label: "Delete Environment",
+                onClick: () => deleteEnvironmentMutation.mutate({ request: { slug: environment.slug } }),
+                icon: "trash",
+                destructive: true,
+              },
+            ]}
+          />
+          <Page.Section.Body>
+            {Object.keys(entries).length > 0 && (
+              <Table
+                columns={[
+                  {
+                    key: "name",
+                    header: "Name",
+                    width: "1fr",
+                    render: (entry: EnvironmentEntry) => (
+                      <Type variant="body" className="truncate">
+                        {entry.name}
+                      </Type>
+                    ),
+                  },
+                  {
+                    key: "value",
+                    header: "Value",
+                    width: "1fr",
+                    render: (entry: EnvironmentEntry) => (
+                      <Type variant="body" className="truncate">
+                        {entry.value}
+                      </Type>
+                    ),
+                  },
+                  {
+                    key: "actions",
+                    header: "",
+                    width: "100px",
+                    render: (entry: EnvironmentEntry) => (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-4 w-4 p-0"
+                          onClick={() => {
+                            setEditingEntry(entry);
+                            setDialogOpen(true);
+                          }}
+                        >
+                          <PencilIcon className="h-3 w-3" />
+                        </Button>
+                        <DeleteButton
+                          tooltip="Remove Entry"
+                          onClick={() => removeEntry(entry)}
+                        />
+                      </div>
+                    ),
+                  },
+                ]}
+                data={Object.values(entries)}
+                rowKey={(row) => row.name}
+              />
+            )}
+            {hasChanges && (
+              <Stack direction="horizontal" gap={1} justify="end" className="mt-4">
                 <Button variant="ghost" onClick={discardChanges}>
                   Discard
                 </Button>
-              </>
-            ) : (
-              <>
-                <Button
-                  onClick={() => {
-                    setEditingEntry(undefined);
-                    setDialogOpen(true);
-                  }}
-                >
-                  New Variable
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setToolsetDialogOpen(true);
-                  }}
-                >
-                  Fill for Toolset
-                </Button>
-              </>
+                <Button onClick={commitUpdates}>Save</Button>
+              </Stack>
             )}
-          </Stack>
-        </Stack>
 
-        {Object.keys(entries).length > 0 && (
-          <Table
-            columns={[
-              {
-                key: "name",
-                header: "Name",
-                width: "1fr",
-                render: (entry: EnvironmentEntry) => (
-                  <Type variant="body" className="truncate">
-                    {entry.name}
-                  </Type>
-                ),
-              },
-              {
-                key: "value",
-                header: "Value",
-                width: "1fr",
-                render: (entry: EnvironmentEntry) => (
-                  <Type variant="body" className="truncate">
-                    {entry.value}
-                  </Type>
-                ),
-              },
-              {
-                key: "actions",
-                header: "",
-                width: "100px",
-                render: (entry: EnvironmentEntry) => (
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-4 w-4 p-0"
-                      onClick={() => {
-                        setEditingEntry(entry);
-                        setDialogOpen(true);
-                      }}
-                    >
-                      <PencilIcon className="h-3 w-3" />
-                    </Button>
-                    <DeleteButton
-                      tooltip="Remove Entry"
-                      onClick={() => removeEntry(entry)}
-                    />
-                  </div>
-                ),
-              },
-            ]}
-            data={Object.values(entries)}
-            rowKey={(row) => row.name}
-          />
-        )}
+            <EntryDialog
+              open={dialogOpen}
+              onOpenChange={setDialogOpen}
+              onSubmit={handleEntrySubmit}
+              validateName={validateEntryName}
+              initialEntry={editingEntry}
+            />
 
-        <EntryDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          onSubmit={handleEntrySubmit}
-          validateName={validateEntryName}
-          initialEntry={editingEntry}
-        />
-
-        <ToolsetDialog
-          open={toolsetDialogOpen}
-          onOpenChange={setToolsetDialogOpen}
-          onSubmit={handleToolsetSubmit}
-        />
+            <ToolsetDialog
+              open={toolsetDialogOpen}
+              onOpenChange={setToolsetDialogOpen}
+              onSubmit={handleToolsetSubmit}
+            />
+          </Page.Section.Body>
+        </Page.Section>
       </Page.Body>
     </Page>
   );

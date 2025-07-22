@@ -4,7 +4,7 @@ import React, { useEffect, useReducer } from "react";
 import { formatDistance } from "date-fns";
 
 export const HumanizeDateTime = React.memo(
-  ({ date }: { date: Date }): string => {
+  ({ date, includeTime = true }: { date: Date, includeTime?: boolean }): string => {
     const forceRender = useReducer((s) => !s, false)[1];
 
     useEffect(() => {
@@ -19,14 +19,14 @@ export const HumanizeDateTime = React.memo(
     // TODO: Re-render if we tick over to a new day
     // TODO: Re-render if we change timezone
     // TODO: Keep global instance of now time up to date and use as reference
-    return dateTimeFormatters.humanize(date);
+    return dateTimeFormatters.humanize(date, { includeTime });
   },
 );
 
 export const dateTimeFormatters = {
   humanize: function humanize(
     date: Date,
-    { referenceDate = new Date(), includeSuffix = true } = {},
+    { referenceDate = new Date(), includeSuffix = true, includeTime = true } = {},
   ) {
     const delta = referenceDate.valueOf() - date.valueOf();
     const suffix = includeSuffix ? "ago" : "";
@@ -37,19 +37,21 @@ export const dateTimeFormatters = {
     }
     // If today: show "Today, {{localeTimeFormat}}"
     if (date.toDateString() === referenceDate.toDateString()) {
-      return `Today, ${dateTimeFormatters.time.format(date)}`;
+      return "Today" + (includeTime ? `, ${dateTimeFormatters.time.format(date)}` : "");
     }
     // If yesterday: show "Yesterday, {{localeTimeFormat}}"
     if (
       date.toDateString() ===
       new Date(referenceDate.valueOf() - 24 * 60 * 60 * 1000).toDateString()
     ) {
-      return `Yesterday, ${dateTimeFormatters.time.format(date)}`;
+      return "Yesterday" + (includeTime ? `, ${dateTimeFormatters.time.format(date)}` : "");
     }
 
     // If same year: display in full without year
     if (date.getFullYear() === referenceDate.getFullYear()) {
-      return `${dateTimeFormatters.sameYear.format(date)}`;
+      return includeTime
+        ? `${dateTimeFormatters.sameYear.format(date)}`
+        : `${dateTimeFormatters.monthDay.format(date)}`;
     }
 
     // Full date
@@ -67,6 +69,10 @@ export const dateTimeFormatters = {
     day: "numeric",
     hour: "numeric",
     minute: "numeric",
+  }),
+  monthDay: new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    day: "numeric",
   }),
   time: new Intl.DateTimeFormat(undefined, {
     hour: "numeric",

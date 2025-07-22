@@ -25,11 +25,11 @@ function ContentErrorFallback({ error }: ContentErrorFallbackProps) {
             Error loading Page
           </Stack>
         </Card.Title>
+      </Card.Header>
+      <Card.Content className="space-y-4">
         <Card.Description>
           We encountered an error while loading this page.
         </Card.Description>
-      </Card.Header>
-      <Card.Content className="space-y-4">
         <div className="bg-muted p-3 rounded-md">
           <p className="text-sm text-muted-foreground font-mono">
             {error.message}

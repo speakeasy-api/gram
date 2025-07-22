@@ -4,8 +4,8 @@ import { Button } from "@/components/ui/button";
 import { MiniCard, MiniCards } from "@/components/ui/card-mini";
 import { Dialog } from "@/components/ui/dialog";
 import { SkeletonCode } from "@/components/ui/skeleton";
+import { UpdatedAt } from "@/components/updated-at";
 import { useSdkClient } from "@/contexts/Sdk";
-import { HumanizeDateTime } from "@/lib/dates";
 import { getServerURL } from "@/lib/utils";
 import { Asset } from "@gram/client/models/components";
 import {
@@ -13,6 +13,7 @@ import {
   useListAssets,
 } from "@gram/client/react-query/index.js";
 import { useEffect, useState } from "react";
+import { useParams } from "react-router";
 import { OnboardingContent } from "../../onboarding/Onboarding";
 import { ApisEmptyState } from "./ApisEmptyState";
 
@@ -184,7 +185,7 @@ function OpenAPICard({
         {asset.name}
       </MiniCard.Title>
       <MiniCard.Description>
-        Updated <HumanizeDateTime date={asset.updatedAt} />
+        <UpdatedAt date={asset.updatedAt} italic={false} className="text-xs" />
       </MiniCard.Description>
       <MiniCard.Actions
         actions={[
@@ -225,6 +226,7 @@ function AssetViewDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   // const client = useSdkClient();
+  const { projectSlug } = useParams();
   const [content, setContent] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -232,12 +234,16 @@ function AssetViewDialog({
   downloadURL.searchParams.set("id", asset.id);
 
   useEffect(() => {
-    if (!open) {
+    if (!open || !projectSlug) {
       setContent("");
       return;
     }
 
-    fetch(downloadURL).then((assetData) => {
+    fetch(downloadURL, {
+      headers: {
+        "gram-project": projectSlug,
+      },
+    }).then((assetData) => {
       if (!assetData.ok) {
         setContent("");
         return;
@@ -248,7 +254,7 @@ function AssetViewDialog({
         setIsLoading(false);
       });
     });
-  }, [open]);
+  }, [open, projectSlug]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -256,7 +262,7 @@ function AssetViewDialog({
         <Dialog.Header>
           <Dialog.Title>{asset.name}</Dialog.Title>
           <Dialog.Description>
-            Updated <HumanizeDateTime date={asset.updatedAt} />
+            <UpdatedAt date={asset.updatedAt} italic={false} />
           </Dialog.Description>
         </Dialog.Header>
         {isLoading ? (

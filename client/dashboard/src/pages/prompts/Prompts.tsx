@@ -1,8 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
-import { HumanizeDateTime } from "@/lib/dates";
+import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import {
   PromptTemplate,
@@ -43,32 +42,32 @@ export default function Prompts() {
   const routes = useRoutes();
 
   let content = (
-    <PromptsEmptyState onCreatePrompt={() => routes.prompts.newPrompt.goTo()} />
+    <Page.Section>
+      <Page.Section.Title>Prompt Templates</Page.Section.Title>
+      <Page.Section.Description>
+        Provide your users with MCP-native prompt templates
+      </Page.Section.Description>
+      <Page.Section.CTA
+        onClick={() => routes.prompts.newPrompt.goTo()}
+        icon="plus"
+      >
+        New Prompt
+      </Page.Section.CTA>
+      <Page.Section.Body>
+        <Cards isLoading={isLoading}>
+          {prompts?.map((template) => {
+            return <PromptTemplateCard key={template.id} template={template} />;
+          })}
+        </Cards>
+      </Page.Section.Body>
+    </Page.Section>
   );
 
-  if (prompts && prompts.length > 0) {
+  if (!isLoading && prompts && prompts.length === 0) {
     content = (
-      <Page.Section>
-        <Page.Section.Title>Prompt Templates</Page.Section.Title>
-        <Page.Section.Description>
-          Provide your users with MCP-native prompt templates
-        </Page.Section.Description>
-        <Page.Section.CTA
-          onClick={() => routes.prompts.newPrompt.goTo()}
-          icon="plus"
-        >
-          New Prompt Template
-        </Page.Section.CTA>
-        <Page.Section.Body>
-          <Cards isLoading={isLoading}>
-            {prompts?.map((template) => {
-              return (
-                <PromptTemplateCard key={template.id} template={template} />
-              );
-            })}
-          </Cards>
-        </Page.Section.Body>
-      </Page.Section>
+      <PromptsEmptyState
+        onCreatePrompt={() => routes.prompts.newPrompt.goTo()}
+      />
     );
   }
 
@@ -101,44 +100,44 @@ export function PromptTemplateCard({
   });
 
   return (
-    <Card>
-      <Card.Header>
-        <routes.prompts.prompt.Link params={[template.name]}>
+    <routes.prompts.prompt.Link
+      params={[template.name]}
+      className="hover:no-underline"
+    >
+      <Card>
+        <Card.Header>
           <Card.Title className="normal-case">{template.name}</Card.Title>
-        </routes.prompts.prompt.Link>
-        <MoreActions
-          actions={[
-            {
-              label: deleteLabel ?? "Delete",
-              destructive: true,
-              icon: "trash",
-              onClick: () => {
-                if (onDelete) {
-                  onDelete();
-                } else if (
-                  confirm(
-                    "Are you sure you want to delete this prompt template?"
-                  )
-                ) {
-                  deleteTemplate.mutate({ request: { name: template.name } });
-                }
+          <MoreActions
+            actions={[
+              {
+                label: deleteLabel ?? "Delete",
+                destructive: true,
+                icon: "trash",
+                onClick: () => {
+                  if (onDelete) {
+                    onDelete();
+                  } else if (
+                    confirm(
+                      "Are you sure you want to delete this prompt template?"
+                    )
+                  ) {
+                    deleteTemplate.mutate({ request: { name: template.name } });
+                  }
+                },
               },
-            },
-          ]}
-        />
-      </Card.Header>
-      <Card.Content>
-        <Card.Description>
-          {template.description || "No description"}
-        </Card.Description>
-      </Card.Content>
-      <Card.Footer>
-        <div />
-        <Type variant="body" muted className="text-sm italic">
-          {"Updated "}
-          <HumanizeDateTime date={new Date(template.updatedAt)} />
-        </Type>
-      </Card.Footer>
-    </Card>
+            ]}
+          />
+        </Card.Header>
+        <Card.Content>
+          <Card.Description>
+            {template.description || "No description"}
+          </Card.Description>
+        </Card.Content>
+        <Card.Footer>
+          <div />
+          <UpdatedAt date={new Date(template.updatedAt)} />
+        </Card.Footer>
+      </Card>
+    </routes.prompts.prompt.Link>
   );
 }

@@ -1,7 +1,7 @@
-import { DeleteButton } from "@/components/delete-button";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Cards } from "@/components/ui/card";
+import { MoreActions } from "@/components/ui/more-actions";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -26,7 +26,6 @@ import { MCPDetails } from "../mcp/MCPDetails";
 import { PromptsTabContent } from "./PromptsTab";
 import { ToolCard } from "./ToolCard";
 import { ToolSelectDialog } from "./ToolSelectDialog";
-import { ToolsetPlaygroundLink } from "./ToolsetCard";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
 import { ToolDefinition, useToolDefinitions } from "./types";
@@ -68,42 +67,19 @@ export function useDeleteToolset({
 
 export function ToolsetRoot() {
   const { toolsetSlug } = useParams();
-  const routes = useRoutes();
-
-  const { data: toolset } = useToolset({
-    slug: toolsetSlug || "",
-  });
 
   useRegisterToolsetTelemetry({
     toolsetSlug: toolsetSlug ?? "",
-  });
-
-  const deleteToolset = useDeleteToolset({
-    onSuccess: () => {
-      routes.toolsets.goTo();
-    },
   });
 
   if (!toolsetSlug) {
     return <div>Toolset not found</div>;
   }
 
-  const deleteButton = (
-    <DeleteButton
-      tooltip="Delete Toolset"
-      onClick={() => {
-        if (toolset) {
-          deleteToolset(toolset.slug);
-        }
-      }}
-    />
-  );
-
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
-        <Page.Header.Actions>{toolset && deleteButton}</Page.Header.Actions>
       </Page.Header>
       <Outlet />
     </Page>
@@ -196,11 +172,33 @@ export function ToolsetView({
     }
   };
 
+  const deleteToolset = useDeleteToolset({
+    onSuccess: () => {
+      routes.toolsets.goTo();
+    },
+  });
+
   const actions = (
-    <Stack direction="horizontal" gap={2}>
-      {!routes.playground.active && (
-        <ToolsetPlaygroundLink toolset={toolset} />
-      )}
+    <Stack direction="horizontal" gap={2} align="center">
+      <MoreActions
+        actions={[
+          {
+            label: "Playground",
+            onClick: () => {
+              routes.playground.goTo(toolsetSlug);
+            },
+            icon: "message-circle",
+          },
+          {
+            label: "Delete Toolset",
+            onClick: () => {
+              deleteToolset(toolsetSlug);
+            },
+            icon: "trash",
+            destructive: true,
+          },
+        ]}
+      />
       <Button icon="plus" onClick={gotoAddTools} caps>
         Add/Remove Tools
       </Button>

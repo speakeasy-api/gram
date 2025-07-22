@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, Cards } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
+import { MoreActions } from "@/components/ui/more-actions";
 import {
   Tooltip,
   TooltipContent,
@@ -116,33 +117,31 @@ export function McpToolsetCard({ toolset }: { toolset: Toolset }) {
   );
 
   return (
-    <Card>
-      <Card.Header>
-        <Card.Title>
-          <CopyableSlug slug={toolset.slug}>
-            <routes.mcp.details.Link params={[toolset.slug]}>
-              {toolset.name}
-            </routes.mcp.details.Link>
-          </CopyableSlug>
-        </Card.Title>
-        <Stack direction="horizontal" gap={2} align="center">
-          <Button
-            icon="braces"
-            onClick={() => setMcpModalOpen(true)}
-            variant="secondary"
-            size="sm"
-          >
-            Config
-          </Button>
-        </Stack>
-      </Card.Header>
-      <Card.Content>
-        <Card.Description className="mt-[-6px]">
-          <Stack direction="horizontal" className="group" align="center">
-            <Type muted mono small className="break-all text-xs">
-              {mcpUrl}
-            </Type>
-            <routes.mcp.details.Link params={[toolset.slug]}>
+    <routes.mcp.details.Link
+      params={[toolset.slug]}
+      className="hover:no-underline"
+    >
+      <Card>
+        <Card.Header>
+          <Card.Title>
+            <CopyableSlug slug={toolset.slug}>{toolset.name}</CopyableSlug>
+          </Card.Title>
+          <MoreActions
+            actions={[
+              {
+                label: "View/Copy Config",
+                onClick: () => setMcpModalOpen(true),
+                icon: "braces",
+              },
+            ]}
+          />
+        </Card.Header>
+        <Card.Content>
+          <Card.Description className="mt-[-6px]">
+            <Stack direction="horizontal" className="group" align="center">
+              <Type muted mono small className="break-all text-xs">
+                {mcpUrl}
+              </Type>
               <Button
                 variant="ghost"
                 size="icon-sm"
@@ -150,20 +149,20 @@ export function McpToolsetCard({ toolset }: { toolset: Toolset }) {
               >
                 <Pencil className="h-4 w-4" />
               </Button>
-            </routes.mcp.details.Link>
-            <CopyButton
-              text={mcpUrl ?? ""}
-              size="icon-sm"
-              className="group-hover:opacity-100 opacity-0 transition-opacity"
-            />
-          </Stack>
-        </Card.Description>
-      </Card.Content>
-      <Card.Footer>
-        {badges}
-        <div />
-      </Card.Footer>
-      {mcpConfigDialog}
-    </Card>
+              <CopyButton
+                text={mcpUrl ?? ""}
+                size="icon-sm"
+                className="group-hover:opacity-100 opacity-0 transition-opacity"
+              />
+            </Stack>
+          </Card.Description>
+        </Card.Content>
+        <Card.Footer>
+          {badges}
+          <div />
+        </Card.Footer>
+        {mcpConfigDialog}
+      </Card>
+    </routes.mcp.details.Link>
   );
 }

@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Icon, IconName } from "@speakeasy-api/moonshine";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "./button";
 import {
   DropdownMenu,
@@ -19,23 +19,11 @@ export type Action = {
 
 export function MoreActions({ actions }: { actions: Action[] }) {
   const [isOpen, setIsOpen] = useState(false);
-  const isOpening = useRef(false);
 
-  const open = () => {
-    isOpening.current = true;
-    setIsOpen(true);
-    setTimeout(() => {
-      isOpening.current = false;
-    }, 350); // Ensure that the menu always appears for at least a certain amount of time
-  };
-
-  const close = () => {
-    setTimeout(() => {
-      // If the menu is still opening, don't close it
-      if (!isOpening.current) {
-        setIsOpen(false);
-      }
-    }, 250);
+  const wrapOnClick = (onClick: () => void) => (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    onClick();
   };
 
   return (
@@ -45,18 +33,16 @@ export function MoreActions({ actions }: { actions: Action[] }) {
           variant="ghost"
           size="sm"
           className="h-8 w-8 p-0 mx-[-4px]"
-          onMouseEnter={open}
-          onMouseLeave={close}
         >
           <Icon name="ellipsis-vertical" className="size-4" />
           <span className="sr-only">Open menu</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" onMouseEnter={open} onMouseLeave={close}>
+      <DropdownMenuContent align="end">
         {actions.map((action, index) => (
           <DropdownMenuItem
             key={index}
-            onClick={action.onClick}
+            onClick={wrapOnClick(action.onClick)}
             disabled={action.disabled}
             className={cn(
               "cursor-pointer justify-between flex items-center group",

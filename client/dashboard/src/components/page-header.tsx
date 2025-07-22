@@ -40,25 +40,14 @@ function PageHeaderTitle({
   children: React.ReactNode;
 }) {
   return (
-    <Heading variant="h4" className={cn("ml-1", className)}>
+    // 1270 carefully chosen to make the header line up with the max width of the page content
+    <Heading variant="h4" className={cn("ml-1 max-w-[1270px] w-full mx-auto", className)}> 
       {children}
     </Heading>
   );
 }
 
-function PageHeaderActions({
-  className,
-  children,
-}: {
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={cn("ml-auto flex items-center", className)}>{children}</div>
-  );
-}
-
-function PageHeaderBreadcrumbs() {
+function PageHeaderBreadcrumbs({ fullWidth, className }: { fullWidth?: boolean, className?: string }) {
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
 
@@ -92,7 +81,7 @@ function PageHeaderBreadcrumbs() {
   });
 
   return (
-    <PageHeader.Title>
+    <PageHeader.Title className={cn(fullWidth ? "max-w-full" : "", className)}>
       <div className="ml-auto flex items-center gap-2 capitalize">
         {visibleElements.map((elem, index) => (
           <React.Fragment key={elem.url}>
@@ -118,6 +107,5 @@ function PageHeaderBreadcrumbs() {
 
 export const PageHeader = Object.assign(PageHeaderComponent, {
   Title: PageHeaderTitle,
-  Actions: PageHeaderActions,
   Breadcrumbs: PageHeaderBreadcrumbs,
 });

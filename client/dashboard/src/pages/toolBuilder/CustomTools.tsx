@@ -3,8 +3,6 @@ import { ToolsBadge } from "@/components/tools-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
-import { Type } from "@/components/ui/type";
-import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import {
   PromptTemplate,
@@ -22,6 +20,7 @@ import { Outlet } from "react-router";
 import { CustomToolsEmptyState } from "./CustomToolsEmptyState";
 import { MustacheHighlight } from "./ToolBuilder";
 import { ToolifyDialog, ToolifyProvider } from "./Toolify";
+import { UpdatedAt } from "@/components/updated-at";
 
 export function useCustomTools() {
   const { data, isLoading } = useTemplates();
@@ -115,47 +114,42 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
   }
 
   return (
-    <Card>
-      <Card.Header>
-        <Card.Title className="normal-case">
-          <routes.customTools.toolBuilder.Link params={[template.name]}>
-            {template.name}
-          </routes.customTools.toolBuilder.Link>
-        </Card.Title>
-        <MoreActions
-          actions={[
-            {
-              label: "Delete",
-              destructive: true,
-              icon: "trash",
-              onClick: () => {
-                if (confirm("Are you sure you want to delete this tool?")) {
-                  deleteTemplate.mutate({ request: { name: template.name } });
-                }
+    <routes.customTools.toolBuilder.Link params={[template.name]} className="hover:no-underline">
+      <Card>
+        <Card.Header>
+          <Card.Title className="normal-case">{template.name}</Card.Title>
+          <MoreActions
+            actions={[
+              {
+                label: "Delete",
+                destructive: true,
+                icon: "trash",
+                onClick: () => {
+                  if (confirm("Are you sure you want to delete this tool?")) {
+                    deleteTemplate.mutate({ request: { name: template.name } });
+                  }
+                },
               },
-            },
-          ]}
-        />
-      </Card.Header>
-      <Card.Content>
-        {template.description && (
-          <Card.Description>
-            <div className="line-clamp-3">
-              <MustacheHighlight>{template.description}</MustacheHighlight>
-            </div>
-          </Card.Description>
-        )}
-      </Card.Content>
-      <Card.Footer>
-        <Stack direction="horizontal" gap={1}>
-          {inputsBadge}
-          <ToolsBadge toolNames={template.toolsHint} />
-        </Stack>
-        <Type variant="body" muted className="text-sm italic">
-          {"Updated "}
-          <HumanizeDateTime date={new Date(template.updatedAt)} />
-        </Type>
-      </Card.Footer>
-    </Card>
+            ]}
+          />
+        </Card.Header>
+        <Card.Content>
+          {template.description && (
+            <Card.Description>
+              <div className="line-clamp-3">
+                <MustacheHighlight>{template.description}</MustacheHighlight>
+              </div>
+            </Card.Description>
+          )}
+        </Card.Content>
+        <Card.Footer>
+          <Stack direction="horizontal" gap={1}>
+            {inputsBadge}
+            <ToolsBadge toolNames={template.toolsHint} />
+          </Stack>
+          <UpdatedAt date={new Date(template.updatedAt)} />
+        </Card.Footer>
+      </Card>
+    </routes.customTools.toolBuilder.Link>
   );
 }

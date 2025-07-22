@@ -9,6 +9,7 @@ import { Button } from "./ui/button.tsx";
 import { Heading } from "./ui/heading.tsx";
 import { Type } from "./ui/type.tsx";
 import { XYFade } from "./ui/xy-fade.tsx";
+import { MoreActions } from "./ui/more-actions.tsx";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -21,15 +22,18 @@ function PageLayout({ children }: { children: React.ReactNode }) {
 
 function PageBody({
   children,
+  fullWidth = false,
   className,
 }: {
   children: React.ReactNode;
+  fullWidth?: boolean;
   className?: string;
 }) {
   return (
     <div
       className={cn(
-        "@container/main flex flex-col gap-4 p-8 pb-0 overflow-y-auto h-full",
+        "@container/main flex flex-col gap-4 p-8 pb-0 overflow-y-auto h-full w-full",
+        !fullWidth && "max-w-7xl mx-auto ",
         className
       )}
     >
@@ -42,8 +46,9 @@ function PageSectionComponent({ children }: { children: React.ReactNode }) {
   const slots = {
     title: null as React.ReactElement | null,
     description: null as React.ReactElement | null,
-    cta: null as React.ReactElement | null,
+    ctas: [] as React.ReactElement[],
     body: null as React.ReactElement | null,
+    moreActions: null as React.ReactElement | null,
   };
 
   // Process children to extract slots by checking component type
@@ -55,9 +60,11 @@ function PageSectionComponent({ children }: { children: React.ReactNode }) {
       } else if (child.type === PageSectionDescription) {
         slots.description = child;
       } else if (child.type === PageSectionCTA) {
-        slots.cta = child;
+        slots.ctas.push(child);
       } else if (child.type === PageSectionBody) {
         slots.body = child;
+      } else if (child.type === PageSection.MoreActions) {
+        slots.moreActions = child;
       }
     }
   });
@@ -65,7 +72,7 @@ function PageSectionComponent({ children }: { children: React.ReactNode }) {
   return (
     <Stack gap={2} className="mb-8">
       {/* Render header with title, description, and CTA if they exist */}
-      {(slots.title || slots.description || slots.cta) && (
+      {(slots.title || slots.description || slots.ctas.length > 0) && (
         <Stack
           direction="horizontal"
           justify="space-between"
@@ -76,7 +83,10 @@ function PageSectionComponent({ children }: { children: React.ReactNode }) {
             {slots.title}
             {slots.description}
           </Stack>
-          {slots.cta}
+          <Stack direction="horizontal" gap={1} align="center">
+            {slots.ctas.map((cta) => cta)}
+            {slots.moreActions}
+          </Stack>
         </Stack>
       )}
       {/* Render body */}
@@ -121,7 +131,11 @@ function PageSectionCTA({
   children,
   ...props
 }: { children: React.ReactNode } & React.ComponentProps<typeof Button>) {
-  return <Button caps {...props}>{children}</Button>;
+  return (
+    <Button caps {...props}>
+      {children}
+    </Button>
+  );
 }
 
 const PageSection = Object.assign(PageSectionComponent, {
@@ -129,6 +143,7 @@ const PageSection = Object.assign(PageSectionComponent, {
   Description: PageSectionDescription,
   Body: PageSectionBody,
   CTA: PageSectionCTA,
+  MoreActions: MoreActions,
 });
 
 export const Page = Object.assign(PageLayout, {

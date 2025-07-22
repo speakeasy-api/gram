@@ -2,11 +2,10 @@ import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
 import { Card, Cards } from "@/components/ui/card";
-import { Type } from "@/components/ui/type";
+import { UpdatedAt } from "@/components/updated-at";
 import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useApiError } from "@/hooks/useApiError";
-import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
 import { Environment } from "@gram/client/models/components/environment.js";
 import {
@@ -122,28 +121,23 @@ function EnvironmentCard({ environment }: { environment: Environment }) {
   const routes = useRoutes();
 
   return (
-    <Card>
-      <Card.Header>
-        <Card.Title>
-          <routes.environments.environment.Link params={[environment.slug]}>
-            {environment.name}
-          </routes.environments.environment.Link>
-        </Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <Card.Description>
-          {environment.description || "No description provided"}
-        </Card.Description>
-      </Card.Content>
-      <Card.Footer>
-        <Badge variant="outline">
-          {environment.entries.length || "No"} Entries
-        </Badge>
-        <Type variant="body" muted className="text-sm italic">
-          {"Updated "}
-          <HumanizeDateTime date={new Date(environment.updatedAt)} />
-        </Type>
-      </Card.Footer>
-    </Card>
+    <routes.environments.environment.Link params={[environment.slug]} className="hover:no-underline">
+      <Card>
+        <Card.Header>
+          <Card.Title>{environment.name}</Card.Title>
+        </Card.Header>
+        <Card.Content>
+          <Card.Description>
+            {environment.description || "No description provided"}
+          </Card.Description>
+        </Card.Content>
+        <Card.Footer>
+          <Badge variant="outline">
+            {environment.entries.length || "No"} Entries
+          </Badge>
+          <UpdatedAt date={new Date(environment.updatedAt)} />
+        </Card.Footer>
+      </Card>
+    </routes.environments.environment.Link>
   );
 }

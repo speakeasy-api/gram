@@ -261,7 +261,6 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         heading="Hosted URL"
         headingRHS={publicToggle}
         description="The URL you or your users will use to access this MCP server."
-        className="max-w-3xl mb-2"
       >
         <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
         <Block label="Custom Slug" className="max-w-3xl" error={mcpSlugError}>
@@ -420,9 +419,9 @@ export function MCPJson({
         </Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
       </Grid.Item>
-      // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ) as any);
+    ) as // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    any);
 
   return (
     <Grid

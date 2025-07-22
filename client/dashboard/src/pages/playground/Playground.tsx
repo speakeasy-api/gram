@@ -133,11 +133,11 @@ function PlaygroundInner() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
-        <Page.Header.Actions className="gap-2">
+        <Page.Header.Breadcrumbs fullWidth />
+        <Stack direction="horizontal" gap={2} align="center">
           {shareChatButton}
           {chatHistoryButton}
-        </Page.Header.Actions>
+        </Stack>
       </Page.Header>
       <Page.Body className="max-w-full p-0">
         <ResizablePanel

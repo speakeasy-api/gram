@@ -48,7 +48,10 @@ function CardTitle({
     <Heading
       variant="h4"
       data-slot="card-title"
-      className={cn("leading-none", className)}
+      className={cn(
+        "leading-none [a:has([data-slot=card]):hover_&]:underline", // Underline the title when the card is hovered, if the card is a link
+        className
+      )}
       {...props}
     />
   );
@@ -98,7 +101,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-footer"
       className={cn(
-        "flex items-center justify-between [.border-t]:pt-6",
+        "flex items-center justify-between [.border-t]:pt-6 w-full",
         className
       )}
       {...props}
@@ -120,24 +123,26 @@ export function Cards({
   className,
   isLoading: loading,
   noGrid,
+  cardSize = 2,
   ...props
 }: React.ComponentProps<"div"> & {
   isLoading?: boolean;
   noGrid?: boolean;
+  cardSize?: number;
 }) {
   let children = React.Children.map(props.children, (child) => (
-    <Grid.Item colSpan={1}>{child}</Grid.Item>
+    <Grid.Item colSpan={cardSize}>{child}</Grid.Item>
   ));
 
   if (loading) {
     children = [
-      <Grid.Item colSpan={1}>
+      <Grid.Item colSpan={cardSize}>
         <CardSkeleton />
       </Grid.Item>,
-      <Grid.Item colSpan={1}>
+      <Grid.Item colSpan={cardSize}>
         <CardSkeleton />
       </Grid.Item>,
-      <Grid.Item colSpan={1}>
+      <Grid.Item colSpan={cardSize}>
         <CardSkeleton />
       </Grid.Item>,
     ];
@@ -153,7 +158,8 @@ export function Cards({
         columns={1}
         className={cn(
           "grid-cols-1 gap-x-8 gap-y-4 mb-8",
-          !noGrid && "@2xl/cards:grid-cols-2 @7xl/cards:grid-cols-3",
+          !noGrid &&
+            "@lg/cards:grid-cols-2 @3xl/cards:grid-cols-4 @7xl/cards:grid-cols-6",
           className
         )}
         {...props}

@@ -45,16 +45,16 @@ export default function Integrations() {
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
+      </Page.Header>
+      <Page.Body>
         {isAdmin && (
-          <Page.Header.Actions>
+          <div className="flex justify-end mb-4">
             <AddButton
               onClick={() => setCreateIntegrationDialogOpen(true)}
               tooltip="New Integration"
             />
-          </Page.Header.Actions>
+          </div>
         )}
-      </Page.Header>
-      <Page.Body>
         <Cards>
           {integrations?.integrations?.map((integration) => (
             <IntegrationCard

@@ -20,7 +20,10 @@ export const CopyButton = ({
 }) => {
   const [recentlyCopied, setRecentlyCopied] = useState(false);
 
-  const handleCopy = () => {
+  const handleCopy = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
     navigator.clipboard.writeText(text);
     setRecentlyCopied(true);
     setTimeout(() => {

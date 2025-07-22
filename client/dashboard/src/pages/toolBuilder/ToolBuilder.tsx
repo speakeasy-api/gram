@@ -38,7 +38,7 @@ import {
 } from "@gram/client/react-query";
 import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
@@ -57,7 +57,6 @@ import {
   toJSON,
 } from "./components";
 import { useToolifyContext } from "./Toolify";
-import React from "react";
 
 export function ToolBuilderNew() {
   const ctx = useToolifyContext();
@@ -90,9 +89,9 @@ export function ToolBuilderNew() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs fullWidth />
       </Page.Header>
-      <Page.Body>
+      <Page.Body fullWidth>
         <ToolBuilder initial={newTemplate} />
       </Page.Body>
     </Page>
@@ -118,9 +117,9 @@ export function ToolBuilderPage() {
   return (
     <Page>
       <Page.Header>
-        <Page.Header.Breadcrumbs />
+        <Page.Header.Breadcrumbs fullWidth />
       </Page.Header>
-      <Page.Body>
+      <Page.Body fullWidth>
         <ChatProvider>
           <ToolBuilder
             initial={{
