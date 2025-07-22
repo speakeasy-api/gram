@@ -76,6 +76,8 @@ mise infra:start
 echo -e "\n⏳ Running migrations"
 mise db:migrate
 
+mise zero:summary
+
 echo -e "\n✅ All set up!"
 echo "Want me to start the server and dashboard (\`mise run start\`)?"
 echo -n "[y/N] "
