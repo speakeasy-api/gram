@@ -60,18 +60,16 @@ export const TelemetryContext = createContext<Telemetry>(
 export const useTelemetry = () => useContext(TelemetryContext);
 
 export const TelemetryProvider = (props: { children: ReactNode }) => {
-  let ph: PostHog | undefined;
+  const ph = posthog.init(
+    "phc_hiYSF5Axu49I1xs4Z5BG8KCI3PGNLM8ERRs7eocmfX9",
+    {
+      api_host: "https://metrics.speakeasy.com",
+      feature_flag_request_timeout_ms: 1000,
+    },
+    "speakeasy"
+  );
 
   useEffect(() => {
-    ph = posthog.init(
-      "phc_hiYSF5Axu49I1xs4Z5BG8KCI3PGNLM8ERRs7eocmfX9",
-      {
-        api_host: "https://metrics.speakeasy.com",
-        feature_flag_request_timeout_ms: 1000,
-      },
-      "speakeasy"
-    );
-
     if (getServerURL().includes("getgram.ai")) {
       datadogRum.init({
         applicationId: "93afb64a-dd15-490c-a749-51b4c5c5a171",
