@@ -69,7 +69,7 @@ function DeploymentActionsDropdown({
     },
   });
 
-  // Don't show actions for the latest deployment (first item, assuming sorted by date desc)
+  // Check if this is the latest deployment (first item, assuming sorted by date desc)
   const isLatestDeployment =
     deployments.length > 0 && deployments[0]?.id === deploymentId;
 
@@ -77,8 +77,10 @@ function DeploymentActionsDropdown({
   const currentDeployment = deployments.find((d) => d.id === deploymentId);
   const isCompletedDeployment = currentDeployment?.status === "completed";
 
-  // Only show actions for completed deployments that are not the latest
-  if (isLatestDeployment || !isCompletedDeployment) {
+  // Show actions for:
+  // 1. Latest deployment (regardless of status) - shows "Retry"
+  // 2. Completed deployments that are not the latest - shows "Redeploy"
+  if (!isLatestDeployment && !isCompletedDeployment) {
     return null;
   }
 
@@ -91,6 +93,10 @@ function DeploymentActionsDropdown({
       },
     });
   };
+
+  const isRedeploying = redeployMutation.isPending;
+  const actionText = isLatestDeployment ? "Retry Deployment" : "Redeploy";
+  const buttonText = isRedeploying ? "Redeploying..." : actionText;
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
@@ -107,7 +113,7 @@ function DeploymentActionsDropdown({
           className="cursor-pointer"
         >
           <Icon name="refresh-cw" className="size-4 mr-2" />
-          {redeployMutation.isPending ? "Redeploying..." : "Redeploy"}
+          {buttonText}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
