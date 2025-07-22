@@ -9,7 +9,7 @@ import AnimatedToolCard from "./components/AnimatedToolCard";
 import CurateToolsetsAnimation from "./components/CurateToolsetsAnimation";
 import StackedMetricCards from "./components/StackedMetricCards";
 import { AnimatedAPITransform } from "./components/APIToolsSection";
-import { Button, buttonVariants } from "./components/Button";
+import { Button } from "./components/Button";
 import MCPGraphic from "./components/MCPGraphic";
 import HowItWorksSection from "./components/HowItWorksSection";
 import { BentoGrid, BentoGridRow, BentoGridItem } from "./components/BentoGrid";
@@ -88,114 +88,21 @@ export default function Home() {
               },
             }}
           >
-            <motion.a
-              layout="position"
+            <Button
               href="https://docs.getgram.ai/"
-              className="relative inline-flex items-center justify-center font-mono text-[15px] leading-[1.6] tracking-[0.01em] uppercase whitespace-nowrap rounded-full transition-colors"
-              initial={{
-                backgroundColor: "rgb(245 245 245)",
-                color: "rgb(38 38 38)",
-                paddingLeft: "20px",
-                paddingRight: "20px",
-                paddingTop: "8px",
-                paddingBottom: "8px",
-                boxShadow:
-                  "0px 2px 1px 0px #F3F3F3 inset, 0px -40px 10px 10px rgba(220,220,220,0.2) inset, 0px -2px 1px 0px rgba(0,0,0,0.05) inset",
-              }}
-              whileHover={{
-                backgroundColor: "rgb(240 240 240)",
-                boxShadow:
-                  "0px 2px 1px 0px #F3F3F3 inset, 0px -40px 10px 10px rgba(210,210,210,0.3) inset, 0px -2px 1px 0px rgba(0,0,0,0.05) inset",
-              }}
-              transition={{
-                type: "spring",
-                stiffness: 500,
-                damping: 40,
-                mass: 0.5,
-              }}
+              variant="primary-light"
+              size="default"
             >
               View docs
-            </motion.a>
+            </Button>
             {!isMobile && (
-              <motion.div
-                layout
-                className="relative overflow-hidden"
-                transition={{
-                  layout: {
-                    type: "spring",
-                    stiffness: 300,
-                    damping: 30,
-                  },
-                }}
+              <Button
+                href="https://app.getgram.ai/login"
+                variant={showNavbarCTA ? "rainbow-light" : "primary-light"}
+                size="default"
               >
-                <motion.a
-                  href={
-                    showNavbarCTA
-                      ? "https://speakeasyapi.typeform.com/to/h6WJdwWr"
-                      : "https://app.getgram.ai/login"
-                  }
-                  className={
-                    showNavbarCTA
-                      ? buttonVariants({
-                          variant: "rainbow-light",
-                          size: "default",
-                        }) + " shadow-lg"
-                      : "relative inline-flex items-center justify-center font-mono text-[15px] leading-[1.6] tracking-[0.01em] uppercase whitespace-nowrap rounded-full transition-all"
-                  }
-                  initial={{
-                    backgroundColor: "rgb(245 245 245)",
-                    color: "rgb(38 38 38)",
-                    paddingLeft: "20px",
-                    paddingRight: "20px",
-                    paddingTop: "8px",
-                    paddingBottom: "8px",
-                    boxShadow:
-                      "0px 2px 1px 0px #F3F3F3 inset, 0px -40px 10px 10px rgba(220,220,220,0.2) inset, 0px -2px 1px 0px rgba(0,0,0,0.05) inset",
-                  }}
-                  animate={{
-                    backgroundColor: showNavbarCTA
-                      ? "transparent"
-                      : "rgb(245 245 245)",
-                    color: "rgb(38 38 38)",
-                    paddingLeft: "20px",
-                    paddingRight: "20px",
-                    paddingTop: showNavbarCTA ? "10px" : "8px",
-                    paddingBottom: showNavbarCTA ? "10px" : "8px",
-                    boxShadow: showNavbarCTA
-                      ? "none"
-                      : "0px 2px 1px 0px #F3F3F3 inset, 0px -40px 10px 10px rgba(220,220,220,0.2) inset, 0px -2px 1px 0px rgba(0,0,0,0.05) inset",
-                  }}
-                  whileHover={{
-                    backgroundColor: showNavbarCTA
-                      ? "transparent"
-                      : "rgb(240 240 240)",
-                    boxShadow: showNavbarCTA
-                      ? "none"
-                      : "0px 2px 1px 0px #F3F3F3 inset, 0px -40px 10px 10px rgba(210,210,210,0.3) inset, 0px -2px 1px 0px rgba(0,0,0,0.05) inset",
-                  }}
-                  transition={{
-                    type: "spring",
-                    stiffness: 400,
-                    damping: 30,
-                  }}
-                >
-                  <span className="block invisible">
-                    {showNavbarCTA ? "Join the waitlist" : "Login"}
-                  </span>
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.span
-                      key={showNavbarCTA ? "waitlist" : "login"}
-                      className="absolute inset-0 flex items-center justify-center"
-                      initial={{ opacity: 0, filter: "blur(4px)" }}
-                      animate={{ opacity: 1, filter: "blur(0px)" }}
-                      exit={{ opacity: 0, filter: "blur(4px)" }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      {showNavbarCTA ? "Join the waitlist" : "Login"}
-                    </motion.span>
-                  </AnimatePresence>
-                </motion.a>
-              </motion.div>
+                Login
+              </Button>
             )}
           </motion.div>
         </div>
@@ -238,8 +145,8 @@ export default function Home() {
                     <ButtonGroup
                       buttons={[
                         {
-                          text: "Join the waitlist",
-                          href: "https://speakeasyapi.typeform.com/to/h6WJdwWr",
+                          text: "Login",
+                          href: "https://app.getgram.ai/login",
                           variant: "rainbow-light",
                           size: "chunky",
                         },
@@ -265,7 +172,11 @@ export default function Home() {
 
         <HowItWorksSection />
 
-        <Section background="neutral" size="none" className="pb-8 sm:pb-12 lg:pb-16">
+        <Section
+          background="neutral"
+          size="none"
+          className="pb-8 sm:pb-12 lg:pb-16"
+        >
           <Container>
             <Flex
               direction="col"
@@ -329,7 +240,11 @@ export default function Home() {
           </Container>
         </Section>
 
-        <Section background="black" size="none" className="py-12 sm:py-16 lg:py-20 overflow-hidden">
+        <Section
+          background="black"
+          size="none"
+          className="py-12 sm:py-16 lg:py-20 overflow-hidden"
+        >
           <Container>
             <Flex direction="col" align="center" className="text-center">
               <Heading
@@ -345,16 +260,18 @@ export default function Home() {
           </Container>
         </Section>
 
-        <Section background="neutral" size="none" className="pb-20 sm:pb-24 lg:pb-28" asChild>
+        <Section
+          background="neutral"
+          size="none"
+          className="pb-20 sm:pb-24 lg:pb-28"
+          asChild
+        >
           <footer
             ref={footerRef}
             className="relative overflow-hidden flex flex-col justify-center items-center"
           >
             <Container size="2xl" className="relative z-20 pointer-events-none">
-              <Flex
-                direction="col"
-                align="center"
-              >
+              <Flex direction="col" align="center">
                 <CommunityBadge className="mb-8 sm:mb-12 pointer-events-auto" />
 
                 <Heading
@@ -570,10 +487,10 @@ export default function Home() {
           >
             <Button
               variant="rainbow-light"
-              href="https://speakeasyapi.typeform.com/to/h6WJdwWr"
+              href="https://app.getgram.ai/login"
               className="w-full max-w-xs shadow-lg text-base py-4"
             >
-              Join the waitlist
+              Login
             </Button>
           </motion.div>
         )}
