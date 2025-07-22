@@ -90,8 +90,8 @@ export function LoginSection() {
     <div className="flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen p-8 md:p-16 bg-white relative">
       <div className="w-full flex flex-col items-center gap-8 max-w-xs">
         <div className="flex flex-col items-center gap-4">
-          <h1 className="text-display-xl">gram</h1>
-          <p className="text-body-lg text-center">
+          <h1 className="text-display-xl dark:text-black">gram</h1>
+          <p className="text-body-lg text-center dark:text-black">
             Create, Curate and Host high quality MCP servers for every use case.
             Enable AI to connect with your APIs.
           </p>
@@ -141,7 +141,7 @@ export function RegisterSection() {
     },
 
     onSuccess: () => {
-      window.location.replace("/")
+      window.location.replace("/");
     },
     onError: (error) => {
       setValidationError(error.message);
