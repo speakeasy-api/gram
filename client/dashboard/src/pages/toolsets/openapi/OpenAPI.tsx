@@ -35,19 +35,6 @@ type NamedAsset = Asset & {
   slug: string;
 };
 
-export function useDeploymentIsEmpty() {
-  const { data: deploymentResult, isLoading } = useLatestDeployment();
-  const deployment = deploymentResult?.deployment;
-
-  if (isLoading) {
-    return false;
-  }
-
-  return !deployment ||
-    (deployment.openapiv3Assets.length === 0 &&
-      deployment.packages.length === 0);
-}
-
 export function APIsContent() {
   const client = useSdkClient();
   const { data: deploymentResult, refetch, isLoading } = useLatestDeployment();
@@ -65,7 +52,10 @@ export function APIsContent() {
     refetchAssets();
   };
 
-  const deploymentIsEmpty = useDeploymentIsEmpty();
+  const deploymentIsEmpty =
+    !deployment ||
+    (deployment.openapiv3Assets.length === 0 &&
+      deployment.packages.length === 0);
 
   const newDocumentDialog = (
     <Dialog

@@ -48,7 +48,7 @@ export default function Onboarding() {
   );
 }
 
-export function useOnboardingSteps(existingDocumentSlug?: string, checkDocumentSlugUnique = true) {
+export function useOnboardingSteps(existingDocumentSlug?: string) {
   const project = useProject();
   const session = useSession();
   const client = useSdkClient();
@@ -77,7 +77,6 @@ export function useOnboardingSteps(existingDocumentSlug?: string, checkDocumentS
 
     if (
       !existingDocumentSlug &&
-      checkDocumentSlugUnique &&
       latestDeployment?.deployment?.openapiv3Assets
         .map((a) => a.slug)
         .includes(apiName)
@@ -164,8 +163,6 @@ export function useOnboardingSteps(existingDocumentSlug?: string, checkDocumentS
       action: "deployment_created",
       num_tools: deploymentNumTools(deployment.deployment),
     });
-
-    return deployment.deployment;
   };
 
   const deploymentNumTools = (deployment: Deployment | undefined) => {
@@ -188,7 +185,6 @@ export function useOnboardingSteps(existingDocumentSlug?: string, checkDocumentS
   const undoSpecUpload = () => {
     setFile(undefined);
     setAsset(undefined);
-    setApiName(undefined);
   };
 
   return {
@@ -317,7 +313,7 @@ export function OnboardingContent({
   );
 }
 
-export function DeploymentLogs(props: { deploymentId: string; onlyErrors?: boolean }) {
+function DeploymentLogs(props: { deploymentId: string; onlyErrors?: boolean }) {
   const { data, status, error } = useDeploymentLogs({
     deploymentId: props.deploymentId,
   });

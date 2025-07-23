@@ -2,11 +2,15 @@ import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ProjectSelector } from "@/components/project-menu";
-import { Expandable } from "@/components/simple-accordion";
 import { ToolBadge } from "@/components/tool-badge";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -42,8 +46,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
-import { DeploymentLogs, useOnboardingSteps } from "./Onboarding";
-import { useTelemetry } from "@/contexts/Telemetry";
+import { useOnboardingSteps } from "./Onboarding";
 
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
@@ -238,24 +241,13 @@ const UploadStep = ({
     apiName,
     setApiName,
     apiNameError,
-    numTools,
-    undoSpecUpload,
-  } = useOnboardingSteps(undefined, false);
-  
-  const telemetry = useTelemetry();
+  } = useOnboardingSteps();
   const [fileText, setFileText] = useState<string>();
-  const [deploymentToShowLogsFor, setDeploymentToShowLogsFor] =
-    useState<string>();
 
   useEffect(() => {
     if (!file) return;
     file.text().then(setFileText);
   }, [file]);
-
-  const reset = () => {
-    setDeploymentToShowLogsFor(undefined);
-    undoSpecUpload();
-  };
 
   const content = file ? (
     <Stack gap={4}>
@@ -266,29 +258,27 @@ const UploadStep = ({
             OpenAPI Document
           </Type>
         </Stack>
-        <Expandable>
-          <Expandable.Trigger>
-            <Stack direction={"horizontal"} gap={2} align={"center"}>
-              <FileJson2 className="w-4 h-4 text-muted-foreground/70" />
-              <Type small mono>
-                {file.name}
-              </Type>
-              <Button
-                variant="ghost"
-                onClick={reset}
-                className="size-6 opacity-50 hover:opacity-100"
-                icon="x"
-              />
-            </Stack>
-          </Expandable.Trigger>
-          <Expandable.Content className="text-xs">
-            {fileText?.length ? (
-              <pre className="whitespace-pre-wrap">{fileText}</pre>
-            ) : (
-              <SkeletonParagraph lines={12} />
-            )}
-          </Expandable.Content>
-        </Expandable>
+        <Accordion type="single" collapsible>
+          <AccordionItem value="logs">
+            <AccordionTrigger className="text-base border-1 px-4 py-2 w-full [&[data-state=open]]:rounded-b-none ">
+              <Stack direction={"horizontal"} gap={2} align={"center"}>
+                <FileJson2 className="w-4 h-4 text-muted-foreground/70" />
+                <Type small mono>
+                  {file.name}
+                </Type>
+              </Stack>
+            </AccordionTrigger>
+            <AccordionContent>
+              <div className="text-xs p-4 bg-background h-48 overflow-y-auto border-1 border-t-0 rounded-b-md">
+                {fileText?.length ? (
+                  <pre className="whitespace-pre-wrap">{fileText}</pre>
+                ) : (
+                  <SkeletonParagraph lines={12} />
+                )}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </Stack>
       {apiName != null ? (
         <InputField
@@ -317,16 +307,7 @@ const UploadStep = ({
 
   const onContinue = async () => {
     setToolsetName(slugify(apiName || "my-toolset"));
-    const deployment = await createDeployment();
-    if (numTools === 0) {
-      setDeploymentToShowLogsFor(deployment?.id);
-      toast.error("Unable to create tools from your OpenAPI spec");
-      telemetry.capture("onboarding_event", {
-        action: "no_tools_found",
-        error: "no_tools_found",
-      });
-      return;
-    }
+    await createDeployment();
     setCurrentStep("toolset");
   };
 
@@ -339,18 +320,8 @@ const UploadStep = ({
         </span>
       </Stack>
       {content}
-      {deploymentToShowLogsFor && (
-        <Expandable>
-          <Expandable.Trigger className="text-destructive-foreground">
-            Unable to create tools from your OpenAPI spec
-          </Expandable.Trigger>
-          <Expandable.Content>
-            <DeploymentLogs deploymentId={deploymentToShowLogsFor} onlyErrors />
-          </Expandable.Content>
-        </Expandable>
-      )}
       <ContinueButton
-        disabled={!file || !!apiNameError || !!deploymentToShowLogsFor}
+        disabled={!file || !!apiNameError}
         onClick={onContinue}
         inProgressText="Generating tools"
       />

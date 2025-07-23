@@ -12,7 +12,7 @@ import { useState } from "react";
 import { Outlet } from "react-router";
 import { ToolsetCard } from "./ToolsetCard";
 import { ToolsetsEmptyState } from "./ToolsetsEmptyState";
-import { APIsContent, useDeploymentIsEmpty } from "./openapi/OpenAPI";
+import { APIsContent } from "./openapi/OpenAPI";
 
 export function useToolsets() {
   const { data: toolsets, refetch, isLoading } = useListToolsets();
@@ -91,14 +91,8 @@ function ToolsetsContent({
   setCreateToolsetDialogOpen: (open: boolean) => void;
 }) {
   const toolsets = useToolsets();
-  const deploymentIsEmpty = useDeploymentIsEmpty();
 
   if (!toolsets.isLoading && toolsets.length === 0) {
-    // We do this because toolsets and apis are rendered on the same page, so if the APIs empty state is going to be shown, we don't need to show the toolsets empty state
-    if (deploymentIsEmpty) {
-      return null;
-    }
-
     return (
       <ToolsetsEmptyState
         onCreateToolset={() => setCreateToolsetDialogOpen(true)}
