@@ -66,6 +66,7 @@ type mcpInputs struct {
 	environment     string
 	mcpEnvVariables map[string]string
 	authenticated   bool
+	sessionID       string
 }
 
 //go:embed config_snippet.json.tmpl
@@ -331,16 +332,17 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return respondWithNoContent(true, w)
 	}
 
+	sessionID := parseMcpSessionID(r.Header)
+	w.Header().Set("Mcp-Session-Id", sessionID)
+
 	mcpInputs := &mcpInputs{
 		projectID:       toolset.ProjectID,
 		toolset:         toolset.Slug,
 		environment:     selectedEnvironment,
 		mcpEnvVariables: parseMcpEnvVariables(r),
 		authenticated:   authenticated,
+		sessionID:       sessionID,
 	}
-
-	sessionID := parseMcpSessionID(r.Header)
-	w.Header().Set("Mcp-Session-Id", sessionID)
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
 	switch {
@@ -448,16 +450,17 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		return respondWithNoContent(true, w)
 	}
 
+	sessionID := parseMcpSessionID(r.Header)
+	w.Header().Set("Mcp-Session-Id", sessionID)
+
 	mcpInputs := &mcpInputs{
 		projectID:       *authCtx.ProjectID,
 		toolset:         toolsetSlug,
 		environment:     environmentSlug,
 		mcpEnvVariables: parseMcpEnvVariables(r),
 		authenticated:   true,
+		sessionID:       sessionID,
 	}
-
-	sessionID := parseMcpSessionID(r.Header)
-	w.Header().Set("Mcp-Session-Id", sessionID)
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
 	switch {
@@ -531,7 +534,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "ping":
 		return handlePing(ctx, s.logger, req.ID)
 	case "initialize":
-		return handleInitialize(ctx, s.logger, req)
+		return handleInitialize(ctx, s.logger, req, payload, s.posthog)
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
