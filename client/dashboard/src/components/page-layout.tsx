@@ -70,7 +70,7 @@ function PageSectionComponent({ children }: { children: React.ReactNode }) {
   });
 
   return (
-    <Stack gap={2} className="mb-8">
+    <Stack gap={2} className="mb-8 mt-3">
       {/* Render header with title, description, and CTA if they exist */}
       {(slots.title || slots.description || slots.ctas.length > 0) && (
         <Stack

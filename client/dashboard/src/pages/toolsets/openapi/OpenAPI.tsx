@@ -38,29 +38,59 @@ type NamedAsset = Asset & {
 export function APIsContent() {
   const client = useSdkClient();
   const { data: deploymentResult, refetch, isLoading } = useLatestDeployment();
-  const { data: assets } = useListAssets();
+  const { data: assets, refetch: refetchAssets } = useListAssets();
   const deployment = deploymentResult?.deployment;
 
   const [newDocumentDialogOpen, setNewDocumentDialogOpen] = useState(false);
   const [changeDocumentTargetSlug, setChangeDocumentTargetSlug] =
-    useState<string>();
+    useState<string | null>(null);
+
+  const finishUpload = () => {
+    setNewDocumentDialogOpen(false);
+    setChangeDocumentTargetSlug(null);
+    refetch();
+    refetchAssets();
+  };
 
   const deploymentIsEmpty =
     !deployment ||
     (deployment.openapiv3Assets.length === 0 &&
       deployment.packages.length === 0);
 
+  const newDocumentDialog = (
+    <Dialog
+      open={newDocumentDialogOpen}
+      onOpenChange={setNewDocumentDialogOpen}
+    >
+      <Dialog.Content className="max-w-2xl!">
+        <Dialog.Header>
+          <Dialog.Title>New OpenAPI Source</Dialog.Title>
+          <Dialog.Description>
+            Upload a new OpenAPI document to use in addition to your existing
+            documents.
+          </Dialog.Description>
+        </Dialog.Header>
+        <OnboardingContent onOnboardingComplete={finishUpload} />
+        <Dialog.Footer>
+          <Button
+            variant="secondary"
+            onClick={() => setNewDocumentDialogOpen(false)}
+          >
+            Back
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
+  );
+
   if (!isLoading && deploymentIsEmpty) {
     return (
-      <ApisEmptyState onNewUpload={() => setNewDocumentDialogOpen(true)} />
+      <>
+        <ApisEmptyState onNewUpload={() => setNewDocumentDialogOpen(true)} />
+        {newDocumentDialog}
+      </>
     );
   }
-
-  const finishUpload = () => {
-    setNewDocumentDialogOpen(false);
-    setChangeDocumentTargetSlug(undefined);
-    refetch();
-  };
 
   const removeDocument = async (assetId: string) => {
     await client.deployments.evolveDeployment({
@@ -107,35 +137,10 @@ export function APIsContent() {
             />
           ))}
         </MiniCards>
+        {newDocumentDialog}
         <Dialog
-          open={newDocumentDialogOpen}
-          onOpenChange={setNewDocumentDialogOpen}
-        >
-          <Dialog.Content className="max-w-2xl!">
-            <Dialog.Header>
-              <Dialog.Title>New OpenAPI Source</Dialog.Title>
-              <Dialog.Description>
-                Upload a new OpenAPI document to use in addition to your
-                existing documents.
-              </Dialog.Description>
-            </Dialog.Header>
-            <OnboardingContent
-              className="scale-95"
-              onOnboardingComplete={finishUpload}
-            />
-            <Dialog.Footer>
-              <Button
-                variant="secondary"
-                onClick={() => setNewDocumentDialogOpen(false)}
-              >
-                Back
-              </Button>
-            </Dialog.Footer>
-          </Dialog.Content>
-        </Dialog>
-        <Dialog
-          open={changeDocumentTargetSlug !== undefined}
-          onOpenChange={() => setChangeDocumentTargetSlug(undefined)}
+          open={changeDocumentTargetSlug !== null}
+          onOpenChange={() => setChangeDocumentTargetSlug(null)}
         >
           <Dialog.Content className="max-w-2xl!">
             <Dialog.Header>
@@ -146,14 +151,13 @@ export function APIsContent() {
               </Dialog.Description>
             </Dialog.Header>
             <OnboardingContent
-              existingDocumentSlug={changeDocumentTargetSlug}
-              className="scale-95"
+              existingDocumentSlug={changeDocumentTargetSlug ?? undefined}
               onOnboardingComplete={finishUpload}
             />
             <Dialog.Footer>
               <Button
                 variant="secondary"
-                onClick={() => setChangeDocumentTargetSlug(undefined)}
+                onClick={() => setChangeDocumentTargetSlug(null)}
               >
                 Back
               </Button>
