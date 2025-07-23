@@ -126,7 +126,7 @@ export const ToolsBadge = ({
   return toolNames && toolNames.length > 0 ? (
     <Badge
       size={size}
-      variant={tooManyTools ? "urgent-warning" : variant}
+      variant={tooManyTools ? "warning" : variant}
       tooltip={tooltipContent}
       className={className}
     >
