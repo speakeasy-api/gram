@@ -133,6 +133,8 @@ func selectResponse(ctx context.Context, logger *slog.Logger, op *v3.Operation) 
 	schemaToContentTypes := make(map[string][]string)
 	// Map schema hash to the best content type for that schema
 	schemaToBestContentType := make(map[string]string)
+	// Map status code + content type to schema hash for consistent lookup
+	codeContentToHash := make(map[string]string)
 
 	for code, response := range op.Responses.Codes.FromOldest() {
 		if orderedmap.Len(response.Content) == 0 {
@@ -143,6 +145,10 @@ func selectResponse(ctx context.Context, logger *slog.Logger, op *v3.Operation) 
 			if contenttypes.IsJSON(contentType) || contenttypes.IsYAML(contentType) {
 				hashBytes := content.Schema.GoLow().Schema().Hash()
 				hash := string(hashBytes[:])
+
+				// Store the hash for this specific code+contentType combination
+				codeContentKey := code + "|" + contentType
+				codeContentToHash[codeContentKey] = hash
 
 				// Add this status code to the schema group
 				schemaToStatusCodes[hash] = append(schemaToStatusCodes[hash], code)
@@ -213,13 +219,15 @@ func selectResponse(ctx context.Context, logger *slog.Logger, op *v3.Operation) 
 				continue
 			}
 
-			// Find the schema hash for this status code
+			// Find the schema hash for this status code using our stored mapping
 			var selectedSchemaHash string
-			for contentType, content := range selectedResponse.Content.FromOldest() {
+			for contentType := range selectedResponse.Content.FromOldest() {
 				if contenttypes.IsJSON(contentType) || contenttypes.IsYAML(contentType) {
-					hashBytes := content.Schema.GoLow().Schema().Hash()
-					selectedSchemaHash = string(hashBytes[:])
-					break
+					codeContentKey := selectedCode + "|" + contentType
+					if hash, exists := codeContentToHash[codeContentKey]; exists {
+						selectedSchemaHash = hash
+						break
+					}
 				}
 			}
 
