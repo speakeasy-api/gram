@@ -473,7 +473,7 @@ function ChatInner({
         messages={m}
         isLoading={status === "streaming" || isChatHistoryLoading}
         onSendMessage={handleSend}
-        className={"pb-4"}
+        className={"pb-4 w-3xl"} // Set width explicitly or else it will shrink to the size of the messages
         toolCallApproval={toolCallApproval}
         components={{
           composer: {

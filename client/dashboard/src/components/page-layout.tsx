@@ -7,9 +7,9 @@ import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
 import { Button } from "./ui/button.tsx";
 import { Heading } from "./ui/heading.tsx";
+import { MoreActions } from "./ui/more-actions.tsx";
 import { Type } from "./ui/type.tsx";
 import { XYFade } from "./ui/xy-fade.tsx";
-import { MoreActions } from "./ui/more-actions.tsx";
 
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -30,14 +30,17 @@ function PageBody({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(
-        "@container/main flex flex-col gap-4 p-8 pb-0 overflow-y-auto h-full w-full",
-        !fullWidth && "max-w-7xl mx-auto ",
-        className
-      )}
-    >
-      <ContentErrorBoundary>{children}</ContentErrorBoundary>
+    // Nest the max-width container inside another div so that the entire page area remains scrollable
+    <div className="overflow-y-auto h-full w-full">
+      <div
+        className={cn(
+          "@container/main flex flex-col gap-4 p-8 pb-0 h-full w-full",
+          !fullWidth && "max-w-7xl mx-auto ",
+          className
+        )}
+      >
+        <ContentErrorBoundary>{children}</ContentErrorBoundary>
+      </div>
     </div>
   );
 }

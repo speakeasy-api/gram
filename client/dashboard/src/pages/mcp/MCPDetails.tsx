@@ -53,7 +53,7 @@ export function MCPDetailPage() {
           tools or prompts exposed by this MCP server, update the source toolset
           below."
       >
-        <ToolsetCard toolset={toolset.data} className="max-w-3xl" />
+        <ToolsetCard toolset={toolset.data} className="max-w-2xl" />
       </PageSection>
       <MCPDetails toolset={toolset.data} />
     </Stack>
@@ -263,7 +263,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         description="The URL you or your users will use to access this MCP server."
       >
         <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
-        <Block label="Custom Slug" className="max-w-3xl" error={mcpSlugError}>
+        <Block label="Custom Slug" error={mcpSlugError}>
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Type muted mono variant="small">
@@ -315,26 +315,27 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           {saveButton}
         </div>
       </PageSection>
-      {toolset.mcpIsPublic && (
-        <PageSection
-          heading="MCP Installation"
-          description="A simple hosted page for installing your MCP server. Try it in the browser!"
-        >
-          <Stack direction="horizontal" align="center" gap={2}>
-            <CodeBlock className="max-w-3xl">{`${mcpUrl}/install`}</CodeBlock>
-            <Link external to={`${mcpUrl}/install`} noIcon>
-              <Button variant="outline" size="sm" className="px-8">
-                View
-              </Button>
-            </Link>
-          </Stack>
-        </PageSection>
-      )}
       <PageSection
-        heading="MCP Config"
-        description="Use this config to connect to this MCP server from a client like
+        heading="MCP Installation"
+        description="Use these configs to connect to this MCP server from a client like
           Cursor or Claude Desktop."
       >
+        {toolset.mcpIsPublic && (
+          <Stack className="mt-2" gap={1}>
+            <Stack direction="horizontal" align="center" gap={2}>
+              <CodeBlock>{`${mcpUrl}/install`}</CodeBlock>
+              <Link external to={`${mcpUrl}/install`} noIcon>
+                <Button variant="outline" size="sm" className="px-8">
+                  View
+                </Button>
+              </Link>
+            </Stack>
+            <Type muted small>
+              A shareable page for installing your MCP server. Try it in the
+              browser!
+            </Type>
+          </Stack>
+        )}
         <MCPJson toolset={toolset} />
       </PageSection>
       <FeatureRequestModal
@@ -381,7 +382,7 @@ function PageSection({
         <Heading variant="h3">{heading}</Heading>
         {headingRHS}
       </Stack>
-      <Type muted small className="max-w-3xl">
+      <Type muted small className="max-w-2xl">
         {description}
       </Type>
       {children}
@@ -418,15 +419,14 @@ export function MCPJson({
           Pass API credentials directly to the MCP server.
         </Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-      </Grid.Item>
-    ) as // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
+      </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    any);
+    ) as any);
 
   return (
     <Grid
       gap={4}
-      className="mt-4!"
+      className="my-4!"
       columns={
         publicSettingsJson || !fullWidth
           ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 }
