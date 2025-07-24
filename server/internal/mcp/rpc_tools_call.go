@@ -96,7 +96,7 @@ func handleToolsCall(
 	// Transform environment entries into a map
 	var envVars map[string]string
 
-	// IMPORTANT: MCP servers accessed in a public manner or not gram authenticated, there is not concept of using stored environments for them
+	// IMPORTANT: MCP servers accessed in a public manner or not gram authenticated, there is no concept of using stored environments for them
 	if envSlug != "" && payload.authenticated {
 		envVars, err = env.Load(ctx, payload.projectID, gateway.Slug(envSlug))
 		switch {
