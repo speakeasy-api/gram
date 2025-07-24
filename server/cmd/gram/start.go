@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/templates"
@@ -445,8 +446,10 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger.With(slog.String("component", "keys")), db, sessionManager, c.String("environment")))
 			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
+			oauthService := oauth.NewService(logger.With(slog.String("component", "oauth")), tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient)
+			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy))
-			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy))
+			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService))
 			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{

@@ -39,6 +39,8 @@ type Toolset struct {
 	McpSlug                pgtype.Text
 	McpIsPublic            bool
 	CustomDomainID         uuid.NullUUID
+	ExternalOauthServerID  uuid.NullUUID
+	OauthProxyServerID     uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz

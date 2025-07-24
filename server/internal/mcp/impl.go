@@ -39,6 +39,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oauth"
+	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -58,15 +60,23 @@ type Service struct {
 	serverURL    *url.URL
 	posthog      *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 	toolProxy    *gateway.ToolProxy
+	oauthService *oauth.Service
+	oauthRepo    *oauth_repo.Queries
+}
+
+type oauthTokenInputs struct {
+	securityKeys []string // can be empty if a single token applies to the whole server
+	Token        string
 }
 
 type mcpInputs struct {
-	projectID       uuid.UUID
-	toolset         string
-	environment     string
-	mcpEnvVariables map[string]string
-	authenticated   bool
-	sessionID       string
+	projectID        uuid.UUID
+	toolset          string
+	environment      string
+	mcpEnvVariables  map[string]string
+	oauthTokenInputs []oauthTokenInputs
+	authenticated    bool
+	sessionID        string
 }
 
 //go:embed config_snippet.json.tmpl
@@ -86,6 +96,7 @@ func NewService(
 	serverURL *url.URL,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
+	oauthService *oauth.Service,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -110,6 +121,8 @@ func NewService(
 			cacheImpl,
 			guardianPolicy,
 		),
+		oauthService: oauthService,
+		oauthRepo:    oauth_repo.New(db),
 	}
 }
 
@@ -118,7 +131,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP(w, r)
 	})
 	mux.Handle("GET", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
-		// This is page is being laoded in the browser equest
+		// This is page is being laoded in the browser request
 		for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
 			if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
 				oops.ErrHandle(service.logger, service.ServeHostedPage).ServeHTTP(w, r)
@@ -151,10 +164,124 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	mux.Handle("POST", "/mcp/{project}/{toolset}/{environment}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP(w, r)
 	})
+
+	// OAuth 2.1 Authorization Server Metadata
+	mux.Handle("GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP(w, r)
+	})
+
+	mux.Handle("GET", "/.well-known/oauth-protected-resource/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP(w, r)
+	})
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+// handleWellKnownMetadata handles OAuth 2.1 authorization server metadata discovery
+func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+	}
+
+	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	}
+
+	var metadata map[string]interface{}
+	switch {
+	case toolset.OauthProxyServerID.Valid:
+		appServerURL := s.serverURL.String()
+		metadata = map[string]interface{}{
+			"issuer":                           appServerURL + "/oauth/" + mcpSlug,
+			"authorization_endpoint":           appServerURL + "/oauth/" + mcpSlug + "/authorize",
+			"token_endpoint":                   appServerURL + "/oauth/" + mcpSlug + "/token",
+			"registration_endpoint":            appServerURL + "/oauth/" + mcpSlug + "/register",
+			"response_types_supported":         []string{"code"},
+			"grant_types_supported":            []string{"authorization_code"},
+			"code_challenge_methods_supported": []string{"plain", "S256"},
+		}
+	case toolset.ExternalOauthServerID.Valid:
+		// Fetch metadata from external_oauth_server_metadata table
+		externalOAuthServer, err := s.oauthRepo.GetExternalOAuthServerMetadata(ctx, oauth_repo.GetExternalOAuthServerMetadataParams{
+			ProjectID: toolset.ProjectID,
+			ID:        toolset.ExternalOauthServerID.UUID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to load OAuth server metadata").Log(ctx, s.logger)
+		}
+
+		// Parse the stored JSON metadata
+		if err := json.Unmarshal(externalOAuthServer.Metadata, &metadata); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "invalid OAuth server metadata").Log(ctx, s.logger)
+		}
+	default:
+		return oops.E(oops.CodeNotFound, nil, "").Log(ctx, s.logger)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	body, err := json.Marshal(metadata)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth server metadata").Log(ctx, s.logger)
+	}
+
+	_, writeErr := w.Write(body)
+	if writeErr != nil {
+		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body").Log(ctx, s.logger)
+	}
+
+	return nil
+}
+
+func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) error {
+	ctx := r.Context()
+	mcpSlug := chi.URLParam(r, "mcpSlug")
+	if mcpSlug == "" {
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
+	}
+
+	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	}
+
+	switch {
+	case toolset.OauthProxyServerID.Valid, toolset.ExternalOauthServerID.Valid:
+		// Continue processing
+	default:
+		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found for this MCP server").Log(ctx, s.logger)
+	}
+
+	baseURL := s.serverURL.String()
+	if customDomainCtx != nil {
+		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
+	}
+
+	metadata := map[string]any{
+		"issuer":                baseURL + "/mcp/" + mcpSlug,
+		"authorization_servers": []string{baseURL + "/mcp/" + mcpSlug},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	body, err := json.Marshal(metadata)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal OAuth protected resource metadata").Log(ctx, s.logger)
+	}
+
+	_, writeErr := w.Write(body)
+	if writeErr != nil {
+		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body").Log(ctx, s.logger)
+	}
+
+	return nil
 }
 
 type jsonSnippetData struct {
@@ -176,21 +303,21 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
+		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
 
 	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
 
 	if !toolset.McpIsPublic {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to describe toolset")
+		return oops.E(oops.CodeUnexpected, err, "failed to describe toolset").Log(ctx, s.logger)
 	}
 
 	envHeaders := []string{}
@@ -214,16 +341,14 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	configSnippetTmpl, err := template.New("config_snippet").Parse(configSnippetTmplData)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to parse config snippet template", slog.String("error", err.Error()))
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return oops.E(oops.CodeUnexpected, err, "failed to parse config snippet template")
+		return oops.E(oops.CodeUnexpected, err, "failed to parse config snippet template").Log(ctx, s.logger)
 	}
 
 	var configSnippet bytes.Buffer
 	if err := configSnippetTmpl.Execute(&configSnippet, configSnippetData); err != nil {
-		s.logger.ErrorContext(ctx, "failed to execute config snippet template", slog.String("error", err.Error()))
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return oops.E(oops.CodeUnexpected, err, "failed to execute config snippet template")
+		return oops.E(oops.CodeUnexpected, err, "failed to execute config snippet template").Log(ctx, s.logger)
 	}
 
 	data := hostedPageData{
@@ -233,9 +358,8 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	hostedPageTmpl, err := template.New("hosted_page").Parse(hostedPageTmplData)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to parse hosted page template", slog.String("error", err.Error()))
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted page template")
+		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted page template").Log(ctx, s.logger)
 	}
 
 	buf := &bytes.Buffer{}
@@ -260,30 +384,96 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		return r.Body.Close()
 	})
 
-	token := r.Header.Get("Authorization")
-	if token != "" {
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           auth.KeySecurityScheme,
-			RequiredScopes: []string{"consumer"},
-			Scopes:         []string{},
-		}
-		token = strings.TrimPrefix(token, "Bearer ")
-		token = strings.TrimPrefix(token, "bearer ")
-		ctx, err = s.auth.Authorize(ctx, token, &sc)
-		if err != nil {
-			return oops.C(oops.CodeUnauthorized)
-		}
-	}
-
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
 	}
 
-	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found")
+		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	}
+
+	baseURL := s.serverURL.String()
+	if customDomainCtx != nil {
+		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
+	}
+
+	token := r.Header.Get("Authorization")
+	token = strings.TrimPrefix(token, "Bearer ")
+	token = strings.TrimPrefix(token, "bearer ")
+	var tokenInputs []oauthTokenInputs
+
+	switch {
+	case toolset.ExternalOauthServerID.Valid:
+		if token == "" {
+			s.logger.WarnContext(ctx, "No authorization token provided")
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		}
+
+		tokenInputs = append(tokenInputs, oauthTokenInputs{
+			securityKeys: []string{""},
+			Token:        token,
+		})
+	case toolset.OauthProxyServerID.Valid:
+		token, err := s.oauthService.ValidateAccessToken(ctx, mcpSlug, token)
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
+		}
+		s.logger.InfoContext(ctx, "OAuth token validated successfully", slog.String("toolset_id", toolset.ID.String()))
+
+		for _, externalSecret := range token.ExternalSecrets {
+			tokenInputs = append(tokenInputs, oauthTokenInputs{
+				securityKeys: externalSecret.SecurityKeys,
+				Token:        externalSecret.Token,
+			})
+		}
+	default:
+		if token != "" {
+			// see if we are authenticated with our own key
+			sc := security.APIKeyScheme{
+				Name:           auth.KeySecurityScheme,
+				RequiredScopes: []string{"consumer"},
+				Scopes:         []string{},
+			}
+			ctx, err = s.auth.Authorize(ctx, token, &sc)
+			if err != nil {
+				return oops.E(oops.CodeUnauthorized, err, "failed to authorize with API key").Log(ctx, s.logger)
+			}
+		}
+	}
+
+	// TODO: How do we actually validate an external token is still active
+	if toolset.ExternalOauthServerID.Valid {
+		if token == "" {
+			s.logger.WarnContext(ctx, "No authorization token provided")
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
+		}
+
+		tokenInputs = append(tokenInputs, oauthTokenInputs{
+			securityKeys: []string{""},
+			Token:        token,
+		})
+	}
+
+	// Validate OAuth access token
+	if toolset.OauthProxyServerID.Valid {
+		token, err := s.oauthService.ValidateAccessToken(ctx, mcpSlug, token)
+		if err != nil {
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
+			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
+		}
+		s.logger.InfoContext(ctx, "OAuth token validated successfully", slog.String("toolset_id", toolset.ID.String()))
+
+		for _, externalSecret := range token.ExternalSecrets {
+			tokenInputs = append(tokenInputs, oauthTokenInputs{
+				securityKeys: externalSecret.SecurityKeys,
+				Token:        externalSecret.Token,
+			})
+		}
 	}
 
 	var selectedEnvironment string
@@ -292,7 +482,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		projects, err := s.repo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
-			return oops.E(oops.CodeForbidden, nil, "no projects found")
+			return oops.E(oops.CodeForbidden, nil, "no projects found").Log(ctx, s.logger)
 		case err != nil:
 			return oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, s.logger, slog.String("org_id", authCtx.ActiveOrganizationID))
 		}
@@ -313,7 +503,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	if !toolset.McpIsPublic && !authenticated {
-		return oops.C(oops.CodeUnauthorized)
+		return oops.C(oops.CodeNotFound)
 	}
 
 	// IMPORTANT: We should not use gram environments if we are not in an authenticated context
@@ -323,6 +513,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			selectedEnvironment = passedEnv
 		}
 	}
+
 	var batch batchedRawRequest
 	err = json.NewDecoder(r.Body).Decode(&batch)
 	switch {
@@ -340,12 +531,13 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Mcp-Session-Id", sessionID)
 
 	mcpInputs := &mcpInputs{
-		projectID:       toolset.ProjectID,
-		toolset:         toolset.Slug,
-		environment:     selectedEnvironment,
-		mcpEnvVariables: parseMcpEnvVariables(r),
-		authenticated:   authenticated,
-		sessionID:       sessionID,
+		projectID:        toolset.ProjectID,
+		toolset:          toolset.Slug,
+		environment:      selectedEnvironment,
+		mcpEnvVariables:  parseMcpEnvVariables(r),
+		authenticated:    authenticated,
+		oauthTokenInputs: tokenInputs,
+		sessionID:        sessionID,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -360,9 +552,9 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	w.WriteHeader(http.StatusOK)
 	_, writeErr := w.Write(body)
 	if writeErr != nil {
-		s.logger.ErrorContext(ctx, "failed to write response body", slog.String("error", writeErr.Error()))
 		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body")
 	}
+
 	return nil
 }
 
@@ -381,7 +573,6 @@ func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*
 	}
 
 	if toolsetErr != nil {
-		s.logger.ErrorContext(ctx, "failed to get toolset for MCP server slug", slog.String("error", toolsetErr.Error()))
 		return nil, nil, oops.E(oops.CodeNotFound, toolsetErr, "mcp server not found").Log(ctx, s.logger)
 	}
 
@@ -458,12 +649,13 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 	w.Header().Set("Mcp-Session-Id", sessionID)
 
 	mcpInputs := &mcpInputs{
-		projectID:       *authCtx.ProjectID,
-		toolset:         toolsetSlug,
-		environment:     environmentSlug,
-		mcpEnvVariables: parseMcpEnvVariables(r),
-		authenticated:   true,
-		sessionID:       sessionID,
+		projectID:        *authCtx.ProjectID,
+		toolset:          toolsetSlug,
+		environment:      environmentSlug,
+		mcpEnvVariables:  parseMcpEnvVariables(r),
+		authenticated:    true,
+		oauthTokenInputs: []oauthTokenInputs{},
+		sessionID:        sessionID,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -478,8 +670,7 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 	w.WriteHeader(http.StatusOK)
 	_, writeErr := w.Write(body)
 	if writeErr != nil {
-		s.logger.ErrorContext(ctx, "failed to write response body", slog.String("error", writeErr.Error()))
-		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body")
+		return oops.E(oops.CodeUnexpected, writeErr, "failed to write response body").Log(ctx, s.logger)
 	}
 	return nil
 }
@@ -508,7 +699,7 @@ func (s *Service) handleBatch(ctx context.Context, payload *mcpInputs, batch bat
 	} else {
 		m, err := json.Marshal(results)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize results")
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize results").Log(ctx, s.logger)
 		}
 
 		return m, nil

@@ -11,6 +11,7 @@ import (
 	"maps"
 	"mime"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -119,6 +120,19 @@ func handleToolsCall(
 	executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByID(ctx, uuid.MustParse(*toolID), uuid.UUID(projectID))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool execution plan").Log(ctx, logger)
+	}
+
+	// map provided oauth tokens into the relevant security env variables
+	for _, security := range executionPlan.Security {
+		for _, token := range payload.oauthTokenInputs {
+			if slices.Contains(security.OauthTypes, "authorization_code") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
+				for _, envVar := range security.EnvVariables {
+					if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
+						envVars[envVar] = token.Token
+					}
+				}
+			}
+		}
 	}
 
 	rw := &toolCallResponseWriter{

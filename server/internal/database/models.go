@@ -156,6 +156,17 @@ type EnvironmentEntry struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type ExternalOauthServerMetadatum struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Slug      string
+	Metadata  []byte
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+	Deleted   bool
+}
+
 type HttpSecurity struct {
 	ID           uuid.UUID
 	Key          string
@@ -207,6 +218,53 @@ type HttpToolDefinition struct {
 	UpdatedAt           pgtype.Timestamptz
 	DeletedAt           pgtype.Timestamptz
 	Deleted             bool
+}
+
+type OauthProxyClientInfo struct {
+	McpSlug                 string
+	ClientID                string
+	ClientSecret            string
+	ClientSecretExpiresAt   pgtype.Timestamptz
+	ClientName              string
+	RedirectUris            []string
+	GrantTypes              []string
+	ResponseTypes           []string
+	Scope                   string
+	TokenEndpointAuthMethod string
+	ApplicationType         string
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+}
+
+type OauthProxyProvider struct {
+	ID                                uuid.UUID
+	ProjectID                         uuid.UUID
+	OauthProxyServerID                uuid.UUID
+	Slug                              string
+	AuthorizationEndpoint             string
+	TokenEndpoint                     string
+	RegistrationEndpoint              pgtype.Text
+	ScopesSupported                   []string
+	ResponseTypesSupported            []string
+	ResponseModesSupported            []string
+	GrantTypesSupported               []string
+	TokenEndpointAuthMethodsSupported []string
+	SecurityKeyNames                  []string
+	Secrets                           []byte
+	CreatedAt                         pgtype.Timestamptz
+	UpdatedAt                         pgtype.Timestamptz
+	DeletedAt                         pgtype.Timestamptz
+	Deleted                           bool
+}
+
+type OauthProxyServer struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Slug      string
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+	DeletedAt pgtype.Timestamptz
+	Deleted   bool
 }
 
 type OpenrouterApiKey struct {
@@ -350,6 +408,8 @@ type Toolset struct {
 	McpSlug                pgtype.Text
 	McpIsPublic            bool
 	CustomDomainID         uuid.NullUUID
+	ExternalOauthServerID  uuid.NullUUID
+	OauthProxyServerID     uuid.NullUUID
 	CreatedAt              pgtype.Timestamptz
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz

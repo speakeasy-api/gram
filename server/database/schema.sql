@@ -359,6 +359,83 @@ CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_key
 ON custom_domains (organization_id)
 WHERE deleted IS FALSE;
 
+-- External OAuth Server Metadata (RFC 8414 compliant)
+-- For direct external OAuth provider connections
+CREATE TABLE IF NOT EXISTS external_oauth_server_metadata (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
+  metadata JSONB NOT NULL,
+  
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  
+  CONSTRAINT external_oauth_server_metadata_pkey PRIMARY KEY (id),
+  CONSTRAINT external_oauth_server_metadata_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS external_oauth_server_metadata_project_slug_key
+ON external_oauth_server_metadata (project_id, slug)
+WHERE deleted IS FALSE;
+
+-- OAuth Proxy Servers - collection of OAuth proxy configurations
+CREATE TABLE IF NOT EXISTS oauth_proxy_servers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
+  
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  
+  CONSTRAINT oauth_proxy_servers_pkey PRIMARY KEY (id),
+  CONSTRAINT oauth_proxy_servers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS oauth_proxy_servers_project_slug_key
+ON oauth_proxy_servers (project_id, slug)
+WHERE deleted IS FALSE;
+
+-- OAuth Proxy Providers - individual OAuth providers within a proxy server
+CREATE TABLE IF NOT EXISTS oauth_proxy_providers (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  oauth_proxy_server_id uuid NOT NULL,
+  
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
+  authorization_endpoint TEXT NOT NULL,
+  token_endpoint TEXT NOT NULL,
+  registration_endpoint TEXT,
+  
+  -- OAuth server capabilities
+  scopes_supported TEXT[] DEFAULT ARRAY[]::TEXT[],
+  response_types_supported TEXT[] DEFAULT ARRAY[]::TEXT[],
+  response_modes_supported TEXT[] DEFAULT ARRAY[]::TEXT[],
+  grant_types_supported TEXT[] DEFAULT ARRAY[]::TEXT[],
+  token_endpoint_auth_methods_supported TEXT[] DEFAULT ARRAY[]::TEXT[],
+  
+  security_key_names TEXT[] DEFAULT ARRAY[]::TEXT[],
+  secrets JSONB,
+  
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+  
+  CONSTRAINT oauth_proxy_providers_pkey PRIMARY KEY (id),
+  CONSTRAINT oauth_proxy_providers_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT oauth_proxy_providers_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS oauth_proxy_providers_project_slug_key
+ON oauth_proxy_providers (project_id, slug)
+WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS toolsets (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
 
@@ -375,6 +452,10 @@ CREATE TABLE IF NOT EXISTS toolsets (
   mcp_is_public BOOLEAN NOT NULL DEFAULT FALSE,
   custom_domain_id uuid,
 
+  -- OAuth configuration - mutually exclusive
+  external_oauth_server_id uuid,
+  oauth_proxy_server_id uuid,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -382,7 +463,10 @@ CREATE TABLE IF NOT EXISTS toolsets (
 
   CONSTRAINT toolsets_pkey PRIMARY KEY (id),
   CONSTRAINT toolsets_project_id_fkey FOREIGN key (project_id) REFERENCES projects (id) ON DELETE SET NULL,
-  CONSTRAINT toolsets_custom_domain_id_fkey FOREIGN key (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL
+  CONSTRAINT toolsets_custom_domain_id_fkey FOREIGN key (custom_domain_id) REFERENCES custom_domains (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_external_oauth_server_id_fkey FOREIGN KEY (external_oauth_server_id) REFERENCES external_oauth_server_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_oauth_proxy_server_id_fkey FOREIGN KEY (oauth_proxy_server_id) REFERENCES oauth_proxy_servers (id) ON DELETE SET NULL,
+  CONSTRAINT toolsets_oauth_exclusivity CHECK ((external_oauth_server_id IS NULL) != (oauth_proxy_server_id IS NULL) OR (external_oauth_server_id IS NULL AND oauth_proxy_server_id IS NULL))
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS toolsets_project_id_slug_key
@@ -657,3 +741,23 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_key
 ON users (email);
+
+
+CREATE TABLE IF NOT EXISTS oauth_proxy_client_info (
+  mcp_slug TEXT NOT NULL CHECK (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 60),
+  client_id TEXT NOT NULL CHECK (client_id <> '' AND CHAR_LENGTH(client_id) <= 100),
+  client_secret TEXT NOT NULL CHECK (client_secret <> '' AND CHAR_LENGTH(client_secret) <= 200),
+  client_secret_expires_at timestamptz NOT NULL,
+  client_name TEXT NOT NULL,
+  redirect_uris TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  grant_types TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  response_types TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  scope TEXT NOT NULL,
+  token_endpoint_auth_method TEXT NOT NULL,
+  application_type TEXT NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT oauth_proxy_client_info_pkey PRIMARY KEY (client_id)
+);
