@@ -174,9 +174,6 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		return r.Body.Close()
 	})
 
-	w.Header().Set("Content-Type", "text/html")
-	w.WriteHeader(http.StatusOK)
-
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided")
@@ -241,10 +238,17 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted page template")
 	}
 
-	if err := hostedPageTmpl.Execute(w, data); err != nil {
+	buf := &bytes.Buffer{}
+	if err := hostedPageTmpl.Execute(buf, data); err != nil {
 		s.logger.ErrorContext(ctx, "failed to execute hosted page template", slog.String("error", err.Error()))
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return oops.E(oops.CodeUnexpected, err, "failed to execute hosted page template")
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(buf.Bytes())
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to write response body", slog.String("error", err.Error()))
 	}
 
 	return nil
