@@ -165,7 +165,7 @@ function ChatInner({
 
       if (result.length > MAX_TOOL_RESPONSE_LENGTH) {
         return (
-          "Response is too long and has been truncated to avoid bricking your playground's context window. Consider turning on auto-summarization for this tool." +
+          "Response is too long and has been truncated to avoid bricking your playground's context window. Consider using [response filtering](https://docs.getgram.ai/concepts/openapi#response-filtering) to help the LLM process API responses more effectively." +
           `\n\n${result.slice(0, MAX_TOOL_RESPONSE_LENGTH)}`
         );
       }
