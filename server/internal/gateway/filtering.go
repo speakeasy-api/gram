@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"slices"
 
@@ -36,7 +37,13 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, tool tool
 	contentType := resp.Header.Get("Content-Type")
 	statusCode := resp.StatusCode
 
-	if !slices.Contains(tool.ResponseFilter.ContentTypes, contentType) || !slices.Contains(tool.ResponseFilter.StatusCodes, fmt.Sprintf("%d", statusCode)) {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to parse content type", slog.String("error", err.Error()), slog.String("content_type", contentType))
+		return nil
+	}
+
+	if !slices.Contains(tool.ResponseFilter.ContentTypes, mediaType) || !slices.Contains(tool.ResponseFilter.StatusCodes, fmt.Sprintf("%d", statusCode)) {
 		return nil
 	}
 
@@ -102,12 +109,12 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, tool tool
 		results = append(results, v)
 	}
 
-	if contenttypes.IsJSON(contentType) {
+	if contenttypes.IsJSON(mediaType) {
 		if err := json.NewEncoder(buf).Encode(results); err != nil {
 			filterSpan.SetStatus(codes.Error, err.Error())
 			logger.ErrorContext(ctx, "failed to encode response filter results", slog.String("error", err.Error()))
 		}
-	} else if contenttypes.IsYAML(contentType) {
+	} else if contenttypes.IsYAML(mediaType) {
 		if err := yaml.NewEncoder(buf).Encode(results); err != nil {
 			filterSpan.SetStatus(codes.Error, err.Error())
 			logger.ErrorContext(ctx, "failed to encode response filter results", slog.String("error", err.Error()))
