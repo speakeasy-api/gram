@@ -94,16 +94,20 @@ func handleToolsCall(
 	}
 
 	// Transform environment entries into a map
-	var envVars map[string]string
+	envVars := make(map[string]string)
 
 	// IMPORTANT: MCP servers accessed in a public manner or not gram authenticated, there is no concept of using stored environments for them
 	if envSlug != "" && payload.authenticated {
-		envVars, err = env.Load(ctx, payload.projectID, gateway.Slug(envSlug))
+		storedEnvVars, err := env.Load(ctx, payload.projectID, gateway.Slug(envSlug))
 		switch {
 		case errors.Is(err, gateway.ErrNotFound):
 			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").Log(ctx, logger)
 		case err != nil:
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
+		}
+
+		if len(storedEnvVars) > 0 {
+			maps.Copy(envVars, storedEnvVars)
 		}
 	}
 
