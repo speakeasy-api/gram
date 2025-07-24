@@ -692,6 +692,14 @@ WITH latest_status as (
     WHERE deployment_id = $1
     ORDER BY seq DESC
     LIMIT 1
+),
+tool_counts as (
+    SELECT 
+        deployment_id,
+        COUNT(DISTINCT id) as tool_count
+    FROM http_tool_definitions 
+    WHERE deployment_id = $1 AND deleted IS FALSE
+    GROUP BY deployment_id
 )
 SELECT
   deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.cloned_from, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at,
@@ -706,13 +714,15 @@ SELECT
   package_versions.minor as package_version_minor,
   package_versions.patch as package_version_patch,
   package_versions.prerelease as package_version_prerelease,
-  package_versions.build as package_version_build
+  package_versions.build as package_version_build,
+  COALESCE(tool_counts.tool_count, 0) as tool_count
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 LEFT JOIN deployments_packages ON deployments.id = deployments_packages.deployment_id
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
+LEFT JOIN tool_counts ON deployments.id = tool_counts.deployment_id
 WHERE deployments.id = $1 AND deployments.project_id = $2
 `
 
@@ -735,6 +745,7 @@ type GetDeploymentWithAssetsRow struct {
 	PackageVersionPatch              pgtype.Int8
 	PackageVersionPrerelease         pgtype.Text
 	PackageVersionBuild              pgtype.Text
+	ToolCount                        int64
 }
 
 func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeploymentWithAssetsParams) ([]GetDeploymentWithAssetsRow, error) {
@@ -773,6 +784,7 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.PackageVersionPatch,
 			&i.PackageVersionPrerelease,
 			&i.PackageVersionBuild,
+			&i.ToolCount,
 		); err != nil {
 			return nil, err
 		}

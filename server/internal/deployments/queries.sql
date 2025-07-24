@@ -77,6 +77,14 @@ WITH latest_status as (
     WHERE deployment_id = @id
     ORDER BY seq DESC
     LIMIT 1
+),
+tool_counts as (
+    SELECT 
+        deployment_id,
+        COUNT(DISTINCT id) as tool_count
+    FROM http_tool_definitions 
+    WHERE deployment_id = @id AND deleted IS FALSE
+    GROUP BY deployment_id
 )
 SELECT
   sqlc.embed(deployments),
@@ -91,13 +99,15 @@ SELECT
   package_versions.minor as package_version_minor,
   package_versions.patch as package_version_patch,
   package_versions.prerelease as package_version_prerelease,
-  package_versions.build as package_version_build
+  package_versions.build as package_version_build,
+  COALESCE(tool_counts.tool_count, 0) as tool_count
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 LEFT JOIN deployments_packages ON deployments.id = deployments_packages.deployment_id
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
+LEFT JOIN tool_counts ON deployments.id = tool_counts.deployment_id
 WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
 -- name: GetLatestDeploymentID :one

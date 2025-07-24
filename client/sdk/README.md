@@ -526,7 +526,7 @@ run();
 ### Error Classes
 **Primary errors:**
 * [`GramError`](./src/models/errors/gramerror.ts): The base class for HTTP error responses.
-  * [`ServiceError`](docs/models/errors/serviceerror.md): unauthorized access.
+  * [`ServiceError`](./src/models/errors/serviceerror.ts): unauthorized access.
 
 <details><summary>Less common errors (6)</summary>
 

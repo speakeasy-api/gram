@@ -1,6 +1,6 @@
 {
   "name": "@gram/client",
-  "version": "0.12.38",
+  "version": "0.12.39",
   "author": "Speakeasy",
   "type": "module",
   "main": "./esm/index.js",
@@ -57,7 +57,7 @@
     "@tanstack/react-query": "^5",
     "react": "^18 || ^19",
     "react-dom": "^18 || ^19",
-    "zod": ">= 3"
+    "zod": "^3"
   },
   "peerDependenciesMeta": {
     "@tanstack/react-query": {"optional":true},

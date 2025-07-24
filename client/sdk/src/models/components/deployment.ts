@@ -78,6 +78,10 @@ export type Deployment = {
    */
   status: string;
   /**
+   * The number of tools in the deployment.
+   */
+  toolCount: number;
+  /**
    * The ID of the user that created the deployment.
    */
   userId: string;
@@ -103,6 +107,7 @@ export const Deployment$inboundSchema: z.ZodType<
   packages: z.array(DeploymentPackage$inboundSchema),
   project_id: z.string(),
   status: z.string(),
+  tool_count: z.number().int(),
   user_id: z.string(),
 }).transform((v) => {
   return remap$(v, {
@@ -117,6 +122,7 @@ export const Deployment$inboundSchema: z.ZodType<
     "openapiv3_assets": "openapiv3Assets",
     "organization_id": "organizationId",
     "project_id": "projectId",
+    "tool_count": "toolCount",
     "user_id": "userId",
   });
 });
@@ -137,6 +143,7 @@ export type Deployment$Outbound = {
   packages: Array<DeploymentPackage$Outbound>;
   project_id: string;
   status: string;
+  tool_count: number;
   user_id: string;
 };
 
@@ -160,6 +167,7 @@ export const Deployment$outboundSchema: z.ZodType<
   packages: z.array(DeploymentPackage$outboundSchema),
   projectId: z.string(),
   status: z.string(),
+  toolCount: z.number().int(),
   userId: z.string(),
 }).transform((v) => {
   return remap$(v, {
@@ -174,6 +182,7 @@ export const Deployment$outboundSchema: z.ZodType<
     openapiv3Assets: "openapiv3_assets",
     organizationId: "organization_id",
     projectId: "project_id",
+    toolCount: "tool_count",
     userId: "user_id",
   });
 });

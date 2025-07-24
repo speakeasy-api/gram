@@ -1763,6 +1763,7 @@ func unmarshalDeploymentResponseBodyToTypesDeployment(v *DeploymentResponseBody)
 		ExternalID:     v.ExternalID,
 		ExternalURL:    v.ExternalURL,
 		ClonedFrom:     v.ClonedFrom,
+		ToolCount:      *v.ToolCount,
 	}
 	res.Openapiv3Assets = make([]*types.OpenAPIv3DeploymentAsset, len(v.Openapiv3Assets))
 	for i, val := range v.Openapiv3Assets {

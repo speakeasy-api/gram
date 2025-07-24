@@ -5,7 +5,7 @@ import (
 )
 
 var Deployment = Type("Deployment", func() {
-	Required("id", "created_at", "organization_id", "project_id", "user_id", "openapiv3_assets", "status", "packages")
+	Required("id", "created_at", "organization_id", "project_id", "user_id", "openapiv3_assets", "status", "packages", "tool_count")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
@@ -53,6 +53,9 @@ var Deployment = Type("Deployment", func() {
 	Attribute("cloned_from", String, func() {
 		Description("The ID of the deployment that this deployment was cloned from.")
 		Example("bc5f4a555e933e6861d12edba4c2d87ef6caf8e6")
+	})
+	Attribute("tool_count", Int64, func() {
+		Description("The number of tools in the deployment.")
 	})
 
 	Attribute("openapiv3_assets", ArrayOf(OpenAPIv3DeploymentAsset), func() {

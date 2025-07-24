@@ -5,7 +5,13 @@
 ```typescript
 import { CreatePackageRequest } from "@gram/client/models/operations";
 
-let value: CreatePackageRequest = {};
+let value: CreatePackageRequest = {
+  createPackageForm: {
+    name: "<value>",
+    summary: "<value>",
+    title: "<value>",
+  },
+};
 ```
 
 ## Fields

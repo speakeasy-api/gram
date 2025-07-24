@@ -89,6 +89,8 @@ type GetDeploymentResponseBody struct {
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	// The ID of the deployment that this deployment was cloned from.
 	ClonedFrom *string `form:"cloned_from,omitempty" json:"cloned_from,omitempty" xml:"cloned_from,omitempty"`
+	// The number of tools in the deployment.
+	ToolCount int64 `form:"tool_count" json:"tool_count" xml:"tool_count"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
@@ -1501,6 +1503,8 @@ type DeploymentResponseBody struct {
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	// The ID of the deployment that this deployment was cloned from.
 	ClonedFrom *string `form:"cloned_from,omitempty" json:"cloned_from,omitempty" xml:"cloned_from,omitempty"`
+	// The number of tools in the deployment.
+	ToolCount int64 `form:"tool_count" json:"tool_count" xml:"tool_count"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
@@ -1584,6 +1588,7 @@ func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDepl
 		ExternalID:     res.ExternalID,
 		ExternalURL:    res.ExternalURL,
 		ClonedFrom:     res.ClonedFrom,
+		ToolCount:      res.ToolCount,
 	}
 	if res.Openapiv3Assets != nil {
 		body.Openapiv3Assets = make([]*OpenAPIv3DeploymentAssetResponseBody, len(res.Openapiv3Assets))

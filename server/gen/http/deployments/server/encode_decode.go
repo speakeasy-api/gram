@@ -1676,6 +1676,7 @@ func marshalTypesDeploymentToDeploymentResponseBody(v *types.Deployment) *Deploy
 		ExternalID:     v.ExternalID,
 		ExternalURL:    v.ExternalURL,
 		ClonedFrom:     v.ClonedFrom,
+		ToolCount:      v.ToolCount,
 	}
 	if v.Openapiv3Assets != nil {
 		res.Openapiv3Assets = make([]*OpenAPIv3DeploymentAssetResponseBody, len(v.Openapiv3Assets))

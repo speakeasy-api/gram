@@ -5,7 +5,11 @@
 ```typescript
 import { UpdatePackageRequest } from "@gram/client/models/operations";
 
-let value: UpdatePackageRequest = {};
+let value: UpdatePackageRequest = {
+  updatePackageForm: {
+    id: "<id>",
+  },
+};
 ```
 
 ## Fields

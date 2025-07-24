@@ -30,6 +30,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 
 	deployment := rows[0].Deployment
 	stat := rows[0].Status
+	toolCount := rows[0].ToolCount
 	attachedAssets := make([]*types.OpenAPIv3DeploymentAsset, 0, len(rows))
 	attachedPackages := make([]*types.DeploymentPackage, 0, len(rows))
 	var seenAssets = make(map[uuid.UUID]bool)
@@ -91,5 +92,6 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 		ClonedFrom:      conv.FromNullableUUID(deployment.ClonedFrom),
 		Openapiv3Assets: attachedAssets,
 		Packages:        attachedPackages,
+		ToolCount:       toolCount,
 	}, nil
 }

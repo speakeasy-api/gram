@@ -6869,6 +6869,10 @@ components:
                 status:
                     type: string
                     description: The status of the deployment.
+                tool_count:
+                    type: integer
+                    description: The number of tools in the deployment.
+                    format: int64
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
@@ -6881,6 +6885,7 @@ components:
                 - openapiv3_assets
                 - status
                 - packages
+                - tool_count
         DeploymentLogEvent:
             type: object
             properties:
@@ -7187,6 +7192,10 @@ components:
                 status:
                     type: string
                     description: The status of the deployment.
+                tool_count:
+                    type: integer
+                    description: The number of tools in the deployment.
+                    format: int64
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
@@ -7199,6 +7208,7 @@ components:
                 - openapiv3_assets
                 - status
                 - packages
+                - tool_count
         GetInstanceForm:
             type: object
             properties:

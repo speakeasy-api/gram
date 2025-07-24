@@ -33,6 +33,7 @@ let value: GetLatestDeploymentResult = {
     ],
     projectId: "<id>",
     status: "<value>",
+    toolCount: 325382,
     userId: "<id>",
   },
 };

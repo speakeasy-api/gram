@@ -90,6 +90,8 @@ type GetDeploymentResponseBody struct {
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	// The ID of the deployment that this deployment was cloned from.
 	ClonedFrom *string `form:"cloned_from,omitempty" json:"cloned_from,omitempty" xml:"cloned_from,omitempty"`
+	// The number of tools in the deployment.
+	ToolCount *int64 `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
@@ -1502,6 +1504,8 @@ type DeploymentResponseBody struct {
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	// The ID of the deployment that this deployment was cloned from.
 	ClonedFrom *string `form:"cloned_from,omitempty" json:"cloned_from,omitempty" xml:"cloned_from,omitempty"`
+	// The number of tools in the deployment.
+	ToolCount *int64 `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
@@ -1652,6 +1656,7 @@ func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetD
 		ExternalID:     body.ExternalID,
 		ExternalURL:    body.ExternalURL,
 		ClonedFrom:     body.ClonedFrom,
+		ToolCount:      *body.ToolCount,
 	}
 	v.Openapiv3Assets = make([]*types.OpenAPIv3DeploymentAsset, len(body.Openapiv3Assets))
 	for i, val := range body.Openapiv3Assets {
@@ -2813,6 +2818,9 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	}
 	if body.Packages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("packages", "body"))
+	}
+	if body.ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -4659,6 +4667,9 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 	}
 	if body.Packages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("packages", "body"))
+	}
+	if body.ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

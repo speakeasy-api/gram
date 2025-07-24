@@ -7,6 +7,7 @@ import { UpdateToolsetRequest } from "@gram/client/models/operations";
 
 let value: UpdateToolsetRequest = {
   slug: "<value>",
+  updateToolsetRequestBody: {},
 };
 ```
 

@@ -48,7 +48,7 @@ export default function Onboarding() {
   );
 }
 
-export function useOnboardingSteps(existingDocumentSlug?: string) {
+export function useOnboardingSteps(existingDocumentSlug?: string, checkDocumentSlugUnique = true) {
   const project = useProject();
   const session = useSession();
   const client = useSdkClient();
@@ -64,8 +64,6 @@ export function useOnboardingSteps(existingDocumentSlug?: string) {
   );
   const [deployment, setDeployment] = useState<Deployment>();
 
-  const { data: tools, refetch: refetchTools } = useListTools();
-
   // If an existing document slug was NOT provided, then we need to make sure the provided slug
   // isn't accidentally overwriting an existing document slug.
   let apiNameError: string | undefined;
@@ -77,6 +75,7 @@ export function useOnboardingSteps(existingDocumentSlug?: string) {
 
     if (
       !existingDocumentSlug &&
+      checkDocumentSlugUnique &&
       latestDeployment?.deployment?.openapiv3Assets
         .map((a) => a.slug)
         .includes(apiName)
@@ -143,7 +142,7 @@ export function useOnboardingSteps(existingDocumentSlug?: string) {
 
     setCreatingDeployment(true);
 
-    const deployment = await client.deployments.evolveDeployment({
+    const createResult = await client.deployments.evolveDeployment({
       evolveForm: {
         upsertOpenapiv3Assets: [
           {
@@ -155,36 +154,35 @@ export function useOnboardingSteps(existingDocumentSlug?: string) {
       },
     });
 
-    setDeployment(deployment.deployment);
-    refetchTools();
+    let deployment = createResult.deployment;
+
+    if (!deployment) {
+      throw new Error("Deployment not found");
+    }
+
+    // Wait for deployment to finish
+    while (deployment.status !== "completed") {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      deployment = await client.deployments.getById({
+        id: deployment.id,
+      });
+    }
+
+    setDeployment(deployment);
     setCreatingDeployment(false);
 
     telemetry.capture("onboarding_event", {
       action: "deployment_created",
-      num_tools: deploymentNumTools(deployment.deployment),
+      num_tools: deployment?.toolCount,
     });
+
+    return deployment;
   };
-
-  const deploymentNumTools = (deployment: Deployment | undefined) => {
-    const documentId = deployment?.openapiv3Assets.find(
-      (doc) => doc.assetId === asset?.asset.id
-    )?.id;
-
-    return documentId
-      ? tools?.tools.filter(
-          (tool) =>
-            tool.openapiv3DocumentId !== undefined &&
-            tool.deploymentId === deployment?.id &&
-            tool.openapiv3DocumentId === documentId
-        ).length
-      : 0;
-  };
-
-  const numTools = deploymentNumTools(deployment);
 
   const undoSpecUpload = () => {
     setFile(undefined);
     setAsset(undefined);
+    setApiName(undefined);
   };
 
   return {
@@ -196,11 +194,29 @@ export function useOnboardingSteps(existingDocumentSlug?: string) {
     createDeployment,
     file,
     asset,
-    numTools,
     createdDeployment: deployment,
     creatingDeployment,
   };
 }
+
+const useAssetNumtools = (assetId: string | undefined, deployment: Deployment | undefined) => {
+  const { data: tools } = useListTools({
+    deploymentId: deployment?.id,
+  });
+
+  const documentId = deployment?.openapiv3Assets.find(
+    (doc) => doc.assetId === assetId
+  )?.id;
+
+  return documentId
+    ? tools?.tools.filter(
+        (tool) =>
+          tool.openapiv3DocumentId !== undefined &&
+          tool.deploymentId === deployment?.id &&
+          tool.openapiv3DocumentId === documentId
+      ).length
+    : 0;
+};
 
 export function OnboardingContent({
   existingDocumentSlug,
@@ -217,13 +233,14 @@ export function OnboardingContent({
     apiName,
     setApiName,
     createDeployment,
-    numTools,
     createdDeployment,
     creatingDeployment,
     apiNameError,
     file,
     asset,
   } = useOnboardingSteps(existingDocumentSlug);
+
+  const numtools = useAssetNumtools(asset?.asset.id, createdDeployment);
 
   const steps: StepProps[] = [
     {
@@ -286,7 +303,7 @@ export function OnboardingContent({
             <Accordion type="single" collapsible className="max-w-2xl">
               <AccordionItem value="logs">
                 <AccordionTrigger className="text-base">
-                  ✓ Created {numTools} tools
+                  ✓ Created {numtools} tools
                 </AccordionTrigger>
                 <AccordionContent>
                   <DeploymentLogs
@@ -313,7 +330,7 @@ export function OnboardingContent({
   );
 }
 
-function DeploymentLogs(props: { deploymentId: string; onlyErrors?: boolean }) {
+export function DeploymentLogs(props: { deploymentId: string; onlyErrors?: boolean }) {
   const { data, status, error } = useDeploymentLogs({
     deploymentId: props.deploymentId,
   });

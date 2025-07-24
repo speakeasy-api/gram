@@ -33,6 +33,7 @@ let value: RedeployResult = {
     ],
     projectId: "<id>",
     status: "<value>",
+    toolCount: 325382,
     userId: "<id>",
   },
 };

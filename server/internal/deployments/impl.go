@@ -115,6 +115,7 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		ClonedFrom:      dep.ClonedFrom,
 		Openapiv3Assets: dep.Openapiv3Assets,
 		Packages:        dep.Packages,
+		ToolCount:       dep.ToolCount,
 	}, nil
 }
 
@@ -552,6 +553,12 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		}
 
 		dep.Status = status
+	}
+
+	// Re-read the deployment to get the latest status, tool count etc
+	dep, err = mv.DescribeDeployment(ctx, logger, s.repo, mv.ProjectID(projectID), mv.DeploymentID(cloneID))
+	if err != nil {
+		return nil, err
 	}
 
 	return &gen.EvolveResult{Deployment: dep}, nil

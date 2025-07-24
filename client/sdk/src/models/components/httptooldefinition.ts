@@ -14,6 +14,12 @@ import {
   CanonicalToolAttributes$outboundSchema,
 } from "./canonicaltoolattributes.js";
 import {
+  ResponseFilter,
+  ResponseFilter$inboundSchema,
+  ResponseFilter$Outbound,
+  ResponseFilter$outboundSchema,
+} from "./responsefilter.js";
+import {
   ToolVariation,
   ToolVariation$inboundSchema,
   ToolVariation$Outbound,
@@ -86,6 +92,10 @@ export type HTTPToolDefinition = {
    */
   projectId: string;
   /**
+   * Response filter metadata for the tool
+   */
+  responseFilter?: ResponseFilter | undefined;
+  /**
    * JSON schema for the request
    */
   schema: string;
@@ -138,6 +148,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   package_name: z.string().optional(),
   path: z.string(),
   project_id: z.string(),
+  response_filter: ResponseFilter$inboundSchema.optional(),
   schema: z.string(),
   schema_version: z.string().optional(),
   security: z.string().optional(),
@@ -158,6 +169,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
     "openapiv3_operation": "openapiv3Operation",
     "package_name": "packageName",
     "project_id": "projectId",
+    "response_filter": "responseFilter",
     "schema_version": "schemaVersion",
     "updated_at": "updatedAt",
   });
@@ -181,6 +193,7 @@ export type HTTPToolDefinition$Outbound = {
   package_name?: string | undefined;
   path: string;
   project_id: string;
+  response_filter?: ResponseFilter$Outbound | undefined;
   schema: string;
   schema_version?: string | undefined;
   security?: string | undefined;
@@ -213,6 +226,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   packageName: z.string().optional(),
   path: z.string(),
   projectId: z.string(),
+  responseFilter: ResponseFilter$outboundSchema.optional(),
   schema: z.string(),
   schemaVersion: z.string().optional(),
   security: z.string().optional(),
@@ -233,6 +247,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
     openapiv3Operation: "openapiv3_operation",
     packageName: "package_name",
     projectId: "project_id",
+    responseFilter: "response_filter",
     schemaVersion: "schema_version",
     updatedAt: "updated_at",
   });

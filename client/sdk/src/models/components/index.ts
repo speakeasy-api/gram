@@ -76,6 +76,7 @@ export * from "./registerrequestbody.js";
 export * from "./rendertemplatebyidrequestbody.js";
 export * from "./rendertemplaterequestbody.js";
 export * from "./rendertemplateresult.js";
+export * from "./responsefilter.js";
 export * from "./toolset.js";
 export * from "./toolvariation.js";
 export * from "./updateenvironmentrequestbody.js";

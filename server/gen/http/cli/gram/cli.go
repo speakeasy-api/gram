@@ -1404,7 +1404,7 @@ Get the latest deployment for a project.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s deployments get-latest-deployment --apikey-token "Sunt nam eaque." --session-token "Quia accusantium." --project-slug-input "Odio voluptatum et placeat qui."
+    %[1]s deployments get-latest-deployment --apikey-token "Nam eaque iusto quia accusantium dolores." --session-token "Voluptatum et placeat." --project-slug-input "At at numquam."
 `, os.Args[0])
 }
 
@@ -1421,51 +1421,47 @@ Create a deployment to load tool definitions.
 Example:
     %[1]s deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
-      "external_url": "Quo earum labore repellat ut quae.",
+      "external_url": "Eos eaque eligendi.",
       "github_pr": "1234",
       "github_repo": "speakeasyapi/gram",
       "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
       "openapiv3_assets": [
          {
-            "asset_id": "Eos eaque eligendi.",
-            "name": "Quod illo consequatur et voluptate veniam.",
-            "slug": "eih"
+            "asset_id": "Illo consequatur et.",
+            "name": "Veniam voluptates omnis at et dolor magnam.",
+            "slug": "h11"
          },
          {
-            "asset_id": "Eos eaque eligendi.",
-            "name": "Quod illo consequatur et voluptate veniam.",
-            "slug": "eih"
+            "asset_id": "Illo consequatur et.",
+            "name": "Veniam voluptates omnis at et dolor magnam.",
+            "slug": "h11"
          },
          {
-            "asset_id": "Eos eaque eligendi.",
-            "name": "Quod illo consequatur et voluptate veniam.",
-            "slug": "eih"
+            "asset_id": "Illo consequatur et.",
+            "name": "Veniam voluptates omnis at et dolor magnam.",
+            "slug": "h11"
          },
          {
-            "asset_id": "Eos eaque eligendi.",
-            "name": "Quod illo consequatur et voluptate veniam.",
-            "slug": "eih"
+            "asset_id": "Illo consequatur et.",
+            "name": "Veniam voluptates omnis at et dolor magnam.",
+            "slug": "h11"
          }
       ],
       "packages": [
          {
-            "name": "Non molestiae dolores laboriosam sapiente deserunt quis.",
-            "version": "Possimus aspernatur porro et omnis aut est."
+            "name": "Quis qui.",
+            "version": "Aspernatur porro et omnis."
          },
          {
-            "name": "Non molestiae dolores laboriosam sapiente deserunt quis.",
-            "version": "Possimus aspernatur porro et omnis aut est."
+            "name": "Quis qui.",
+            "version": "Aspernatur porro et omnis."
          },
          {
-            "name": "Non molestiae dolores laboriosam sapiente deserunt quis.",
-            "version": "Possimus aspernatur porro et omnis aut est."
-         },
-         {
-            "name": "Non molestiae dolores laboriosam sapiente deserunt quis.",
-            "version": "Possimus aspernatur porro et omnis aut est."
+            "name": "Quis qui.",
+            "version": "Aspernatur porro et omnis."
          }
       ]
-   }' --apikey-token "Vitae ducimus consequatur." --session-token "Est saepe ut reiciendis ut." --project-slug-input "A at est dolores alias." --idempotency-key "01jqq0ajmb4qh9eppz48dejr2m"
+   }' --apikey-token "Est sunt vitae ducimus consequatur iste." --session-token "Saepe ut reiciendis ut alias." --project-slug-input "At est dolores alias consequuntur quis." --idempotency-key "01jqq0ajmb4qh9eppz48dejr2m"
 `, os.Args[0])
 }
 
@@ -1480,7 +1476,7 @@ Create a new deployment with additional or updated tool sources.
 
 Example:
     %[1]s deployments evolve --body '{
-      "deployment_id": "Repellat laudantium natus quae ut placeat aut.",
+      "deployment_id": "Natus quae ut.",
       "exclude_openapiv3_assets": [
          "Est eum.",
          "Non occaecati suscipit.",
@@ -1493,28 +1489,37 @@ Example:
       ],
       "upsert_openapiv3_assets": [
          {
-            "asset_id": "Eos eaque eligendi.",
-            "name": "Quod illo consequatur et voluptate veniam.",
-            "slug": "eih"
+            "asset_id": "Illo consequatur et.",
+            "name": "Veniam voluptates omnis at et dolor magnam.",
+            "slug": "h11"
          },
          {
-            "asset_id": "Eos eaque eligendi.",
-            "name": "Quod illo consequatur et voluptate veniam.",
-            "slug": "eih"
+            "asset_id": "Illo consequatur et.",
+            "name": "Veniam voluptates omnis at et dolor magnam.",
+            "slug": "h11"
          },
          {
-            "asset_id": "Eos eaque eligendi.",
-            "name": "Quod illo consequatur et voluptate veniam.",
-            "slug": "eih"
+            "asset_id": "Illo consequatur et.",
+            "name": "Veniam voluptates omnis at et dolor magnam.",
+            "slug": "h11"
+         },
+         {
+            "asset_id": "Illo consequatur et.",
+            "name": "Veniam voluptates omnis at et dolor magnam.",
+            "slug": "h11"
          }
       ],
       "upsert_packages": [
          {
-            "name": "Eius ullam consequatur aspernatur et.",
+            "name": "Adipisci est eius ullam consequatur aspernatur et.",
             "version": "Beatae maiores."
          },
          {
-            "name": "Eius ullam consequatur aspernatur et.",
+            "name": "Adipisci est eius ullam consequatur aspernatur et.",
+            "version": "Beatae maiores."
+         },
+         {
+            "name": "Adipisci est eius ullam consequatur aspernatur et.",
             "version": "Beatae maiores."
          }
       ]

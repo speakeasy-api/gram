@@ -1346,6 +1346,7 @@ paths:
                             - openapiv3_assets
                             - status
                             - packages
+                            - tool_count
                 "400":
                     description: Bad Request response.
                     schema:
@@ -11820,7 +11821,7 @@ definitions:
             created_at:
                 type: string
                 description: The creation date of the deployment.
-                example: "2010-05-30T09:49:45Z"
+                example: "1993-12-06T15:33:38Z"
                 format: date-time
             external_id:
                 type: string
@@ -11829,7 +11830,7 @@ definitions:
             external_url:
                 type: string
                 description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
-                example: Recusandae ut.
+                example: Vel eius laboriosam.
             github_pr:
                 type: string
                 description: The github pull request that resulted in the deployment.
@@ -11871,7 +11872,7 @@ definitions:
             organization_id:
                 type: string
                 description: The ID of the organization that the deployment belongs to.
-                example: Ullam cumque dolor molestiae.
+                example: Cumque dolor molestiae aliquid.
             packages:
                 type: array
                 items:
@@ -11890,20 +11891,25 @@ definitions:
             project_id:
                 type: string
                 description: The ID of the project that the deployment belongs to.
-                example: Sint magni.
+                example: Magni et laborum consequatur omnis.
             status:
                 type: string
                 description: The status of the deployment.
-                example: Eaque iusto unde temporibus eum ut.
+                example: Ut nulla recusandae ut officiis corrupti et.
+            tool_count:
+                type: integer
+                description: The number of tools in the deployment.
+                example: 291707924675922982
+                format: int64
             user_id:
                 type: string
                 description: The ID of the user that created the deployment.
-                example: Laborum consequatur omnis quidem possimus non.
+                example: Possimus non quibusdam omnis repellendus reprehenderit dolor.
         example:
             cloned_from: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-            created_at: "2012-03-01T04:05:58Z"
+            created_at: "2013-01-14T02:13:01Z"
             external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-            external_url: Nisi sit praesentium quas et.
+            external_url: Tenetur nisi sit praesentium quas.
             github_pr: "1234"
             github_repo: speakeasyapi/gram
             github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
@@ -11922,7 +11928,7 @@ definitions:
                   id: Aut dignissimos voluptatem.
                   name: Quia veniam sint eos recusandae.
                   slug: eyg
-            organization_id: Ea vel eius laboriosam ut.
+            organization_id: Distinctio dolorum placeat error et.
             packages:
                 - id: Voluptas perferendis enim rerum iste magni et.
                   name: Vel doloribus labore rem velit aspernatur.
@@ -11936,9 +11942,10 @@ definitions:
                 - id: Voluptas perferendis enim rerum iste magni et.
                   name: Vel doloribus labore rem velit aspernatur.
                   version: Sint nobis incidunt voluptas et occaecati distinctio.
-            project_id: Facilis nam distinctio.
-            status: Provident quis commodi sint alias velit.
-            user_id: Placeat error et et consequuntur id.
+            project_id: Consequuntur id quae quia.
+            status: Sint alias.
+            tool_count: 5636768757389059957
+            user_id: Deserunt et.
         required:
             - id
             - created_at
@@ -11948,6 +11955,7 @@ definitions:
             - openapiv3_assets
             - status
             - packages
+            - tool_count
     DeploymentLogEvent:
         title: DeploymentLogEvent
         type: object
@@ -11985,7 +11993,7 @@ definitions:
             id:
                 type: string
                 description: The ID of the deployment package.
-                example: Quis sapiente enim ut quia.
+                example: Tenetur quis sapiente enim ut quia.
             name:
                 type: string
                 description: The name of the package.
@@ -12377,21 +12385,21 @@ definitions:
                 items:
                     $ref: '#/definitions/AddOpenAPIv3DeploymentAssetForm'
                 example:
-                    - asset_id: Eos eaque eligendi.
-                      name: Quod illo consequatur et voluptate veniam.
-                      slug: eih
-                    - asset_id: Eos eaque eligendi.
-                      name: Quod illo consequatur et voluptate veniam.
-                      slug: eih
+                    - asset_id: Illo consequatur et.
+                      name: Veniam voluptates omnis at et dolor magnam.
+                      slug: h11
+                    - asset_id: Illo consequatur et.
+                      name: Veniam voluptates omnis at et dolor magnam.
+                      slug: h11
             packages:
                 type: array
                 items:
                     $ref: '#/definitions/AddDeploymentPackageForm'
                 example:
-                    - name: Non molestiae dolores laboriosam sapiente deserunt quis.
-                      version: Possimus aspernatur porro et omnis aut est.
-                    - name: Non molestiae dolores laboriosam sapiente deserunt quis.
-                      version: Possimus aspernatur porro et omnis aut est.
+                    - name: Quis qui.
+                      version: Aspernatur porro et omnis.
+                    - name: Quis qui.
+                      version: Aspernatur porro et omnis.
         example:
             external_id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
             external_url: Omnis ipsam delectus quos.
@@ -12399,27 +12407,27 @@ definitions:
             github_repo: speakeasyapi/gram
             github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
             openapiv3_assets:
-                - asset_id: Eos eaque eligendi.
-                  name: Quod illo consequatur et voluptate veniam.
-                  slug: eih
-                - asset_id: Eos eaque eligendi.
-                  name: Quod illo consequatur et voluptate veniam.
-                  slug: eih
-                - asset_id: Eos eaque eligendi.
-                  name: Quod illo consequatur et voluptate veniam.
-                  slug: eih
-                - asset_id: Eos eaque eligendi.
-                  name: Quod illo consequatur et voluptate veniam.
-                  slug: eih
+                - asset_id: Illo consequatur et.
+                  name: Veniam voluptates omnis at et dolor magnam.
+                  slug: h11
+                - asset_id: Illo consequatur et.
+                  name: Veniam voluptates omnis at et dolor magnam.
+                  slug: h11
+                - asset_id: Illo consequatur et.
+                  name: Veniam voluptates omnis at et dolor magnam.
+                  slug: h11
+                - asset_id: Illo consequatur et.
+                  name: Veniam voluptates omnis at et dolor magnam.
+                  slug: h11
             packages:
-                - name: Non molestiae dolores laboriosam sapiente deserunt quis.
-                  version: Possimus aspernatur porro et omnis aut est.
-                - name: Non molestiae dolores laboriosam sapiente deserunt quis.
-                  version: Possimus aspernatur porro et omnis aut est.
-                - name: Non molestiae dolores laboriosam sapiente deserunt quis.
-                  version: Possimus aspernatur porro et omnis aut est.
-                - name: Non molestiae dolores laboriosam sapiente deserunt quis.
-                  version: Possimus aspernatur porro et omnis aut est.
+                - name: Quis qui.
+                  version: Aspernatur porro et omnis.
+                - name: Quis qui.
+                  version: Aspernatur porro et omnis.
+                - name: Quis qui.
+                  version: Aspernatur porro et omnis.
+                - name: Quis qui.
+                  version: Aspernatur porro et omnis.
     DeploymentsCreateDeploymentUnauthorizedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
@@ -12884,23 +12892,23 @@ definitions:
                     $ref: '#/definitions/AddOpenAPIv3DeploymentAssetForm'
                 description: The OpenAPI 3.x documents to upsert in the new deployment.
                 example:
-                    - asset_id: Eos eaque eligendi.
-                      name: Quod illo consequatur et voluptate veniam.
-                      slug: eih
-                    - asset_id: Eos eaque eligendi.
-                      name: Quod illo consequatur et voluptate veniam.
-                      slug: eih
+                    - asset_id: Illo consequatur et.
+                      name: Veniam voluptates omnis at et dolor magnam.
+                      slug: h11
+                    - asset_id: Illo consequatur et.
+                      name: Veniam voluptates omnis at et dolor magnam.
+                      slug: h11
             upsert_packages:
                 type: array
                 items:
                     $ref: '#/definitions/AddPackageForm'
                 description: The packages to upsert in the new deployment.
                 example:
-                    - name: Eius ullam consequatur aspernatur et.
+                    - name: Adipisci est eius ullam consequatur aspernatur et.
                       version: Beatae maiores.
-                    - name: Eius ullam consequatur aspernatur et.
+                    - name: Adipisci est eius ullam consequatur aspernatur et.
                       version: Beatae maiores.
-                    - name: Eius ullam consequatur aspernatur et.
+                    - name: Adipisci est eius ullam consequatur aspernatur et.
                       version: Beatae maiores.
         example:
             deployment_id: Architecto a.
@@ -12912,20 +12920,20 @@ definitions:
                 - Distinctio nam aliquam alias.
                 - Dolore beatae assumenda sint.
             upsert_openapiv3_assets:
-                - asset_id: Eos eaque eligendi.
-                  name: Quod illo consequatur et voluptate veniam.
-                  slug: eih
-                - asset_id: Eos eaque eligendi.
-                  name: Quod illo consequatur et voluptate veniam.
-                  slug: eih
+                - asset_id: Illo consequatur et.
+                  name: Veniam voluptates omnis at et dolor magnam.
+                  slug: h11
+                - asset_id: Illo consequatur et.
+                  name: Veniam voluptates omnis at et dolor magnam.
+                  slug: h11
             upsert_packages:
-                - name: Eius ullam consequatur aspernatur et.
+                - name: Adipisci est eius ullam consequatur aspernatur et.
                   version: Beatae maiores.
-                - name: Eius ullam consequatur aspernatur et.
+                - name: Adipisci est eius ullam consequatur aspernatur et.
                   version: Beatae maiores.
-                - name: Eius ullam consequatur aspernatur et.
+                - name: Adipisci est eius ullam consequatur aspernatur et.
                   version: Beatae maiores.
-                - name: Eius ullam consequatur aspernatur et.
+                - name: Adipisci est eius ullam consequatur aspernatur et.
                   version: Beatae maiores.
     DeploymentsEvolveUnauthorizedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
@@ -13063,7 +13071,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -13083,14 +13091,14 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request is invalid (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -13106,7 +13114,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -13122,19 +13130,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource already exists (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -13149,7 +13157,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -13169,7 +13177,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: permission denied (default view)
         example:
             fault: true
@@ -13177,7 +13185,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -13192,7 +13200,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -13215,12 +13223,12 @@ definitions:
                 example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -13251,19 +13259,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
         description: request contains one or more invalidation fields (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -13278,7 +13286,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -13306,7 +13314,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -13751,7 +13759,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -13771,14 +13779,14 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource not found (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -13794,7 +13802,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -13814,7 +13822,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: unauthorized access (default view)
         example:
             fault: false
@@ -13837,7 +13845,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -13857,15 +13865,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
             fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -13880,7 +13888,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -18581,6 +18589,14 @@ definitions:
                       id: Aut dignissimos voluptatem.
                       name: Quia veniam sint eos recusandae.
                       slug: eyg
+                    - asset_id: Quaerat rerum.
+                      id: Aut dignissimos voluptatem.
+                      name: Quia veniam sint eos recusandae.
+                      slug: eyg
+                    - asset_id: Quaerat rerum.
+                      id: Aut dignissimos voluptatem.
+                      name: Quia veniam sint eos recusandae.
+                      slug: eyg
             organization_id:
                 type: string
                 description: The ID of the organization that the deployment belongs to.
@@ -18608,6 +18624,11 @@ definitions:
                 type: string
                 description: The status of the deployment.
                 example: Dolores nobis ut error ut qui ad.
+            tool_count:
+                type: integer
+                description: The number of tools in the deployment.
+                example: 8527015973955948942
+                format: int64
             user_id:
                 type: string
                 description: The ID of the user that created the deployment.
@@ -18631,14 +18652,6 @@ definitions:
                   id: Aut dignissimos voluptatem.
                   name: Quia veniam sint eos recusandae.
                   slug: eyg
-                - asset_id: Quaerat rerum.
-                  id: Aut dignissimos voluptatem.
-                  name: Quia veniam sint eos recusandae.
-                  slug: eyg
-                - asset_id: Quaerat rerum.
-                  id: Aut dignissimos voluptatem.
-                  name: Quia veniam sint eos recusandae.
-                  slug: eyg
             organization_id: Consectetur dolorem.
             packages:
                 - id: Voluptas perferendis enim rerum iste magni et.
@@ -18647,8 +18660,15 @@ definitions:
                 - id: Voluptas perferendis enim rerum iste magni et.
                   name: Vel doloribus labore rem velit aspernatur.
                   version: Sint nobis incidunt voluptas et occaecati distinctio.
+                - id: Voluptas perferendis enim rerum iste magni et.
+                  name: Vel doloribus labore rem velit aspernatur.
+                  version: Sint nobis incidunt voluptas et occaecati distinctio.
+                - id: Voluptas perferendis enim rerum iste magni et.
+                  name: Vel doloribus labore rem velit aspernatur.
+                  version: Sint nobis incidunt voluptas et occaecati distinctio.
             project_id: Excepturi voluptatem quis unde.
             status: Distinctio autem expedita nobis est.
+            tool_count: 3268016225871903548
             user_id: Sint error ea saepe.
         required:
             - id
@@ -18659,6 +18679,7 @@ definitions:
             - openapiv3_assets
             - status
             - packages
+            - tool_count
     GetInstanceResult:
         title: GetInstanceResult
         type: object
@@ -24765,26 +24786,26 @@ definitions:
             asset_id:
                 type: string
                 description: The ID of the uploaded asset.
-                example: Accusamus debitis eum praesentium consequatur sed similique.
+                example: Eum praesentium consequatur sed similique velit neque.
             id:
                 type: string
                 description: The ID of the deployment asset.
-                example: Consequuntur officiis consequatur esse voluptas.
+                example: Officiis consequatur esse voluptas aperiam accusamus.
             name:
                 type: string
                 description: The name to give the document as it will be displayed in UIs.
-                example: Neque iure harum accusantium blanditiis reprehenderit.
+                example: Harum accusantium.
             slug:
                 type: string
                 description: The slug to give the document as it will be displayed in URLs.
-                example: mdk
+                example: u9m
                 pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
         example:
-            asset_id: Iste laudantium quisquam quis asperiores.
-            id: Nihil aut voluptate itaque mollitia qui.
-            name: Aut voluptate in dolorem aliquam.
-            slug: 81b
+            asset_id: Voluptate itaque mollitia qui rem iste laudantium.
+            id: Et officiis nihil.
+            name: Quis asperiores praesentium aut voluptate in dolorem.
+            slug: k81
         required:
             - id
             - asset_id
