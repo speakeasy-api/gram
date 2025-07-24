@@ -35,14 +35,20 @@ import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
 // Ignore int32 format instead of erroring out
 const ajv = new Ajv({ formats: { int32: true } });
 
+const defaultModel = {
+  label: "Claude 4 Sonnet",
+  value: "anthropic/claude-sonnet-4",
+};
+
 const availableModels = [
+  defaultModel,
   { label: "GPT-4o", value: "openai/gpt-4o" },
   { label: "GPT-4o-mini", value: "openai/gpt-4o-mini" },
   { label: "GPT-4.1", value: "openai/gpt-4.1" },
-  { label: "Claude 4 Sonnet", value: "anthropic/claude-sonnet-4" },
   { label: "Claude 3.7 Sonnet", value: "anthropic/claude-3.7-sonnet" },
   { label: "Claude 4 Opus (Expensive)", value: "anthropic/claude-opus-4" },
   { label: "Gemini 2.5 Pro Preview", value: "google/gemini-2.5-pro-preview" },
+  { label: "Kimi K2", value: "moonshotai/kimi-k2" },
   { label: "Mistral Medium 3", value: "mistralai/mistral-medium-3" },
   { label: "Mistral Codestral 2501", value: "mistralai/codestral-2501" },
 ];
@@ -65,7 +71,7 @@ export function ChatWindow({
   additionalActions?: React.ReactNode;
   initialMessages?: Message[];
 }) {
-  const [model, setModel] = useState(availableModels[0]?.value ?? "");
+  const [model, setModel] = useState(defaultModel.value);
   const chatKey = `chat-${model}`;
 
   // We do this because we want the chat to reset when the model changes
@@ -303,7 +309,7 @@ function ChatInner({
             description: tool.description,
             parameters: tool.parameters,
             // Remove execute function - we handle execution in onToolCall
-          }
+          },
         ])
       ),
       temperature: 0.5,
