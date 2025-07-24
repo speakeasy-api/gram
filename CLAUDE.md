@@ -19,6 +19,10 @@ Each component you build should be minimal and focused on a single responsibilit
 
 Following Boyd's Law, prioritize rapid iterations with focused changes over attempting large, complex modifications.
 
+## Tone of voice
+
+Speak like a software engineer team member and don't be pointlessly agreeable such as starting every response with "You're absolute right!" or "That's a great question!". Focus on providing clear, concise, and actionable information. In other words: **get to the point quickly and avoid unnecessary pleasantries**.
+
 ## Key Directories
 
 ### server
@@ -26,6 +30,7 @@ Following Boyd's Law, prioritize rapid iterations with focused changes over atte
 Contains the main application code for the Gram server:
 
 <structure>
+
 - `go.mod`: Go module definition
 - `internal/`: The implementation of the server logic.
   - `background/`: Temporal workflows and activities are implemented here.
@@ -43,11 +48,11 @@ Contains the main application code for the Gram server:
 - `design/`: Goa design files that define the public interface of the Gram service.
 - `gen/`: Code generated types from Goa. Files in here cannot be modified directly.
 - `migrations/`: Database migration files. Files in here cannot be modified directly.
+
 </structure>
 
 <commands>
-- `mise infra:start`: Start up databases, caches and so on
-- `mise infra:stop`: Stop all databases, caches and so on
+
 - `mise go:tidy`: Run `go mod tidy` across the codebase
 - `mise build:server`: Build the server binary
 - `mise lint:server`: Run linters on the server code
@@ -56,6 +61,7 @@ Contains the main application code for the Gram server:
 - `mise gen:goa-server`: Generate Goa code for the server
 - `mise db:diff`: Create a versioned database migration
 - `mise db:migrate`: Apply pending migrations to local database
+
 </commands>
 
 ### infra/helm
@@ -63,11 +69,13 @@ Contains the main application code for the Gram server:
 Contains Kubernetes Helm charts for deploying Gram:
 
 <structure>
+
 - `gram/`: Main Helm chart
   - `Chart.yaml`: Chart definition
   - `templates/`: Kubernetes manifest templates
   - `migrations/`: Database migration files
   - `values*.yaml`: Configuration values for different environments
+
 </structure>
 
 To validate helm charts, run the command `mise helm:validate`
@@ -77,12 +85,14 @@ To validate helm charts, run the command `mise helm:validate`
 Infrastructure as Code (IaC) configuration:
 
 <structure>
+
 - `base/`: Core infrastructure resources
   - `dev/`, `prod/`: Environment-specific configs
   - `*.tf`: Terraform configuration files for GKE, Redis, SQL, etc.
 - `k8s/`: Kubernetes-specific resources
   - `dev/`, `prod/`: Environment-specific configs
   - `*.tf`: Resources like Atlas, Cert Manager, Ingress, etc.
+
 </structure>
 
 To validate terraform, run the command `mise helm:gcp:validate`
