@@ -4,9 +4,12 @@ import { Button } from "@/components/ui/button";
 import { MiniCard, MiniCards } from "@/components/ui/card-mini";
 import { Dialog } from "@/components/ui/dialog";
 import { SkeletonCode } from "@/components/ui/skeleton";
+import { Spinner } from "@/components/ui/spinner";
 import { UpdatedAt } from "@/components/updated-at";
+import FileUpload from "@/components/upload";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
+import { UploadedDocument } from "@/pages/onboarding/Wizard";
 import { Asset } from "@gram/client/models/components";
 import {
   useLatestDeployment,
@@ -14,7 +17,11 @@ import {
 } from "@gram/client/react-query/index.js";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
-import { OnboardingContent } from "../../onboarding/Onboarding";
+import { toast } from "sonner";
+import {
+  OnboardingContent,
+  useOnboardingSteps,
+} from "../../onboarding/Onboarding";
 import { ApisEmptyState } from "./ApisEmptyState";
 
 export default function OpenAPIDocuments() {
@@ -43,9 +50,11 @@ export function useDeploymentIsEmpty() {
     return false;
   }
 
-  return !deployment ||
+  return (
+    !deployment ||
     (deployment.openapiv3Assets.length === 0 &&
-      deployment.packages.length === 0);
+      deployment.packages.length === 0)
+  );
 }
 
 export function APIsContent() {
@@ -54,9 +63,11 @@ export function APIsContent() {
   const { data: assets, refetch: refetchAssets } = useListAssets();
   const deployment = deploymentResult?.deployment;
 
+  const [isDeploying, setIsDeploying] = useState(false);
   const [newDocumentDialogOpen, setNewDocumentDialogOpen] = useState(false);
-  const [changeDocumentTargetSlug, setChangeDocumentTargetSlug] =
-    useState<string | null>(null);
+  const [changeDocumentTargetSlug, setChangeDocumentTargetSlug] = useState<
+    string | null
+  >(null);
 
   const finishUpload = () => {
     setNewDocumentDialogOpen(false);
@@ -64,6 +75,9 @@ export function APIsContent() {
     refetch();
     refetchAssets();
   };
+
+  const { handleSpecUpload, createDeployment, file, undoSpecUpload } =
+    useOnboardingSteps();
 
   const deploymentIsEmpty = useDeploymentIsEmpty();
 
@@ -83,7 +97,7 @@ export function APIsContent() {
         <OnboardingContent onOnboardingComplete={finishUpload} />
         <Dialog.Footer>
           <Button
-            variant="secondary"
+            variant="ghost"
             onClick={() => setNewDocumentDialogOpen(false)}
           >
             Back
@@ -123,6 +137,14 @@ export function APIsContent() {
         : [];
     }) || [];
 
+  const deploy = async () => {
+    setIsDeploying(true);
+    await createDeployment();
+    finishUpload();
+    toast.success("OpenAPI document deployed");
+    setIsDeploying(false);
+  };
+
   return (
     <Page.Section>
       <Page.Section.Title>API Sources</Page.Section.Title>
@@ -160,16 +182,28 @@ export function APIsContent() {
                 {changeDocumentTargetSlug}
               </Dialog.Description>
             </Dialog.Header>
-            <OnboardingContent
-              existingDocumentSlug={changeDocumentTargetSlug ?? undefined}
-              onOnboardingComplete={finishUpload}
-            />
+            {!file ? (
+              <FileUpload
+                onUpload={handleSpecUpload}
+                allowedExtensions={["yaml", "yml", "json"]}
+              />
+            ) : (
+              <UploadedDocument
+                file={file}
+                onReset={undoSpecUpload}
+                defaultExpanded
+              />
+            )}
             <Dialog.Footer>
               <Button
-                variant="secondary"
+                variant="ghost"
                 onClick={() => setChangeDocumentTargetSlug(null)}
               >
                 Back
+              </Button>
+              <Button onClick={deploy} disabled={!file || isDeploying}>
+                {isDeploying && <Spinner />}
+                {isDeploying ? "Deploying..." : "Deploy"}
               </Button>
             </Dialog.Footer>
           </Dialog.Content>

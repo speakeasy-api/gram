@@ -9,12 +9,19 @@ import {
 function ExpandableComponent({
   children,
   className,
+  defaultExpanded,
 }: {
   children: React.ReactNode;
   className?: string;
+  defaultExpanded?: boolean;
 }) {
   return (
-    <Accordion type="single" collapsible className={className}>
+    <Accordion
+      type="single"
+      collapsible
+      className={className}
+      defaultValue={defaultExpanded ? "logs" : undefined}
+    >
       <AccordionItem value="logs">{children}</AccordionItem>
     </Accordion>
   );

@@ -27,7 +27,7 @@ export const ToolsetBadge = ({
       <ToolsetToolsBadge
         toolset={toolset}
         variant="outline"
-        className="lowercase"
+        className="lowercase bg-card"
       />
     </TwoPartBadge>
   );

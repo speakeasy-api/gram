@@ -1,8 +1,8 @@
+import { Expandable } from "@/components/expandable";
 import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ProjectSelector } from "@/components/project-menu";
-import { Expandable } from "@/components/expandable";
 import { ToolBadge } from "@/components/tool-badge";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +14,7 @@ import { Type } from "@/components/ui/type";
 import FileUpload from "@/components/upload";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useApiError } from "@/hooks/useApiError";
 import { slugify } from "@/lib/constants";
 import { useGroupedHttpTools } from "@/lib/toolNames";
@@ -43,7 +44,6 @@ import { useParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useOnboardingSteps } from "./Onboarding";
-import { useTelemetry } from "@/contexts/Telemetry";
 
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
@@ -224,6 +224,56 @@ const LHS = ({
   );
 };
 
+export const UploadedDocument = ({
+  file,
+  onReset,
+  defaultExpanded = false,
+}: {
+  file: File;
+  onReset: () => void;
+  defaultExpanded?: boolean;
+}) => {
+  const [fileText, setFileText] = useState<string>();
+
+  useEffect(() => {
+    if (!file) return;
+    if (file.size > 10_000) {
+      file
+        .slice(0, 10_000)
+        .text()
+        .then((text) => setFileText(text + "\n..."));
+    } else {
+      file.text().then(setFileText);
+    }
+  }, [file]);
+
+  return (
+    <Expandable defaultExpanded={defaultExpanded}>
+      <Expandable.Trigger>
+        <Stack direction={"horizontal"} gap={2} align={"center"}>
+          <FileJson2 className="w-4 h-4 text-muted-foreground/70" />
+          <Type small mono>
+            {file.name}
+          </Type>
+          <Button
+            variant="ghost"
+            onClick={onReset}
+            className="size-6 opacity-50 hover:opacity-100"
+            icon="x"
+          />
+        </Stack>
+      </Expandable.Trigger>
+      <Expandable.Content className="text-xs">
+        {fileText?.length ? (
+          <pre className="whitespace-pre-wrap break-all">{fileText}</pre>
+        ) : (
+          <SkeletonParagraph lines={12} />
+        )}
+      </Expandable.Content>
+    </Expandable>
+  );
+};
+
 const UploadStep = ({
   setCurrentStep,
   setToolsetName,
@@ -242,14 +292,8 @@ const UploadStep = ({
   } = useOnboardingSteps(undefined, false);
 
   const telemetry = useTelemetry();
-  const [fileText, setFileText] = useState<string>();
   const [deploymentToShowLogsFor, setDeploymentToShowLogsFor] =
     useState<string>();
-
-  useEffect(() => {
-    if (!file) return;
-    file.text().then(setFileText);
-  }, [file]);
 
   const reset = () => {
     setDeploymentToShowLogsFor(undefined);
@@ -265,29 +309,7 @@ const UploadStep = ({
             OpenAPI Document
           </Type>
         </Stack>
-        <Expandable>
-          <Expandable.Trigger>
-            <Stack direction={"horizontal"} gap={2} align={"center"}>
-              <FileJson2 className="w-4 h-4 text-muted-foreground/70" />
-              <Type small mono>
-                {file.name}
-              </Type>
-              <Button
-                variant="ghost"
-                onClick={reset}
-                className="size-6 opacity-50 hover:opacity-100"
-                icon="x"
-              />
-            </Stack>
-          </Expandable.Trigger>
-          <Expandable.Content className="text-xs">
-            {fileText?.length ? (
-              <pre className="whitespace-pre-wrap">{fileText}</pre>
-            ) : (
-              <SkeletonParagraph lines={12} />
-            )}
-          </Expandable.Content>
-        </Expandable>
+        <UploadedDocument file={file} onReset={reset} />
       </Stack>
       {apiName != null ? (
         <InputField

@@ -261,6 +261,7 @@ function HeroCard({
                 <Badge
                   variant="outline"
                   tooltip={"Change visibility in settings ->"}
+                  className="bg-card"
                 >
                   {toolset?.mcpIsPublic ? (
                     <Stack direction="horizontal" align="center" gap={2}>
@@ -366,7 +367,7 @@ function HeroGraphic({ toolset }: { toolset: Toolset | undefined }) {
                 key={`${rowIndex}-${toolIndex}`}
                 variant={"outline"}
                 className={cn(
-                  "lowercase opacity-70 hover:opacity-100 trans",
+                  "lowercase opacity-70 hover:opacity-100 trans bg-card",
                   HttpMethodColors[tool.httpMethod]?.border
                 )}
               />
@@ -374,7 +375,7 @@ function HeroGraphic({ toolset }: { toolset: Toolset | undefined }) {
               <Badge
                 key={`${rowIndex}-${toolIndex}`}
                 variant={"secondary"}
-                className={"opacity-40 w-30 bg-muted"}
+                className={"opacity-40 w-30 bg-muted/70"}
                 size="sm"
                 isLoading={false}
               >
