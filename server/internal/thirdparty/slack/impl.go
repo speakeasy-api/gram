@@ -21,7 +21,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
-	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -38,7 +37,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 	toolset_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -115,7 +116,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 	// payloads may end up being polymorphic defining this outside of goa
-	mux.Handle("POST", "/rpc/slack.events", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "POST", "/rpc/slack.events", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.SlackEventHandler).ServeHTTP(w, r)
 	})
 }

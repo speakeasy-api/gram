@@ -127,10 +127,10 @@ func NewService(
 }
 
 func Attach(mux goahttp.Muxer, service *Service) {
-	mux.Handle("POST", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP(w, r)
 	})
-	mux.Handle("GET", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
 		// This is page is being laoded in the browser request
 		for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
 			if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
@@ -158,19 +158,19 @@ func Attach(mux goahttp.Muxer, service *Service) {
 			service.logger.ErrorContext(r.Context(), "failed to write response body", slog.String("error", writeErr.Error()))
 		}
 	})
-	mux.Handle("GET", "/mcp/{mcpSlug}/install", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServeHostedPage).ServeHTTP(w, r)
 	})
-	mux.Handle("POST", "/mcp/{project}/{toolset}/{environment}", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP(w, r)
 	})
 
 	// OAuth 2.1 Authorization Server Metadata
-	mux.Handle("GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-authorization-server/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.HandleWellKnownOAuthServerMetadata).ServeHTTP(w, r)
 	})
 
-	mux.Handle("GET", "/.well-known/oauth-protected-resource/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-protected-resource/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP(w, r)
 	})
 }

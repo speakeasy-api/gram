@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -71,7 +72,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
-	mux.Handle("POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "POST", "/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.HandleCompletion).ServeHTTP(w, r)
 	})
 }

@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
@@ -91,7 +92,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
-	mux.Handle("POST", "/rpc/instances.invoke/tool", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "POST", "/rpc/instances.invoke/tool", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ExecuteInstanceTool).ServeHTTP(w, r)
 	})
 }

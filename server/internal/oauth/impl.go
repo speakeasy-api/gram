@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -94,27 +95,27 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 
 func Attach(mux goahttp.Muxer, service *Service) {
 	// OAuth 2.1 Dynamic Client Registration
-	mux.Handle("POST", "/oauth/{mcpSlug}/register", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "POST", "/oauth/{mcpSlug}/register", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.handleClientRegistration).ServeHTTP(w, r)
 	})
 
 	// OAuth 2.1 Authorization Endpoint
-	mux.Handle("GET", "/oauth/{mcpSlug}/authorize", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "GET", "/oauth/{mcpSlug}/authorize", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.handleAuthorize).ServeHTTP(w, r)
 	})
 
 	// Consent Screen Complete
-	mux.Handle("POST", "/oauth/{mcpSlug}/complete", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "POST", "/oauth/{mcpSlug}/complete", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.handleAuthorizationComplete).ServeHTTP(w, r)
 	})
 
 	// OAuth 2.1 Authorization Callback
-	mux.Handle("GET", "/oauth/{mcpSlug}/callback", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "GET", "/oauth/{mcpSlug}/callback", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.handleAuthorizationCallback).ServeHTTP(w, r)
 	})
 
 	// OAuth 2.1 Token Endpoint
-	mux.Handle("POST", "/oauth/{mcpSlug}/token", func(w http.ResponseWriter, r *http.Request) {
+	o11y.AttachHandler(mux, "POST", "/oauth/{mcpSlug}/token", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.handleToken).ServeHTTP(w, r)
 	})
 }
