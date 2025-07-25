@@ -109,6 +109,15 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 				DocURL:       u,
 				ProjectSlug:  orgData.ProjectSlug,
 				OrgSlug:      orgData.Slug,
+				OnOperationSkipped: func(err error) {
+					var perr *openapi.ProcessError
+					switch {
+					case errors.As(err, &perr):
+						p.metrics.RecordOpenAPIOperationSkipped(ctx, perr.Reason())
+					default:
+						p.metrics.RecordOpenAPIOperationSkipped(ctx, "unexpected")
+					}
+				},
 			})
 
 			if processErr == nil {

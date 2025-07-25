@@ -38,6 +38,30 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 )
 
+type ProcessError struct {
+	reason string
+	err    error
+}
+
+func tagError(reason string, msg string, keyvals ...any) *ProcessError {
+	return &ProcessError{
+		reason: reason,
+		err:    fmt.Errorf(msg, keyvals...),
+	}
+}
+
+func (e *ProcessError) Reason() string {
+	return e.reason
+}
+
+func (e *ProcessError) Error() string {
+	return e.err.Error()
+}
+
+func (e *ProcessError) Unwrap() error {
+	return e.err
+}
+
 var preferredRequestTypes = []*regexp.Regexp{
 	regexp.MustCompile(`\bjson\b`),
 	regexp.MustCompile(`^application/x-www-form-urlencoded\b`),
@@ -53,6 +77,8 @@ type ToolExtractorTask struct {
 	DocURL       *url.URL
 	ProjectSlug  string
 	OrgSlug      string
+
+	OnOperationSkipped func(err error)
 }
 
 type ToolExtractorResult struct {
@@ -256,6 +282,9 @@ func (p *ToolExtractor) Do(
 				defaultServer:    globalDefaultServer,
 			})
 			if err != nil {
+				if task.OnOperationSkipped != nil {
+					task.OnOperationSkipped(err)
+				}
 				_ = oops.E(oops.CodeUnexpected, err, "%s: %s: skipped operation due to error: %s", docInfo.Name, op.operation.OperationId, err.Error()).Log(ctx, logger)
 				continue
 			}
@@ -346,16 +375,16 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		"operation set", op != nil,
 		"server env var set", serverEnvVar != "",
 	); err != nil {
-		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("not enough information to create tool definition: %w", err)
+		return repo.CreateOpenAPIv3ToolDefinitionParams{}, tagError("invariants-violated", "not enough information to create tool definition: %w", err)
 	}
 
 	switch {
 	case op.OperationId == "":
-		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("operation id is required [line: %d]", op.GoLow().KeyNode.Line)
+		return repo.CreateOpenAPIv3ToolDefinitionParams{}, tagError("missing-id", "operation id is required [line: %d]", op.GoLow().KeyNode.Line)
 	case len(op.Servers) > 0:
-		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("per-operation servers are not currently supported [line: %d]", op.GoLow().Servers.NodeLineNumber())
+		return repo.CreateOpenAPIv3ToolDefinitionParams{}, tagError("op-servers", "per-operation servers are not currently supported [line: %d]", op.GoLow().Servers.NodeLineNumber())
 	case op.Deprecated != nil && *op.Deprecated:
-		return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("operation is deprecated [line: %d]", op.GoLow().Deprecated.NodeLineNumber())
+		return repo.CreateOpenAPIv3ToolDefinitionParams{}, tagError("deprecated-op", "operation is deprecated [line: %d]", op.GoLow().Deprecated.NodeLineNumber())
 	}
 
 	if op.RequestBody != nil && op.RequestBody.Content != nil && op.RequestBody.Content.Len() > 1 {
@@ -714,7 +743,7 @@ func captureRequestBody(op *v3.Operation) (capturedRequestBody, error) {
 
 	if contentType == "" {
 		types := slices.Collect(op.RequestBody.Content.KeysFromOldest())
-		return empty, fmt.Errorf("no supported request body content type found: %s", strings.Join(types, ", "))
+		return empty, tagError("unsupported-request", "no supported request body content type found: %s", strings.Join(types, ", "))
 	}
 
 	if spec == nil {
@@ -921,23 +950,23 @@ func extractJSONSchemaFromYaml(name string, schemaProxy *base.SchemaProxy) ([]by
 	line, col := keyNode.Line, keyNode.Column
 	schema, err := schemaProxy.MarshalYAMLInline()
 	if err != nil {
-		return nil, fmt.Errorf("%s (%d:%d): error inlining schema: %w", name, line, col, err)
+		return nil, tagError("inline-error", "%s (%d:%d): error inlining schema: %w", name, line, col, err)
 	}
 
 	schemaNode, ok := schema.(*yaml.Node)
 	if !ok {
-		return nil, fmt.Errorf("%s (%d:%d): error inlining schema: expected *yaml.Node, got %T", name, line, col, schema)
+		return nil, tagError("non-yaml-node", "%s (%d:%d): error inlining schema: expected *yaml.Node, got %T", name, line, col, schema)
 	}
 
 	schemaBytes, err := libopenapiJSON.YAMLNodeToJSON(schemaNode, "")
 	if err != nil {
-		return nil, fmt.Errorf("%s (%d:%d): error json marshalling schema: %w", name, line, col, err)
+		return nil, tagError("yaml-to-json-error", "%s (%d:%d): error json marshalling schema: %w", name, line, col, err)
 	}
 
 	// Check if any $ref values are present in the schema
 	// NB: this could result in false positives if any values in json schema contain `"$ref":`
 	if strings.Contains(string(schemaBytes), `"$ref":`) {
-		return nil, fmt.Errorf("%s (%d:%d): error inlining schema: circular reference detected", name, line, col)
+		return nil, tagError("circular-ref", "%s (%d:%d): error inlining schema: circular reference detected", name, line, col)
 	}
 
 	return schemaBytes, nil

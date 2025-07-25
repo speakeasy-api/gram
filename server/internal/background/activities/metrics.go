@@ -16,13 +16,16 @@ func newMeter(meterProvider metric.MeterProvider) metric.Meter {
 }
 
 const (
-	meterOpenAPIUpgradeCounter    = "openapi.upgrade.count"
-	meterOpenAPIUpgradeDuration   = "openapi.upgrade.duration"
-	meterOpenAPIProcessedCounter  = "openapi.processed.count"
-	meterOpenAPIProcessedDuration = "openapi.processed.duration"
+	metricOpenAPIOperationsSkipped = "openapi.operations.skipped"
+	meterOpenAPIUpgradeCounter     = "openapi.upgrade.count"
+	meterOpenAPIUpgradeDuration    = "openapi.upgrade.duration"
+	meterOpenAPIProcessedCounter   = "openapi.processed.count"
+	meterOpenAPIProcessedDuration  = "openapi.processed.duration"
 )
 
 type metrics struct {
+	opSkipped metric.Int64Counter
+
 	openAPIUpgradeCounter   metric.Int64Counter
 	openAPIProcessedCounter metric.Int64Counter
 
@@ -31,13 +34,24 @@ type metrics struct {
 }
 
 func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
+	ctx := context.Background()
+
+	opSkipped, err := meter.Int64Counter(
+		metricOpenAPIOperationsSkipped,
+		metric.WithDescription("Number of OpenAPI operations that were skipped due to errors"),
+		metric.WithUnit("{#}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "create metric error", slog.String("metric", metricOpenAPIOperationsSkipped), slog.String("error", err.Error()))
+	}
+
 	openAPIUpgradeCounter, err := meter.Int64Counter(
 		meterOpenAPIUpgradeCounter,
 		metric.WithDescription("Number of OpenAPI 3.0 to 3.1 upgrades"),
 		metric.WithUnit("{upgrade}"),
 	)
 	if err != nil {
-		logger.ErrorContext(context.Background(), "failed to create metric", slog.String("name", meterOpenAPIUpgradeCounter), slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to create metric", slog.String("name", meterOpenAPIUpgradeCounter), slog.String("error", err.Error()))
 	}
 
 	openAPIProcessedCounter, err := meter.Int64Counter(
@@ -46,7 +60,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		metric.WithUnit("{document}"),
 	)
 	if err != nil {
-		logger.ErrorContext(context.Background(), "failed to create metric", slog.String("name", meterOpenAPIProcessedCounter), slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to create metric", slog.String("name", meterOpenAPIProcessedCounter), slog.String("error", err.Error()))
 	}
 
 	openAPIProcessedDuration, err := meter.Float64Histogram(
@@ -56,7 +70,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		metric.WithExplicitBucketBoundaries(0.1, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 240),
 	)
 	if err != nil {
-		logger.ErrorContext(context.Background(), "failed to create metric", slog.String("name", meterOpenAPIProcessedDuration), slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to create metric", slog.String("name", meterOpenAPIProcessedDuration), slog.String("error", err.Error()))
 	}
 
 	openAPIUpgradeDuration, err := meter.Float64Histogram(
@@ -66,14 +80,23 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		metric.WithExplicitBucketBoundaries(.05, .1, .25, .5, .75, 1, 2.5, 5, 7.5, 10, 25),
 	)
 	if err != nil {
-		logger.ErrorContext(context.Background(), "failed to create metric", slog.String("name", meterOpenAPIUpgradeDuration), slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to create metric", slog.String("name", meterOpenAPIUpgradeDuration), slog.String("error", err.Error()))
 	}
 
 	return &metrics{
+		opSkipped:                opSkipped,
 		openAPIUpgradeCounter:    openAPIUpgradeCounter,
 		openAPIProcessedCounter:  openAPIProcessedCounter,
 		openAPIProcessedDuration: openAPIProcessedDuration,
 		openAPIUpgradeDuration:   openAPIUpgradeDuration,
+	}
+}
+
+func (m *metrics) RecordOpenAPIOperationSkipped(ctx context.Context, reason string) {
+	if counter := m.opSkipped; counter != nil {
+		counter.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("reason", reason),
+		))
 	}
 }
 
