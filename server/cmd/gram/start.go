@@ -448,7 +448,7 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
 			oauthService := oauth.NewService(logger.With(slog.String("component", "oauth")), tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient)
 			oauth.Attach(mux, oauthService)
-			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy))
+			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient))
 			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService))
 			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
 			if slackClient.Enabled() {

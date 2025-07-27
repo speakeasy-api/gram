@@ -152,11 +152,11 @@ function ChatInner({
   );
 
   const executeHttpToolFn =
-    (tool: HTTPToolDefinition) => async (args: unknown) => {
+    (tool: HTTPToolDefinition, toolsetSlug: string) => async (args: unknown) => {
       const response = await fetch(
         `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
           tool.id
-        }&environment_slug=${configRef.current.environmentSlug}`,
+        }&environment_slug=${configRef.current.environmentSlug}&chat_id=${chat.id}&toolset_slug=${toolsetSlug}`,
         {
           method: "POST",
           headers: {
@@ -189,7 +189,7 @@ function ChatInner({
             path: tool.path,
             description: tool.description,
             parameters: jsonSchema(tool.schema ? JSON.parse(tool.schema) : {}),
-            execute: executeHttpToolFn(tool),
+            execute: executeHttpToolFn(tool, configRef.current.toolsetSlug || ""),
           },
         ];
       }) ?? []

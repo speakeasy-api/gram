@@ -34,8 +34,11 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		if err := productMetrics.CaptureEvent(ctx, "mcp_server_count", payload.projectID.String(), map[string]interface{}{
 			"project_id":          payload.projectID.String(),
+			"organization_id":     toolset.OrganizationID,
 			"authenticated":       payload.authenticated,
 			"toolset":             toolset.Name,
+			"toolset_slug":        toolset.Slug,
+			"toolset_id":          toolset.ID,
 			"mcp_domain":          requestContext.Host,
 			"mcp_url":             requestContext.Host + requestContext.ReqURL,
 			"disable_noification": true,

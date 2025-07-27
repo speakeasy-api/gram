@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -48,6 +49,7 @@ type Service struct {
 	environmentsRepo *environments_repo.Queries
 	env              *environments.EnvironmentEntries
 	toolProxy        *gateway.ToolProxy
+	posthog          *posthog.Posthog
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -61,6 +63,7 @@ func NewService(
 	env *environments.EnvironmentEntries,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
+	posthog *posthog.Posthog,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
@@ -73,6 +76,7 @@ func NewService(
 		toolset:          toolsets.NewToolsets(db),
 		environmentsRepo: envRepo,
 		env:              env,
+		posthog:          posthog,
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			traceProvider,
@@ -225,6 +229,10 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeBadRequest, nil, "tool_id query parameter is required").Log(ctx, s.logger)
 	}
 
+	// These variabels will come in our playground chats
+	toolsetSlug := r.URL.Query().Get("toolset_slug")
+	chatID := r.URL.Query().Get("chat_id")
+
 	envVars := make(map[string]string)
 	if environmentSlug := r.URL.Query().Get(environmentSlugQueryParam); environmentSlug != "" {
 		envModel, err := s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
@@ -249,6 +257,21 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	executionInfo, err := s.toolset.GetHTTPToolExecutionInfoByID(ctx, uuid.MustParse(toolID), *authCtx.ProjectID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load tool execution info").Log(ctx, s.logger)
+	}
+
+	if chatID != "" && toolsetSlug != "" {
+		if err := s.posthog.CaptureEvent(ctx, "direct_tool_execution", authCtx.ProjectID.String(), map[string]interface{}{
+			"project_id":          authCtx.ProjectID.String(),
+			"organization_id":     executionInfo.OrganizationID,
+			"authenticated":       true,
+			"toolset_slug":        toolsetSlug,
+			"chat_session_id":     chatID,
+			"tool_name":           executionInfo.Tool.Name,
+			"tool_id":             executionInfo.Tool.ID,
+			"disable_noification": true,
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "failed to capture direct_tool_execution event", slog.String("error", err.Error()))
+		}
 	}
 
 	requestBody := r.Body
