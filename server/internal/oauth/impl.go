@@ -528,13 +528,42 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	tokenURL := provider.TokenEndpoint
 	tokenData := url.Values{}
 	tokenData.Set("grant_type", "authorization_code")
-	tokenData.Set("client_id", clientID)
-	tokenData.Set("client_secret", clientSecret)
 	tokenData.Set("redirect_uri", callbackURL)
 	tokenData.Set("code", externalCode)
 
-	//nolint:gosec // OAuth token exchange requires HTTP POST to external provider
-	tokenResp, err := http.PostForm(tokenURL, tokenData)
+	// Determine authentication method based on provider configuration
+	// Default to client_secret_post (form body) if TokenEndpointAuthMethodsSupported is empty
+	useBasicAuth := false
+	if len(provider.TokenEndpointAuthMethodsSupported) > 0 {
+		// Check if provider supports client_secret_basic
+		for _, method := range provider.TokenEndpointAuthMethodsSupported {
+			if method == "client_secret_basic" {
+				useBasicAuth = true
+				break
+			}
+		}
+	}
+
+	// For Post Auth, client credentials go in form body
+	if !useBasicAuth {
+		tokenData.Set("client_id", clientID)
+		tokenData.Set("client_secret", clientSecret)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(tokenData.Encode()))
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to create token request", slog.String("provider", provider.Slug), slog.String("error", err.Error()))
+		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Failed to exchange authorization code", oauthReqInfo["state"])
+		http.Redirect(w, r, errorURL, http.StatusFound)
+		return nil
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if useBasicAuth {
+		req.SetBasicAuth(clientID, clientSecret)
+	}
+
+	tokenResp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to exchange code for token", slog.String("provider", provider.Slug), slog.String("error", err.Error()))
 		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Failed to exchange authorization code", oauthReqInfo["state"])
@@ -586,7 +615,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	}
 
 	// Reconstruct the original authorization request from decoded state
-	req := &AuthorizationRequest{
+	authReq := &AuthorizationRequest{
 		ResponseType:        oauthReqInfo["response_type"],
 		ClientID:            oauthReqInfo["client_id"],
 		RedirectURI:         oauthReqInfo["redirect_uri"],
@@ -597,23 +626,23 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		Nonce:               "", // Nonce is not preserved in state for this flow
 	}
 
-	grant, err := s.grantManager.CreateAuthorizationGrant(ctx, req, fullMcpSlug, accessToken, expiresAt, provider.SecurityKeyNames)
+	grant, err := s.grantManager.CreateAuthorizationGrant(ctx, authReq, fullMcpSlug, accessToken, expiresAt, provider.SecurityKeyNames)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create authorization grant", slog.String("error", err.Error()))
 
 		// Build error response
-		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, req.RedirectURI, "server_error", "Failed to create authorization grant", req.State)
+		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, authReq.RedirectURI, "server_error", "Failed to create authorization grant", authReq.State)
 		http.Redirect(w, r, errorURL, http.StatusFound)
 		return nil
 	}
 
 	s.logger.InfoContext(ctx, "authorization grant created after external provider callback",
-		slog.String("client_id", req.ClientID),
+		slog.String("client_id", authReq.ClientID),
 		slog.String("grant_code", grant.Code),
 		slog.String("external_code", externalCode))
 
 	// Build authorization response and redirect back to client
-	responseURL, err := s.grantManager.BuildAuthorizationResponse(ctx, grant, req.RedirectURI)
+	responseURL, err := s.grantManager.BuildAuthorizationResponse(ctx, grant, authReq.RedirectURI)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to build authorization response").Log(ctx, s.logger)
 	}

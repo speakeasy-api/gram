@@ -289,7 +289,27 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 		if err != nil {
 			return fmt.Errorf("failed to make client credentials token request: status %d, failed to read response body: %w", resp.StatusCode, err)
 		}
-		return fmt.Errorf("failed to make client credentials token request: status %d, response: %s", resp.StatusCode, string(bodyBytes))
+
+		// Retry with basic auth if we get 401 or 403
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			logger.InfoContext(ctx, "retrying client credentials token request with basic auth")
+
+			retryResp, retryErr := retryTokenRequestWithBasicAuth(ctx, logger, tokenURL, clientID, clientSecret, requestedScopes)
+			if retryErr != nil {
+				return fmt.Errorf("failed to make client credentials token request: status %d, response: %s, retry failed: %w", resp.StatusCode, string(bodyBytes), retryErr)
+			}
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				logger.ErrorContext(ctx, "failed to close original response body", slog.String("error", closeErr.Error()))
+			}
+			resp = retryResp
+			defer func() {
+				if closeErr := resp.Body.Close(); closeErr != nil {
+					logger.ErrorContext(ctx, "failed to close retry response body", slog.String("error", closeErr.Error()))
+				}
+			}()
+		} else {
+			return fmt.Errorf("failed to make client credentials token request: status %d, response: %s", resp.StatusCode, string(bodyBytes))
+		}
 	}
 
 	var tokenResponse clientCredentialsTokenResponse
@@ -320,6 +340,46 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	req.Header.Set("Authorization", formatForBearer(tokenResponse.AccessToken))
 
 	return nil
+}
+
+func retryTokenRequestWithBasicAuth(ctx context.Context, logger *slog.Logger, tokenURL, clientID, clientSecret string, requestedScopes []string) (*http.Response, error) {
+	values := url.Values{}
+	values.Set("grant_type", "client_credentials")
+	if len(requestedScopes) > 0 {
+		values.Set("scope", strings.Join(requestedScopes, " "))
+	}
+
+	data := strings.NewReader(values.Encode())
+
+	retryReq, err := http.NewRequestWithContext(ctx, "POST", tokenURL, data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create retry token request: %w", err)
+	}
+
+	retryReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	retryReq.SetBasicAuth(clientID, clientSecret)
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(retryReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make retry token request: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		defer func() {
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				logger.ErrorContext(ctx, "failed to close retry response body", slog.String("error", closeErr.Error()))
+			}
+		}()
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("retry token request failed: status %d, failed to read response body: %w", resp.StatusCode, err)
+		}
+		return nil, fmt.Errorf("retry token request failed: status %d, response: %s", resp.StatusCode, string(bodyBytes))
+	}
+
+	return resp, nil
 }
 
 func getTokenFromCache(ctx context.Context, logger *slog.Logger, tokenCache cache.TypedCacheObject[clientCredentialsTokenCache], cacheKey string) string {
