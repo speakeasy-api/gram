@@ -326,7 +326,10 @@ func (itp *ToolProxy) Do(
 		}
 	}
 
-	processSecurity(ctx, logger, req, w, &responseStatusCode, tool, itp.cache, ciEnv, serverURL)
+	shouldContinue := processSecurity(ctx, logger, req, w, &responseStatusCode, tool, itp.cache, ciEnv, serverURL)
+	if !shouldContinue {
+		return nil
+	}
 
 	return reverseProxyRequest(ctx, logger, itp.tracer, tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode)
 }
