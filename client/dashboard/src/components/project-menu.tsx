@@ -8,7 +8,7 @@ import { useSdkClient } from "@/contexts/Sdk.tsx";
 import { cn } from "@/lib/utils.ts";
 import { ProjectEntry } from "@gram/client/models/components";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
-import { ChevronsUpDown, PlusIcon } from "lucide-react";
+import { ChevronsUpDown, MessageCircle, PlusIcon } from "lucide-react";
 import React from "react";
 import { InputDialog } from "./input-dialog.tsx";
 import { NavButton } from "./nav-menu.tsx";
@@ -197,16 +197,20 @@ export function ProjectMenu() {
             }
           >
             <NavButton
-              title="Manage Members"
+              title="Manage members"
+              href={membershipURL}
               Icon={() => <Icon name="users-round" />}
-              onClick={() => {
-                window.open(membershipURL, "_blank");
-                setOpen(false);
-              }}
+              onClick={() => setOpen(false)}
             />
           </SimpleTooltip>
           <NavButton
-            title="Logout"
+            title="Contact us"
+            href="https://calendly.com/sagar-speakeasy/gram-intro"
+            Icon={() => <MessageCircle className="h-4 w-4" />}
+            onClick={() => setOpen(false)}
+          />
+          <NavButton
+            title="Log out"
             Icon={() => <Icon name="log-out" />}
             onClick={async () => {
               await client.auth.logout();
