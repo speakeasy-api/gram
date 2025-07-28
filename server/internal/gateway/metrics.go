@@ -28,7 +28,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 	}
 }
 
-func (m *metrics) RecordHTTPToolCall(ctx context.Context, orgID string, orgSlug string, toolName string, statusCode int) {
+func (m *metrics) RecordHTTPToolCall(ctx context.Context, orgID string, toolName string, statusCode int) {
 	if m.toolCallsCounter == nil {
 		return
 	}
@@ -36,7 +36,6 @@ func (m *metrics) RecordHTTPToolCall(ctx context.Context, orgID string, orgSlug 
 	m.toolCallsCounter.Add(ctx, 1, metric.WithAttributes(
 		attribute.String("tool", toolName),
 		attribute.String("organization_id", orgID),
-		attribute.String("organization_slug", orgSlug),
 		attribute.String("status_code", fmt.Sprintf("%d", statusCode)),
 	))
 }

@@ -266,8 +266,8 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			"authenticated":       true,
 			"toolset_slug":        toolsetSlug,
 			"chat_session_id":     chatID,
-			"tool_name":           executionInfo.Tool.Name,
-			"tool_id":             executionInfo.Tool.ID,
+			"tool_name":           executionInfo.Name,
+			"tool_id":             executionInfo.ID,
 			"disable_noification": true,
 		}); err != nil {
 			s.logger.ErrorContext(ctx, "failed to capture direct_tool_execution event", slog.String("error", err.Error()))

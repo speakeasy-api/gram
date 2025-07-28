@@ -26,8 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/serialization"
-	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
-	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
 type ToolCallSource string
@@ -129,24 +127,23 @@ func (itp *ToolProxy) Do(
 	w http.ResponseWriter,
 	requestBody io.Reader,
 	envVars map[string]string,
-	toolExecutionInfo *toolsets.HTTPToolExecutionInfo,
+	tool *HTTPTool,
 ) error {
 	logger := itp.logger.With(
-		slog.String("project_id", toolExecutionInfo.Tool.ProjectID.String()),
-		slog.String("tool", toolExecutionInfo.Tool.Name),
-		slog.String("path", toolExecutionInfo.Tool.Path),
+		slog.String("id", tool.ID),
+		slog.String("project_id", tool.ProjectID),
+		slog.String("deployment_id", tool.DeploymentID),
+		slog.String("tool", tool.Name),
+		slog.String("path", tool.Path),
 		slog.String("source", string(itp.source)),
-		slog.String("account_type", toolExecutionInfo.AccountType),
-		slog.String("org_slug", toolExecutionInfo.OrgSlug),
-		slog.String("project_slug", toolExecutionInfo.ProjectSlug),
 	)
 
 	// Variable to capture status code for metrics
 	var responseStatusCode int
 	defer func() {
-		logger.InfoContext(ctx, "tool call", slog.String("status_code", fmt.Sprintf("%d", responseStatusCode)), slog.String("method", toolExecutionInfo.Tool.HttpMethod), slog.String("content_type", toolExecutionInfo.Tool.RequestContentType.String))
+		logger.InfoContext(ctx, "tool call", slog.String("status_code", fmt.Sprintf("%d", responseStatusCode)), slog.String("method", tool.Method), slog.String("content_type", tool.RequestContentType.Value))
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
-		itp.metrics.RecordHTTPToolCall(ctx, toolExecutionInfo.OrganizationID, toolExecutionInfo.OrgSlug, toolExecutionInfo.Tool.Name, responseStatusCode)
+		itp.metrics.RecordHTTPToolCall(ctx, tool.OrganizationID, tool.Name, responseStatusCode)
 	}()
 
 	ciEnv := newCaseInsensitiveEnv(envVars)
@@ -162,8 +159,8 @@ func (itp *ToolProxy) Do(
 	}
 
 	// We are silently failing before we actually start returning errors to the LLM related to body not fitting json schema
-	if len(toolExecutionInfo.Tool.Schema) > 0 {
-		if validateErr := validateToolCallBody(ctx, logger, bodyBytes, string(toolExecutionInfo.Tool.Schema)); validateErr != nil {
+	if len(tool.Schema) > 0 {
+		if validateErr := validateToolCallBody(ctx, logger, bodyBytes, string(tool.Schema)); validateErr != nil {
 			logger.InfoContext(ctx, "tool call request schema failed validation", slog.String("error", validateErr.Error()))
 			responseStatusCode = http.StatusBadRequest
 			w.Header().Set("Content-Type", "application/json")
@@ -185,20 +182,24 @@ func (itp *ToolProxy) Do(
 	}
 
 	// Handle path parameters
-	requestPath := toolExecutionInfo.Tool.Path
+	requestPath := tool.Path
 	if toolCallBody.PathParameters != nil {
-		parameterSettings, err := serialization.ParseParameterSettings(toolExecutionInfo.Tool.PathSettings)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to parse path parameter settings").Log(ctx, logger)
-		}
 		pathParams := make(map[string]string)
 		for name, value := range toolCallBody.PathParameters {
-			parameterSettings := parameterSettings[name]
-			if parameterSettings == nil {
+			param := tool.PathParams[name]
+			var settings *serialization.HTTPParameter
+			if param == nil {
 				logger.WarnContext(ctx, "no parameter settings found for path parameter", slog.String("parameter", name))
+			} else {
+				settings = &serialization.HTTPParameter{
+					Name:            param.Name,
+					Style:           param.Style,
+					Explode:         param.Explode,
+					AllowEmptyValue: param.AllowEmptyValue,
+				}
 			}
 			// style: simple and explode: false is the default serialization for path parameters
-			params := serialization.ParsePathAndHeaderParameter(ctx, logger, name, reflect.TypeOf(value), reflect.ValueOf(value), parameterSettings)
+			params := serialization.ParsePathAndHeaderParameter(ctx, logger, name, reflect.TypeOf(value), reflect.ValueOf(value), settings)
 			if params != nil && params[name] != "" {
 				pathParams[name] = params[name]
 			} else {
@@ -215,23 +216,23 @@ func (itp *ToolProxy) Do(
 
 	// Get the server URL from the tool definition
 	var serverURL string
-	if toolExecutionInfo.Tool.DefaultServerUrl.Valid {
-		serverURL = toolExecutionInfo.Tool.DefaultServerUrl.String
+	if tool.DefaultServerUrl.Valid {
+		serverURL = tool.DefaultServerUrl.Value
 	}
 
-	if envServerURL := processServerEnvVars(ctx, logger, toolExecutionInfo, ciEnv); envServerURL != "" {
+	if envServerURL := processServerEnvVars(ctx, logger, tool, ciEnv); envServerURL != "" {
 		serverURL = envServerURL
 	}
 
 	if serverURL == "" {
-		logger.ErrorContext(ctx, "no server URL provided for tool", slog.String("tool", toolExecutionInfo.Tool.Name))
+		logger.ErrorContext(ctx, "no server URL provided for tool", slog.String("tool", tool.Name))
 		return oops.E(oops.CodeUnexpected, nil, "no server URL provided for tool").Log(ctx, logger)
 	}
 
 	// Create a new request
 	fullURL := strings.TrimRight(serverURL, "/") + "/" + strings.TrimLeft(requestPath, "/")
 	var req *http.Request
-	if strings.HasPrefix(toolExecutionInfo.Tool.RequestContentType.String, "application/x-www-form-urlencoded") {
+	if strings.HasPrefix(tool.RequestContentType.Value, "application/x-www-form-urlencoded") {
 		encoded := ""
 		if len(toolCallBody.Body) > 0 {
 			// Assume toolCallBody.Body is a JSON object (map[string]interface{})
@@ -247,42 +248,46 @@ func (itp *ToolProxy) Do(
 		}
 		req, err = http.NewRequestWithContext(
 			ctx,
-			toolExecutionInfo.Tool.HttpMethod,
+			tool.Method,
 			fullURL,
 			strings.NewReader(encoded),
 		)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to build url-encoded request").Log(ctx, logger)
 		}
-		req.Header.Set("Content-Type", toolExecutionInfo.Tool.RequestContentType.String)
+		req.Header.Set("Content-Type", tool.RequestContentType.Value)
 	} else {
 		req, err = http.NewRequestWithContext(
 			ctx,
-			toolExecutionInfo.Tool.HttpMethod,
+			tool.Method,
 			fullURL,
 			bytes.NewReader(toolCallBody.Body),
 		)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to build json request").Log(ctx, logger)
 		}
-		if toolExecutionInfo.Tool.RequestContentType.String != "" {
-			req.Header.Set("Content-Type", toolExecutionInfo.Tool.RequestContentType.String)
+		if tool.RequestContentType.Value != "" {
+			req.Header.Set("Content-Type", tool.RequestContentType.Value)
 		}
 	}
 
 	if toolCallBody.QueryParameters != nil {
-		parameterSettings, err := serialization.ParseParameterSettings(toolExecutionInfo.Tool.QuerySettings)
-		if err != nil {
-			return oops.E(oops.CodeBadRequest, err, "failed to parse query parameter settings").Log(ctx, logger)
-		}
 		values := url.Values{}
 		for name, value := range toolCallBody.QueryParameters {
-			parameterSettings := parameterSettings[name]
-			if parameterSettings == nil {
+			param := tool.QueryParams[name]
+			var settings *serialization.HTTPParameter
+			if param == nil {
 				logger.WarnContext(ctx, "no parameter settings found for query parameter", slog.String("parameter", name))
+			} else {
+				settings = &serialization.HTTPParameter{
+					Name:            param.Name,
+					Style:           param.Style,
+					Explode:         param.Explode,
+					AllowEmptyValue: param.AllowEmptyValue,
+				}
 			}
 			// style: form and explode: true with , delimiter is default for query parameters
-			params := serialization.ParseQueryParameter(ctx, logger, name, reflect.TypeOf(value), reflect.ValueOf(value), parameterSettings)
+			params := serialization.ParseQueryParameter(ctx, logger, name, reflect.TypeOf(value), reflect.ValueOf(value), settings)
 			if len(params) > 0 {
 				for name, value := range params {
 					for _, vv := range value {
@@ -298,17 +303,21 @@ func (itp *ToolProxy) Do(
 
 	// Handle headers
 	if toolCallBody.Headers != nil {
-		parameterSettings, err := serialization.ParseParameterSettings(toolExecutionInfo.Tool.HeaderSettings)
-		if err != nil {
-			return oops.E(oops.CodeBadRequest, err, "failed to parse header parameter settings").Log(ctx, logger)
-		}
 		for name, value := range toolCallBody.Headers {
-			parameterSettings := parameterSettings[name]
-			if parameterSettings == nil {
+			param := tool.HeaderParams[name]
+			var settings *serialization.HTTPParameter
+			if param == nil {
 				logger.WarnContext(ctx, "no parameter settings found for header parameter", slog.String("parameter", name))
+			} else {
+				settings = &serialization.HTTPParameter{
+					Name:            param.Name,
+					Style:           param.Style,
+					Explode:         param.Explode,
+					AllowEmptyValue: param.AllowEmptyValue,
+				}
 			}
 			// style: simple and explode: false is the default serialization for headers
-			params := serialization.ParsePathAndHeaderParameter(ctx, logger, name, reflect.TypeOf(value), reflect.ValueOf(value), parameterSettings)
+			params := serialization.ParsePathAndHeaderParameter(ctx, logger, name, reflect.TypeOf(value), reflect.ValueOf(value), settings)
 			if params != nil && params[name] != "" {
 				req.Header.Set(name, params[name])
 			} else {
@@ -317,9 +326,9 @@ func (itp *ToolProxy) Do(
 		}
 	}
 
-	processSecurity(ctx, logger, req, w, &responseStatusCode, toolExecutionInfo, itp.cache, ciEnv, serverURL)
+	processSecurity(ctx, logger, req, w, &responseStatusCode, tool, itp.cache, ciEnv, serverURL)
 
-	return reverseProxyRequest(ctx, logger, itp.tracer, toolExecutionInfo.Tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode)
+	return reverseProxyRequest(ctx, logger, itp.tracer, tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode)
 }
 
 type retryConfig struct {
@@ -380,7 +389,7 @@ func retryWithBackoff(
 func reverseProxyRequest(ctx context.Context,
 	logger *slog.Logger,
 	tracer trace.Tracer,
-	tool tools_repo.HttpToolDefinition,
+	tool *HTTPTool,
 	responseFilter *ResponseFilterRequest,
 	w http.ResponseWriter,
 	req *http.Request,
@@ -524,13 +533,13 @@ func reverseProxyRequest(ctx context.Context,
 	return nil
 }
 
-func processServerEnvVars(ctx context.Context, logger *slog.Logger, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, envVars *caseInsensitiveEnv) string {
-	if toolExecutionInfo.Tool.ServerEnvVar != "" {
-		envVar := envVars.Get(toolExecutionInfo.Tool.ServerEnvVar)
+func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTool, envVars *caseInsensitiveEnv) string {
+	if tool.ServerEnvVar != "" {
+		envVar := envVars.Get(tool.ServerEnvVar)
 		if envVar != "" {
 			return envVar
 		} else {
-			logger.WarnContext(ctx, "environment variable for server not found", slog.String("key", toolExecutionInfo.Tool.ServerEnvVar))
+			logger.WarnContext(ctx, "environment variable for server not found", slog.String("key", tool.ServerEnvVar))
 		}
 	}
 	return ""

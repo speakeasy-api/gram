@@ -125,7 +125,7 @@ func handleToolsCall(
 	// map provided oauth tokens into the relevant security env variables
 	for _, security := range executionPlan.Security {
 		for _, token := range payload.oauthTokenInputs {
-			if slices.Contains(security.OauthTypes, "authorization_code") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
+			if slices.Contains(security.OAuthTypes, "authorization_code") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
 				for _, envVar := range security.EnvVariables {
 					if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
 						envVars[envVar] = token.Token

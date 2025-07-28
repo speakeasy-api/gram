@@ -13,8 +13,6 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/toolsets"
-	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func processSecurity(
@@ -23,52 +21,52 @@ func processSecurity(
 	req *http.Request,
 	w http.ResponseWriter,
 	responseStatusCodeCapture *int,
-	toolExecutionInfo *toolsets.HTTPToolExecutionInfo,
+	tool *HTTPTool,
 	cacheImpl cache.Cache,
 	envVars *caseInsensitiveEnv,
 	serverURL string,
 ) {
-	for _, security := range toolExecutionInfo.Security {
+	for _, security := range tool.Security {
 		if !security.Type.Valid {
-			logger.ErrorContext(ctx, "invalid security type in tool definition", slog.String("tool", toolExecutionInfo.Tool.Name))
+			logger.ErrorContext(ctx, "invalid security type in tool definition", slog.String("tool", tool.Name))
 			continue
 		}
 
-		switch security.Type.String {
+		switch security.Type.Value {
 		case "apiKey":
 			if len(security.EnvVariables) == 0 {
-				logger.ErrorContext(ctx, "no environment variables provided for api key auth", slog.String("scheme", security.Scheme.String))
+				logger.ErrorContext(ctx, "no environment variables provided for api key auth", slog.String("scheme", security.Scheme.Value))
 			} else if envVars.Get(security.EnvVariables[0]) == "" {
-				logger.ErrorContext(ctx, "missing value for environment variable in api key auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.String))
-			} else if !security.Name.Valid || security.Name.String == "" {
-				logger.ErrorContext(ctx, "no name provided for api key auth", slog.String("scheme", security.Scheme.String))
+				logger.ErrorContext(ctx, "missing value for environment variable in api key auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.Value))
+			} else if !security.Name.Valid || security.Name.Value == "" {
+				logger.ErrorContext(ctx, "no name provided for api key auth", slog.String("scheme", security.Scheme.Value))
 			} else {
 				key := security.EnvVariables[0]
-				switch security.InPlacement.String {
+				switch security.Placement.Value {
 				case "header":
-					req.Header.Set(security.Name.String, envVars.Get(key))
+					req.Header.Set(security.Name.Value, envVars.Get(key))
 				case "query":
 					values := req.URL.Query()
-					values.Set(security.Name.String, envVars.Get(key))
+					values.Set(security.Name.Value, envVars.Get(key))
 					req.URL.RawQuery = values.Encode()
 				default:
-					logger.ErrorContext(ctx, "unsupported api key placement", slog.String("placement", security.InPlacement.String))
+					logger.ErrorContext(ctx, "unsupported api key placement", slog.String("placement", security.Placement.Value))
 				}
 			}
 		case "http":
-			switch security.Scheme.String {
+			switch security.Scheme.Value {
 			case "bearer":
 				if len(security.EnvVariables) == 0 {
-					logger.ErrorContext(ctx, "no environment variables provided for bearer auth", slog.String("scheme", security.Scheme.String))
+					logger.ErrorContext(ctx, "no environment variables provided for bearer auth", slog.String("scheme", security.Scheme.Value))
 				} else if envVars.Get(security.EnvVariables[0]) == "" {
-					logger.ErrorContext(ctx, "token value is empty for bearer auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.String))
+					logger.ErrorContext(ctx, "token value is empty for bearer auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.Value))
 				} else {
 					token := envVars.Get(security.EnvVariables[0])
 					req.Header.Set("Authorization", formatForBearer(token))
 				}
 			case "basic":
 				if len(security.EnvVariables) < 2 {
-					logger.ErrorContext(ctx, "not enough environment variables provided for basic auth", slog.String("scheme", security.Scheme.String))
+					logger.ErrorContext(ctx, "not enough environment variables provided for basic auth", slog.String("scheme", security.Scheme.Value))
 				} else {
 					var username, password string
 					for _, envVar := range security.EnvVariables {
@@ -83,21 +81,21 @@ func processSecurity(
 						logger.ErrorContext(ctx, "missing username or password value for basic auth",
 							slog.Bool("env_username", security.EnvVariables[0] == ""),
 							slog.Bool("env_password", security.EnvVariables[1] == ""),
-							slog.String("scheme", security.Scheme.String))
+							slog.String("scheme", security.Scheme.Value))
 					} else {
 						req.SetBasicAuth(username, password)
 					}
 				}
 			default:
-				logger.ErrorContext(ctx, "unsupported http security scheme", slog.String("scheme", security.Scheme.String))
+				logger.ErrorContext(ctx, "unsupported http security scheme", slog.String("scheme", security.Scheme.Value))
 				continue
 			}
 		case "oauth2":
-			if security.OauthTypes == nil {
-				logger.ErrorContext(ctx, "no oauth types provided for oauth2 auth", slog.String("scheme", security.Scheme.String))
+			if security.OAuthTypes == nil {
+				logger.ErrorContext(ctx, "no oauth types provided for oauth2 auth", slog.String("scheme", security.Scheme.Value))
 			}
 
-			for _, oauthType := range security.OauthTypes {
+			for _, oauthType := range security.OAuthTypes {
 				switch oauthType {
 				case "authorization_code":
 					for _, envVar := range security.EnvVariables {
@@ -110,7 +108,7 @@ func processSecurity(
 						}
 					}
 				case "client_credentials":
-					if err := processClientCredentials(ctx, logger, req, cacheImpl, toolExecutionInfo, security, envVars, serverURL); err != nil {
+					if err := processClientCredentials(ctx, logger, req, cacheImpl, tool, security, envVars, serverURL); err != nil {
 						logger.ErrorContext(ctx, "could not process client credentials", slog.String("error", err.Error()))
 						if strings.Contains(err.Error(), "failed to make client credentials token request") {
 							w.Header().Set("Content-Type", "application/json")
@@ -129,7 +127,7 @@ func processSecurity(
 				}
 			}
 		default:
-			logger.ErrorContext(ctx, "unsupported security scheme type", slog.String("type", security.Type.String))
+			logger.ErrorContext(ctx, "unsupported security scheme type", slog.String("type", security.Type.Value))
 			continue
 		}
 	}
@@ -191,7 +189,7 @@ type clientCredentialsTokenResponse struct {
 	ExpiresIn   int    `json:"expires_in"`
 }
 
-func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, toolExecutionInfo *toolsets.HTTPToolExecutionInfo, security repo.HttpSecurity, envVars *caseInsensitiveEnv, serverURL string) error {
+func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *HTTPTool, security *HTTPToolSecurity, envVars *caseInsensitiveEnv, serverURL string) error {
 	// To discuss, currently we are taking the approach of exact scope match for reused tokens
 	// We could look into enabling a prefix match feature for caches where we return multiple entries matching the projectID, clientID, tokenURL and then check scopes against all returned values
 	// We would want to make sure any underlying cache implementation supports this feature
@@ -223,12 +221,12 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	}
 
 	var requestedScopes []string
-	if scopes, ok := toolExecutionInfo.SecurityScopes[security.Key]; ok {
+	if scopes, ok := tool.SecurityScopes[security.Key]; ok {
 		requestedScopes = scopes
 	}
 
 	var oauthFlows oAuthFlows
-	if err := json.Unmarshal(security.OauthFlows, &oauthFlows); err != nil {
+	if err := json.Unmarshal(security.OAuthFlows, &oauthFlows); err != nil {
 		return fmt.Errorf("failed to unmarshal oauth flows for client credentials: %w", err)
 	}
 
@@ -249,7 +247,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 		return fmt.Errorf("no client credentials token url found")
 	}
 
-	cacheKey := clientCredentialsTokenCacheCacheKey(toolExecutionInfo.Tool.ProjectID.String(), clientID, tokenURL, requestedScopes)
+	cacheKey := clientCredentialsTokenCacheCacheKey(tool.ProjectID, clientID, tokenURL, requestedScopes)
 	if token := getTokenFromCache(ctx, logger, tokenCache, cacheKey); token != "" {
 		req.Header.Set("Authorization", formatForBearer(token))
 		return nil
@@ -307,7 +305,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	// If we are passed an expiry value we will use the cache
 	if tokenResponse.ExpiresIn > 0 {
 		if err := tokenCache.Store(ctx, clientCredentialsTokenCache{
-			ProjectID:   toolExecutionInfo.Tool.ProjectID.String(),
+			ProjectID:   tool.ProjectID,
 			ClientID:    clientID,
 			TokenURL:    tokenURL,
 			AccessToken: tokenResponse.AccessToken,

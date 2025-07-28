@@ -2,31 +2,26 @@ package serialization
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/url"
 	"reflect"
-
-	"github.com/speakeasy-api/gram/server/internal/openapi"
 )
 
-func ParseParameterSettings(settings []byte) (map[string]*openapi.OpenapiV3ParameterProxy, error) {
-	result := make(map[string]*openapi.OpenapiV3ParameterProxy)
-	if len(settings) == 0 {
-		return result, nil
-	}
-
-	if err := json.Unmarshal(settings, &result); err != nil {
-		return nil, fmt.Errorf("parse parameter settings: %w", err)
-	}
-
-	return result, nil
+// HTTPParameter holds the settings for encoding a parameter into an HTTP
+// request.
+//
+// Note: this struct is a duplicate of one in the gateway package as a temporary
+// measure. The goal is to merge these two packages in the future.
+type HTTPParameter struct {
+	Name            string `json:"name" yaml:"name"`
+	Style           string `json:"style" yaml:"style"`
+	Explode         *bool  `json:"explode" yaml:"explode"`
+	AllowEmptyValue bool   `json:"allow_empty_value" yaml:"allow_empty_value"`
 }
 
 // ParsePathAndHeaderParameter parses path and header parameters.
 // We currently only support simple style for these parameter types.
-func ParsePathAndHeaderParameter(ctx context.Context, logger *slog.Logger, parentName string, objType reflect.Type, objValue reflect.Value, parameterSettings *openapi.OpenapiV3ParameterProxy) map[string]string {
+func ParsePathAndHeaderParameter(ctx context.Context, logger *slog.Logger, parentName string, objType reflect.Type, objValue reflect.Value, parameterSettings *HTTPParameter) map[string]string {
 	style := "simple"
 	explode := setExplodeDefaults(style)
 	if parameterSettings != nil && parameterSettings.Style != "" && parameterSettings.Style != "simple" {
@@ -39,7 +34,7 @@ func ParsePathAndHeaderParameter(ctx context.Context, logger *slog.Logger, paren
 }
 
 // ParseQueryParameter parses query parameters based on the style and explode flag.
-func ParseQueryParameter(ctx context.Context, logger *slog.Logger, parentName string, objType reflect.Type, objValue reflect.Value, parameterSettings *openapi.OpenapiV3ParameterProxy) url.Values {
+func ParseQueryParameter(ctx context.Context, logger *slog.Logger, parentName string, objType reflect.Type, objValue reflect.Value, parameterSettings *HTTPParameter) url.Values {
 	style := "form" // Default style for query parameters
 	if parameterSettings != nil && parameterSettings.Style != "" {
 		style = parameterSettings.Style

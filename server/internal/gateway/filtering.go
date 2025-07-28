@@ -14,7 +14,6 @@ import (
 
 	"github.com/itchyny/gojq"
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
-	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"gopkg.in/yaml.v3"
@@ -26,7 +25,7 @@ type responseFilteringResult struct {
 	contentType string
 }
 
-func handleResponseFiltering(ctx context.Context, logger *slog.Logger, tool tools_repo.HttpToolDefinition, responseFilterRequest *ResponseFilterRequest, resp *http.Response) *responseFilteringResult {
+func handleResponseFiltering(ctx context.Context, logger *slog.Logger, tool *HTTPTool, responseFilterRequest *ResponseFilterRequest, resp *http.Response) *responseFilteringResult {
 	if tool.ResponseFilter == nil || responseFilterRequest == nil {
 		return nil
 	}

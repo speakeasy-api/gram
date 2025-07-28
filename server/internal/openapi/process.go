@@ -802,7 +802,10 @@ func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, 
 		}
 
 		proxy := &OpenapiV3ParameterProxy{
-			Schema:          json.RawMessage(schemaBytes),
+			// We don't need the schema when plucking out the serialzating settings
+			// for a parameter. It would only bloat the database so we're stripping
+			// it out before storing.
+			Schema:          nil,
 			In:              param.In,
 			Name:            param.Name,
 			Description:     param.Description,
@@ -813,17 +816,12 @@ func captureParameters(params []*v3.Parameter) (objectSchema *jsonSchemaObject, 
 			Explode:         param.Explode,
 		}
 
-		obj.Properties.Set(param.Name, proxy.Schema)
+		obj.Properties.Set(param.Name, json.RawMessage(schemaBytes))
 		if param.Required != nil && *param.Required {
 			obj.Required = append(obj.Required, param.Name)
 		}
 
-		clone := *proxy
-		// We don't need the schema when plucking out the serialzating settings
-		// for a parameter. It would only bloat the database so we're stripping
-		// it out before storing.
-		clone.Schema = nil
-		specs[param.Name] = &clone
+		specs[param.Name] = proxy
 	}
 
 	spec, err = json.Marshal(specs)
