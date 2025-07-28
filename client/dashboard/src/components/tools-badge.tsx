@@ -117,20 +117,30 @@ export const ToolsBadge = ({
     </div>
   );
 
-  const tooManyTools = warnOnTooManyTools && toolNames && toolNames.length > 40;
-  if (tooManyTools) {
+  const toolsWarnings = warnOnTooManyTools && toolNames && toolNames.length > 40 && toolNames.length < 150;
+  if (toolsWarnings) {
     tooltipContent =
-      "LLM tool-use performance typically degrades with toolset size. General industry standards recommend keeping MCP servers under 40 tools";
+      "LLM tool-use performance typically degrades with toolset size. General industry standards recommend keeping MCP servers at around 40 tool or less";
+  }
+
+  const toolsSevere = warnOnTooManyTools && toolNames && toolNames.length > 150;
+  if (toolsSevere) {
+    tooltipContent =
+      "An LLM is unlikely to consistently perform well with a toolset of this size. General industry standards recommend keeping MCP servers at around 40 tool or less";
   }
 
   return toolNames && toolNames.length > 0 ? (
     <Badge
       size={size}
-      variant={tooManyTools ? "warning" : variant}
+      variant={toolsSevere ? "urgent-warning" : toolsWarnings ? "warning" : variant}
       tooltip={tooltipContent}
       className={className}
     >
-      {tooManyTools && <UrgentWarningIcon />}
+      {(toolsWarnings || toolsSevere) && (
+        <UrgentWarningIcon 
+          className={toolsSevere ? "text-white dark:text-white" : undefined}
+        />
+      )}
       {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
     </Badge>
   ) : (
