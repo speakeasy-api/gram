@@ -17,8 +17,10 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -129,13 +131,23 @@ func (itp *ToolProxy) Do(
 	envVars map[string]string,
 	tool *HTTPTool,
 ) error {
+	ctx, span := itp.tracer.Start(ctx, "proxyToolCall", trace.WithAttributes(
+		attribute.String("tool.name", tool.Name),
+		attribute.String("tool.id", tool.ID),
+		attribute.String("project.id", tool.ProjectID),
+		attribute.String("deployment.id", tool.DeploymentID),
+		attribute.String("tool.call.source", string(itp.source)),
+		semconv.HTTPRouteKey.String(tool.Path),
+	))
+	defer span.End()
+
 	logger := itp.logger.With(
-		slog.String("id", tool.ID),
 		slog.String("project_id", tool.ProjectID),
 		slog.String("deployment_id", tool.DeploymentID),
-		slog.String("tool", tool.Name),
-		slog.String("path", tool.Path),
-		slog.String("source", string(itp.source)),
+		slog.String("tool_id", tool.ID),
+		slog.String("tool_name", tool.Name),
+		slog.String("tool_call.source", string(itp.source)),
+		slog.String("http_route", tool.Path),
 	)
 
 	// Variable to capture status code for metrics
@@ -144,6 +156,8 @@ func (itp *ToolProxy) Do(
 		logger.InfoContext(ctx, "tool call", slog.String("status_code", fmt.Sprintf("%d", responseStatusCode)), slog.String("method", tool.Method), slog.String("content_type", tool.RequestContentType.Value))
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
 		itp.metrics.RecordHTTPToolCall(ctx, tool.OrganizationID, tool.Name, responseStatusCode)
+
+		span.SetAttributes(semconv.HTTPResponseStatusCode(responseStatusCode))
 	}()
 
 	ciEnv := newCaseInsensitiveEnv(envVars)

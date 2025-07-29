@@ -32,16 +32,12 @@ func NewToolsets(tx repo.DBTX) *Toolsets {
 }
 
 type HTTPToolExecutionInfo struct {
-	Tool           toolsRepo.HttpToolDefinition
-	Security       []repo.HttpSecurity
-	SecurityScopes map[string][]string
-	ProjectSlug    string
-	AccountType    string
-	OrgSlug        string
-	OrganizationID string
+	Tool             *gateway.HTTPTool
+	OrganizationSlug string
+	ProjectSlug      string
 }
 
-func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*gateway.HTTPTool, error) {
+func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
 	tool, err := t.toolsRepo.GetHTTPToolDefinitionByID(ctx, toolsRepo.GetHTTPToolDefinitionByIDParams{
 		ID:        id,
 		ProjectID: projectID,
@@ -116,7 +112,7 @@ func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUI
 		return nil, fmt.Errorf("parse path settings: %w", err)
 	}
 
-	return &gateway.HTTPTool{
+	gatewayTool := &gateway.HTTPTool{
 		ID:                 tool.ID.String(),
 		DeploymentID:       tool.DeploymentID.String(),
 		ProjectID:          tool.ProjectID.String(),
@@ -134,6 +130,12 @@ func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUI
 		Security:           sec,
 		SecurityScopes:     securityScopes,
 		ResponseFilter:     filter,
+	}
+
+	return &HTTPToolExecutionInfo{
+		Tool:             gatewayTool,
+		OrganizationSlug: orgData.Slug,
+		ProjectSlug:      orgData.ProjectSlug,
 	}, nil
 }
 

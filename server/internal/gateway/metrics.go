@@ -2,11 +2,12 @@ package gateway
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 )
 
 type metrics struct {
@@ -33,9 +34,17 @@ func (m *metrics) RecordHTTPToolCall(ctx context.Context, orgID string, toolName
 		return
 	}
 
-	m.toolCallsCounter.Add(ctx, 1, metric.WithAttributes(
-		attribute.String("tool", toolName),
-		attribute.String("organization_id", orgID),
-		attribute.String("status_code", fmt.Sprintf("%d", statusCode)),
-	))
+	kv := []attribute.KeyValue{
+		attribute.String("tool.name", toolName),
+		attribute.String("organization.id", orgID),
+		semconv.HTTPResponseStatusCode(statusCode),
+	}
+
+	bag := baggage.FromContext(ctx)
+
+	if org := bag.Member("organization.slug").Value(); org != "" {
+		kv = append(kv, attribute.String("organization.slug", org))
+	}
+
+	m.toolCallsCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }

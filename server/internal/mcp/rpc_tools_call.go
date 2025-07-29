@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
@@ -121,9 +122,10 @@ func handleToolsCall(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool execution plan").Log(ctx, logger)
 	}
+	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, executionPlan.OrganizationSlug, executionPlan.ProjectSlug)
 
 	// map provided oauth tokens into the relevant security env variables
-	for _, security := range executionPlan.Security {
+	for _, security := range executionPlan.Tool.Security {
 		for _, token := range payload.oauthTokenInputs {
 			if slices.Contains(security.OAuthTypes, "authorization_code") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
 				for _, envVar := range security.EnvVariables {
@@ -141,7 +143,7 @@ func handleToolsCall(
 		statusCode: http.StatusOK,
 	}
 
-	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan)
+	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan.Tool)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}

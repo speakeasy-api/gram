@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -223,7 +224,6 @@ func (c *ChatClient) LoadToolsetTools(
 		projID := projectID
 
 		executor := func(ctx context.Context, rawArgs string) (string, error) {
-
 			// Find tool by name
 			toolID, err := toolsRepo.PokeHTTPToolDefinitionByName(ctx, tools_repo.PokeHTTPToolDefinitionByNameParams{
 				ProjectID: projID,
@@ -240,6 +240,7 @@ func (c *ChatClient) LoadToolsetTools(
 			if err != nil {
 				return "", fmt.Errorf("failed to get tool execution info: %w", err)
 			}
+			ctx, _ = o11y.EnrichToolCallContext(ctx, c.logger, executionPlan.OrganizationSlug, executionPlan.ProjectSlug)
 
 			rw := &toolCallResponseWriter{
 				headers:    make(http.Header),
@@ -258,7 +259,7 @@ func (c *ChatClient) LoadToolsetTools(
 				envVars[key] = value
 			}
 
-			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), envVars, executionPlan)
+			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), envVars, executionPlan.Tool)
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

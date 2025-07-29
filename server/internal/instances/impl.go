@@ -188,6 +188,8 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 }
 
 func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) error {
+	logger := s.logger
+
 	// TODO: Handling security, we can probably factor this out into something smarter like a proxy
 	sc := security.APIKeyScheme{
 		Name:           auth.SessionSecurityScheme,
@@ -204,7 +206,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		}
 		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)
 		if err != nil {
-			return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, logger)
 		}
 	}
 
@@ -216,17 +218,17 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	ctx, err = s.auth.Authorize(ctx, r.Header.Get(auth.ProjectHeader), &sc)
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, err, "failed to authorize").Log(ctx, logger)
 	}
 
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	if authCtx == nil || authCtx.ProjectID == nil {
-		return oops.E(oops.CodeUnauthorized, nil, "project ID is required").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnauthorized, nil, "project ID is required").Log(ctx, logger)
 	}
 
 	toolID := r.URL.Query().Get(tooldIdQueryParam)
 	if toolID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "tool_id query parameter is required").Log(ctx, s.logger)
+		return oops.E(oops.CodeBadRequest, nil, "tool_id query parameter is required").Log(ctx, logger)
 	}
 
 	// These variabels will come in our playground chats
@@ -240,12 +242,12 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			Slug:      strings.ToLower(environmentSlug),
 		})
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
 		}
 
 		environmentEntries, err := s.env.ListEnvironmentEntries(ctx, *authCtx.ProjectID, envModel.ID, false)
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, s.logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, logger)
 		}
 
 		// Transform environment entries into a map
@@ -256,38 +258,41 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	executionInfo, err := s.toolset.GetHTTPToolExecutionInfoByID(ctx, uuid.MustParse(toolID), *authCtx.ProjectID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to load tool execution info").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to load tool execution info").Log(ctx, logger)
 	}
+	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, executionInfo.OrganizationSlug, executionInfo.ProjectSlug)
 
 	if chatID != "" && toolsetSlug != "" {
 		if err := s.posthog.CaptureEvent(ctx, "direct_tool_execution", authCtx.ProjectID.String(), map[string]interface{}{
 			"project_id":          authCtx.ProjectID.String(),
-			"organization_id":     executionInfo.OrganizationID,
+			"project_slug":        authCtx.ProjectSlug,
+			"organization_id":     executionInfo.Tool.OrganizationID,
+			"organization_slug":   executionInfo.OrganizationSlug,
 			"authenticated":       true,
 			"toolset_slug":        toolsetSlug,
 			"chat_session_id":     chatID,
-			"tool_name":           executionInfo.Name,
-			"tool_id":             executionInfo.ID,
+			"tool_name":           executionInfo.Tool.Name,
+			"tool_id":             executionInfo.Tool.ID,
 			"disable_noification": true,
 		}); err != nil {
-			s.logger.ErrorContext(ctx, "failed to capture direct_tool_execution event", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "failed to capture direct_tool_execution event", slog.String("error", err.Error()))
 		}
 	}
 
 	requestBody := r.Body
 	requestBodyBytes, err := io.ReadAll(requestBody)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to read request body").Log(ctx, s.logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to read request body").Log(ctx, logger)
 	}
 
-	s.logger.InfoContext(ctx, "request body", slog.String("request_body", string(requestBodyBytes)))
+	logger.InfoContext(ctx, "request body", slog.String("request_body", string(requestBodyBytes)))
 
 	requestBody = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
 
 	// Use a response interceptor that completely captures the response
 	interceptor := newResponseInterceptor(w)
 
-	err = s.toolProxy.Do(ctx, interceptor, requestBody, envVars, executionInfo)
+	err = s.toolProxy.Do(ctx, interceptor, requestBody, envVars, executionInfo.Tool)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}

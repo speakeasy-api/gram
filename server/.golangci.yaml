@@ -67,6 +67,8 @@ linters:
       checks:
         - end
         - set-status
+      ignore-check-signatures:
+        - '\(\*github\.com/speakeasy-api/gram/server/internal/oops\.ShareableError\)\.Log\('
     gocritic:
       disabled-checks:
         - ifElseChain
