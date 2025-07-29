@@ -13,6 +13,19 @@ updates:
     directory: "/server"
     schedule:
       interval: "weekly"
+    groups:
+      otel:
+        patterns:
+          - "go.opentelemetry.io/*"
+      goa:
+        patterns:
+          - "goa.design/*"
+      temporal:
+        patterns:
+          - "go.temporal.io/*"
+      testcontainers:
+        patterns:
+          - "github.com/testcontainers/*"
   - package-ecosystem: "docker"
     directory: "/server"
     schedule:
