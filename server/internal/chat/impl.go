@@ -41,7 +41,6 @@ import (
 var _ gen.Service = (*Service)(nil)
 
 type Service struct {
-	openaiAPIKey   string
 	auth           *auth.Auth
 	repo           *repo.Queries
 	tracer         trace.Tracer
@@ -51,9 +50,8 @@ type Service struct {
 	proxyTransport http.RoundTripper
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openaiAPIKey string, openRouter openrouter.Provisioner) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openRouter openrouter.Provisioner) *Service {
 	return &Service{
-		openaiAPIKey:   openaiAPIKey,
 		auth:           auth.New(logger, db, sessions),
 		sessions:       sessions,
 		logger:         logger,
@@ -299,14 +297,15 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
-	// Set up the proxy to OpenAI
-	target, _ := url.Parse(openrouter.OpenRouterBaseURL)
+	// Set up the proxy to OpenRouter
+	target, err := url.Parse(openrouter.OpenRouterBaseURL)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error parsing openrouter url").Log(ctx, s.logger)
+	}
+
 	apiKey, err := s.openRouter.ProvisionAPIKey(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "error getting openrouter api key falling back to openai", slog.String("error", err.Error()))
-		// Fallback to OpenAI API key until fully implemented
-		target, _ = url.Parse("https://api.openai.com")
-		apiKey = s.openaiAPIKey
+		return oops.E(oops.CodeGatewayError, err, "error provisioning openrouter api key").Log(ctx, s.logger)
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)

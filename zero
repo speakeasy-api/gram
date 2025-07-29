@@ -60,7 +60,6 @@ echo -e "\n⏳ Installing dependencies"
 mise run install
 
 echo -e "\n⏳ Setting up API keys and secrets"
-mise run zero:openai
 mise run zero:github
 mise run zero:openrouter
 mise run zero:encryption

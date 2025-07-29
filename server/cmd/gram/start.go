@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -177,18 +176,6 @@ func newStartCommand() *cli.Command {
 				Usage:    "Key for App level AES encryption/decyryption",
 				Required: true,
 				EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
-			},
-			&cli.StringFlag{
-				Name:     "openai-api-key",
-				Usage:    "API key for the OpenAI API",
-				EnvVars:  []string{"GRAM_OPENAI_API_KEY"},
-				Required: true,
-				Action: func(c *cli.Context, val string) error {
-					if strings.TrimSpace(val) == "" {
-						return errors.New("OpenAI API key cannot be empty")
-					}
-					return nil
-				},
 			},
 			&cli.StringFlag{
 				Name:    "openrouter-dev-key",
@@ -450,7 +437,7 @@ func newStartCommand() *cli.Command {
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient))
 			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService))
-			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, c.String("openai-api-key"), openRouter))
+			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, openRouter))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
 					GramServerURL:      c.String("server-url"),
