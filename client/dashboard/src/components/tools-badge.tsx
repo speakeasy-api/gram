@@ -5,6 +5,7 @@ import { Toolset } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Badge, TwoPartBadge } from "./ui/badge";
 import { UrgentWarningIcon } from "./ui/urgent-warning-icon";
+import { cn } from "@/lib/utils";
 
 export const ToolsetBadge = ({
   toolset,
@@ -27,7 +28,7 @@ export const ToolsetBadge = ({
       <ToolsetToolsBadge
         toolset={toolset}
         variant="outline"
-        className="lowercase bg-card"
+        className="lowercase"
       />
     </TwoPartBadge>
   );
@@ -134,7 +135,7 @@ export const ToolsBadge = ({
       size={size}
       variant={toolsSevere ? "urgent-warning" : toolsWarnings ? "warning" : variant}
       tooltip={tooltipContent}
-      className={className}
+      className={cn(!toolsSevere && !toolsWarnings && "bg-card", className)}
     >
       {(toolsWarnings || toolsSevere) && (
         <UrgentWarningIcon 
