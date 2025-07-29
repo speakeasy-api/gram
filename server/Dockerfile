@@ -29,5 +29,7 @@ WORKDIR /app
 USER nonroot
 
 COPY --from=builder --chown=nonroot:nonroot /app/bin/gram .
+# Add this line to copy the migrations folder
+COPY --from=builder --chown=nonroot:nonroot /app/migrations ./migrations
 
 ENTRYPOINT ["/app/gram"]

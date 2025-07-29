@@ -3,6 +3,7 @@
 !/cmd
 !/internal
 !/gen
+!/migrations
 !go.mod
 !go.sum
 !main.go
