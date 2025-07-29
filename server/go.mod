@@ -35,7 +35,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.37.0
-	github.com/testcontainers/testcontainers-go/modules/redis v0.37.0
+	github.com/testcontainers/testcontainers-go/modules/redis v0.38.0
 	github.com/urfave/cli/v2 v2.27.7
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.62.0
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.62.0
