@@ -15,7 +15,6 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
-	"path"
 	"slices"
 	"strings"
 
@@ -331,7 +330,10 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	if customDomainCtx != nil {
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain+"/mcp")
 	}
-	MCPURL := path.Join(baseURL, mcpSlug)
+	MCPURL, err := url.JoinPath(baseURL, mcpSlug)
+	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "malformed mcp url").Log(ctx, s.logger)
+	}
 
 	configSnippetData := jsonSnippetData{
 		MCPName: cases.Title(language.English).String(toolset.Name),
