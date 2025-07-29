@@ -237,7 +237,7 @@ const ROUTE_STRUCTURE = {
   deployments: {
     title: "Deployments",
     url: "deployments",
-    icon: "circle-play",
+    icon: "history",
     component: DeploymentsRoot,
     indexComponent: Deployments,
     subPages: {

@@ -1,13 +1,4 @@
 import { Page } from "@/components/page-layout";
-import { Heading } from "@/components/ui/heading";
-import { useRoutes } from "@/routes";
-import {
-  useListDeploymentsSuspense,
-  useRedeployDeploymentMutation,
-} from "@gram/client/react-query";
-import { Icon, Table, TableProps } from "@speakeasy-api/moonshine";
-import { Suspense, useState } from "react";
-import { Outlet } from "react-router";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -15,7 +6,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Heading } from "@/components/ui/heading";
+import { useRoutes } from "@/routes";
+import {
+  useListDeploymentsSuspense,
+  useRedeployDeploymentMutation,
+} from "@gram/client/react-query";
+import { Icon, Table, TableProps } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { Suspense, useState } from "react";
+import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
 
 export default function DeploymentsPage() {
@@ -122,31 +122,42 @@ function DeploymentActionsDropdown({
 
 const columns: TableProps<DeploymentSummary>["columns"] = [
   {
+    key: "status",
+    header: "",
+    width: "50px",
+    render: (row) => {
+      switch (row.status) {
+        case "completed":
+          return (
+            <div className="flex items-center justify-center rounded-full bg-success p-1">
+              <Icon name="check" className="text-success-foreground" />
+            </div>
+          );
+        case "failed":
+          return (
+            <div className="flex items-center justify-center rounded-full bg-destructive/20 p-1">
+              <Icon name="x" className="text-destructive-foreground" />
+            </div>
+          );
+        default:
+          return (
+            <div className="flex items-center justify-center rounded-full bg-warning p-1">
+              <Icon name="circle-dashed" className="text-warning-foreground" />
+            </div>
+          );
+      }
+    },
+  },
+  {
     key: "id",
     header: "ID",
     render: (row) => {
-      let icon: React.ReactNode = null;
-      switch (row.status) {
-        case "completed":
-          icon = <Icon name="check" className="text-success" />;
-          break;
-        case "failed":
-          icon = <Icon name="x" className="text-destructive" />;
-          break;
-        default:
-          icon = <Icon name="circle-dashed" className="text-warning" />;
-          break;
-      }
-
       const createdAt = relativeTime(row.createdAt);
 
       return (
         <div>
-          <p className="inline-flex items-center gap-1 font-mono">
-            {icon}
-            <DeploymentLink id={row.id} />
-          </p>
-          <p className="text-muted-foreground text-sm ps-5">{createdAt}</p>
+          <DeploymentLink id={row.id} />
+          <p className="text-muted-foreground text-sm">{createdAt}</p>
         </div>
       );
     },
@@ -207,6 +218,7 @@ function DeploymentsTable() {
         columns={columnsWithData}
         rowKey={(row) => row.id}
         data={deployments}
+        className="mb-8 overflow-auto"
       />
     </>
   );

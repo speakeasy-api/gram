@@ -62,8 +62,9 @@ export function Button({
     icon?: IconName;
     iconAfter?: boolean;
     caps?: boolean;
+    href?: string;
   }) {
-  const Comp = asChild ? Slot : "button";
+  const Comp: React.ElementType = asChild ? Slot : (props.href ? "a" : "button");
 
   const iconColors = {
     default: "text-primary-foreground/60 group-hover:text-primary-foreground",
@@ -96,6 +97,24 @@ export function Button({
       }
     : undefined;
 
+  // We do it like this because certain Comps need a single child
+  let childrenWithIcons = props.children;
+  if (icon && !iconAfter) {
+    childrenWithIcons = (
+      <>
+        {icon}
+        {props.children}
+      </>
+    );
+  } else if (icon && iconAfter) {
+    childrenWithIcons = (
+      <>
+        {props.children}
+        {icon}
+      </>
+    );
+  }
+
   const base = (
     <Comp
       data-slot="button"
@@ -105,11 +124,9 @@ export function Button({
         caps && "uppercase font-mono"
       )}
       {...props}
-      onClick={onClick}
+      {...(onClick ? { onClick } : {})}
     >
-      {!iconAfter && icon}
-      {props.children}
-      {iconAfter && icon}
+      {childrenWithIcons}
     </Comp>
   );
 

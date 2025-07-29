@@ -3,14 +3,16 @@ import { Heading } from "@/components/ui/heading";
 import { HumanizeDateTime } from "@/lib/dates";
 import { cn, getServerURL } from "@/lib/utils";
 import {
+  useDeploymentLogs,
   useDeploymentLogsSuspense,
   useDeploymentSuspense,
 } from "@gram/client/react-query";
+import { Icon } from "@speakeasy-api/moonshine";
 import { Suspense } from "react";
 import { useParams } from "react-router";
 import { DeploymentLink } from "./Deployments";
-import { Icon } from "@speakeasy-api/moonshine";
 import { ToolsList } from "./ToolsList";
+import { Type } from "@/components/ui/type";
 
 export default function DeploymentPage() {
   const { deploymentId } = useParams();
@@ -56,13 +58,13 @@ function DeploymentLogs(props: { deploymentId: string }) {
           Overview
         </Heading>
         <dl className="grid grid-cols-[max-content_1fr] gap-x-4">
-          <dt>Created</dt>
+          <dt><Type muted>Created</Type></dt>
           <dd>
             <HumanizeDateTime date={deployment.createdAt} />
           </dd>
           {deployment.clonedFrom ? (
             <>
-              <dt>Predecessor</dt>
+              <dt><Type muted>Predecessor</Type></dt>
               <dd>
                 <DeploymentLink id={deployment.clonedFrom} />
               </dd>
@@ -72,9 +74,9 @@ function DeploymentLogs(props: { deploymentId: string }) {
       </div>
       <div className="mb-6">
         <Heading variant="h2" className="mb-4">
-          OpenAPI Assets
+          OpenAPI Documents
         </Heading>
-        <ul className="flex gap-4 flex-wrap">
+        <ul className="flex gap-2 flex-wrap">
           {deployment.openapiv3Assets.map((asset) => {
             const downloadURL = new URL(
               "/rpc/assets.serveOpenAPIv3",
@@ -85,22 +87,20 @@ function DeploymentLogs(props: { deploymentId: string }) {
             return (
               <li
                 key={asset.id}
-                className="text-xl flex flex-nowrap gap-1 items-center"
+                className="text-xl flex flex-nowrap gap-1 items-center bg-muted py-1 px-2 rounded-md"
               >
-                <Icon name="file-text" size="small" className="text-muted-foreground" />
+                <Icon
+                  name="file-text"
+                  size="small"
+                  className="text-muted-foreground"
+                />
                 <a href={`${downloadURL}`} download>
-                  {asset.name}
+                  <Type>{asset.name}</Type>
                 </a>
               </li>
             );
           })}
         </ul>
-      </div>
-      <div className="mb-6">
-        <Heading variant="h2" className="mb-4">
-          Tools
-        </Heading>
-        <ToolsList deploymentId={deploymentId} />
       </div>
       <div className="mb-6">
         <Heading variant="h2" className="mb-4">
@@ -129,6 +129,39 @@ function DeploymentLogs(props: { deploymentId: string }) {
           })}
         </ol>
       </div>
+      <div className="mb-8 pb-8">
+        <Heading variant="h2" className="mb-4">
+          Tools
+        </Heading>
+        <ToolsList deploymentId={deploymentId} />
+      </div>
     </>
+  );
+}
+
+export function useDeploymentLogsSummary(deploymentId: string | undefined) {
+  const { data: logs } = useDeploymentLogs(
+    { deploymentId: deploymentId! },
+    undefined,
+    {
+      staleTime: Infinity,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+      enabled: !!deploymentId,
+    }
+  );
+
+  return logs?.events.reduce(
+    (acc, event) => {
+      if (event.message.includes("skipped")) {
+        acc.skipped++;
+      }
+      // Skipped are also errors
+      if (event.event.includes("error")) {
+        acc.errors++;
+      }
+      return acc;
+    },
+    { skipped: 0, errors: 0 }
   );
 }

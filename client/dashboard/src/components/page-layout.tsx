@@ -86,7 +86,7 @@ function PageSectionComponent({ children }: { children: React.ReactNode }) {
             {slots.title}
             {slots.description}
           </Stack>
-          <Stack direction="horizontal" gap={1} align="center">
+          <Stack direction="horizontal" gap={2} align="center">
             {slots.ctas.map((cta) => cta)}
             {slots.moreActions}
           </Stack>

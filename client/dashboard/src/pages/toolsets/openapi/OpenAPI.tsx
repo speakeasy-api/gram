@@ -8,14 +8,17 @@ import { Spinner } from "@/components/ui/spinner";
 import { UpdatedAt } from "@/components/updated-at";
 import FileUpload from "@/components/upload";
 import { useSdkClient } from "@/contexts/Sdk";
-import { getServerURL } from "@/lib/utils";
+import { cn, getServerURL } from "@/lib/utils";
+import { useDeploymentLogsSummary } from "@/pages/deployments/Deployment";
 import { UploadedDocument } from "@/pages/onboarding/Wizard";
+import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
 import {
   useLatestDeployment,
   useListAssets,
 } from "@gram/client/react-query/index.js";
-import { useEffect, useState } from "react";
+import { Icon } from "@speakeasy-api/moonshine";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -59,6 +62,8 @@ export function useDeploymentIsEmpty() {
 
 export function APIsContent() {
   const client = useSdkClient();
+  const routes = useRoutes();
+
   const { data: deploymentResult, refetch, isLoading } = useLatestDeployment();
   const { data: assets, refetch: refetchAssets } = useListAssets();
   const deployment = deploymentResult?.deployment;
@@ -80,6 +85,7 @@ export function APIsContent() {
     useOnboardingSteps();
 
   const deploymentIsEmpty = useDeploymentIsEmpty();
+  const deploymentLogsSummary = useDeploymentLogsSummary(deployment?.id);
 
   const newDocumentDialog = (
     <Dialog
@@ -106,6 +112,41 @@ export function APIsContent() {
       </Dialog.Content>
     </Dialog>
   );
+
+
+  const logsCta = useMemo(() => {
+    if (!deployment || !deploymentLogsSummary) {
+      return null;
+    }
+
+    const hasErrors = deploymentLogsSummary.errors > 0;
+    const hasSkipped = deploymentLogsSummary.skipped > 0;
+
+    const icon = hasErrors ? (
+      <Icon name="triangle-alert" className="text-yellow-500" />
+    ) : (
+      <Icon name="history" className="text-muted-foreground" />
+    );
+
+    let tooltip = undefined;
+    if (hasSkipped) {
+      tooltip = "Some operations were skipped";
+    } else if (hasErrors) {
+      tooltip = "Deployment completed with errors";
+    }
+
+    return (
+      <Page.Section.CTA
+        variant="ghost"
+        href={routes.deployments.deployment.href(deployment.id)}
+        tooltip={tooltip}
+        className={cn(hasErrors && "text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/20!")}
+      >
+        {icon}
+        History
+      </Page.Section.CTA>
+    );
+  }, [deployment, deploymentLogsSummary]);
 
   if (!isLoading && deploymentIsEmpty) {
     return (
@@ -151,6 +192,7 @@ export function APIsContent() {
       <Page.Section.Description>
         OpenAPI documents providing tools for your toolsets
       </Page.Section.Description>
+      {logsCta}
       <Page.Section.CTA
         onClick={() => setNewDocumentDialogOpen(true)}
         icon="plus"
