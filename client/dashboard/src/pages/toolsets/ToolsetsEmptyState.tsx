@@ -10,7 +10,7 @@ export function ToolsetsEmptyState({
   onCreateToolset: () => void;
 }) {
   const cta = (
-    <Button size="sm" onClick={onCreateToolset}>
+    <Button size="sm" onClick={onCreateToolset} caps>
       Create a toolset
     </Button>
   );

@@ -4,7 +4,7 @@ import { CheckCircle } from "lucide-react";
 
 export function ApisEmptyState({ onNewUpload }: { onNewUpload: () => void }) {
   const cta = (
-    <Button size="sm" onClick={onNewUpload}>
+    <Button size="sm" onClick={onNewUpload} caps>
       Upload OpenAPI
     </Button>
   );

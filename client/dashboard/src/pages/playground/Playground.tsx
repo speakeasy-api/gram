@@ -26,7 +26,6 @@ import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { ToolsetView } from "../toolsets/Toolset";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
-import { AgentifyProvider } from "./Agentify";
 import { ChatProvider, useChatContext } from "./ChatContext";
 import { ChatConfig } from "./ChatWindow";
 import { PlaygroundRHS } from "./PlaygroundRHS";
@@ -34,9 +33,7 @@ import { PlaygroundRHS } from "./PlaygroundRHS";
 export default function Playground() {
   return (
     <ChatProvider>
-      <AgentifyProvider>
-        <PlaygroundInner />
-      </AgentifyProvider>
+      <PlaygroundInner />
     </ChatProvider>
   );
 }
@@ -215,11 +212,6 @@ export function ToolsetPanel({
       toolset?.httpTools?.length && toolset.httpTools.length > 40 && isAdmin;
     setDynamicToolset(!!isDynamic);
   }, [toolset, isAdmin, setDynamicToolset]);
-
-  // This is prefetched in PrefetchedQueries, so this state shouldn't be hit
-  if (toolsets === undefined) {
-    return <div>Loading...</div>;
-  }
 
   let content = (
     <ToolsetView

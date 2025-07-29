@@ -8,7 +8,7 @@ export function CustomToolsEmptyState({
   onCreateCustomTool: () => void;
 }) {
   const cta = (
-    <Button size="sm" onClick={onCreateCustomTool}>
+    <Button size="sm" onClick={onCreateCustomTool} caps>
       Create a custom tool
     </Button>
   );

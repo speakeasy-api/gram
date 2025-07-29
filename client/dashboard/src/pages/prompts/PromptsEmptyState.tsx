@@ -9,7 +9,7 @@ export function PromptsEmptyState({
   onCreatePrompt: () => void;
 }) {
   const cta = (
-    <Button size="sm" onClick={onCreatePrompt}>
+    <Button size="sm" onClick={onCreatePrompt} caps>
       Create a prompt
     </Button>
   );

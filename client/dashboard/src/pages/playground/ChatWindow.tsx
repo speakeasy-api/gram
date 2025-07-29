@@ -1,10 +1,12 @@
 import { AutoSummarizeBadge } from "@/components/auto-summarize-badge";
 import { HttpRoute } from "@/components/http-route";
 import { ProjectAvatar } from "@/components/project-menu";
+import { Link } from "@/components/ui/link";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
+import { Telemetry, useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
 import { Message, useChat } from "@ai-sdk/react";
 import { HTTPToolDefinition } from "@gram/client/models/components";
@@ -152,11 +154,14 @@ function ChatInner({
   );
 
   const executeHttpToolFn =
-    (tool: HTTPToolDefinition, toolsetSlug: string) => async (args: unknown) => {
+    (tool: HTTPToolDefinition, toolsetSlug: string) =>
+    async (args: unknown) => {
       const response = await fetch(
         `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
           tool.id
-        }&environment_slug=${configRef.current.environmentSlug}&chat_id=${chat.id}&toolset_slug=${toolsetSlug}`,
+        }&environment_slug=${configRef.current.environmentSlug}&chat_id=${
+          chat.id
+        }&toolset_slug=${toolsetSlug}`,
         {
           method: "POST",
           headers: {
@@ -189,7 +194,10 @@ function ChatInner({
             path: tool.path,
             description: tool.description,
             parameters: jsonSchema(tool.schema ? JSON.parse(tool.schema) : {}),
-            execute: executeHttpToolFn(tool, configRef.current.toolsetSlug || ""),
+            execute: executeHttpToolFn(
+              tool,
+              configRef.current.toolsetSlug || ""
+            ),
           },
         ];
       }) ?? []
@@ -486,7 +494,7 @@ function ChatInner({
                 <ProjectAvatar project={project} className="h-6 w-6" />
               ),
             },
-            toolCall: toolCallComponents(allTools),
+            toolCall: toolCallComponents(allTools, telemetry),
           },
         }}
         modelSelector={{
@@ -504,7 +512,7 @@ function ChatInner({
   );
 }
 
-const toolCallComponents = (tools: Toolset) => {
+const toolCallComponents = (tools: Toolset, telemetry: Telemetry) => {
   const JsonDisplay = ({ json }: { json: string }) => {
     let pretty = json;
     // Particularly when loading chat history from the database, the JSON formatting needs to be restored
@@ -568,9 +576,21 @@ const toolCallComponents = (tools: Toolset) => {
           )}
           {hasSummary && <AutoSummarizeBadge />}
           {isTooLong && (
-            <Type variant="small" muted>
-              (truncated)
-            </Type>
+            <SimpleTooltip tooltip="Response is too long and has been truncated to avoid bricking your playground's context window. Consider using reponse filtering (click to learn more).">
+              <Link
+                to="https://docs.getgram.ai/concepts/openapi#response-filtering"
+                target="_blank"
+                onClick={() => {
+                  telemetry.capture("feature_requested", {
+                    action: "response_filtering",
+                  });
+                }}
+              >
+                <Type variant="small" muted>
+                  (truncated)
+                </Type>
+              </Link>
+            </SimpleTooltip>
           )}
         </Stack>
       );

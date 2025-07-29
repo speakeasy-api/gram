@@ -4,7 +4,6 @@ import { Message } from "@ai-sdk/react";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { SdkContent } from "../sdk/SDK";
-import { AgentifyButton } from "./Agentify";
 import { ChatConfig, ChatWindow } from "./ChatWindow";
 import { PanelHeader } from "./Playground";
 
@@ -16,15 +15,6 @@ export function PlaygroundRHS({
   dynamicToolset: boolean;
 }) {
   const [activeTab, setActiveTab] = useState<"chat" | "agents">("chat");
-
-  const agentifyButton = (
-    <AgentifyButton
-      toolsetSlug={configRef.current.toolsetSlug ?? ""}
-      environmentSlug={configRef.current.environmentSlug ?? ""}
-      key="agentify-button"
-      onAgentify={() => setActiveTab("agents")}
-    />
-  );
 
   const initialMessages: Message[] = [
     {
@@ -55,7 +45,6 @@ export function PlaygroundRHS({
           <ChatWindow
             configRef={configRef}
             dynamicToolset={dynamicToolset}
-            additionalActions={agentifyButton}
             initialMessages={initialMessages}
           />
         </TabsContent>

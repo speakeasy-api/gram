@@ -295,7 +295,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         </Block>
         <Block label="Custom Domain">
           <BlockInner>
-            <Stack direction="horizontal" align="center" className="select-all">
+            <Stack direction="horizontal" align="center">
               <Type mono small>
                 {toolset.mcpSlug && customServerURL
                   ? `${customServerURL}/mcp/`

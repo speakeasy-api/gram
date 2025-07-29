@@ -29,6 +29,7 @@ import { ToolSelectDialog } from "./ToolSelectDialog";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
 import { ToolDefinition, useToolDefinitions } from "./types";
+import { ToolsetEmptyState } from "./ToolsetEmptyState";
 
 export function useDeleteToolset({
   onSuccess,
@@ -199,7 +200,7 @@ export function ToolsetView({
           },
         ]}
       />
-      <Button icon="plus" onClick={gotoAddTools} caps>
+      <Button icon="plus" onClick={gotoAddTools} caps size="sm">
         Add/Remove Tools
       </Button>
     </Stack>
@@ -262,6 +263,9 @@ export function ToolsetView({
               />
             ))}
           </Cards>
+          {toolsToDisplay.length === 0 && (
+            <ToolsetEmptyState toolsetSlug={toolsetSlug} />
+          )}
         </TabsContent>
         <TabsContent value="prompts">
           {toolset && (

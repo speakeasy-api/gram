@@ -173,13 +173,15 @@ export function EmptyState({
 
   let CTA: React.ReactNode = (
     <routes.onboarding.Link>
-      <Button size="sm">Get Started</Button>
+      <Button size="sm" caps>
+        Get Started
+      </Button>
     </routes.onboarding.Link>
   );
 
   if (isLoading) {
     CTA = (
-      <Button disabled size="sm">
+      <Button disabled size="sm" caps>
         Checking project...
       </Button>
     );
