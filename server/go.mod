@@ -51,8 +51,8 @@ require (
 	go.temporal.io/sdk/contrib/opentelemetry v0.6.0
 	go.uber.org/automaxprocs v1.6.0
 	goa.design/clue v1.2.1
-	goa.design/goa/v3 v3.21.1
-	goa.design/plugins/v3 v3.21.1
+	goa.design/goa/v3 v3.21.5
+	goa.design/plugins/v3 v3.21.5
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
 	k8s.io/client-go v0.33.2
