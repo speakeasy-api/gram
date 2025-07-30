@@ -1,12 +1,10 @@
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
 import {
-  SimpleTooltip,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -195,32 +193,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       </Button>
     );
 
-  const publicToggle = (
-    <SimpleTooltip
-      tooltip={
-        mcpIsPublic
-          ? "This MCP server can be used without a Gram API Key."
-          : "This MCP server is only visible to users with a Gram API Key."
-      }
-    >
-      <div className="flex items-center gap-2 border-1 rounded-sm px-2 py-1">
-        <Checkbox
-          checked={mcpIsPublic}
-          onCheckedChange={(checked) => setMcpIsPublic(!!checked)}
-          id={`mcp-public-checkbox-${toolset.slug}`}
-        />
-        <label
-          htmlFor={`mcp-public-checkbox-${toolset.slug}`}
-          className="font-medium select-none cursor-pointer"
-        >
-          <Type small>Public</Type>
-        </label>
-      </div>
-    </SimpleTooltip>
-  );
-
-  const anyChanges =
-    mcpIsPublic !== toolset.mcpIsPublic || mcpSlug !== toolset.mcpSlug;
+  const anyChanges = mcpSlug !== toolset.mcpSlug;
 
   const saveButton = (
     <Button
@@ -235,6 +208,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           },
         });
       }}
+      size="sm"
       disabled={!!mcpSlugError || !mcpSlug || !anyChanges}
     >
       Save
@@ -249,17 +223,96 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         setMcpSlug(toolset.mcpSlug || "");
         setMcpIsPublic(toolset.mcpIsPublic);
       }}
-      className="mr-2"
     >
       Discard
     </Button>
   );
 
+  const PublicToggle = ({ isPublic }: { isPublic: boolean }) => {
+    const classes = {
+      both: "px-2 py-1 rounded-sm border-1 w-full",
+      active: "border-border bg-card text-foreground",
+      inactive:
+        "border-transparent text-muted-foreground hover:bg-card hover:cursor-pointer hover:border-border hover:text-foreground",
+      activeText: "text-foreground!",
+      inactiveText: "text-muted-foreground! italic",
+    };
+
+    const onToggle = () => {
+      setMcpIsPublic(!isPublic);
+      updateToolsetMutation.mutate({
+        request: {
+          slug: toolset.slug,
+          updateToolsetRequestBody: { mcpIsPublic: !isPublic },
+        },
+      });
+      toast.success(
+        !isPublic
+          ? "Your MCP server is now public"
+          : "Your MCP server is now private"
+      );
+    };
+
+    const toggle = (
+      <Stack
+        align="center"
+        gap={1}
+        className="border rounded-md p-1 w-fit bg-background"
+      >
+        <Button
+          icon={"globe"}
+          variant="outline"
+          size="sm"
+          className={cn(
+            classes.both,
+            isPublic ? classes.active : classes.inactive
+          )}
+          {...(!isPublic ? { onClick: onToggle } : {})}
+        >
+          Public
+        </Button>
+        <Button
+          icon={"lock"}
+          variant="outline"
+          size="sm"
+          className={cn(
+            classes.both,
+            !isPublic ? classes.active : classes.inactive
+          )}
+          {...(isPublic ? { onClick: onToggle } : {})}
+        >
+          Private
+        </Button>
+      </Stack>
+    );
+
+    return (
+      <Stack direction="horizontal" align="center" gap={3} className="mt-2">
+        {toggle}
+        <Stack className="gap-4.5">
+          <Type
+            small
+            className={cn(isPublic ? classes.activeText : classes.inactiveText)}
+          >
+            Anyone with the URL can read the tools hosted by this server.
+            Authentication is still required to use the tools.
+          </Type>
+          <Type
+            small
+            className={cn(isPublic ? classes.inactiveText : classes.activeText)}
+          >
+            Only users with a Gram API Key can read the tools hosted by this
+            server.
+          </Type>
+        </Stack>
+      </Stack>
+    );
+  };
+
   return (
     <Stack className="mb-4">
       <PageSection
         heading="Hosted URL"
-        headingRHS={publicToggle}
         description="The URL you or your users will use to access this MCP server."
       >
         <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
@@ -290,6 +343,15 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
                   disabled={!toolset.customDomainId}
                 />
               )}
+              <Stack
+                direction="horizontal"
+                gap={1}
+                align="center"
+                className="ml-auto"
+              >
+                {discardButton}
+                {saveButton}
+              </Stack>
             </Stack>
           </BlockInner>
         </Block>
@@ -310,32 +372,45 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
             </Stack>
           </BlockInner>
         </Block>
-        <div className="ml-auto">
-          {discardButton}
-          {saveButton}
-        </div>
+      </PageSection>
+      <PageSection
+        heading="Visibility"
+        description="Make your MCP server visible to the world, or protected behind a Gram key."
+      >
+        <PublicToggle isPublic={mcpIsPublic ?? false} />
       </PageSection>
       <PageSection
         heading="MCP Installation"
         description="Use these configs to connect to this MCP server from a client like
           Cursor or Claude Desktop."
       >
-        {toolset.mcpIsPublic && (
-          <Stack className="mt-2" gap={1}>
-            <Stack direction="horizontal" align="center" gap={2}>
-              <CodeBlock>{`${mcpUrl}/install`}</CodeBlock>
-              <Link external to={`${mcpUrl}/install`} noIcon>
-                <Button variant="outline" size="sm" className="px-8">
-                  View
-                </Button>
-              </Link>
-            </Stack>
-            <Type muted small>
-              A shareable page for installing your MCP server. Try it in the
-              browser!
-            </Type>
+        <Stack className="mt-2" gap={1}>
+          <Stack direction="horizontal" align="center" gap={2}>
+            <CodeBlock
+              copyable={toolset.mcpIsPublic}
+            >{`${mcpUrl}/install`}</CodeBlock>
+            <Link external to={`${mcpUrl}/install`} noIcon>
+              <Button
+                variant="outline"
+                className="px-4"
+                icon={"external-link"}
+                iconAfter
+                disabled={!toolset.mcpIsPublic}
+                tooltip={
+                  toolset.mcpIsPublic
+                    ? "Open the install page"
+                    : "Make your MCP server public to view the installation page."
+                }
+              >
+                View
+              </Button>
+            </Link>
           </Stack>
-        )}
+          <Type muted small>
+            A shareable page for installing your MCP server. Try it in the
+            browser!
+          </Type>
+        </Stack>
         <MCPJson toolset={toolset} />
       </PageSection>
       <FeatureRequestModal
@@ -364,13 +439,11 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
 
 function PageSection({
   heading,
-  headingRHS,
   description,
   children,
   className,
 }: {
   heading: string;
-  headingRHS?: React.ReactNode;
   description: string;
   fullWidth?: boolean;
   children: React.ReactNode;
@@ -378,10 +451,7 @@ function PageSection({
 }) {
   return (
     <Stack gap={2} className={cn("mb-8", className)}>
-      <Stack direction="horizontal" align="center" justify="space-between">
-        <Heading variant="h3">{heading}</Heading>
-        {headingRHS}
-      </Stack>
+      <Heading variant="h3">{heading}</Heading>
       <Type muted small className="max-w-2xl">
         {description}
       </Type>
@@ -409,48 +479,35 @@ export function MCPJson({
     });
   };
 
-  const publicSettingsJson =
-    toolset.mcpIsPublic &&
-    mcpJsonPublic &&
-    ((
-      <Grid.Item>
-        <Type className="font-medium">Public Server</Type>
-        <Type muted small className="max-w-3xl mb-2!">
-          Pass API credentials directly to the MCP server.
-        </Type>
-        <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
-      </Grid.Item> // This any is necessary because the Grid API is a bit messed up and doesn't accept null elements
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ) as any);
-
   return (
     <Grid
       gap={4}
       className="my-4!"
-      columns={
-        publicSettingsJson || !fullWidth
-          ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 }
-          : 1
-      }
+      columns={!fullWidth ? { xs: 1, md: 2, lg: 2, xl: 2, "2xl": 2 } : 1}
     >
-      {publicSettingsJson}
       <Grid.Item>
-        <Type className="font-medium">
-          Authenticated Server{" "}
-          <span className="text-muted-foreground font-normal">
-            (with Gram key)
+        <Type className="font-medium">Pass-through Authentication</Type>
+        <Type muted small className="max-w-3xl mb-2!">
+          Pass API credentials directly to the MCP server.
+          <br />
+          <span
+            className={
+              !toolset.mcpIsPublic
+                ? "font-medium text-warning-foreground"
+                : "italic"
+            }
+          >
+            Requires a Gram API key if the server is not public.
           </span>
         </Type>
+        <CodeBlock onCopy={onCopy}>{mcpJsonPublic}</CodeBlock>
+      </Grid.Item>
+      <Grid.Item>
+        <Type className="font-medium">Managed Authentication</Type>
         <Type muted small className="max-w-3xl mb-2!">
-          {toolset.mcpIsPublic ? (
-            "Use preset gram environments with an MCP server."
-          ) : (
-            <>
-              This server can only be accessed using a Gram API Key. Either use
-              a preset Gram environment or pass API credentials directly to the
-              MCP server.
-            </>
-          )}
+          Manage API authentication with Gram environments.
+          <br />
+          Users need a single Gram API Key rather than bringing their own keys.
         </Type>
         <CodeBlock onCopy={onCopy}>{mcpJsonInternal}</CodeBlock>
       </Grid.Item>
@@ -483,6 +540,11 @@ export const useMcpConfigs = (toolset: Toolset | undefined) => {
       `MCP-${header.replace(/_/g, "-")}:${"${VALUE}"}`,
     ]),
   ];
+
+  if (!toolset.mcpIsPublic) {
+    mcpJsonPublicArgs.push("--header", "Authorization:${GRAM_KEY}");
+  }
+
   // Indent each line of the header args array by 8 spaces for alignment
   const INDENT = " ".repeat(8);
   const argsStringIndented = JSON.stringify(mcpJsonPublicArgs, null, 2)
@@ -496,7 +558,10 @@ export const useMcpConfigs = (toolset: Toolset | undefined) => {
       .replace(/-/g, "")
       .replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
-      "args": ${argsStringIndented}
+      "args": ${argsStringIndented}${!toolset.mcpIsPublic ? `,
+      "env": {
+        "GRAM_KEY": "Bearer <your-key-here>"
+      }` : ""}
     }
   }
 }`;
