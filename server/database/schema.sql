@@ -265,6 +265,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   summarizer TEXT,
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
+  untruncated_name TEXT,
   summary TEXT NOT NULL,
   description TEXT NOT NULL,
   openapiv3_operation TEXT CHECK (openapiv3_operation <> '' AND CHAR_LENGTH(openapiv3_operation) <= 255),

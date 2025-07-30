@@ -548,6 +548,7 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		HttpMethod:          strings.ToUpper(method),
 		Openapiv3Operation:  conv.ToPGText(truncateWithHash(opID, 255)),
 		Name:                descriptor.name,
+		UntruncatedName:     conv.ToPGTextEmpty(descriptor.untruncatedName),
 		Tags:                tags,
 		Summary:             descriptor.summary,
 		Description:         descriptor.description,
@@ -587,6 +588,7 @@ type toolDescriptor struct {
 	xGramFound          bool
 	xSpeakeasyMCPFound  bool
 	name                string
+	untruncatedName     string
 	summary             string
 	description         string
 	confirm             *mv.Confirm
@@ -600,10 +602,9 @@ type toolDescriptor struct {
 func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, opID string, op *v3.Operation) toolDescriptor {
 	gramExtNode, _ := op.Extensions.Get("x-gram")
 	speakeasyExtNode, _ := op.Extensions.Get("x-speakeasy-mcp")
-	name := strcase.ToSnake(tools.SanitizeName(fmt.Sprintf("%s_%s", docInfo.Slug, opID)))
-
-	// If name is larger than 100 characters we truncate it and append a hash at the end to make it unique
-	name = truncateWithHash(name, 100)
+	untruncatedName := strcase.ToSnake(tools.SanitizeName(fmt.Sprintf("%s_%s", docInfo.Slug, opID)))
+	// we limit actual tool name to 60 character by default to stay in line with common MCP client restrictions
+	name := truncateWithHash(untruncatedName, 60)
 
 	description := op.Description
 	summary := op.Summary
@@ -614,6 +615,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 		confirm:             conv.Ptr(mv.ConfirmAlways),
 		confirmPrompt:       nil,
 		name:                name,
+		untruncatedName:     untruncatedName,
 		summary:             summary,
 		description:         description,
 		originalName:        nil,
@@ -686,6 +688,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 		xGramFound:          xgram,
 		xSpeakeasyMCPFound:  xspeakeasy,
 		name:                conv.Default(sanitizedName, name),
+		untruncatedName:     untruncatedName,
 		summary:             conv.PtrValOr(customSummary, summary),
 		description:         conv.PtrValOr(customDescription, description),
 		originalName:        conv.PtrEmpty(name),

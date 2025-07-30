@@ -12,7 +12,7 @@ import (
 )
 
 const listDeploymentTools = `-- name: ListDeploymentTools :many
-SELECT id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
+SELECT id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
 FROM http_tool_definitions
 WHERE deployment_id = $1
 `
@@ -35,6 +35,7 @@ func (q *Queries) ListDeploymentTools(ctx context.Context, deploymentID uuid.UUI
 			&i.ConfirmPrompt,
 			&i.Summarizer,
 			&i.Name,
+			&i.UntruncatedName,
 			&i.Summary,
 			&i.Description,
 			&i.Openapiv3Operation,

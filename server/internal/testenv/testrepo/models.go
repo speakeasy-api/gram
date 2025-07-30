@@ -19,6 +19,7 @@ type HttpToolDefinition struct {
 	ConfirmPrompt       pgtype.Text
 	Summarizer          pgtype.Text
 	Name                string
+	UntruncatedName     pgtype.Text
 	Summary             string
 	Description         string
 	Openapiv3Operation  pgtype.Text

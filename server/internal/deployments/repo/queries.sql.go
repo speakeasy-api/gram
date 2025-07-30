@@ -285,6 +285,7 @@ INSERT INTO http_tool_definitions (
   , deployment_id
   , openapiv3_document_id
   , name
+  , untruncated_name
   , openapiv3_operation
   , summary
   , description
@@ -334,8 +335,9 @@ INSERT INTO http_tool_definitions (
   , $24
   , $25
   , $26
+  , $27
 )
-RETURNING id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
+RETURNING id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenAPIv3ToolDefinitionParams struct {
@@ -343,6 +345,7 @@ type CreateOpenAPIv3ToolDefinitionParams struct {
 	DeploymentID        uuid.UUID
 	Openapiv3DocumentID uuid.NullUUID
 	Name                string
+	UntruncatedName     pgtype.Text
 	Openapiv3Operation  pgtype.Text
 	Summary             string
 	Description         string
@@ -373,6 +376,7 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		arg.DeploymentID,
 		arg.Openapiv3DocumentID,
 		arg.Name,
+		arg.UntruncatedName,
 		arg.Openapiv3Operation,
 		arg.Summary,
 		arg.Description,
@@ -406,6 +410,7 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 		&i.ConfirmPrompt,
 		&i.Summarizer,
 		&i.Name,
+		&i.UntruncatedName,
 		&i.Summary,
 		&i.Description,
 		&i.Openapiv3Operation,
