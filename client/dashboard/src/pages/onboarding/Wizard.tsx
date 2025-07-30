@@ -14,7 +14,6 @@ import { Type } from "@/components/ui/type";
 import FileUpload from "@/components/upload";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { useApiError } from "@/hooks/useApiError";
 import { slugify } from "@/lib/constants";
 import { useGroupedHttpTools } from "@/lib/toolNames";
@@ -291,7 +290,6 @@ const UploadStep = ({
     undoSpecUpload,
   } = useOnboardingSteps(undefined, false);
 
-  const telemetry = useTelemetry();
   const [deploymentToShowLogsFor, setDeploymentToShowLogsFor] =
     useState<string>();
 
@@ -340,15 +338,12 @@ const UploadStep = ({
     setToolsetName(slugify(apiName || "my-toolset"));
     const deployment = await createDeployment();
 
-    if (deployment?.toolCount === 0) {
+    if (deployment?.toolCount === 0 || deployment?.status === "failed") {
       setDeploymentToShowLogsFor(deployment?.id);
       toast.error("Unable to create tools from your OpenAPI spec");
-      telemetry.capture("onboarding_event", {
-        action: "no_tools_found",
-        error: "no_tools_found",
-      });
       return;
     }
+
     setCurrentStep("toolset");
   };
 
@@ -363,8 +358,10 @@ const UploadStep = ({
       {content}
       {deploymentToShowLogsFor && (
         <Expandable>
-          <Expandable.Trigger className="text-destructive-foreground">
-            Unable to create tools from your OpenAPI spec
+          <Expandable.Trigger>
+            <Type small destructive>
+              Unable to create tools from your OpenAPI spec
+            </Type>
           </Expandable.Trigger>
           <Expandable.Content>
             <DeploymentLogs deploymentId={deploymentToShowLogsFor} onlyErrors />

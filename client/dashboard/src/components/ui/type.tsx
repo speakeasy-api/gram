@@ -12,6 +12,7 @@ export function Type({
   italic,
   mono,
   small,
+  destructive,
   ...props
 }: {
   variant?: "subheading" | "body" | "small";
@@ -20,6 +21,7 @@ export function Type({
   mono?: boolean;
   small?: boolean;
   skeleton?: "word" | "phrase" | "line" | "paragraph";
+  destructive?: boolean;
 } & React.ComponentProps<"p">) {
   if (children === undefined) {
     const variantHeight = {
@@ -75,6 +77,8 @@ export function Type({
 
   if (muted) {
     baseClass += " text-muted-foreground";
+  } else if (destructive) {
+    baseClass += " text-destructive-foreground";
   } else {
     baseClass += " text-stone-800 dark:text-stone-200";
   }

@@ -161,7 +161,7 @@ export function useOnboardingSteps(existingDocumentSlug?: string, checkDocumentS
     }
 
     // Wait for deployment to finish
-    while (deployment.status !== "completed") {
+    while (deployment.status !== "completed" && deployment.status !== "failed") {
       await new Promise((resolve) => setTimeout(resolve, 100));
       deployment = await client.deployments.getById({
         id: deployment.id,
@@ -171,10 +171,23 @@ export function useOnboardingSteps(existingDocumentSlug?: string, checkDocumentS
     setDeployment(deployment);
     setCreatingDeployment(false);
 
-    telemetry.capture("onboarding_event", {
-      action: "deployment_created",
-      num_tools: deployment?.toolCount,
-    });
+    if (deployment.status === "failed") {
+      telemetry.capture("onboarding_event", {
+        action: "deployment_failed",
+      });
+    } else {
+      telemetry.capture("onboarding_event", {
+        action: "deployment_created",
+        num_tools: deployment?.toolCount,
+      });
+    }
+
+    if (deployment?.toolCount === 0) {
+      telemetry.capture("onboarding_event", {
+        action: "no_tools_found",
+        error: "no_tools_found",
+      });
+    }
 
     return deployment;
   };
