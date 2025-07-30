@@ -33,6 +33,7 @@ import { useChatHistory } from "./ChatHistory";
 import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useMiniModel, useModel } from "./Openrouter";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
+import { onboardingStepStorageKeys } from "../home/Home";
 
 // Ignore int32 format instead of erroring out
 const ajv = new Ajv({ formats: { int32: true } });
@@ -432,6 +433,8 @@ function ChatInner({
           model,
           message: msg,
         });
+
+        localStorage.setItem(onboardingStepStorageKeys.test, "true");
       }
 
       await append({

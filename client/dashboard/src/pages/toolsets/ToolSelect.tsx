@@ -31,6 +31,7 @@ import { useCustomTools } from "../toolBuilder/CustomTools";
 import { MustacheHighlight } from "../toolBuilder/ToolBuilder";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { UpdatedAt } from "@/components/updated-at";
+import { onboardingStepStorageKeys } from "../home/Home";
 
 type Tool = HTTPToolDefinition & { displayName: string };
 
@@ -200,6 +201,10 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
       refetch();
     },
   });
+
+  useEffect(() => {
+    localStorage.setItem(onboardingStepStorageKeys.curate, "true");
+  }, []);
 
   useEffect(() => {
     setSelectedTools(toolset?.httpTools.map((t) => t.canonicalName) ?? []);

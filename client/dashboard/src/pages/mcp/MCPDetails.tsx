@@ -30,6 +30,7 @@ import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { Block, BlockInner } from "../toolBuilder/components";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
+import { onboardingStepStorageKeys } from "../home/Home";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -39,6 +40,10 @@ export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
 
   const toolset = useToolsetSuspense({ slug: toolsetSlug! });
+
+  useEffect(() => {
+    localStorage.setItem(onboardingStepStorageKeys.configure, "true");
+  }, []);
 
   return (
     <Stack>

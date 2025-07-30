@@ -26,7 +26,7 @@ import { useRoutes } from "@/routes";
 import { Toolset } from "@gram/client/models/components";
 import { useListToolsets } from "@gram/client/react-query";
 import { Grid, Icon, IconName, Stack } from "@speakeasy-api/moonshine";
-import { ArrowRightIcon, CheckCircleIcon, LockIcon } from "lucide-react";
+import { ArrowRightIcon, Check, CheckCircleIcon, LockIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useMcpUrl } from "../mcp/MCPDetails";
 import { MCPEmptyState } from "../mcp/MCPEmptyState";
@@ -37,7 +37,7 @@ export default function Home() {
     <Page>
       <Page.Header>
         {/* Custom max width is to account for the extra padding which is needed to accomodate the carousel */}
-        <Page.Header.Breadcrumbs className="max-w-[1210px]" /> 
+        <Page.Header.Breadcrumbs className="max-w-[1210px]" />
       </Page.Header>
       <Page.Body className="overflow-visible px-16">
         <Stack className="mb-4">
@@ -52,11 +52,21 @@ export default function Home() {
   );
 }
 
+export const onboardingStepStorageKeys = {
+  test: "onboarding_playground_completed",
+  curate: "onboarding_toolsets_completed",
+  configure: "onboarding_mcp_config_completed",
+};
+
 function HomeContent() {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { data: toolsets } = useListToolsets();
   const [selectedToolset, setSelectedToolset] = useState<Toolset | null>(null);
+
+  const isStepCompleted = (storageKey: string) => {
+    return localStorage.getItem(storageKey) === "true";
+  };
 
   useEffect(() => {
     if (toolsets?.toolsets.length) {
@@ -66,25 +76,31 @@ function HomeContent() {
 
   const cards = [
     {
+      number: 1,
       icon: "message-circle",
       title: "Try it in the playground",
       description:
         "Try out your MCP server in the playground. Easily test and iterate.",
       link: routes.playground.href(),
+      storageKey: onboardingStepStorageKeys.test,
     },
     {
+      number: 2,
       icon: "blocks",
       title: "Curate your tools",
       description:
         "Create toolsets for different purposes. Maximize both user and LLM success.",
       link: routes.toolsets.toolset.href(selectedToolset?.slug ?? "_"),
+      storageKey: onboardingStepStorageKeys.curate,
     },
     {
+      number: 3,
       icon: "cog",
       title: "Configure your MCP server",
       description:
         "Choose your server settings. Control visibility, name, and more.",
       link: routes.mcp.details.href(selectedToolset?.slug ?? "_"),
+      storageKey: onboardingStepStorageKeys.configure,
     },
   ];
 
@@ -122,47 +138,94 @@ function HomeContent() {
       <Heading variant="h2" className="mt-5 mb-4">
         Getting started
       </Heading>
-      <Grid columns={{ sm: 1, md: 2, lg: 3 }} gap={6}>
-        {cards.map((card) => (
-          <Grid.Item key={card.title}>
-            <Card className="bg-sidebar h-[275px]">
-              <Card.Content>
-                <Stack gap={4}>
-                  <Icon
-                    name={card.icon as IconName}
-                    size="large"
-                    className="text-stone-400 dark:text-stone-500"
-                  />
-                  <Link
-                    to={card.link}
-                    onClick={() =>
-                      telemetry.capture("home_action", {
-                        action: "card_clicked",
-                        card: card.title,
-                      })
-                    }
+      <div className="relative">
+        <Grid columns={{ sm: 1, md: 2, lg: 3 }} gap={6}>
+          {cards.map((card, index) => {
+            const isCompleted = isStepCompleted(card.storageKey);
+            const incompleteCards = cards.filter(
+              (c) => !isStepCompleted(c.storageKey)
+            );
+            const isSmallestIncomplete =
+              !isCompleted &&
+              incompleteCards.length > 0 &&
+              incompleteCards[0]?.number === card.number;
+
+            return (
+              <Grid.Item key={card.title} className="relative">
+                {index < cards.length - 1 && (
+                  <div className="hidden lg:block absolute top-1/2 -right-6 w-6 h-0 border-t-2 border-dashed border-muted-foreground/30 transform -translate-y-1/2" />
+                )}
+                <Link
+                  to={card.link}
+                  onClick={() => {
+                    telemetry.capture("home_action", {
+                      action: "card_clicked",
+                      card: card.title,
+                    });
+                  }}
+                  className="block h-full group hover:no-underline"
+                >
+                  <Card
+                    className={cn(
+                      "bg-sidebar h-[275px] relative transition-all duration-200 cursor-pointer group-hover:scale-[1.02] group-hover:shadow-lg",
+                      isSmallestIncomplete && "ring-1 ring-primary/30 shadow-md"
+                    )}
                   >
-                    <Stack
-                      direction="horizontal"
-                      gap={1}
-                      align="center"
-                      className="group"
+                    <div
+                      className={cn(
+                        "absolute top-3 right-3 w-8 h-8 rounded-full border-1  flex items-center justify-center text-sm font-semibold z-20 transition-all duration-200",
+                        isCompleted
+                          ? "bg-success text-success-foreground border-success-foreground w-6 h-6 top-4 right-4"
+                          : "bg-card",
+                        isSmallestIncomplete &&
+                          "bg-primary text-primary-foreground animate"
+                      )}
                     >
-                      <Heading variant="h4" className="font-normal">
-                        {card.title}
-                      </Heading>
-                      <ArrowRightIcon className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </Stack>
-                  </Link>
-                  <Type className="text-[16px] leading-[28px]">
-                    {card.description}
-                  </Type>
-                </Stack>
-              </Card.Content>
-            </Card>
-          </Grid.Item>
-        ))}
-      </Grid>
+                      {isCompleted ? (
+                        <Check className="w-4 h-4" />
+                      ) : (
+                        card.number
+                      )}
+                    </div>
+                    <Card.Content>
+                      <Stack gap={4}>
+                        <Icon
+                          name={card.icon as IconName}
+                          size="large"
+                          className={cn(
+                            "text-stone-400 dark:text-stone-500 transition-all duration-200 group-hover:scale-105",
+                            isSmallestIncomplete && "text-primary"
+                          )}
+                        />
+                        <Stack direction="horizontal" gap={1} align="center">
+                          <Heading
+                            variant="h4"
+                            className={cn(
+                              "font-normal transition-colors duration-200 group-hover:underline",
+                              isSmallestIncomplete && "text-primary"
+                            )}
+                          >
+                            {card.title}
+                          </Heading>
+                          <ArrowRightIcon className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                        </Stack>
+                        <Type
+                          className={cn(
+                            "text-[16px] leading-[28px] transition-colors duration-200",
+                            isSmallestIncomplete && "text-primary/80"
+                          )}
+                        >
+                          {card.description}
+                        </Type>
+                      </Stack>
+                    </Card.Content>
+                  </Card>
+                </Link>
+              </Grid.Item>
+            );
+          })}
+        </Grid>
+      </div>
     </>
   );
 }

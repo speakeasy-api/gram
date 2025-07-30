@@ -130,14 +130,16 @@ export const ToolsBadge = ({
       "An LLM is unlikely to consistently perform well with a toolset of this size. General industry standards recommend keeping MCP servers at around 40 tool or less";
   }
 
+  const anyWarnings = toolsWarnings || toolsSevere;
+
   return toolNames && toolNames.length > 0 ? (
     <Badge
       size={size}
       variant={toolsSevere ? "urgent-warning" : toolsWarnings ? "warning" : variant}
       tooltip={tooltipContent}
-      className={cn(!toolsSevere && !toolsWarnings && "bg-card", className)}
+      className={cn(!anyWarnings && "bg-card", className)}
     >
-      {(toolsWarnings || toolsSevere) && (
+      {anyWarnings && (
         <UrgentWarningIcon 
           className={toolsSevere ? "text-white dark:text-white" : undefined}
         />
