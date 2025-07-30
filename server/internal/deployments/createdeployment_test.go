@@ -145,7 +145,6 @@ func TestDeploymentsService_CreateDeployment_Idempotency(t *testing.T) {
 				},
 				Packages: []*gen.AddDeploymentPackageForm{},
 			})
-
 			if err != nil {
 				return fmt.Errorf("create deployment: %w", err)
 			}

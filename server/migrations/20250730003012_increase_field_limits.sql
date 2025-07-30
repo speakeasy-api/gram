@@ -1,0 +1,2 @@
+-- Modify "http_tool_definitions" table
+ALTER TABLE "http_tool_definitions" DROP CONSTRAINT "http_tool_definitions_openapiv3_operation_check", ADD CONSTRAINT "http_tool_definitions_openapiv3_operation_check" CHECK ((openapiv3_operation <> ''::text) AND (char_length(openapiv3_operation) <= 255)), DROP CONSTRAINT "http_tool_definitions_path_check", ADD CONSTRAINT "http_tool_definitions_path_check" CHECK ((path <> ''::text) AND (char_length(path) <= 2000));

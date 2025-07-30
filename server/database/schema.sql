@@ -267,7 +267,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 100),
   summary TEXT NOT NULL,
   description TEXT NOT NULL,
-  openapiv3_operation TEXT CHECK (openapiv3_operation <> '' AND CHAR_LENGTH(openapiv3_operation) <= 100),
+  openapiv3_operation TEXT CHECK (openapiv3_operation <> '' AND CHAR_LENGTH(openapiv3_operation) <= 255),
   tags TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tags, 1) <= 40),
 
   x_gram BOOLEAN,
@@ -280,7 +280,7 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
   security jsonb,
 
   http_method TEXT NOT NULL CHECK (http_method <> '' AND CHAR_LENGTH(http_method) <= 20),
-  path TEXT NOT NULL CHECK (path <> '' AND CHAR_LENGTH(path) <= 140),
+  path TEXT NOT NULL CHECK (path <> '' AND CHAR_LENGTH(path) <= 2000),
   schema_version TEXT NOT NULL CHECK (schema_version <> '' AND CHAR_LENGTH(schema_version) <= 20),
   schema JSONB,
   header_settings JSONB,

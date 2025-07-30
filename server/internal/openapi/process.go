@@ -2,6 +2,8 @@ package openapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/ettle/strcase"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/pb33f/libopenapi"
@@ -41,6 +44,23 @@ import (
 type ProcessError struct {
 	reason string
 	err    error
+}
+
+// truncateWithHash truncates a string to the specified length and appends a hash if needed
+func truncateWithHash(s string, maxLength int) string {
+	if len(s) <= maxLength {
+		return s
+	}
+
+	hash := sha256.Sum256([]byte(s))
+	hashStr := hex.EncodeToString(hash[:])[:8] // Use first 8 characters of hex hash
+	truncateLength := maxLength - len(hashStr)
+	if truncateLength < 0 {
+		// If maxLength is too small to fit even the hash, just return the hash
+		return hashStr
+	}
+
+	return s[:truncateLength] + hashStr
 }
 
 func tagError(reason string, msg string, keyvals ...any) *ProcessError {
@@ -271,10 +291,16 @@ func (p *ToolExtractor) Do(
 			// TODO: Currently ignoring servers at path item level until we
 			// figure out how to name env variable
 
+			opID := op.operation.OperationId
+			if opID == "" {
+				opID = fmt.Sprintf("%s_%s", op.method, path)
+			}
+
 			def, err := p.extractToolDef(ctx, logger, tx, operationTask{
 				extractTask:      task,
 				method:           op.method,
 				path:             path,
+				opID:             opID,
 				operation:        op.operation,
 				sharedParameters: sharedParameters,
 				globalSecurity:   globalSecurity,
@@ -285,12 +311,29 @@ func (p *ToolExtractor) Do(
 				if task.OnOperationSkipped != nil {
 					task.OnOperationSkipped(err)
 				}
-				_ = oops.E(oops.CodeUnexpected, err, "%s: %s: skipped operation due to error: %s", docInfo.Name, op.operation.OperationId, err.Error()).Log(ctx, logger)
+				_ = oops.E(oops.CodeUnexpected, err, "%s: %s: skipped operation due to error: %s", docInfo.Name, opID, err.Error()).Log(ctx, logger)
 				continue
 			}
 
 			if _, err := tx.CreateOpenAPIv3ToolDefinition(ctx, def); err != nil {
-				writeErr = err
+				var pgErr *pgconn.PgError
+				if errors.As(err, &pgErr) {
+					// Special logging for path constraint violations
+					if pgErr.ConstraintName == "http_tool_definitions_path_check" {
+						logger.ErrorContext(ctx, "Path exceeds 2000 character de facto limit",
+							slog.String("event", "openapi:path-too-long"),
+							slog.String("operation_id", opID),
+							slog.String("path", path),
+							slog.Int("path_length", len(path)),
+							slog.String("method", op.method),
+						)
+					}
+					err = fmt.Errorf("%s: %s %s (SQLSTATE %s)", docInfo.Name, pgErr.Message, pgErr.Detail, pgErr.Code)
+				}
+				// Only capture the first error as the rest will just be transaction aborted errors
+				if writeErr == nil {
+					writeErr = err
+				}
 				writeErrCount++
 			}
 		}
@@ -340,6 +383,7 @@ type operationTask struct {
 	extractTask      ToolExtractorTask
 	method           string
 	path             string
+	opID             string
 	operation        *v3.Operation
 	sharedParameters []*v3.Parameter
 	globalSecurity   []byte
@@ -360,6 +404,7 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 	docInfo := task.extractTask.DocInfo
 	method := task.method
 	path := task.path
+	opID := task.opID
 	op := task.operation
 	sharedParameters := task.sharedParameters
 	globalSecurity := task.globalSecurity
@@ -370,6 +415,7 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		"deployment id set", deploymentID != uuid.Nil,
 		"openapi doc id set", openapiDocID != uuid.Nil,
 		"doc info set", docInfo != nil && docInfo.Name != "" && docInfo.Slug != "",
+		"op id set", opID != "",
 		"method set", method != "",
 		"path set", path != "",
 		"operation set", op != nil,
@@ -379,8 +425,6 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 	}
 
 	switch {
-	case op.OperationId == "":
-		return repo.CreateOpenAPIv3ToolDefinitionParams{}, tagError("missing-id", "operation id is required [line: %d]", op.GoLow().KeyNode.Line)
 	case len(op.Servers) > 0:
 		return repo.CreateOpenAPIv3ToolDefinitionParams{}, tagError("op-servers", "per-operation servers are not currently supported [line: %d]", op.GoLow().Servers.NodeLineNumber())
 	case op.Deprecated != nil && *op.Deprecated:
@@ -392,7 +436,7 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 			DeploymentID: deploymentID,
 			ProjectID:    projectID,
 			Event:        "deployment:warning",
-			Message:      fmt.Sprintf("%s: %s: only one request body content type processed for operation", docInfo.Name, op.OperationId),
+			Message:      fmt.Sprintf("%s: %s: only one request body content type processed for operation", docInfo.Name, opID),
 		}); err != nil {
 			logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", err.Error()))
 		}
@@ -447,7 +491,7 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		requestContentType = &bodyResult.contentType
 	}
 
-	descriptor := parseToolDescriptor(ctx, logger, docInfo, op)
+	descriptor := parseToolDescriptor(ctx, logger, docInfo, opID, op)
 
 	responseFilter, responseFilterSchema, err := getResponseFilter(ctx, logger, op, descriptor.responseFilterType)
 	if err != nil {
@@ -481,7 +525,7 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 	}
 
 	if len(op.Servers) > 0 {
-		serverEnvVar = strcase.ToSNAKE(fmt.Sprintf("%s_%s_SERVER_URL", docInfo.Slug, op.OperationId))
+		serverEnvVar = strcase.ToSNAKE(fmt.Sprintf("%s_%s_SERVER_URL", docInfo.Slug, opID))
 		defaultServer = s.extractDefaultServer(ctx, logger, docInfo, op.Servers)
 	}
 
@@ -502,7 +546,7 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 		Security:            security,
 		Path:                path,
 		HttpMethod:          strings.ToUpper(method),
-		Openapiv3Operation:  conv.ToPGText(op.OperationId),
+		Openapiv3Operation:  conv.ToPGText(truncateWithHash(opID, 255)),
 		Name:                descriptor.name,
 		Tags:                tags,
 		Summary:             descriptor.summary,
@@ -553,10 +597,14 @@ type toolDescriptor struct {
 	responseFilterType  *models.FilterType
 }
 
-func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, op *v3.Operation) toolDescriptor {
+func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, opID string, op *v3.Operation) toolDescriptor {
 	gramExtNode, _ := op.Extensions.Get("x-gram")
 	speakeasyExtNode, _ := op.Extensions.Get("x-speakeasy-mcp")
-	name := strcase.ToSnake(tools.SanitizeName(fmt.Sprintf("%s_%s", docInfo.Slug, op.OperationId)))
+	name := strcase.ToSnake(tools.SanitizeName(fmt.Sprintf("%s_%s", docInfo.Slug, opID)))
+
+	// If name is larger than 100 characters we truncate it and append a hash at the end to make it unique
+	name = truncateWithHash(name, 100)
+
 	description := op.Description
 	summary := op.Summary
 
