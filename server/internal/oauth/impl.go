@@ -599,17 +599,26 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		return nil
 	}
 
+	// Technically the OAuth spec does expect snake_case field names in the response but we will be generous to mistakes and try with camelCase
 	accessToken, ok := oauthTokenResp["access_token"].(string)
 	if !ok {
-		s.logger.ErrorContext(ctx, "missing access_token in OAuth response", slog.String("provider", provider.Slug))
-		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Invalid token response", oauthReqInfo["state"])
-		http.Redirect(w, r, errorURL, http.StatusFound)
-		return nil
+		// Retry with camelCase field name
+		accessToken, ok = oauthTokenResp["accessToken"].(string)
+		if !ok {
+			s.logger.ErrorContext(ctx, "missing access_token in OAuth response", slog.String("provider", provider.Slug))
+			errorURL, _ := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Invalid token response", oauthReqInfo["state"])
+			http.Redirect(w, r, errorURL, http.StatusFound)
+			return nil
+		}
 	}
 
-	// Calculate expiration time from expires_in field if present
 	var expiresAt *time.Time
 	if expiresInFloat, ok := oauthTokenResp["expires_in"].(float64); ok {
+		expiryTime := time.Now().Add(time.Duration(expiresInFloat) * time.Second)
+		expiresAt = &expiryTime
+	}
+	if expiresInFloat, ok := oauthTokenResp["expiresIn"].(float64); ok {
+		// Retry with camelCase field name
 		expiryTime := time.Now().Add(time.Duration(expiresInFloat) * time.Second)
 		expiresAt = &expiryTime
 	}

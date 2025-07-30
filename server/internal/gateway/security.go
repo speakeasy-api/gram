@@ -191,6 +191,11 @@ type clientCredentialsTokenResponse struct {
 	ExpiresIn   int    `json:"expires_in"`
 }
 
+type clientCredentialsTokenResponseCamelCase struct {
+	AccessToken string `json:"accessToken"`
+	ExpiresIn   int    `json:"expiresIn"`
+}
+
 func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *HTTPTool, security *HTTPToolSecurity, envVars *caseInsensitiveEnv, serverURL string) error {
 	// To discuss, currently we are taking the approach of exact scope match for reused tokens
 	// We could look into enabling a prefix match feature for caches where we return multiple entries matching the projectID, clientID, tokenURL and then check scopes against all returned values
@@ -314,34 +319,62 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 		}
 	}
 
-	var tokenResponse clientCredentialsTokenResponse
-
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
-		return fmt.Errorf("failed to decode client credentials token response: %w", err)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read client credentials token response body: %w", err)
 	}
 
-	if tokenResponse.AccessToken == "" {
-		return fmt.Errorf("no access token in client credentials token response")
+	accessToken, expiresIn, err := parseClientCredentialsTokenResponse(bodyBytes)
+	if err != nil {
+		return fmt.Errorf("failed to parse client credentials token response: %w", err)
 	}
 
 	// If we are passed an expiry value we will use the cache
-	if tokenResponse.ExpiresIn > 0 {
+	if expiresIn > 0 {
 		if err := tokenCache.Store(ctx, clientCredentialsTokenCache{
 			ProjectID:   tool.ProjectID,
 			ClientID:    clientID,
 			TokenURL:    tokenURL,
-			AccessToken: tokenResponse.AccessToken,
+			AccessToken: accessToken,
 			Scopes:      requestedScopes,
-			ExpiresIn:   time.Duration(tokenResponse.ExpiresIn) * time.Second,
+			ExpiresIn:   time.Duration(expiresIn) * time.Second,
 			CreatedAt:   time.Now(),
 		}); err != nil {
 			logger.ErrorContext(ctx, "failed to store client credentials token in cache", slog.String("error", err.Error()))
 		}
 	}
 
-	req.Header.Set("Authorization", formatForBearer(tokenResponse.AccessToken))
+	req.Header.Set("Authorization", formatForBearer(accessToken))
 
 	return nil
+}
+
+// Technically the OAuth spec does expect snake_case field names in the response but we will be generous to mistakes and try with camelCase
+func parseClientCredentialsTokenResponse(body []byte) (string, int, error) {
+	accessToken := ""
+	expiresIn := 0
+	var tokenResponse clientCredentialsTokenResponse
+	if err := json.Unmarshal(body, &tokenResponse); err != nil {
+		return "", 0, fmt.Errorf("failed to decode client credentials token response: %w", err)
+	}
+
+	accessToken = tokenResponse.AccessToken
+	expiresIn = tokenResponse.ExpiresIn
+
+	if accessToken == "" {
+		var tokenResponseCamelCase clientCredentialsTokenResponseCamelCase
+		if err := json.Unmarshal(body, &tokenResponseCamelCase); err != nil {
+			return "", 0, fmt.Errorf("failed to decode client credentials token response: %w", err)
+		}
+		accessToken = tokenResponseCamelCase.AccessToken
+		expiresIn = tokenResponseCamelCase.ExpiresIn
+	}
+
+	if accessToken == "" {
+		return "", 0, fmt.Errorf("no access token in client credentials token response")
+	}
+
+	return accessToken, expiresIn, nil
 }
 
 func retryTokenRequestWithBasicAuth(ctx context.Context, tokenURL, clientID, clientSecret string, requestedScopes []string) (*http.Response, error) {
