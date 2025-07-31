@@ -70,6 +70,8 @@ const (
 	HTTPParamValueKey              = attribute.Key("gram.http.param.value")
 	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
+	McpMethodKey                   = attribute.Key("gram.mcp.method")
+	McpURLKey                      = attribute.Key("gram.mcp.url")
 	MetricNameKey                  = attribute.Key("gram.metric.name")
 	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
 	OAuthCodeKey                   = attribute.Key("gram.oauth.code")
@@ -381,6 +383,12 @@ func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetI
 
 func ToolsetSlug(v string) attribute.KeyValue { return ToolsetSlugKey.String(v) }
 func SlogToolsetSlug(v string) slog.Attr      { return slog.String(string(ToolsetSlugKey), v) }
+
+func McpURL(v string) attribute.KeyValue { return McpURLKey.String(v) }
+func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey), v) }
+
+func McpMethod(v string) attribute.KeyValue { return McpMethodKey.String(v) }
+func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMethodKey), v) }
 
 func ToolCallDuration(v time.Duration) attribute.KeyValue {
 	return ToolCallDurationKey.Float64(v.Seconds())

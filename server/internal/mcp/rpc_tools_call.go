@@ -18,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -34,6 +35,7 @@ type toolsCallParams struct {
 func handleToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
+	metrics *metrics,
 	db *pgxpool.Pool,
 	env gateway.EnvironmentLoader,
 	payload *mcpInputs,
@@ -54,6 +56,10 @@ func handleToolsCall(
 	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)))
 	if err != nil {
 		return nil, err
+	}
+
+	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, requestContext.Host+requestContext.ReqURL, params.Name)
 	}
 
 	toolsetHelpers := toolsets.NewToolsets(db)

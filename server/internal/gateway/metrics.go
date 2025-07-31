@@ -37,15 +37,15 @@ func (m *metrics) RecordHTTPToolCall(ctx context.Context, orgID string, toolName
 	}
 
 	kv := []attribute.KeyValue{
-		attribute.String("tool.name", toolName),
-		attribute.String("organization.id", orgID),
+		attr.ToolName(toolName),
+		attr.OrganizationID(orgID),
 		semconv.HTTPResponseStatusCode(statusCode),
 	}
 
 	bag := baggage.FromContext(ctx)
 
 	if org := bag.Member("organization.slug").Value(); org != "" {
-		kv = append(kv, attribute.String("organization.slug", org))
+		kv = append(kv, attr.OrganizationSlug(org))
 	}
 
 	m.toolCallsCounter.Add(ctx, 1, metric.WithAttributes(kv...))

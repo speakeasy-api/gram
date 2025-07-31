@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -50,7 +51,7 @@ import (
 type Service struct {
 	logger       *slog.Logger
 	tracer       trace.Tracer
-	meter        metric.Meter
+	metrics      *metrics
 	db           *pgxpool.Pool
 	repo         *repo.Queries
 	projectsRepo *projects_repo.Queries
@@ -104,7 +105,7 @@ func NewService(
 	return &Service{
 		logger:       logger,
 		tracer:       tracer,
-		meter:        meter,
+		metrics:      newMetrics(meter, logger),
 		db:           db,
 		repo:         repo.New(db),
 		projectsRepo: projects_repo.New(db),
@@ -728,6 +729,13 @@ func parseMcpEnvVariables(r *http.Request) map[string]string {
 }
 
 func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
+	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
+		start := time.Now()
+		defer func() {
+			s.metrics.RecordMCPRequestDuration(ctx, req.Method, requestContext.Host+requestContext.ReqURL, time.Since(start))
+		}()
+	}
+
 	switch req.Method {
 	case "ping":
 		return handlePing(ctx, s.logger, req.ID)
@@ -738,7 +746,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.db, s.env, payload, req, s.toolProxy)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req)
 	case "prompts/get":
