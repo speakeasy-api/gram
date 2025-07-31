@@ -4,10 +4,7 @@ server:
 client:
   - 'client/**'
   - 'package.json'
+  - 'pnpm-lock.yaml'
+  - 'pnpm-workspace.yaml'
   - 'tsconfig.json'
-
-python_sdk:
-  - 'sdks/python/**'
-
-typescript_sdk:
   - 'sdks/typescript/**'
