@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -58,12 +58,12 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 
 	resp, err := client.Do(req)
 	if err != nil {
-		s.logger.ErrorContext(context.Background(), "failed to make request", slog.String("error", err.Error()))
+		s.logger.ErrorContext(context.Background(), "failed to make request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			s.logger.ErrorContext(context.Background(), "failed to close response body", slog.String("error", err.Error()))
+			s.logger.ErrorContext(context.Background(), "failed to close response body", attr.SlogError(err))
 		}
 	}()
 
@@ -121,7 +121,7 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 
 	var userPylonSignature *string
 	if pylonSignature, err := s.pylon.Sign(validateResp.User.Email); err != nil {
-		s.logger.ErrorContext(ctx, "error signing user email", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "error signing user email", attr.SlogError(err))
 	} else if pylonSignature != "" {
 		userPylonSignature = &pylonSignature
 	}
@@ -170,12 +170,12 @@ func (s *Manager) CreateOrgFromSpeakeasy(ctx context.Context, idToken string, or
 
 	resp, err := client.Do(req)
 	if err != nil {
-		s.logger.ErrorContext(context.Background(), "failed to make request", slog.String("error", err.Error()))
+		s.logger.ErrorContext(context.Background(), "failed to make request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			s.logger.ErrorContext(context.Background(), "failed to close response body", slog.String("error", err.Error()))
+			s.logger.ErrorContext(context.Background(), "failed to close response body", attr.SlogError(err))
 		}
 	}()
 
@@ -241,7 +241,7 @@ func (s *Manager) GetUserInfo(ctx context.Context, userID, sessionID string) (*C
 	}
 
 	if err = s.userInfoCache.Store(ctx, *userInfo); err != nil {
-		s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to store user info in cache", attr.SlogError(err))
 		return userInfo, false, fmt.Errorf("cache user info: %w", err)
 	}
 

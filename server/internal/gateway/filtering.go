@@ -13,10 +13,12 @@ import (
 	"slices"
 
 	"github.com/itchyny/gojq"
-	"github.com/speakeasy-api/gram/server/internal/contenttypes"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"gopkg.in/yaml.v3"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contenttypes"
 )
 
 type responseFilteringResult struct {
@@ -38,7 +40,7 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, tool *HTT
 
 	mediaType, _, err := mime.ParseMediaType(contentType)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to parse content type", slog.String("error", err.Error()), slog.String("content_type", contentType))
+		logger.ErrorContext(ctx, "failed to parse content type", attr.SlogError(err), attr.SlogHTTPResponseHeaderContentType(contentType))
 		return nil
 	}
 
@@ -48,7 +50,7 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, tool *HTT
 
 	query, err := gojq.Parse(responseFilterRequest.Filter)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to parse response filter", slog.String("error", err.Error()), slog.String("filter", responseFilterRequest.Filter))
+		logger.ErrorContext(ctx, "failed to parse response filter", attr.SlogError(err), attr.SlogFilterExpression(responseFilterRequest.Filter))
 		return nil
 	}
 
@@ -57,7 +59,7 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, tool *HTT
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
 		filterSpan.SetStatus(codes.Error, err.Error())
-		logger.ErrorContext(ctx, "failed to read response body", slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to read response body", attr.SlogError(err))
 		return &responseFilteringResult{
 			resp:        buf,
 			statusCode:  http.StatusInternalServerError,
@@ -68,7 +70,7 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, tool *HTT
 	var respData any
 	if err := yaml.Unmarshal(data, &respData); err != nil {
 		filterSpan.SetStatus(codes.Error, err.Error())
-		logger.ErrorContext(ctx, "failed to unmarshal response body", slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to unmarshal response body", attr.SlogError(err))
 		return &responseFilteringResult{
 			resp:        buf,
 			statusCode:  http.StatusInternalServerError,
@@ -90,14 +92,14 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, tool *HTT
 				break
 			}
 			filterSpan.SetStatus(codes.Error, err.Error())
-			logger.ErrorContext(ctx, "failed to run response filter", slog.String("error", err.Error()), slog.String("filter", responseFilterRequest.Filter))
+			logger.ErrorContext(ctx, "failed to run response filter", attr.SlogError(err), attr.SlogFilterExpression(responseFilterRequest.Filter))
 
 			// Return error response when filter doesn't match response structure
 			errorResponse := map[string]string{
 				"error": fmt.Sprintf("Response filter failed to match response structure: %s", err.Error()),
 			}
 			if encodeErr := json.NewEncoder(buf).Encode(errorResponse); encodeErr != nil {
-				logger.ErrorContext(ctx, "failed to encode filter error response", slog.String("error", encodeErr.Error()))
+				logger.ErrorContext(ctx, "failed to encode filter error response", attr.SlogError(encodeErr))
 			}
 			return &responseFilteringResult{
 				resp:        buf,
@@ -111,12 +113,12 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, tool *HTT
 	if contenttypes.IsJSON(mediaType) {
 		if err := json.NewEncoder(buf).Encode(results); err != nil {
 			filterSpan.SetStatus(codes.Error, err.Error())
-			logger.ErrorContext(ctx, "failed to encode response filter results", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "failed to encode response filter results", attr.SlogError(err))
 		}
 	} else if contenttypes.IsYAML(mediaType) {
 		if err := yaml.NewEncoder(buf).Encode(results); err != nil {
 			filterSpan.SetStatus(codes.Error, err.Error())
-			logger.ErrorContext(ctx, "failed to encode response filter results", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "failed to encode response filter results", attr.SlogError(err))
 		}
 	}
 

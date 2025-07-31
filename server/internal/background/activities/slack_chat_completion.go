@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 
@@ -60,7 +61,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 			ThreadTS:  input.Event.Event.ThreadTs,
 			Limit:     nil,
 		}); err != nil {
-			s.logger.ErrorContext(ctx, "error getting conversation replies", slog.String("error", err.Error()))
+			s.logger.ErrorContext(ctx, "error getting conversation replies", attr.SlogError(err))
 		} else {
 			for _, reply := range replies.Messages {
 				previousConversationContext += fmt.Sprintf("%s: %s\n\n", reply.User, reply.Text)
@@ -78,7 +79,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 	}
 	currentDatetimeParamsJSON, err := json.Marshal(currentDatetimeParams)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to marshal currentDatetimeParams", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to marshal currentDatetimeParams", attr.SlogError(err))
 		return "sorry, I cannot process that message right now", nil
 	}
 
@@ -106,7 +107,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 		AgentTimeout: &slackChatCompletionTimeout,
 	})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "error getting chat response", attr.SlogError(err))
 		return "", fmt.Errorf("error getting chat response: %w", err)
 	}
 
@@ -126,7 +127,7 @@ func (s *SlackChatCompletion) Do(ctx context.Context, input SlackChatCompletionI
 			AddedEnvironmentEntries: map[string]string{},
 		})
 		if err != nil {
-			s.logger.ErrorContext(ctx, "error getting chat response", slog.String("error", err.Error()))
+			s.logger.ErrorContext(ctx, "error getting chat response", attr.SlogError(err))
 			return "", fmt.Errorf("error getting formatted chat response: %w", err)
 		}
 	}

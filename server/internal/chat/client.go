@@ -15,6 +15,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	env_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -25,8 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
-	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type ChatClient struct {
@@ -149,19 +151,19 @@ func (c *ChatClient) AgentChat(
 
 		// Tool call loop
 		for _, tc := range msg.ToolCalls {
-			c.logger.InfoContext(ctx, "Tool called", slog.String("name", tc.Function.Name), slog.String("args", tc.Function.Arguments))
+			c.logger.InfoContext(ctx, "Tool called", attr.SlogToolName(tc.Function.Name))
 
 			exec, ok := executors[tc.Function.Name]
 			var output string
 
 			if !ok {
 				output = fmt.Sprintf("No executor found for %q", tc.Function.Name)
-				c.logger.ErrorContext(ctx, "Missing executor", slog.String("tool", tc.Function.Name))
+				c.logger.ErrorContext(ctx, "Missing executor", attr.SlogToolName(tc.Function.Name))
 			} else {
 				result, err := exec(ctx, tc.Function.Arguments)
 				if err != nil {
 					output = fmt.Sprintf("Error calling tool %q: %v", tc.Function.Name, err)
-					c.logger.ErrorContext(ctx, "Tool error", slog.String("tool", tc.Function.Name), slog.String("error", err.Error()))
+					c.logger.ErrorContext(ctx, "Tool error", attr.SlogToolName(tc.Function.Name), attr.SlogError(err))
 				} else {
 					output = result
 				}

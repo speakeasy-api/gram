@@ -7,6 +7,8 @@ import (
 	"net/http"
 
 	goa "goa.design/goa/v3/pkg"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 func ErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
@@ -30,7 +32,7 @@ func ErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 				false,
 				true,
 			)
-			logger.ErrorContext(r.Context(), "unexpected error", slog.String("error_id", gerr.ID), slog.String("error", err.Error()))
+			logger.ErrorContext(r.Context(), "unexpected error", attr.SlogErrorID(gerr.ID), attr.SlogError(err))
 			payload = gerr
 		}
 
@@ -38,7 +40,7 @@ func ErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 		w.Header().Set("Content-Type", "application/json")
 		err = json.NewEncoder(w).Encode(payload)
 		if err != nil {
-			logger.ErrorContext(r.Context(), "failed to encode response", slog.String("error", err.Error()))
+			logger.ErrorContext(r.Context(), "failed to encode response", attr.SlogError(err))
 		}
 	})
 }

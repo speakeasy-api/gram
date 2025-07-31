@@ -22,6 +22,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	"goa.design/clue/clue"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 type SetupOTelSDKOptions struct {
@@ -100,7 +102,7 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		prop,
 		clue.AdaptiveSampler(2, 10),
 		otel.ErrorHandlerFunc(func(err error) {
-			logger.ErrorContext(ctx, "otel error", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "otel error", attr.SlogError(err))
 		}),
 	)
 	if err != nil {

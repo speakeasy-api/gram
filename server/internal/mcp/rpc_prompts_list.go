@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -34,16 +36,16 @@ func parsePromptArgumentsFromJSONSchema(schemaStr string, logger *slog.Logger, c
 	compiler := jsonschema.NewCompiler()
 	rawSchema, err := jsonschema.UnmarshalJSON(bytes.NewReader([]byte(schemaStr)))
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to add prompt arguments schema resource", slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to add prompt arguments schema resource", attr.SlogError(err))
 		return args
 	}
 	if err := compiler.AddResource("file:///schema.json", rawSchema); err != nil {
-		logger.ErrorContext(ctx, "failed to add prompt arguments schema resource", slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to add prompt arguments schema resource", attr.SlogError(err))
 		return args
 	}
 	schema, err := compiler.Compile("file:///schema.json")
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to compile prompt arguments schema", slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to compile prompt arguments schema", attr.SlogError(err))
 		return args
 	}
 

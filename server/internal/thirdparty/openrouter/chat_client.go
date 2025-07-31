@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-cleanhttp"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 type ChatClient struct {
@@ -89,7 +91,7 @@ func (c *ChatClient) GetCompletionFromMessages(ctx context.Context, orgID string
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
-			c.logger.ErrorContext(ctx, "failed to close response body", slog.String("error", err.Error()))
+			c.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(err))
 		}
 	}()
 

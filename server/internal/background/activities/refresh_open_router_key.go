@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -31,7 +32,7 @@ func (o *RefreshOpenRouterKey) Do(ctx context.Context, args RefreshOpenRouterKey
 		return oops.E(oops.CodeUnexpected, err, "error updating openrouter key").Log(ctx, o.logger)
 	}
 
-	o.logger.InfoContext(ctx, "refreshed openrouter key limit", slog.Int("limit", limit))
+	o.logger.InfoContext(ctx, "refreshed openrouter key limit", attr.SlogOpenRouterKeyLimit(limit))
 
 	return nil
 }

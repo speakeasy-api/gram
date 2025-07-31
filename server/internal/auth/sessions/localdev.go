@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/speakeasy-api/gram/server/gen/auth"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -74,9 +75,9 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 	}
 
 	return &Manager{
-		logger:                 logger.With(slog.String("component", "sessions")),
-		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(slog.String("cache", "session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(slog.String("cache", "user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		logger:                 logger.With(attr.SlogComponent("sessions")),
+		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		localEnvFile:           data,
 		unsafeLocal:            true,
 		speakeasyServerAddress: "",
@@ -125,7 +126,7 @@ func (s *Manager) PopulateLocalDevDefaultAuthSession(ctx context.Context) (strin
 
 	for userID, userInfo := range s.localEnvFile {
 		if err := s.InvalidateUserInfoCache(ctx, userID); err != nil {
-			s.logger.WarnContext(ctx, "failed to invalidate user info cache", slog.String("error", err.Error()))
+			s.logger.WarnContext(ctx, "failed to invalidate user info cache", attr.SlogError(err))
 		}
 
 		if _, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{

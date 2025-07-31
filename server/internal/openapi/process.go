@@ -30,6 +30,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
@@ -151,13 +152,13 @@ func (p *ToolExtractor) Do(
 	tx := repo.New(dbtx)
 
 	slogArgs := []any{
-		slog.String("project_id", projectID.String()),
-		slog.String("doc_name", docInfo.Name),
-		slog.String("doc_slug", string(docInfo.Slug)),
-		slog.String("deployment_id", deploymentID.String()),
-		slog.String("openapi_doc_id", openapiDocID.String()),
-		slog.String("project_slug", task.ProjectSlug),
-		slog.String("org_slug", task.OrgSlug),
+		attr.SlogProjectID(projectID.String()),
+		attr.SlogDeploymentOpenAPIName(docInfo.Name),
+		attr.SlogDeploymentOpenAPISlug(string(docInfo.Slug)),
+		attr.SlogDeploymentID(deploymentID.String()),
+		attr.SlogDeploymentOpenAPIID(openapiDocID.String()),
+		attr.SlogProjectSlug(task.ProjectSlug),
+		attr.SlogOrganizationSlug(task.OrgSlug),
 	}
 
 	eventsHandler := NewLogHandler()
@@ -171,10 +172,10 @@ func (p *ToolExtractor) Do(
 			p.logger.ErrorContext(
 				ctx,
 				"failed to flush deployment events",
-				slog.String("error", err.Error()),
-				slog.String("project_id", projectID.String()),
-				slog.String("deployment_id", deploymentID.String()),
-				slog.String("openapi_doc_id", openapiDocID.String()),
+				attr.SlogError(err),
+				attr.SlogProjectID(projectID.String()),
+				attr.SlogDeploymentID(deploymentID.String()),
+				attr.SlogDeploymentOpenAPIID(openapiDocID.String()),
 			)
 		}
 	}()
@@ -207,14 +208,14 @@ func (p *ToolExtractor) Do(
 	v3Model, errs := document.BuildV3Model()
 	if len(errs) > 0 {
 		for _, err := range errs {
-			logger.ErrorContext(ctx, fmt.Sprintf("%s: %s", docInfo.Name, err.Error()), slog.String("event", "openapi:error"))
+			logger.ErrorContext(ctx, fmt.Sprintf("%s: %s", docInfo.Name, err.Error()), attr.SlogEvent("openapi:error"))
 		}
 
 		return nil, oops.E(
 			oops.CodeBadRequest,
 			oops.Perm(errors.Join(errs...)),
 			"openapi v3 document '%s' had %d errors", docInfo.Name, len(errs),
-		).Log(ctx, logger, slog.String("event", "openapi:error"))
+		).Log(ctx, logger, attr.SlogEvent("openapi:error"))
 	}
 
 	upgradeStart := time.Now()
@@ -223,8 +224,8 @@ func (p *ToolExtractor) Do(
 	var upgradeOutcome *o11y.Outcome
 	if err != nil {
 		upgradeOutcome = conv.Ptr(o11y.OutcomeFailure)
-		logger.ErrorContext(ctx, "Unable to upgrade OpenAPI v3.0 document to v3.1. Proceeding with v3.0 document.", slog.String("event", "openapi-upgrade:error"))
-		logger.ErrorContext(ctx, err.Error(), slog.String("event", "openapi-upgrade:error"))
+		logger.ErrorContext(ctx, "Unable to upgrade OpenAPI v3.0 document to v3.1. Proceeding with v3.0 document.", attr.SlogEvent("openapi-upgrade:error"))
+		logger.ErrorContext(ctx, err.Error(), attr.SlogEvent("openapi-upgrade:error"))
 	} else {
 		v3Model = upgradeResult.Model
 
@@ -234,12 +235,12 @@ func (p *ToolExtractor) Do(
 
 		if len(upgradeResult.Issues) > 0 {
 			msg := fmt.Sprintf("Found %d issues upgrading OpenAPI v3.0 document to v3.1", len(upgradeResult.Issues))
-			logger.ErrorContext(ctx, msg, slog.String("event", "openapi-upgrade:error"))
+			logger.ErrorContext(ctx, msg, attr.SlogEvent("openapi-upgrade:error"))
 			for i, issue := range upgradeResult.Issues {
 				if i >= 30 {
 					break
 				}
-				logger.ErrorContext(ctx, issue.Error(), slog.String("event", "openapi-upgrade:error"))
+				logger.ErrorContext(ctx, issue.Error(), attr.SlogEvent("openapi-upgrade:error"))
 			}
 		}
 	}
@@ -320,12 +321,12 @@ func (p *ToolExtractor) Do(
 				if errors.As(err, &pgErr) {
 					// Special logging for path constraint violations
 					if pgErr.ConstraintName == "http_tool_definitions_path_check" {
-						logger.ErrorContext(ctx, "Path exceeds 2000 character de facto limit",
-							slog.String("event", "openapi:path-too-long"),
-							slog.String("operation_id", opID),
-							slog.String("path", path),
-							slog.Int("path_length", len(path)),
-							slog.String("method", op.method),
+						logger.ErrorContext(ctx, "path exceeds 2000 character limit",
+							attr.SlogEvent("openapi:error:path-too-long"),
+							attr.SlogOpenAPIOperationID(opID),
+							attr.SlogOpenAPIPath(path),
+							attr.SlogValueInt(len(path)),
+							attr.SlogOpenAPIMethod(op.method),
 						)
 					}
 					err = fmt.Errorf("%s: %s %s (SQLSTATE %s)", docInfo.Name, pgErr.Message, pgErr.Detail, pgErr.Code)
@@ -438,7 +439,7 @@ func (s *ToolExtractor) extractToolDef(ctx context.Context, logger *slog.Logger,
 			Event:        "deployment:warning",
 			Message:      fmt.Sprintf("%s: %s: only one request body content type processed for operation", docInfo.Name, opID),
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to log deployment event", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "failed to log deployment event", attr.SlogError(err))
 		}
 	}
 

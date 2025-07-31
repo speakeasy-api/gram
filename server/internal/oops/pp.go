@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -119,9 +120,9 @@ func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...a
 	trace.SpanFromContext(ctx).SetStatus(codes.Error, e.String())
 
 	if len(args) > 0 {
-		logger.ErrorContext(ctx, e.public, append(args, slog.String("error_id", e.id), slog.String("error", e.String()))...)
+		logger.ErrorContext(ctx, e.public, append(args, attr.SlogErrorID(e.id), attr.SlogError(e))...)
 	} else {
-		logger.ErrorContext(ctx, e.public, slog.String("error_id", e.id), slog.String("error", e.String()))
+		logger.ErrorContext(ctx, e.public, attr.SlogErrorID(e.id), attr.SlogError(e))
 	}
 	return e
 }

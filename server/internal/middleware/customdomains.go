@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 )
@@ -34,14 +36,14 @@ func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string, 
 
 			domain, err := domainsRepo.GetCustomDomainByDomain(r.Context(), host)
 			if err != nil {
-				logger.ErrorContext(r.Context(), "failed to get custom domain", slog.String("host", host), slog.String("error", err.Error()))
+				logger.ErrorContext(r.Context(), "failed to get custom domain", attr.SlogHostName(host), attr.SlogError(err))
 				http.Error(w, "invalid domain", http.StatusForbidden)
 				return
 			}
 
 			if !domain.Activated || !domain.Verified {
 				http.Error(w, "invalid domain", http.StatusForbidden)
-				logger.ErrorContext(r.Context(), "domain not activated", slog.String("host", host))
+				logger.ErrorContext(r.Context(), "domain not activated", attr.SlogHostName(host))
 				return
 			}
 

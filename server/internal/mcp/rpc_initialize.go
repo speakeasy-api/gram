@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -30,7 +31,7 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest,
 			"disable_noification": true,
 			"mcp_session_id":      payload.sessionID,
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to capture mcp_initialized event", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "failed to capture mcp_initialized event", attr.SlogError(err))
 		}
 	}
 

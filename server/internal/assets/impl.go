@@ -28,6 +28,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/assets"
 	srv "github.com/speakeasy-api/gram/server/gen/http/assets/server"
 	"github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -362,7 +363,7 @@ func (s *Service) downloadPendingAsset(ctx context.Context, reader io.Reader, pa
 		}
 
 		if cerr := cleanup(); cerr != nil {
-			s.logger.ErrorContext(ctx, "failed to cleanup temp file", slog.String("error", cerr.Error()))
+			s.logger.ErrorContext(ctx, "failed to cleanup temp file", attr.SlogError(cerr))
 		}
 	}()
 
@@ -409,7 +410,7 @@ func (s *Service) findExistingAsset(ctx context.Context, params *findAssetParams
 			exists, err := s.storage.Exists(ctx, assetURL)
 			switch {
 			case err != nil:
-				s.logger.ErrorContext(ctx, "failed to check if asset exists", slog.String("url", asset.Url), slog.String("error", err.Error()))
+				s.logger.ErrorContext(ctx, "failed to check if asset exists", attr.SlogURLFull(asset.Url), attr.SlogError(err))
 			case exists:
 				return &gen.Asset{
 					ID:            asset.ID.String(),
@@ -424,7 +425,7 @@ func (s *Service) findExistingAsset(ctx context.Context, params *findAssetParams
 				// it doesn't exist, carry on to create it
 			}
 		} else {
-			s.logger.ErrorContext(ctx, "failed to parse asset url", slog.String("url", asset.Url), slog.String("error", err.Error()))
+			s.logger.ErrorContext(ctx, "failed to parse asset url", attr.SlogURLFull(asset.Url), attr.SlogError(err))
 		}
 	}
 
@@ -530,8 +531,8 @@ func (s *Service) ServeOpenAPIv3(ctx context.Context, payload *gen.ServeOpenAPIv
 	}
 
 	logger := s.logger.With(
-		slog.String("asset_id", assetID.String()),
-		slog.String("project_id", authCtx.ProjectID.String()),
+		attr.SlogAssetID(assetID.String()),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
 	)
 
 	row, err := s.repo.GetOpenAPIv3AssetURL(ctx, repo.GetOpenAPIv3AssetURLParams{

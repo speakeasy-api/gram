@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -355,7 +356,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		return nil, err
 	}
 
-	logger = logger.With(slog.String("deployment_id", newID.String()))
+	logger = logger.With(attr.SlogDeploymentID(newID.String()))
 	span.SetAttributes(attribute.String("deployment_id", newID.String()))
 
 	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(newID))
@@ -396,7 +397,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 	projectID := *authCtx.ProjectID
 
-	logger := s.logger.With(slog.String("project_id", projectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 	span.SetAttributes(attribute.String("project_id", projectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
@@ -499,8 +500,8 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			return nil, oops.E(oops.CodeInvariantViolation, ierr, "error cloning deployment").Log(ctx, logger)
 		}
 
-		logger = logger.With(slog.String("deployment_id", newID.String()))
-		span.SetAttributes(attribute.String("deployment_id", newID.String()))
+		logger = logger.With(attr.SlogDeploymentID(newID.String()))
+		span.SetAttributes(attr.DeploymentID(newID.String()))
 
 		cloneID = newID
 	// 2️⃣ Something went wrong querying for the latest deployment
@@ -525,7 +526,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			return nil, oops.E(oops.CodeInvariantViolation, ierr, "error cloning deployment").Log(ctx, logger)
 		}
 
-		logger = logger.With(slog.String("deployment_id", newID.String()))
+		logger = logger.With(attr.SlogDeploymentID(newID.String()))
 		span.SetAttributes(attribute.String("deployment_id", newID.String()))
 
 		cloneID = newID
@@ -577,7 +578,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 	projectID := *authCtx.ProjectID
 
-	logger := s.logger.With(slog.String("project_id", projectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 	span.SetAttributes(attribute.String("project_id", projectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
@@ -612,7 +613,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		return nil, oops.E(oops.CodeInvariantViolation, ierr, "error cloning deployment").Log(ctx, logger)
 	}
 
-	logger = logger.With(slog.String("deployment_id", newID.String()))
+	logger = logger.With(attr.SlogDeploymentID(newID.String()))
 	span.SetAttributes(attribute.String("deployment_id", newID.String()))
 
 	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(newID))
@@ -661,10 +662,10 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 		if version == "" {
 			row, err := tx.PeekLatestPackageVersionByName(ctx, name)
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, oops.E(oops.CodeBadRequest, err, "no versions found for package: %s", name).Log(ctx, s.logger, slog.String("package_name", name))
+				return nil, oops.E(oops.CodeBadRequest, err, "no versions found for package: %s", name).Log(ctx, s.logger, attr.SlogPackageName(name))
 			}
 			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "error getting latest package version").Log(ctx, s.logger, slog.String("package_name", name))
+				return nil, oops.E(oops.CodeUnexpected, err, "error getting latest package version").Log(ctx, s.logger, attr.SlogPackageName(name))
 			}
 
 			packageID = row.PackageID
@@ -689,10 +690,10 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 				Build:      conv.ToPGTextEmpty(semver.Build),
 			})
 			if errors.Is(err, sql.ErrNoRows) {
-				return nil, oops.E(oops.CodeBadRequest, err, "package version not found: %s@%s", name, version).Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", version))
+				return nil, oops.E(oops.CodeBadRequest, err, "package version not found: %s@%s", name, version).Log(ctx, s.logger, attr.SlogPackageName(name), attr.SlogPackageVersion(version))
 			}
 			if err != nil {
-				return nil, oops.E(oops.CodeBadRequest, err, "error getting package by name and version").Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", version))
+				return nil, oops.E(oops.CodeBadRequest, err, "error getting package by name and version").Log(ctx, s.logger, attr.SlogPackageName(name), attr.SlogPackageVersion(version))
 			}
 
 			packageID = row.PackageID
@@ -701,7 +702,7 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 		}
 
 		if packageID == uuid.Nil || versionID == uuid.Nil {
-			return nil, oops.E(oops.CodeBadRequest, nil, "could not resolve package version: %s@%s", name, conv.Default(version, "latest")).Log(ctx, s.logger, slog.String("package_name", name), slog.String("package_version", conv.Default(version, "latest")))
+			return nil, oops.E(oops.CodeBadRequest, nil, "could not resolve package version: %s@%s", name, conv.Default(version, "latest")).Log(ctx, s.logger, attr.SlogPackageName(name), attr.SlogPackageVersion(conv.Default(version, "latest")))
 		}
 
 		res = append(res, resolvedPackage{
@@ -729,7 +730,7 @@ func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, proj
 		return "", oops.E(oops.CodeUnexpected, err, "error getting deployment status").Log(ctx, logger)
 	}
 
-	logger.InfoContext(ctx, "processed deployment", slog.String("deployment_id", deploymentID.String()), slog.String("deployment_status", res.Status), slog.String("project_id", projectID.String()))
+	logger.InfoContext(ctx, "processed deployment", attr.SlogDeploymentID(deploymentID.String()), attr.SlogDeploymentStatus(res.Status), attr.SlogProjectID(projectID.String()))
 
 	return res.Status, nil
 }

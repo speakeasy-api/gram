@@ -21,6 +21,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/toolsets/server"
 	gen "github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -171,7 +172,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	logger := s.logger.With(slog.String("project_id", authCtx.ProjectID.String()), slog.String("toolset_slug", string(payload.Slug)))
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {

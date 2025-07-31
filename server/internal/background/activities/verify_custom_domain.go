@@ -11,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -70,7 +72,7 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 
 	cname, err := net.LookupCNAME(domain.Domain)
 	if err != nil {
-		d.logger.InfoContext(ctx, "CNAME lookup failed for domain", slog.String("domain", domain.Domain), slog.String("error", err.Error()))
+		d.logger.InfoContext(ctx, "CNAME lookup failed for domain", attr.SlogURLDomain(domain.Domain), attr.SlogError(err))
 		// Provide more info if an A record exists
 		ips, aErr := net.LookupHost(domain.Domain)
 		if aErr == nil && len(ips) > 0 {

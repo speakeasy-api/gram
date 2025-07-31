@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
@@ -57,8 +58,8 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 		}
 
 		c.logger.InfoContext(ctx, "custom domain ingress",
-			slog.String("ingress_name", ingressName),
-			slog.String("secret_name", secretName),
+			attr.SlogIngressName(ingressName),
+			attr.SlogSecretName(secretName),
 		)
 
 		err = c.k8s.CreateOrUpdateIngress(ctx, ingressName, ingress)

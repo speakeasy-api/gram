@@ -16,6 +16,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/packages/server"
 	gen "github.com/speakeasy-api/gram/server/gen/packages"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -70,7 +71,7 @@ func (s *Service) ListPackages(ctx context.Context, form *gen.ListPackagesPayloa
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	logger := s.logger.With(slog.String("project_id", authCtx.ProjectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	packages, err := s.repo.ListPackages(ctx, *authCtx.ProjectID)
 	if err != nil {
@@ -120,7 +121,7 @@ func (s *Service) CreatePackage(ctx context.Context, form *gen.CreatePackagePayl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	logger := s.logger.With(slog.String("project_id", authCtx.ProjectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -196,7 +197,7 @@ func (s *Service) UpdatePackage(ctx context.Context, form *gen.UpdatePackagePayl
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	logger := s.logger.With(slog.String("project_id", authCtx.ProjectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	pkgID, err := uuid.Parse(form.ID)
 	if err != nil {
@@ -272,7 +273,7 @@ func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayloa
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	logger := s.logger.With(slog.String("project_id", authCtx.ProjectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -333,7 +334,7 @@ func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *g
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	logger := s.logger.With(slog.String("project_id", authCtx.ProjectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
 	semver, err := ParseSemver(form.Version)
 	if err != nil {

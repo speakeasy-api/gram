@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 // PKCEService handles PKCE (Proof Key for Code Exchange) operations
@@ -97,13 +99,13 @@ func (s *PKCEService) VerifyCodeChallenge(ctx context.Context, codeVerifier, cod
 	// Compare the challenges (constant time comparison to prevent timing attacks)
 	if subtle.ConstantTimeCompare([]byte(expectedChallenge), []byte(codeChallenge)) != 1 {
 		s.logger.ErrorContext(ctx, "PKCE verification failed",
-			slog.String("method", method),
-			slog.String("expected_length", fmt.Sprintf("%d", len(expectedChallenge))),
-			slog.String("actual_length", fmt.Sprintf("%d", len(codeChallenge))))
+			attr.SlogPKCEMethod(method),
+			attr.SlogExpected(len(expectedChallenge)),
+			attr.SlogActual(len(codeChallenge)))
 		return fmt.Errorf("PKCE verification failed")
 	}
 
-	s.logger.InfoContext(ctx, "PKCE verification successful", slog.String("method", method))
+	s.logger.InfoContext(ctx, "PKCE verification successful", attr.SlogPKCEMethod(method))
 	return nil
 }
 

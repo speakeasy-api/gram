@@ -55,7 +55,7 @@ linters:
       attr-only: true
       no-global: all
       context: all
-      key-naming-case: snake
+      no-raw-keys: true
       forbidden-keys:
         - err
         - org

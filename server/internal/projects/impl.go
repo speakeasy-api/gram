@@ -20,6 +20,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/projects/server"
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -96,9 +97,9 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 		if pgErr.Code == pgerrcode.UniqueViolation {
 			return nil, oops.E(oops.CodeConflict, err, "project slug already exists")
 		}
-		return nil, oops.E(oops.CodeUnexpected, err, "database error creating project").Log(ctx, s.logger, slog.String("org_id", payload.OrganizationID), slog.String("project_name", payload.Name))
+		return nil, oops.E(oops.CodeUnexpected, err, "database error creating project").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID), attr.SlogProjectName(payload.Name))
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "unexpected error creating project").Log(ctx, s.logger, slog.String("org_id", payload.OrganizationID), slog.String("project_name", payload.Name))
+		return nil, oops.E(oops.CodeUnexpected, err, "unexpected error creating project").Log(ctx, s.logger, attr.SlogOrganizationID(payload.OrganizationID), attr.SlogProjectName(payload.Name))
 	}
 
 	_, err = s.envRepo.CreateEnvironment(ctx, envrepo.CreateEnvironmentParams{

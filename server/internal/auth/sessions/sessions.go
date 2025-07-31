@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -41,9 +42,9 @@ type Manager struct {
 
 func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, speakeasyServerAddress string, speakeasySecretKey string, pylon *pylon.Pylon) *Manager {
 	return &Manager{
-		logger:                 logger.With(slog.String("component", "sessions")),
-		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(slog.String("cache", "session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(slog.String("cache", "user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		logger:                 logger.With(attr.SlogComponent("sessions")),
+		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		localEnvFile:           localEnvFile{},
 		unsafeLocal:            false,
 		speakeasyServerAddress: speakeasyServerAddress,

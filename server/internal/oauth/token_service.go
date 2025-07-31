@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 )
@@ -26,7 +27,7 @@ type TokenService struct {
 }
 
 func NewTokenService(cacheImpl cache.Cache, clientRegistration *ClientRegistrationService, grantManager *GrantManager, pkceService *PKCEService, logger *slog.Logger, enc *encryption.Client) *TokenService {
-	tokenStorage := cache.NewTypedObjectCache[Token](logger.With(slog.String("cache", "oauth_token")), cacheImpl, cache.SuffixNone)
+	tokenStorage := cache.NewTypedObjectCache[Token](logger.With(attr.SlogCacheNamespace("oauth_token")), cacheImpl, cache.SuffixNone)
 	return &TokenService{
 		tokenStorage:          tokenStorage,
 		clientRegistration:    clientRegistration,
@@ -83,8 +84,8 @@ func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *Toke
 	}
 
 	ts.logger.InfoContext(ctx, "authorization code exchanged for tokens",
-		slog.String("client_id", req.ClientID),
-		slog.String("scope", grant.Scope))
+		attr.SlogOAuthClientID(req.ClientID),
+		attr.SlogOAuthScope(grant.Scope))
 
 	return token, nil
 }
@@ -99,7 +100,7 @@ func (ts *TokenService) ValidateAccessToken(ctx context.Context, mcpSlug string,
 	// Check if token has expired
 	if time.Now().After(token.ExpiresAt) {
 		if err := ts.deleteToken(ctx, *token); err != nil {
-			ts.logger.ErrorContext(ctx, "failed to delete expired token", slog.String("error", err.Error()))
+			ts.logger.ErrorContext(ctx, "failed to delete expired token", attr.SlogError(err))
 		}
 		return nil, fmt.Errorf("access token has expired")
 	}
@@ -108,7 +109,7 @@ func (ts *TokenService) ValidateAccessToken(ctx context.Context, mcpSlug string,
 		if externalSecret.ExpiresAt.Before(time.Now()) {
 			// TODO: Eventually we will want to 403 but not actually delete the credentials as we may have multiple credentials under the hood
 			if err := ts.deleteToken(ctx, *token); err != nil {
-				ts.logger.ErrorContext(ctx, "failed to delete expired token", slog.String("error", err.Error()))
+				ts.logger.ErrorContext(ctx, "failed to delete expired token", attr.SlogError(err))
 			}
 			return nil, fmt.Errorf("access token has expired")
 		}

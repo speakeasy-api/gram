@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -152,9 +152,9 @@ func newWorkerCommand() *cli.Command {
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "worker"
 			logger := PullLogger(c.Context).With(
-				slog.String("service", serviceName),
-				slog.String("version", shortGitSHA()),
-				slog.String("env", serviceEnv),
+				attr.SlogServiceName(serviceName),
+				attr.SlogServiceVersion(shortGitSHA()),
+				attr.SlogServiceEnv(serviceEnv),
 			)
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
@@ -195,7 +195,7 @@ func newWorkerCommand() *cli.Command {
 			}
 			// Ping the database to ensure connectivity
 			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", slog.String("error", err.Error()))
+				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
 				return fmt.Errorf("database ping failed: %w", err)
 			}
 			defer db.Close()
@@ -232,7 +232,7 @@ func newWorkerCommand() *cli.Command {
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
-					Logger:           logger.With(slog.String("component", "control")),
+					Logger:           logger.With(attr.SlogComponent("control")),
 					DisableProfiling: false,
 				}
 

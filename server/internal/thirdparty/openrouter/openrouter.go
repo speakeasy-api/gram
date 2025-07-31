@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -169,7 +170,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 
 	req, err := http.NewRequestWithContext(ctx, "GET", OpenRouterBaseURL+"/v1/key", nil)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to get openrouter key HTTP request", slog.String("error", err.Error()))
+		o.logger.ErrorContext(ctx, "failed to get openrouter key HTTP request", attr.SlogError(err))
 		return 0, limit, fmt.Errorf("failed to get key request: %w", err)
 	}
 
@@ -178,7 +179,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 
 	resp, err := o.orClient.Do(req)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to send HTTP request", slog.String("error", err.Error()))
+		o.logger.ErrorContext(ctx, "failed to send HTTP request", attr.SlogError(err))
 		return 0, limit, fmt.Errorf("failed to send update key request: %w", err)
 	}
 
@@ -192,7 +193,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 
 	var usageResp keyUsageResponse
 	if err := json.NewDecoder(resp.Body).Decode(&usageResp); err != nil {
-		o.logger.ErrorContext(ctx, "failed to decode key usage response", slog.String("error", err.Error()))
+		o.logger.ErrorContext(ctx, "failed to decode key usage response", attr.SlogError(err))
 		return 0, limit, fmt.Errorf("failed to decode key usage response: %w", err)
 	}
 
@@ -229,13 +230,13 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, o
 
 	bodyBytes, err := json.Marshal(requestBody)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to marshal create openrouter key request body", slog.String("error", err.Error()))
+		o.logger.ErrorContext(ctx, "failed to marshal create openrouter key request body", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to serialize create key request body: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", OpenRouterBaseURL+"/v1/keys", bytes.NewReader(bodyBytes))
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to create openrouter key HTTP request", slog.String("error", err.Error()))
+		o.logger.ErrorContext(ctx, "failed to create openrouter key HTTP request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to build create key request: %w", err)
 	}
 
@@ -244,7 +245,7 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, o
 
 	resp, err := o.orClient.Do(req)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to send HTTP request", slog.String("error", err.Error()))
+		o.logger.ErrorContext(ctx, "failed to send HTTP request", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to send create key request: %w", err)
 	}
 
@@ -258,7 +259,7 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, o
 
 	var response keyResponse
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		o.logger.ErrorContext(ctx, "failed to decode create openrouter key response body", slog.String("error", err.Error()))
+		o.logger.ErrorContext(ctx, "failed to decode create openrouter key response body", attr.SlogError(err))
 		return nil, fmt.Errorf("failed to decode create openrouter key response body: %w", err)
 	}
 
@@ -273,13 +274,13 @@ func (o *OpenRouter) createOpenRouterAPIKey(ctx context.Context, orgID string, o
 func (o *OpenRouter) updateOpenRouterAPIKey(ctx context.Context, keyHash string, request updateKeyRequest) error {
 	bodyBytes, err := json.Marshal(request)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to marshal update openrouter key request body", slog.String("error", err.Error()))
+		o.logger.ErrorContext(ctx, "failed to marshal update openrouter key request body", attr.SlogError(err))
 		return fmt.Errorf("failed to serialize update key request body: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "PATCH", OpenRouterBaseURL+fmt.Sprintf("/v1/keys/%s", keyHash), bytes.NewReader(bodyBytes))
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to create openrouter key HTTP request", slog.String("error", err.Error()))
+		o.logger.ErrorContext(ctx, "failed to create openrouter key HTTP request", attr.SlogError(err))
 		return fmt.Errorf("failed to create update key request: %w", err)
 	}
 
@@ -288,7 +289,7 @@ func (o *OpenRouter) updateOpenRouterAPIKey(ctx context.Context, keyHash string,
 
 	resp, err := o.orClient.Do(req)
 	if err != nil {
-		o.logger.ErrorContext(ctx, "failed to send HTTP request", slog.String("error", err.Error()))
+		o.logger.ErrorContext(ctx, "failed to send HTTP request", attr.SlogError(err))
 		return fmt.Errorf("failed to send update key request: %w", err)
 	}
 

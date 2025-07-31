@@ -8,6 +8,8 @@ import (
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 type metrics struct {
@@ -21,7 +23,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		metric.WithUnit("{call}"),
 	)
 	if err != nil {
-		logger.ErrorContext(context.Background(), "failed to create tool calls counter", slog.String("error", err.Error()))
+		logger.ErrorContext(context.Background(), "failed to create tool calls counter", attr.SlogError(err))
 	}
 
 	return &metrics{

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
@@ -23,6 +22,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -256,9 +256,9 @@ func newStartCommand() *cli.Command {
 			appinfo := o11y.PullAppInfo(c.Context)
 			appinfo.Command = "server"
 			logger := PullLogger(c.Context).With(
-				slog.String("service", serviceName),
-				slog.String("version", shortGitSHA()),
-				slog.String("env", serviceEnv),
+				attr.SlogServiceName(serviceName),
+				attr.SlogServiceVersion(shortGitSHA()),
+				attr.SlogServiceEnv(serviceEnv),
 			)
 			tracerProvider := otel.GetTracerProvider()
 			meterProvider := otel.GetMeterProvider()
@@ -285,7 +285,7 @@ func newStartCommand() *cli.Command {
 			}
 			// Ping the database to ensure connectivity
 			if err := db.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping database", slog.String("error", err.Error()))
+				logger.ErrorContext(ctx, "failed to ping database", attr.SlogError(err))
 				return fmt.Errorf("database ping failed: %w", err)
 			}
 			defer db.Close()
@@ -320,10 +320,10 @@ func newStartCommand() *cli.Command {
 			localEnvPath := c.String("unsafe-local-env-path")
 			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(logger.With(slog.String("component", "sessions")), db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient)
+				sessionManager = sessions.NewManager(logger.With(attr.SlogComponent("sessions")), db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient)
 			} else {
-				logger.WarnContext(ctx, "enabling unsafe session store", slog.String("path", localEnvPath))
-				s, err := sessions.NewUnsafeManager(logger.With(slog.String("component", "sessions")), db, redisClient, cache.Suffix("gram-local"), localEnvPath)
+				logger.WarnContext(ctx, "enabling unsafe session store", attr.SlogFilePath(localEnvPath))
+				s, err := sessions.NewUnsafeManager(logger.With(attr.SlogComponent("sessions")), db, redisClient, cache.Suffix("gram-local"), localEnvPath)
 				if err != nil {
 					return fmt.Errorf("failed to create unsafe session manager: %w", err)
 				}
@@ -371,7 +371,7 @@ func newStartCommand() *cli.Command {
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
-					Logger:           logger.With(slog.String("component", "control")),
+					Logger:           logger.With(attr.SlogComponent("control")),
 					DisableProfiling: false,
 				}
 
@@ -412,42 +412,42 @@ func newStartCommand() *cli.Command {
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
-			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With(slog.String("component", "http"))))
+			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With(attr.SlogComponent("http"))))
 			mux.Use(middleware.CustomDomainsMiddleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 
-			auth.Attach(mux, auth.NewService(logger.With(slog.String("component", "auth")), db, sessionManager, auth.AuthConfigurations{
+			auth.Attach(mux, auth.NewService(logger.With(attr.SlogComponent("auth")), db, sessionManager, auth.AuthConfigurations{
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
 				GramServerURL:          c.String("server-url"),
 				SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("site-url")),
 				Environment:            c.String("environment"),
 			}))
-			projects.Attach(mux, projects.NewService(logger.With(slog.String("component", "projects")), db, sessionManager))
-			packages.Attach(mux, packages.NewService(logger.With(slog.String("component", "packages")), db, sessionManager))
-			integrations.Attach(mux, integrations.NewService(logger.With(slog.String("component", "integrations")), db, sessionManager))
-			templates.Attach(mux, templates.NewService(logger.With(slog.String("component", "templates")), db, sessionManager))
-			assets.Attach(mux, assets.NewService(logger.With(slog.String("component", "assets")), db, sessionManager, assetStorage))
-			deployments.Attach(mux, deployments.NewService(logger.With(slog.String("component", "deployments")), tracerProvider, db, temporalClient, sessionManager, assetStorage))
-			toolsets.Attach(mux, toolsets.NewService(logger.With(slog.String("component", "toolsets")), db, sessionManager))
-			keys.Attach(mux, keys.NewService(logger.With(slog.String("component", "keys")), db, sessionManager, c.String("environment")))
-			environments.Attach(mux, environments.NewService(logger.With(slog.String("component", "environments")), db, sessionManager, encryptionClient))
-			tools.Attach(mux, tools.NewService(logger.With(slog.String("component", "tools")), db, sessionManager))
-			oauthService := oauth.NewService(logger.With(slog.String("component", "oauth")), tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient)
+			projects.Attach(mux, projects.NewService(logger.With(attr.SlogComponent("projects")), db, sessionManager))
+			packages.Attach(mux, packages.NewService(logger.With(attr.SlogComponent("packages")), db, sessionManager))
+			integrations.Attach(mux, integrations.NewService(logger.With(attr.SlogComponent("integrations")), db, sessionManager))
+			templates.Attach(mux, templates.NewService(logger.With(attr.SlogComponent("templates")), db, sessionManager))
+			assets.Attach(mux, assets.NewService(logger.With(attr.SlogComponent("assets")), db, sessionManager, assetStorage))
+			deployments.Attach(mux, deployments.NewService(logger.With(attr.SlogComponent("deployments")), tracerProvider, db, temporalClient, sessionManager, assetStorage))
+			toolsets.Attach(mux, toolsets.NewService(logger.With(attr.SlogComponent("toolsets")), db, sessionManager))
+			keys.Attach(mux, keys.NewService(logger.With(attr.SlogComponent("keys")), db, sessionManager, c.String("environment")))
+			environments.Attach(mux, environments.NewService(logger.With(attr.SlogComponent("environments")), db, sessionManager, encryptionClient))
+			tools.Attach(mux, tools.NewService(logger.With(attr.SlogComponent("tools")), db, sessionManager))
+			oauthService := oauth.NewService(logger.With(attr.SlogComponent("oauth")), tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient)
 			oauth.Attach(mux, oauthService)
-			instances.Attach(mux, instances.NewService(logger.With(slog.String("component", "instances")), tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient))
-			mcp.Attach(mux, mcp.NewService(logger.With(slog.String("component", "mcp")), tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService))
-			chat.Attach(mux, chat.NewService(logger.With(slog.String("component", "chat")), db, sessionManager, openRouter))
+			instances.Attach(mux, instances.NewService(logger.With(attr.SlogComponent("instances")), tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient))
+			mcp.Attach(mux, mcp.NewService(logger.With(attr.SlogComponent("mcp")), tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService))
+			chat.Attach(mux, chat.NewService(logger.With(attr.SlogComponent("chat")), db, sessionManager, openRouter))
 			if slackClient.Enabled() {
-				slack.Attach(mux, slack.NewService(logger.With(slog.String("component", "slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
+				slack.Attach(mux, slack.NewService(logger.With(attr.SlogComponent("slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
 					GramServerURL:      c.String("server-url"),
 					SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("site-url")),
 					SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
 					SlackSigningSecret: c.String("slack-signing-secret"),
 				}))
 			}
-			variations.Attach(mux, variations.NewService(logger.With(slog.String("component", "variations")), db, sessionManager))
-			customdomains.Attach(mux, customdomains.NewService(logger.With(slog.String("component", "customdomains")), db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
+			variations.Attach(mux, variations.NewService(logger.With(attr.SlogComponent("variations")), db, sessionManager))
+			customdomains.Attach(mux, customdomains.NewService(logger.With(attr.SlogComponent("customdomains")), db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
@@ -480,7 +480,7 @@ func newStartCommand() *cli.Command {
 						ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
-						logger.ErrorContext(ctx, "temporal worker failed", slog.String("error", err.Error()))
+						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
 					}
 				})
 			}
@@ -494,19 +494,20 @@ func newStartCommand() *cli.Command {
 				defer graceCancel()
 
 				if err := srv.Shutdown(graceCtx); err != nil {
-					logger.ErrorContext(ctx, "failed to shutdown development server", slog.String("error", err.Error()))
+					logger.ErrorContext(ctx, "failed to shutdown development server", attr.SlogError(err))
 				}
 			})
 
 			tlsEnabled := c.String("ssl-key-file") != "" && c.String("ssl-cert-file") != ""
-			logger.InfoContext(ctx, "server started", slog.String("address", c.String("address")), slog.Bool("tls", tlsEnabled))
 			if tlsEnabled {
+				logger.InfoContext(ctx, "server started with tls", attr.SlogServerAddress(c.String("address")))
 				if err := srv.ListenAndServeTLS(c.String("ssl-cert-file"), c.String("ssl-key-file")); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					logger.ErrorContext(ctx, "server error", slog.String("error", err.Error()))
+					logger.ErrorContext(ctx, "server error", attr.SlogError(err))
 				}
 			} else {
+				logger.InfoContext(ctx, "server started", attr.SlogServerAddress(c.String("address")))
 				if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					logger.ErrorContext(ctx, "server error", slog.String("error", err.Error()))
+					logger.ErrorContext(ctx, "server error", attr.SlogError(err))
 				}
 			}
 

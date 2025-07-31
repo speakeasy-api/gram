@@ -28,6 +28,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -145,7 +146,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 			Data:    nil,
 		})
 		if err != nil {
-			service.logger.ErrorContext(r.Context(), "failed to marshal MCP 405 response", slog.String("error", err.Error()))
+			service.logger.ErrorContext(r.Context(), "failed to marshal MCP 405 response", attr.SlogError(err))
 			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 			return
 		}
@@ -154,7 +155,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		_, writeErr := w.Write(body)
 		if writeErr != nil {
-			service.logger.ErrorContext(r.Context(), "failed to write response body", slog.String("error", writeErr.Error()))
+			service.logger.ErrorContext(r.Context(), "failed to write response body", attr.SlogError(writeErr))
 		}
 	})
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", func(w http.ResponseWriter, r *http.Request) {
@@ -366,7 +367,7 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	buf := &bytes.Buffer{}
 	if err := hostedPageTmpl.Execute(buf, data); err != nil {
-		s.logger.ErrorContext(ctx, "failed to execute hosted page template", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to execute hosted page template", attr.SlogError(err))
 		return oops.E(oops.CodeUnexpected, err, "failed to execute hosted page template")
 	}
 
@@ -374,7 +375,7 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	w.WriteHeader(http.StatusOK)
 	_, err = w.Write(buf.Bytes())
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to write response body", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to write response body", attr.SlogError(err))
 	}
 
 	return nil
@@ -424,7 +425,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
 		}
-		s.logger.InfoContext(ctx, "OAuth token validated successfully", slog.String("toolset_id", toolset.ID.String()))
+		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
 
 		for _, externalSecret := range token.ExternalSecrets {
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
@@ -468,7 +469,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
 		}
-		s.logger.InfoContext(ctx, "OAuth token validated successfully", slog.String("toolset_id", toolset.ID.String()))
+		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
 
 		for _, externalSecret := range token.ExternalSecrets {
 			tokenInputs = append(tokenInputs, oauthTokenInputs{
@@ -486,7 +487,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		case errors.Is(err, sql.ErrNoRows):
 			return oops.E(oops.CodeForbidden, nil, "no projects found").Log(ctx, s.logger)
 		case err != nil:
-			return oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, s.logger, slog.String("org_id", authCtx.ActiveOrganizationID))
+			return oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, s.logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 		}
 
 		projectInOrg := false

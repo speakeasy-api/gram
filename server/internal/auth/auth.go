@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -60,7 +61,7 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 	case errors.Is(err, sql.ErrNoRows):
 		return ctx, oops.E(oops.CodeForbidden, nil, "no projects found")
 	case err != nil:
-		return ctx, oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, logger, slog.String("org_id", authCtx.ActiveOrganizationID))
+		return ctx, oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
 	if projectSlug == "" && len(projects) == 1 {
@@ -81,7 +82,7 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 		}
 	}
 
-	logger = logger.With(slog.String("project_slug", projectSlug), slog.String("org_id", authCtx.ActiveOrganizationID))
+	logger = logger.With(attr.SlogProjectSlug(projectSlug), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 
 	if !hasProjectAccess {
 		return ctx, oops.C(oops.CodeForbidden).Log(ctx, logger)

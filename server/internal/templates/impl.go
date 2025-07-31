@@ -21,6 +21,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/templates/server"
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -75,7 +76,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 
 	projectID := *authCtx.ProjectID
 
-	logger := s.logger.With(slog.String("project_id", projectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -142,7 +143,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	}
 
 	projectID := *authCtx.ProjectID
-	logger := s.logger.With(slog.String("project_id", projectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -313,7 +314,7 @@ func (s *Service) RenderTemplateByID(ctx context.Context, payload *gen.RenderTem
 	}
 
 	projectID := *authCtx.ProjectID
-	logger := s.logger.With(slog.String("project_id", projectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
@@ -363,7 +364,7 @@ func (s *Service) RenderTemplate(ctx context.Context, payload *gen.RenderTemplat
 	}
 
 	projectID := *authCtx.ProjectID
-	logger := s.logger.With(slog.String("project_id", projectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 
 	prompt := payload.Prompt
 	renderedPrompt := prompt

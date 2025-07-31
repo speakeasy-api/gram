@@ -6,6 +6,8 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -43,7 +45,7 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 			"mcp_url":             requestContext.Host + requestContext.ReqURL,
 			"disable_noification": true,
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to capture mcp_server_count event", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "failed to capture mcp_server_count event", attr.SlogError(err))
 		}
 	}
 

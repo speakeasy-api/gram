@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 func runShutdown(logger *slog.Logger, logCtx context.Context, shutdownFuncs []func(context.Context) error) error {
@@ -23,7 +25,7 @@ func runShutdown(logger *slog.Logger, logCtx context.Context, shutdownFuncs []fu
 		go func(shutdown func(context.Context) error) {
 			defer wg.Done()
 			if err := shutdown(ctx); err != nil {
-				logger.ErrorContext(logCtx, "failed to shutdown component", slog.String("error", err.Error()))
+				logger.ErrorContext(logCtx, "failed to shutdown component", attr.SlogError(err))
 			}
 		}(shutdown)
 	}

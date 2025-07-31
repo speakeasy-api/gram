@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 type Server struct {
@@ -48,9 +50,9 @@ func (s *Server) Start(ctx context.Context, healthCheck http.Handler) (shutdown 
 	}
 
 	go func() {
-		s.Logger.InfoContext(ctx, "control server started", slog.String("address", s.Address))
+		s.Logger.InfoContext(ctx, "control server started", attr.SlogServerAddress(s.Address))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			s.Logger.ErrorContext(ctx, "control server error", slog.String("error", err.Error()))
+			s.Logger.ErrorContext(ctx, "control server error", attr.SlogError(err))
 		}
 	}()
 

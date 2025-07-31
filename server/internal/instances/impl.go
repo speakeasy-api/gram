@@ -20,6 +20,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/instances/server"
 	gen "github.com/speakeasy-api/gram/server/gen/instances"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -275,7 +276,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			"tool_id":             executionInfo.Tool.ID,
 			"disable_noification": true,
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to capture direct_tool_execution event", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "failed to capture direct_tool_execution event", attr.SlogError(err))
 		}
 	}
 
@@ -284,8 +285,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to read request body").Log(ctx, logger)
 	}
-
-	logger.InfoContext(ctx, "request body", slog.String("request_body", string(requestBodyBytes)))
 
 	requestBody = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
 

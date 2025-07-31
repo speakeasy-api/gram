@@ -23,6 +23,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -142,18 +143,22 @@ func (itp *ToolProxy) Do(
 	defer span.End()
 
 	logger := itp.logger.With(
-		slog.String("project_id", tool.ProjectID),
-		slog.String("deployment_id", tool.DeploymentID),
-		slog.String("tool_id", tool.ID),
-		slog.String("tool_name", tool.Name),
-		slog.String("tool_call.source", string(itp.source)),
-		slog.String("http_route", tool.Path),
+		attr.SlogProjectID(tool.ProjectID),
+		attr.SlogDeploymentID(tool.DeploymentID),
+		attr.SlogToolID(tool.ID),
+		attr.SlogToolName(tool.Name),
+		attr.SlogToolCallSource(string(itp.source)),
+		attr.SlogHTTPRoute(tool.Path),
 	)
 
 	// Variable to capture status code for metrics
 	var responseStatusCode int
 	defer func() {
-		logger.InfoContext(ctx, "tool call", slog.String("status_code", fmt.Sprintf("%d", responseStatusCode)), slog.String("method", tool.Method), slog.String("content_type", tool.RequestContentType.Value))
+		logger.InfoContext(ctx, "tool call",
+			attr.SlogHTTPResponseStatusCode(responseStatusCode),
+			attr.SlogHTTPRequestMethod(tool.Method),
+			attr.SlogHTTPResponseHeaderContentType(tool.RequestContentType.Value),
+		)
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
 		itp.metrics.RecordHTTPToolCall(ctx, tool.OrganizationID, tool.Name, responseStatusCode)
 
@@ -175,14 +180,14 @@ func (itp *ToolProxy) Do(
 	// We are silently failing before we actually start returning errors to the LLM related to body not fitting json schema
 	if len(tool.Schema) > 0 {
 		if validateErr := validateToolCallBody(ctx, logger, bodyBytes, string(tool.Schema)); validateErr != nil {
-			logger.InfoContext(ctx, "tool call request schema failed validation", slog.String("error", validateErr.Error()))
+			logger.InfoContext(ctx, "tool call request schema failed validation", attr.SlogError(validateErr))
 			responseStatusCode = http.StatusBadRequest
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			if err := json.NewEncoder(w).Encode(toolcallErrorSchema{
 				Error: fmt.Sprintf("The input to the tool is invalid with the attached error. Please review the tool schema closely: %s", validateErr.Error()),
 			}); err != nil {
-				logger.ErrorContext(ctx, "failed to encode tool call error", slog.String("error", err.Error()))
+				logger.ErrorContext(ctx, "failed to encode tool call error", attr.SlogError(err))
 			}
 			return nil
 		}
@@ -203,7 +208,7 @@ func (itp *ToolProxy) Do(
 			param := tool.PathParams[name]
 			var settings *serialization.HTTPParameter
 			if param == nil {
-				logger.WarnContext(ctx, "no parameter settings found for path parameter", slog.String("parameter", name))
+				logger.WarnContext(ctx, "no parameter settings found for path parameter", attr.SlogHTTPParamName(name))
 			} else {
 				settings = &serialization.HTTPParameter{
 					Name:            param.Name,
@@ -217,7 +222,7 @@ func (itp *ToolProxy) Do(
 			if params != nil && params[name] != "" {
 				pathParams[name] = params[name]
 			} else {
-				logger.ErrorContext(ctx, "failed to parse path parameter", slog.String("parameter", name), slog.Any("value", value))
+				logger.ErrorContext(ctx, "failed to parse path parameter", attr.SlogHTTPParamName(name), attr.SlogHTTPParamValue(value))
 			}
 		}
 		urlStr := insertPathParams(requestPath, pathParams)
@@ -239,7 +244,7 @@ func (itp *ToolProxy) Do(
 	}
 
 	if serverURL == "" {
-		logger.ErrorContext(ctx, "no server URL provided for tool", slog.String("tool", tool.Name))
+		logger.ErrorContext(ctx, "no server URL provided for tool", attr.SlogToolName(tool.Name))
 		return oops.E(oops.CodeUnexpected, nil, "no server URL provided for tool").Log(ctx, logger)
 	}
 
@@ -291,7 +296,7 @@ func (itp *ToolProxy) Do(
 			param := tool.QueryParams[name]
 			var settings *serialization.HTTPParameter
 			if param == nil {
-				logger.WarnContext(ctx, "no parameter settings found for query parameter", slog.String("parameter", name))
+				logger.WarnContext(ctx, "no parameter settings found for query parameter", attr.SlogHTTPParamName(name))
 			} else {
 				settings = &serialization.HTTPParameter{
 					Name:            param.Name,
@@ -309,7 +314,7 @@ func (itp *ToolProxy) Do(
 					}
 				}
 			} else {
-				logger.ErrorContext(ctx, "failed to parse query parameter", slog.String("parameter", name), slog.Any("value", value))
+				logger.ErrorContext(ctx, "failed to parse query parameter", attr.SlogHTTPParamName(name), attr.SlogHTTPParamValue(value))
 			}
 		}
 		req.URL.RawQuery = values.Encode()
@@ -321,7 +326,7 @@ func (itp *ToolProxy) Do(
 			param := tool.HeaderParams[name]
 			var settings *serialization.HTTPParameter
 			if param == nil {
-				logger.WarnContext(ctx, "no parameter settings found for header parameter", slog.String("parameter", name))
+				logger.WarnContext(ctx, "no parameter settings found for header parameter", attr.SlogHTTPParamName(name))
 			} else {
 				settings = &serialization.HTTPParameter{
 					Name:            param.Name,
@@ -335,7 +340,7 @@ func (itp *ToolProxy) Do(
 			if params != nil && params[name] != "" {
 				req.Header.Set(name, params[name])
 			} else {
-				logger.ErrorContext(ctx, "failed to parse header", slog.String("header", name), slog.Any("value", value))
+				logger.ErrorContext(ctx, "failed to parse header parameter", attr.SlogHTTPParamName(name), attr.SlogHTTPParamValue(value))
 			}
 		}
 	}
@@ -507,7 +512,7 @@ func reverseProxyRequest(ctx context.Context,
 
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
 		// Streaming mode: flush after each chunk
-		logger.InfoContext(ctx, "streaming with flush", slog.String("content_type", resp.Header.Get("Content-Type")))
+		logger.InfoContext(ctx, "streaming with flush", attr.SlogHTTPResponseHeaderContentType(resp.Header.Get("Content-Type")))
 
 		buf := make([]byte, 32*1024)
 		flusher, canFlush := w.(http.Flusher)
@@ -516,7 +521,7 @@ func reverseProxyRequest(ctx context.Context,
 			n, err := resp.Body.Read(buf)
 			if n > 0 {
 				if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-					logger.ErrorContext(ctx, "client write failed", slog.String("error", writeErr.Error()))
+					logger.ErrorContext(ctx, "client write failed", attr.SlogError(writeErr))
 					break
 				}
 				if canFlush {
@@ -526,7 +531,7 @@ func reverseProxyRequest(ctx context.Context,
 			if err != nil {
 				if err != io.EOF {
 					span.SetStatus(codes.Error, err.Error())
-					logger.ErrorContext(ctx, "upstream read failed", slog.String("error", err.Error()))
+					logger.ErrorContext(ctx, "upstream read failed", attr.SlogError(err))
 				}
 				break
 			}
@@ -543,7 +548,7 @@ func reverseProxyRequest(ctx context.Context,
 
 		if _, err := io.Copy(w, body); err != nil {
 			span.SetStatus(codes.Error, err.Error())
-			logger.ErrorContext(ctx, "failed to copy response body", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "failed to copy response body", attr.SlogError(err))
 		}
 	}
 
@@ -556,7 +561,7 @@ func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTo
 		if envVar != "" {
 			return envVar
 		} else {
-			logger.WarnContext(ctx, "environment variable for server not found", slog.String("key", tool.ServerEnvVar))
+			logger.WarnContext(ctx, "environment variable for server not found", attr.SlogEnvVarName(tool.ServerEnvVar))
 		}
 	}
 	return ""

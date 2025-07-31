@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 func newMeter(meterProvider metric.MeterProvider) metric.Meter {
@@ -42,7 +44,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		metric.WithUnit("{#}"),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "create metric error", slog.String("metric", metricOpenAPIOperationsSkipped), slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "create metric error", attr.SlogMetricName(metricOpenAPIOperationsSkipped), attr.SlogError(err))
 	}
 
 	openAPIUpgradeCounter, err := meter.Int64Counter(
@@ -51,7 +53,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		metric.WithUnit("{upgrade}"),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to create metric", slog.String("name", meterOpenAPIUpgradeCounter), slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterOpenAPIUpgradeCounter), attr.SlogError(err))
 	}
 
 	openAPIProcessedCounter, err := meter.Int64Counter(
@@ -60,7 +62,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		metric.WithUnit("{document}"),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to create metric", slog.String("name", meterOpenAPIProcessedCounter), slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterOpenAPIProcessedCounter), attr.SlogError(err))
 	}
 
 	openAPIProcessedDuration, err := meter.Float64Histogram(
@@ -70,7 +72,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		metric.WithExplicitBucketBoundaries(0.1, 0.5, 1, 2, 5, 10, 20, 30, 60, 120, 240),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to create metric", slog.String("name", meterOpenAPIProcessedDuration), slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterOpenAPIProcessedDuration), attr.SlogError(err))
 	}
 
 	openAPIUpgradeDuration, err := meter.Float64Histogram(
@@ -80,7 +82,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		metric.WithExplicitBucketBoundaries(.05, .1, .25, .5, .75, 1, 2.5, 5, 7.5, 10, 25),
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to create metric", slog.String("name", meterOpenAPIUpgradeDuration), slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterOpenAPIUpgradeDuration), attr.SlogError(err))
 	}
 
 	return &metrics{

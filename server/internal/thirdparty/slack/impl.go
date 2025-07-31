@@ -28,6 +28,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/slack/server"
 	gen "github.com/speakeasy-api/gram/server/gen/slack"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
@@ -103,7 +104,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		cfg:                 &cfg,
 		client:              client,
 		temporal:            temporal,
-		watchedThreadsCache: cache.NewTypedObjectCache[types.AppMentionedThreads](logger.With(slog.String("cache", "watched_threads")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		watchedThreadsCache: cache.NewTypedObjectCache[types.AppMentionedThreads](logger.With(attr.SlogCacheNamespace("watched_threads")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
 }
 
@@ -124,7 +125,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
 	returnURL := s.cfg.SignInRedirectURL
 	redirectWithError := func(returnURL string, err error) (*gen.CallbackResult, error) {
-		s.logger.ErrorContext(ctx, "slack auth error", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "slack auth error", attr.SlogError(err))
 		return &gen.CallbackResult{
 			Location: fmt.Sprintf("%s?slack_error=%s", returnURL, err.Error()),
 		}, nil
@@ -309,7 +310,7 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 
 	_, err := s.repo.GetSlackAppConnectionByTeamID(ctx, event.TeamID)
 	if err != nil {
-		s.logger.InfoContext(ctx, "skipping an event with no slack app connection", slog.Any("team_id", event.TeamID))
+		s.logger.InfoContext(ctx, "skipping an event with no slack app connection", attr.SlogSlackTeamID(event.TeamID))
 		w.WriteHeader(http.StatusOK)
 	}
 
@@ -329,7 +330,7 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 			Channel:  event.Event.Channel,
 			ThreadTs: threadTs,
 		}); err != nil {
-			s.logger.ErrorContext(ctx, "failed to store user info in cache", slog.String("error", err.Error()))
+			s.logger.ErrorContext(ctx, "failed to store user info in cache", attr.SlogError(err))
 		}
 		processEvent = true
 
@@ -361,7 +362,7 @@ func (s *Service) SlackEventHandler(w http.ResponseWriter, r *http.Request) erro
 		}
 
 	default:
-		s.logger.InfoContext(ctx, "we do not process this event type", slog.Any("event_type", event.Event.Type))
+		s.logger.InfoContext(ctx, "we do not process this event type", attr.SlogSlackEventType(event.Event.Type))
 	}
 
 	if processEvent {

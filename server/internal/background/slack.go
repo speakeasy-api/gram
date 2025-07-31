@@ -3,17 +3,18 @@ package background
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
-	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 )
 
 type ProcessSlackWorkflowParams struct {
@@ -39,7 +40,7 @@ func SlackEventWorkflow(ctx workflow.Context, params ProcessSlackWorkflowParams)
 	var a *Activities
 
 	logger := workflow.GetLogger(ctx)
-	logger.Info("received slack event", slog.Any("event", params.Event))
+	logger.Info("received slack event", attr.SlogSlackEventFull(params.Event))
 
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,
@@ -191,7 +192,7 @@ func formatListToolsSlackMessage(input activities.SlackProjectContextResponse) s
 
 func postSlackErrorMessage(ctx workflow.Context, a *Activities, event types.SlackEvent, err error) (*ProcessSlackEventResult, error) {
 	logger := workflow.GetLogger(ctx)
-	logger.Error("error in slack event workflow", slog.String("error", err.Error()))
+	logger.Error("error in slack event workflow", attr.SlogError(err))
 	msg := "*Error:* \n Apologies I am unable to complete your request."
 	activityErr := workflow.ExecuteActivity(
 		ctx,

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 )
@@ -26,7 +27,7 @@ type GrantManager struct {
 }
 
 func NewGrantManager(cacheImpl cache.Cache, clientRegistration *ClientRegistrationService, pkceService *PKCEService, logger *slog.Logger, enc *encryption.Client) *GrantManager {
-	grantStorage := cache.NewTypedObjectCache[Grant](logger.With(slog.String("cache", "oauth_grant")), cacheImpl, cache.SuffixNone)
+	grantStorage := cache.NewTypedObjectCache[Grant](logger.With(attr.SlogCacheNamespace("oauth_grant")), cacheImpl, cache.SuffixNone)
 	return &GrantManager{
 		grantStorage:            grantStorage,
 		clientRegistration:      clientRegistration,
@@ -79,8 +80,8 @@ func (gm *GrantManager) CreateAuthorizationGrant(ctx context.Context, req *Autho
 	}
 
 	gm.logger.InfoContext(ctx, "authorization grant created",
-		slog.String("client_id", req.ClientID),
-		slog.String("scope", req.Scope))
+		attr.SlogOAuthClientID(req.ClientID),
+		attr.SlogOAuthScope(req.Scope))
 
 	return grant, nil
 }
@@ -95,7 +96,7 @@ func (gm *GrantManager) ValidateAndConsumeGrant(ctx context.Context, mcpSlug str
 	if time.Now().After(grant.ExpiresAt) {
 		// Clean up expired grant
 		if err := gm.deleteGrant(ctx, *grant); err != nil {
-			gm.logger.ErrorContext(ctx, "failed to delete expired grant", slog.String("error", err.Error()))
+			gm.logger.ErrorContext(ctx, "failed to delete expired grant", attr.SlogError(err))
 		}
 		return nil, fmt.Errorf("authorization code has expired")
 	}
@@ -113,12 +114,12 @@ func (gm *GrantManager) ValidateAndConsumeGrant(ctx context.Context, mcpSlug str
 	// Grant is valid, consume it (delete it to prevent replay)
 	if err := gm.deleteGrant(ctx, *grant); err != nil {
 		gm.logger.ErrorContext(ctx, "failed to delete grant",
-			slog.String("code", code),
-			slog.String("error", err.Error()))
+			attr.SlogOAuthCode(code),
+			attr.SlogError(err))
 	}
 
 	gm.logger.InfoContext(ctx, "grant validated and consumed",
-		slog.String("client_id", clientID))
+		attr.SlogOAuthClientID(clientID))
 
 	return grant, nil
 }
@@ -157,7 +158,7 @@ func (gm *GrantManager) ValidateAuthorizationRequest(ctx context.Context, req *A
 
 	if req.CodeChallenge != "" {
 		if req.CodeChallengeMethod == "plain" {
-			gm.logger.InfoContext(ctx, "client is using plain code challenge method", slog.String("client_id", req.ClientID))
+			gm.logger.InfoContext(ctx, "client is using plain code challenge method", attr.SlogOAuthClientID(req.ClientID))
 		}
 		if err := gm.pkceService.ValidateCodeChallenge(ctx, req.CodeChallenge, req.CodeChallengeMethod); err != nil {
 			return fmt.Errorf("invalid PKCE challenge: %w", err)
@@ -229,8 +230,8 @@ func (gm *GrantManager) BuildAuthorizationResponse(ctx context.Context, grant *G
 	u.RawQuery = query.Encode()
 
 	gm.logger.InfoContext(ctx, "authorization response built",
-		slog.String("client_id", grant.ClientID),
-		slog.String("redirect_uri", redirectURI))
+		attr.SlogOAuthClientID(grant.ClientID),
+		attr.SlogOAuthRedirectURIFull(redirectURI))
 
 	return u.String(), nil
 }
@@ -258,8 +259,8 @@ func (gm *GrantManager) BuildErrorResponse(ctx context.Context, redirectURI, err
 	u.RawQuery = query.Encode()
 
 	gm.logger.InfoContext(ctx, "error response built",
-		slog.String("error", errorString),
-		slog.String("redirect_uri", redirectURI))
+		attr.SlogErrorMessage(errorString),
+		attr.SlogOAuthRedirectURIFull(redirectURI))
 
 	return u.String(), nil
 }

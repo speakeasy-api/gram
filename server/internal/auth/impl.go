@@ -20,6 +20,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/auth"
 	srv "github.com/speakeasy-api/gram/server/gen/http/auth/server"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -86,7 +87,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
 	redirectWithError := func(err error) (*gen.CallbackResult, error) {
-		s.logger.ErrorContext(ctx, "signin error", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err))
 		return &gen.CallbackResult{
 			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
 			SessionToken:  "",
@@ -166,7 +167,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 func (s *Service) Login(ctx context.Context) (res *gen.LoginResult, err error) {
 	if s.sessions.IsUnsafeLocalDevelopment() {
 		err = errors.New("calling rpc.login for local development stubbed auth is not supported because stubbed auth implies always being logged in. Reaching this point suggests a problem with dashboard authentication")
-		s.logger.ErrorContext(ctx, "signin error", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err))
 		return &gen.LoginResult{
 			Location: fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
 		}, nil

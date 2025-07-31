@@ -22,6 +22,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -193,7 +194,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	if err := s.validateAuthorizationRequest(ctx, req, fullMcpSlug); err != nil {
-		s.logger.ErrorContext(ctx, "invalid authorization request", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "invalid authorization request", attr.SlogError(err))
 
 		// Return 403 with error details instead of redirecting
 		w.Header().Set("Content-Type", "application/json")
@@ -202,7 +203,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 			"error": "invalid_client",
 		}
 		if err := json.NewEncoder(w).Encode(errorResponse); err != nil {
-			s.logger.ErrorContext(ctx, "failed to encode error response", slog.String("error", err.Error()))
+			s.logger.ErrorContext(ctx, "failed to encode error response", attr.SlogError(err))
 		}
 		return nil
 	}
@@ -356,8 +357,8 @@ func (s *Service) handleAuthorizationComplete(w http.ResponseWriter, r *http.Req
 	authURL.RawQuery = params.Encode()
 
 	s.logger.InfoContext(ctx, "redirecting to OAuth authorization",
-		slog.String("provider", provider.Slug),
-		slog.String("redirect_url", authURL.String()))
+		attr.SlogOAuthProvider(provider.Slug),
+		attr.SlogOAuthRedirectURIFull(authURL.String()))
 
 	// Redirect to underlying OAuth provider
 	http.Redirect(w, r, authURL.String(), http.StatusFound)
@@ -414,7 +415,7 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(s.tokenService.CreateTokenResponse(token)); err != nil {
-		s.logger.ErrorContext(ctx, "failed to encode token response", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to encode token response", attr.SlogError(err))
 	}
 	return nil
 }
@@ -457,7 +458,7 @@ func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	if err := json.NewEncoder(w).Encode(client); err != nil {
-		s.logger.ErrorContext(ctx, "failed to encode client registration response", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to encode client registration response", attr.SlogError(err))
 	}
 	return nil
 }
@@ -552,7 +553,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 	req, err := http.NewRequestWithContext(ctx, "POST", tokenURL, strings.NewReader(tokenData.Encode()))
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to create token request", slog.String("provider", provider.Slug), slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to create token request", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
 		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Failed to exchange authorization code", oauthReqInfo["state"])
 		http.Redirect(w, r, errorURL, http.StatusFound)
 		return nil
@@ -565,19 +566,19 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 	tokenResp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to exchange code for token", slog.String("provider", provider.Slug), slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to exchange code for token", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
 		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Failed to exchange authorization code", oauthReqInfo["state"])
 		http.Redirect(w, r, errorURL, http.StatusFound)
 		return nil
 	}
 	defer func() {
 		if err := tokenResp.Body.Close(); err != nil {
-			s.logger.ErrorContext(ctx, "failed to close response body", slog.String("error", err.Error()))
+			s.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(err))
 		}
 	}()
 
 	if tokenResp.StatusCode != http.StatusOK {
-		s.logger.ErrorContext(ctx, "OAuth token exchange failed", slog.String("provider", provider.Slug), slog.Int("status_code", tokenResp.StatusCode))
+		s.logger.ErrorContext(ctx, "OAuth token exchange failed", attr.SlogOAuthProvider(provider.Slug), attr.SlogHTTPResponseStatusCode(tokenResp.StatusCode))
 		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Authorization code exchange failed", oauthReqInfo["state"])
 		http.Redirect(w, r, errorURL, http.StatusFound)
 		return nil
@@ -585,7 +586,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 	tokenRespBody, err := io.ReadAll(tokenResp.Body)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to read OAuth token response", slog.String("provider", provider.Slug), slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to read OAuth token response", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
 		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Failed to read token response", oauthReqInfo["state"])
 		http.Redirect(w, r, errorURL, http.StatusFound)
 		return nil
@@ -593,7 +594,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 	var oauthTokenResp map[string]interface{}
 	if err := json.Unmarshal(tokenRespBody, &oauthTokenResp); err != nil {
-		s.logger.ErrorContext(ctx, "failed to parse OAuth token response", slog.String("provider", provider.Slug), slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to parse OAuth token response", attr.SlogOAuthProvider(provider.Slug), attr.SlogError(err))
 		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Invalid token response", oauthReqInfo["state"])
 		http.Redirect(w, r, errorURL, http.StatusFound)
 		return nil
@@ -605,7 +606,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		// Retry with camelCase field name
 		accessToken, ok = oauthTokenResp["accessToken"].(string)
 		if !ok {
-			s.logger.ErrorContext(ctx, "missing access_token in OAuth response", slog.String("provider", provider.Slug))
+			s.logger.ErrorContext(ctx, "missing access_token in OAuth response", attr.SlogOAuthProvider(provider.Slug))
 			errorURL, _ := s.grantManager.BuildErrorResponse(ctx, oauthReqInfo["redirect_uri"], "server_error", "Invalid token response", oauthReqInfo["state"])
 			http.Redirect(w, r, errorURL, http.StatusFound)
 			return nil
@@ -637,7 +638,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 
 	grant, err := s.grantManager.CreateAuthorizationGrant(ctx, authReq, fullMcpSlug, accessToken, expiresAt, provider.SecurityKeyNames)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to create authorization grant", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to create authorization grant", attr.SlogError(err))
 
 		// Build error response
 		errorURL, _ := s.grantManager.BuildErrorResponse(ctx, authReq.RedirectURI, "server_error", "Failed to create authorization grant", authReq.State)
@@ -646,9 +647,9 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 	}
 
 	s.logger.InfoContext(ctx, "authorization grant created after external provider callback",
-		slog.String("client_id", authReq.ClientID),
-		slog.String("grant_code", grant.Code),
-		slog.String("external_code", externalCode))
+		attr.SlogOAuthClientID(authReq.ClientID),
+		attr.SlogOAuthCode(grant.Code),
+		attr.SlogOAuthExternalCode(externalCode))
 
 	// Build authorization response and redirect back to client
 	responseURL, err := s.grantManager.BuildAuthorizationResponse(ctx, grant, authReq.RedirectURI)

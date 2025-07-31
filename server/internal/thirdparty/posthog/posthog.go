@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/posthog/posthog-go"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
@@ -43,7 +45,7 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 		},
 	)
 	if err != nil {
-		logger.ErrorContext(ctx, "failed to instantiate posthog client", slog.String("error", err.Error()))
+		logger.ErrorContext(ctx, "failed to instantiate posthog client", attr.SlogError(err))
 		return &Posthog{
 			disabled: true,
 			logger:   logger,

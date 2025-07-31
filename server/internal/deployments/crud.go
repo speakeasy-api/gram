@@ -11,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -91,8 +92,8 @@ func createDeployment(
 		return newID, nil
 	}
 
-	logger = logger.With(slog.String("deployment_id", d.Deployment.ID.String()))
-	span.SetAttributes(attribute.String("deployment_id", d.Deployment.ID.String()))
+	logger = logger.With(attr.SlogDeploymentID(d.Deployment.ID.String()))
+	span.SetAttributes(attr.DeploymentID(d.Deployment.ID.String()))
 
 	aerr := amendDeployment(ctx, logger, tx, DeploymentID(newID), openAPIv3ToUpsert, packagesToUpsert)
 	if aerr != nil {
@@ -140,7 +141,7 @@ func cloneDeployment(
 		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").Log(ctx, logger)
 	}
 
-	logger = logger.With(slog.String("deployment_id", newID.String()))
+	logger = logger.With(attr.SlogDeploymentID(newID.String()))
 	span.SetAttributes(attribute.String("deployment_id", newID.String()))
 
 	_, err = depRepo.CloneDeploymentPackages(ctx, repo.CloneDeploymentPackagesParams{

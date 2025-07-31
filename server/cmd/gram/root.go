@@ -10,6 +10,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.uber.org/automaxprocs/maxprocs"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -50,13 +51,13 @@ func newApp() *cli.App {
 			// Sets GOMAXPROCS to match the Linux container CPU quota.
 			_, err := maxprocs.Set(maxprocs.Logger(nil))
 			if err != nil {
-				logger.ErrorContext(c.Context, "automaxprocs", slog.String("error", err.Error()))
+				logger.ErrorContext(c.Context, "automaxprocs", attr.SlogError(err))
 			}
 
 			// Sets `GOMEMLIMIT` to 90% of cgroup's memory limit.
 			_, err = memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(nil))
 			if err != nil {
-				logger.ErrorContext(c.Context, "automemlimit", slog.String("error", err.Error()))
+				logger.ErrorContext(c.Context, "automemlimit", attr.SlogError(err))
 			}
 
 			c.Context = PushLogger(c.Context, logger)

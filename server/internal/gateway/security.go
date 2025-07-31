@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
@@ -28,18 +29,18 @@ func processSecurity(
 ) bool {
 	for _, security := range tool.Security {
 		if !security.Type.Valid {
-			logger.ErrorContext(ctx, "invalid security type in tool definition", slog.String("tool", tool.Name))
+			logger.ErrorContext(ctx, "invalid security type in tool definition", attr.SlogToolName(tool.Name))
 			continue
 		}
 
 		switch security.Type.Value {
 		case "apiKey":
 			if len(security.EnvVariables) == 0 {
-				logger.ErrorContext(ctx, "no environment variables provided for api key auth", slog.String("scheme", security.Scheme.Value))
+				logger.ErrorContext(ctx, "no environment variables provided for api key auth", attr.SlogSecurityScheme(security.Scheme.Value))
 			} else if envVars.Get(security.EnvVariables[0]) == "" {
-				logger.ErrorContext(ctx, "missing value for environment variable in api key auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.Value))
+				logger.ErrorContext(ctx, "missing value for environment variable in api key auth", attr.SlogEnvVarName(security.EnvVariables[0]), attr.SlogSecurityScheme(security.Scheme.Value))
 			} else if !security.Name.Valid || security.Name.Value == "" {
-				logger.ErrorContext(ctx, "no name provided for api key auth", slog.String("scheme", security.Scheme.Value))
+				logger.ErrorContext(ctx, "no name provided for api key auth", attr.SlogSecurityScheme(security.Scheme.Value))
 			} else {
 				key := security.EnvVariables[0]
 				switch security.Placement.Value {
@@ -50,23 +51,23 @@ func processSecurity(
 					values.Set(security.Name.Value, envVars.Get(key))
 					req.URL.RawQuery = values.Encode()
 				default:
-					logger.ErrorContext(ctx, "unsupported api key placement", slog.String("placement", security.Placement.Value))
+					logger.ErrorContext(ctx, "unsupported api key placement", attr.SlogSecurityPlacement(security.Placement.Value))
 				}
 			}
 		case "http":
 			switch security.Scheme.Value {
 			case "bearer":
 				if len(security.EnvVariables) == 0 {
-					logger.ErrorContext(ctx, "no environment variables provided for bearer auth", slog.String("scheme", security.Scheme.Value))
+					logger.ErrorContext(ctx, "no environment variables provided for bearer auth", attr.SlogSecurityScheme(security.Scheme.Value))
 				} else if envVars.Get(security.EnvVariables[0]) == "" {
-					logger.ErrorContext(ctx, "token value is empty for bearer auth", slog.String("key", security.EnvVariables[0]), slog.String("scheme", security.Scheme.Value))
+					logger.ErrorContext(ctx, "token value is empty for bearer auth", attr.SlogEnvVarName(security.EnvVariables[0]), attr.SlogSecurityScheme(security.Scheme.Value))
 				} else {
 					token := envVars.Get(security.EnvVariables[0])
 					req.Header.Set("Authorization", formatForBearer(token))
 				}
 			case "basic":
 				if len(security.EnvVariables) < 2 {
-					logger.ErrorContext(ctx, "not enough environment variables provided for basic auth", slog.String("scheme", security.Scheme.Value))
+					logger.ErrorContext(ctx, "not enough environment variables provided for basic auth", attr.SlogSecurityScheme(security.Scheme.Value))
 				} else {
 					var username, password string
 					for _, envVar := range security.EnvVariables {
@@ -79,20 +80,19 @@ func processSecurity(
 
 					if username == "" || password == "" {
 						logger.ErrorContext(ctx, "missing username or password value for basic auth",
-							slog.Bool("env_username", security.EnvVariables[0] == ""),
-							slog.Bool("env_password", security.EnvVariables[1] == ""),
-							slog.String("scheme", security.Scheme.Value))
+							attr.SlogValueString(fmt.Sprintf("env_username=%t env_password=%t", security.EnvVariables[0] == "", security.EnvVariables[1] == "")),
+							attr.SlogSecurityScheme(security.Scheme.Value))
 					} else {
 						req.SetBasicAuth(username, password)
 					}
 				}
 			default:
-				logger.ErrorContext(ctx, "unsupported http security scheme", slog.String("scheme", security.Scheme.Value))
+				logger.ErrorContext(ctx, "unsupported http security scheme", attr.SlogSecurityScheme(security.Scheme.Value))
 				continue
 			}
 		case "oauth2":
 			if security.OAuthTypes == nil {
-				logger.ErrorContext(ctx, "no oauth types provided for oauth2 auth", slog.String("scheme", security.Scheme.Value))
+				logger.ErrorContext(ctx, "no oauth types provided for oauth2 auth", attr.SlogSecurityScheme(security.Scheme.Value))
 			}
 
 			for _, oauthType := range security.OAuthTypes {
@@ -101,7 +101,7 @@ func processSecurity(
 					for _, envVar := range security.EnvVariables {
 						if strings.Contains(envVar, "ACCESS_TOKEN") {
 							if token := envVars.Get(envVar); token == "" {
-								logger.ErrorContext(ctx, "missing authorization code", slog.String("env_var", envVar))
+								logger.ErrorContext(ctx, "missing authorization code", attr.SlogEnvVarName(envVar))
 							} else {
 								req.Header.Set("Authorization", formatForBearer(token))
 							}
@@ -109,7 +109,7 @@ func processSecurity(
 					}
 				case "client_credentials":
 					if err := processClientCredentials(ctx, logger, req, cacheImpl, tool, security, envVars, serverURL); err != nil {
-						logger.ErrorContext(ctx, "could not process client credentials", slog.String("error", err.Error()))
+						logger.ErrorContext(ctx, "could not process client credentials", attr.SlogError(err))
 						if strings.Contains(err.Error(), "failed to make client credentials token request") {
 							w.Header().Set("Content-Type", "application/json")
 							w.WriteHeader(http.StatusUnauthorized)
@@ -119,7 +119,7 @@ func processSecurity(
 							if err := json.NewEncoder(w).Encode(toolcallErrorSchema{
 								Error: err.Error(),
 							}); err != nil {
-								logger.ErrorContext(ctx, "failed to encode tool call error", slog.String("error", err.Error()))
+								logger.ErrorContext(ctx, "failed to encode tool call error", attr.SlogError(err))
 							}
 							return false
 						}
@@ -127,7 +127,7 @@ func processSecurity(
 				}
 			}
 		default:
-			logger.ErrorContext(ctx, "unsupported security scheme type", slog.String("type", security.Type.Value))
+			logger.ErrorContext(ctx, "unsupported security scheme type", attr.SlogSecurityType(security.Type.Value))
 			continue
 		}
 	}
@@ -200,7 +200,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	// To discuss, currently we are taking the approach of exact scope match for reused tokens
 	// We could look into enabling a prefix match feature for caches where we return multiple entries matching the projectID, clientID, tokenURL and then check scopes against all returned values
 	// We would want to make sure any underlying cache implementation supports this feature
-	tokenCache := cache.NewTypedObjectCache[clientCredentialsTokenCache](logger.With(slog.String("cache", "client_credentials_token_cache")), cacheImpl, cache.SuffixNone)
+	tokenCache := cache.NewTypedObjectCache[clientCredentialsTokenCache](logger.With(attr.SlogCacheNamespace("client_credentials_token_cache")), cacheImpl, cache.SuffixNone)
 	var clientSecret, clientID, tokenURLOverride, accessToken string
 	for _, v := range security.EnvVariables {
 		if strings.Contains(v, "CLIENT_SECRET") {
@@ -286,7 +286,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
-			logger.ErrorContext(ctx, "failed to close response body", slog.String("error", closeErr.Error()))
+			logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(closeErr))
 		}
 	}()
 
@@ -297,7 +297,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 
 			// Close the original response since we're done with it
 			if closeErr := resp.Body.Close(); closeErr != nil {
-				logger.ErrorContext(ctx, "failed to close original response body", slog.String("error", closeErr.Error()))
+				logger.ErrorContext(ctx, "failed to close original response body", attr.SlogError(closeErr))
 			}
 
 			retryResp, retryErr := retryTokenRequestWithBasicAuth(ctx, tokenURL, clientID, clientSecret, requestedScopes)
@@ -340,7 +340,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 			ExpiresIn:   time.Duration(expiresIn) * time.Second,
 			CreatedAt:   time.Now(),
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to store client credentials token in cache", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "failed to store client credentials token in cache", attr.SlogError(err))
 		}
 	}
 
@@ -413,7 +413,7 @@ func getTokenFromCache(ctx context.Context, logger *slog.Logger, tokenCache cach
 	token = cachedToken.AccessToken
 	// we do this in case the underlying cache implementation does not support TTL
 	if time.Since(cachedToken.CreatedAt) > cachedToken.ExpiresIn {
-		logger.InfoContext(ctx, "cached client credentials token has expired", slog.String("cache_key", cacheKey))
+		logger.InfoContext(ctx, "cached client credentials token has expired", attr.SlogCacheKey(cacheKey))
 		if err := tokenCache.Delete(ctx, clientCredentialsTokenCache{
 			ProjectID:   cachedToken.ProjectID,
 			ClientID:    cachedToken.ClientID,
@@ -423,7 +423,7 @@ func getTokenFromCache(ctx context.Context, logger *slog.Logger, tokenCache cach
 			ExpiresIn:   cachedToken.ExpiresIn,
 			CreatedAt:   cachedToken.CreatedAt,
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to delete expired client credentials token from cache", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "failed to delete expired client credentials token from cache", attr.SlogError(err))
 		}
 
 		return ""

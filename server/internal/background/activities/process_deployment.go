@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -65,12 +66,12 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 	perm := &atomic.Bool{}
 	for _, docInfo := range deployment.Openapiv3Assets {
 		logger := p.logger.With(
-			slog.String("deployment_id", deployment.ID),
-			slog.String("project_id", deployment.ProjectID),
-			slog.String("openapi_id", docInfo.ID),
-			slog.String("asset_id", docInfo.AssetID),
-			slog.String("org_slug", orgData.Slug),
-			slog.String("project_slug", orgData.ProjectSlug),
+			attr.SlogDeploymentID(deployment.ID),
+			attr.SlogProjectID(deployment.ProjectID),
+			attr.SlogDeploymentOpenAPIID(docInfo.ID),
+			attr.SlogAssetID(docInfo.AssetID),
+			attr.SlogOrganizationSlug(orgData.Slug),
+			attr.SlogProjectSlug(orgData.ProjectSlug),
 		)
 
 		openapiDocID, err := uuid.Parse(docInfo.ID)

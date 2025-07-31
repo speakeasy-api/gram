@@ -10,6 +10,8 @@ import (
 
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"github.com/pb33f/libopenapi/orderedmap"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 )
@@ -195,7 +197,7 @@ func selectResponse(ctx context.Context, logger *slog.Logger, op *v3.Operation) 
 
 		code, err := strconv.Atoi(codeString)
 		if err != nil {
-			logger.WarnContext(ctx, "failed to parse status code", slog.String("code_string", codeString), slog.String("error", err.Error()))
+			logger.WarnContext(ctx, "failed to parse status code", attr.SlogHTTPStatusCodePattern(codeString), attr.SlogError(err))
 			return nil, nil, nil
 		}
 		codes[i] = code

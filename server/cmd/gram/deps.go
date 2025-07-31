@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/sdk/interceptor"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -156,7 +157,7 @@ func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.
 		HostPort:          opts.address,
 		Namespace:         opts.namespace,
 		ConnectionOptions: connOpts,
-		Logger:            logger.With(slog.String("component", "temporal")),
+		Logger:            logger.With(attr.SlogComponent("temporal")),
 	}
 
 	interceptors := []interceptor.ClientInterceptor{}

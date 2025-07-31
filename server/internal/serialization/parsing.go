@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/url"
 	"reflect"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 // HTTPParameter holds the settings for encoding a parameter into an HTTP
@@ -25,7 +27,7 @@ func ParsePathAndHeaderParameter(ctx context.Context, logger *slog.Logger, paren
 	style := "simple"
 	explode := setExplodeDefaults(style)
 	if parameterSettings != nil && parameterSettings.Style != "" && parameterSettings.Style != "simple" {
-		logger.WarnContext(ctx, "unsupported style for path and header parameters", slog.String("style", parameterSettings.Style))
+		logger.WarnContext(ctx, "unsupported style for path and header parameters", attr.SlogHTTPEncodingStyle(parameterSettings.Style))
 	}
 	if parameterSettings != nil && parameterSettings.Explode != nil {
 		explode = *parameterSettings.Explode
@@ -53,7 +55,7 @@ func ParseQueryParameter(ctx context.Context, logger *slog.Logger, parentName st
 	case "deepObject":
 		return parseDeepObjectParams(parentName, objType, objValue)
 	default:
-		logger.WarnContext(ctx, "unsupported style for query parameters", slog.String("style", style))
+		logger.WarnContext(ctx, "unsupported style for query parameters", attr.SlogHTTPEncodingStyle(style))
 		return parseFormParams(parentName, objType, objValue, ",", true) // defaulting back to form style
 	}
 }

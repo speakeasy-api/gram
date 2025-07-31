@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 type Suffix string
@@ -49,7 +51,7 @@ func (d *TypedCacheObject[T]) Delete(ctx context.Context, obj T) error {
 	}
 
 	cacheKey := d.fullKey(obj.CacheKey())
-	d.logger.DebugContext(ctx, "invalidating cache", slog.String("key", cacheKey))
+	d.logger.DebugContext(ctx, "invalidating cache", attr.SlogCacheKey(cacheKey))
 	err := d.cache.Delete(ctx, cacheKey)
 	if err != nil {
 		return fmt.Errorf("delete: %s: %w", cacheKey, err)

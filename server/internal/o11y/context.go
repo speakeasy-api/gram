@@ -8,6 +8,8 @@ import (
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 type ctxKey string
@@ -81,8 +83,8 @@ func PullActivityExecutionInfo(ctx context.Context) *ActivityExecutionInfo {
 
 func EnrichToolCallContext(ctx context.Context, logger *slog.Logger, orgSlug, projectSlug string) (context.Context, *slog.Logger) {
 	logger = logger.With(
-		slog.String("organization_slug", orgSlug),
-		slog.String("project_slug", projectSlug),
+		attr.SlogOrganizationSlug(orgSlug),
+		attr.SlogProjectSlug(projectSlug),
 	)
 
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -92,15 +94,15 @@ func EnrichToolCallContext(ctx context.Context, logger *slog.Logger, orgSlug, pr
 
 	orgMember, err := baggage.NewMember("organization.slug", orgSlug)
 	if err != nil {
-		logger.WarnContext(ctx, "failed to create organization slug baggage member", slog.String("error", err.Error()))
+		logger.WarnContext(ctx, "failed to create organization slug baggage member", attr.SlogError(err))
 	}
 	projMember, err := baggage.NewMember("project.slug", projectSlug)
 	if err != nil {
-		logger.WarnContext(ctx, "failed to create project slug baggage member", slog.String("error", err.Error()))
+		logger.WarnContext(ctx, "failed to create project slug baggage member", attr.SlogError(err))
 	}
 	bag, err := baggage.New(orgMember, projMember)
 	if err != nil {
-		logger.WarnContext(ctx, "failed to create baggage", slog.String("error", err.Error()))
+		logger.WarnContext(ctx, "failed to create baggage", attr.SlogError(err))
 	}
 
 	ctx = baggage.ContextWithBaggage(ctx, bag)

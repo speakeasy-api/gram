@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	networkingv1 "k8s.io/api/networking/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,41 +80,41 @@ func (k *KubernetesClients) CreateOrUpdateIngress(ctx context.Context, ingressNa
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			k.logger.InfoContext(ctx, "Ingress not found, creating new one.",
-				slog.String("name", ingressName),
+				attr.SlogIngressName(ingressName),
 			)
 			_, createErr := k.Clientset.NetworkingV1().Ingresses(k.namespace).Create(ctx, ingress, metav1.CreateOptions{})
 			if createErr != nil {
 				k.logger.ErrorContext(ctx, "Failed to create Ingress",
-					slog.String("name", ingressName),
-					slog.Any("error", createErr),
+					attr.SlogIngressName(ingressName),
+					attr.SlogError(createErr),
 				)
 				return fmt.Errorf("failed to create ingress %s: %w", ingressName, createErr)
 			}
 			k.logger.InfoContext(ctx, "Ingress created successfully",
-				slog.String("name", ingressName),
+				attr.SlogIngressName(ingressName),
 			)
 		} else {
 			k.logger.ErrorContext(ctx, "Failed to get Ingress",
-				slog.String("name", ingressName),
-				slog.Any("error", err),
+				attr.SlogIngressName(ingressName),
+				attr.SlogError(err),
 			)
 			return fmt.Errorf("failed to get ingress %s: %w", ingressName, err)
 		}
 	} else {
 		k.logger.InfoContext(ctx, "Ingress found, attempting to update.",
-			slog.String("name", ingressName),
+			attr.SlogIngressName(ingressName),
 		)
 		ingress.ResourceVersion = existingIngress.ResourceVersion // Required for updates
 		_, updateErr := k.Clientset.NetworkingV1().Ingresses(k.namespace).Update(ctx, ingress, metav1.UpdateOptions{})
 		if updateErr != nil {
 			k.logger.ErrorContext(ctx, "Failed to update Ingress",
-				slog.String("name", ingressName),
-				slog.Any("error", updateErr),
+				attr.SlogIngressName(ingressName),
+				attr.SlogError(updateErr),
 			)
 			return fmt.Errorf("failed to update ingress %s: %w", ingressName, updateErr)
 		}
 		k.logger.InfoContext(ctx, "Ingress updated successfully",
-			slog.String("name", ingressName),
+			attr.SlogIngressName(ingressName),
 		)
 	}
 	return nil
@@ -132,25 +133,25 @@ func (k *KubernetesClients) DeleteIngress(ctx context.Context, ingressName strin
 	ingressErr := k.Clientset.NetworkingV1().Ingresses(k.namespace).Delete(ctx, ingressName, metav1.DeleteOptions{})
 	if ingressErr != nil {
 		k.logger.ErrorContext(ctx, "Failed to delete ingress",
-			slog.String("name", ingressName),
-			slog.Any("error", ingressErr),
+			attr.SlogIngressName(ingressName),
+			attr.SlogError(ingressErr),
 		)
 		return fmt.Errorf("failed to delete ingress %s: %w", ingressName, ingressErr)
 	}
 	k.logger.InfoContext(ctx, "Ingress deleted successfully",
-		slog.String("name", ingressName),
+		attr.SlogIngressName(ingressName),
 	)
 
 	secretErr := k.Clientset.CoreV1().Secrets(k.namespace).Delete(ctx, secretName, metav1.DeleteOptions{})
 	if secretErr != nil {
 		k.logger.ErrorContext(ctx, "Failed to delete secret",
-			slog.String("name", secretName),
-			slog.Any("error", secretErr),
+			attr.SlogSecretName(secretName),
+			attr.SlogError(secretErr),
 		)
 		return fmt.Errorf("failed to delete secret %s: %w", secretName, secretErr)
 	}
 	k.logger.InfoContext(ctx, "Secret deleted successfully",
-		slog.String("name", secretName),
+		attr.SlogSecretName(secretName),
 	)
 
 	return nil

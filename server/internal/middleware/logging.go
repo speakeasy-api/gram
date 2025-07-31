@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -47,7 +48,7 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 
 			start := time.Now()
 
-			logger.InfoContext(ctx, "request", slog.String("method", r.Method), slog.String("url", r.URL.String()))
+			logger.InfoContext(ctx, "request", attr.SlogHTTPRequestMethod(r.Method), attr.SlogURLOriginal(r.URL.String()))
 			requestContext := &contextvalues.RequestContext{
 				ReqURL: r.URL.String(),
 				Host:   r.Host,
@@ -60,11 +61,11 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			next.ServeHTTP(rw, r)
 
 			logger.InfoContext(ctx, "response",
-				slog.String("method", r.Method),
-				slog.String("url", r.URL.String()),
-				slog.Int("status", rw.statusCode),
-				slog.String("duration", time.Since(start).String()),
-				slog.String("host", r.Host),
+				attr.SlogHTTPRequestMethod(r.Method),
+				attr.SlogURLOriginal(r.URL.String()),
+				attr.SlogHTTPResponseStatusCode(rw.statusCode),
+				attr.SlogHTTPServerRequestDuration(time.Since(start).Seconds()),
+				attr.SlogHostName(r.Host),
 			)
 		})
 	}

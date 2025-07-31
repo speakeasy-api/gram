@@ -27,6 +27,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
 	srv "github.com/speakeasy-api/gram/server/gen/http/chat/server"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -232,15 +233,15 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	}
 
 	slogArgs := []any{
-		slog.String("project_id", authCtx.ProjectID.String()),
-		slog.String("org_id", orgID),
-		slog.String("user_id", userID),
-		slog.String("account_type", authCtx.AccountType),
-		slog.String("org_slug", authCtx.OrganizationSlug),
+		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogOrganizationID(orgID),
+		attr.OrganizationSlug(authCtx.OrganizationSlug),
+		attr.SlogUserID(userID),
+		attr.SlogOrganizationAccountType(authCtx.AccountType),
 	}
 
 	if authCtx.ProjectSlug != nil {
-		slogArgs = append(slogArgs, slog.String("project_slug", *authCtx.ProjectSlug))
+		slogArgs = append(slogArgs, attr.SlogProjectSlug(*authCtx.ProjectSlug))
 	}
 
 	s.logger.InfoContext(ctx, "chat request received",
@@ -369,14 +370,14 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 		Title:          conv.ToPGText("New Chat"), // TODO title
 	})
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to create chat", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))
 		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "failed to create chat")
 	}
 
 	// Get the number of already-stored messages so we can insert any new ones
 	chatCount, err := s.repo.CountChatMessages(ctx, chatID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to get chat history", slog.String("error", err.Error()))
+		s.logger.ErrorContext(ctx, "failed to get chat history", attr.SlogError(err))
 		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "failed to get chat history")
 	}
 
@@ -405,7 +406,7 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 			}})
 
 			if err != nil {
-				s.logger.ErrorContext(ctx, "failed to create chat message", slog.String("error", err.Error()))
+				s.logger.ErrorContext(ctx, "failed to create chat message", attr.SlogError(err))
 			}
 		}
 	}
@@ -455,7 +456,7 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 			toolCallsArr := slices.Collect(maps.Values(r.accumulatedToolCalls))
 			toolCallsJSON, err = json.Marshal(toolCallsArr)
 			if err != nil {
-				r.logger.ErrorContext(r.ctx, "failed to marshal tool calls", slog.String("error", err.Error()))
+				r.logger.ErrorContext(r.ctx, "failed to marshal tool calls", attr.SlogError(err))
 			}
 		}
 
@@ -475,7 +476,7 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 			UserID:           conv.ToPGTextEmpty(""), // These are agent messages, not user messages
 		}})
 		if err != nil {
-			r.logger.ErrorContext(r.ctx, "failed to store chat message", slog.String("error", err.Error()))
+			r.logger.ErrorContext(r.ctx, "failed to store chat message", attr.SlogError(err))
 		}
 		r.messageWritten = true
 	}
@@ -554,7 +555,7 @@ func (r *responseCaptor) processLine(line string) {
 				}
 			}
 		} else {
-			r.logger.ErrorContext(r.ctx, "failed to parse streaming chunk", slog.String("error", err.Error()))
+			r.logger.ErrorContext(r.ctx, "failed to parse streaming chunk", attr.SlogError(err))
 		}
 	}
 }
