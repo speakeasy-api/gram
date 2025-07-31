@@ -266,7 +266,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       >
         <Button
           icon={"globe"}
-          variant="outline"
+          variant="ghost"
           size="sm"
           className={cn(
             classes.both,
@@ -278,7 +278,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         </Button>
         <Button
           icon={"lock"}
-          variant="outline"
+          variant="ghost"
           size="sm"
           className={cn(
             classes.both,

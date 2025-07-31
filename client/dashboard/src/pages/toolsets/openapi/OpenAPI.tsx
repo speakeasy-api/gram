@@ -178,9 +178,9 @@ export function APIsContent() {
         : [];
     }) || [];
 
-  const deploy = async () => {
+  const deploySpecUpdate = async (documentSlug: string) => {
     setIsDeploying(true);
-    await createDeployment();
+    await createDeployment(documentSlug); // Make sure we overwrite the current document by slug
     finishUpload();
     toast.success("OpenAPI document deployed");
     setIsDeploying(false);
@@ -243,7 +243,7 @@ export function APIsContent() {
               >
                 Back
               </Button>
-              <Button onClick={deploy} disabled={!file || isDeploying}>
+              <Button onClick={() => deploySpecUpdate(changeDocumentTargetSlug!)} disabled={!file || isDeploying || !changeDocumentTargetSlug}>
                 {isDeploying && <Spinner />}
                 {isDeploying ? "Deploying..." : "Deploy"}
               </Button>

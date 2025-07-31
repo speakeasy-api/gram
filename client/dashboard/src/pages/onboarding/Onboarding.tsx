@@ -135,7 +135,7 @@ export function useOnboardingSteps(existingDocumentSlug?: string, checkDocumentS
     }
   };
 
-  const createDeployment = async () => {
+  const createDeployment = async (documentSlug?: string) => {
     if (!asset || !apiName) {
       throw new Error("Asset or file not found");
     }
@@ -147,8 +147,8 @@ export function useOnboardingSteps(existingDocumentSlug?: string, checkDocumentS
         upsertOpenapiv3Assets: [
           {
             assetId: asset.asset.id,
-            name: apiName,
-            slug: slugify(apiName),
+            name: documentSlug ?? apiName,
+            slug: documentSlug ?? slugify(apiName),
           },
         ],
       },
@@ -287,7 +287,7 @@ export function OnboardingContent({
               placeholder="My API"
               disabled={!!existingDocumentSlug}
             />
-            <Button onClick={createDeployment} disabled={!!apiNameError}>
+            <Button onClick={() => createDeployment()} disabled={!!apiNameError}>
               Continue
             </Button>
           </Stack>

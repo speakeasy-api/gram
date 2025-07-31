@@ -167,18 +167,17 @@ function HomeContent() {
                 >
                   <Card
                     className={cn(
-                      "bg-sidebar h-[275px] relative transition-all duration-200 cursor-pointer group-hover:scale-[1.02] group-hover:shadow-lg",
-                      isSmallestIncomplete && "ring-1 ring-primary/30 shadow-md"
+                      "bg-sidebar h-[275px] relative transition-all duration-200 cursor-pointer group-hover:scale-[1.02] group-hover:shadow-sm"
                     )}
                   >
                     <div
                       className={cn(
-                        "absolute top-3 right-3 w-8 h-8 rounded-full border-1  flex items-center justify-center text-sm font-semibold z-20 transition-all duration-200",
+                        "absolute top-4 right-4 w-7 h-7 rounded-full border-1 flex items-center justify-center text-sm font-semibold z-20 transition-all duration-200 text-muted-foreground",
                         isCompleted
-                          ? "bg-success text-success-foreground border-success-foreground w-6 h-6 top-4 right-4"
+                          ? "bg-success text-success-foreground border-success-foreground"
                           : "bg-card",
                         isSmallestIncomplete &&
-                          "bg-primary text-primary-foreground animate"
+                          "text-primary border-primary"
                       )}
                     >
                       {isCompleted ? (
@@ -188,16 +187,19 @@ function HomeContent() {
                       )}
                     </div>
                     <Card.Content>
-                      <Stack gap={4}>
+                      <Stack>
                         <Icon
                           name={card.icon as IconName}
-                          size="large"
                           className={cn(
-                            "text-stone-400 dark:text-stone-500 transition-all duration-200 group-hover:scale-105",
-                            isSmallestIncomplete && "text-primary"
+                            "text-stone-400 dark:text-stone-500 transition-all duration-200 group-hover:scale-105 mb-8 w-7 h-7"
                           )}
                         />
-                        <Stack direction="horizontal" gap={1} align="center">
+                        <Stack
+                          direction="horizontal"
+                          gap={1}
+                          align="center"
+                          className="mb-3"
+                        >
                           <Heading
                             variant="h4"
                             className={cn(
