@@ -34,6 +34,7 @@ const (
 	EventKey    = attribute.Key("event")
 	ExpectedKey = attribute.Key("expected")
 	NameKey     = attribute.Key("name")
+	ReasonKey   = attribute.Key("reason")
 	SpanIDKey   = attribute.Key("span.id")
 	TraceIDKey  = attribute.Key("trace.id")
 	ValueKey    = attribute.Key("value")
@@ -83,6 +84,7 @@ const (
 	OpenAPIMethodKey               = attribute.Key("gram.openapi.method")
 	OpenAPIOperationIDKey          = attribute.Key("gram.openapi.operation_id")
 	OpenAPIPathKey                 = attribute.Key("gram.openapi.path")
+	OpenAPIVersionKey              = attribute.Key("gram.openapi.version")
 	OpenRouterKeyLimitKey          = attribute.Key("gram.openrouter.key.limit")
 	OrganizationAccountTypeKey     = attribute.Key("gram.org.account_type")
 	OrganizationIDKey              = attribute.Key("gram.org.id")
@@ -98,6 +100,7 @@ const (
 	SecurityPlacementKey           = attribute.Key("gram.security.placement")
 	SecuritySchemeKey              = attribute.Key("gram.security.scheme")
 	SecurityTypeKey                = attribute.Key("gram.security.type")
+	SessionIDKey                   = attribute.Key("gram.session.id")
 	SlackEventFullKey              = attribute.Key("gram.slack.event.full")
 	SlackEventTypeKey              = attribute.Key("gram.slack.event.type")
 	SlackTeamIDKey                 = attribute.Key("gram.slack.team.id")
@@ -189,6 +192,9 @@ func SlogExpected(v any) slog.Attr      { return slog.Any(string(ExpectedKey), v
 
 func Name(v string) attribute.KeyValue { return NameKey.String(v) }
 func SlogName(v string) slog.Attr      { return slog.String(string(NameKey), v) }
+
+func Reason(v string) attribute.KeyValue { return ReasonKey.String(v) }
+func SlogReason(v string) slog.Attr      { return slog.String(string(ReasonKey), v) }
 
 func SpanID(v string) attribute.KeyValue { return SpanIDKey.String(v) }
 func SlogSpanID(v string) slog.Attr      { return slog.String(string(SpanIDKey), v) }
@@ -311,6 +317,9 @@ func SlogOpenAPIOperationID(v string) slog.Attr {
 func OpenAPIPath(v string) attribute.KeyValue { return OpenAPIPathKey.String(v) }
 func SlogOpenAPIPath(v string) slog.Attr      { return slog.String(string(OpenAPIPathKey), v) }
 
+func OpenAPIVersion(v string) attribute.KeyValue { return OpenAPIVersionKey.String(v) }
+func SlogOpenAPIVersion(v string) slog.Attr      { return slog.String(string(OpenAPIVersionKey), v) }
+
 func OpenRouterKeyLimit(v int) attribute.KeyValue { return OpenRouterKeyLimitKey.Int(v) }
 func SlogOpenRouterKeyLimit(v int) slog.Attr      { return slog.Int(string(OpenRouterKeyLimitKey), v) }
 
@@ -359,6 +368,9 @@ func SlogSecurityScheme(v string) slog.Attr      { return slog.String(string(Sec
 
 func SecurityType(v string) attribute.KeyValue { return SecurityTypeKey.String(v) }
 func SlogSecurityType(v string) slog.Attr      { return slog.String(string(SecurityTypeKey), v) }
+
+func SessionID(v string) attribute.KeyValue { return SessionIDKey.String(v) }
+func SlogSessionID(v string) slog.Attr      { return slog.String(string(SessionIDKey), v) }
 
 func SlackEventFull(v any) attribute.KeyValue { return SlackEventFullKey.String(fmt.Sprintf("%v", v)) }
 func SlogSlackEventFull(v any) slog.Attr      { return slog.Any(string(SlackEventFullKey), v) }

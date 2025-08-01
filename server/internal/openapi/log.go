@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 )
 
@@ -53,16 +54,16 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 	projectID := l.attrProjectID
 	deploymentID := l.attrDeploymentID
 
-	record.Attrs(func(attr slog.Attr) bool {
+	record.Attrs(func(a slog.Attr) bool {
 		switch {
-		case attr.Key == "event" && attr.Value.Kind() == slog.KindString:
-			event = attr.Value.String()
-		case attr.Key == "project_id" && attr.Value.Kind() == slog.KindString:
-			if id, err := uuid.Parse(attr.Value.String()); err == nil {
+		case a.Key == string(attr.EventKey) && a.Value.Kind() == slog.KindString:
+			event = a.Value.String()
+		case a.Key == string(attr.ProjectIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
 				projectID = id
 			}
-		case attr.Key == "deployment_id" && attr.Value.Kind() == slog.KindString:
-			if id, err := uuid.Parse(attr.Value.String()); err == nil {
+		case a.Key == string(attr.DeploymentIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
 				deploymentID = id
 			}
 		}
@@ -113,16 +114,16 @@ func (l *LogHandler) Flush(ctx context.Context, db *pgxpool.Pool) (int64, error)
 func (l *LogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	clone := l.clone()
 
-	for _, attr := range attrs {
+	for _, a := range attrs {
 		switch {
-		case attr.Key == "event" && attr.Value.Kind() == slog.KindString:
-			clone.attrEvent = attr.Value.String()
-		case attr.Key == "project_id" && attr.Value.Kind() == slog.KindString:
-			if id, err := uuid.Parse(attr.Value.String()); err == nil {
+		case a.Key == string(attr.EventKey) && a.Value.Kind() == slog.KindString:
+			clone.attrEvent = a.Value.String()
+		case a.Key == string(attr.ProjectIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
 				clone.attrProjectID = id
 			}
-		case attr.Key == "deployment_id" && attr.Value.Kind() == slog.KindString:
-			if id, err := uuid.Parse(attr.Value.String()); err == nil {
+		case a.Key == string(attr.DeploymentIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
 				clone.attrDeploymentID = id
 			}
 		}

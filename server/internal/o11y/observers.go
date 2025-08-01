@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y/repo"
 )
 
@@ -103,7 +103,7 @@ func (o *observers) observeDeploymentsHttpSecuritySchemesCount(ctx context.Conte
 		}
 
 		observer.Observe(scheme.Count, metric.WithAttributes(
-			attribute.String("http.security.type", t),
+			attr.SecurityType(t),
 		))
 	}
 

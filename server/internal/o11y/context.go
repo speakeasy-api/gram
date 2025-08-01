@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/baggage"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/workflow"
@@ -88,15 +87,15 @@ func EnrichToolCallContext(ctx context.Context, logger *slog.Logger, orgSlug, pr
 	)
 
 	trace.SpanFromContext(ctx).SetAttributes(
-		attribute.String("organization.slug", orgSlug),
-		attribute.String("project.slug", projectSlug),
+		attr.OrganizationSlug(orgSlug),
+		attr.ProjectSlug(projectSlug),
 	)
 
-	orgMember, err := baggage.NewMember("organization.slug", orgSlug)
+	orgMember, err := baggage.NewMember(string(attr.OrganizationSlugKey), orgSlug)
 	if err != nil {
 		logger.WarnContext(ctx, "failed to create organization slug baggage member", attr.SlogError(err))
 	}
-	projMember, err := baggage.NewMember("project.slug", projectSlug)
+	projMember, err := baggage.NewMember(string(attr.ProjectSlugKey), projectSlug)
 	if err != nil {
 		logger.WarnContext(ctx, "failed to create project slug baggage member", attr.SlogError(err))
 	}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"go.temporal.io/api/enums/v1"
@@ -92,8 +93,8 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 		logger.Error(
 			"failed to process deployment",
 			"error", err.Error(),
-			"project_id", params.ProjectID,
-			"deployment_id", params.DeploymentID,
+			string(attr.ProjectIDKey), params.ProjectID,
+			string(attr.DeploymentIDKey), params.DeploymentID,
 		)
 	}
 

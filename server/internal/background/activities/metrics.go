@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/Masterminds/semver/v3"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -97,7 +96,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 func (m *metrics) RecordOpenAPIOperationSkipped(ctx context.Context, reason string) {
 	if counter := m.opSkipped; counter != nil {
 		counter.Add(ctx, 1, metric.WithAttributes(
-			attribute.String("reason", reason),
+			attr.Reason(reason),
 		))
 	}
 }
@@ -105,26 +104,26 @@ func (m *metrics) RecordOpenAPIOperationSkipped(ctx context.Context, reason stri
 func (m *metrics) RecordOpenAPIProcessed(ctx context.Context, outcome o11y.Outcome, duration time.Duration, version string) {
 	if counter := m.openAPIProcessedCounter; counter != nil {
 		counter.Add(ctx, 1, metric.WithAttributes(
-			attribute.String("outcome", string(outcome)),
-			attribute.String("openapi.version", sanitizeOpenAPIVersion(version)),
+			attr.Outcome(string(outcome)),
+			attr.OpenAPIVersion(sanitizeOpenAPIVersion(version)),
 		))
 	}
 
 	if histogram := m.openAPIProcessedDuration; histogram != nil {
-		histogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attribute.String("outcome", string(outcome))))
+		histogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attr.Outcome(string(outcome))))
 	}
 }
 
 func (m *metrics) RecordOpenAPIUpgrade(ctx context.Context, outcome o11y.Outcome, duration time.Duration, version string) {
 	if counter := m.openAPIUpgradeCounter; counter != nil {
 		counter.Add(ctx, 1, metric.WithAttributes(
-			attribute.String("outcome", string(outcome)),
-			attribute.String("openapi.version", sanitizeOpenAPIVersion(version)),
+			attr.Outcome(string(outcome)),
+			attr.OpenAPIVersion(sanitizeOpenAPIVersion(version)),
 		))
 	}
 
 	if histogram := m.openAPIUpgradeDuration; histogram != nil {
-		histogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attribute.String("outcome", string(outcome))))
+		histogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attr.Outcome(string(outcome))))
 	}
 }
 

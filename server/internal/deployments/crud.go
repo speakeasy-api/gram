@@ -7,7 +7,6 @@ import (
 	"log/slog"
 
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -142,7 +141,7 @@ func cloneDeployment(
 	}
 
 	logger = logger.With(attr.SlogDeploymentID(newID.String()))
-	span.SetAttributes(attribute.String("deployment_id", newID.String()))
+	span.SetAttributes(attr.DeploymentID(newID.String()))
 
 	_, err = depRepo.CloneDeploymentPackages(ctx, repo.CloneDeploymentPackagesParams{
 		OriginalDeploymentID: srcDepID,

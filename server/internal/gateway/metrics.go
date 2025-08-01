@@ -44,7 +44,7 @@ func (m *metrics) RecordHTTPToolCall(ctx context.Context, orgID string, toolName
 
 	bag := baggage.FromContext(ctx)
 
-	if org := bag.Member("organization.slug").Value(); org != "" {
+	if org := bag.Member(string(attr.OrganizationSlugKey)).Value(); org != "" {
 		kv = append(kv, attr.OrganizationSlug(org))
 	}
 

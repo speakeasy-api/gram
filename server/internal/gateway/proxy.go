@@ -17,10 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
-	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -133,12 +131,12 @@ func (itp *ToolProxy) Do(
 	tool *HTTPTool,
 ) error {
 	ctx, span := itp.tracer.Start(ctx, "proxyToolCall", trace.WithAttributes(
-		attribute.String("tool.name", tool.Name),
-		attribute.String("tool.id", tool.ID),
-		attribute.String("project.id", tool.ProjectID),
-		attribute.String("deployment.id", tool.DeploymentID),
-		attribute.String("tool.call.source", string(itp.source)),
-		semconv.HTTPRouteKey.String(tool.Path),
+		attr.ToolName(tool.Name),
+		attr.ToolID(tool.ID),
+		attr.ProjectID(tool.ProjectID),
+		attr.DeploymentID(tool.DeploymentID),
+		attr.ToolCallSource(string(itp.source)),
+		attr.HTTPRoute(tool.Path),
 	))
 	defer span.End()
 
@@ -162,7 +160,7 @@ func (itp *ToolProxy) Do(
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
 		itp.metrics.RecordHTTPToolCall(ctx, tool.OrganizationID, tool.Name, responseStatusCode)
 
-		span.SetAttributes(semconv.HTTPResponseStatusCode(responseStatusCode))
+		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
 
 	ciEnv := newCaseInsensitiveEnv(envVars)

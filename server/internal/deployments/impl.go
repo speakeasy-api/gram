@@ -9,7 +9,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -281,10 +280,10 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
-		attribute.String("organization_id", authCtx.ActiveOrganizationID),
-		attribute.String("project_id", projectID.String()),
-		attribute.String("user_id", authCtx.UserID),
-		attribute.String("session_id", *authCtx.SessionID),
+		attr.OrganizationID(authCtx.ActiveOrganizationID),
+		attr.ProjectID(projectID.String()),
+		attr.UserID(authCtx.UserID),
+		attr.SessionID(*authCtx.SessionID),
 	)
 
 	dbtx, err := s.db.Begin(ctx)
@@ -357,7 +356,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 	}
 
 	logger = logger.With(attr.SlogDeploymentID(newID.String()))
-	span.SetAttributes(attribute.String("deployment_id", newID.String()))
+	span.SetAttributes(attr.DeploymentID(newID.String()))
 
 	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(newID))
 	if err != nil {
@@ -398,7 +397,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	projectID := *authCtx.ProjectID
 
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
-	span.SetAttributes(attribute.String("project_id", projectID.String()))
+	span.SetAttributes(attr.ProjectID(projectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -527,7 +526,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		}
 
 		logger = logger.With(attr.SlogDeploymentID(newID.String()))
-		span.SetAttributes(attribute.String("deployment_id", newID.String()))
+		span.SetAttributes(attr.DeploymentID(newID.String()))
 
 		cloneID = newID
 	}
@@ -579,7 +578,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 	projectID := *authCtx.ProjectID
 
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
-	span.SetAttributes(attribute.String("project_id", projectID.String()))
+	span.SetAttributes(attr.ProjectID(projectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -614,7 +613,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 	}
 
 	logger = logger.With(attr.SlogDeploymentID(newID.String()))
-	span.SetAttributes(attribute.String("deployment_id", newID.String()))
+	span.SetAttributes(attr.DeploymentID(newID.String()))
 
 	dep, err := mv.DescribeDeployment(ctx, logger, tx, mv.ProjectID(projectID), mv.DeploymentID(newID))
 	if err != nil {
