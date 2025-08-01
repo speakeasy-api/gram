@@ -6,7 +6,7 @@ import (
 
 // ClientInfo represents an OAuth client registration
 type ClientInfo struct {
-	MCPSlug                 string    `json:"mcp_slug"`
+	MCPURL                  string    `json:"mcp_url"`
 	ClientID                string    `json:"client_id"`
 	ClientSecret            string    `json:"client_secret"`
 	ClientSecretExpiresAt   int64     `json:"client_secret_expires_at"`

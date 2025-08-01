@@ -20,22 +20,6 @@ type ExternalOauthServerMetadatum struct {
 	Deleted   bool
 }
 
-type OauthProxyClientInfo struct {
-	McpSlug                 string
-	ClientID                string
-	ClientSecret            string
-	ClientSecretExpiresAt   pgtype.Timestamptz
-	ClientName              string
-	RedirectUris            []string
-	GrantTypes              []string
-	ResponseTypes           []string
-	Scope                   string
-	TokenEndpointAuthMethod string
-	ApplicationType         string
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
-}
-
 type OauthProxyProvider struct {
 	ID                                uuid.UUID
 	ProjectID                         uuid.UUID

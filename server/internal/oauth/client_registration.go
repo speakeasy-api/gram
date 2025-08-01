@@ -9,25 +9,25 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
 // ClientRegistrationService handles OAuth Dynamic Client Registration
 type ClientRegistrationService struct {
-	oauthRepo *repo.Queries
-	logger    *slog.Logger
+	logger            *slog.Logger
+	clientInfoStorage cache.TypedCacheObject[OauthProxyClientInfo]
 }
 
-func NewClientRegistrationService(oauthRepo *repo.Queries, logger *slog.Logger) *ClientRegistrationService {
+func NewClientRegistrationService(cacheImpl cache.Cache, logger *slog.Logger) *ClientRegistrationService {
 	return &ClientRegistrationService{
-		oauthRepo: oauthRepo,
-		logger:    logger,
+		logger:            logger,
+		clientInfoStorage: cache.NewTypedObjectCache[OauthProxyClientInfo](logger.With(attr.SlogCacheNamespace("oauth_client_info")), cacheImpl, cache.SuffixNone),
 	}
 }
 
 // RegisterClient implements RFC 7591 Dynamic Client Registration
-func (s *ClientRegistrationService) RegisterClient(ctx context.Context, req *ClientInfo, mcpSlug string) (*ClientInfo, error) {
+func (s *ClientRegistrationService) RegisterClient(ctx context.Context, req *ClientInfo, mcpURL string) (*ClientInfo, error) {
 	// Generate client ID
 	clientID, err := s.generateClientID()
 	if err != nil {
@@ -41,7 +41,7 @@ func (s *ClientRegistrationService) RegisterClient(ctx context.Context, req *Cli
 
 	// Set default values
 	client := &ClientInfo{
-		MCPSlug:                 mcpSlug,
+		MCPURL:                  mcpURL,
 		ClientID:                clientID,
 		ClientSecret:            clientSecret,
 		ClientSecretExpiresAt:   time.Now().Add(15 * 24 * time.Hour).Unix(),
@@ -64,16 +64,11 @@ func (s *ClientRegistrationService) RegisterClient(ctx context.Context, req *Cli
 		return nil, fmt.Errorf("validation failed: %w", err)
 	}
 
-	// Store client pairing in the database
-	var expiresAt pgtype.Timestamptz
-	expiresAt.Time = time.Unix(client.ClientSecretExpiresAt, 0)
-	expiresAt.Valid = true
-
-	storeParams := repo.StoreOAuthProxyClientParams{
-		McpSlug:                 client.MCPSlug,
+	clientInfoStorage := OauthProxyClientInfo{
+		MCPURL:                  mcpURL,
 		ClientID:                client.ClientID,
 		ClientSecret:            client.ClientSecret,
-		ClientSecretExpiresAt:   expiresAt,
+		ClientSecretExpiresAt:   time.Unix(client.ClientSecretExpiresAt, 0),
 		ClientName:              client.ClientName,
 		RedirectUris:            client.RedirectURIs,
 		GrantTypes:              client.GrantTypes,
@@ -81,43 +76,37 @@ func (s *ClientRegistrationService) RegisterClient(ctx context.Context, req *Cli
 		Scope:                   client.Scope,
 		TokenEndpointAuthMethod: client.TokenEndpointAuthMethod,
 		ApplicationType:         client.ApplicationType,
+		CreatedAt:               client.CreatedAt,
+		UpdatedAt:               client.UpdatedAt,
 	}
 
-	dbClient, err := s.oauthRepo.StoreOAuthProxyClient(ctx, storeParams)
-	if err != nil {
+	if err = s.storeClientInfo(ctx, clientInfoStorage); err != nil {
 		return nil, fmt.Errorf("failed to store client: %w", err)
 	}
 
-	client.CreatedAt = dbClient.CreatedAt.Time
-	client.UpdatedAt = dbClient.UpdatedAt.Time
 	return client, nil
 }
 
-func (s *ClientRegistrationService) GetClient(ctx context.Context, mcpSlug string, clientID string) (*ClientInfo, error) {
-	getParams := repo.GetOAuthProxyClientParams{
-		McpSlug:  mcpSlug,
-		ClientID: clientID,
-	}
-
-	dbClient, err := s.oauthRepo.GetOAuthProxyClient(ctx, getParams)
+func (s *ClientRegistrationService) GetClient(ctx context.Context, mcpURL string, clientID string) (*ClientInfo, error) {
+	storeClientInfo, err := s.getClientInfo(ctx, mcpURL, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("client not found: %w", err)
 	}
 
 	client := &ClientInfo{
-		MCPSlug:                 dbClient.McpSlug,
-		ClientID:                dbClient.ClientID,
-		ClientSecret:            dbClient.ClientSecret,
-		ClientSecretExpiresAt:   dbClient.ClientSecretExpiresAt.Time.Unix(),
-		ClientName:              dbClient.ClientName,
-		RedirectURIs:            dbClient.RedirectUris,
-		GrantTypes:              dbClient.GrantTypes,
-		ResponseTypes:           dbClient.ResponseTypes,
-		Scope:                   dbClient.Scope,
-		TokenEndpointAuthMethod: dbClient.TokenEndpointAuthMethod,
-		ApplicationType:         dbClient.ApplicationType,
-		CreatedAt:               dbClient.CreatedAt.Time,
-		UpdatedAt:               dbClient.UpdatedAt.Time,
+		MCPURL:                  storeClientInfo.MCPURL,
+		ClientID:                storeClientInfo.ClientID,
+		ClientSecret:            storeClientInfo.ClientSecret,
+		ClientSecretExpiresAt:   storeClientInfo.ClientSecretExpiresAt.Unix(),
+		ClientName:              storeClientInfo.ClientName,
+		RedirectURIs:            storeClientInfo.RedirectUris,
+		GrantTypes:              storeClientInfo.GrantTypes,
+		ResponseTypes:           storeClientInfo.ResponseTypes,
+		Scope:                   storeClientInfo.Scope,
+		TokenEndpointAuthMethod: storeClientInfo.TokenEndpointAuthMethod,
+		ApplicationType:         storeClientInfo.ApplicationType,
+		CreatedAt:               storeClientInfo.CreatedAt,
+		UpdatedAt:               storeClientInfo.UpdatedAt,
 	}
 
 	return client, nil
@@ -227,8 +216,8 @@ func (s *ClientRegistrationService) generateClientSecret() (string, error) {
 }
 
 // ValidateClientCredentials validates client credentials
-func (s *ClientRegistrationService) ValidateClientCredentials(ctx context.Context, mcpSlug string, clientID, clientSecret string) (*ClientInfo, error) {
-	client, err := s.GetClient(ctx, mcpSlug, clientID)
+func (s *ClientRegistrationService) ValidateClientCredentials(ctx context.Context, mcpURL string, clientID, clientSecret string) (*ClientInfo, error) {
+	client, err := s.GetClient(ctx, mcpURL, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("invalid client credentials")
 	}
@@ -247,8 +236,8 @@ func (s *ClientRegistrationService) ValidateClientCredentials(ctx context.Contex
 }
 
 // IsValidRedirectURI checks if a redirect URI is valid for the client
-func (s *ClientRegistrationService) IsValidRedirectURI(ctx context.Context, mcpSlug string, clientID, redirectURI string) (bool, error) {
-	client, err := s.GetClient(ctx, mcpSlug, clientID)
+func (s *ClientRegistrationService) IsValidRedirectURI(ctx context.Context, mcpURL string, clientID, redirectURI string) (bool, error) {
+	client, err := s.GetClient(ctx, mcpURL, clientID)
 	if err != nil {
 		return false, fmt.Errorf("failed to get client: %w", err)
 	}
@@ -260,4 +249,20 @@ func (s *ClientRegistrationService) IsValidRedirectURI(ctx context.Context, mcpS
 	}
 
 	return false, nil
+}
+
+func (s *ClientRegistrationService) storeClientInfo(ctx context.Context, clientInfo OauthProxyClientInfo) error {
+	if err := s.clientInfoStorage.Store(ctx, clientInfo); err != nil {
+		return fmt.Errorf("failed to store client info: %w", err)
+	}
+	return nil
+}
+
+func (s *ClientRegistrationService) getClientInfo(ctx context.Context, mcpURL, clientId string) (*OauthProxyClientInfo, error) {
+	clientInfo, err := s.clientInfoStorage.Get(ctx, ClientInfoCacheKey(mcpURL, clientId))
+	if err != nil {
+		return nil, fmt.Errorf("client info not found: %w", err)
+	}
+
+	return &clientInfo, nil
 }

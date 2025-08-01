@@ -29,21 +29,6 @@ func (q *Queries) DeleteExternalOAuthServerMetadata(ctx context.Context, arg Del
 	return err
 }
 
-const deleteOAuthProxyClient = `-- name: DeleteOAuthProxyClient :exec
-DELETE FROM oauth_proxy_client_info
-WHERE mcp_slug = $1 AND client_id = $2
-`
-
-type DeleteOAuthProxyClientParams struct {
-	McpSlug  string
-	ClientID string
-}
-
-func (q *Queries) DeleteOAuthProxyClient(ctx context.Context, arg DeleteOAuthProxyClientParams) error {
-	_, err := q.db.Exec(ctx, deleteOAuthProxyClient, arg.McpSlug, arg.ClientID)
-	return err
-}
-
 const deleteOAuthProxyProvider = `-- name: DeleteOAuthProxyProvider :exec
 UPDATE oauth_proxy_providers SET
     deleted_at = clock_timestamp(),
@@ -100,37 +85,6 @@ func (q *Queries) GetExternalOAuthServerMetadata(ctx context.Context, arg GetExt
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.Deleted,
-	)
-	return i, err
-}
-
-const getOAuthProxyClient = `-- name: GetOAuthProxyClient :one
-SELECT mcp_slug, client_id, client_secret, client_secret_expires_at, client_name, redirect_uris, grant_types, response_types, scope, token_endpoint_auth_method, application_type, created_at, updated_at FROM oauth_proxy_client_info
-WHERE mcp_slug = $1 AND client_id = $2
-`
-
-type GetOAuthProxyClientParams struct {
-	McpSlug  string
-	ClientID string
-}
-
-func (q *Queries) GetOAuthProxyClient(ctx context.Context, arg GetOAuthProxyClientParams) (OauthProxyClientInfo, error) {
-	row := q.db.QueryRow(ctx, getOAuthProxyClient, arg.McpSlug, arg.ClientID)
-	var i OauthProxyClientInfo
-	err := row.Scan(
-		&i.McpSlug,
-		&i.ClientID,
-		&i.ClientSecret,
-		&i.ClientSecretExpiresAt,
-		&i.ClientName,
-		&i.RedirectUris,
-		&i.GrantTypes,
-		&i.ResponseTypes,
-		&i.Scope,
-		&i.TokenEndpointAuthMethod,
-		&i.ApplicationType,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -209,71 +163,6 @@ func (q *Queries) ListOAuthProxyProvidersByServer(ctx context.Context, arg ListO
 		return nil, err
 	}
 	return items, nil
-}
-
-const storeOAuthProxyClient = `-- name: StoreOAuthProxyClient :one
-INSERT INTO oauth_proxy_client_info (
-    mcp_slug,
-    client_id,
-    client_secret,
-    client_secret_expires_at,
-    client_name,
-    redirect_uris,
-    grant_types,
-    response_types,
-    scope,
-    token_endpoint_auth_method,
-    application_type
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-) RETURNING mcp_slug, client_id, client_secret, client_secret_expires_at, client_name, redirect_uris, grant_types, response_types, scope, token_endpoint_auth_method, application_type, created_at, updated_at
-`
-
-type StoreOAuthProxyClientParams struct {
-	McpSlug                 string
-	ClientID                string
-	ClientSecret            string
-	ClientSecretExpiresAt   pgtype.Timestamptz
-	ClientName              string
-	RedirectUris            []string
-	GrantTypes              []string
-	ResponseTypes           []string
-	Scope                   string
-	TokenEndpointAuthMethod string
-	ApplicationType         string
-}
-
-func (q *Queries) StoreOAuthProxyClient(ctx context.Context, arg StoreOAuthProxyClientParams) (OauthProxyClientInfo, error) {
-	row := q.db.QueryRow(ctx, storeOAuthProxyClient,
-		arg.McpSlug,
-		arg.ClientID,
-		arg.ClientSecret,
-		arg.ClientSecretExpiresAt,
-		arg.ClientName,
-		arg.RedirectUris,
-		arg.GrantTypes,
-		arg.ResponseTypes,
-		arg.Scope,
-		arg.TokenEndpointAuthMethod,
-		arg.ApplicationType,
-	)
-	var i OauthProxyClientInfo
-	err := row.Scan(
-		&i.McpSlug,
-		&i.ClientID,
-		&i.ClientSecret,
-		&i.ClientSecretExpiresAt,
-		&i.ClientName,
-		&i.RedirectUris,
-		&i.GrantTypes,
-		&i.ResponseTypes,
-		&i.Scope,
-		&i.TokenEndpointAuthMethod,
-		&i.ApplicationType,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const upsertExternalOAuthServerMetadata = `-- name: UpsertExternalOAuthServerMetadata :one

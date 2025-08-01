@@ -197,6 +197,26 @@ func (k *KubernetesClients) CreateCustomDomainIngressCharts(domain string) (stri
 										},
 									},
 								},
+								{
+									Path:     "/oauth",
+									PathType: &pathTypePrefix,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: "gram-server",
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
+									},
+								},
+								{
+									Path:     "/.well-known",
+									PathType: &pathTypePrefix,
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: "gram-server",
+											Port: networkingv1.ServiceBackendPort{Number: 80},
+										},
+									},
+								},
 							},
 						},
 					},

@@ -48,6 +48,7 @@ type ConsentTemplateData struct {
 	CodeChallenge       string
 	CodeChallengeMethod string
 	ResponseType        string
+	MCPURL              string
 	MCPSlug             string
 }
 
@@ -71,7 +72,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oauth")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/oauth")
 
-	clientRegistration := NewClientRegistrationService(repo.New(db), logger)
+	clientRegistration := NewClientRegistrationService(cacheImpl, logger)
 	pkceService := NewPKCEService(logger)
 	grantManager := NewGrantManager(cacheImpl, clientRegistration, pkceService, logger, enc)
 	tokenService := NewTokenService(cacheImpl, clientRegistration, grantManager, pkceService, logger, enc)
@@ -124,10 +125,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 // buildFullMcpSlug builds the full MCP slug with domain prefix
 func (s *Service) buildFullMcpSlug(ctx context.Context, mcpSlug string) string {
 	if domainCtx, ok := contextvalues.GetCustomDomainContext(ctx); ok && domainCtx != nil {
-		return domainCtx.Domain + "/mcp/" + mcpSlug
+		return fmt.Sprintf("https://%s", domainCtx.Domain) + "/mcp/" + mcpSlug
 	}
-	// For non-custom domains, use the server URL host
-	return s.serverURL.Host + "/mcp/" + mcpSlug
+
+	return s.serverURL.String() + "/mcp/" + mcpSlug
 }
 
 // loadToolsetFromMcpSlug loads a toolset from the MCP slug
@@ -174,7 +175,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	// Build full MCP slug with domain prefix
-	fullMcpSlug := s.buildFullMcpSlug(ctx, mcpSlug)
+	fullMCPURL := s.buildFullMcpSlug(ctx, mcpSlug)
 
 	// Parse authorization request
 	req := &AuthorizationRequest{
@@ -193,7 +194,7 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 		req.CodeChallengeMethod = "plain"
 	}
 
-	if err := s.validateAuthorizationRequest(ctx, req, fullMcpSlug); err != nil {
+	if err := s.validateAuthorizationRequest(ctx, req, fullMCPURL); err != nil {
 		s.logger.ErrorContext(ctx, "invalid authorization request", attr.SlogError(err))
 
 		// Return 403 with error details instead of redirecting
@@ -209,24 +210,22 @@ func (s *Service) handleAuthorize(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	// Render consent screen
-	return s.renderConsentScreen(ctx, w, req, toolset, mcpSlug)
+	return s.renderConsentScreen(ctx, w, req, toolset, mcpSlug, fullMCPURL)
 }
 
 // validateAuthorizationRequest validates an authorization request
-func (s *Service) validateAuthorizationRequest(ctx context.Context, req *AuthorizationRequest, mcpSlug string) error {
-	return s.grantManager.ValidateAuthorizationRequest(ctx, req, mcpSlug)
+func (s *Service) validateAuthorizationRequest(ctx context.Context, req *AuthorizationRequest, mcpURL string) error {
+	return s.grantManager.ValidateAuthorizationRequest(ctx, req, mcpURL)
 }
 
 // renderConsentScreen renders the OAuth consent screen
-func (s *Service) renderConsentScreen(ctx context.Context, w http.ResponseWriter, req *AuthorizationRequest, toolset *toolsets_repo.Toolset, mcpSlug string) error {
+func (s *Service) renderConsentScreen(ctx context.Context, w http.ResponseWriter, req *AuthorizationRequest, toolset *toolsets_repo.Toolset, mcpSlug, mcpURL string) error {
 	tmpl, err := template.New("consent").Parse(consentTemplateHTML)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to parse consent template").Log(ctx, s.logger)
 	}
 
-	fullMcpSlug := s.buildFullMcpSlug(ctx, mcpSlug)
-
-	client, err := s.clientRegistration.GetClient(ctx, fullMcpSlug, req.ClientID)
+	client, err := s.clientRegistration.GetClient(ctx, mcpURL, req.ClientID)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "client not found").Log(ctx, s.logger)
 	}
@@ -248,6 +247,7 @@ func (s *Service) renderConsentScreen(ctx context.Context, w http.ResponseWriter
 		CodeChallenge:       req.CodeChallenge,
 		CodeChallengeMethod: req.CodeChallengeMethod,
 		ResponseType:        req.ResponseType,
+		MCPURL:              mcpURL,
 		MCPSlug:             mcpSlug,
 	}
 
@@ -360,7 +360,7 @@ func (s *Service) handleAuthorizationComplete(w http.ResponseWriter, r *http.Req
 		attr.SlogOAuthProvider(provider.Slug),
 		attr.SlogOAuthRedirectURIFull(authURL.String()))
 
-	// Redirect to underlying OAuth provider
+	// Redirect to underlying OAuth provider, this MUST be a 302
 	http.Redirect(w, r, authURL.String(), http.StatusFound)
 	return nil
 }
@@ -374,12 +374,12 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
 
-	_, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
 
-	fullMcpSlug := s.buildFullMcpSlug(ctx, mcpSlug)
+	fullMCPURL := s.buildFullMcpSlug(ctx, mcpSlug)
 
 	if err := r.ParseForm(); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "failed to parse form data").Log(ctx, s.logger)
@@ -404,7 +404,7 @@ func (s *Service) handleToken(w http.ResponseWriter, r *http.Request) error {
 
 	switch req.GrantType {
 	case "authorization_code":
-		token, err = s.tokenService.ExchangeAuthorizationCode(ctx, req, fullMcpSlug)
+		token, err = s.tokenService.ExchangeAuthorizationCode(ctx, req, fullMCPURL, toolset.ID)
 	default:
 		return oops.E(oops.CodeBadRequest, nil, "unsupported grant type: %s", req.GrantType).Log(ctx, s.logger)
 	}
@@ -434,7 +434,7 @@ func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
 
-	fullMcpSlug := s.buildFullMcpSlug(ctx, mcpSlug)
+	fullMcpURL := s.buildFullMcpSlug(ctx, mcpSlug)
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -450,7 +450,7 @@ func (s *Service) handleClientRegistration(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Register client
-	client, err := s.clientRegistration.RegisterClient(ctx, &req, fullMcpSlug)
+	client, err := s.clientRegistration.RegisterClient(ctx, &req, fullMcpURL)
 	if err != nil {
 		return oops.E(oops.CodeBadRequest, err, "client registration failed").Log(ctx, s.logger)
 	}
@@ -477,7 +477,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
 
-	fullMcpSlug := s.buildFullMcpSlug(ctx, mcpSlug)
+	fullMCPURL := s.buildFullMcpSlug(ctx, mcpSlug)
 
 	externalCode := r.URL.Query().Get("code")
 	if externalCode == "" {
@@ -636,7 +636,7 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		Nonce:               "", // Nonce is not preserved in state for this flow
 	}
 
-	grant, err := s.grantManager.CreateAuthorizationGrant(ctx, authReq, fullMcpSlug, accessToken, expiresAt, provider.SecurityKeyNames)
+	grant, err := s.grantManager.CreateAuthorizationGrant(ctx, authReq, fullMCPURL, toolset.ID, accessToken, expiresAt, provider.SecurityKeyNames)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create authorization grant", attr.SlogError(err))
 
@@ -702,7 +702,6 @@ func (s *Service) parseBasicAuth(authHeader string) (string, string, bool) {
 }
 
 // ValidateAccessToken validates an OAuth access token
-func (s *Service) ValidateAccessToken(ctx context.Context, mcpSlug string, accessToken string) (*Token, error) {
-	fullMcpSlug := s.buildFullMcpSlug(ctx, mcpSlug)
-	return s.tokenService.ValidateAccessToken(ctx, fullMcpSlug, accessToken)
+func (s *Service) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*Token, error) {
+	return s.tokenService.ValidateAccessToken(ctx, toolsetId, accessToken)
 }

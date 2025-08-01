@@ -128,7 +128,8 @@
         <div class="client-info">
             <h3>Application Details</h3>
             {{if .ClientName}}<p><strong>Application Name:</strong> {{.ClientName}}</p>{{end}}
-            <p><strong>MCP Server:</strong> {{.MCPSlug}}</p>
+            <p><strong>MCP Server:</strong></p>
+            <p>{{.MCPURL}}</p>
         </div>
         
         {{if .Scope}}

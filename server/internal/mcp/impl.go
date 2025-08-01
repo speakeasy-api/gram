@@ -188,20 +188,24 @@ func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *h
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
 
-	toolset, _, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
+	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
 	if err != nil {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	}
+
+	baseURL := s.serverURL.String()
+	if customDomainCtx != nil {
+		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain)
 	}
 
 	var metadata map[string]interface{}
 	switch {
 	case toolset.OauthProxyServerID.Valid:
-		appServerURL := s.serverURL.String()
 		metadata = map[string]interface{}{
-			"issuer":                           appServerURL + "/oauth/" + mcpSlug,
-			"authorization_endpoint":           appServerURL + "/oauth/" + mcpSlug + "/authorize",
-			"token_endpoint":                   appServerURL + "/oauth/" + mcpSlug + "/token",
-			"registration_endpoint":            appServerURL + "/oauth/" + mcpSlug + "/register",
+			"issuer":                           baseURL + "/oauth/" + mcpSlug,
+			"authorization_endpoint":           baseURL + "/oauth/" + mcpSlug + "/authorize",
+			"token_endpoint":                   baseURL + "/oauth/" + mcpSlug + "/token",
+			"registration_endpoint":            baseURL + "/oauth/" + mcpSlug + "/register",
 			"response_types_supported":         []string{"code"},
 			"grant_types_supported":            []string{"authorization_code"},
 			"code_challenge_methods_supported": []string{"plain", "S256"},
@@ -421,7 +425,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			Token:        token,
 		})
 	case toolset.OauthProxyServerID.Valid:
-		token, err := s.oauthService.ValidateAccessToken(ctx, mcpSlug, token)
+		token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
@@ -465,7 +469,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 	// Validate OAuth access token
 	if toolset.OauthProxyServerID.Valid {
-		token, err := s.oauthService.ValidateAccessToken(ctx, mcpSlug, token)
+		token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
 			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)

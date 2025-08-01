@@ -3,6 +3,7 @@ package oauth
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
@@ -16,7 +17,7 @@ type ExternalSecret struct {
 
 // Grant represents an OAuth authorization grant
 type Grant struct {
-	MCPSlug             string
+	ToolsetID           uuid.UUID
 	Code                string
 	ClientID            string
 	RedirectURI         string
@@ -30,12 +31,12 @@ type Grant struct {
 	ExternalSecrets     []ExternalSecret
 }
 
-func GrantCacheKey(mcpSlug string, code string) string {
-	return "oauthGrant:" + mcpSlug + ":" + code
+func GrantCacheKey(toolsetId uuid.UUID, code string) string {
+	return "oauthGrant:" + toolsetId.String() + ":" + code
 }
 
 func (g Grant) CacheKey() string {
-	return GrantCacheKey(g.MCPSlug, g.Code)
+	return GrantCacheKey(g.ToolsetID, g.Code)
 }
 
 func (g Grant) AdditionalCacheKeys() []string {
@@ -50,7 +51,7 @@ var _ cache.CacheableObject[Token] = (*Token)(nil)
 
 // Token represents an OAuth access token
 type Token struct {
-	MCPSlug         string           `json:"mcp_slug"`
+	ToolsetID       uuid.UUID        `json:"-"`
 	AccessToken     string           `json:"access_token"`
 	TokenType       string           `json:"token_type"`
 	Scope           string           `json:"scope,omitempty"`
@@ -59,12 +60,12 @@ type Token struct {
 	ExternalSecrets []ExternalSecret `json:"-"` // this should never be exposed in JSON
 }
 
-func TokenCacheKey(mcpSlug string, token string) string {
-	return "oauthToken:" + mcpSlug + ":" + token
+func TokenCacheKey(toolsetID uuid.UUID, token string) string {
+	return "oauthToken:" + toolsetID.String() + ":" + token
 }
 
 func (t Token) CacheKey() string {
-	return TokenCacheKey(t.MCPSlug, t.AccessToken)
+	return TokenCacheKey(t.ToolsetID, t.AccessToken)
 }
 
 func (t Token) AdditionalCacheKeys() []string {
@@ -73,4 +74,41 @@ func (t Token) AdditionalCacheKeys() []string {
 
 func (t Token) TTL() time.Duration {
 	return time.Until(t.ExpiresAt)
+}
+
+var _ cache.CacheableObject[OauthProxyClientInfo] = (*OauthProxyClientInfo)(nil)
+
+type OauthProxyClientInfo struct {
+	MCPURL                  string
+	ClientID                string
+	ClientSecret            string
+	ClientSecretExpiresAt   time.Time
+	ClientName              string
+	RedirectUris            []string
+	GrantTypes              []string
+	ResponseTypes           []string
+	Scope                   string
+	TokenEndpointAuthMethod string
+	ApplicationType         string
+	CreatedAt               time.Time
+	UpdatedAt               time.Time
+}
+
+func ClientInfoCacheKey(mcpURL string, clientID string) string {
+	return "oauthClientInfo:" + mcpURL + ":" + clientID
+}
+
+func (o OauthProxyClientInfo) CacheKey() string {
+	return ClientInfoCacheKey(o.MCPURL, o.ClientID)
+}
+
+func (o OauthProxyClientInfo) AdditionalCacheKeys() []string {
+	return []string{}
+}
+
+func (o OauthProxyClientInfo) TTL() time.Duration {
+	// we are responding to mcp clients wiht a client registration expiry of 15 days
+	// it seems most respect this so we may start enforcing this TTL in our storage
+	// we will not until we finish evaluating that
+	return 0
 }

@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -41,17 +42,17 @@ func NewTokenService(cacheImpl cache.Cache, clientRegistration *ClientRegistrati
 }
 
 // ExchangeAuthorizationCode exchanges an authorization code for tokens
-func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *TokenRequest, mcpSlug string) (*Token, error) {
+func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *TokenRequest, mcpURL string, toolsetId uuid.UUID) (*Token, error) {
 	if err := ts.validateTokenRequest(req); err != nil {
 		return nil, fmt.Errorf("invalid token request: %w", err)
 	}
 
-	_, err := ts.clientRegistration.ValidateClientCredentials(ctx, mcpSlug, req.ClientID, req.ClientSecret)
+	_, err := ts.clientRegistration.ValidateClientCredentials(ctx, mcpURL, req.ClientID, req.ClientSecret)
 	if err != nil {
 		return nil, fmt.Errorf("invalid client credentials: %w", err)
 	}
 
-	grant, err := ts.grantManager.ValidateAndConsumeGrant(ctx, mcpSlug, req.Code, req.ClientID, req.RedirectURI)
+	grant, err := ts.grantManager.ValidateAndConsumeGrant(ctx, toolsetId, req.Code, req.ClientID, req.RedirectURI)
 	if err != nil {
 		return nil, fmt.Errorf("invalid authorization code: %w", err)
 	}
@@ -70,7 +71,7 @@ func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *Toke
 
 	// Create token response
 	token := &Token{
-		MCPSlug:         mcpSlug,
+		ToolsetID:       toolsetId,
 		AccessToken:     accessToken,
 		TokenType:       "Bearer",
 		Scope:           grant.Scope,
@@ -91,8 +92,8 @@ func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *Toke
 }
 
 // ValidateAccessToken validates an access token
-func (ts *TokenService) ValidateAccessToken(ctx context.Context, mcpSlug string, accessToken string) (*Token, error) {
-	token, err := ts.getToken(ctx, mcpSlug, accessToken)
+func (ts *TokenService) ValidateAccessToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*Token, error) {
+	token, err := ts.getToken(ctx, toolsetId, accessToken)
 	if err != nil {
 		return nil, fmt.Errorf("invalid access token")
 	}
@@ -206,10 +207,10 @@ func (ts *TokenService) storeToken(ctx context.Context, token Token) error {
 	return nil
 }
 
-func (ts *TokenService) getToken(ctx context.Context, mcpSlug string, accessToken string) (*Token, error) {
+func (ts *TokenService) getToken(ctx context.Context, toolsetId uuid.UUID, accessToken string) (*Token, error) {
 	hash := sha256.Sum256([]byte(accessToken))
 	accessTokenHash := base64.RawURLEncoding.EncodeToString(hash[:])
-	token, err := ts.tokenStorage.Get(ctx, TokenCacheKey(mcpSlug, accessTokenHash))
+	token, err := ts.tokenStorage.Get(ctx, TokenCacheKey(toolsetId, accessTokenHash))
 	if err != nil {
 		return nil, fmt.Errorf("token not found: %w", err)
 	}

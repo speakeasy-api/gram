@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -40,8 +41,8 @@ func NewGrantManager(cacheImpl cache.Cache, clientRegistration *ClientRegistrati
 }
 
 // CreateAuthorizationGrant creates a new authorization grant
-func (gm *GrantManager) CreateAuthorizationGrant(ctx context.Context, req *AuthorizationRequest, mcpSlug string, accessToken string, expiresAt *time.Time, securityKeys []string) (*Grant, error) {
-	if err := gm.ValidateAuthorizationRequest(ctx, req, mcpSlug); err != nil {
+func (gm *GrantManager) CreateAuthorizationGrant(ctx context.Context, req *AuthorizationRequest, mcpURL string, toolsetId uuid.UUID, accessToken string, expiresAt *time.Time, securityKeys []string) (*Grant, error) {
+	if err := gm.ValidateAuthorizationRequest(ctx, req, mcpURL); err != nil {
 		return nil, fmt.Errorf("invalid authorization request: %w", err)
 	}
 
@@ -51,7 +52,7 @@ func (gm *GrantManager) CreateAuthorizationGrant(ctx context.Context, req *Autho
 	}
 
 	grant := &Grant{
-		MCPSlug:             mcpSlug,
+		ToolsetID:           toolsetId,
 		Code:                authCode,
 		ClientID:            req.ClientID,
 		RedirectURI:         req.RedirectURI,
@@ -87,8 +88,8 @@ func (gm *GrantManager) CreateAuthorizationGrant(ctx context.Context, req *Autho
 }
 
 // ValidateAndConsumeGrant validates and consumes an authorization grant
-func (gm *GrantManager) ValidateAndConsumeGrant(ctx context.Context, mcpSlug string, code, clientID, redirectURI string) (*Grant, error) {
-	grant, err := gm.getGrant(ctx, mcpSlug, code)
+func (gm *GrantManager) ValidateAndConsumeGrant(ctx context.Context, toolsetId uuid.UUID, code, clientID, redirectURI string) (*Grant, error) {
+	grant, err := gm.getGrant(ctx, toolsetId, code)
 	if err != nil {
 		return nil, fmt.Errorf("invalid authorization code")
 	}
@@ -125,7 +126,7 @@ func (gm *GrantManager) ValidateAndConsumeGrant(ctx context.Context, mcpSlug str
 }
 
 // ValidateAuthorizationRequest validates an authorization request
-func (gm *GrantManager) ValidateAuthorizationRequest(ctx context.Context, req *AuthorizationRequest, mcpSlug string) error {
+func (gm *GrantManager) ValidateAuthorizationRequest(ctx context.Context, req *AuthorizationRequest, mcpURL string) error {
 	if req.ResponseType == "" {
 		return fmt.Errorf("response_type is required")
 	}
@@ -143,12 +144,12 @@ func (gm *GrantManager) ValidateAuthorizationRequest(ctx context.Context, req *A
 	}
 
 	// Validate client exists
-	client, err := gm.clientRegistration.GetClient(ctx, mcpSlug, req.ClientID)
+	client, err := gm.clientRegistration.GetClient(ctx, mcpURL, req.ClientID)
 	if err != nil {
 		return fmt.Errorf("invalid client_id: %w", err)
 	}
 
-	validRedirectURI, err := gm.clientRegistration.IsValidRedirectURI(ctx, mcpSlug, req.ClientID, req.RedirectURI)
+	validRedirectURI, err := gm.clientRegistration.IsValidRedirectURI(ctx, mcpURL, req.ClientID, req.RedirectURI)
 	if err != nil {
 		return fmt.Errorf("failed to validate redirect URI: %w", err)
 	}
@@ -287,8 +288,8 @@ func (gm *GrantManager) storeGrant(ctx context.Context, grant Grant) error {
 	return nil
 }
 
-func (gm *GrantManager) getGrant(ctx context.Context, mcpSlug string, code string) (*Grant, error) {
-	grant, err := gm.grantStorage.Get(ctx, GrantCacheKey(mcpSlug, code))
+func (gm *GrantManager) getGrant(ctx context.Context, toolsetId uuid.UUID, code string) (*Grant, error) {
+	grant, err := gm.grantStorage.Get(ctx, GrantCacheKey(toolsetId, code))
 	if err != nil {
 		return nil, fmt.Errorf("grant not found: %w", err)
 	}
