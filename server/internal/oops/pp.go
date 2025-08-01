@@ -120,9 +120,9 @@ func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...a
 	trace.SpanFromContext(ctx).SetStatus(codes.Error, e.String())
 
 	if len(args) > 0 {
-		logger.ErrorContext(ctx, e.public, append(args, attr.SlogErrorID(e.id), attr.SlogError(e))...)
+		logger.ErrorContext(ctx, e.public, append(args, attr.SlogErrorID(e.id), attr.SlogErrorMessage(e.String()))...)
 	} else {
-		logger.ErrorContext(ctx, e.public, attr.SlogErrorID(e.id), attr.SlogError(e))
+		logger.ErrorContext(ctx, e.public, attr.SlogErrorID(e.id), attr.SlogErrorMessage(e.String()))
 	}
 	return e
 }
