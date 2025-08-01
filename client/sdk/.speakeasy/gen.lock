@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 4d4c41dc3a943bee814ed7b9b8acab35
+  docChecksum: 99e1790222958559a4f26e400644934c
   docVersion: 0.0.1
   speakeasyVersion: 1.585.0
   generationVersion: 2.660.0
-  releaseVersion: 0.12.39
-  configChecksum: 5143aae6d84fdfbe2a4a90b650c1c455
+  releaseVersion: 0.12.41
+  configChecksum: 47eefd9f537611bc6e1a6dac74c53e2d
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -80,6 +80,7 @@ generatedFiles:
   - docs/models/components/getprompttemplateresult.md
   - docs/models/components/getslackconnectionresult.md
   - docs/models/components/httptooldefinition.md
+  - docs/models/components/httptooldefinitionentry.md
   - docs/models/components/inforesponsebody.md
   - docs/models/components/integration.md
   - docs/models/components/integrationentry.md
@@ -107,6 +108,7 @@ generatedFiles:
   - docs/models/components/project.md
   - docs/models/components/projectentry.md
   - docs/models/components/prompttemplate.md
+  - docs/models/components/prompttemplateentry.md
   - docs/models/components/prompttemplatekind.md
   - docs/models/components/publishpackageform.md
   - docs/models/components/publishpackageresult.md
@@ -120,6 +122,7 @@ generatedFiles:
   - docs/models/components/rendertemplateresult.md
   - docs/models/components/responsefilter.md
   - docs/models/components/toolset.md
+  - docs/models/components/toolsetentry.md
   - docs/models/components/toolvariation.md
   - docs/models/components/updateenvironmentrequestbody.md
   - docs/models/components/updatepackageform.md
@@ -473,6 +476,7 @@ generatedFiles:
   - src/models/components/getprompttemplateresult.ts
   - src/models/components/getslackconnectionresult.ts
   - src/models/components/httptooldefinition.ts
+  - src/models/components/httptooldefinitionentry.ts
   - src/models/components/index.ts
   - src/models/components/inforesponsebody.ts
   - src/models/components/integration.ts
@@ -500,6 +504,7 @@ generatedFiles:
   - src/models/components/project.ts
   - src/models/components/projectentry.ts
   - src/models/components/prompttemplate.ts
+  - src/models/components/prompttemplateentry.ts
   - src/models/components/publishpackageform.ts
   - src/models/components/publishpackageresult.ts
   - src/models/components/redeployrequestbody.ts
@@ -510,6 +515,7 @@ generatedFiles:
   - src/models/components/rendertemplateresult.ts
   - src/models/components/responsefilter.ts
   - src/models/components/toolset.ts
+  - src/models/components/toolsetentry.ts
   - src/models/components/toolvariation.ts
   - src/models/components/updateenvironmentrequestbody.ts
   - src/models/components/updatepackageform.ts

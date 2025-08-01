@@ -106,7 +106,7 @@ type ListToolsetsPayload struct {
 // method.
 type ListToolsetsResult struct {
 	// The list of toolsets
-	Toolsets []*types.Toolset
+	Toolsets []*types.ToolsetEntry
 }
 
 // UpdateToolsetPayload is the payload type of the toolsets service

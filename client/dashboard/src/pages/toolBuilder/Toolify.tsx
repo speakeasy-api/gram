@@ -5,7 +5,7 @@ import { Heading } from "@/components/ui/heading";
 import { Spinner } from "@/components/ui/spinner";
 import { TextArea } from "@/components/ui/textarea";
 import { useRoutes } from "@/routes";
-import { Toolset } from "@gram/client/models/components";
+import { ToolsetEntry } from "@gram/client/models/components";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { generateObject } from "ai";
 import { createContext, useContext, useState } from "react";
@@ -13,6 +13,7 @@ import { z } from "zod";
 import { useMiniModel } from "../playground/Openrouter";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { useToolDefinitions } from "../toolsets/types";
+import { useToolset } from "@gram/client/react-query";
 
 const SuggestionSchema = z.object({
   name: z.string(),
@@ -32,7 +33,7 @@ const SuggestionSchema = z.object({
 });
 
 type ToolifyContextType = {
-  toolset: Toolset;
+  toolset: ToolsetEntry;
   purpose: string;
   suggestion: z.infer<typeof SuggestionSchema>;
 };
@@ -73,8 +74,13 @@ export const ToolifyDialog = ({
 
   const [inProgress, setInProgress] = useState(false);
   const [purpose, setPurpose] = useState("");
-  const [selectedToolset, setSelectedToolset] = useState<Toolset>();
-  const tools = useToolDefinitions(selectedToolset);
+  const [selectedToolset, setSelectedToolset] = useState<ToolsetEntry>();
+  const { data: toolset } = useToolset(
+    { slug: selectedToolset?.slug ?? "" },
+    undefined,
+    { enabled: !!selectedToolset?.slug }
+  );
+  const tools = useToolDefinitions(toolset);
 
   const { set } = useToolifyContext();
 
@@ -150,7 +156,7 @@ export const ToolifyDialog = ({
             <Stack direction="horizontal" gap={2} align="center">
               <ToolsetDropdown
                 selectedToolset={selectedToolset}
-                setSelectedToolset={setSelectedToolset}
+                setSelectedToolset={(toolset) => setSelectedToolset(toolset)}
               />
               <ToolsetToolsBadge toolset={selectedToolset} />
             </Stack>

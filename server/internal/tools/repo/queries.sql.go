@@ -13,6 +13,74 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 )
 
+const findToolEntriesByName = `-- name: FindToolEntriesByName :many
+WITH deployment AS (
+    SELECT id
+    FROM deployments
+    WHERE deployments.project_id = $2
+      AND (
+        $3::uuid IS NULL
+        OR id = $3::uuid
+      )
+    ORDER BY seq DESC
+    LIMIT 1
+),
+external_deployments AS (
+  SELECT package_versions.deployment_id as id
+  FROM deployments_packages
+  INNER JOIN package_versions ON deployments_packages.version_id = package_versions.id
+  WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
+)
+SELECT 
+  htd.id, htd.deployment_id, htd.name, htd.security, htd.server_env_var
+FROM http_tool_definitions htd
+WHERE
+  htd.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
+  AND htd.deleted IS FALSE
+  AND htd.name = ANY ($1::text[])
+ORDER BY htd.id DESC
+`
+
+type FindToolEntriesByNameParams struct {
+	Names        []string
+	ProjectID    uuid.UUID
+	DeploymentID uuid.NullUUID
+}
+
+type FindToolEntriesByNameRow struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	Name         string
+	Security     []byte
+	ServerEnvVar string
+}
+
+func (q *Queries) FindToolEntriesByName(ctx context.Context, arg FindToolEntriesByNameParams) ([]FindToolEntriesByNameRow, error) {
+	rows, err := q.db.Query(ctx, findToolEntriesByName, arg.Names, arg.ProjectID, arg.DeploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindToolEntriesByNameRow
+	for rows.Next() {
+		var i FindToolEntriesByNameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentID,
+			&i.Name,
+			&i.Security,
+			&i.ServerEnvVar,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findToolsByName = `-- name: FindToolsByName :many
 WITH deployment AS (
     SELECT id

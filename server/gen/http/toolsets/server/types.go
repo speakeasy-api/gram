@@ -88,7 +88,7 @@ type CreateToolsetResponseBody struct {
 // "listToolsets" endpoint HTTP response body.
 type ListToolsetsResponseBody struct {
 	// The list of toolsets
-	Toolsets []*ToolsetResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
+	Toolsets []*ToolsetEntryResponseBody `form:"toolsets" json:"toolsets" xml:"toolsets"`
 }
 
 // UpdateToolsetResponseBody is the type of the "toolsets" service
@@ -1403,8 +1403,8 @@ type PromptTemplateResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
-// ToolsetResponseBody is used to define fields on response body types.
-type ToolsetResponseBody struct {
+// ToolsetEntryResponseBody is used to define fields on response body types.
+type ToolsetEntryResponseBody struct {
 	// The ID of the toolset
 	ID string `form:"id" json:"id" xml:"id"`
 	// The project ID this toolset belongs to
@@ -1422,9 +1422,9 @@ type ToolsetResponseBody struct {
 	// The environment variables that are relevant to the toolset
 	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
 	// The HTTP tools in this toolset
-	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
+	HTTPTools []*HTTPToolDefinitionEntryResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
 	// The prompt templates in this toolset
-	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	PromptTemplates []*PromptTemplateEntryResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -1435,6 +1435,24 @@ type ToolsetResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// HTTPToolDefinitionEntryResponseBody is used to define fields on response
+// body types.
+type HTTPToolDefinitionEntryResponseBody struct {
+	// The ID of the HTTP tool
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the tool
+	Name string `form:"name" json:"name" xml:"name"`
+}
+
+// PromptTemplateEntryResponseBody is used to define fields on response body
+// types.
+type PromptTemplateEntryResponseBody struct {
+	// The ID of the prompt template
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the prompt template
+	Name string `form:"name" json:"name" xml:"name"`
 }
 
 // NewCreateToolsetResponseBody builds the HTTP response body from the result
@@ -1490,12 +1508,12 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 func NewListToolsetsResponseBody(res *toolsets.ListToolsetsResult) *ListToolsetsResponseBody {
 	body := &ListToolsetsResponseBody{}
 	if res.Toolsets != nil {
-		body.Toolsets = make([]*ToolsetResponseBody, len(res.Toolsets))
+		body.Toolsets = make([]*ToolsetEntryResponseBody, len(res.Toolsets))
 		for i, val := range res.Toolsets {
-			body.Toolsets[i] = marshalTypesToolsetToToolsetResponseBody(val)
+			body.Toolsets[i] = marshalTypesToolsetEntryToToolsetEntryResponseBody(val)
 		}
 	} else {
-		body.Toolsets = []*ToolsetResponseBody{}
+		body.Toolsets = []*ToolsetEntryResponseBody{}
 	}
 	return body
 }

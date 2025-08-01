@@ -42,3 +42,10 @@ var PromptTemplate = Type("PromptTemplate", func() {
 
 	Meta("struct:pkg:path", "types")
 })
+
+var PromptTemplateEntry = Type("PromptTemplateEntry", func() {
+	Required("id", "name")
+
+	Attribute("id", String, "The ID of the prompt template")
+	Attribute("name", Slug, "The name of the prompt template")
+})

@@ -107,6 +107,33 @@ WHERE
   AND http_tool_definitions.name = ANY (@names::text[])
 ORDER BY http_tool_definitions.id DESC;
 
+-- name: FindToolEntriesByName :many
+WITH deployment AS (
+    SELECT id
+    FROM deployments
+    WHERE deployments.project_id = @project_id
+      AND (
+        sqlc.narg(deployment_id)::uuid IS NULL
+        OR id = sqlc.narg(deployment_id)::uuid
+      )
+    ORDER BY seq DESC
+    LIMIT 1
+),
+external_deployments AS (
+  SELECT package_versions.deployment_id as id
+  FROM deployments_packages
+  INNER JOIN package_versions ON deployments_packages.version_id = package_versions.id
+  WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
+)
+SELECT 
+  htd.id, htd.deployment_id, htd.name, htd.security, htd.server_env_var
+FROM http_tool_definitions htd
+WHERE
+  htd.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
+  AND htd.deleted IS FALSE
+  AND htd.name = ANY (@names::text[])
+ORDER BY htd.id DESC;
+
 -- name: GetHTTPToolDefinitionByID :one
 WITH first_party AS (
   SELECT id

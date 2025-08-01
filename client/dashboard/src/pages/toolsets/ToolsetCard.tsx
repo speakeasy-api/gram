@@ -7,16 +7,18 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { useRoutes } from "@/routes";
-import { Toolset } from "@gram/client/models/components";
+import { ToolsetEntry } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useDeleteToolset } from "./Toolset";
 import { UpdatedAt } from "@/components/updated-at";
+
+type ToolsetForCard = Pick<ToolsetEntry, 'id' | 'name' | 'slug' | 'description' | 'updatedAt' | 'httpTools' | 'promptTemplates'>;
 
 export function ToolsetCard({
   toolset,
   className,
 }: {
-  toolset: Toolset;
+  toolset: ToolsetForCard;
   className?: string;
 }) {
   const routes = useRoutes();
@@ -70,7 +72,7 @@ export function ToolsetCard({
 export function ToolsetPlaygroundLink({
   toolset,
 }: {
-  toolset: Toolset | undefined;
+  toolset: Pick<ToolsetEntry, 'slug'>;
 }) {
   const routes = useRoutes();
   return (

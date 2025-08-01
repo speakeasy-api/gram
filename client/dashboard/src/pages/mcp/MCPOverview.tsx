@@ -19,7 +19,7 @@ import {
 import { Type } from "@/components/ui/type";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { Toolset } from "@gram/client/models/components";
+import { ToolsetEntry } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Check, Lock, Pencil } from "lucide-react";
 import { useState } from "react";
@@ -27,6 +27,9 @@ import { Outlet } from "react-router";
 import { useToolsets } from "../toolsets/Toolsets";
 import { MCPJson, useMcpUrl } from "./MCPDetails";
 import { MCPEmptyState } from "./MCPEmptyState";
+
+// Define specific type for MCP components
+type ToolsetForMCP = ToolsetEntry;
 
 export function MCPRoot() {
   return (
@@ -56,7 +59,7 @@ export function MCPOverview() {
       </Page.Section.Description>
       <Page.Section.Body>
         <Cards>
-          {toolsets.map((toolset: Toolset) => (
+          {toolsets.map((toolset) => (
             <McpToolsetCard key={toolset.id} toolset={toolset} />
           ))}
         </Cards>
@@ -65,7 +68,7 @@ export function MCPOverview() {
   );
 }
 
-export function McpToolsetCard({ toolset }: { toolset: Toolset }) {
+export function McpToolsetCard({ toolset }: { toolset: ToolsetForMCP }) {
   const routes = useRoutes();
 
   const { url: mcpUrl } = useMcpUrl(toolset);

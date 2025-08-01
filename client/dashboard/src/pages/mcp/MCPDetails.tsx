@@ -15,10 +15,11 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
-import { Toolset } from "@gram/client/models/components";
+import { Toolset, ToolsetEntry } from "@gram/client/models/components";
 import {
   invalidateAllToolset,
   useGetDomain,
+  useListTools,
   useToolsetSuspense,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
@@ -77,7 +78,7 @@ export function useCustomDomain() {
   return { domain: domain, refetch: refetch, isLoading };
 }
 
-export function useMcpUrl(toolset: Toolset | undefined) {
+export function useMcpUrl(toolset: Pick<ToolsetEntry, 'slug' | 'customDomainId' | 'mcpSlug' | 'defaultEnvironmentSlug'> | undefined) {
   const { domain } = useCustomDomain();
   const project = useProject();
 
@@ -469,7 +470,7 @@ export function MCPJson({
   toolset,
   fullWidth = false,
 }: {
-  toolset: Toolset;
+  toolset: ToolsetEntry;
   fullWidth?: boolean; // If true, the code block will take up the full width of the page even when there's only one
 }) {
   const telemetry = useTelemetry();
@@ -520,12 +521,14 @@ export function MCPJson({
   );
 }
 
-export const useMcpConfigs = (toolset: Toolset | undefined) => {
+export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
   const { url: mcpUrl } = useMcpUrl(toolset);
+  const { data: tools} = useListTools();
 
   if (!toolset) return { public: "", internal: "" };
 
-  const requiresServerURL = toolset.httpTools?.some(
+  const toolsetTools = tools?.tools?.filter((tool) => toolset.httpTools.some((t) => t.id === tool.id));
+  const requiresServerURL = toolsetTools?.some(
     (tool) => !tool.defaultServerUrl
   );
 

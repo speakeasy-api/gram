@@ -152,9 +152,9 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets").Log(ctx, s.logger)
 	}
 
-	result := make([]*types.Toolset, len(toolsets))
+	result := make([]*types.ToolsetEntry, len(toolsets))
 	for i, toolset := range toolsets {
-		toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug))
+		toolsetDetails, err := mv.DescribeToolsetEntry(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolset.Slug))
 		if err != nil {
 			return nil, err
 		}

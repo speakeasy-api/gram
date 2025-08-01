@@ -7407,6 +7407,18 @@ components:
                 - schema
                 - created_at
                 - updated_at
+        HTTPToolDefinitionEntry:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the HTTP tool
+                name:
+                    type: string
+                    description: The name of the tool
+            required:
+                - id
+                - name
         InfoResponseBody:
             type: object
             properties:
@@ -7710,7 +7722,7 @@ components:
                 toolsets:
                     type: array
                     items:
-                        $ref: '#/components/schemas/Toolset'
+                        $ref: '#/components/schemas/ToolsetEntry'
                     description: The list of toolsets
             required:
                 - toolsets
@@ -7997,6 +8009,20 @@ components:
                 - tools_hint
                 - created_at
                 - updated_at
+        PromptTemplateEntry:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the prompt template
+                name:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+            required:
+                - id
+                - name
         PublishPackageForm:
             type: object
             properties:
@@ -8261,6 +8287,78 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/PromptTemplate'
+                    description: The prompt templates in this toolset
+                relevant_environment_variables:
+                    type: array
+                    items:
+                        type: string
+                    description: The environment variables that are relevant to the toolset
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+                updated_at:
+                    type: string
+                    description: When the toolset was last updated.
+                    format: date-time
+            required:
+                - id
+                - project_id
+                - organization_id
+                - name
+                - slug
+                - http_tools
+                - prompt_templates
+                - created_at
+                - updated_at
+        ToolsetEntry:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the toolset was created.
+                    format: date-time
+                custom_domain_id:
+                    type: string
+                    description: The ID of the custom domain to use for the toolset
+                default_environment_slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+                description:
+                    type: string
+                    description: Description of the toolset
+                http_tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/HTTPToolDefinitionEntry'
+                    description: The HTTP tools in this toolset
+                id:
+                    type: string
+                    description: The ID of the toolset
+                mcp_is_public:
+                    type: boolean
+                    description: Whether the toolset is public in MCP
+                mcp_slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+                name:
+                    type: string
+                    description: The name of the toolset
+                organization_id:
+                    type: string
+                    description: The organization ID this toolset belongs to
+                project_id:
+                    type: string
+                    description: The project ID this toolset belongs to
+                prompt_templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptTemplateEntry'
                     description: The prompt templates in this toolset
                 relevant_environment_variables:
                     type: array

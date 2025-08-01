@@ -1570,10 +1570,10 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 	return res
 }
 
-// unmarshalToolsetResponseBodyToTypesToolset builds a value of type
-// *types.Toolset from a value of type *ToolsetResponseBody.
-func unmarshalToolsetResponseBodyToTypesToolset(v *ToolsetResponseBody) *types.Toolset {
-	res := &types.Toolset{
+// unmarshalToolsetEntryResponseBodyToTypesToolsetEntry builds a value of type
+// *types.ToolsetEntry from a value of type *ToolsetEntryResponseBody.
+func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryResponseBody) *types.ToolsetEntry {
+	res := &types.ToolsetEntry{
 		ID:             *v.ID,
 		ProjectID:      *v.ProjectID,
 		OrganizationID: *v.OrganizationID,
@@ -1599,13 +1599,37 @@ func unmarshalToolsetResponseBodyToTypesToolset(v *ToolsetResponseBody) *types.T
 			res.RelevantEnvironmentVariables[i] = val
 		}
 	}
-	res.HTTPTools = make([]*types.HTTPToolDefinition, len(v.HTTPTools))
+	res.HTTPTools = make([]*types.HTTPToolDefinitionEntry, len(v.HTTPTools))
 	for i, val := range v.HTTPTools {
-		res.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
+		res.HTTPTools[i] = unmarshalHTTPToolDefinitionEntryResponseBodyToTypesHTTPToolDefinitionEntry(val)
 	}
-	res.PromptTemplates = make([]*types.PromptTemplate, len(v.PromptTemplates))
+	res.PromptTemplates = make([]*types.PromptTemplateEntry, len(v.PromptTemplates))
 	for i, val := range v.PromptTemplates {
-		res.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+		res.PromptTemplates[i] = unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(val)
+	}
+
+	return res
+}
+
+// unmarshalHTTPToolDefinitionEntryResponseBodyToTypesHTTPToolDefinitionEntry
+// builds a value of type *types.HTTPToolDefinitionEntry from a value of type
+// *HTTPToolDefinitionEntryResponseBody.
+func unmarshalHTTPToolDefinitionEntryResponseBodyToTypesHTTPToolDefinitionEntry(v *HTTPToolDefinitionEntryResponseBody) *types.HTTPToolDefinitionEntry {
+	res := &types.HTTPToolDefinitionEntry{
+		ID:   *v.ID,
+		Name: *v.Name,
+	}
+
+	return res
+}
+
+// unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry builds a
+// value of type *types.PromptTemplateEntry from a value of type
+// *PromptTemplateEntryResponseBody.
+func unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(v *PromptTemplateEntryResponseBody) *types.PromptTemplateEntry {
+	res := &types.PromptTemplateEntry{
+		ID:   *v.ID,
+		Name: types.Slug(*v.Name),
 	}
 
 	return res

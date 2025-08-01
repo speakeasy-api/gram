@@ -162,7 +162,7 @@ var CreateToolsetForm = Type("CreateToolsetForm", func() {
 })
 
 var ListToolsetsResult = Type("ListToolsetsResult", func() {
-	Attribute("toolsets", ArrayOf(shared.Toolset), "The list of toolsets")
+	Attribute("toolsets", ArrayOf(shared.ToolsetEntry), "The list of toolsets")
 	Required("toolsets")
 })
 

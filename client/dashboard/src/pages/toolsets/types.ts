@@ -26,6 +26,9 @@ export type ToolDefinition =
         type: "prompt";
       });
 
+/**
+ * For full toolsets with complete tool definitions
+ */
 export const useToolDefinitions = (
   toolset: Toolset | undefined
 ): ToolDefinition[] => {

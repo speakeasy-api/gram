@@ -24,6 +24,138 @@ import (
 
 const DefaultEmptyToolSchema = `{"type":"object","properties":{}}`
 
+func DescribeToolsetEntry(
+	ctx context.Context,
+	logger *slog.Logger,
+	tx DBTX,
+	projectID ProjectID,
+	toolsetSlug ToolsetSlug,
+) (*types.ToolsetEntry, error) {
+	toolsetRepo := tsr.New(tx)
+	toolsRepo := tr.New(tx)
+	variationsRepo := vr.New(tx)
+	pid := uuid.UUID(projectID)
+
+	if err := inv.Check(
+		"describe toolset inputs",
+		"project id is set", pid != uuid.Nil,
+		"toolset slug is set", toolsetSlug != "",
+	); err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "not enough information to describe toolset").Log(ctx, logger)
+	}
+
+	toolset, err := toolsetRepo.GetToolset(ctx, tsr.GetToolsetParams{
+		Slug:      conv.ToLower(toolsetSlug),
+		ProjectID: pid,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
+	}
+
+	var httpTools []*types.HTTPToolDefinitionEntry
+	var relevantEnvVars []string
+	if len(toolset.HttpToolNames) > 0 {
+		definitions, err := toolsRepo.FindToolEntriesByName(ctx, tr.FindToolEntriesByNameParams{
+			ProjectID:    pid,
+			Names:        toolset.HttpToolNames,
+			DeploymentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
+		}
+
+		names := make([]string, 0, len(definitions))
+		for _, def := range definitions {
+			names = append(names, def.Name)
+		}
+
+		allVariations, err := variationsRepo.FindGlobalVariationsByToolNames(ctx, vr.FindGlobalVariationsByToolNamesParams{
+			ProjectID: pid,
+			ToolNames: names,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").Log(ctx, logger)
+		}
+
+		nameVariations := make(map[string]string)
+		for _, variation := range allVariations {
+			n := conv.FromPGText[string](variation.Name)
+			if n == nil || *n == "" {
+				continue
+			}
+
+			nameVariations[variation.SrcToolName] = *n
+		}
+
+		httpTools = make([]*types.HTTPToolDefinitionEntry, 0, len(definitions))
+		envQueries := make([]toolEnvLookupParams, 0, len(definitions))
+		seen := make(map[string]bool, 0)
+		for _, def := range definitions {
+			if _, ok := seen[def.Name]; ok {
+				continue
+			}
+			seen[def.ID.String()] = true
+
+			name := conv.Default(nameVariations[def.Name], def.Name)
+
+			tool := &types.HTTPToolDefinitionEntry{
+				ID:   def.ID.String(),
+				Name: name,
+			}
+
+			envQueries = append(envQueries, toolEnvLookupParams{
+				deploymentID: def.DeploymentID,
+				security:     def.Security,
+				serverEnvVar: def.ServerEnvVar,
+			})
+
+			httpTools = append(httpTools, tool)
+		}
+
+		relevantEnvVars, err = environmentVariablesForTools(ctx, tx, envQueries)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").Log(ctx, logger)
+		}
+	}
+
+	ptrows, err := toolsetRepo.GetPromptTemplatesForToolset(ctx, tsr.GetPromptTemplatesForToolsetParams{
+		ProjectID: pid,
+		ToolsetID: toolset.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").Log(ctx, logger)
+	}
+
+	promptTemplates := make([]*types.PromptTemplateEntry, 0, len(ptrows))
+	for _, pt := range ptrows {
+		promptTemplates = append(promptTemplates, &types.PromptTemplateEntry{
+			ID:   pt.ID.String(),
+			Name: types.Slug(pt.Name),
+		})
+	}
+
+	return &types.ToolsetEntry{
+		ID:                           toolset.ID.String(),
+		OrganizationID:               toolset.OrganizationID,
+		ProjectID:                    toolset.ProjectID.String(),
+		Name:                         toolset.Name,
+		Slug:                         types.Slug(toolset.Slug),
+		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
+		RelevantEnvironmentVariables: relevantEnvVars,
+		Description:                  conv.FromPGText[string](toolset.Description),
+		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
+		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
+		McpIsPublic:                  &toolset.McpIsPublic,
+		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
+		HTTPTools:                    httpTools,
+		PromptTemplates:              promptTemplates,
+	}, nil
+}
+
 func DescribeToolset(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -100,6 +232,7 @@ func DescribeToolset(
 
 		httpTools = make([]*types.HTTPToolDefinition, 0, len(definitions))
 		seen := make(map[string]bool, 0)
+		envQueries := make([]toolEnvLookupParams, 0, len(definitions))
 		for _, def := range definitions {
 			if _, ok := seen[def.HttpToolDefinition.Name]; ok {
 				continue
@@ -195,10 +328,16 @@ func DescribeToolset(
 				tool.Schema = DefaultEmptyToolSchema
 			}
 
+			envQueries = append(envQueries, toolEnvLookupParams{
+				deploymentID: def.HttpToolDefinition.DeploymentID,
+				security:     def.HttpToolDefinition.Security,
+				serverEnvVar: def.HttpToolDefinition.ServerEnvVar,
+			})
+
 			httpTools = append(httpTools, tool)
 		}
 
-		relevantEnvVars, err = environmentVariablesForTools(ctx, tx, definitions)
+		relevantEnvVars, err = environmentVariablesForTools(ctx, tx, envQueries)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").Log(ctx, logger)
 		}
@@ -259,7 +398,18 @@ func DescribeToolset(
 	}, nil
 }
 
-func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []tr.FindToolsByNameRow) ([]string, error) {
+type toolEnvLookupParams struct {
+	// The deployment ID of the tool.
+	deploymentID uuid.UUID
+
+	// The security requirements for the tool.
+	security []byte
+
+	// The server environment variable for the tool if available.
+	serverEnvVar string
+}
+
+func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []toolEnvLookupParams) ([]string, error) {
 	if len(tools) == 0 {
 		return []string{}, nil
 	}
@@ -269,7 +419,7 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []tr.FindT
 	relevantSecurityKeysMap := make(map[string]bool)
 	serverEnvVarsMap := make(map[string]bool)
 	for _, tool := range tools {
-		securityKeys, _, err := security.ParseHTTPToolSecurityKeys(tool.HttpToolDefinition.Security)
+		securityKeys, _, err := security.ParseHTTPToolSecurityKeys(tool.security)
 		if err != nil {
 			return nil, fmt.Errorf("http tool security keys: %w", err)
 		}
@@ -278,14 +428,14 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []tr.FindT
 			relevantSecurityKeysMap[key] = true
 		}
 
-		if tool.HttpToolDefinition.ServerEnvVar != "" {
-			serverEnvVarsMap[tool.HttpToolDefinition.ServerEnvVar] = true
+		if tool.serverEnvVar != "" {
+			serverEnvVarsMap[tool.serverEnvVar] = true
 		}
 	}
 
 	uniqueDeploymentIDs := make(map[uuid.UUID]bool)
 	for _, tool := range tools {
-		uniqueDeploymentIDs[tool.HttpToolDefinition.DeploymentID] = true
+		uniqueDeploymentIDs[tool.deploymentID] = true
 	}
 
 	securityEntries, err := toolsetRepo.GetHTTPSecurityDefinitions(ctx, tsr.GetHTTPSecurityDefinitionsParams{

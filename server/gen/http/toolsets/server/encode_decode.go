@@ -1493,10 +1493,10 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 	return res
 }
 
-// marshalTypesToolsetToToolsetResponseBody builds a value of type
-// *ToolsetResponseBody from a value of type *types.Toolset.
-func marshalTypesToolsetToToolsetResponseBody(v *types.Toolset) *ToolsetResponseBody {
-	res := &ToolsetResponseBody{
+// marshalTypesToolsetEntryToToolsetEntryResponseBody builds a value of type
+// *ToolsetEntryResponseBody from a value of type *types.ToolsetEntry.
+func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *ToolsetEntryResponseBody {
+	res := &ToolsetEntryResponseBody{
 		ID:             v.ID,
 		ProjectID:      v.ProjectID,
 		OrganizationID: v.OrganizationID,
@@ -1523,20 +1523,44 @@ func marshalTypesToolsetToToolsetResponseBody(v *types.Toolset) *ToolsetResponse
 		}
 	}
 	if v.HTTPTools != nil {
-		res.HTTPTools = make([]*HTTPToolDefinitionResponseBody, len(v.HTTPTools))
+		res.HTTPTools = make([]*HTTPToolDefinitionEntryResponseBody, len(v.HTTPTools))
 		for i, val := range v.HTTPTools {
-			res.HTTPTools[i] = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
+			res.HTTPTools[i] = marshalTypesHTTPToolDefinitionEntryToHTTPToolDefinitionEntryResponseBody(val)
 		}
 	} else {
-		res.HTTPTools = []*HTTPToolDefinitionResponseBody{}
+		res.HTTPTools = []*HTTPToolDefinitionEntryResponseBody{}
 	}
 	if v.PromptTemplates != nil {
-		res.PromptTemplates = make([]*PromptTemplateResponseBody, len(v.PromptTemplates))
+		res.PromptTemplates = make([]*PromptTemplateEntryResponseBody, len(v.PromptTemplates))
 		for i, val := range v.PromptTemplates {
-			res.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+			res.PromptTemplates[i] = marshalTypesPromptTemplateEntryToPromptTemplateEntryResponseBody(val)
 		}
 	} else {
-		res.PromptTemplates = []*PromptTemplateResponseBody{}
+		res.PromptTemplates = []*PromptTemplateEntryResponseBody{}
+	}
+
+	return res
+}
+
+// marshalTypesHTTPToolDefinitionEntryToHTTPToolDefinitionEntryResponseBody
+// builds a value of type *HTTPToolDefinitionEntryResponseBody from a value of
+// type *types.HTTPToolDefinitionEntry.
+func marshalTypesHTTPToolDefinitionEntryToHTTPToolDefinitionEntryResponseBody(v *types.HTTPToolDefinitionEntry) *HTTPToolDefinitionEntryResponseBody {
+	res := &HTTPToolDefinitionEntryResponseBody{
+		ID:   v.ID,
+		Name: v.Name,
+	}
+
+	return res
+}
+
+// marshalTypesPromptTemplateEntryToPromptTemplateEntryResponseBody builds a
+// value of type *PromptTemplateEntryResponseBody from a value of type
+// *types.PromptTemplateEntry.
+func marshalTypesPromptTemplateEntryToPromptTemplateEntryResponseBody(v *types.PromptTemplateEntry) *PromptTemplateEntryResponseBody {
+	res := &PromptTemplateEntryResponseBody{
+		ID:   v.ID,
+		Name: string(v.Name),
 	}
 
 	return res

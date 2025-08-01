@@ -21,9 +21,10 @@ import { Type } from "@/components/ui/type";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useGroupedToolDefinitions } from "@/lib/toolNames";
+import { useToolset } from "@gram/client/react-query";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { Toolset } from "@gram/client/models/components";
+import { ToolsetEntry } from "@gram/client/models/components";
 import { useListToolsets } from "@gram/client/react-query";
 import { Grid, Icon, IconName, Stack } from "@speakeasy-api/moonshine";
 import { ArrowRightIcon, Check, CheckCircleIcon, LockIcon } from "lucide-react";
@@ -62,7 +63,7 @@ function HomeContent() {
   const routes = useRoutes();
   const telemetry = useTelemetry();
   const { data: toolsets } = useListToolsets();
-  const [selectedToolset, setSelectedToolset] = useState<Toolset | null>(null);
+  const [selectedToolset, setSelectedToolset] = useState<ToolsetEntry | null>(null);
 
   const isStepCompleted = (storageKey: string) => {
     return localStorage.getItem(storageKey) === "true";
@@ -236,7 +237,7 @@ function HeroCard({
   toolset,
   className,
 }: {
-  toolset: Toolset | undefined;
+  toolset: ToolsetEntry | undefined;
   className?: string;
 }) {
   const routes = useRoutes();
@@ -363,8 +364,16 @@ function HeroCard({
   );
 }
 
-function HeroGraphic({ toolset }: { toolset: Toolset | undefined }) {
-  const groupedTools = useGroupedToolDefinitions(toolset);
+function HeroGraphic({ toolset }: { toolset: ToolsetEntry | undefined }) {
+  // Fetch the full toolset data to get complete tool definitions
+  const { data: fullToolset } = useToolset(
+    { slug: toolset?.slug ?? "" },
+    undefined,
+    { enabled: !!toolset?.slug }
+  );
+  
+  // Use the full toolset data for proper tool grouping
+  const groupedTools = useGroupedToolDefinitions(fullToolset);
 
   const groupedToolDefinitions =
     groupedTools.filter((group) => group.key !== "custom").length == 1

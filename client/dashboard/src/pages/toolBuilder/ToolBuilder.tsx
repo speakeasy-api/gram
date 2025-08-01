@@ -27,7 +27,10 @@ import { MUSTACHE_VAR_REGEX, slugify, TOOL_NAME_REGEX } from "@/lib/constants";
 import { useGroupedTools } from "@/lib/toolNames";
 import { capitalize, cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { PromptTemplateKind, Toolset } from "@gram/client/models/components";
+import {
+  PromptTemplateKind,
+  ToolsetEntry,
+} from "@gram/client/models/components";
 import {
   invalidateAllListToolsets,
   invalidateTemplate,
@@ -145,7 +148,7 @@ type ToolBuilderState = {
   purpose: string;
   inputs: Input[];
   steps: Step[];
-  toolset?: Toolset;
+  toolset?: ToolsetEntry;
 };
 
 function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
@@ -159,7 +162,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   const [description, setDescription] = useState(initial.description);
   const [purpose, setPurpose] = useState(initial.purpose);
   const [inputs, setInputs] = useState<Input[]>(initial.inputs);
-  const [toolsetFilter, setToolset] = useState<Toolset | undefined>(
+  const [toolsetFilter, setToolset] = useState<ToolsetEntry | undefined>(
     initial.toolset
   );
 
@@ -189,7 +192,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     });
   };
 
-  const tools = useToolDefinitions(toolsetFilter);
+  const tools = useToolDefinitions(toolsetData);
 
   // Ensures that the canonical tool and update function is set for the step
   const makeStep = (step: Step) => {
@@ -480,7 +483,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
               <BlockInner>
                 <ToolsetDropdown
                   selectedToolset={toolsetFilter}
-                  setSelectedToolset={setToolset}
+                  setSelectedToolset={(toolset) => setToolset(toolset)}
                   noLabel
                   defaultSelection="most-recent"
                   disabledMessage={

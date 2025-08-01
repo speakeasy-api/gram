@@ -7,7 +7,6 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useState } from "react";
 import { getServerURL } from "@/lib/utils";
 import { useToolsets } from "../toolsets/Toolsets";
-import { Toolset } from "@gram/client/models/components";
 import { Card } from "@/components/ui/card";
 import { Stack, Icon } from "@speakeasy-api/moonshine";
 import { Type } from "@/components/ui/type";
@@ -187,7 +186,7 @@ export default function SlackApp() {
                     <option value="" disabled>
                       Select a toolset
                     </option>
-                    {toolsets.map((ts: Toolset) => (
+                    {toolsets.map((ts) => (
                       <option key={ts.slug} value={ts.slug}>
                         {ts.slug}
                       </option>

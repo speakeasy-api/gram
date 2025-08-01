@@ -16,19 +16,12 @@ let value: ListToolsetsResult = {
       projectId: "<id>",
       promptTemplates: [
         {
-          createdAt: new Date("2024-04-18T10:37:41.805Z"),
-          engine: "mustache",
-          historyId: "<id>",
           id: "<id>",
-          kind: "higher_order_tool",
           name: "<value>",
-          prompt: "<value>",
-          toolsHint: [],
-          updatedAt: new Date("2024-10-27T10:52:08.281Z"),
         },
       ],
       slug: "<value>",
-      updatedAt: new Date("2025-12-23T11:52:23.236Z"),
+      updatedAt: new Date("2024-04-18T10:37:41.805Z"),
     },
   ],
 };
@@ -36,6 +29,6 @@ let value: ListToolsetsResult = {
 
 ## Fields
 
-| Field                                                      | Type                                                       | Required                                                   | Description                                                |
-| ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
-| `toolsets`                                                 | [components.Toolset](../../models/components/toolset.md)[] | :heavy_check_mark:                                         | The list of toolsets                                       |
+| Field                                                                | Type                                                                 | Required                                                             | Description                                                          |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `toolsets`                                                           | [components.ToolsetEntry](../../models/components/toolsetentry.md)[] | :heavy_check_mark:                                                   | The list of toolsets                                                 |

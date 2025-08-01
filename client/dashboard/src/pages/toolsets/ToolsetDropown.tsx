@@ -1,8 +1,7 @@
 import { Type } from "@/components/ui/type";
-
 import { Combobox } from "@/components/ui/combobox";
 import { capitalize } from "@/lib/utils";
-import { Toolset } from "@gram/client/models/components";
+import { ToolsetEntry } from "@gram/client/models/components";
 import { useListToolsets } from "@gram/client/react-query";
 import { useEffect } from "react";
 
@@ -14,8 +13,8 @@ export function ToolsetDropdown({
   disabledMessage,
   defaultSelection = "most-recent",
 }: {
-  selectedToolset: Toolset | undefined;
-  setSelectedToolset: (toolset: Toolset) => void;
+  selectedToolset: ToolsetEntry | undefined;
+  setSelectedToolset: (toolset: ToolsetEntry) => void;
   placeholder?: string;
   noLabel?: boolean;
   disabledMessage?: string;

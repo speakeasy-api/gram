@@ -58,6 +58,13 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Required("id", "project_id", "deployment_id", "name", "canonical_name", "summary", "description", "confirm", "tags", "http_method", "path", "schema", "created_at", "updated_at")
 })
 
+var HTTPToolDefinitionEntry = Type("HTTPToolDefinitionEntry", func() {
+	Attribute("id", String, "The ID of the HTTP tool")
+	Attribute("name", String, "The name of the tool")
+
+	Required("id", "name")
+})
+
 var CanonicalToolAttributes = Type("CanonicalToolAttributes", func() {
 	Meta("struct:pkg:path", "types")
 	Description("The original details of a tool")

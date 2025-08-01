@@ -1,17 +1,18 @@
-import { useGroupedToolDefinitions } from "@/lib/toolNames";
-import { getToolsetPrompts } from "@/pages/prompts/Prompts";
 import { useRoutes } from "@/routes";
-import { Toolset } from "@gram/client/models/components";
+import { ToolsetEntry } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Badge, TwoPartBadge } from "./ui/badge";
 import { UrgentWarningIcon } from "./ui/urgent-warning-icon";
 import { cn } from "@/lib/utils";
 
+// Define minimal types for badge components
+type ToolsetForBadge = Pick<ToolsetEntry, 'name' | 'slug' | 'httpTools' | 'promptTemplates'>;
+
 export const ToolsetBadge = ({
   toolset,
   size = "md",
 }: {
-  toolset: Toolset | undefined;
+  toolset: ToolsetForBadge | undefined;
   size?: "sm" | "md";
 }) => {
   const routes = useRoutes();
@@ -39,11 +40,11 @@ export const ToolsetPromptsBadge = ({
   size = "md",
   variant = "outline",
 }: {
-  toolset: Toolset | undefined;
+  toolset: ToolsetForBadge | undefined;
   size?: "sm" | "md";
   variant?: "outline" | "default";
 }) => {
-  const promptNames = getToolsetPrompts(toolset)?.map((prompt) => prompt.name);
+  const promptNames = toolset?.promptTemplates?.map((template) => template.name) || [];
 
   const tooltipContent = (
     <div className="max-h-[300px] overflow-y-auto">
@@ -68,25 +69,14 @@ export const ToolsetToolsBadge = ({
   variant = "outline",
   className,
 }: {
-  toolset: Toolset | undefined;
+  toolset: ToolsetForBadge | undefined;
   size?: "sm" | "md";
   variant?: "outline" | "default";
   className?: string;
 }) => {
-  const groupedTools = useGroupedToolDefinitions(toolset);
-
-  const groupedToolNames =
-    groupedTools.length == 1
-      ? groupedTools[0]!.tools.map((tool) => tool.displayName)
-      : groupedTools.flatMap((group) => group.tools.map((tool) => tool.name));
-
-  groupedToolNames.push(
-    ...(toolset?.promptTemplates ?? []).map((template) => template.name)
-  );
-
   return (
     <ToolsBadge
-      toolNames={groupedToolNames}
+      toolNames={toolset?.httpTools.map((tool) => tool.name)}
       size={size}
       variant={variant}
       className={className}
