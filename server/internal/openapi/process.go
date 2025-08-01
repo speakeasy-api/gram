@@ -945,7 +945,7 @@ func extractSecuritySchemes(doc v3.Document, task ToolExtractorTask) (map[string
 			}
 		case "oauth2":
 			if sec.Flows != nil {
-				if sec.Flows.AuthorizationCode != nil || sec.Flows.ClientCredentials != nil {
+				if sec.Flows.AuthorizationCode != nil || sec.Flows.ClientCredentials != nil || sec.Flows.Implicit != nil {
 					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
 				}
 
@@ -954,11 +954,17 @@ func extractSecuritySchemes(doc v3.Document, task ToolExtractorTask) (map[string
 					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_SECRET"))
 					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_ID"))
 					envvars = append(envvars, strcase.ToSNAKE(slug+"_TOKEN_URL"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
+				}
+
+				if sec.Flows.Implicit != nil {
+					oauthTypes = append(oauthTypes, "implicit")
 				}
 
 				if sec.Flows.AuthorizationCode != nil {
 					oauthTypes = append(oauthTypes, "authorization_code")
 				}
+
 				if flow, err := json.Marshal(sec.Flows); err != nil {
 					errs = append(errs, fmt.Errorf("%s (%d:%d) error serializing oauth2 flows: %w", key, line, col, err))
 					continue

@@ -97,7 +97,7 @@ func processSecurity(
 
 			for _, oauthType := range security.OAuthTypes {
 				switch oauthType {
-				case "authorization_code":
+				case "authorization_code", "implicit":
 					for _, envVar := range security.EnvVariables {
 						if strings.Contains(envVar, "ACCESS_TOKEN") {
 							if token := envVars.Get(envVar); token == "" {
