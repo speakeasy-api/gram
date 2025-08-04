@@ -63,7 +63,7 @@ jobs:
       - id: "auth"
         if: ${{ needs.changes.outputs.server == 'true' }}
         name: "Authenticate to Google Cloud"
-        uses: google-github-actions/auth@140bb5113ffb6b65a7e9b937a81fa96cf5064462 # v2.1.11
+        uses: google-github-actions/auth@b7593ed2efd1c1617e1b0254da33b86225adb2a5 # v2.1.12
         with:
           token_format: "access_token"
           workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
@@ -113,7 +113,7 @@ jobs:
       - id: "auth"
         if: needs.changes.outputs.client == 'true'
         name: "Authenticate to Google Cloud"
-        uses: google-github-actions/auth@140bb5113ffb6b65a7e9b937a81fa96cf5064462 # v2.1.11
+        uses: google-github-actions/auth@b7593ed2efd1c1617e1b0254da33b86225adb2a5 # v2.1.12
         with:
           token_format: "access_token"
           workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
