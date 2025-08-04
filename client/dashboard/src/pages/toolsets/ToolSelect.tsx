@@ -183,9 +183,11 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     toolsetSlug: toolsetSlug,
   });
 
-  const { data: toolset, refetch } = useToolset({
-    slug: toolsetSlug,
-  });
+  const { data: toolset, refetch } = useToolset(
+    { slug: toolsetSlug },
+    undefined,
+    { enabled: !!toolsetSlug }
+  );
   const { data: tools, isLoading: isLoadingTools } = useListTools();
   const { customTools } = useCustomTools();
 

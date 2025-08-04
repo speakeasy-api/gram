@@ -167,13 +167,9 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   );
 
   const { data: toolsetData } = useToolset(
-    {
-      slug: toolsetFilter?.slug ?? "",
-    },
+    { slug: toolsetFilter?.slug ?? "" },
     undefined,
-    {
-      enabled: !!toolsetFilter?.slug,
-    }
+    { enabled: !!toolsetFilter?.slug }
   );
 
   const parseInputs = (s: string): string[] => {

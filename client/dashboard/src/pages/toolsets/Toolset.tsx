@@ -117,9 +117,11 @@ export function ToolsetView({
   const queryClient = useQueryClient();
   const routes = useRoutes();
   const telemetry = useTelemetry();
-  const { data: toolset, refetch } = useToolset({
-    slug: toolsetSlug,
-  });
+  const { data: toolset, refetch } = useToolset(
+    { slug: toolsetSlug },
+    undefined,
+    { enabled: !!toolsetSlug }
+  );
 
   const toolDefinitions = useToolDefinitions(toolset);
 

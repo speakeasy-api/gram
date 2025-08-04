@@ -10,7 +10,9 @@ import { useMcpUrl } from "./MCPDetails";
 
 export function MCPHostedPage() {
   const { toolsetSlug } = useParams();
-  const { data: toolset } = useToolset({ slug: toolsetSlug! });
+  const { data: toolset } = useToolset({ slug: toolsetSlug ?? "" }, undefined, {
+    enabled: !!toolsetSlug,
+  });
 
   return (
     <Stack className="w-full h-full">
@@ -53,7 +55,7 @@ export function MCPPagePreview({
       headers: {
         "Gram-Session": session.session,
         "Gram-Project": project.slug,
-        "Accept": "text/html,application/xhtml+xml",
+        Accept: "text/html,application/xhtml+xml",
       },
     })
       .then((res) => {

@@ -260,13 +260,9 @@ export default function EnvironmentPage() {
   }, [environment]);
 
   const { data: selectedToolset } = useToolset(
-    {
-      slug: selectedToolsetSlug,
-    },
+    { slug: selectedToolsetSlug },
     undefined,
-    {
-      enabled: !!selectedToolsetSlug,
-    }
+    { enabled: !!selectedToolsetSlug }
   );
 
   useEffect(() => {
@@ -328,7 +324,6 @@ export default function EnvironmentPage() {
       },
     });
   };
-
 
   const validateEntryName = (name: string) => {
     return (
@@ -398,7 +393,10 @@ export default function EnvironmentPage() {
               },
               {
                 label: "Delete Environment",
-                onClick: () => deleteEnvironmentMutation.mutate({ request: { slug: environment.slug } }),
+                onClick: () =>
+                  deleteEnvironmentMutation.mutate({
+                    request: { slug: environment.slug },
+                  }),
                 icon: "trash",
                 destructive: true,
               },
@@ -458,7 +456,12 @@ export default function EnvironmentPage() {
               />
             )}
             {hasChanges && (
-              <Stack direction="horizontal" gap={1} justify="end" className="mt-4">
+              <Stack
+                direction="horizontal"
+                gap={1}
+                justify="end"
+                className="mt-4"
+              >
                 <Button variant="ghost" onClick={discardChanges}>
                   Discard
                 </Button>

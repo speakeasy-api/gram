@@ -24,9 +24,11 @@ export const ToolsetHeader = ({
   environmentSlug?: string;
 }) => {
   const client = useSdkClient();
-  const { data: toolset, refetch } = useToolset({
-    slug: toolsetSlug,
-  });
+  const { data: toolset, refetch } = useToolset(
+    { slug: toolsetSlug },
+    undefined,
+    { enabled: !!toolsetSlug }
+  );
 
   const updateToolset = async (changes: Partial<Toolset>) => {
     if (!toolset) {
