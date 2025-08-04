@@ -349,13 +349,11 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	configSnippetTmpl, err := template.New("config_snippet").Parse(configSnippetTmplData)
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return oops.E(oops.CodeUnexpected, err, "failed to parse config snippet template").Log(ctx, s.logger)
 	}
 
 	var configSnippet bytes.Buffer
 	if err := configSnippetTmpl.Execute(&configSnippet, configSnippetData); err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return oops.E(oops.CodeUnexpected, err, "failed to execute config snippet template").Log(ctx, s.logger)
 	}
 
@@ -366,7 +364,6 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	hostedPageTmpl, err := template.New("hosted_page").Parse(hostedPageTmplData)
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted page template").Log(ctx, s.logger)
 	}
 

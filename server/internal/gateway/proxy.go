@@ -243,7 +243,7 @@ func (itp *ToolProxy) Do(
 
 	if serverURL == "" {
 		logger.ErrorContext(ctx, "no server URL provided for tool", attr.SlogToolName(tool.Name))
-		return oops.E(oops.CodeUnexpected, nil, "no server URL provided for tool").Log(ctx, logger)
+		return oops.E(oops.CodeInvalid, nil, "no server URL provided for tool").Log(ctx, logger)
 	}
 
 	// Create a new request
