@@ -6,7 +6,10 @@ import { UrgentWarningIcon } from "./ui/urgent-warning-icon";
 import { cn } from "@/lib/utils";
 
 // Define minimal types for badge components
-type ToolsetForBadge = Pick<ToolsetEntry, 'name' | 'slug' | 'httpTools' | 'promptTemplates'>;
+type ToolsetForBadge = Pick<
+  ToolsetEntry,
+  "name" | "slug" | "httpTools" | "promptTemplates"
+>;
 
 export const ToolsetBadge = ({
   toolset,
@@ -44,7 +47,8 @@ export const ToolsetPromptsBadge = ({
   size?: "sm" | "md";
   variant?: "outline" | "default";
 }) => {
-  const promptNames = toolset?.promptTemplates?.map((template) => template.name) || [];
+  const promptNames =
+    toolset?.promptTemplates?.map((template) => template.name) || [];
 
   const tooltipContent = (
     <div className="max-h-[300px] overflow-y-auto">
@@ -108,16 +112,20 @@ export const ToolsBadge = ({
     </div>
   );
 
-  const toolsWarnings = warnOnTooManyTools && toolNames && toolNames.length > 40 && toolNames.length < 150;
+  const toolsWarnings =
+    warnOnTooManyTools &&
+    toolNames &&
+    toolNames.length > 40 &&
+    toolNames.length < 150;
   if (toolsWarnings) {
     tooltipContent =
-      "LLM tool-use performance typically degrades with toolset size. General industry standards recommend keeping MCP servers at around 40 tool or less";
+      "LLM tool-use performance typically degrades with toolset size. General industry standards recommend keeping MCP servers at around 40 tool or fewer";
   }
 
   const toolsSevere = warnOnTooManyTools && toolNames && toolNames.length > 150;
   if (toolsSevere) {
     tooltipContent =
-      "An LLM is unlikely to consistently perform well with a toolset of this size. General industry standards recommend keeping MCP servers at around 40 tool or less";
+      "An LLM is unlikely to consistently perform well with a toolset of this size. General industry standards recommend keeping MCP servers at around 40 tool or fewer";
   }
 
   const anyWarnings = toolsWarnings || toolsSevere;
@@ -125,12 +133,14 @@ export const ToolsBadge = ({
   return toolNames && toolNames.length > 0 ? (
     <Badge
       size={size}
-      variant={toolsSevere ? "urgent-warning" : toolsWarnings ? "warning" : variant}
+      variant={
+        toolsSevere ? "urgent-warning" : toolsWarnings ? "warning" : variant
+      }
       tooltip={tooltipContent}
       className={cn(!anyWarnings && "bg-card", className)}
     >
       {anyWarnings && (
-        <UrgentWarningIcon 
+        <UrgentWarningIcon
           className={toolsSevere ? "text-white dark:text-white" : undefined}
         />
       )}

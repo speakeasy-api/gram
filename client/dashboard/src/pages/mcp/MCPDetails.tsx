@@ -78,7 +78,14 @@ export function useCustomDomain() {
   return { domain: domain, refetch: refetch, isLoading };
 }
 
-export function useMcpUrl(toolset: Pick<ToolsetEntry, 'slug' | 'customDomainId' | 'mcpSlug' | 'defaultEnvironmentSlug'> | undefined) {
+export function useMcpUrl(
+  toolset:
+    | Pick<
+        ToolsetEntry,
+        "slug" | "customDomainId" | "mcpSlug" | "defaultEnvironmentSlug"
+      >
+    | undefined
+) {
   const { domain } = useCustomDomain();
   const project = useProject();
 
@@ -523,11 +530,13 @@ export function MCPJson({
 
 export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
   const { url: mcpUrl } = useMcpUrl(toolset);
-  const { data: tools} = useListTools();
+  const { data: tools } = useListTools();
 
   if (!toolset) return { public: "", internal: "" };
 
-  const toolsetTools = tools?.tools?.filter((tool) => toolset.httpTools.some((t) => t.id === tool.id));
+  const toolsetTools = tools?.tools?.filter((tool) =>
+    toolset.httpTools.some((t) => t.id === tool.id)
+  );
   const requiresServerURL = toolsetTools?.some(
     (tool) => !tool.defaultServerUrl
   );
@@ -566,10 +575,14 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
       .replace(/-/g, "")
       .replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
-      "args": ${argsStringIndented}${!toolset.mcpIsPublic ? `,
+      "args": ${argsStringIndented}${
+    !toolset.mcpIsPublic
+      ? `,
       "env": {
         "GRAM_KEY": "Bearer <your-key-here>"
-      }` : ""}
+      }`
+      : ""
+  }
     }
   }
 }`;
@@ -607,7 +620,7 @@ export function useMcpSlugValidation(
 
   function validateMcpSlug(slug: string) {
     if (!slug) return "MCP Slug is required";
-    if (slug.length > 40) return "Must be 40 characters or less";
+    if (slug.length > 40) return "Must be 40 characters or fewer";
     if (!/^[a-z0-9_-]+$/.test(slug))
       return "Lowercase letters, numbers, _ or - only";
     return null;
