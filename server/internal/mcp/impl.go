@@ -563,11 +563,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *contextvalues.CustomDomainContext, error) {
+func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *gateway.DomainContext, error) {
 	var toolset toolsets_repo.Toolset
 	var toolsetErr error
-	var customDomainCtx *contextvalues.CustomDomainContext
-	if domainCtx, ok := contextvalues.GetCustomDomainContext(ctx); ok && domainCtx != nil {
+	var customDomainCtx *gateway.DomainContext
+	if domainCtx := gateway.DomainFromContext(ctx); domainCtx != nil {
 		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
 			McpSlug:        conv.ToPGText(mcpSlug),
 			CustomDomainID: uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true},

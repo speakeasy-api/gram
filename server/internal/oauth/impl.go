@@ -24,9 +24,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -124,7 +124,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 // buildFullMcpSlug builds the full MCP slug with domain prefix
 func (s *Service) buildFullMcpSlug(ctx context.Context, mcpSlug string) string {
-	if domainCtx, ok := contextvalues.GetCustomDomainContext(ctx); ok && domainCtx != nil {
+	if domainCtx := gateway.DomainFromContext(ctx); domainCtx != nil {
 		return fmt.Sprintf("https://%s", domainCtx.Domain) + "/mcp/" + mcpSlug
 	}
 
@@ -132,12 +132,12 @@ func (s *Service) buildFullMcpSlug(ctx context.Context, mcpSlug string) string {
 }
 
 // loadToolsetFromMcpSlug loads a toolset from the MCP slug
-func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *contextvalues.CustomDomainContext, error) {
+func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *gateway.DomainContext, error) {
 	var toolset toolsets_repo.Toolset
 	var toolsetErr error
-	var customDomainCtx *contextvalues.CustomDomainContext
+	var customDomainCtx *gateway.DomainContext
 
-	if domainCtx, ok := contextvalues.GetCustomDomainContext(ctx); ok && domainCtx != nil {
+	if domainCtx := gateway.DomainFromContext(ctx); domainCtx != nil {
 		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
 			McpSlug:        conv.ToPGText(mcpSlug),
 			CustomDomainID: uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true},
