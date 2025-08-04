@@ -35,6 +35,10 @@ type Toolset struct {
 	McpIsPublic *bool
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServer
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServer
 	// When the toolset was created.
 	CreatedAt string
 	// When the toolset was last updated.

@@ -1493,6 +1493,86 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 	return res
 }
 
+// marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody builds a
+// value of type *ExternalOAuthServerResponseBody from a value of type
+// *types.ExternalOAuthServer.
+func marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(v *types.ExternalOAuthServer) *ExternalOAuthServerResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ExternalOAuthServerResponseBody{
+		ID:        v.ID,
+		ProjectID: v.ProjectID,
+		Slug:      string(v.Slug),
+		Metadata:  v.Metadata,
+		CreatedAt: v.CreatedAt,
+		UpdatedAt: v.UpdatedAt,
+	}
+
+	return res
+}
+
+// marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody builds a value of
+// type *OAuthProxyServerResponseBody from a value of type
+// *types.OAuthProxyServer.
+func marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(v *types.OAuthProxyServer) *OAuthProxyServerResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &OAuthProxyServerResponseBody{
+		ID:        v.ID,
+		ProjectID: v.ProjectID,
+		Slug:      string(v.Slug),
+		CreatedAt: v.CreatedAt,
+		UpdatedAt: v.UpdatedAt,
+	}
+	if v.OauthProxyProviders != nil {
+		res.OauthProxyProviders = make([]*OAuthProxyProviderResponseBody, len(v.OauthProxyProviders))
+		for i, val := range v.OauthProxyProviders {
+			res.OauthProxyProviders[i] = marshalTypesOAuthProxyProviderToOAuthProxyProviderResponseBody(val)
+		}
+	}
+
+	return res
+}
+
+// marshalTypesOAuthProxyProviderToOAuthProxyProviderResponseBody builds a
+// value of type *OAuthProxyProviderResponseBody from a value of type
+// *types.OAuthProxyProvider.
+func marshalTypesOAuthProxyProviderToOAuthProxyProviderResponseBody(v *types.OAuthProxyProvider) *OAuthProxyProviderResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &OAuthProxyProviderResponseBody{
+		ID:                    v.ID,
+		Slug:                  string(v.Slug),
+		AuthorizationEndpoint: v.AuthorizationEndpoint,
+		TokenEndpoint:         v.TokenEndpoint,
+		CreatedAt:             v.CreatedAt,
+		UpdatedAt:             v.UpdatedAt,
+	}
+	if v.ScopesSupported != nil {
+		res.ScopesSupported = make([]string, len(v.ScopesSupported))
+		for i, val := range v.ScopesSupported {
+			res.ScopesSupported[i] = val
+		}
+	}
+	if v.GrantTypesSupported != nil {
+		res.GrantTypesSupported = make([]string, len(v.GrantTypesSupported))
+		for i, val := range v.GrantTypesSupported {
+			res.GrantTypesSupported[i] = val
+		}
+	}
+	if v.TokenEndpointAuthMethodsSupported != nil {
+		res.TokenEndpointAuthMethodsSupported = make([]string, len(v.TokenEndpointAuthMethodsSupported))
+		for i, val := range v.TokenEndpointAuthMethodsSupported {
+			res.TokenEndpointAuthMethodsSupported[i] = val
+		}
+	}
+
+	return res
+}
+
 // marshalTypesToolsetEntryToToolsetEntryResponseBody builds a value of type
 // *ToolsetEntryResponseBody from a value of type *types.ToolsetEntry.
 func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *ToolsetEntryResponseBody {

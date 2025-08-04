@@ -7099,6 +7099,37 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        ExternalOAuthServer:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the external OAuth server was created.
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the external OAuth server
+                metadata:
+                    description: The metadata for the external OAuth server
+                project_id:
+                    type: string
+                    description: The project ID this external OAuth server belongs to
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+                updated_at:
+                    type: string
+                    description: When the external OAuth server was last updated.
+                    format: date-time
+            required:
+                - id
+                - project_id
+                - slug
+                - metadata
+                - created_at
+                - updated_at
         GetDeploymentForm:
             type: object
             properties:
@@ -7762,6 +7793,86 @@ components:
                     type: string
             required:
                 - location
+        OAuthProxyProvider:
+            type: object
+            properties:
+                authorization_endpoint:
+                    type: string
+                    description: The authorization endpoint URL
+                created_at:
+                    type: string
+                    description: When the OAuth proxy provider was created.
+                    format: date-time
+                grant_types_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: The grant types supported by this provider
+                id:
+                    type: string
+                    description: The ID of the OAuth proxy provider
+                scopes_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: The OAuth scopes supported by this provider
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+                token_endpoint:
+                    type: string
+                    description: The token endpoint URL
+                token_endpoint_auth_methods_supported:
+                    type: array
+                    items:
+                        type: string
+                    description: The token endpoint auth methods supported by this provider
+                updated_at:
+                    type: string
+                    description: When the OAuth proxy provider was last updated.
+                    format: date-time
+            required:
+                - id
+                - slug
+                - authorization_endpoint
+                - token_endpoint
+                - created_at
+                - updated_at
+        OAuthProxyServer:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the OAuth proxy server was created.
+                    format: date-time
+                id:
+                    type: string
+                    description: The ID of the OAuth proxy server
+                oauth_proxy_providers:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OAuthProxyProvider'
+                    description: The OAuth proxy providers for this server
+                project_id:
+                    type: string
+                    description: The project ID this OAuth proxy server belongs to
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+                updated_at:
+                    type: string
+                    description: When the OAuth proxy server was last updated.
+                    format: date-time
+            required:
+                - id
+                - project_id
+                - slug
+                - created_at
+                - updated_at
         OpenAPIv3DeploymentAsset:
             type: object
             properties:
@@ -8258,6 +8369,8 @@ components:
                 description:
                     type: string
                     description: Description of the toolset
+                external_oauth_server:
+                    $ref: '#/components/schemas/ExternalOAuthServer'
                 http_tools:
                     type: array
                     items:
@@ -8277,6 +8390,8 @@ components:
                 name:
                     type: string
                     description: The name of the toolset
+                oauth_proxy_server:
+                    $ref: '#/components/schemas/OAuthProxyServer'
                 organization_id:
                     type: string
                     description: The organization ID this toolset belongs to

@@ -78,6 +78,10 @@ type CreateToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -120,6 +124,10 @@ type UpdateToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -155,6 +163,10 @@ type GetToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
 	// When the toolset was created.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the toolset was last updated.
@@ -1403,6 +1415,62 @@ type PromptTemplateResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// ExternalOAuthServerResponseBody is used to define fields on response body
+// types.
+type ExternalOAuthServerResponseBody struct {
+	// The ID of the external OAuth server
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this external OAuth server belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The slug of the external OAuth server
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The metadata for the external OAuth server
+	Metadata any `form:"metadata" json:"metadata" xml:"metadata"`
+	// When the external OAuth server was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the external OAuth server was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// OAuthProxyServerResponseBody is used to define fields on response body types.
+type OAuthProxyServerResponseBody struct {
+	// The ID of the OAuth proxy server
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this OAuth proxy server belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The slug of the OAuth proxy server
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The OAuth proxy providers for this server
+	OauthProxyProviders []*OAuthProxyProviderResponseBody `form:"oauth_proxy_providers,omitempty" json:"oauth_proxy_providers,omitempty" xml:"oauth_proxy_providers,omitempty"`
+	// When the OAuth proxy server was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the OAuth proxy server was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// OAuthProxyProviderResponseBody is used to define fields on response body
+// types.
+type OAuthProxyProviderResponseBody struct {
+	// The ID of the OAuth proxy provider
+	ID string `form:"id" json:"id" xml:"id"`
+	// The slug of the OAuth proxy provider
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The authorization endpoint URL
+	AuthorizationEndpoint string `form:"authorization_endpoint" json:"authorization_endpoint" xml:"authorization_endpoint"`
+	// The token endpoint URL
+	TokenEndpoint string `form:"token_endpoint" json:"token_endpoint" xml:"token_endpoint"`
+	// The OAuth scopes supported by this provider
+	ScopesSupported []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	// The grant types supported by this provider
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// The token endpoint auth methods supported by this provider
+	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// When the OAuth proxy provider was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the OAuth proxy provider was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // ToolsetEntryResponseBody is used to define fields on response body types.
 type ToolsetEntryResponseBody struct {
 	// The ID of the toolset
@@ -1500,6 +1568,12 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 	} else {
 		body.PromptTemplates = []*PromptTemplateResponseBody{}
 	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
 	return body
 }
 
@@ -1563,6 +1637,12 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 	} else {
 		body.PromptTemplates = []*PromptTemplateResponseBody{}
 	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
 	return body
 }
 
@@ -1610,6 +1690,12 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		}
 	} else {
 		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
 	}
 	return body
 }

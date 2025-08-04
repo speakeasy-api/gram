@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tr "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/tools/security"
@@ -167,6 +168,7 @@ func DescribeToolset(
 	toolsRepo := tr.New(tx)
 	variationsRepo := vr.New(tx)
 	pid := uuid.UUID(projectID)
+	oauthRepo := oauth.New(tx)
 
 	if err := inv.Check(
 		"describe toolset inputs",
@@ -379,6 +381,72 @@ func DescribeToolset(
 		})
 	}
 
+	var externalOAuthServer *types.ExternalOAuthServer
+	var oauthProxyServer *types.OAuthProxyServer
+
+	if toolset.ExternalOauthServerID.Valid {
+		externalOauthMetadata, err := oauthRepo.GetExternalOAuthServerMetadata(ctx, oauth.GetExternalOAuthServerMetadataParams{
+			ProjectID: pid,
+			ID:        toolset.ExternalOauthServerID.UUID,
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").Log(ctx, logger)
+		}
+		if err == nil {
+			externalOAuthServer = &types.ExternalOAuthServer{
+				ID:        externalOauthMetadata.ID.String(),
+				ProjectID: externalOauthMetadata.ProjectID.String(),
+				Slug:      types.Slug(externalOauthMetadata.Slug),
+				Metadata:  externalOauthMetadata.Metadata,
+				CreatedAt: externalOauthMetadata.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt: externalOauthMetadata.UpdatedAt.Time.Format(time.RFC3339),
+			}
+		}
+	}
+
+	if toolset.OauthProxyServerID.Valid {
+		oauthProxyServerData, err := oauthRepo.GetOAuthProxyServer(ctx, oauth.GetOAuthProxyServerParams{
+			ProjectID: pid,
+			ID:        toolset.OauthProxyServerID.UUID,
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy server").Log(ctx, logger)
+		}
+		if err == nil {
+			oauthProxyProviders, err := oauthRepo.ListOAuthProxyProvidersByServer(ctx, oauth.ListOAuthProxyProvidersByServerParams{
+				ProjectID:          pid,
+				OauthProxyServerID: oauthProxyServerData.ID,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy providers").Log(ctx, logger)
+			}
+
+			providers := make([]*types.OAuthProxyProvider, 0, len(oauthProxyProviders))
+			for _, provider := range oauthProxyProviders {
+				providers = append(providers, &types.OAuthProxyProvider{
+					ID:                                provider.ID.String(),
+					Slug:                              types.Slug(provider.Slug),
+					AuthorizationEndpoint:             provider.AuthorizationEndpoint,
+					TokenEndpoint:                     provider.TokenEndpoint,
+					ScopesSupported:                   provider.ScopesSupported,
+					GrantTypesSupported:               provider.GrantTypesSupported,
+					TokenEndpointAuthMethodsSupported: provider.TokenEndpointAuthMethodsSupported,
+					CreatedAt:                         provider.CreatedAt.Time.Format(time.RFC3339),
+					UpdatedAt:                         provider.UpdatedAt.Time.Format(time.RFC3339),
+				})
+			}
+
+			oauthProxyServer = &types.OAuthProxyServer{
+				ID:                  oauthProxyServerData.ID.String(),
+				ProjectID:           oauthProxyServerData.ProjectID.String(),
+				Slug:                types.Slug(oauthProxyServerData.Slug),
+				OauthProxyProviders: providers,
+				CreatedAt:           oauthProxyServerData.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:           oauthProxyServerData.UpdatedAt.Time.Format(time.RFC3339),
+			}
+		}
+	}
+
 	return &types.Toolset{
 		ID:                           toolset.ID.String(),
 		OrganizationID:               toolset.OrganizationID,
@@ -395,6 +463,8 @@ func DescribeToolset(
 		McpIsPublic:                  &toolset.McpIsPublic,
 		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
+		ExternalOauthServer:          externalOAuthServer,
+		OauthProxyServer:             oauthProxyServer,
 	}, nil
 }
 

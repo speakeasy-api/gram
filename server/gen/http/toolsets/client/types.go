@@ -78,6 +78,10 @@ type CreateToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
 	// When the toolset was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the toolset was last updated.
@@ -120,6 +124,10 @@ type UpdateToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
 	// When the toolset was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the toolset was last updated.
@@ -155,6 +163,10 @@ type GetToolsetResponseBody struct {
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
 	// When the toolset was created.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the toolset was last updated.
@@ -1403,6 +1415,62 @@ type PromptTemplateResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// ExternalOAuthServerResponseBody is used to define fields on response body
+// types.
+type ExternalOAuthServerResponseBody struct {
+	// The ID of the external OAuth server
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The project ID this external OAuth server belongs to
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The slug of the external OAuth server
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The metadata for the external OAuth server
+	Metadata any `form:"metadata,omitempty" json:"metadata,omitempty" xml:"metadata,omitempty"`
+	// When the external OAuth server was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the external OAuth server was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// OAuthProxyServerResponseBody is used to define fields on response body types.
+type OAuthProxyServerResponseBody struct {
+	// The ID of the OAuth proxy server
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The project ID this OAuth proxy server belongs to
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The slug of the OAuth proxy server
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The OAuth proxy providers for this server
+	OauthProxyProviders []*OAuthProxyProviderResponseBody `form:"oauth_proxy_providers,omitempty" json:"oauth_proxy_providers,omitempty" xml:"oauth_proxy_providers,omitempty"`
+	// When the OAuth proxy server was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the OAuth proxy server was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// OAuthProxyProviderResponseBody is used to define fields on response body
+// types.
+type OAuthProxyProviderResponseBody struct {
+	// The ID of the OAuth proxy provider
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The slug of the OAuth proxy provider
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The authorization endpoint URL
+	AuthorizationEndpoint *string `form:"authorization_endpoint,omitempty" json:"authorization_endpoint,omitempty" xml:"authorization_endpoint,omitempty"`
+	// The token endpoint URL
+	TokenEndpoint *string `form:"token_endpoint,omitempty" json:"token_endpoint,omitempty" xml:"token_endpoint,omitempty"`
+	// The OAuth scopes supported by this provider
+	ScopesSupported []string `form:"scopes_supported,omitempty" json:"scopes_supported,omitempty" xml:"scopes_supported,omitempty"`
+	// The grant types supported by this provider
+	GrantTypesSupported []string `form:"grant_types_supported,omitempty" json:"grant_types_supported,omitempty" xml:"grant_types_supported,omitempty"`
+	// The token endpoint auth methods supported by this provider
+	TokenEndpointAuthMethodsSupported []string `form:"token_endpoint_auth_methods_supported,omitempty" json:"token_endpoint_auth_methods_supported,omitempty" xml:"token_endpoint_auth_methods_supported,omitempty"`
+	// When the OAuth proxy provider was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the OAuth proxy provider was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // ToolsetEntryResponseBody is used to define fields on response body types.
 type ToolsetEntryResponseBody struct {
 	// The ID of the toolset
@@ -1543,6 +1611,12 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
 	for i, val := range body.PromptTemplates {
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	}
+	if body.ExternalOauthServer != nil {
+		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
+	}
+	if body.OauthProxyServer != nil {
+		v.OauthProxyServer = unmarshalOAuthProxyServerResponseBodyToTypesOAuthProxyServer(body.OauthProxyServer)
 	}
 
 	return v
@@ -1897,6 +1971,12 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 	for i, val := range body.PromptTemplates {
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
+	if body.ExternalOauthServer != nil {
+		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
+	}
+	if body.OauthProxyServer != nil {
+		v.OauthProxyServer = unmarshalOAuthProxyServerResponseBodyToTypesOAuthProxyServer(body.OauthProxyServer)
+	}
 
 	return v
 }
@@ -2237,6 +2317,12 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
 	for i, val := range body.PromptTemplates {
 		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	}
+	if body.ExternalOauthServer != nil {
+		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
+	}
+	if body.OauthProxyServer != nil {
+		v.OauthProxyServer = unmarshalOAuthProxyServerResponseBodyToTypesOAuthProxyServer(body.OauthProxyServer)
 	}
 
 	return v
@@ -2610,6 +2696,16 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
 		}
 	}
+	if body.ExternalOauthServer != nil {
+		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.OauthProxyServer != nil {
+		if err2 := ValidateOAuthProxyServerResponseBody(body.OauthProxyServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -2703,6 +2799,16 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
 		}
 	}
+	if body.ExternalOauthServer != nil {
+		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.OauthProxyServer != nil {
+		if err2 := ValidateOAuthProxyServerResponseBody(body.OauthProxyServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
@@ -2778,6 +2884,16 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
+		}
+	}
+	if body.ExternalOauthServer != nil {
+		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.OauthProxyServer != nil {
+		if err2 := ValidateOAuthProxyServerResponseBody(body.OauthProxyServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	if body.CreatedAt != nil {
@@ -4401,6 +4517,124 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 	}
 	if len(body.ToolsHint) > 20 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools_hint", body.ToolsHint, len(body.ToolsHint), 20, false))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateExternalOAuthServerResponseBody runs the validations defined on
+// ExternalOAuthServerResponseBody
+func ValidateExternalOAuthServerResponseBody(body *ExternalOAuthServerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Metadata == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("metadata", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateOAuthProxyServerResponseBody runs the validations defined on
+// OAuthProxyServerResponseBody
+func ValidateOAuthProxyServerResponseBody(body *OAuthProxyServerResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	for _, e := range body.OauthProxyProviders {
+		if e != nil {
+			if err2 := ValidateOAuthProxyProviderResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateOAuthProxyProviderResponseBody runs the validations defined on
+// OAuthProxyProviderResponseBody
+func ValidateOAuthProxyProviderResponseBody(body *OAuthProxyProviderResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.AuthorizationEndpoint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("authorization_endpoint", "body"))
+	}
+	if body.TokenEndpoint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("token_endpoint", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
