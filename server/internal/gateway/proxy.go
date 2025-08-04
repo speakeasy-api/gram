@@ -348,6 +348,8 @@ func (itp *ToolProxy) Do(
 		return nil
 	}
 
+	req.Header.Set("X-Gram-Proxy", "1")
+
 	return reverseProxyRequest(ctx, logger, itp.tracer, tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode)
 }
 
