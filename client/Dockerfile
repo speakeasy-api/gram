@@ -31,7 +31,7 @@ WORKDIR /app/client/dashboard
 RUN pnpm build
 
 # Stage 2: Production environment
-FROM nginx:alpine
+FROM nginxinc/nginx-unprivileged:alpine
 
 # Copy the build output to nginx
 COPY --from=build /app/client/dashboard/dist /usr/share/nginx/html
