@@ -1426,6 +1426,52 @@ func DecodeCheckMCPSlugAvailabilityResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// unmarshalSecurityVariableResponseBodyToTypesSecurityVariable builds a value
+// of type *types.SecurityVariable from a value of type
+// *SecurityVariableResponseBody.
+func unmarshalSecurityVariableResponseBodyToTypesSecurityVariable(v *SecurityVariableResponseBody) *types.SecurityVariable {
+	if v == nil {
+		return nil
+	}
+	res := &types.SecurityVariable{
+		Type:         v.Type,
+		Name:         *v.Name,
+		InPlacement:  *v.InPlacement,
+		Scheme:       *v.Scheme,
+		BearerFormat: v.BearerFormat,
+		OauthFlows:   v.OauthFlows,
+	}
+	if v.OauthTypes != nil {
+		res.OauthTypes = make([]string, len(v.OauthTypes))
+		for i, val := range v.OauthTypes {
+			res.OauthTypes[i] = val
+		}
+	}
+	res.EnvVariables = make([]string, len(v.EnvVariables))
+	for i, val := range v.EnvVariables {
+		res.EnvVariables[i] = val
+	}
+
+	return res
+}
+
+// unmarshalServerVariableResponseBodyToTypesServerVariable builds a value of
+// type *types.ServerVariable from a value of type *ServerVariableResponseBody.
+func unmarshalServerVariableResponseBodyToTypesServerVariable(v *ServerVariableResponseBody) *types.ServerVariable {
+	if v == nil {
+		return nil
+	}
+	res := &types.ServerVariable{
+		Description: *v.Description,
+	}
+	res.EnvVariables = make([]string, len(v.EnvVariables))
+	for i, val := range v.EnvVariables {
+		res.EnvVariables[i] = val
+	}
+
+	return res
+}
+
 // unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition builds a
 // value of type *types.HTTPToolDefinition from a value of type
 // *HTTPToolDefinitionResponseBody.
@@ -1673,10 +1719,16 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 		mcpSlug := types.Slug(*v.McpSlug)
 		res.McpSlug = &mcpSlug
 	}
-	if v.RelevantEnvironmentVariables != nil {
-		res.RelevantEnvironmentVariables = make([]string, len(v.RelevantEnvironmentVariables))
-		for i, val := range v.RelevantEnvironmentVariables {
-			res.RelevantEnvironmentVariables[i] = val
+	if v.SecurityVariables != nil {
+		res.SecurityVariables = make([]*types.SecurityVariable, len(v.SecurityVariables))
+		for i, val := range v.SecurityVariables {
+			res.SecurityVariables[i] = unmarshalSecurityVariableResponseBodyToTypesSecurityVariable(val)
+		}
+	}
+	if v.ServerVariables != nil {
+		res.ServerVariables = make([]*types.ServerVariable, len(v.ServerVariables))
+		for i, val := range v.ServerVariables {
+			res.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
 	res.HTTPTools = make([]*types.HTTPToolDefinitionEntry, len(v.HTTPTools))

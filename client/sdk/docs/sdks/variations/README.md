@@ -17,6 +17,7 @@ Create or update a globally defined tool variation.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="deleteGlobalVariation" method="delete" path="/rpc/variations.deleteGlobal" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -105,6 +106,7 @@ List globally defined tool variations.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="listGlobalVariations" method="get" path="/rpc/variations.listGlobal" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -200,6 +202,7 @@ Create or update a globally defined tool variation.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="upsertGlobalVariation" method="post" path="/rpc/variations.upsertGlobal" -->
 ```typescript
 import { Gram } from "@gram/client";
 

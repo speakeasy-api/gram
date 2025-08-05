@@ -57,7 +57,8 @@ func DescribeToolsetEntry(
 	}
 
 	var httpTools []*types.HTTPToolDefinitionEntry
-	var relevantEnvVars []string
+	var securityVars []*types.SecurityVariable
+	var serverVars []*types.ServerVariable
 	if len(toolset.HttpToolNames) > 0 {
 		definitions, err := toolsRepo.FindToolEntriesByName(ctx, tr.FindToolEntriesByNameParams{
 			ProjectID:    pid,
@@ -116,7 +117,7 @@ func DescribeToolsetEntry(
 			httpTools = append(httpTools, tool)
 		}
 
-		relevantEnvVars, err = environmentVariablesForTools(ctx, tx, envQueries)
+		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, envQueries)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").Log(ctx, logger)
 		}
@@ -139,21 +140,22 @@ func DescribeToolsetEntry(
 	}
 
 	return &types.ToolsetEntry{
-		ID:                           toolset.ID.String(),
-		OrganizationID:               toolset.OrganizationID,
-		ProjectID:                    toolset.ProjectID.String(),
-		Name:                         toolset.Name,
-		Slug:                         types.Slug(toolset.Slug),
-		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
-		RelevantEnvironmentVariables: relevantEnvVars,
-		Description:                  conv.FromPGText[string](toolset.Description),
-		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
-		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
-		McpIsPublic:                  &toolset.McpIsPublic,
-		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
-		HTTPTools:                    httpTools,
-		PromptTemplates:              promptTemplates,
+		ID:                     toolset.ID.String(),
+		OrganizationID:         toolset.OrganizationID,
+		ProjectID:              toolset.ProjectID.String(),
+		Name:                   toolset.Name,
+		Slug:                   types.Slug(toolset.Slug),
+		DefaultEnvironmentSlug: conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
+		SecurityVariables:      securityVars,
+		ServerVariables:        serverVars,
+		Description:            conv.FromPGText[string](toolset.Description),
+		McpSlug:                conv.FromPGText[types.Slug](toolset.McpSlug),
+		CustomDomainID:         conv.FromNullableUUID(toolset.CustomDomainID),
+		McpIsPublic:            &toolset.McpIsPublic,
+		CreatedAt:              toolset.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              toolset.UpdatedAt.Time.Format(time.RFC3339),
+		HTTPTools:              httpTools,
+		PromptTemplates:        promptTemplates,
 	}, nil
 }
 
@@ -190,7 +192,8 @@ func DescribeToolset(
 	}
 
 	var httpTools []*types.HTTPToolDefinition
-	var relevantEnvVars []string
+	var securityVars []*types.SecurityVariable
+	var serverVars []*types.ServerVariable
 	if len(toolset.HttpToolNames) > 0 {
 		definitions, err := toolsRepo.FindToolsByName(ctx, tr.FindToolsByNameParams{
 			ProjectID:    pid,
@@ -339,7 +342,7 @@ func DescribeToolset(
 			httpTools = append(httpTools, tool)
 		}
 
-		relevantEnvVars, err = environmentVariablesForTools(ctx, tx, envQueries)
+		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, envQueries)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").Log(ctx, logger)
 		}
@@ -448,23 +451,24 @@ func DescribeToolset(
 	}
 
 	return &types.Toolset{
-		ID:                           toolset.ID.String(),
-		OrganizationID:               toolset.OrganizationID,
-		ProjectID:                    toolset.ProjectID.String(),
-		Name:                         toolset.Name,
-		Slug:                         types.Slug(toolset.Slug),
-		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
-		RelevantEnvironmentVariables: relevantEnvVars,
-		Description:                  conv.FromPGText[string](toolset.Description),
-		HTTPTools:                    httpTools,
-		PromptTemplates:              promptTemplates,
-		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
-		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
-		McpIsPublic:                  &toolset.McpIsPublic,
-		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
-		ExternalOauthServer:          externalOAuthServer,
-		OauthProxyServer:             oauthProxyServer,
+		ID:                     toolset.ID.String(),
+		OrganizationID:         toolset.OrganizationID,
+		ProjectID:              toolset.ProjectID.String(),
+		Name:                   toolset.Name,
+		Slug:                   types.Slug(toolset.Slug),
+		DefaultEnvironmentSlug: conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
+		SecurityVariables:      securityVars,
+		ServerVariables:        serverVars,
+		Description:            conv.FromPGText[string](toolset.Description),
+		HTTPTools:              httpTools,
+		PromptTemplates:        promptTemplates,
+		McpSlug:                conv.FromPGText[types.Slug](toolset.McpSlug),
+		CustomDomainID:         conv.FromNullableUUID(toolset.CustomDomainID),
+		McpIsPublic:            &toolset.McpIsPublic,
+		CreatedAt:              toolset.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              toolset.UpdatedAt.Time.Format(time.RFC3339),
+		ExternalOauthServer:    externalOAuthServer,
+		OauthProxyServer:       oauthProxyServer,
 	}, nil
 }
 
@@ -479,23 +483,23 @@ type toolEnvLookupParams struct {
 	serverEnvVar string
 }
 
-func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []toolEnvLookupParams) ([]string, error) {
+func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []toolEnvLookupParams) ([]*types.SecurityVariable, []*types.ServerVariable, error) {
 	if len(tools) == 0 {
-		return []string{}, nil
+		return []*types.SecurityVariable{}, []*types.ServerVariable{}, nil
 	}
 
 	toolsetRepo := tsr.New(tx)
 
-	relevantSecurityKeysMap := make(map[string]bool)
+	securityKeysMap := make(map[string]bool)
 	serverEnvVarsMap := make(map[string]bool)
 	for _, tool := range tools {
 		securityKeys, _, err := security.ParseHTTPToolSecurityKeys(tool.security)
 		if err != nil {
-			return nil, fmt.Errorf("http tool security keys: %w", err)
+			return nil, nil, fmt.Errorf("http tool security keys: %w", err)
 		}
 
 		for _, key := range securityKeys {
-			relevantSecurityKeysMap[key] = true
+			securityKeysMap[key] = true
 		}
 
 		if tool.serverEnvVar != "" {
@@ -509,25 +513,43 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []toolEnvL
 	}
 
 	securityEntries, err := toolsetRepo.GetHTTPSecurityDefinitions(ctx, tsr.GetHTTPSecurityDefinitionsParams{
-		SecurityKeys:  slices.Collect(maps.Keys(relevantSecurityKeysMap)),
+		SecurityKeys:  slices.Collect(maps.Keys(securityKeysMap)),
 		DeploymentIds: slices.Collect(maps.Keys(uniqueDeploymentIDs)), // all selected tools share the same deployment
 	})
 	if err != nil {
-		return nil, fmt.Errorf("read toolset security definitions: %w", err)
+		return nil, nil, fmt.Errorf("read toolset security definitions: %w", err)
 	}
 
-	relevantEnvVarsMap := make(map[string]bool)
+	// Build security variables map to avoid duplicates
+	securityVarsMap := make(map[string]*types.SecurityVariable)
 	for _, entry := range securityEntries {
-		for _, envVar := range entry.EnvVariables {
-			relevantEnvVarsMap[envVar] = true
+		key := entry.Key
+		if _, exists := securityVarsMap[key]; !exists {
+			securityVar := &types.SecurityVariable{
+				Type:         conv.FromPGText[string](entry.Type),
+				Name:         entry.Name.String,
+				InPlacement:  entry.InPlacement.String,
+				Scheme:       entry.Scheme.String,
+				BearerFormat: conv.FromPGText[string](entry.BearerFormat),
+				OauthTypes:   entry.OauthTypes,
+				OauthFlows:   entry.OauthFlows,
+				EnvVariables: entry.EnvVariables,
+			}
+
+			securityVarsMap[key] = securityVar
 		}
 	}
 
-	for key := range serverEnvVarsMap {
-		relevantEnvVarsMap[key] = true
+	// Build server variables
+	var serverVars []*types.ServerVariable
+	if len(serverEnvVarsMap) > 0 {
+		serverVars = append(serverVars, &types.ServerVariable{
+			Description:  "",
+			EnvVariables: slices.Collect(maps.Keys(serverEnvVarsMap)),
+		})
 	}
 
-	return slices.Collect(maps.Keys(relevantEnvVarsMap)), nil
+	return slices.Collect(maps.Values(securityVarsMap)), serverVars, nil
 }
 
 func variedToolSchema(ctx context.Context, logger *slog.Logger, tool *types.HTTPToolDefinition) (string, error) {

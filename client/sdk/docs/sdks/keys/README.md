@@ -17,6 +17,7 @@ Create a new api key
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="createAPIKey" method="post" path="/rpc/keys.create" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -109,6 +110,7 @@ List all api keys for an organization
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="listAPIKeys" method="get" path="/rpc/keys.list" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -204,6 +206,7 @@ Revoke a api key
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="revokeAPIKey" method="delete" path="/rpc/keys.revoke" -->
 ```typescript
 import { Gram } from "@gram/client";
 

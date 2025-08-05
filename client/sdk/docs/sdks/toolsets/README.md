@@ -20,6 +20,7 @@ Check if a MCP slug is available
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="checkMCPSlugAvailability" method="get" path="/rpc/toolsets.checkMCPSlugAvailability" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -119,6 +120,7 @@ Create a new toolset with associated tools
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="createToolset" method="post" path="/rpc/toolsets.create" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -211,6 +213,7 @@ Delete a toolset by its ID
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="deleteToolset" method="delete" path="/rpc/toolsets.delete" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -299,6 +302,7 @@ Get detailed information about a toolset including full HTTP tool definitions
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="getToolset" method="get" path="/rpc/toolsets.get" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -398,6 +402,7 @@ List all toolsets for a project
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="listToolsets" method="get" path="/rpc/toolsets.list" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -493,6 +498,7 @@ Update a toolset's properties including name, description, and HTTP tools
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="updateToolset" method="post" path="/rpc/toolsets.update" -->
 ```typescript
 import { Gram } from "@gram/client";
 

@@ -8,17 +8,41 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  ExternalOAuthServer,
+  ExternalOAuthServer$inboundSchema,
+  ExternalOAuthServer$Outbound,
+  ExternalOAuthServer$outboundSchema,
+} from "./externaloauthserver.js";
+import {
   HTTPToolDefinition,
   HTTPToolDefinition$inboundSchema,
   HTTPToolDefinition$Outbound,
   HTTPToolDefinition$outboundSchema,
 } from "./httptooldefinition.js";
 import {
+  OAuthProxyServer,
+  OAuthProxyServer$inboundSchema,
+  OAuthProxyServer$Outbound,
+  OAuthProxyServer$outboundSchema,
+} from "./oauthproxyserver.js";
+import {
   PromptTemplate,
   PromptTemplate$inboundSchema,
   PromptTemplate$Outbound,
   PromptTemplate$outboundSchema,
 } from "./prompttemplate.js";
+import {
+  SecurityVariable,
+  SecurityVariable$inboundSchema,
+  SecurityVariable$Outbound,
+  SecurityVariable$outboundSchema,
+} from "./securityvariable.js";
+import {
+  ServerVariable,
+  ServerVariable$inboundSchema,
+  ServerVariable$Outbound,
+  ServerVariable$outboundSchema,
+} from "./servervariable.js";
 
 export type Toolset = {
   /**
@@ -37,6 +61,7 @@ export type Toolset = {
    * Description of the toolset
    */
   description?: string | undefined;
+  externalOauthServer?: ExternalOAuthServer | undefined;
   /**
    * The HTTP tools in this toolset
    */
@@ -57,6 +82,7 @@ export type Toolset = {
    * The name of the toolset
    */
   name: string;
+  oauthProxyServer?: OAuthProxyServer | undefined;
   /**
    * The organization ID this toolset belongs to
    */
@@ -70,9 +96,13 @@ export type Toolset = {
    */
   promptTemplates: Array<PromptTemplate>;
   /**
-   * The environment variables that are relevant to the toolset
+   * The security variables that are relevant to the toolset
    */
-  relevantEnvironmentVariables?: Array<string> | undefined;
+  securityVariables?: Array<SecurityVariable> | undefined;
+  /**
+   * The server variables that are relevant to the toolset
+   */
+  serverVariables?: Array<ServerVariable> | undefined;
   /**
    * A short url-friendly label that uniquely identifies a resource.
    */
@@ -92,15 +122,18 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     custom_domain_id: z.string().optional(),
     default_environment_slug: z.string().optional(),
     description: z.string().optional(),
+    external_oauth_server: ExternalOAuthServer$inboundSchema.optional(),
     http_tools: z.array(HTTPToolDefinition$inboundSchema),
     id: z.string(),
     mcp_is_public: z.boolean().optional(),
     mcp_slug: z.string().optional(),
     name: z.string(),
+    oauth_proxy_server: OAuthProxyServer$inboundSchema.optional(),
     organization_id: z.string(),
     project_id: z.string(),
     prompt_templates: z.array(PromptTemplate$inboundSchema),
-    relevant_environment_variables: z.array(z.string()).optional(),
+    security_variables: z.array(SecurityVariable$inboundSchema).optional(),
+    server_variables: z.array(ServerVariable$inboundSchema).optional(),
     slug: z.string(),
     updated_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
@@ -110,13 +143,16 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
       "created_at": "createdAt",
       "custom_domain_id": "customDomainId",
       "default_environment_slug": "defaultEnvironmentSlug",
+      "external_oauth_server": "externalOauthServer",
       "http_tools": "httpTools",
       "mcp_is_public": "mcpIsPublic",
       "mcp_slug": "mcpSlug",
+      "oauth_proxy_server": "oauthProxyServer",
       "organization_id": "organizationId",
       "project_id": "projectId",
       "prompt_templates": "promptTemplates",
-      "relevant_environment_variables": "relevantEnvironmentVariables",
+      "security_variables": "securityVariables",
+      "server_variables": "serverVariables",
       "updated_at": "updatedAt",
     });
   });
@@ -127,15 +163,18 @@ export type Toolset$Outbound = {
   custom_domain_id?: string | undefined;
   default_environment_slug?: string | undefined;
   description?: string | undefined;
+  external_oauth_server?: ExternalOAuthServer$Outbound | undefined;
   http_tools: Array<HTTPToolDefinition$Outbound>;
   id: string;
   mcp_is_public?: boolean | undefined;
   mcp_slug?: string | undefined;
   name: string;
+  oauth_proxy_server?: OAuthProxyServer$Outbound | undefined;
   organization_id: string;
   project_id: string;
   prompt_templates: Array<PromptTemplate$Outbound>;
-  relevant_environment_variables?: Array<string> | undefined;
+  security_variables?: Array<SecurityVariable$Outbound> | undefined;
+  server_variables?: Array<ServerVariable$Outbound> | undefined;
   slug: string;
   updated_at: string;
 };
@@ -150,15 +189,18 @@ export const Toolset$outboundSchema: z.ZodType<
   customDomainId: z.string().optional(),
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
+  externalOauthServer: ExternalOAuthServer$outboundSchema.optional(),
   httpTools: z.array(HTTPToolDefinition$outboundSchema),
   id: z.string(),
   mcpIsPublic: z.boolean().optional(),
   mcpSlug: z.string().optional(),
   name: z.string(),
+  oauthProxyServer: OAuthProxyServer$outboundSchema.optional(),
   organizationId: z.string(),
   projectId: z.string(),
   promptTemplates: z.array(PromptTemplate$outboundSchema),
-  relevantEnvironmentVariables: z.array(z.string()).optional(),
+  securityVariables: z.array(SecurityVariable$outboundSchema).optional(),
+  serverVariables: z.array(ServerVariable$outboundSchema).optional(),
   slug: z.string(),
   updatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
@@ -166,13 +208,16 @@ export const Toolset$outboundSchema: z.ZodType<
     createdAt: "created_at",
     customDomainId: "custom_domain_id",
     defaultEnvironmentSlug: "default_environment_slug",
+    externalOauthServer: "external_oauth_server",
     httpTools: "http_tools",
     mcpIsPublic: "mcp_is_public",
     mcpSlug: "mcp_slug",
+    oauthProxyServer: "oauth_proxy_server",
     organizationId: "organization_id",
     projectId: "project_id",
     promptTemplates: "prompt_templates",
-    relevantEnvironmentVariables: "relevant_environment_variables",
+    securityVariables: "security_variables",
+    serverVariables: "server_variables",
     updatedAt: "updated_at",
   });
 });

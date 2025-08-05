@@ -4,6 +4,28 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
+var SecurityVariable = Type("SecurityVariable", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("type", String, "The type of security")
+	Attribute("name", String, "The name of the security scheme")
+	Attribute("in_placement", String, "Where the security token is placed")
+	Attribute("scheme", String, "The security scheme")
+	Attribute("bearer_format", String, "The bearer format")
+	Attribute("oauth_types", ArrayOf(String), "The OAuth types")
+	Attribute("oauth_flows", Bytes, "The OAuth flows")
+	Attribute("env_variables", ArrayOf(String), "The environment variables")
+	Required("name", "in_placement", "scheme", "env_variables")
+})
+
+var ServerVariable = Type("ServerVariable", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("description", String, "Description of the server variable")
+	Attribute("env_variables", ArrayOf(String), "The environment variables")
+	Required("description", "env_variables")
+})
+
 var Toolset = Type("Toolset", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -14,7 +36,8 @@ var Toolset = Type("Toolset", func() {
 	Attribute("slug", Slug, "The slug of the toolset")
 	Attribute("description", String, "Description of the toolset")
 	Attribute("default_environment_slug", Slug, "The slug of the environment to use as the default for the toolset")
-	Attribute("relevant_environment_variables", ArrayOf(String), "The environment variables that are relevant to the toolset")
+	Attribute("security_variables", ArrayOf(SecurityVariable), "The security variables that are relevant to the toolset")
+	Attribute("server_variables", ArrayOf(ServerVariable), "The server variables that are relevant to the toolset")
 	Attribute("http_tools", ArrayOf(HTTPToolDefinition), "The HTTP tools in this toolset")
 	Attribute("prompt_templates", ArrayOf(PromptTemplate), "The prompt templates in this toolset")
 	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
@@ -43,7 +66,8 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 	Attribute("slug", Slug, "The slug of the toolset")
 	Attribute("description", String, "Description of the toolset")
 	Attribute("default_environment_slug", Slug, "The slug of the environment to use as the default for the toolset")
-	Attribute("relevant_environment_variables", ArrayOf(String), "The environment variables that are relevant to the toolset")
+	Attribute("security_variables", ArrayOf(SecurityVariable), "The security variables that are relevant to the toolset")
+	Attribute("server_variables", ArrayOf(ServerVariable), "The server variables that are relevant to the toolset")
 	Attribute("http_tools", ArrayOf(HTTPToolDefinitionEntry), "The HTTP tools in this toolset")
 	Attribute("prompt_templates", ArrayOf(PromptTemplateEntry), "The prompt templates in this toolset")
 	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")

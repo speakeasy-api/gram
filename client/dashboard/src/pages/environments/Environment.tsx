@@ -266,18 +266,37 @@ export default function EnvironmentPage() {
   );
 
   useEffect(() => {
-    if (selectedToolset && selectedToolset.relevantEnvironmentVariables) {
+    if (selectedToolset && (selectedToolset.securityVariables || selectedToolset.serverVariables)) {
       const newEntries = { ...entries };
-      selectedToolset.relevantEnvironmentVariables.forEach((varName) => {
-        if (!entries[varName]) {
-          newEntries[varName] = {
-            name: varName,
-            value: "",
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-        }
+      
+      // Process security variables
+      selectedToolset.securityVariables?.forEach((entry) => {
+        entry.envVariables.forEach((varName) => {
+          if (!entries[varName]) {
+            newEntries[varName] = {
+              name: varName,
+              value: "",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+          }
+        });
       });
+      
+      // Process server variables
+      selectedToolset.serverVariables?.forEach((entry) => {
+        entry.envVariables.forEach((varName) => {
+          if (!entries[varName]) {
+            newEntries[varName] = {
+              name: varName,
+              value: "",
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+          }
+        });
+      });
+      
       setEntries(newEntries);
       setSelectedToolsetSlug("");
     }

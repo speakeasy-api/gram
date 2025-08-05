@@ -66,8 +66,10 @@ type CreateToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// The environment variables that are relevant to the toolset
-	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
 	// The prompt templates in this toolset
@@ -112,8 +114,10 @@ type UpdateToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// The environment variables that are relevant to the toolset
-	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
 	// The prompt templates in this toolset
@@ -151,8 +155,10 @@ type GetToolsetResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// The environment variables that are relevant to the toolset
-	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
 	// The prompt templates in this toolset
@@ -1272,6 +1278,34 @@ type CheckMCPSlugAvailabilityGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SecurityVariableResponseBody is used to define fields on response body types.
+type SecurityVariableResponseBody struct {
+	// The type of security
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// The name of the security scheme
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Where the security token is placed
+	InPlacement *string `form:"in_placement,omitempty" json:"in_placement,omitempty" xml:"in_placement,omitempty"`
+	// The security scheme
+	Scheme *string `form:"scheme,omitempty" json:"scheme,omitempty" xml:"scheme,omitempty"`
+	// The bearer format
+	BearerFormat *string `form:"bearer_format,omitempty" json:"bearer_format,omitempty" xml:"bearer_format,omitempty"`
+	// The OAuth types
+	OauthTypes []string `form:"oauth_types,omitempty" json:"oauth_types,omitempty" xml:"oauth_types,omitempty"`
+	// The OAuth flows
+	OauthFlows []byte `form:"oauth_flows,omitempty" json:"oauth_flows,omitempty" xml:"oauth_flows,omitempty"`
+	// The environment variables
+	EnvVariables []string `form:"env_variables,omitempty" json:"env_variables,omitempty" xml:"env_variables,omitempty"`
+}
+
+// ServerVariableResponseBody is used to define fields on response body types.
+type ServerVariableResponseBody struct {
+	// Description of the server variable
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The environment variables
+	EnvVariables []string `form:"env_variables,omitempty" json:"env_variables,omitempty" xml:"env_variables,omitempty"`
+}
+
 // HTTPToolDefinitionResponseBody is used to define fields on response body
 // types.
 type HTTPToolDefinitionResponseBody struct {
@@ -1487,8 +1521,10 @@ type ToolsetEntryResponseBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
-	// The environment variables that are relevant to the toolset
-	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinitionEntryResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
 	// The prompt templates in this toolset
@@ -1598,10 +1634,16 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 		mcpSlug := types.Slug(*body.McpSlug)
 		v.McpSlug = &mcpSlug
 	}
-	if body.RelevantEnvironmentVariables != nil {
-		v.RelevantEnvironmentVariables = make([]string, len(body.RelevantEnvironmentVariables))
-		for i, val := range body.RelevantEnvironmentVariables {
-			v.RelevantEnvironmentVariables[i] = val
+	if body.SecurityVariables != nil {
+		v.SecurityVariables = make([]*types.SecurityVariable, len(body.SecurityVariables))
+		for i, val := range body.SecurityVariables {
+			v.SecurityVariables[i] = unmarshalSecurityVariableResponseBodyToTypesSecurityVariable(val)
+		}
+	}
+	if body.ServerVariables != nil {
+		v.ServerVariables = make([]*types.ServerVariable, len(body.ServerVariables))
+		for i, val := range body.ServerVariables {
+			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
 	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
@@ -1957,10 +1999,16 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 		mcpSlug := types.Slug(*body.McpSlug)
 		v.McpSlug = &mcpSlug
 	}
-	if body.RelevantEnvironmentVariables != nil {
-		v.RelevantEnvironmentVariables = make([]string, len(body.RelevantEnvironmentVariables))
-		for i, val := range body.RelevantEnvironmentVariables {
-			v.RelevantEnvironmentVariables[i] = val
+	if body.SecurityVariables != nil {
+		v.SecurityVariables = make([]*types.SecurityVariable, len(body.SecurityVariables))
+		for i, val := range body.SecurityVariables {
+			v.SecurityVariables[i] = unmarshalSecurityVariableResponseBodyToTypesSecurityVariable(val)
+		}
+	}
+	if body.ServerVariables != nil {
+		v.ServerVariables = make([]*types.ServerVariable, len(body.ServerVariables))
+		for i, val := range body.ServerVariables {
+			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
 	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
@@ -2304,10 +2352,16 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 		mcpSlug := types.Slug(*body.McpSlug)
 		v.McpSlug = &mcpSlug
 	}
-	if body.RelevantEnvironmentVariables != nil {
-		v.RelevantEnvironmentVariables = make([]string, len(body.RelevantEnvironmentVariables))
-		for i, val := range body.RelevantEnvironmentVariables {
-			v.RelevantEnvironmentVariables[i] = val
+	if body.SecurityVariables != nil {
+		v.SecurityVariables = make([]*types.SecurityVariable, len(body.SecurityVariables))
+		for i, val := range body.SecurityVariables {
+			v.SecurityVariables[i] = unmarshalSecurityVariableResponseBodyToTypesSecurityVariable(val)
+		}
+	}
+	if body.ServerVariables != nil {
+		v.ServerVariables = make([]*types.ServerVariable, len(body.ServerVariables))
+		for i, val := range body.ServerVariables {
+			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
 	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
@@ -2674,6 +2728,20 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
 		}
 	}
+	for _, e := range body.SecurityVariables {
+		if e != nil {
+			if err2 := ValidateSecurityVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ServerVariables {
+		if e != nil {
+			if err2 := ValidateServerVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	for _, e := range body.HTTPTools {
 		if e != nil {
 			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
@@ -2777,6 +2845,20 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
 		}
 	}
+	for _, e := range body.SecurityVariables {
+		if e != nil {
+			if err2 := ValidateSecurityVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ServerVariables {
+		if e != nil {
+			if err2 := ValidateServerVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	for _, e := range body.HTTPTools {
 		if e != nil {
 			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
@@ -2862,6 +2944,20 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	if body.DefaultEnvironmentSlug != nil {
 		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+		}
+	}
+	for _, e := range body.SecurityVariables {
+		if e != nil {
+			if err2 := ValidateSecurityVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ServerVariables {
+		if e != nil {
+			if err2 := ValidateServerVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	for _, e := range body.HTTPTools {
@@ -4347,6 +4443,36 @@ func ValidateCheckMCPSlugAvailabilityGatewayErrorResponseBody(body *CheckMCPSlug
 	return
 }
 
+// ValidateSecurityVariableResponseBody runs the validations defined on
+// SecurityVariableResponseBody
+func ValidateSecurityVariableResponseBody(body *SecurityVariableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.InPlacement == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("in_placement", "body"))
+	}
+	if body.Scheme == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scheme", "body"))
+	}
+	if body.EnvVariables == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("env_variables", "body"))
+	}
+	return
+}
+
+// ValidateServerVariableResponseBody runs the validations defined on
+// ServerVariableResponseBody
+func ValidateServerVariableResponseBody(body *ServerVariableResponseBody) (err error) {
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.EnvVariables == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("env_variables", "body"))
+	}
+	return
+}
+
 // ValidateHTTPToolDefinitionResponseBody runs the validations defined on
 // HTTPToolDefinitionResponseBody
 func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody) (err error) {
@@ -4689,6 +4815,20 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 	if body.DefaultEnvironmentSlug != nil {
 		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+		}
+	}
+	for _, e := range body.SecurityVariables {
+		if e != nil {
+			if err2 := ValidateSecurityVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ServerVariables {
+		if e != nil {
+			if err2 := ValidateServerVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
 		}
 	}
 	for _, e := range body.HTTPTools {

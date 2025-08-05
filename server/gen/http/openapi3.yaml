@@ -7277,11 +7277,16 @@ components:
                     items:
                         $ref: '#/components/schemas/PromptTemplate'
                     description: The list of prompt templates
-                relevant_environment_variables:
+                security_variables:
                     type: array
                     items:
-                        type: string
-                    description: The environment variables that are relevant to the toolset
+                        $ref: '#/components/schemas/SecurityVariable'
+                    description: The security variables that are relevant to the toolset
+                server_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ServerVariable'
+                    description: The server variables that are relevant to the toolset
                 tools:
                     type: array
                     items:
@@ -8252,6 +8257,43 @@ components:
                 - type
                 - status_codes
                 - content_types
+        SecurityVariable:
+            type: object
+            properties:
+                bearer_format:
+                    type: string
+                    description: The bearer format
+                env_variables:
+                    type: array
+                    items:
+                        type: string
+                    description: The environment variables
+                in_placement:
+                    type: string
+                    description: Where the security token is placed
+                name:
+                    type: string
+                    description: The name of the security scheme
+                oauth_flows:
+                    type: string
+                    description: The OAuth flows
+                    format: binary
+                oauth_types:
+                    type: array
+                    items:
+                        type: string
+                    description: The OAuth types
+                scheme:
+                    type: string
+                    description: The security scheme
+                type:
+                    type: string
+                    description: The type of security
+            required:
+                - name
+                - in_placement
+                - scheme
+                - env_variables
         ServeImageForm:
             type: object
             properties:
@@ -8304,6 +8346,20 @@ components:
                 - content_type
                 - content_length
                 - last_modified
+        ServerVariable:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of the server variable
+                env_variables:
+                    type: array
+                    items:
+                        type: string
+                    description: The environment variables
+            required:
+                - description
+                - env_variables
         ToolVariation:
             type: object
             properties:
@@ -8403,11 +8459,16 @@ components:
                     items:
                         $ref: '#/components/schemas/PromptTemplate'
                     description: The prompt templates in this toolset
-                relevant_environment_variables:
+                security_variables:
                     type: array
                     items:
-                        type: string
-                    description: The environment variables that are relevant to the toolset
+                        $ref: '#/components/schemas/SecurityVariable'
+                    description: The security variables that are relevant to the toolset
+                server_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ServerVariable'
+                    description: The server variables that are relevant to the toolset
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -8475,11 +8536,16 @@ components:
                     items:
                         $ref: '#/components/schemas/PromptTemplateEntry'
                     description: The prompt templates in this toolset
-                relevant_environment_variables:
+                security_variables:
                     type: array
                     items:
-                        type: string
-                    description: The environment variables that are relevant to the toolset
+                        $ref: '#/components/schemas/SecurityVariable'
+                    description: The security variables that are relevant to the toolset
+                server_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ServerVariable'
+                    description: The server variables that are relevant to the toolset
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.

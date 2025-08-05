@@ -541,12 +541,20 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
     (tool) => !tool.defaultServerUrl
   );
 
-  const envHeaders =
-    toolset.relevantEnvironmentVariables?.filter(
-      (v) =>
-        (!v.toLowerCase().includes("server_url") || requiresServerURL) &&
+  const envHeaders: string[] = [
+    // Security variables (exclude token_url)
+    ...(toolset.securityVariables?.flatMap(secVar => 
+      secVar.envVariables.filter(v => 
         !v.toLowerCase().includes("token_url") // direct token url is always a hidden option right now
-    ) ?? [];
+      )
+    ) ?? []),
+    // Server variables (filter server_url unless required)
+    ...(toolset.serverVariables?.flatMap(serverVar => 
+      serverVar.envVariables.filter(v => 
+        !v.toLowerCase().includes("server_url") || requiresServerURL
+      )
+    ) ?? [])
+  ];
 
   // Build the args array for public MCP config
   const mcpJsonPublicArgs = [

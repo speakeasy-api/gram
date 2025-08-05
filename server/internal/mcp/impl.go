@@ -326,9 +326,13 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	envHeaders := []string{}
-	for _, envVar := range toolsetDetails.RelevantEnvironmentVariables {
-		if !strings.Contains(strings.ToLower(envVar), "server_url") {
-			envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")))
+
+	// Collect environment variables from security variables
+	for _, secVar := range toolsetDetails.SecurityVariables {
+		for _, envVar := range secVar.EnvVariables {
+			if !strings.Contains(strings.ToLower(envVar), "token_url") {
+				envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")))
+			}
 		}
 	}
 

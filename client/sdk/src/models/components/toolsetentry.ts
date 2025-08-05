@@ -19,6 +19,18 @@ import {
   PromptTemplateEntry$Outbound,
   PromptTemplateEntry$outboundSchema,
 } from "./prompttemplateentry.js";
+import {
+  SecurityVariable,
+  SecurityVariable$inboundSchema,
+  SecurityVariable$Outbound,
+  SecurityVariable$outboundSchema,
+} from "./securityvariable.js";
+import {
+  ServerVariable,
+  ServerVariable$inboundSchema,
+  ServerVariable$Outbound,
+  ServerVariable$outboundSchema,
+} from "./servervariable.js";
 
 export type ToolsetEntry = {
   /**
@@ -70,9 +82,13 @@ export type ToolsetEntry = {
    */
   promptTemplates: Array<PromptTemplateEntry>;
   /**
-   * The environment variables that are relevant to the toolset
+   * The security variables that are relevant to the toolset
    */
-  relevantEnvironmentVariables?: Array<string> | undefined;
+  securityVariables?: Array<SecurityVariable> | undefined;
+  /**
+   * The server variables that are relevant to the toolset
+   */
+  serverVariables?: Array<ServerVariable> | undefined;
   /**
    * A short url-friendly label that uniquely identifies a resource.
    */
@@ -101,7 +117,8 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
   organization_id: z.string(),
   project_id: z.string(),
   prompt_templates: z.array(PromptTemplateEntry$inboundSchema),
-  relevant_environment_variables: z.array(z.string()).optional(),
+  security_variables: z.array(SecurityVariable$inboundSchema).optional(),
+  server_variables: z.array(ServerVariable$inboundSchema).optional(),
   slug: z.string(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
 }).transform((v) => {
@@ -115,7 +132,8 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
     "organization_id": "organizationId",
     "project_id": "projectId",
     "prompt_templates": "promptTemplates",
-    "relevant_environment_variables": "relevantEnvironmentVariables",
+    "security_variables": "securityVariables",
+    "server_variables": "serverVariables",
     "updated_at": "updatedAt",
   });
 });
@@ -134,7 +152,8 @@ export type ToolsetEntry$Outbound = {
   organization_id: string;
   project_id: string;
   prompt_templates: Array<PromptTemplateEntry$Outbound>;
-  relevant_environment_variables?: Array<string> | undefined;
+  security_variables?: Array<SecurityVariable$Outbound> | undefined;
+  server_variables?: Array<ServerVariable$Outbound> | undefined;
   slug: string;
   updated_at: string;
 };
@@ -157,7 +176,8 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
   organizationId: z.string(),
   projectId: z.string(),
   promptTemplates: z.array(PromptTemplateEntry$outboundSchema),
-  relevantEnvironmentVariables: z.array(z.string()).optional(),
+  securityVariables: z.array(SecurityVariable$outboundSchema).optional(),
+  serverVariables: z.array(ServerVariable$outboundSchema).optional(),
   slug: z.string(),
   updatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
@@ -171,7 +191,8 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
     organizationId: "organization_id",
     projectId: "project_id",
     promptTemplates: "prompt_templates",
-    relevantEnvironmentVariables: "relevant_environment_variables",
+    securityVariables: "security_variables",
+    serverVariables: "server_variables",
     updatedAt: "updated_at",
   });
 });

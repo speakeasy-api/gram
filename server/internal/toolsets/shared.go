@@ -46,17 +46,17 @@ func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUI
 		return nil, fmt.Errorf("get http tool definition by id: %w", err)
 	}
 
-	relevantSecurityKeysMap := make(map[string]bool)
+	securityKeysMap := make(map[string]bool)
 	securityKeys, securityScopes, err := security.ParseHTTPToolSecurityKeys(tool.Security)
 	if err != nil {
 		return nil, fmt.Errorf("parse http tool security keys: %w", err)
 	}
 	for _, key := range securityKeys {
-		relevantSecurityKeysMap[key] = true
+		securityKeysMap[key] = true
 	}
 
 	securityEntries, err := t.repo.GetHTTPSecurityDefinitions(ctx, repo.GetHTTPSecurityDefinitionsParams{
-		SecurityKeys:  slices.Collect(maps.Keys(relevantSecurityKeysMap)),
+		SecurityKeys:  slices.Collect(maps.Keys(securityKeysMap)),
 		DeploymentIds: []uuid.UUID{tool.DeploymentID},
 	})
 	if err != nil {

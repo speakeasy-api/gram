@@ -23,8 +23,10 @@ type Toolset struct {
 	Description *string
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *Slug
-	// The environment variables that are relevant to the toolset
-	RelevantEnvironmentVariables []string
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariable
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariable
 	// The HTTP tools in this toolset
 	HTTPTools []*HTTPToolDefinition
 	// The prompt templates in this toolset

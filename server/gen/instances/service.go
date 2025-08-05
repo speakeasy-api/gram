@@ -67,8 +67,10 @@ type GetInstanceResult struct {
 	Tools []*types.HTTPToolDefinition
 	// The list of prompt templates
 	PromptTemplates []*types.PromptTemplate
-	// The environment variables that are relevant to the toolset
-	RelevantEnvironmentVariables []string
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*types.SecurityVariable
+	// The server variables that are relevant to the toolset
+	ServerVariables []*types.ServerVariable
 	// The environment
 	Environment *types.Environment
 }

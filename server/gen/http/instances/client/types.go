@@ -26,8 +26,10 @@ type GetInstanceResponseBody struct {
 	Tools []*HTTPToolDefinitionResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The list of prompt templates
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
-	// The environment variables that are relevant to the toolset
-	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The environment
 	Environment *EnvironmentResponseBody `form:"environment,omitempty" json:"environment,omitempty" xml:"environment,omitempty"`
 }
@@ -357,6 +359,34 @@ type PromptTemplateResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// SecurityVariableResponseBody is used to define fields on response body types.
+type SecurityVariableResponseBody struct {
+	// The type of security
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// The name of the security scheme
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Where the security token is placed
+	InPlacement *string `form:"in_placement,omitempty" json:"in_placement,omitempty" xml:"in_placement,omitempty"`
+	// The security scheme
+	Scheme *string `form:"scheme,omitempty" json:"scheme,omitempty" xml:"scheme,omitempty"`
+	// The bearer format
+	BearerFormat *string `form:"bearer_format,omitempty" json:"bearer_format,omitempty" xml:"bearer_format,omitempty"`
+	// The OAuth types
+	OauthTypes []string `form:"oauth_types,omitempty" json:"oauth_types,omitempty" xml:"oauth_types,omitempty"`
+	// The OAuth flows
+	OauthFlows []byte `form:"oauth_flows,omitempty" json:"oauth_flows,omitempty" xml:"oauth_flows,omitempty"`
+	// The environment variables
+	EnvVariables []string `form:"env_variables,omitempty" json:"env_variables,omitempty" xml:"env_variables,omitempty"`
+}
+
+// ServerVariableResponseBody is used to define fields on response body types.
+type ServerVariableResponseBody struct {
+	// Description of the server variable
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The environment variables
+	EnvVariables []string `form:"env_variables,omitempty" json:"env_variables,omitempty" xml:"env_variables,omitempty"`
+}
+
 // EnvironmentResponseBody is used to define fields on response body types.
 type EnvironmentResponseBody struct {
 	// The ID of the environment
@@ -408,10 +438,16 @@ func NewGetInstanceResultOK(body *GetInstanceResponseBody) *instances.GetInstanc
 			v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 		}
 	}
-	if body.RelevantEnvironmentVariables != nil {
-		v.RelevantEnvironmentVariables = make([]string, len(body.RelevantEnvironmentVariables))
-		for i, val := range body.RelevantEnvironmentVariables {
-			v.RelevantEnvironmentVariables[i] = val
+	if body.SecurityVariables != nil {
+		v.SecurityVariables = make([]*types.SecurityVariable, len(body.SecurityVariables))
+		for i, val := range body.SecurityVariables {
+			v.SecurityVariables[i] = unmarshalSecurityVariableResponseBodyToTypesSecurityVariable(val)
+		}
+	}
+	if body.ServerVariables != nil {
+		v.ServerVariables = make([]*types.ServerVariable, len(body.ServerVariables))
+		for i, val := range body.ServerVariables {
+			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
 	v.Environment = unmarshalEnvironmentResponseBodyToTypesEnvironment(body.Environment)
@@ -591,6 +627,20 @@ func ValidateGetInstanceResponseBody(body *GetInstanceResponseBody) (err error) 
 	for _, e := range body.PromptTemplates {
 		if e != nil {
 			if err2 := ValidatePromptTemplateResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.SecurityVariables {
+		if e != nil {
+			if err2 := ValidateSecurityVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ServerVariables {
+		if e != nil {
+			if err2 := ValidateServerVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -1019,6 +1069,36 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateSecurityVariableResponseBody runs the validations defined on
+// SecurityVariableResponseBody
+func ValidateSecurityVariableResponseBody(body *SecurityVariableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.InPlacement == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("in_placement", "body"))
+	}
+	if body.Scheme == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scheme", "body"))
+	}
+	if body.EnvVariables == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("env_variables", "body"))
+	}
+	return
+}
+
+// ValidateServerVariableResponseBody runs the validations defined on
+// ServerVariableResponseBody
+func ValidateServerVariableResponseBody(body *ServerVariableResponseBody) (err error) {
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.EnvVariables == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("env_variables", "body"))
 	}
 	return
 }

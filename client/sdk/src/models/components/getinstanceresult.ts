@@ -25,6 +25,18 @@ import {
   PromptTemplate$Outbound,
   PromptTemplate$outboundSchema,
 } from "./prompttemplate.js";
+import {
+  SecurityVariable,
+  SecurityVariable$inboundSchema,
+  SecurityVariable$Outbound,
+  SecurityVariable$outboundSchema,
+} from "./securityvariable.js";
+import {
+  ServerVariable,
+  ServerVariable$inboundSchema,
+  ServerVariable$Outbound,
+  ServerVariable$outboundSchema,
+} from "./servervariable.js";
 
 export type GetInstanceResult = {
   /**
@@ -44,9 +56,13 @@ export type GetInstanceResult = {
    */
   promptTemplates?: Array<PromptTemplate> | undefined;
   /**
-   * The environment variables that are relevant to the toolset
+   * The security variables that are relevant to the toolset
    */
-  relevantEnvironmentVariables?: Array<string> | undefined;
+  securityVariables?: Array<SecurityVariable> | undefined;
+  /**
+   * The server variables that are relevant to the toolset
+   */
+  serverVariables?: Array<ServerVariable> | undefined;
   /**
    * The list of tools
    */
@@ -63,12 +79,14 @@ export const GetInstanceResult$inboundSchema: z.ZodType<
   environment: Environment$inboundSchema,
   name: z.string(),
   prompt_templates: z.array(PromptTemplate$inboundSchema).optional(),
-  relevant_environment_variables: z.array(z.string()).optional(),
+  security_variables: z.array(SecurityVariable$inboundSchema).optional(),
+  server_variables: z.array(ServerVariable$inboundSchema).optional(),
   tools: z.array(HTTPToolDefinition$inboundSchema),
 }).transform((v) => {
   return remap$(v, {
     "prompt_templates": "promptTemplates",
-    "relevant_environment_variables": "relevantEnvironmentVariables",
+    "security_variables": "securityVariables",
+    "server_variables": "serverVariables",
   });
 });
 
@@ -78,7 +96,8 @@ export type GetInstanceResult$Outbound = {
   environment: Environment$Outbound;
   name: string;
   prompt_templates?: Array<PromptTemplate$Outbound> | undefined;
-  relevant_environment_variables?: Array<string> | undefined;
+  security_variables?: Array<SecurityVariable$Outbound> | undefined;
+  server_variables?: Array<ServerVariable$Outbound> | undefined;
   tools: Array<HTTPToolDefinition$Outbound>;
 };
 
@@ -92,12 +111,14 @@ export const GetInstanceResult$outboundSchema: z.ZodType<
   environment: Environment$outboundSchema,
   name: z.string(),
   promptTemplates: z.array(PromptTemplate$outboundSchema).optional(),
-  relevantEnvironmentVariables: z.array(z.string()).optional(),
+  securityVariables: z.array(SecurityVariable$outboundSchema).optional(),
+  serverVariables: z.array(ServerVariable$outboundSchema).optional(),
   tools: z.array(HTTPToolDefinition$outboundSchema),
 }).transform((v) => {
   return remap$(v, {
     promptTemplates: "prompt_templates",
-    relevantEnvironmentVariables: "relevant_environment_variables",
+    securityVariables: "security_variables",
+    serverVariables: "server_variables",
   });
 });
 

@@ -410,6 +410,52 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 	return res
 }
 
+// unmarshalSecurityVariableResponseBodyToTypesSecurityVariable builds a value
+// of type *types.SecurityVariable from a value of type
+// *SecurityVariableResponseBody.
+func unmarshalSecurityVariableResponseBodyToTypesSecurityVariable(v *SecurityVariableResponseBody) *types.SecurityVariable {
+	if v == nil {
+		return nil
+	}
+	res := &types.SecurityVariable{
+		Type:         v.Type,
+		Name:         *v.Name,
+		InPlacement:  *v.InPlacement,
+		Scheme:       *v.Scheme,
+		BearerFormat: v.BearerFormat,
+		OauthFlows:   v.OauthFlows,
+	}
+	if v.OauthTypes != nil {
+		res.OauthTypes = make([]string, len(v.OauthTypes))
+		for i, val := range v.OauthTypes {
+			res.OauthTypes[i] = val
+		}
+	}
+	res.EnvVariables = make([]string, len(v.EnvVariables))
+	for i, val := range v.EnvVariables {
+		res.EnvVariables[i] = val
+	}
+
+	return res
+}
+
+// unmarshalServerVariableResponseBodyToTypesServerVariable builds a value of
+// type *types.ServerVariable from a value of type *ServerVariableResponseBody.
+func unmarshalServerVariableResponseBodyToTypesServerVariable(v *ServerVariableResponseBody) *types.ServerVariable {
+	if v == nil {
+		return nil
+	}
+	res := &types.ServerVariable{
+		Description: *v.Description,
+	}
+	res.EnvVariables = make([]string, len(v.EnvVariables))
+	for i, val := range v.EnvVariables {
+		res.EnvVariables[i] = val
+	}
+
+	return res
+}
+
 // unmarshalEnvironmentResponseBodyToTypesEnvironment builds a value of type
 // *types.Environment from a value of type *EnvironmentResponseBody.
 func unmarshalEnvironmentResponseBodyToTypesEnvironment(v *EnvironmentResponseBody) *types.Environment {

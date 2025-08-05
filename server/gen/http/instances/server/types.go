@@ -24,8 +24,10 @@ type GetInstanceResponseBody struct {
 	Tools []*HTTPToolDefinitionResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The list of prompt templates
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
-	// The environment variables that are relevant to the toolset
-	RelevantEnvironmentVariables []string `form:"relevant_environment_variables,omitempty" json:"relevant_environment_variables,omitempty" xml:"relevant_environment_variables,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
 	// The environment
 	Environment *EnvironmentResponseBody `form:"environment" json:"environment" xml:"environment"`
 }
@@ -355,6 +357,34 @@ type PromptTemplateResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// SecurityVariableResponseBody is used to define fields on response body types.
+type SecurityVariableResponseBody struct {
+	// The type of security
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// The name of the security scheme
+	Name string `form:"name" json:"name" xml:"name"`
+	// Where the security token is placed
+	InPlacement string `form:"in_placement" json:"in_placement" xml:"in_placement"`
+	// The security scheme
+	Scheme string `form:"scheme" json:"scheme" xml:"scheme"`
+	// The bearer format
+	BearerFormat *string `form:"bearer_format,omitempty" json:"bearer_format,omitempty" xml:"bearer_format,omitempty"`
+	// The OAuth types
+	OauthTypes []string `form:"oauth_types,omitempty" json:"oauth_types,omitempty" xml:"oauth_types,omitempty"`
+	// The OAuth flows
+	OauthFlows []byte `form:"oauth_flows,omitempty" json:"oauth_flows,omitempty" xml:"oauth_flows,omitempty"`
+	// The environment variables
+	EnvVariables []string `form:"env_variables" json:"env_variables" xml:"env_variables"`
+}
+
+// ServerVariableResponseBody is used to define fields on response body types.
+type ServerVariableResponseBody struct {
+	// Description of the server variable
+	Description string `form:"description" json:"description" xml:"description"`
+	// The environment variables
+	EnvVariables []string `form:"env_variables" json:"env_variables" xml:"env_variables"`
+}
+
 // EnvironmentResponseBody is used to define fields on response body types.
 type EnvironmentResponseBody struct {
 	// The ID of the environment
@@ -410,10 +440,16 @@ func NewGetInstanceResponseBody(res *instances.GetInstanceResult) *GetInstanceRe
 			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
 		}
 	}
-	if res.RelevantEnvironmentVariables != nil {
-		body.RelevantEnvironmentVariables = make([]string, len(res.RelevantEnvironmentVariables))
-		for i, val := range res.RelevantEnvironmentVariables {
-			body.RelevantEnvironmentVariables[i] = val
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
 		}
 	}
 	if res.Environment != nil {

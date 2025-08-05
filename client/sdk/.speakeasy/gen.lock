@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 99e1790222958559a4f26e400644934c
+  docChecksum: 32e2034a967372d4ba917de56c9d3e3a
   docVersion: 0.0.1
-  speakeasyVersion: 1.585.0
-  generationVersion: 2.660.0
-  releaseVersion: 0.12.41
-  configChecksum: 47eefd9f537611bc6e1a6dac74c53e2d
+  speakeasyVersion: 1.596.1
+  generationVersion: 2.672.0
+  releaseVersion: 0.12.43
+  configChecksum: 41cb08f092e0b83a674152bd8e06bbdd
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.14
+    core: 3.21.19
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
@@ -72,6 +72,7 @@ generatedFiles:
   - docs/models/components/environmententryinput.md
   - docs/models/components/evolveform.md
   - docs/models/components/evolveresult.md
+  - docs/models/components/externaloauthserver.md
   - docs/models/components/getdeploymentlogsresult.md
   - docs/models/components/getdeploymentresult.md
   - docs/models/components/getinstanceresult.md
@@ -101,6 +102,8 @@ generatedFiles:
   - docs/models/components/listvariationsresult.md
   - docs/models/components/listversionsresult.md
   - docs/models/components/notmodified.md
+  - docs/models/components/oauthproxyprovider.md
+  - docs/models/components/oauthproxyserver.md
   - docs/models/components/openapiv3deploymentasset.md
   - docs/models/components/organizationentry.md
   - docs/models/components/package.md
@@ -121,6 +124,8 @@ generatedFiles:
   - docs/models/components/rendertemplaterequestbodykind.md
   - docs/models/components/rendertemplateresult.md
   - docs/models/components/responsefilter.md
+  - docs/models/components/securityvariable.md
+  - docs/models/components/servervariable.md
   - docs/models/components/toolset.md
   - docs/models/components/toolsetentry.md
   - docs/models/components/toolvariation.md
@@ -468,6 +473,7 @@ generatedFiles:
   - src/models/components/environmententryinput.ts
   - src/models/components/evolveform.ts
   - src/models/components/evolveresult.ts
+  - src/models/components/externaloauthserver.ts
   - src/models/components/getdeploymentlogsresult.ts
   - src/models/components/getdeploymentresult.ts
   - src/models/components/getinstanceresult.ts
@@ -497,6 +503,8 @@ generatedFiles:
   - src/models/components/listvariationsresult.ts
   - src/models/components/listversionsresult.ts
   - src/models/components/notmodified.ts
+  - src/models/components/oauthproxyprovider.ts
+  - src/models/components/oauthproxyserver.ts
   - src/models/components/openapiv3deploymentasset.ts
   - src/models/components/organizationentry.ts
   - src/models/components/package.ts
@@ -514,6 +522,8 @@ generatedFiles:
   - src/models/components/rendertemplaterequestbody.ts
   - src/models/components/rendertemplateresult.ts
   - src/models/components/responsefilter.ts
+  - src/models/components/securityvariable.ts
+  - src/models/components/servervariable.ts
   - src/models/components/toolset.ts
   - src/models/components/toolsetentry.ts
   - src/models/components/toolvariation.ts
