@@ -160,6 +160,7 @@ func (k *KubernetesClients) DeleteIngress(ctx context.Context, ingressName strin
 func (k *KubernetesClients) CreateCustomDomainIngressCharts(domain string) (string, string, *networkingv1.Ingress, error) {
 	nginxIngressClassName := "nginx"
 	pathTypePrefix := networkingv1.PathTypePrefix
+	pathTypeImplementationSpecific := networkingv1.PathTypeImplementationSpecific
 	k8sName, err := SanitizeDomainForK8sName(domain)
 	if err != nil {
 		return "", "", nil, err
@@ -208,8 +209,11 @@ func (k *KubernetesClients) CreateCustomDomainIngressCharts(domain string) (stri
 									},
 								},
 								{
-									Path:     "/.well-known/oauth-authorization-server/mcp",
-									PathType: &pathTypePrefix,
+									// NGINX ingress validator rejects .well-known paths with pathType Prefix
+									// Using regex with ImplementationSpecific bypasses this validation while achieving the same prefix matching behavior.
+									// This matches: /.well-known/oauth-authorization-server/mcp and any subpaths
+									Path:     `/\.well-known/oauth-authorization-server/mcp(/.*)?`,
+									PathType: &pathTypeImplementationSpecific,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
 											Name: "gram-server",
@@ -218,8 +222,8 @@ func (k *KubernetesClients) CreateCustomDomainIngressCharts(domain string) (stri
 									},
 								},
 								{
-									Path:     "/.well-known/oauth-protected-resource/mcp",
-									PathType: &pathTypePrefix,
+									Path:     `/\.well-known/oauth-protected-resource/mcp(/.*)?`,
+									PathType: &pathTypeImplementationSpecific,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
 											Name: "gram-server",
