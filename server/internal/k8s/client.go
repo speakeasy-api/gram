@@ -208,7 +208,7 @@ func (k *KubernetesClients) CreateCustomDomainIngressCharts(domain string) (stri
 									},
 								},
 								{
-									Path:     "/.well-known/oauth-authorization-server/",
+									Path:     "/.well-known/oauth-authorization-server/mcp",
 									PathType: &pathTypePrefix,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
@@ -218,7 +218,7 @@ func (k *KubernetesClients) CreateCustomDomainIngressCharts(domain string) (stri
 									},
 								},
 								{
-									Path:     "/.well-known/oauth-protected-resource/",
+									Path:     "/.well-known/oauth-protected-resource/mcp",
 									PathType: &pathTypePrefix,
 									Backend: networkingv1.IngressBackend{
 										Service: &networkingv1.IngressServiceBackend{
