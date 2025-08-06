@@ -1,6 +1,6 @@
 module github.com/speakeasy-api/gram/server
 
-go 1.24.5
+go 1.24.6
 
 tool (
 	github.com/GoogleCloudPlatform/cloudsql-proxy/cmd/cloud_sql_proxy
