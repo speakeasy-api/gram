@@ -1,0 +1,108 @@
+# 💡 TIP
+#
+# If you want to override anything in this file, create an adjacent file called
+# `mise.local.toml`. That file is not checked in to the repository. Using this
+# file, you can specify more tools or different version of listed ones below as
+# well as overriding environment variables.
+[tools]
+"aqua:ariga/atlas" = "0.34.0"
+"aqua:golangci/golangci-lint" = "2.1.6"
+"aqua:pnpm/pnpm" = "10.8.1"
+"aqua:pvolok/mprocs" = "0.7.2"
+"ubi:sbdchd/squawk" = "1.6.1"
+"ubi:speakeasy-api/speakeasy" = "1.585.0"
+go = "1.24.5"
+jq = "1.7.1"
+nodejs = "22.14.0"
+watchexec = "2.3.0"
+gum = "0.16.0"
+
+# ℹ️ The settings below are sensible defaults for local development. When
+# deploying to production, you will want to configure these more carefully.
+[env]
+############################
+## Database configuration ##
+############################
+## The following DB_* variables are only needed to configure the postgres local
+## development database and to run SQLc (`mise run gen:sqlc-server`). They do
+## not need to be set in a production deployment.
+DB_USER = "gram"
+DB_PASSWORD = "gram"
+DB_NAME = "gram"
+DB_HOST = "127.0.0.1"
+DB_PORT = "5439"
+## Only this variable is relevant to production deployments. It can be set to a
+## static connection string. In this case, we use interpolation to point to the
+## local development database configured above.
+GRAM_DATABASE_URL = "postgres://{{env.DB_USER}}:{{env.DB_PASSWORD}}@{{env.DB_HOST}}:{{env.DB_PORT}}/{{env.DB_NAME}}?sslmode=disable&search_path=public"
+
+############################
+## Temporal configuration ##
+############################
+TEMPORAL_PORT = "7233"
+TEMPORAL_NAMESPACE = "default"
+## When using Temporal Cloud, the following variable should like something like:
+##     "<namespace>.<account>.tmprl.cloud:7233".
+TEMPORAL_ADDRESS = ":{{env.TEMPORAL_PORT}}"
+
+###################################
+## Gram server and worker config ##
+###################################
+## Setting this to 1 will run the server and worker in a single process.
+## This is useful when debugging during local development. It can also be used
+## for simple production deployments although you are encouraged to run the gram
+## server and worker as separate processes that can be scaled independently.
+GRAM_SINGLE_PROCESS = 0
+GRAM_SERVER_ADDRESS = ":8080"
+GRAM_CONTROL_ADDRESS = ":8081"
+GRAM_WORKER_CONTROL_ADDRESS = ":8082"
+## The following variable can be one of: local, test, prod
+GRAM_ENVIRONMENT = "local"
+GRAM_SERVER_URL = "http://localhost:8080"
+GRAM_SITE_URL = "http://localhost:5173"
+GRAM_ASSETS_BACKEND = "fs"
+GRAM_ASSETS_URI = ".assets"
+## The following variable is used to encrypt env vars stored in the database.
+GRAM_ENCRYPTION_KEY = "unset"
+GRAM_REDIS_CACHE_ADDR = "127.0.0.1:5445"
+GRAM_REDIS_CACHE_PASSWORD = "xi9XILbY"
+OPENROUTER_DEV_KEY = "unset"
+## The following two variables are used by Speakeasy staff developing against
+## the Speakeasy app.
+SPEAKEASY_SERVER_ADDRESS = "http://localhost:35291"
+SPEAKEASY_SECRET_KEY = "unset"
+## The following variables are only needed if you want to do one of the following:
+## - Run the server with SSL enabled and not rely on SSL termination at a load balancer.
+## - Local development with SSL enabled.
+# GRAM_SSL_CERT_FILE = "{{config_root}}/local/ssl/certs/dev.pem"
+# GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/dev.pem"
+
+##########################
+## Observability config ##
+##########################
+OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4317"
+## Change these to 0 to disable OpenTelemetry traces and metrics to be emitted.
+GRAM_ENABLE_OTEL_TRACES = 1
+GRAM_ENABLE_OTEL_METRICS = 1
+
+################################
+## Local development settings ##
+################################
+GRAM_LOG_PRETTY = 1
+## DO NOT SET THIS VARIABLE WHEN DEPLOYING TO PRODUCTION.
+GRAM_UNSAFE_LOCAL_ENV_PATH = "{{config_root}}/.local.env.json"
+VITE_DEV_HOSTNAMES = "localhost,gram.local"
+TEMPORAL_WEB_PORT = "8233"
+## The following variables configure the local opentelemetry stack powered by
+## Grafana.
+GRAFANA_PORT = "6171"
+PROMETHEUS_PORT = "9090"
+TEMPO_PORT = "3200"
+ALLOY_PORT = "12345"
+OTLP_GRPC_PORT = "4317"
+## If you want to enable/disable certain feature flags during local development,
+## copy the following line to mise.local.toml and point to a CSV file containing
+## flag settings. Check out flags.local.csv.example in the root of the repo for
+## an example of the format.
+## For a list of feature flags, check `server/internal/feature/flags.go`.
+# GRAM_LOCAL_FEATURE_FLAGS_CSV = "{{config_root}}/flags.csv"
