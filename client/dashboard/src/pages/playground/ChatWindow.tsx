@@ -24,7 +24,6 @@ import {
   Tool,
   ToolCall,
 } from "ai";
-import Ajv from "ajv";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
@@ -34,9 +33,6 @@ import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useMiniModel, useModel } from "./Openrouter";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
 import { onboardingStepStorageKeys } from "../home/Home";
-
-// Ignore int32 format instead of erroring out
-const ajv = new Ajv({ formats: { int32: true } });
 
 const defaultModel = {
   label: "Claude 4 Sonnet",
@@ -375,16 +371,8 @@ function ChatInner({
     },
   });
 
-  const validateArgs = (toolCall: ToolCall<string, unknown>) => {
-    const tool = allTools[toolCall.toolName];
-    if (!tool) {
-      throw new Error(`Tool ${toolCall.toolName} not found`);
-    }
-
-    const validate = ajv.compile(tool.parameters.jsonSchema);
-    if (!validate(toolCall.args)) {
-      return "Schema validation error: " + JSON.stringify(validate.errors);
-    }
+  const validateArgs = (_toolCall: ToolCall<string, unknown>) => {
+    // This is stubbed out at this time because we validate args on the backend
     return null;
   };
 
