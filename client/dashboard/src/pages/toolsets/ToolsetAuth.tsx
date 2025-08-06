@@ -266,7 +266,10 @@ export function ToolsetAuth({
         <div className="space-y-1">
           <h2 className="text-heading-xs">Environment Variables</h2>
           <p className="text-sm text-muted-foreground">
-            Configure required API credentials for this toolset
+            Configure required API credentials for this toolset to use in the Gram dashboard
+          </p>
+          <p className="text-sm text-muted-foreground">
+            View the MCP page for options on how to provide relevant credentials to an MCP server
           </p>
         </div>
         <div className="flex-shrink-0 flex items-center gap-2">

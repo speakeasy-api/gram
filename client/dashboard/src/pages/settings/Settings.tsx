@@ -600,7 +600,7 @@ export default function Settings() {
         </Stack>
         <div className="space-y-4">
           <Type variant="body" muted>
-            LLM Credits are used for the chat playground and other AI-powered in
+            LLM Credits are used only for the in dashboard playground and other AI-powered in
             dashboard experiences.
           </Type>
           {creditUsage && (

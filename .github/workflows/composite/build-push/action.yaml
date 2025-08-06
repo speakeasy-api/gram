@@ -23,7 +23,7 @@ inputs:
     description: 'Path to the docker file relative to context'
     required: true
   build-args:
-    description: 'Build arguments for docker'
+    description: 'Build arguments for docker (key=value format)'
     required: false
   git-auth-token:
     description: 'The GitHub access token for accessing private repos'
@@ -52,6 +52,64 @@ runs:
           type=schedule,pattern=nightly
           type=sha
           type=sha,format=long
+
+    - name: Validate and sanitize build arguments
+      shell: bash
+      run: |
+        set -e
+        ARGS="${{ inputs.build-args }}"
+
+        # Comprehensive validation
+        echo "Validating build arguments..."
+        
+        # Check for empty input
+        if [[ -z "$ARGS" ]]; then
+          echo "No build arguments provided"
+          exit 0
+        fi
+        
+        # Define security patterns to reject
+        DANGEROUS_PATTERNS=(
+          '\$\('          # Command substitution
+          '`'             # Backticks  
+          '\|\|'          # OR operator
+          '&&'            # AND operator
+          ';'             # Command separator
+          '&'             # Background execution
+          '>'             # Redirection
+          '<'             # Input redirection
+          'curl'          # HTTP client
+          'wget'          # HTTP client
+          'nc\|netcat'    # Network tools
+          'bash'          # Shell execution
+          'sh '           # Shell execution
+          '/bin/'         # Binary execution
+          'eval'          # Code evaluation
+          'exec'          # Command execution
+        )
+        
+        # Check each line
+        while IFS= read -r line; do
+          if [[ -n "$line" ]]; then
+            # Check for dangerous patterns
+            for pattern in "${DANGEROUS_PATTERNS[@]}"; do
+              if echo "$line" | grep -qiE "$pattern"; then
+                echo "Dangerous pattern detected: $pattern"
+                echo "Line: $line"
+                exit 1
+              fi
+            done
+            
+            # Validate key=value format
+            if [[ ! "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9._/-]+$ ]]; then
+              echo "Invalid format: $line"
+              echo "Must be: KEY=value (alphanumeric only)"
+              exit 1
+            fi
+          fi
+        done <<< "$ARGS"
+        
+        echo "Build arguments validated successfully"
 
     - name: Set GIT_SHA
       shell: bash
