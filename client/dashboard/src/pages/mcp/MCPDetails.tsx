@@ -1,5 +1,6 @@
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { OAuthSetupModal } from "@/components/OAuthSetupModal";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
@@ -28,8 +29,8 @@ import { Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
+import { Outlet, useParams } from "react-router";
 import { Block, BlockInner } from "../toolBuilder/components";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
 import { onboardingStepStorageKeys } from "../home/Home";
@@ -42,11 +43,15 @@ export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
 
   const toolset = useToolsetSuspense({ slug: toolsetSlug! });
-  const showOAuthButton = toolset.data.securityVariables?.some(secVar => 
-    secVar.type === "oauth2" && 
-    secVar.oauthTypes?.includes("authorization_code")
-  ) ?? false;
-  const isOAuthConnected = !!(toolset.data.oauthProxyServer || toolset.data.externalOauthServer);
+  const showOAuthButton =
+    toolset.data.securityVariables?.some(
+      (secVar) =>
+        secVar.type === "oauth2" &&
+        secVar.oauthTypes?.includes("authorization_code")
+    ) ?? false;
+  const isOAuthConnected = !!(
+    toolset.data.oauthProxyServer || toolset.data.externalOauthServer
+  );
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
 
@@ -56,15 +61,21 @@ export function MCPDetailPage() {
 
   return (
     <Stack>
-      <Stack direction="horizontal" align="center" className="mb-8 justify-between">
-        <Heading variant="h2">
-          MCP Details
-        </Heading>
+      <Stack
+        direction="horizontal"
+        align="center"
+        className="mb-8 justify-between"
+      >
+        <Heading variant="h2">MCP Details</Heading>
         {showOAuthButton && (
-          <Button 
+          <Button
             variant="secondary"
             size="lg"
-            onClick={() => isOAuthConnected ? setIsOAuthDetailsModalOpen(true) : setIsOAuthModalOpen(true)}
+            onClick={() =>
+              isOAuthConnected
+                ? setIsOAuthDetailsModalOpen(true)
+                : setIsOAuthModalOpen(true)
+            }
           >
             {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
           </Button>
@@ -572,17 +583,17 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
 
   const envHeaders: string[] = [
     // Security variables (exclude token_url)
-    ...(toolset.securityVariables?.flatMap(secVar => 
-      secVar.envVariables.filter(v => 
-        !v.toLowerCase().includes("token_url") // direct token url is always a hidden option right now
+    ...(toolset.securityVariables?.flatMap((secVar) =>
+      secVar.envVariables.filter(
+        (v) => !v.toLowerCase().includes("token_url") // direct token url is always a hidden option right now
       )
     ) ?? []),
     // Server variables (filter server_url unless required)
-    ...(toolset.serverVariables?.flatMap(serverVar => 
-      serverVar.envVariables.filter(v => 
-        !v.toLowerCase().includes("server_url") || requiresServerURL
+    ...(toolset.serverVariables?.flatMap((serverVar) =>
+      serverVar.envVariables.filter(
+        (v) => !v.toLowerCase().includes("server_url") || requiresServerURL
       )
-    ) ?? [])
+    ) ?? []),
   ];
 
   // Build the args array for public MCP config
@@ -704,23 +715,49 @@ function ConnectOAuthModal({
   toolsetSlug: string;
 }) {
   const session = useSession();
+  const telemetry = useTelemetry();
   const isAccountUpgrade = session.gramAccountType === "free";
+  const [isRequesting, setIsRequesting] = useState(false);
+
+  const handleAction = async () => {
+    telemetry.capture("feature_requested", {
+      action: "mcp_oauth_integration",
+      slug: toolsetSlug,
+    });
+
+    if (!isAccountUpgrade) {
+      setIsRequesting(true);
+      try {
+        toast.success("Help requested - we'll be in touch soon!");
+        onClose();
+      } catch {
+        toast.error("Failed to request help");
+      } finally {
+        setIsRequesting(false);
+      }
+    }
+  };
 
   return (
-    <FeatureRequestModal
+    <OAuthSetupModal
       isOpen={isOpen}
       onClose={onClose}
       title="Connect OAuth"
       description={
-        isAccountUpgrade 
+        isAccountUpgrade
           ? "A Managed OAuth integration requires upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
           : "Gram can help you connect an OAuth provider directly to your MCP server. Book a meeting and we'll help you get started."
       }
-      actionType="mcp_oauth_integration"
       icon={Globe}
-      telemetryData={{ slug: toolsetSlug }}
-      docsLink="https://docs.getgram.ai/build-mcp/adding-oauth"
-      accountUpgrade={isAccountUpgrade}
+      docsUrl="https://docs.getgram.ai/build-mcp/adding-oauth"
+      primaryAction={{
+        label: isAccountUpgrade ? "Book Meeting" : "Request Help",
+        href: isAccountUpgrade
+          ? "https://calendly.com/sagar-speakeasy/30min"
+          : undefined,
+        onClick: handleAction,
+        isLoading: isRequesting,
+      }}
     />
   );
 }
@@ -740,32 +777,54 @@ function OAuthDetailsModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <Dialog.Content className="max-w-2xl">
         <Dialog.Header>
-          <Dialog.Title>{toolset.externalOauthServer ? "External OAuth Configuration" : "OAuth Proxy Configuration"}</Dialog.Title>
+          <Dialog.Title>
+            {toolset.externalOauthServer
+              ? "External OAuth Configuration"
+              : "OAuth Proxy Configuration"}
+          </Dialog.Title>
         </Dialog.Header>
         <Stack gap={4}>
           {toolset.oauthProxyServer?.oauthProxyProviders?.map((provider) => (
             <Stack key={provider.id} gap={2}>
               <Stack gap={2} className="pl-4">
                 <div>
-                  <Type small className="font-medium text-muted-foreground">Authorization Endpoint:</Type>
-                  <CodeBlock className="mt-1">{provider.authorizationEndpoint}</CodeBlock>
+                  <Type small className="font-medium text-muted-foreground">
+                    Authorization Endpoint:
+                  </Type>
+                  <CodeBlock className="mt-1">
+                    {provider.authorizationEndpoint}
+                  </CodeBlock>
                 </div>
                 <div>
-                  <Type small className="font-medium text-muted-foreground">Token Endpoint:</Type>
-                  <CodeBlock className="mt-1">{provider.tokenEndpoint}</CodeBlock>
+                  <Type small className="font-medium text-muted-foreground">
+                    Token Endpoint:
+                  </Type>
+                  <CodeBlock className="mt-1">
+                    {provider.tokenEndpoint}
+                  </CodeBlock>
                 </div>
-                {provider.scopesSupported && provider.scopesSupported.length > 0 && (
-                  <div>
-                    <Type small className="font-medium text-muted-foreground">Supported Scopes:</Type>
-                    <CodeBlock className="mt-1">{provider.scopesSupported.join(", ")}</CodeBlock>
-                  </div>
-                )}
-                {provider.grantTypesSupported && provider.grantTypesSupported.length > 0 && (
-                  <div>
-                    <Type small className="font-medium text-muted-foreground">Supported Grant Types:</Type>
-                    <CodeBlock className="mt-1">{provider.grantTypesSupported.join(", ")}</CodeBlock>
-                  </div>
-                )}
+                {provider.scopesSupported &&
+                  provider.scopesSupported.length > 0 && (
+                    <div>
+                      <Type small className="font-medium text-muted-foreground">
+                        Supported Scopes:
+                      </Type>
+                      <CodeBlock className="mt-1">
+                        {provider.scopesSupported.join(", ")}
+                      </CodeBlock>
+                    </div>
+                  )}
+                {provider.grantTypesSupported &&
+                  provider.grantTypesSupported.length > 0 && (
+                    <div>
+                      <Type small className="font-medium text-muted-foreground">
+                        Supported Grant Types:
+                      </Type>
+                      <CodeBlock className="mt-1">
+                        {provider.grantTypesSupported.join(", ")}
+                      </CodeBlock>
+                    </div>
+                  )}
               </Stack>
             </Stack>
           ))}
@@ -773,9 +832,17 @@ function OAuthDetailsModal({
             <Stack gap={2}>
               <Stack gap={2} className="pl-4">
                 <div>
-                  <Type small className="font-medium text-muted-foreground">OAuth Authorization Server Metadata:</Type>
+                  <Type small className="font-medium text-muted-foreground">
+                    OAuth Authorization Server Metadata:
+                  </Type>
                   <CodeBlock className="mt-1">
-                    {mcpUrl ? `${new URL(mcpUrl).origin}/.well-known/oauth-authorization-server/mcp/${toolset.mcpSlug}` : ""}
+                    {mcpUrl
+                      ? `${
+                          new URL(mcpUrl).origin
+                        }/.well-known/oauth-authorization-server/mcp/${
+                          toolset.mcpSlug
+                        }`
+                      : ""}
                   </CodeBlock>
                 </div>
               </Stack>
