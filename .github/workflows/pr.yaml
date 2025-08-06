@@ -118,11 +118,6 @@ jobs:
           token_format: "access_token"
           workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
-      - name: Echo
-        if: needs.changes.outputs.client == 'true'
-        run: |
-          echo '::echo::on'
-          echo ${{ steps.auth.outputs.access_token }}
       - name: Login to GCR
         if: needs.changes.outputs.client == 'true'
         uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
