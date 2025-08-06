@@ -97,6 +97,13 @@ export function ProjectMenu() {
 
   const adminOverride = isAdmin ? (
     <>
+      <dl>
+        <dt className="text-muted-foreground">Organization ID</dt>
+        <dd className="text-xs font-mono">{organization?.id}</dd>
+        <dt className="text-muted-foreground">Project ID</dt>
+        <dd className="text-xs font-mono">{project?.id}</dd>
+      </dl>
+      <Separator className="my-2" />
       <form
         onSubmit={async (e) => {
           e.preventDefault();
