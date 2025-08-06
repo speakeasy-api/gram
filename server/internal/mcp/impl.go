@@ -31,7 +31,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
-	"github.com/speakeasy-api/gram/server/internal/auth/repo"
+	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -43,7 +43,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -53,8 +52,7 @@ type Service struct {
 	tracer       trace.Tracer
 	metrics      *metrics
 	db           *pgxpool.Pool
-	repo         *repo.Queries
-	projectsRepo *projects_repo.Queries
+	authRepo     *auth_repo.Queries
 	toolsetsRepo *toolsets_repo.Queries
 	auth         *auth.Auth
 	env          gateway.EnvironmentLoader
@@ -107,8 +105,7 @@ func NewService(
 		tracer:       tracer,
 		metrics:      newMetrics(meter, logger),
 		db:           db,
-		repo:         repo.New(db),
-		projectsRepo: projects_repo.New(db),
+		authRepo:     auth_repo.New(db),
 		toolsetsRepo: toolsets_repo.New(db),
 		auth:         auth.New(logger, db, sessions),
 		env:          env,
@@ -488,7 +485,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	var selectedEnvironment string
 	var authenticated bool
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID != "" {
-		projects, err := s.repo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
+		projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			return oops.E(oops.CodeForbidden, nil, "no projects found").Log(ctx, s.logger)
