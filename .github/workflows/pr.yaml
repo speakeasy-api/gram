@@ -70,7 +70,7 @@ jobs:
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
       - name: Login to GCR
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
           registry: gcr.io/linen-analyst-344721
           username: oauth2accesstoken
@@ -125,7 +125,7 @@ jobs:
           echo ${{ steps.auth.outputs.access_token }}
       - name: Login to GCR
         if: needs.changes.outputs.client == 'true'
-        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
           registry: gcr.io/linen-analyst-344721
           username: oauth2accesstoken
