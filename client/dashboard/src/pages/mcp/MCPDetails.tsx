@@ -1,6 +1,7 @@
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Button } from "@/components/ui/button";
+import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
@@ -41,6 +42,13 @@ export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
 
   const toolset = useToolsetSuspense({ slug: toolsetSlug! });
+  const showOAuthButton = toolset.data.securityVariables?.some(secVar => 
+    secVar.type === "oauth2" && 
+    secVar.oauthTypes?.includes("authorization_code")
+  ) ?? false;
+  const isOAuthConnected = !!(toolset.data.oauthProxyServer || toolset.data.externalOauthServer);
+  const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
+  const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
@@ -48,9 +56,20 @@ export function MCPDetailPage() {
 
   return (
     <Stack>
-      <Heading variant="h2" className="mb-8">
-        MCP Details
-      </Heading>
+      <Stack direction="horizontal" align="center" className="mb-8 justify-between">
+        <Heading variant="h2">
+          MCP Details
+        </Heading>
+        {showOAuthButton && (
+          <Button 
+            variant="secondary"
+            size="lg"
+            onClick={() => isOAuthConnected ? setIsOAuthDetailsModalOpen(true) : setIsOAuthModalOpen(true)}
+          >
+            {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
+          </Button>
+        )}
+      </Stack>
       <PageSection
         heading="Source Toolset"
         description="MCP servers expose the contents of a single toolset. To change the
@@ -60,6 +79,16 @@ export function MCPDetailPage() {
         <ToolsetCard toolset={toolset.data} className="max-w-2xl" />
       </PageSection>
       <MCPDetails toolset={toolset.data} />
+      <ConnectOAuthModal
+        isOpen={isOAuthModalOpen}
+        onClose={() => setIsOAuthModalOpen(false)}
+        toolsetSlug={toolset.data.slug}
+      />
+      <OAuthDetailsModal
+        isOpen={isOAuthDetailsModalOpen}
+        onClose={() => setIsOAuthDetailsModalOpen(false)}
+        toolset={toolset.data}
+      />
     </Stack>
   );
 }
@@ -664,3 +693,96 @@ export const randSlug = () => {
   }
   return rand;
 };
+
+function ConnectOAuthModal({
+  isOpen,
+  onClose,
+  toolsetSlug,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  toolsetSlug: string;
+}) {
+  const session = useSession();
+  const isAccountUpgrade = session.gramAccountType === "free";
+
+  return (
+    <FeatureRequestModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Connect OAuth"
+      description={
+        isAccountUpgrade 
+          ? "A Managed OAuth integration requires upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
+          : "Gram can help you connect an OAuth provider directly to your MCP server. Book a meeting and we'll help you get started."
+      }
+      actionType="mcp_oauth_integration"
+      icon={Globe}
+      telemetryData={{ slug: toolsetSlug }}
+      docsLink="https://docs.getgram.ai/build-mcp/adding-oauth"
+      accountUpgrade={isAccountUpgrade}
+    />
+  );
+}
+
+function OAuthDetailsModal({
+  isOpen,
+  onClose,
+  toolset,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  toolset: Toolset;
+}) {
+  const { url: mcpUrl } = useMcpUrl(toolset);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog.Content className="max-w-2xl">
+        <Dialog.Header>
+          <Dialog.Title>{toolset.externalOauthServer ? "External OAuth Configuration" : "OAuth Proxy Configuration"}</Dialog.Title>
+        </Dialog.Header>
+        <Stack gap={4}>
+          {toolset.oauthProxyServer?.oauthProxyProviders?.map((provider) => (
+            <Stack key={provider.id} gap={2}>
+              <Stack gap={2} className="pl-4">
+                <div>
+                  <Type small className="font-medium text-muted-foreground">Authorization Endpoint:</Type>
+                  <CodeBlock className="mt-1">{provider.authorizationEndpoint}</CodeBlock>
+                </div>
+                <div>
+                  <Type small className="font-medium text-muted-foreground">Token Endpoint:</Type>
+                  <CodeBlock className="mt-1">{provider.tokenEndpoint}</CodeBlock>
+                </div>
+                {provider.scopesSupported && provider.scopesSupported.length > 0 && (
+                  <div>
+                    <Type small className="font-medium text-muted-foreground">Supported Scopes:</Type>
+                    <CodeBlock className="mt-1">{provider.scopesSupported.join(", ")}</CodeBlock>
+                  </div>
+                )}
+                {provider.grantTypesSupported && provider.grantTypesSupported.length > 0 && (
+                  <div>
+                    <Type small className="font-medium text-muted-foreground">Supported Grant Types:</Type>
+                    <CodeBlock className="mt-1">{provider.grantTypesSupported.join(", ")}</CodeBlock>
+                  </div>
+                )}
+              </Stack>
+            </Stack>
+          ))}
+          {toolset.externalOauthServer && (
+            <Stack gap={2}>
+              <Stack gap={2} className="pl-4">
+                <div>
+                  <Type small className="font-medium text-muted-foreground">OAuth Authorization Server Metadata:</Type>
+                  <CodeBlock className="mt-1">
+                    {mcpUrl ? `${new URL(mcpUrl).origin}/.well-known/oauth-authorization-server/mcp/${toolset.mcpSlug}` : ""}
+                  </CodeBlock>
+                </div>
+              </Stack>
+            </Stack>
+          )}
+        </Stack>
+      </Dialog.Content>
+    </Dialog>
+  );
+}

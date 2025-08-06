@@ -15,6 +15,7 @@ interface FeatureRequestModalProps {
   icon?: LucideIcon;
   telemetryData?: Record<string, unknown>;
   accountUpgrade?: boolean;
+  docsLink?: string;
 }
 
 export function FeatureRequestModal({
@@ -26,6 +27,7 @@ export function FeatureRequestModal({
   icon: Icon,
   telemetryData,
   accountUpgrade,
+  docsLink,
 }: FeatureRequestModalProps) {
   const telemetry = useTelemetry();
   const [isRequesting, setIsRequesting] = useState(false);
@@ -75,6 +77,24 @@ export function FeatureRequestModal({
           <Button variant="ghost" onClick={onClose}>
             Back
           </Button>
+          {docsLink && (
+            <div className="inline-block rounded-md p-[1px] bg-gradient-primary">
+              <button
+                onClick={() => window.open(docsLink, "_blank")}
+                className={cn(
+                  "relative inline-flex items-center justify-center gap-2 px-4 py-2",
+                  "font-mono text-sm uppercase text-foreground",
+                  "rounded-md cursor-pointer",
+                  "transition-all outline-none",
+                  "w-full rounded-[7px] bg-background border-0",
+                  "hover:bg-background/95",
+                  "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-neutral-500"
+                )}
+              >
+                View Docs
+              </button>
+            </div>
+          )}
           <div
             className={cn(
               "inline-block rounded-md p-[1px]",
