@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="Start all development processes with mprocs"
+
+set -e
+exec mprocs

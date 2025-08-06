@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+#MISE description="Install all dependencies"
+#MISE depends=["install:go", "install:pnpm"]

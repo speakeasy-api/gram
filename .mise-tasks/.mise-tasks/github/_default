@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+#MISE description="Prepare GitHub Actions environment"
+
+set -e
+
+echo Compute cache keys
+echo ==================
+mise run github:pre-cache
+echo
+echo Install scripting dependencies
+echo ==============================
+pnpm install --frozen-lockfile --filter @gram/workspace

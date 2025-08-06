@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+
+#MISE description="Run all linting tasks (client, server, migrations, etc)"
+
+set -e
+
+mise run lint:*
