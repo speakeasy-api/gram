@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -111,13 +112,15 @@ type ToolExtractorResult struct {
 type ToolExtractor struct {
 	logger       *slog.Logger
 	db           *pgxpool.Pool
+	feature      feature.Provider
 	assetStorage assets.BlobStore
 }
 
-func NewToolExtractor(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) *ToolExtractor {
+func NewToolExtractor(logger *slog.Logger, db *pgxpool.Pool, fp feature.Provider, assetStorage assets.BlobStore) *ToolExtractor {
 	return &ToolExtractor{
 		logger:       logger,
 		db:           db,
+		feature:      fp,
 		assetStorage: assetStorage,
 	}
 }
@@ -192,6 +195,40 @@ func (p *ToolExtractor) Do(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading openapi document").Log(ctx, logger)
 	}
+
+	f := conv.Default[feature.Provider](p.feature, &feature.InMemory{})
+
+	useSpeakeasyParser, err := f.IsFlagEnabled(ctx, feature.FlagSpeakeasyOpenAPIParserV0, task.ProjectID.String())
+	if err != nil {
+		useSpeakeasyParser = false
+		p.logger.ErrorContext(ctx, "error checking openapi parser feature flag for organization", attr.SlogError(err), attr.SlogOrganizationSlug(task.OrgSlug))
+	}
+
+	var res *ToolExtractorResult
+	if useSpeakeasyParser {
+		res, err = p.doSpeakeasy(ctx, logger, tx, doc, task)
+	} else {
+		res, err = p.doLibOpenAPI(ctx, logger, tx, doc, task)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error saving processed deployment").Log(ctx, logger)
+	}
+
+	return res, nil
+}
+
+func (p *ToolExtractor) doLibOpenAPI(
+	ctx context.Context,
+	logger *slog.Logger,
+	tx *repo.Queries,
+	doc []byte,
+	task ToolExtractorTask,
+) (*ToolExtractorResult, error) {
+	docInfo := task.DocInfo
 
 	document, err := libopenapi.NewDocumentWithConfiguration(doc, &datamodel.DocumentConfiguration{
 		AllowFileReferences:                 false,
@@ -345,15 +382,21 @@ func (p *ToolExtractor) Do(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to save %d tool definitions", writeErrCount).Log(ctx, logger)
 	}
 
-	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error saving processed deployment").Log(ctx, logger)
-	}
-
 	return &ToolExtractorResult{
 		DocumentVersion:         document.GetVersion(),
 		DocumentUpgrade:         upgradeOutcome,
 		DocumentUpgradeDuration: upgradeDuration,
 	}, nil
+}
+
+func (p *ToolExtractor) doSpeakeasy(
+	ctx context.Context,
+	logger *slog.Logger,
+	tx *repo.Queries,
+	doc []byte,
+	task ToolExtractorTask,
+) (*ToolExtractorResult, error) {
+	return nil, oops.E(oops.CodeInvalid, nil, "speakeasy openapi tool extractor is not implemented yet").Log(ctx, p.logger, attr.DeploymentID(task.DeploymentID.String()), attr.OrganizationSlug(task.OrgSlug), attr.ProjectID(task.ProjectID.String()))
 }
 
 func (s *ToolExtractor) extractDefaultServer(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, servers []*v3.Server) *string {

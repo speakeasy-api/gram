@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 )
 
 type Posthog struct {
@@ -60,16 +61,16 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 	}
 }
 
-func (p *Posthog) FeatureEnabled(ctx context.Context, flag, distinctID string) (bool, error) {
+func (p *Posthog) IsFlagEnabled(ctx context.Context, flag feature.Flag, distinctID string) (bool, error) {
 	// If posthog is disabled, we return true so we don't block the user from using the product
 	if p.disabled {
-		p.logger.InfoContext(ctx, "posthog is disabled, returning true")
-		return true, nil
+		p.logger.InfoContext(ctx, "posthog is disabled, returning false")
+		return false, nil
 	}
 
 	flagState, err := p.client.IsFeatureEnabled(
 		posthog.FeatureFlagPayload{
-			Key:        flag,
+			Key:        string(flag),
 			DistinctId: distinctID,
 		})
 	if err != nil {
@@ -89,7 +90,7 @@ func (p *Posthog) FeatureEnabled(ctx context.Context, flag, distinctID string) (
 func (p *Posthog) CaptureEvent(ctx context.Context, eventName string, distinctID string, eventProperties map[string]interface{}) error {
 	// If posthog is disabled, we return true so we don't block the user from using the product
 	if p.disabled {
-		p.logger.InfoContext(ctx, "posthog is disabled, returning true")
+		p.logger.InfoContext(ctx, "posthog is disabled, dropping event")
 		return nil
 	}
 

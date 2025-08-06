@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/tools"
@@ -44,6 +45,7 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	service        *tools.Service
+	feature        *feature.InMemory
 	deployments    *deployments.Service
 	assets         *assets.Service
 	packages       *packages.Service
@@ -71,8 +73,10 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
+	f := &feature.InMemory{}
+
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, meterProvider, background.ForDeploymentProcessing(conn, assetStorage))
+	worker := background.NewTemporalWorker(temporal, logger, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()
@@ -87,6 +91,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 
 	return ctx, &testInstance{
 		service:        toolsSvc,
+		feature:        f,
 		deployments:    deploymentsSvc,
 		assets:         assetsSvc,
 		packages:       packagesSvc,

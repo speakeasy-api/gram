@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -20,6 +21,7 @@ import (
 
 type WorkerOptions struct {
 	DB                  *pgxpool.Pool
+	FeatureProvider     feature.Provider
 	AssetStorage        assets.BlobStore
 	SlackClient         *slack_client.SlackClient
 	ChatClient          *chat.ChatClient
@@ -28,9 +30,10 @@ type WorkerOptions struct {
 	ExpectedTargetCNAME string
 }
 
-func ForDeploymentProcessing(db *pgxpool.Pool, assetStorage assets.BlobStore) *WorkerOptions {
+func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage assets.BlobStore) *WorkerOptions {
 	return &WorkerOptions{
 		DB:                  db,
+		FeatureProvider:     f,
 		AssetStorage:        assetStorage,
 		SlackClient:         nil,
 		ChatClient:          nil,
@@ -48,6 +51,7 @@ func NewTemporalWorker(
 ) worker.Worker {
 	opts := &WorkerOptions{
 		DB:                  nil,
+		FeatureProvider:     nil,
 		AssetStorage:        nil,
 		SlackClient:         nil,
 		ChatClient:          nil,
@@ -59,6 +63,7 @@ func NewTemporalWorker(
 	for _, o := range options {
 		opts = &WorkerOptions{
 			DB:                  conv.Default(o.DB, opts.DB),
+			FeatureProvider:     conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:        conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:         conv.Default(o.SlackClient, opts.SlackClient),
 			ChatClient:          conv.Default(o.ChatClient, opts.ChatClient),
@@ -80,6 +85,7 @@ func NewTemporalWorker(
 		logger,
 		meterProvider,
 		opts.DB,
+		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,
 		opts.ChatClient,

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -51,6 +52,7 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	service        *toolsets.Service
+	feature        *feature.InMemory
 	deployments    *deployments.Service
 	assets         *assets.Service
 	packages       *packages.Service
@@ -75,8 +77,10 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	// Create a test blob store for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
+	f := &feature.InMemory{}
+
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, meterProvider, background.ForDeploymentProcessing(conn, assetStorage))
+	worker := background.NewTemporalWorker(temporal, logger, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()
@@ -99,6 +103,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 
 	return ctx, &testInstance{
 		service:        svc,
+		feature:        f,
 		deployments:    deploymentsSvc,
 		assets:         assetsSvc,
 		packages:       packagesSvc,

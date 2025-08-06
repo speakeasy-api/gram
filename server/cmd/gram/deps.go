@@ -3,12 +3,15 @@ package gram
 import (
 	"context"
 	"crypto/tls"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/exaring/otelpgx"
@@ -28,6 +31,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -183,4 +187,63 @@ func newTemporalClient(logger *slog.Logger, opts temporalClientOptions) (client.
 		temporalClient.Close()
 		return nil
 	}, nil
+}
+
+func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath string) *feature.InMemory {
+	inmem := &feature.InMemory{}
+
+	if csvPath == "" {
+		logger.DebugContext(ctx, "newLocalFeatureFlags: no csv path provided, using empty in-memory feature flag provider")
+		return inmem
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		logger.ErrorContext(ctx, "newLocalFeatureFlags: error reading current directory", attr.SlogError(err))
+		return inmem
+	}
+
+	p := filepath.Clean(csvPath)
+	if !strings.HasPrefix(p, wd) {
+		logger.ErrorContext(ctx, "newLocalFeatureFlags: csv path is not within the current working directory", attr.SlogFilePath(csvPath))
+		return inmem
+	}
+
+	file, err := os.Open(p)
+	if err != nil {
+		logger.ErrorContext(ctx, "newLocalFeatureFlags: error opening local feature flags csv file", attr.SlogError(err), attr.SlogFilePath(csvPath))
+		return inmem
+	}
+	defer o11y.LogDefer(ctx, logger, func() error { return file.Close() })
+
+	rdr := csv.NewReader(file)
+	records, err := rdr.ReadAll()
+	if err != nil {
+		logger.ErrorContext(ctx, "newLocalFeatureFlags: failed to read local feature flags csv file", attr.SlogError(err))
+		return inmem
+	}
+
+	for i, record := range records {
+		rowid := fmt.Sprint(i + 1)
+
+		if i == 0 {
+			// Skip header row
+			continue
+		}
+
+		if len(record) != 3 {
+			logger.ErrorContext(ctx, "newLocalFeatureFlags: invalid record in local feature flags csv file at row "+rowid)
+			continue
+		}
+
+		enabled, err := strconv.ParseBool(record[2])
+		if err != nil {
+			logger.ErrorContext(ctx, "newLocalFeatureFlags: invalid boolean value in local feature flags csv file at row "+rowid, attr.SlogError(err))
+			continue
+		}
+
+		inmem.SetFlag(feature.Flag(record[1]), record[0], enabled)
+	}
+
+	return inmem
 }

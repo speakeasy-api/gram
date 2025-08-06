@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -28,9 +29,20 @@ type Activities struct {
 	customDomainIngress    *activities.CustomDomainIngress
 }
 
-func NewActivities(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, assetStorage assets.BlobStore, slackClient *slack_client.SlackClient, chatClient *chat.ChatClient, openrouter openrouter.Provisioner, k8sClient *k8s.KubernetesClients, expectedTargetCNAME string) *Activities {
+func NewActivities(
+	logger *slog.Logger,
+	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
+	features feature.Provider,
+	assetStorage assets.BlobStore,
+	slackClient *slack_client.SlackClient,
+	chatClient *chat.ChatClient,
+	openrouter openrouter.Provisioner,
+	k8sClient *k8s.KubernetesClients,
+	expectedTargetCNAME string,
+) *Activities {
 	return &Activities{
-		processDeployment:      activities.NewProcessDeployment(logger, meterProvider, db, assetStorage),
+		processDeployment:      activities.NewProcessDeployment(logger, meterProvider, db, features, assetStorage),
 		transitionDeployment:   activities.NewTransitionDeployment(logger, db),
 		getSlackProjectContext: activities.NewSlackProjectContextActivity(logger, db, slackClient),
 		postSlackMessage:       activities.NewPostSlackMessageActivity(logger, slackClient),

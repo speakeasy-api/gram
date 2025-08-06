@@ -19,6 +19,7 @@ import (
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -31,6 +32,7 @@ type ProcessDeployment struct {
 	logger       *slog.Logger
 	metrics      *metrics
 	db           *pgxpool.Pool
+	features     feature.Provider
 	repo         *repo.Queries
 	assets       *assetsRepo.Queries
 	tools        *toolsRepo.Queries
@@ -38,11 +40,18 @@ type ProcessDeployment struct {
 	projects     *projectsRepo.Queries
 }
 
-func NewProcessDeployment(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, assetStorage assets.BlobStore) *ProcessDeployment {
+func NewProcessDeployment(
+	logger *slog.Logger,
+	meterProvider metric.MeterProvider,
+	db *pgxpool.Pool,
+	features feature.Provider,
+	assetStorage assets.BlobStore,
+) *ProcessDeployment {
 	return &ProcessDeployment{
 		logger:       logger,
 		metrics:      newMetrics(newMeter(meterProvider), logger),
 		db:           db,
+		features:     features,
 		repo:         repo.New(db),
 		assets:       assetsRepo.New(db),
 		assetStorage: assetStorage,
@@ -100,7 +109,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		workers.Go(func() error {
 			start := time.Now()
 
-			processor := openapi.NewToolExtractor(p.logger, p.db, p.assetStorage)
+			processor := openapi.NewToolExtractor(p.logger, p.db, p.features, p.assetStorage)
 
 			res, processErr := processor.Do(ctx, openapi.ToolExtractorTask{
 				ProjectID:    projectID,

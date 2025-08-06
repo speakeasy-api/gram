@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
@@ -249,6 +250,12 @@ func newStartCommand() *cli.Command {
 				EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 				Required: false,
 			},
+			&cli.StringFlag{
+				Name:     "local-feature-flags-csv",
+				Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row).",
+				EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-server"
@@ -354,6 +361,10 @@ func newStartCommand() *cli.Command {
 			}
 
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"))
+			var features feature.Provider = posthogClient
+			if c.String("environment") == "local" {
+				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+			}
 
 			if temporalClient == nil {
 				logger.WarnContext(ctx, "temporal disabled")
@@ -472,6 +483,7 @@ func newStartCommand() *cli.Command {
 				group.Go(func() {
 					temporalWorker := background.NewTemporalWorker(temporalClient, logger, meterProvider, &background.WorkerOptions{
 						DB:                  db,
+						FeatureProvider:     features,
 						AssetStorage:        assetStorage,
 						SlackClient:         slackClient,
 						ChatClient:          chatClient,

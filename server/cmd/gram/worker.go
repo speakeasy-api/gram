@@ -14,10 +14,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/urfave/cli/v2"
@@ -145,6 +147,24 @@ func newWorkerCommand() *cli.Command {
 				EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
 				Required: false,
 			},
+			&cli.StringFlag{
+				Name:     "posthog-endpoint",
+				Usage:    "The endpoint to proxy product metrics too",
+				EnvVars:  []string{"POSTHOG_ENDPOINT"},
+				Required: false,
+			},
+			&cli.StringFlag{
+				Name:     "posthog-api-key",
+				Usage:    "The posthog public API key",
+				EnvVars:  []string{"POSTHOG_API_KEY"},
+				Required: false,
+			},
+			&cli.StringFlag{
+				Name:     "local-feature-flags-csv",
+				Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row).",
+				EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-worker"
@@ -229,6 +249,12 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
+			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"))
+			var features feature.Provider = posthogClient
+			if c.String("environment") == "local" {
+				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+			}
+
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
@@ -269,6 +295,7 @@ func newWorkerCommand() *cli.Command {
 
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, meterProvider, &background.WorkerOptions{
 				DB:                  db,
+				FeatureProvider:     features,
 				AssetStorage:        assetStorage,
 				SlackClient:         slackClient,
 				ChatClient:          chatClient,
