@@ -97,11 +97,13 @@ export const ProjectProvider = ({
     organization.projects.find((p) => p.slug === projectSlug) ?? defaultProject;
 
   useRegisterProjectForTelemetry({
+    projectId: currentProject?.id ?? "",
     projectSlug: currentProject?.slug ?? "",
     organizationSlug: organization.slug,
   });
 
   useCaptureUserAuthorizationEvent({
+    projectId: currentProject?.id ?? "",
     projectSlug: currentProject?.slug ?? "",
     organizationSlug: organization.slug,
     email: user.email,

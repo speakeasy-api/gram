@@ -2,7 +2,7 @@ import { getServerURL } from "@/lib/utils";
 import posthog, { PostHog } from "posthog-js";
 import { createContext, ReactNode, useContext, useEffect } from "react";
 import { User } from "./Auth";
-import { datadogRum } from '@datadog/browser-rum';
+import { datadogRum } from "@datadog/browser-rum";
 
 // Set this to true to test telemetry locally
 const AM_TESTING_TELEMETRY = false;
@@ -113,10 +113,12 @@ export function useIdentifyUserForTelemetry(user: User | undefined) {
 }
 
 export function useCaptureUserAuthorizationEvent({
+  projectId,
   projectSlug,
   organizationSlug,
   email,
 }: {
+  projectId: string;
   projectSlug: string;
   organizationSlug: string;
   email: string;
@@ -125,11 +127,13 @@ export function useCaptureUserAuthorizationEvent({
 
   useEffect(() => {
     // Capture the event this user authorized for a particular project
+    if (!projectId) return;
     if (!projectSlug) return;
     if (!organizationSlug) return;
     if (!email) return;
     telemetry.capture("authorize_gram_user", {
       email: email,
+      project_id: projectId,
       project_slug: projectSlug,
       organization_slug: organizationSlug,
       slug: `${organizationSlug}/${projectSlug}`,
@@ -190,25 +194,30 @@ export function useRegisterToolsetTelemetry({
 }
 
 export function useRegisterProjectForTelemetry({
+  projectId,
   projectSlug,
   organizationSlug,
 }: {
+  projectId: string;
   projectSlug: string;
   organizationSlug: string;
 }) {
   const telemetry = useTelemetry();
 
   useEffect(() => {
+    if (!projectId) return;
     if (!projectSlug) return;
     if (!organizationSlug) return;
 
     // Register the super properties for this workspace to be sent with every event
+    telemetry.group("project_id", projectId, {});
     telemetry.group("project_slug", projectSlug, {});
     telemetry.group("organization_slug", organizationSlug, {});
     telemetry.group("slug", `${organizationSlug}/${projectSlug}`, {});
 
     telemetry.register({
       is_gram: true,
+      project_id: projectId,
       project_slug: projectSlug,
       organization_slug: organizationSlug,
       slug: `${organizationSlug}/${projectSlug}`,
