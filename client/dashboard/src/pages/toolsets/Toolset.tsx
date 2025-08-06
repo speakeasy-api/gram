@@ -11,6 +11,7 @@ import {
 } from "@/contexts/Telemetry";
 import { useApiError } from "@/hooks/useApiError";
 import { useGroupedTools } from "@/lib/toolNames";
+import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   queryKeyInstance,
@@ -30,6 +31,8 @@ import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
 import { ToolDefinition, useToolDefinitions } from "./types";
 import { ToolsetEmptyState } from "./ToolsetEmptyState";
+import { ToolsetAuth } from "./ToolsetAuth";
+import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
 
 export function useDeleteToolset({
   onSuccess,
@@ -89,23 +92,31 @@ export function ToolsetRoot() {
 
 export default function ToolsetPage() {
   const { toolsetSlug } = useParams();
+  const [selectedEnvironment, setSelectedEnvironment] = useState<string | undefined>(undefined);
 
   if (!toolsetSlug) {
     return <div>Toolset not found</div>;
   }
 
-  return <ToolsetView toolsetSlug={toolsetSlug} />;
+  return (
+    <ToolsetView 
+      toolsetSlug={toolsetSlug}
+      environmentSlug={selectedEnvironment}
+      onEnvironmentChange={setSelectedEnvironment}
+    />
+  );
 }
 
-type ToolsetTabs = "tools" | "prompts" | "mcp";
+type ToolsetTabs = "tools" | "prompts" | "auth" | "mcp";
 
 export function ToolsetView({
   toolsetSlug,
   className,
   environmentSlug,
   addToolsStyle = "link",
-  showEnvironmentBadge,
   noGrid,
+  onEnvironmentChange,
+  context = "toolset",
 }: {
   toolsetSlug: string;
   className?: string;
@@ -113,6 +124,8 @@ export function ToolsetView({
   addToolsStyle?: "link" | "modal";
   showEnvironmentBadge?: boolean;
   noGrid?: boolean;
+  onEnvironmentChange?: (environmentSlug: string) => void;
+  context?: "playground" | "toolset";
 }) {
   const queryClient = useQueryClient();
   const routes = useRoutes();
@@ -183,6 +196,9 @@ export function ToolsetView({
 
   const actions = (
     <Stack direction="horizontal" gap={2} align="center">
+      <Button icon="plus" onClick={gotoAddTools} caps size="sm">
+        Add/Remove Tools
+      </Button>
       <MoreActions
         actions={[
           {
@@ -202,9 +218,6 @@ export function ToolsetView({
           },
         ]}
       />
-      <Button icon="plus" onClick={gotoAddTools} caps size="sm">
-        Add/Remove Tools
-      </Button>
     </Stack>
   );
 
@@ -237,13 +250,16 @@ export function ToolsetView({
   }
 
   return (
-    <Page.Body className={className}>
-      <ToolsetHeader
-        toolsetSlug={toolsetSlug}
-        actions={actions}
-        showEnvironmentBadge={showEnvironmentBadge}
-        environmentSlug={environmentSlug}
-      />
+    <Page.Body className={cn("flex flex-col gap-6", className)}>
+      {toolset && (
+        <ToolsetAuthAlert
+          toolset={toolset}
+          environmentSlug={environmentSlug}
+          onConfigureClick={() => setActiveTab("auth")}
+          context={context}
+        />
+      )}
+      <ToolsetHeader toolsetSlug={toolsetSlug} actions={actions} />
       {groupFilterItems.length > 1 && filterButton}
       <Tabs
         value={activeTab}
@@ -253,6 +269,7 @@ export function ToolsetView({
         <TabsList className="mb-4">
           <TabsTrigger value="tools">Tools</TabsTrigger>
           <TabsTrigger value="prompts">Prompts</TabsTrigger>
+          <TabsTrigger value="auth">Auth</TabsTrigger>
           <TabsTrigger value="mcp">MCP</TabsTrigger>
         </TabsList>
         <TabsContent value="tools">
@@ -274,6 +291,15 @@ export function ToolsetView({
             <PromptsTabContent
               toolset={toolset}
               updateToolsetMutation={updateToolsetMutation}
+            />
+          )}
+        </TabsContent>
+        <TabsContent value="auth">
+          {toolset && (
+            <ToolsetAuth
+              toolset={toolset}
+              environmentSlug={environmentSlug}
+              onEnvironmentChange={onEnvironmentChange}
             />
           )}
         </TabsContent>

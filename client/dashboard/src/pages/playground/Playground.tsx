@@ -221,6 +221,8 @@ export function ToolsetPanel({
       addToolsStyle={"modal"}
       showEnvironmentBadge
       noGrid
+      onEnvironmentChange={setSelectedEnvironment}
+      context="playground"
     />
   );
 
@@ -260,7 +262,7 @@ export function ToolsetPanel({
               </Stack>
             )}
           </Stack>
-          {environments && environments.length > 1 && (
+          {environments && environments.length > 0 && (
             <Stack direction="horizontal" gap={2} align="center">
               <Heading variant="h5">Active environment: </Heading>
               <EnvironmentDropdown

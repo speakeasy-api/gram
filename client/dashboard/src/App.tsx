@@ -5,7 +5,6 @@ import { MoonshineConfigProvider } from "@speakeasy-api/moonshine";
 import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
-import { ThemeContext } from "./components/ui/theme-toggle.tsx";
 import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
 import { SdkProvider } from "./contexts/Sdk.tsx";
 import { TelemetryProvider } from "./contexts/Telemetry.tsx";
@@ -40,38 +39,32 @@ export default function App() {
   };
 
   useEffect(() => {
-    const prefersDark =
-      window.matchMedia("(prefers-color-scheme: dark)").matches &&
-      localStorage.getItem("preferred-theme") !== "light";
+    const savedTheme = localStorage.getItem("preferred-theme") as
+      | "light"
+      | "dark"
+      | null;
+    const systemPrefersDark = window.matchMedia(
+      "(prefers-color-scheme: dark)"
+    ).matches;
 
-    applyTheme(prefersDark ? "dark" : "light");
-
-    // Listen for system preference changes
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e: MediaQueryListEvent) => {
-      applyTheme(e.matches ? "dark" : "light");
-    };
-
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
+    const initialTheme = savedTheme || (systemPrefersDark ? "dark" : "light");
+    applyTheme(initialTheme);
   }, []);
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme: applyTheme }}>
-      <MoonshineConfigProvider themeElement={document.documentElement}>
-        <TelemetryProvider>
-          <BrowserRouter>
-            <SdkProvider>
-              <AuthProvider>
-                <ProjectProvider>
-                  <RouteProvider />
-                </ProjectProvider>
-              </AuthProvider>
-            </SdkProvider>
-          </BrowserRouter>
-        </TelemetryProvider>
-      </MoonshineConfigProvider>
-    </ThemeContext.Provider>
+    <MoonshineConfigProvider theme={theme} setTheme={applyTheme}>
+      <TelemetryProvider>
+        <BrowserRouter>
+          <SdkProvider>
+            <AuthProvider>
+              <ProjectProvider>
+                <RouteProvider />
+              </ProjectProvider>
+            </AuthProvider>
+          </SdkProvider>
+        </BrowserRouter>
+      </TelemetryProvider>
+    </MoonshineConfigProvider>
   );
 }
 

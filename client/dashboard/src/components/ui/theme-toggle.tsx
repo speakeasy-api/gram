@@ -1,17 +1,9 @@
 import { Moon, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createContext, useContext } from "react";
-
-export const ThemeContext = createContext<{
-  theme: "light" | "dark";
-  setTheme: (theme: "light" | "dark") => void;
-}>({
-  theme: "light",
-  setTheme: () => {},
-});
+import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 
 export function ThemeToggle() {
-  const { setTheme, theme } = useContext(ThemeContext);
+  const { setTheme, theme } = useMoonshineConfig();
 
   return (
     <Button

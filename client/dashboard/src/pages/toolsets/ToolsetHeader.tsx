@@ -10,18 +10,13 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { Toolset } from "@gram/client/models/components";
 import { useToolset } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
-import { ToolsetEnvironmentBadge } from "./ToolsetEnvironmentBadge";
 
 export const ToolsetHeader = ({
   toolsetSlug,
   actions,
-  showEnvironmentBadge,
-  environmentSlug,
 }: {
   toolsetSlug: string;
   actions?: React.ReactNode;
-  showEnvironmentBadge?: boolean;
-  environmentSlug?: string;
 }) => {
   const client = useSdkClient();
   const { data: toolset, refetch } = useToolset(
@@ -80,14 +75,6 @@ export const ToolsetHeader = ({
         <Stack direction="horizontal" gap={2}>
           <ToolsetToolsBadge toolset={toolset} size="md" variant="outline" />
           <ToolsetPromptsBadge toolset={toolset} size="md" variant="outline" />
-          {showEnvironmentBadge && (
-            <ToolsetEnvironmentBadge
-              toolset={toolset}
-              environmentSlug={environmentSlug}
-              size="md"
-              variant="outline"
-            />
-          )}
         </Stack>
       </div>
     </Stack>
