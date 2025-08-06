@@ -153,7 +153,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		_, writeErr := w.Write(body)
 		if writeErr != nil {
-			service.logger.ErrorContext(r.Context(), "failed to write response body", attr.SlogError(writeErr))
+			service.logger.ErrorContext(r.Context(), "failed to write MCP response body", attr.SlogError(writeErr))
 		}
 	})
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", func(w http.ResponseWriter, r *http.Request) {
