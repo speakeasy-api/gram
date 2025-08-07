@@ -97,6 +97,7 @@ export function MCPDetailPage() {
         isOpen={isOAuthModalOpen}
         onClose={() => setIsOAuthModalOpen(false)}
         toolsetSlug={toolset.data.slug}
+        toolset={toolset.data}
       />
       <OAuthDetailsModal
         isOpen={isOAuthDetailsModalOpen}
@@ -712,10 +713,12 @@ function ConnectOAuthModal({
   isOpen,
   onClose,
   toolsetSlug,
+  toolset,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
+  toolset: Toolset;
 }) {
   const session = useSession();
   const queryClient = useQueryClient();
@@ -743,6 +746,7 @@ function ConnectOAuthModal({
       isOpen={isOpen}
       onClose={onClose}
       toolsetSlug={toolsetSlug}
+      toolset={toolset}
       onSuccess={() => {
         invalidateAllToolset(queryClient);
         toast.success("External OAuth server configured successfully");
@@ -756,11 +760,13 @@ function OAuthTabModal({
   isOpen,
   onClose,
   toolsetSlug,
+  toolset,
   onSuccess,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
+  toolset: Toolset;
   onSuccess: () => void;
 }) {
   const [activeTab, setActiveTab] = useState("external");
@@ -768,6 +774,15 @@ function OAuthTabModal({
   const [metadataJson, setMetadataJson] = useState("");
   const [jsonError, setJsonError] = useState<string | null>(null);
   const telemetry = useTelemetry();
+
+  // Check if there are multiple OAuth2 authorization_code security variables
+  const oauth2AuthCodeCount = toolset.securityVariables?.filter(
+    (secVar) =>
+      secVar.type === "oauth2" &&
+      secVar.oauthTypes?.includes("authorization_code")
+  ).length ?? 0;
+
+  const hasMultipleOAuth2AuthCode = oauth2AuthCodeCount > 1;
   const queryClient = useQueryClient();
 
   const handleBookMeeting = () => {
@@ -852,6 +867,13 @@ function OAuthTabModal({
             </TabsList>
 
             <TabsContent value="external" className="space-y-4 overflow-auto max-h-[60vh]">
+              {hasMultipleOAuth2AuthCode && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+                  <Type small className="text-red-600 mt-1">
+                    Not Supported: This MCP server has {oauth2AuthCodeCount} OAuth2 security schemes detected.
+                  </Type>
+                </div>
+              )}
               <div>
                 <Type className="font-medium mb-2">External OAuth Server Configuration</Type>
                 <Type muted small className="mb-4">
@@ -926,7 +948,7 @@ function OAuthTabModal({
             {activeTab === "external" && (
               <Button
                 onClick={handleExternalSubmit}
-                disabled={addExternalOAuthMutation.isPending || !externalSlug.trim() || !metadataJson.trim()}
+                disabled={hasMultipleOAuth2AuthCode || addExternalOAuthMutation.isPending || !externalSlug.trim() || !metadataJson.trim()}
               >
                 {addExternalOAuthMutation.isPending ? "Configuring..." : "Configure External OAuth"}
               </Button>
