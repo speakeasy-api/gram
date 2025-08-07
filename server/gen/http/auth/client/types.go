@@ -14,13 +14,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// CallbackRequestBody is the type of the "auth" service "callback" endpoint
-// HTTP request body.
-type CallbackRequestBody struct {
-	// The auth code for authentication from the speakeasy system
-	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
-}
-
 // RegisterRequestBody is the type of the "auth" service "register" endpoint
 // HTTP request body.
 type RegisterRequestBody struct {
@@ -1142,15 +1135,6 @@ type ProjectEntryResponseBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The slug of the project
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-}
-
-// NewCallbackRequestBody builds the HTTP request body from the payload of the
-// "callback" endpoint of the "auth" service.
-func NewCallbackRequestBody(p *auth.CallbackPayload) *CallbackRequestBody {
-	body := &CallbackRequestBody{
-		Code: p.Code,
-	}
-	return body
 }
 
 // NewRegisterRequestBody builds the HTTP request body from the payload of the
