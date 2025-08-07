@@ -16,25 +16,13 @@ import (
 
 // BuildCallbackPayload builds the payload for the auth callback endpoint from
 // CLI flags.
-func BuildCallbackPayload(authCallbackBody string, authCallbackIDToken string) (*auth.CallbackPayload, error) {
-	var err error
-	var body CallbackRequestBody
+func BuildCallbackPayload(authCallbackCode string) (*auth.CallbackPayload, error) {
+	var code string
 	{
-		err = json.Unmarshal([]byte(authCallbackBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"code\": \"Quos delectus.\"\n   }'")
-		}
+		code = authCallbackCode
 	}
-	var idToken *string
-	{
-		if authCallbackIDToken != "" {
-			idToken = &authCallbackIDToken
-		}
-	}
-	v := &auth.CallbackPayload{
-		Code: body.Code,
-	}
-	v.IDToken = idToken
+	v := &auth.CallbackPayload{}
+	v.Code = code
 
 	return v, nil
 }
@@ -91,7 +79,7 @@ func BuildRegisterPayload(authRegisterBody string, authRegisterSessionToken stri
 	{
 		err = json.Unmarshal([]byte(authRegisterBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"org_name\": \"Quis qui cumque dolor et molestiae doloremque.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"org_name\": \"Ut possimus quasi quis.\"\n   }'")
 		}
 	}
 	var sessionToken *string

@@ -17,10 +17,9 @@ func TestService_Callback(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
-		token := "mock_token"
+		code := "mock_code"
 		payload := &gen.CallbackPayload{
-			IDToken: &token,
-			Code:    nil,
+			Code: code,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
@@ -38,10 +37,9 @@ func TestService_Callback(t *testing.T) {
 
 		userInfo := speakeasyMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
-		token := "mock_token"
+		code := "mock_code"
 		payload := &gen.CallbackPayload{
-			IDToken: &token,
-			Code:    nil,
+			Code: code,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
@@ -75,10 +73,9 @@ func TestService_Callback(t *testing.T) {
 
 		// Set admin override in context
 		ctx = contextvalues.SetAdminOverrideInContext(ctx, "admin-org")
-		token := "mock_token"
+		code := "mock_code"
 		payload := &gen.CallbackPayload{
-			IDToken: &token,
-			Code:    nil,
+			Code: code,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
@@ -101,10 +98,9 @@ func TestService_Callback(t *testing.T) {
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{} // No organizations
 		ctx, instance := newTestAuthService(t, userInfo)
-		token := "mock_token"
+		code := "mock_code"
 		payload := &gen.CallbackPayload{
-			IDToken: &token,
-			Code:    nil,
+			Code: code,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
@@ -117,7 +113,24 @@ func TestService_Callback(t *testing.T) {
 		require.Equal(t, result.SessionToken, result.SessionCookie)
 	})
 
-	t.Run("invalid token returns error", func(t *testing.T) {
+	t.Run("empty code returns error", func(t *testing.T) {
+		t.Parallel()
+
+		userInfo := defaultMockUserInfo()
+		ctx, instance := newTestAuthService(t, userInfo)
+		payload := &gen.CallbackPayload{
+			Code: "",
+		}
+
+		result, err := instance.service.Callback(ctx, payload)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		require.Contains(t, result.Location, "signin_error=")
+		require.Empty(t, result.SessionToken)
+	})
+
+	t.Run("invalid code returns error", func(t *testing.T) {
 		t.Parallel()
 
 		userInfo := defaultMockUserInfo()
@@ -125,17 +138,16 @@ func TestService_Callback(t *testing.T) {
 
 		// Override the mock server to return an error for this test
 		instance.mockAuthServer.Config.Handler = nil
-		token := "invalid_token"
+		code := "invalid_code"
 		payload := &gen.CallbackPayload{
-			IDToken: &token,
-			Code:    nil,
+			Code: code,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		require.Contains(t, result.Location, "signin_error=unexpected")
+		require.Contains(t, result.Location, "signin_error=")
 		require.Empty(t, result.SessionToken)
 	})
 }

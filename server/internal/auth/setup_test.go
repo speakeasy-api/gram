@@ -234,6 +234,23 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 		}
 	})
 
+	// Mock the exchange endpoint for code to token exchange
+	mux.HandleFunc("/v1/speakeasy_provider/exchange", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		
+		// Return a mock token response
+		tokenResp := struct {
+			IDToken string `json:"id_token"`
+		}{
+			IDToken: "mock_id_token",
+		}
+		
+		if err := json.NewEncoder(w).Encode(tokenResp); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	})
+
 	// Mock the login endpoint
 	mux.HandleFunc("/v1/speakeasy_provider/login", func(w http.ResponseWriter, r *http.Request) {
 		returnURL := r.URL.Query().Get("return_url")
@@ -241,8 +258,8 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 			http.Error(w, "missing return_url", http.StatusBadRequest)
 			return
 		}
-		// Simulate redirect to callback with mock ID token
-		http.Redirect(w, r, returnURL+"?id_token=mock_token", http.StatusFound)
+		// Simulate redirect to callback with mock auth code
+		http.Redirect(w, r, returnURL+"?code=mock_code", http.StatusFound)
 	})
 
 	return httptest.NewServer(mux)

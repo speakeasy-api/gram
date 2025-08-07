@@ -59,9 +59,7 @@ variations (upsert-global|delete-global|list-global)
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + ` assets serve-image --id "Ratione ad." --session-token "Magnam repudiandae est et."` + "\n" +
-		os.Args[0] + ` auth callback --body '{
-      "code": "Quos delectus."
-   }' --id-token "Provident id."` + "\n" +
+		os.Args[0] + ` auth callback --code "Quos delectus."` + "\n" +
 		os.Args[0] + ` chat list-chats --session-token "Sit et voluptates voluptatem et sed." --project-slug-input "Et accusamus dignissimos quaerat numquam ut."` + "\n" +
 		os.Args[0] + ` deployments get-deployment --id "Illum omnis." --apikey-token "Praesentium dolore exercitationem corporis aut deserunt sint." --session-token "Id laborum sequi ad aut." --project-slug-input "Tempora facere illo laboriosam sunt."` + "\n" +
 		os.Args[0] + ` domains get-domain --session-token "Ea qui repudiandae nesciunt dolor nostrum." --project-slug-input "Provident error."` + "\n" +
@@ -113,9 +111,8 @@ func ParseEndpoint(
 
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
-		authCallbackFlags       = flag.NewFlagSet("callback", flag.ExitOnError)
-		authCallbackBodyFlag    = authCallbackFlags.String("body", "REQUIRED", "")
-		authCallbackIDTokenFlag = authCallbackFlags.String("id-token", "", "")
+		authCallbackFlags    = flag.NewFlagSet("callback", flag.ExitOnError)
+		authCallbackCodeFlag = authCallbackFlags.String("code", "REQUIRED", "")
 
 		authLoginFlags = flag.NewFlagSet("login", flag.ExitOnError)
 
@@ -899,7 +896,7 @@ func ParseEndpoint(
 			switch epn {
 			case "callback":
 				endpoint = c.Callback()
-				data, err = authc.BuildCallbackPayload(*authCallbackBodyFlag, *authCallbackIDTokenFlag)
+				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag)
 			case "login":
 				endpoint = c.Login()
 			case "switch-scopes":
@@ -1243,16 +1240,13 @@ Additional help:
 `, os.Args[0])
 }
 func authCallbackUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth callback -body JSON -id-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] auth callback -code STRING
 
 Handles the authentication callback.
-    -body JSON: 
-    -id-token STRING: 
+    -code STRING: 
 
 Example:
-    %[1]s auth callback --body '{
-      "code": "Quos delectus."
-   }' --id-token "Provident id."
+    %[1]s auth callback --code "Quos delectus."
 `, os.Args[0])
 }
 
@@ -1275,7 +1269,7 @@ Switches the authentication scope to a different organization.
     -session-token STRING: 
 
 Example:
-    %[1]s auth switch-scopes --organization-id "Vel est explicabo voluptatem sint omnis." --project-id "Et maiores beatae." --session-token "Atque eius nesciunt amet molestias sapiente quisquam."
+    %[1]s auth switch-scopes --organization-id "Autem eum harum vel." --project-id "Explicabo voluptatem." --session-token "Omnis odio et maiores beatae."
 `, os.Args[0])
 }
 
@@ -1286,7 +1280,7 @@ Logs out the current user by clearing their session.
     -session-token STRING: 
 
 Example:
-    %[1]s auth logout --session-token "Voluptas est possimus qui est voluptates eligendi."
+    %[1]s auth logout --session-token "Dolor doloremque similique sunt amet quam."
 `, os.Args[0])
 }
 
@@ -1299,8 +1293,8 @@ Register a new org for a user with their session information.
 
 Example:
     %[1]s auth register --body '{
-      "org_name": "Quis qui cumque dolor et molestiae doloremque."
-   }' --session-token "Omnis hic magni ea ipsum et."
+      "org_name": "Ut possimus quasi quis."
+   }' --session-token "Cumque dolor et molestiae doloremque."
 `, os.Args[0])
 }
 
@@ -1311,7 +1305,7 @@ Provides information about the current authentication status.
     -session-token STRING: 
 
 Example:
-    %[1]s auth info --session-token "Explicabo officia soluta et."
+    %[1]s auth info --session-token "Aut ut fuga doloremque sunt autem."
 `, os.Args[0])
 }
 

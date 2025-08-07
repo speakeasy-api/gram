@@ -44,29 +44,17 @@ func EncodeCallbackResponse(encoder func(context.Context, http.ResponseWriter) g
 func DecodeCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			body CallbackRequestBody
+			code string
 			err  error
 		)
-		err = decoder(r).Decode(&body)
+		code = r.URL.Query().Get("code")
+		if code == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("code", "query string"))
+		}
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return nil, gerr
-			}
-			return nil, goa.DecodePayloadError(err.Error())
+			return nil, err
 		}
-
-		var (
-			idToken *string
-		)
-		idTokenRaw := r.URL.Query().Get("id_token")
-		if idTokenRaw != "" {
-			idToken = &idTokenRaw
-		}
-		payload := NewCallbackPayload(&body, idToken)
+		payload := NewCallbackPayload(code)
 
 		return payload, nil
 	}

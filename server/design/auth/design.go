@@ -18,8 +18,8 @@ var _ = Service("auth", func() {
 		NoSecurity()
 
 		Payload(func() {
-			Attribute("id_token", String, "The id token for authentication from the speakeasy system")
 			Attribute("code", String, "The auth code for authentication from the speakeasy system")
+			Required("code")
 		})
 
 		Result(func() {
@@ -31,7 +31,7 @@ var _ = Service("auth", func() {
 
 		HTTP(func() {
 			GET("/rpc/auth.callback")
-			Param("id_token")
+			Param("code")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {
