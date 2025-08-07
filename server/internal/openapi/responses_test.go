@@ -86,7 +86,7 @@ func TestGetResponseFilter_NilFilterType(t *testing.T) {
 		Extensions:   nil,
 	}
 
-	responseFilter, schemaBytes, err := getResponseFilter(ctx, logger, op, nil)
+	responseFilter, schemaBytes, err := getResponseFilterLibOpenAPI(ctx, logger, op, nil)
 	require.NoError(t, err)
 	require.Nil(t, responseFilter)
 	require.Nil(t, schemaBytes)
@@ -115,7 +115,7 @@ func TestGetResponseFilter_NonJQFilterType(t *testing.T) {
 	}
 	filterType := models.FilterTypeNone
 
-	responseFilter, schemaBytes, err := getResponseFilter(ctx, logger, op, &filterType)
+	responseFilter, schemaBytes, err := getResponseFilterLibOpenAPI(ctx, logger, op, &filterType)
 	require.NoError(t, err)
 	require.Nil(t, responseFilter)
 	require.Nil(t, schemaBytes)
@@ -160,7 +160,7 @@ paths:
 
 	filterType := models.FilterTypeJQ
 
-	responseFilter, schemaBytes, err := getResponseFilter(ctx, logger, operation, &filterType)
+	responseFilter, schemaBytes, err := getResponseFilterLibOpenAPI(ctx, logger, operation, &filterType)
 	require.NoError(t, err)
 	require.NotNil(t, responseFilter)
 	require.NotNil(t, schemaBytes)
@@ -199,7 +199,7 @@ func TestSelectResponse_NoResponses(t *testing.T) {
 		Extensions:   nil,
 	}
 
-	capturedBody, err := captureResponseBody(ctx, logger, op)
+	capturedBody, err := captureResponseBodyLibOpenAPI(ctx, logger, op)
 	require.NoError(t, err)
 	require.Nil(t, capturedBody)
 }
@@ -257,7 +257,7 @@ paths:
 	operation := model.Model.Paths.PathItems.GetOrZero("/test").Get
 	require.NotNil(t, operation)
 
-	mediaType, contentTypes, statusCodes := selectResponse(ctx, logger, operation)
+	mediaType, contentTypes, statusCodes := selectResponseLibOpenAPI(ctx, logger, operation)
 	require.NotNil(t, mediaType)
 	require.NotNil(t, contentTypes)
 	require.NotNil(t, statusCodes)
@@ -308,7 +308,7 @@ paths:
 	operation := model.Model.Paths.PathItems.GetOrZero("/test").Get
 	require.NotNil(t, operation)
 
-	mediaType, contentTypes, statusCodes := selectResponse(ctx, logger, operation)
+	mediaType, contentTypes, statusCodes := selectResponseLibOpenAPI(ctx, logger, operation)
 	require.NotNil(t, mediaType)
 	require.NotNil(t, contentTypes)
 	require.NotNil(t, statusCodes)
@@ -360,7 +360,7 @@ paths:
 	operation := model.Model.Paths.PathItems.GetOrZero("/test").Get
 	require.NotNil(t, operation)
 
-	mediaType, contentTypes, statusCodes := selectResponse(ctx, logger, operation)
+	mediaType, contentTypes, statusCodes := selectResponseLibOpenAPI(ctx, logger, operation)
 	require.NotNil(t, mediaType)
 	require.NotNil(t, contentTypes)
 	require.NotNil(t, statusCodes)

@@ -12,19 +12,19 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type UpgradeOpenAPI30To31Result struct {
+type upgradeOpenAPI30To31ResultLibOpenAPI struct {
 	Upgraded bool
 	Document libopenapi.Document
 	Model    *libopenapi.DocumentModel[v3.Document]
 	Issues   []error
 }
 
-// UpgradeOpenAPI30To31 upgrades an OpenAPI 3.0 document to OpenAPI 3.1.
+// upgradeOpenAPI30To31LibOpenAPI upgrades an OpenAPI 3.0 document to OpenAPI 3.1.
 // If the upgrade fails due to an error then the original document and model are
 // returned along with the errors.
-func UpgradeOpenAPI30To31(doc libopenapi.Document, docModel *libopenapi.DocumentModel[v3.Document]) (*UpgradeOpenAPI30To31Result, error) {
+func upgradeOpenAPI30To31LibOpenAPI(doc libopenapi.Document, docModel *libopenapi.DocumentModel[v3.Document]) (*upgradeOpenAPI30To31ResultLibOpenAPI, error) {
 	if !strings.HasPrefix(docModel.Model.Version, "3.0") {
-		return &UpgradeOpenAPI30To31Result{
+		return &upgradeOpenAPI30To31ResultLibOpenAPI{
 			Upgraded: false,
 			Document: doc,
 			Model:    docModel,
@@ -75,7 +75,7 @@ func UpgradeOpenAPI30To31(doc libopenapi.Document, docModel *libopenapi.Document
 		return nil, fmt.Errorf("error rebuilding upgraded openapi document: %w", errors.Join(rrErrs...))
 	}
 
-	return &UpgradeOpenAPI30To31Result{
+	return &upgradeOpenAPI30To31ResultLibOpenAPI{
 		Upgraded: true,
 		Document: upgradedDoc,
 		Model:    upgradedModel,
