@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -58,6 +59,7 @@ type Service struct {
 	meter        metric.Meter
 	db           *pgxpool.Pool
 	toolsetsRepo *toolsets_repo.Queries
+	environments *environments.EnvironmentEntries
 	serverURL    *url.URL
 
 	clientRegistration *ClientRegistrationService
@@ -68,7 +70,7 @@ type Service struct {
 	enc                *encryption.Client
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, serverURL *url.URL, cacheImpl cache.Cache, enc *encryption.Client, env *environments.EnvironmentEntries) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oauth")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/oauth")
 
@@ -83,6 +85,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		meter:        meter,
 		db:           db,
 		toolsetsRepo: toolsets_repo.New(db),
+		environments: env,
 		serverURL:    serverURL,
 
 		// OAuth 2.1 components
@@ -313,8 +316,19 @@ func (s *Service) handleAuthorizationComplete(w http.ResponseWriter, r *http.Req
 		return oops.E(oops.CodeUnexpected, err, "OAuth provider secrets invalid").Log(ctx, s.logger)
 	}
 
-	clientID, ok := secrets["client_id"]
-	if !ok || clientID == "" {
+	clientID := secrets["client_id"]
+
+	// Fallback to environment if client_id is missing and environment is specified
+	if clientID == "" && secrets["environment_slug"] != "" {
+		envMap, err := s.environments.Load(ctx, toolset.ProjectID, gateway.Slug(secrets["environment_slug"]))
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
+		}
+
+		clientID = envMap["client_id"]
+	}
+
+	if clientID == "" {
 		return oops.E(oops.CodeUnexpected, nil, "OAuth provider client_id not configured").Log(ctx, s.logger)
 	}
 
@@ -514,13 +528,28 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 		return oops.E(oops.CodeUnexpected, err, "OAuth provider secrets invalid").Log(ctx, s.logger)
 	}
 
-	clientID, ok := secrets["client_id"]
-	if !ok || clientID == "" {
-		return oops.E(oops.CodeUnexpected, nil, "OAuth provider client_id not configured").Log(ctx, s.logger)
+	clientID := secrets["client_id"]
+	clientSecret := secrets["client_secret"]
+
+	// Fallback to environment if credentials are missing and environment is specified
+	if (clientID == "" || clientSecret == "") && secrets["environment_slug"] != "" {
+		envMap, err := s.environments.Load(ctx, toolset.ProjectID, gateway.Slug(secrets["environment_slug"]))
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
+		}
+
+		if clientID == "" {
+			clientID = envMap["client_id"]
+		}
+		if clientSecret == "" {
+			clientSecret = envMap["client_secret"]
+		}
 	}
 
-	clientSecret, ok := secrets["client_secret"]
-	if !ok || clientSecret == "" {
+	if clientID == "" {
+		return oops.E(oops.CodeUnexpected, nil, "OAuth provider client_id not configured").Log(ctx, s.logger)
+	}
+	if clientSecret == "" {
 		return oops.E(oops.CodeUnexpected, nil, "OAuth provider client_secret not configured").Log(ctx, s.logger)
 	}
 

@@ -444,7 +444,7 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger.With(attr.SlogComponent("keys")), db, sessionManager, c.String("environment")))
 			environments.Attach(mux, environments.NewService(logger.With(attr.SlogComponent("environments")), db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger.With(attr.SlogComponent("tools")), db, sessionManager))
-			oauthService := oauth.NewService(logger.With(attr.SlogComponent("oauth")), tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient)
+			oauthService := oauth.NewService(logger.With(attr.SlogComponent("oauth")), tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env)
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger.With(attr.SlogComponent("instances")), tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient))
 			mcp.Attach(mux, mcp.NewService(logger.With(attr.SlogComponent("mcp")), tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService))
