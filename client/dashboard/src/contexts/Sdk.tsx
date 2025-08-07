@@ -17,31 +17,35 @@ export const useSdkClient = () => {
 export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
   const { projectSlug } = useSlugs();
   const { handleError } = useErrorHandler();
-  
-  const queryClient = useMemo(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        throwOnError: true,
-        retry: (failureCount, error: Error) => {
-          // Don't retry on 4xx errors
-          if (error && typeof error === 'object' && 'status' in error) {
-            const status = (error as unknown as { status: number }).status;
-            if (status >= 400 && status < 500) {
-              return false;
-            }
-          }
-          // Default retry logic for other errors
-          return failureCount < 3;
+
+  const queryClient = useMemo(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            throwOnError: true,
+            retry: (failureCount, error: Error) => {
+              // Don't retry on 4xx errors
+              if (error && typeof error === "object" && "status" in error) {
+                const status = (error as unknown as { status: number }).status;
+                if (status >= 400 && status < 500) {
+                  return false;
+                }
+              }
+              // Default retry logic for other errors
+              return failureCount < 3;
+            },
+          },
+          mutations: {
+            onError: (error: Error) => {
+              handleError(error, { title: "Request failed" });
+            },
+          },
         },
-      },
-      mutations: {
-        onError: (error: Error) => {
-          handleError(error, { title: "Request failed" });
-        },
-      },
-    },
-  }), [handleError]);
-  
+      }),
+    [handleError]
+  );
+
   const previousProjectSlug = useRef(projectSlug);
 
   // Memoize the httpClient and gram instances
@@ -58,6 +62,17 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
 
         return fetch(newRequest);
       },
+    });
+
+    httpClient.addHook("response", (res, request) => {
+      if (!res.ok || typeof localStorage === "undefined") {
+        return;
+      }
+
+      const u = new URL(request.url);
+      if (u.pathname === "/rpc/auth.logout") {
+        localStorage.clear();
+      }
     });
 
     const gram = new Gram({
