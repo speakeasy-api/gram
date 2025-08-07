@@ -13,6 +13,21 @@ import { authInfo } from "@gram/client/funcs/authInfo";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMutation } from "@tanstack/react-query";
 
+const unexpected = "Server error. Please try again later or contact support.";
+const authErrorMessages: Record<string, string> = {
+  lookup_error: "Failed to look up account details.",
+  init_error: "Failed to initialize account.",
+  local_dev_stubbed: "Authentication is stubbed during local development.",
+  unexpected,
+};
+
+function getAuthErrorMessage(errorCode?: string | null): string {
+  if (!errorCode) {
+    return unexpected;
+  }
+  return authErrorMessages[errorCode] || unexpected;
+}
+
 const Logo = () => {
   return (
     <svg
@@ -112,7 +127,7 @@ export function LoginSection() {
     <AuthLayout>
       {signinError && (
         <p className="text-red-600 text-center mb-4">
-          login error: {decodeURIComponent(signinError)}
+          login error: {getAuthErrorMessage(signinError)}
         </p>
       )}
 
@@ -202,7 +217,7 @@ export function RegisterSection() {
     <AuthLayout>
       {signinError && (
         <p className="text-red-600 text-center mb-4">
-          login error: {decodeURIComponent(signinError)}
+          login error: {getAuthErrorMessage(signinError)}
         </p>
       )}
 
