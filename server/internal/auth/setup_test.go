@@ -237,14 +237,14 @@ func createMockAuthServer(userInfo *MockUserInfo) *httptest.Server {
 	// Mock the exchange endpoint for code to token exchange
 	mux.HandleFunc("/v1/speakeasy_provider/exchange", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		
+
 		// Return a mock token response
 		tokenResp := struct {
 			IDToken string `json:"id_token"`
 		}{
 			IDToken: "mock_id_token",
 		}
-		
+
 		if err := json.NewEncoder(w).Encode(tokenResp); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
