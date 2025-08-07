@@ -20,6 +20,7 @@ func TestService_Callback(t *testing.T) {
 		token := "mock_token"
 		payload := &gen.CallbackPayload{
 			IDToken: &token,
+			Code:    nil,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
@@ -40,6 +41,7 @@ func TestService_Callback(t *testing.T) {
 		token := "mock_token"
 		payload := &gen.CallbackPayload{
 			IDToken: &token,
+			Code:    nil,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
@@ -76,6 +78,7 @@ func TestService_Callback(t *testing.T) {
 		token := "mock_token"
 		payload := &gen.CallbackPayload{
 			IDToken: &token,
+			Code:    nil,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
@@ -101,6 +104,7 @@ func TestService_Callback(t *testing.T) {
 		token := "mock_token"
 		payload := &gen.CallbackPayload{
 			IDToken: &token,
+			Code:    nil,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
@@ -124,6 +128,7 @@ func TestService_Callback(t *testing.T) {
 		token := "invalid_token"
 		payload := &gen.CallbackPayload{
 			IDToken: &token,
+			Code:    nil,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
