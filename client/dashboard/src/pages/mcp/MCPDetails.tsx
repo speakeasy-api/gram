@@ -847,7 +847,7 @@ function OAuthTabModal({
           
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
             <TabsList>
-              <TabsTrigger value="external">External</TabsTrigger>
+              <TabsTrigger value="external">External Server</TabsTrigger>
               <TabsTrigger value="proxy">OAuth Proxy</TabsTrigger>
             </TabsList>
 
