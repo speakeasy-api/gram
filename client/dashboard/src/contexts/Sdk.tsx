@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useMemo, useEffect, useRef } from "react";
 import { useLocation, useParams } from "react-router";
 import { useErrorHandler } from "@/contexts/ErrorHandler";
+import { useTelemetry } from "./Telemetry";
+import { datadogRum } from "@datadog/browser-rum";
 
 export const SdkContext = createContext<Gram>({} as Gram);
 
@@ -17,6 +19,7 @@ export const useSdkClient = () => {
 export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
   const { projectSlug } = useSlugs();
   const { handleError } = useErrorHandler();
+  const telemetry = useTelemetry();
 
   const queryClient = useMemo(
     () =>
@@ -65,13 +68,23 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
     });
 
     httpClient.addHook("response", (res, request) => {
-      if (!res.ok || typeof localStorage === "undefined") {
+      if (!res.ok) {
         return;
       }
 
       const u = new URL(request.url);
-      if (u.pathname === "/rpc/auth.logout") {
+      if (u.pathname !== "/rpc/auth.logout") {
+        return;
+      }
+
+      datadogRum.stopSession();
+      datadogRum.clearUser();
+      telemetry.reset();
+      if (typeof localStorage !== "undefined") {
         localStorage.clear();
+      }
+      if (typeof sessionStorage !== "undefined") {
+        sessionStorage?.clear();
       }
     });
 
