@@ -1,6 +1,6 @@
 {
   "name": "@gram/client",
-  "version": "0.12.43",
+  "version": "0.12.46",
   "author": "Speakeasy",
   "type": "module",
   "main": "./esm/index.js",
@@ -70,8 +70,8 @@
     "@types/react-dom": "catalog:",
     "eslint": "^9.19.0",
     "globals": "^15.14.0",
-    "typescript": "^5.4.5",
-    "typescript-eslint": "^8.22.0"
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.26.0"
   },
   "dependencies": {
     "zod": "^3.20.0"

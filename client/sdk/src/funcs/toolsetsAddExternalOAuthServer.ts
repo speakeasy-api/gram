@@ -3,12 +3,14 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeFormQuery } from "../lib/encodings.js";
+import { encodeFormQuery, encodeJSON, encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
+import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -25,18 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * callback auth
+ * addExternalOAuthServer toolsets
  *
  * @remarks
- * Handles the authentication callback.
+ * Associate an external OAuth server with a toolset
  */
-export function authCallback(
+export function toolsetsAddExternalOAuthServer(
   client: GramCore,
-  request: operations.AuthCallbackRequest,
+  request: operations.AddExternalOAuthServerRequest,
+  security?: operations.AddExternalOAuthServerSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.AuthCallbackResponse | undefined,
+    components.Toolset,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -51,18 +54,20 @@ export function authCallback(
   return new APIPromise($do(
     client,
     request,
+    security,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  request: operations.AuthCallbackRequest,
+  request: operations.AddExternalOAuthServerRequest,
+  security?: operations.AddExternalOAuthServerSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.AuthCallbackResponse | undefined,
+      components.Toolset,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -78,34 +83,61 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => operations.AuthCallbackRequest$outboundSchema.parse(value),
+    (value) =>
+      operations.AddExternalOAuthServerRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = null;
+  const body = encodeJSON("body", payload.AddExternalOAuthServerRequestBody, {
+    explode: true,
+  });
 
-  const path = pathToFunc("/rpc/auth.callback")();
+  const path = pathToFunc("/rpc/toolsets.addExternalOAuthServer")();
 
   const query = encodeFormQuery({
-    "code": payload.code,
+    "slug": payload.slug,
   });
 
   const headers = new Headers(compactMap({
+    "Content-Type": "application/json",
     Accept: "application/json",
+    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
+      explode: false,
+      charEncoding: "none",
+    }),
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+      explode: false,
+      charEncoding: "none",
+    }),
   }));
+
+  const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Gram-Project",
+        type: "apiKey:header",
+        value: security?.projectSlugHeaderGramProject,
+      },
+      {
+        fieldName: "Gram-Session",
+        type: "apiKey:header",
+        value: security?.sessionHeaderGramSession,
+      },
+    ],
+  );
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "authCallback",
-    oAuth2Scopes: [],
+    operationID: "addExternalOAuthServer",
+    oAuth2Scopes: null,
 
-    resolvedSecurity: null,
+    resolvedSecurity: requestSecurity,
 
-    securitySource: null,
+    securitySource: security,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },
@@ -113,7 +145,8 @@ async function $do(
   };
 
   const requestRes = client._createRequest(context, {
-    method: "GET",
+    security: requestSecurity,
+    method: "POST",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
@@ -155,7 +188,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.AuthCallbackResponse | undefined,
+    components.Toolset,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -166,9 +199,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.nil(307, operations.AuthCallbackResponse$inboundSchema.optional(), {
-      hdrs: true,
-    }),
+    M.json(200, components.Toolset$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

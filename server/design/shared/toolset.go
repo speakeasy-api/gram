@@ -140,3 +140,11 @@ var OAuthProxyServer = Type("OAuthProxyServer", func() {
 	})
 	Required("id", "project_id", "slug", "created_at", "updated_at")
 })
+
+var ExternalOAuthServerForm = Type("ExternalOAuthServerForm", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("slug", Slug, "The slug of the external OAuth server")
+	Attribute("metadata", Any, "The metadata for the external OAuth server")
+	Required("slug", "metadata")
+})

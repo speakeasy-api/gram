@@ -29,6 +29,10 @@ type Service interface {
 	GetToolset(context.Context, *GetToolsetPayload) (res *types.Toolset, err error)
 	// Check if a MCP slug is available
 	CheckMCPSlugAvailability(context.Context, *CheckMCPSlugAvailabilityPayload) (res bool, err error)
+	// Associate an external OAuth server with a toolset
+	AddExternalOAuthServer(context.Context, *AddExternalOAuthServerPayload) (res *types.Toolset, err error)
+	// Remove OAuth server association from a toolset
+	RemoveOAuthServer(context.Context, *RemoveOAuthServerPayload) (res *types.Toolset, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -51,7 +55,18 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability"}
+var MethodNames = [8]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "addExternalOAuthServer", "removeOAuthServer"}
+
+// AddExternalOAuthServerPayload is the payload type of the toolsets service
+// addExternalOAuthServer method.
+type AddExternalOAuthServerPayload struct {
+	SessionToken *string
+	// The slug of the toolset to update
+	Slug types.Slug
+	// The external OAuth server data to create and associate with the toolset
+	ExternalOauthServer *types.ExternalOAuthServerForm
+	ProjectSlugInput    *string
+}
 
 // CheckMCPSlugAvailabilityPayload is the payload type of the toolsets service
 // checkMCPSlugAvailability method.
@@ -107,6 +122,15 @@ type ListToolsetsPayload struct {
 type ListToolsetsResult struct {
 	// The list of toolsets
 	Toolsets []*types.ToolsetEntry
+}
+
+// RemoveOAuthServerPayload is the payload type of the toolsets service
+// removeOAuthServer method.
+type RemoveOAuthServerPayload struct {
+	// The slug of the toolset
+	Slug             types.Slug
+	SessionToken     *string
+	ProjectSlugInput *string
 }
 
 // UpdateToolsetPayload is the payload type of the toolsets service

@@ -123,3 +123,20 @@ WHERE p.organization_id = @organization_id
   AND t.deleted IS FALSE
   AND p.deleted IS FALSE
 ORDER BY t.created_at DESC;
+
+-- name: UpdateToolsetExternalOAuthServer :one
+UPDATE toolsets
+SET 
+    external_oauth_server_id = @external_oauth_server_id
+  , updated_at = clock_timestamp()
+WHERE slug = @slug AND project_id = @project_id
+RETURNING *;
+
+-- name: ClearToolsetOAuthServers :one
+UPDATE toolsets
+SET 
+    external_oauth_server_id = NULL
+  , oauth_proxy_server_id = NULL
+  , updated_at = clock_timestamp()
+WHERE slug = @slug AND project_id = @project_id
+RETURNING *;

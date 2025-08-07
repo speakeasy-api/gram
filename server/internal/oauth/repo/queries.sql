@@ -1,6 +1,6 @@
 -- External OAuth Server Metadata Queries
 
--- name: UpsertExternalOAuthServerMetadata :one
+-- name: CreateExternalOAuthServerMetadata :one
 INSERT INTO external_oauth_server_metadata (
     project_id,
     slug,
@@ -9,10 +9,7 @@ INSERT INTO external_oauth_server_metadata (
     @project_id,
     @slug,
     @metadata
-) ON CONFLICT (project_id, slug) DO UPDATE SET
-    metadata = EXCLUDED.metadata,
-    updated_at = clock_timestamp()
-RETURNING *;
+) RETURNING *;
 
 -- name: GetExternalOAuthServerMetadata :one
 SELECT * FROM external_oauth_server_metadata

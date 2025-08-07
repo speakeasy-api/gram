@@ -26,6 +26,8 @@ type Server struct {
 	DeleteToolset            http.Handler
 	GetToolset               http.Handler
 	CheckMCPSlugAvailability http.Handler
+	AddExternalOAuthServer   http.Handler
+	RemoveOAuthServer        http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -61,6 +63,8 @@ func New(
 			{"DeleteToolset", "DELETE", "/rpc/toolsets.delete"},
 			{"GetToolset", "GET", "/rpc/toolsets.get"},
 			{"CheckMCPSlugAvailability", "GET", "/rpc/toolsets.checkMCPSlugAvailability"},
+			{"AddExternalOAuthServer", "POST", "/rpc/toolsets.addExternalOAuthServer"},
+			{"RemoveOAuthServer", "POST", "/rpc/toolsets.removeOAuthServer"},
 		},
 		CreateToolset:            NewCreateToolsetHandler(e.CreateToolset, mux, decoder, encoder, errhandler, formatter),
 		ListToolsets:             NewListToolsetsHandler(e.ListToolsets, mux, decoder, encoder, errhandler, formatter),
@@ -68,6 +72,8 @@ func New(
 		DeleteToolset:            NewDeleteToolsetHandler(e.DeleteToolset, mux, decoder, encoder, errhandler, formatter),
 		GetToolset:               NewGetToolsetHandler(e.GetToolset, mux, decoder, encoder, errhandler, formatter),
 		CheckMCPSlugAvailability: NewCheckMCPSlugAvailabilityHandler(e.CheckMCPSlugAvailability, mux, decoder, encoder, errhandler, formatter),
+		AddExternalOAuthServer:   NewAddExternalOAuthServerHandler(e.AddExternalOAuthServer, mux, decoder, encoder, errhandler, formatter),
+		RemoveOAuthServer:        NewRemoveOAuthServerHandler(e.RemoveOAuthServer, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -82,6 +88,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DeleteToolset = m(s.DeleteToolset)
 	s.GetToolset = m(s.GetToolset)
 	s.CheckMCPSlugAvailability = m(s.CheckMCPSlugAvailability)
+	s.AddExternalOAuthServer = m(s.AddExternalOAuthServer)
+	s.RemoveOAuthServer = m(s.RemoveOAuthServer)
 }
 
 // MethodNames returns the methods served.
@@ -95,6 +103,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDeleteToolsetHandler(mux, h.DeleteToolset)
 	MountGetToolsetHandler(mux, h.GetToolset)
 	MountCheckMCPSlugAvailabilityHandler(mux, h.CheckMCPSlugAvailability)
+	MountAddExternalOAuthServerHandler(mux, h.AddExternalOAuthServer)
+	MountRemoveOAuthServerHandler(mux, h.RemoveOAuthServer)
 }
 
 // Mount configures the mux to serve the toolsets endpoints.
@@ -398,6 +408,112 @@ func NewCheckMCPSlugAvailabilityHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "checkMCPSlugAvailability")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountAddExternalOAuthServerHandler configures the mux to serve the
+// "toolsets" service "addExternalOAuthServer" endpoint.
+func MountAddExternalOAuthServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.addExternalOAuthServer", otelhttp.WithRouteTag("/rpc/toolsets.addExternalOAuthServer", f).ServeHTTP)
+}
+
+// NewAddExternalOAuthServerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "addExternalOAuthServer" endpoint.
+func NewAddExternalOAuthServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeAddExternalOAuthServerRequest(mux, decoder)
+		encodeResponse = EncodeAddExternalOAuthServerResponse(encoder)
+		encodeError    = EncodeAddExternalOAuthServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "addExternalOAuthServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountRemoveOAuthServerHandler configures the mux to serve the "toolsets"
+// service "removeOAuthServer" endpoint.
+func MountRemoveOAuthServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.removeOAuthServer", otelhttp.WithRouteTag("/rpc/toolsets.removeOAuthServer", f).ServeHTTP)
+}
+
+// NewRemoveOAuthServerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "toolsets" service "removeOAuthServer" endpoint.
+func NewRemoveOAuthServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeRemoveOAuthServerRequest(mux, decoder)
+		encodeResponse = EncodeRemoveOAuthServerResponse(encoder)
+		encodeError    = EncodeRemoveOAuthServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "removeOAuthServer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {

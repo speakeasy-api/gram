@@ -28,7 +28,7 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.auth.callback({
-    idToken: "<value>",
+    code: "<value>",
   });
 
   console.log(result);
@@ -51,7 +51,7 @@ const gram = new GramCore();
 
 async function run() {
   const res = await authCallback(gram, {
-    idToken: "<value>",
+    code: "<value>",
   });
   if (res.ok) {
     const { value: result } = res;

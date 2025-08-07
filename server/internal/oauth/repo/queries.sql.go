@@ -12,6 +12,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createExternalOAuthServerMetadata = `-- name: CreateExternalOAuthServerMetadata :one
+
+INSERT INTO external_oauth_server_metadata (
+    project_id,
+    slug,
+    metadata
+) VALUES (
+    $1,
+    $2,
+    $3
+) RETURNING id, project_id, slug, metadata, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateExternalOAuthServerMetadataParams struct {
+	ProjectID uuid.UUID
+	Slug      string
+	Metadata  []byte
+}
+
+// External OAuth Server Metadata Queries
+func (q *Queries) CreateExternalOAuthServerMetadata(ctx context.Context, arg CreateExternalOAuthServerMetadataParams) (ExternalOauthServerMetadatum, error) {
+	row := q.db.QueryRow(ctx, createExternalOAuthServerMetadata, arg.ProjectID, arg.Slug, arg.Metadata)
+	var i ExternalOauthServerMetadatum
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Slug,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const deleteExternalOAuthServerMetadata = `-- name: DeleteExternalOAuthServerMetadata :exec
 UPDATE external_oauth_server_metadata SET
     deleted_at = clock_timestamp(),
@@ -163,45 +199,6 @@ func (q *Queries) ListOAuthProxyProvidersByServer(ctx context.Context, arg ListO
 		return nil, err
 	}
 	return items, nil
-}
-
-const upsertExternalOAuthServerMetadata = `-- name: UpsertExternalOAuthServerMetadata :one
-
-INSERT INTO external_oauth_server_metadata (
-    project_id,
-    slug,
-    metadata
-) VALUES (
-    $1,
-    $2,
-    $3
-) ON CONFLICT (project_id, slug) DO UPDATE SET
-    metadata = EXCLUDED.metadata,
-    updated_at = clock_timestamp()
-RETURNING id, project_id, slug, metadata, created_at, updated_at, deleted_at, deleted
-`
-
-type UpsertExternalOAuthServerMetadataParams struct {
-	ProjectID uuid.UUID
-	Slug      string
-	Metadata  []byte
-}
-
-// External OAuth Server Metadata Queries
-func (q *Queries) UpsertExternalOAuthServerMetadata(ctx context.Context, arg UpsertExternalOAuthServerMetadataParams) (ExternalOauthServerMetadatum, error) {
-	row := q.db.QueryRow(ctx, upsertExternalOAuthServerMetadata, arg.ProjectID, arg.Slug, arg.Metadata)
-	var i ExternalOauthServerMetadatum
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.Slug,
-		&i.Metadata,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
 }
 
 const upsertOAuthProxyProvider = `-- name: UpsertOAuthProxyProvider :one

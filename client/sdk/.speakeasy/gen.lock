@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 32e2034a967372d4ba917de56c9d3e3a
+  docChecksum: 86d7477c9bfb7fd14011c34f161e67ef
   docVersion: 0.0.1
-  speakeasyVersion: 1.596.1
-  generationVersion: 2.672.0
-  releaseVersion: 0.12.43
-  configChecksum: 41cb08f092e0b83a674152bd8e06bbdd
+  speakeasyVersion: 1.599.0
+  generationVersion: 2.675.0
+  releaseVersion: 0.12.46
+  configChecksum: 9e6a96842d908ef95bc51544f4e97f5a
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.19
+    core: 3.21.20
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
@@ -37,6 +37,7 @@ generatedFiles:
   - USAGE.md
   - docs/lib/utils/retryconfig.md
   - docs/models/components/adddeploymentpackageform.md
+  - docs/models/components/addexternaloauthserverrequestbody.md
   - docs/models/components/addopenapiv3deploymentassetform.md
   - docs/models/components/addpackageform.md
   - docs/models/components/asset.md
@@ -73,6 +74,7 @@ generatedFiles:
   - docs/models/components/evolveform.md
   - docs/models/components/evolveresult.md
   - docs/models/components/externaloauthserver.md
+  - docs/models/components/externaloauthserverform.md
   - docs/models/components/getdeploymentlogsresult.md
   - docs/models/components/getdeploymentresult.md
   - docs/models/components/getinstanceresult.md
@@ -144,6 +146,8 @@ generatedFiles:
   - docs/models/components/upsertglobaltoolvariationresult.md
   - docs/models/components/visibility.md
   - docs/models/errors/serviceerror.md
+  - docs/models/operations/addexternaloauthserverrequest.md
+  - docs/models/operations/addexternaloauthserversecurity.md
   - docs/models/operations/authcallbackrequest.md
   - docs/models/operations/authcallbackresponse.md
   - docs/models/operations/authloginresponse.md
@@ -275,6 +279,8 @@ generatedFiles:
   - docs/models/operations/registerdomainsecurity.md
   - docs/models/operations/registerrequest.md
   - docs/models/operations/registersecurity.md
+  - docs/models/operations/removeoauthserverrequest.md
+  - docs/models/operations/removeoauthserversecurity.md
   - docs/models/operations/rendertemplatebyidrequest.md
   - docs/models/operations/rendertemplatebyidsecurity.md
   - docs/models/operations/rendertemplatebyidsecurityoption1.md
@@ -412,11 +418,13 @@ generatedFiles:
   - src/funcs/templatesRenderByID.ts
   - src/funcs/templatesUpdate.ts
   - src/funcs/toolsList.ts
+  - src/funcs/toolsetsAddExternalOAuthServer.ts
   - src/funcs/toolsetsCheckMCPSlugAvailability.ts
   - src/funcs/toolsetsCreate.ts
   - src/funcs/toolsetsDeleteBySlug.ts
   - src/funcs/toolsetsGetBySlug.ts
   - src/funcs/toolsetsList.ts
+  - src/funcs/toolsetsRemoveOAuthServer.ts
   - src/funcs/toolsetsUpdateBySlug.ts
   - src/funcs/variationsDeleteGlobal.ts
   - src/funcs/variationsListGlobal.ts
@@ -442,6 +450,7 @@ generatedFiles:
   - src/lib/security.ts
   - src/lib/url.ts
   - src/models/components/adddeploymentpackageform.ts
+  - src/models/components/addexternaloauthserverrequestbody.ts
   - src/models/components/addopenapiv3deploymentassetform.ts
   - src/models/components/addpackageform.ts
   - src/models/components/asset.ts
@@ -474,6 +483,7 @@ generatedFiles:
   - src/models/components/evolveform.ts
   - src/models/components/evolveresult.ts
   - src/models/components/externaloauthserver.ts
+  - src/models/components/externaloauthserverform.ts
   - src/models/components/getdeploymentlogsresult.ts
   - src/models/components/getdeploymentresult.ts
   - src/models/components/getinstanceresult.ts
@@ -545,6 +555,7 @@ generatedFiles:
   - src/models/errors/responsevalidationerror.ts
   - src/models/errors/sdkvalidationerror.ts
   - src/models/errors/serviceerror.ts
+  - src/models/operations/addexternaloauthserver.ts
   - src/models/operations/authcallback.ts
   - src/models/operations/authlogin.ts
   - src/models/operations/checkmcpslugavailability.ts
@@ -592,6 +603,7 @@ generatedFiles:
   - src/models/operations/redeploydeployment.ts
   - src/models/operations/register.ts
   - src/models/operations/registerdomain.ts
+  - src/models/operations/removeoauthserver.ts
   - src/models/operations/rendertemplate.ts
   - src/models/operations/rendertemplatebyid.ts
   - src/models/operations/revokeapikey.ts
@@ -611,6 +623,7 @@ generatedFiles:
   - src/models/operations/upsertglobalvariation.ts
   - src/react-query/_context.tsx
   - src/react-query/_types.ts
+  - src/react-query/addExternalOAuthServer.ts
   - src/react-query/checkMCPSlugAvailability.ts
   - src/react-query/createAPIKey.ts
   - src/react-query/createDeployment.ts
@@ -653,6 +666,7 @@ generatedFiles:
   - src/react-query/redeployDeployment.ts
   - src/react-query/register.ts
   - src/react-query/registerDomain.ts
+  - src/react-query/removeOAuthServer.ts
   - src/react-query/renderTemplate.ts
   - src/react-query/renderTemplateByID.ts
   - src/react-query/revokeAPIKey.ts
@@ -789,6 +803,7 @@ examples:
       parameters:
         query:
           id_token: "<value>"
+          code: "<value>"
       responses:
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
@@ -1369,5 +1384,43 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  addExternalOAuthServer:
+    speakeasy-default-add-external-O-auth-server:
+      parameters:
+        query:
+          slug: "<value>"
+      requestBody:
+        application/json: {"external_oauth_server": {"metadata": "<value>", "slug": "<value>"}}
+      responses:
+        "200":
+          application/json: {"created_at": "2023-08-31T03:23:36.997Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2025-03-28T09:33:33.851Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  removeExternalOAuthServer:
+    speakeasy-default-remove-external-O-auth-server:
+      parameters:
+        query:
+          slug: "<value>"
+      responses:
+        "200":
+          application/json: {"created_at": "2025-03-02T01:44:38.046Z", "http_tools": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2024-06-15T16:24:39.286Z", "deployment_id": "<id>", "description": "wedding dime festival affect profane elegant primary productive video", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/ports", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-08-22T16:18:09.972Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"created_at": "2025-07-28T15:35:34.933Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2025-02-19T02:02:12.817Z"}], "slug": "<value>", "updated_at": "2025-10-31T21:06:05.416Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  removeOAuthServer:
+    speakeasy-default-remove-O-auth-server:
+      parameters:
+        query:
+          slug: "<value>"
+      responses:
+        "200":
+          application/json: {"created_at": "2023-08-30T05:28:04.458Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2023-10-21T14:21:06.001Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

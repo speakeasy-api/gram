@@ -41,6 +41,14 @@ type Client struct {
 	// the checkMCPSlugAvailability endpoint.
 	CheckMCPSlugAvailabilityDoer goahttp.Doer
 
+	// AddExternalOAuthServer Doer is the HTTP client used to make requests to the
+	// addExternalOAuthServer endpoint.
+	AddExternalOAuthServerDoer goahttp.Doer
+
+	// RemoveOAuthServer Doer is the HTTP client used to make requests to the
+	// removeOAuthServer endpoint.
+	RemoveOAuthServerDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -67,6 +75,8 @@ func NewClient(
 		DeleteToolsetDoer:            doer,
 		GetToolsetDoer:               doer,
 		CheckMCPSlugAvailabilityDoer: doer,
+		AddExternalOAuthServerDoer:   doer,
+		RemoveOAuthServerDoer:        doer,
 		RestoreResponseBody:          restoreBody,
 		scheme:                       scheme,
 		host:                         host,
@@ -214,6 +224,54 @@ func (c *Client) CheckMCPSlugAvailability() goa.Endpoint {
 		resp, err := c.CheckMCPSlugAvailabilityDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "checkMCPSlugAvailability", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// AddExternalOAuthServer returns an endpoint that makes HTTP requests to the
+// toolsets service addExternalOAuthServer server.
+func (c *Client) AddExternalOAuthServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeAddExternalOAuthServerRequest(c.encoder)
+		decodeResponse = DecodeAddExternalOAuthServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildAddExternalOAuthServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.AddExternalOAuthServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "addExternalOAuthServer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RemoveOAuthServer returns an endpoint that makes HTTP requests to the
+// toolsets service removeOAuthServer server.
+func (c *Client) RemoveOAuthServer() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRemoveOAuthServerRequest(c.encoder)
+		decodeResponse = DecodeRemoveOAuthServerResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRemoveOAuthServerRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RemoveOAuthServerDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "removeOAuthServer", err)
 		}
 		return decodeResponse(resp)
 	}
