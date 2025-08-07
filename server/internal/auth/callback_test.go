@@ -17,9 +17,10 @@ func TestService_Callback(t *testing.T) {
 
 		userInfo := defaultMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
-
+		token := "mock_token"
 		payload := &gen.CallbackPayload{
-			IDToken: "mock_token",
+			IDToken: &token,
+			Code:    nil,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
@@ -37,9 +38,10 @@ func TestService_Callback(t *testing.T) {
 
 		userInfo := speakeasyMockUserInfo()
 		ctx, instance := newTestAuthService(t, userInfo)
-
+		token := "mock_token"
 		payload := &gen.CallbackPayload{
-			IDToken: "mock_token",
+			IDToken: &token,
+			Code:    nil,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
@@ -73,9 +75,10 @@ func TestService_Callback(t *testing.T) {
 
 		// Set admin override in context
 		ctx = contextvalues.SetAdminOverrideInContext(ctx, "admin-org")
-
+		token := "mock_token"
 		payload := &gen.CallbackPayload{
-			IDToken: "mock_token",
+			IDToken: &token,
+			Code:    nil,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
@@ -98,9 +101,10 @@ func TestService_Callback(t *testing.T) {
 		userInfo := defaultMockUserInfo()
 		userInfo.Organizations = []MockOrganizationEntry{} // No organizations
 		ctx, instance := newTestAuthService(t, userInfo)
-
+		token := "mock_token"
 		payload := &gen.CallbackPayload{
-			IDToken: "mock_token",
+			IDToken: &token,
+			Code:    nil,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)
@@ -121,9 +125,10 @@ func TestService_Callback(t *testing.T) {
 
 		// Override the mock server to return an error for this test
 		instance.mockAuthServer.Config.Handler = nil
-
+		token := "invalid_token"
 		payload := &gen.CallbackPayload{
-			IDToken: "invalid_token",
+			IDToken: &token,
+			Code:    nil,
 		}
 
 		result, err := instance.service.Callback(ctx, payload)

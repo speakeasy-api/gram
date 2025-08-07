@@ -56,7 +56,9 @@ var MethodNames = [6]string{"callback", "login", "switchScopes", "logout", "regi
 // CallbackPayload is the payload type of the auth service callback method.
 type CallbackPayload struct {
 	// The id token for authentication from the speakeasy system
-	IDToken string
+	IDToken *string
+	// The auth code for authentication from the speakeasy system
+	Code *string
 }
 
 // CallbackResult is the result type of the auth service callback method.

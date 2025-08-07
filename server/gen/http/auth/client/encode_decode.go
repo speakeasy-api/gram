@@ -44,8 +44,14 @@ func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 			return goahttp.ErrInvalidType("auth", "callback", "*auth.CallbackPayload", v)
 		}
 		values := req.URL.Query()
-		values.Add("id_token", p.IDToken)
+		if p.IDToken != nil {
+			values.Add("id_token", *p.IDToken)
+		}
 		req.URL.RawQuery = values.Encode()
+		body := NewCallbackRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("auth", "callback", err)
+		}
 		return nil
 	}
 }

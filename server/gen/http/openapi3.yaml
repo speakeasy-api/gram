@@ -651,10 +651,15 @@ paths:
                   description: The id token for authentication from the speakeasy system
                   in: query
                   name: id_token
-                  required: true
                   schema:
                     description: The id token for authentication from the speakeasy system
                     type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CallbackRequestBody'
+                required: true
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -6324,6 +6329,12 @@ components:
                 - content_length
                 - created_at
                 - updated_at
+        CallbackRequestBody:
+            type: object
+            properties:
+                code:
+                    type: string
+                    description: The auth code for authentication from the speakeasy system
         CanonicalToolAttributes:
             type: object
             properties:

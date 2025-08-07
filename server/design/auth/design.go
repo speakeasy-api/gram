@@ -19,7 +19,7 @@ var _ = Service("auth", func() {
 
 		Payload(func() {
 			Attribute("id_token", String, "The id token for authentication from the speakeasy system")
-			Required("id_token")
+			Attribute("code", String, "The auth code for authentication from the speakeasy system")
 		})
 
 		Result(func() {

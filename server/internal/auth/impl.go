@@ -102,7 +102,21 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 			SessionCookie: "",
 		}, nil
 	}
-	userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, payload.IDToken)
+	var idToken string
+	if payload.IDToken != nil {
+		idToken = *payload.IDToken
+	} else {
+		if payload.Code == nil {
+			return redirectWithError(authErrCodeLookup, errors.New("code is required"))
+		}
+
+		idToken, err = s.sessions.ExchangeTokenFromSpeakeasy(ctx, *payload.Code)
+		if err != nil {
+			return redirectWithError(authErrCodeLookup, err)
+		}
+	}
+
+	userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, idToken)
 	if err != nil {
 		return redirectWithError(authErrCodeLookup, err)
 	}
@@ -116,7 +130,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	session := sessions.Session{
-		SessionID:            payload.IDToken,
+		SessionID:            idToken,
 		UserID:               userInfo.UserID,
 		ActiveOrganizationID: "",
 	}
