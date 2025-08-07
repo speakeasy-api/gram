@@ -173,10 +173,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	})
 }
 
-func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
-}
-
 // handleWellKnownMetadata handles OAuth 2.1 authorization server metadata discovery
 func (s *Service) HandleWellKnownOAuthServerMetadata(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
