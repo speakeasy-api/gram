@@ -31,6 +31,14 @@ import (
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
+type authErr string
+
+const (
+	authErrCodeLookup      authErr = "lookup_error"
+	authErrInit            authErr = "init_error"
+	authErrLocalDevStubbed authErr = "local_dev_stubbed"
+)
+
 const gramWaitlistTypeForm = "https://speakeasyapi.typeform.com/to/h6WJdwWr"
 
 type AuthConfigurations struct {
@@ -86,8 +94,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 }
 
 func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (res *gen.CallbackResult, err error) {
-	redirectWithError := func(err error) (*gen.CallbackResult, error) {
-		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err))
+	redirectWithError := func(code authErr, err error) (*gen.CallbackResult, error) {
+		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(code)))
 		return &gen.CallbackResult{
 			Location:      fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
 			SessionToken:  "",
@@ -96,7 +104,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 	userInfo, err := s.sessions.GetUserInfoFromSpeakeasy(ctx, payload.IDToken)
 	if err != nil {
-		return redirectWithError(err)
+		return redirectWithError(authErrCodeLookup, err)
 	}
 
 	if !userInfo.Admin && !userInfo.UserWhitelisted {
@@ -115,7 +123,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 
 	if len(userInfo.Organizations) == 0 {
 		if err := s.sessions.StoreSession(ctx, session); err != nil {
-			return redirectWithError(err)
+			return redirectWithError(authErrInit, err)
 		}
 
 		return &gen.CallbackResult{
@@ -149,12 +157,12 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		Name: activeOrg.Name,
 		Slug: activeOrg.Slug,
 	}); err != nil {
-		return redirectWithError(err)
+		return redirectWithError(authErrInit, err)
 	}
 
 	session.ActiveOrganizationID = activeOrg.ID
 	if err := s.sessions.StoreSession(ctx, session); err != nil {
-		return redirectWithError(err)
+		return redirectWithError(authErrInit, err)
 	}
 
 	return &gen.CallbackResult{
@@ -167,9 +175,9 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 func (s *Service) Login(ctx context.Context) (res *gen.LoginResult, err error) {
 	if s.sessions.IsUnsafeLocalDevelopment() {
 		err = errors.New("calling rpc.login for local development stubbed auth is not supported because stubbed auth implies always being logged in. Reaching this point suggests a problem with dashboard authentication")
-		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err))
+		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(authErrLocalDevStubbed)))
 		return &gen.LoginResult{
-			Location: fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, err.Error()),
+			Location: fmt.Sprintf("%s?signin_error=%s", s.cfg.SignInRedirectURL, authErrLocalDevStubbed),
 		}, nil
 	}
 
