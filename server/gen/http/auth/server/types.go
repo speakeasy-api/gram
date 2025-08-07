@@ -12,6 +12,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// CallbackRequestBody is the type of the "auth" service "callback" endpoint
+// HTTP request body.
+type CallbackRequestBody struct {
+	// The auth code for authentication from the speakeasy system
+	Code *string `form:"code,omitempty" json:"code,omitempty" xml:"code,omitempty"`
+}
+
 // RegisterRequestBody is the type of the "auth" service "register" endpoint
 // HTTP request body.
 type RegisterRequestBody struct {
@@ -2000,8 +2007,10 @@ func NewInfoGatewayErrorResponseBody(res *goa.ServiceError) *InfoGatewayErrorRes
 }
 
 // NewCallbackPayload builds a auth service callback endpoint payload.
-func NewCallbackPayload(idToken string) *auth.CallbackPayload {
-	v := &auth.CallbackPayload{}
+func NewCallbackPayload(body *CallbackRequestBody, idToken *string) *auth.CallbackPayload {
+	v := &auth.CallbackPayload{
+		Code: body.Code,
+	}
 	v.IDToken = idToken
 
 	return v

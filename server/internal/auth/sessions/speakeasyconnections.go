@@ -43,6 +43,53 @@ type validateTokenResponse struct {
 	Organizations []speakeasyProviderOrganization `json:"organizations"`
 }
 
+type TokenExchangeRequest struct {
+	Code string `json:"code"`
+}
+
+type TokenExchangeResponse struct {
+	IDToken string `json:"id_token"`
+}
+
+func (s *Manager) ExchangeTokenFromSpeakeasy(ctx context.Context, code string) (string, error) {
+	// Prepare the request body
+	payload := TokenExchangeRequest{Code: code}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal token exchange request: %w", err)
+	}
+
+	// Create the HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", s.speakeasyServerAddress+"/v1/speakeasy_provider/exchange", bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("failed to create token exchange request: %w", err)
+	}
+
+	req.Header.Set("speakeasy-auth-provider-key", s.speakeasySecretKey)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	// Send the request
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to perform token exchange: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for non-200 status
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("token exchange failed with status %s", resp.Status)
+	}
+
+	// Parse the response
+	var exchangeResp TokenExchangeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&exchangeResp); err != nil {
+		return "", fmt.Errorf("failed to decode token exchange response: %w", err)
+	}
+
+	return exchangeResp.IDToken, nil
+}
+
 func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) (*CachedUserInfo, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
