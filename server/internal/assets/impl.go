@@ -54,6 +54,8 @@ var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, storage BlobStore) *Service {
+	logger = logger.With(attr.SlogComponent("assets"))
+
 	return &Service{
 		tracer:   otel.Tracer("github.com/speakeasy-api/gram/server/internal/assets"),
 		logger:   logger,

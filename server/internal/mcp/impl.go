@@ -99,6 +99,7 @@ func NewService(
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
+	logger = logger.With(attr.SlogComponent("mcp"))
 
 	return &Service{
 		logger:       logger,
