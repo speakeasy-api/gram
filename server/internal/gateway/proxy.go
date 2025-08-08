@@ -259,7 +259,7 @@ func (itp *ToolProxy) Do(
 			}
 			values := url.Values{}
 			for k, v := range formMap {
-				values.Set(k, fmt.Sprintf("%v", v))
+				formEncodeValue(values, k, v)
 			}
 			encoded = values.Encode()
 		}
@@ -581,4 +581,25 @@ func insertPathParams(urlStr string, params map[string]string) string {
 		}
 		return match
 	})
+}
+
+// encodeValue recursively encodes a value into URL form format, specifically handling deep objects
+func formEncodeValue(values url.Values, key string, value any) {
+	switch v := value.(type) {
+	case []interface{}:
+		// Handle arrays: key[0]=val1&key[1]=val2
+		for i, item := range v {
+			indexKey := fmt.Sprintf("%s[%d]", key, i)
+			formEncodeValue(values, indexKey, item)
+		}
+	case map[string]interface{}:
+		// Handle objects: key[field]=value
+		for k, val := range v {
+			objKey := fmt.Sprintf("%s[%s]", key, k)
+			formEncodeValue(values, objKey, val)
+		}
+	default:
+		// Handle primitives
+		values.Set(key, fmt.Sprintf("%v", value))
+	}
 }
