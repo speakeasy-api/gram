@@ -368,7 +368,6 @@ CREATE TABLE IF NOT EXISTS external_oauth_server_metadata (
   
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 100),
   metadata JSONB NOT NULL,
-  security_key_names TEXT[] DEFAULT ARRAY[]::TEXT[],
   
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
