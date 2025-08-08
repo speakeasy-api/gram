@@ -136,7 +136,7 @@ func (itp *ToolProxy) Do(
 		attr.ProjectID(tool.ProjectID),
 		attr.DeploymentID(tool.DeploymentID),
 		attr.ToolCallSource(string(itp.source)),
-		attr.HTTPRoute(tool.Path),
+		attr.HTTPRoute(tool.Path), // this is just from the raw OpenAPI spec. It is not a path with any parameters filled in, so not identifiable.
 	))
 	defer span.End()
 
@@ -146,7 +146,7 @@ func (itp *ToolProxy) Do(
 		attr.SlogToolID(tool.ID),
 		attr.SlogToolName(tool.Name),
 		attr.SlogToolCallSource(string(itp.source)),
-		attr.SlogHTTPRoute(tool.Path),
+		attr.SlogHTTPRoute(tool.Path), // this is just from the raw OpenAPI spec. It is not a path with any parameters filled in, so not identifiable.
 	)
 
 	// Variable to capture status code for metrics
@@ -175,7 +175,6 @@ func (itp *ToolProxy) Do(
 		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
 	}
 
-	// We are silently failing before we actually start returning errors to the LLM related to body not fitting json schema
 	if len(tool.Schema) > 0 {
 		if validateErr := validateToolCallBody(ctx, logger, bodyBytes, string(tool.Schema)); validateErr != nil {
 			logger.InfoContext(ctx, "tool call request schema failed validation", attr.SlogError(validateErr))
@@ -220,7 +219,7 @@ func (itp *ToolProxy) Do(
 			if params != nil && params[name] != "" {
 				pathParams[name] = params[name]
 			} else {
-				logger.ErrorContext(ctx, "failed to parse path parameter", attr.SlogHTTPParamName(name), attr.SlogHTTPParamValue(value))
+				logger.ErrorContext(ctx, "failed to parse path parameter", attr.SlogHTTPParamName(name))
 			}
 		}
 		urlStr := insertPathParams(requestPath, pathParams)
@@ -312,7 +311,7 @@ func (itp *ToolProxy) Do(
 					}
 				}
 			} else {
-				logger.ErrorContext(ctx, "failed to parse query parameter", attr.SlogHTTPParamName(name), attr.SlogHTTPParamValue(value))
+				logger.ErrorContext(ctx, "failed to parse query parameter", attr.SlogHTTPParamName(name))
 			}
 		}
 		req.URL.RawQuery = values.Encode()
@@ -338,7 +337,7 @@ func (itp *ToolProxy) Do(
 			if params != nil && params[name] != "" {
 				req.Header.Set(name, params[name])
 			} else {
-				logger.ErrorContext(ctx, "failed to parse header parameter", attr.SlogHTTPParamName(name), attr.SlogHTTPParamValue(value))
+				logger.ErrorContext(ctx, "failed to parse header parameter", attr.SlogHTTPParamName(name))
 			}
 		}
 	}
@@ -561,7 +560,7 @@ func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTo
 		if envVar != "" {
 			return envVar
 		} else {
-			logger.WarnContext(ctx, "environment variable for server not found", attr.SlogEnvVarName(tool.ServerEnvVar))
+			logger.WarnContext(ctx, "provided variables for server not found", attr.SlogEnvVarName(tool.ServerEnvVar))
 		}
 	}
 	return ""

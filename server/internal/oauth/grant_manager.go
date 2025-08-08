@@ -80,10 +80,6 @@ func (gm *GrantManager) CreateAuthorizationGrant(ctx context.Context, req *Autho
 		return nil, fmt.Errorf("failed to store grant: %w", err)
 	}
 
-	gm.logger.InfoContext(ctx, "authorization grant created",
-		attr.SlogOAuthClientID(req.ClientID),
-		attr.SlogOAuthScope(req.Scope))
-
 	return grant, nil
 }
 
@@ -115,12 +111,8 @@ func (gm *GrantManager) ValidateAndConsumeGrant(ctx context.Context, toolsetId u
 	// Grant is valid, consume it (delete it to prevent replay)
 	if err := gm.deleteGrant(ctx, *grant); err != nil {
 		gm.logger.ErrorContext(ctx, "failed to delete grant",
-			attr.SlogOAuthCode(code),
 			attr.SlogError(err))
 	}
-
-	gm.logger.InfoContext(ctx, "grant validated and consumed",
-		attr.SlogOAuthClientID(clientID))
 
 	return grant, nil
 }
