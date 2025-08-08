@@ -70,19 +70,40 @@ export function MCPDetailPage() {
         className="mb-8 justify-between"
       >
         <Heading variant="h2">MCP Details</Heading>
-        {showOAuthButton && (
-          <Button
-            variant="secondary"
-            size="lg"
-            onClick={() =>
-              isOAuthConnected
-                ? setIsOAuthDetailsModalOpen(true)
-                : setIsOAuthModalOpen(true)
-            }
-          >
-            {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
-          </Button>
-        )}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {!showOAuthButton ? (
+                <span className="inline-block">
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    disabled={true}
+                  >
+                    {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
+                  </Button>
+                </span>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onClick={() =>
+                    isOAuthConnected
+                      ? setIsOAuthDetailsModalOpen(true)
+                      : setIsOAuthModalOpen(true)
+                  }
+                >
+                  {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
+                </Button>
+              )}
+            </TooltipTrigger>
+            {!showOAuthButton && (
+              <TooltipContent>
+                This MCP server does not require the OAuth authorization code flow
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       </Stack>
       <PageSection
         heading="Source Toolset"
