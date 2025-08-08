@@ -327,10 +327,10 @@ func newStartCommand() *cli.Command {
 			localEnvPath := c.String("unsafe-local-env-path")
 			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(logger.With(attr.SlogComponent("sessions")), db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient)
+				sessionManager = sessions.NewManager(logger, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient)
 			} else {
 				logger.WarnContext(ctx, "enabling unsafe session store", attr.SlogFilePath(localEnvPath))
-				s, err := sessions.NewUnsafeManager(logger.With(attr.SlogComponent("sessions")), db, redisClient, cache.Suffix("gram-local"), localEnvPath)
+				s, err := sessions.NewUnsafeManager(logger, db, redisClient, cache.Suffix("gram-local"), localEnvPath)
 				if err != nil {
 					return fmt.Errorf("failed to create unsafe session manager: %w", err)
 				}
@@ -423,42 +423,42 @@ func newStartCommand() *cli.Command {
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
-			mux.Use(middleware.NewHTTPLoggingMiddleware(logger.With(attr.SlogComponent("http"))))
+			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
 			mux.Use(middleware.CustomDomainsMiddleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 
-			auth.Attach(mux, auth.NewService(logger.With(attr.SlogComponent("auth")), db, sessionManager, auth.AuthConfigurations{
+			auth.Attach(mux, auth.NewService(logger, db, sessionManager, auth.AuthConfigurations{
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
 				GramServerURL:          c.String("server-url"),
 				SignInRedirectURL:      auth.FormSignInRedirectURL(c.String("site-url")),
 				Environment:            c.String("environment"),
 			}))
-			projects.Attach(mux, projects.NewService(logger.With(attr.SlogComponent("projects")), db, sessionManager))
-			packages.Attach(mux, packages.NewService(logger.With(attr.SlogComponent("packages")), db, sessionManager))
-			integrations.Attach(mux, integrations.NewService(logger.With(attr.SlogComponent("integrations")), db, sessionManager))
-			templates.Attach(mux, templates.NewService(logger.With(attr.SlogComponent("templates")), db, sessionManager))
-			assets.Attach(mux, assets.NewService(logger.With(attr.SlogComponent("assets")), db, sessionManager, assetStorage))
-			deployments.Attach(mux, deployments.NewService(logger.With(attr.SlogComponent("deployments")), tracerProvider, db, temporalClient, sessionManager, assetStorage))
-			toolsets.Attach(mux, toolsets.NewService(logger.With(attr.SlogComponent("toolsets")), db, sessionManager))
-			keys.Attach(mux, keys.NewService(logger.With(attr.SlogComponent("keys")), db, sessionManager, c.String("environment")))
-			environments.Attach(mux, environments.NewService(logger.With(attr.SlogComponent("environments")), db, sessionManager, encryptionClient))
-			tools.Attach(mux, tools.NewService(logger.With(attr.SlogComponent("tools")), db, sessionManager))
-			oauthService := oauth.NewService(logger.With(attr.SlogComponent("oauth")), tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient)
+			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
+			packages.Attach(mux, packages.NewService(logger, db, sessionManager))
+			integrations.Attach(mux, integrations.NewService(logger, db, sessionManager))
+			templates.Attach(mux, templates.NewService(logger, db, sessionManager))
+			assets.Attach(mux, assets.NewService(logger, db, sessionManager, assetStorage))
+			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalClient, sessionManager, assetStorage))
+			toolsets.Attach(mux, toolsets.NewService(logger, db, sessionManager))
+			keys.Attach(mux, keys.NewService(logger, db, sessionManager, c.String("environment")))
+			environments.Attach(mux, environments.NewService(logger, db, sessionManager, encryptionClient))
+			tools.Attach(mux, tools.NewService(logger, db, sessionManager))
+			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient)
 			oauth.Attach(mux, oauthService)
-			instances.Attach(mux, instances.NewService(logger.With(attr.SlogComponent("instances")), tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient))
-			mcp.Attach(mux, mcp.NewService(logger.With(attr.SlogComponent("mcp")), tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService))
-			chat.Attach(mux, chat.NewService(logger.With(attr.SlogComponent("chat")), db, sessionManager, openRouter))
+			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient))
+			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService))
+			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter))
 			if slackClient.Enabled() {
-				slack.Attach(mux, slack.NewService(logger.With(attr.SlogComponent("slack")), db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
+				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
 					GramServerURL:      c.String("server-url"),
 					SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("site-url")),
 					SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
 					SlackSigningSecret: c.String("slack-signing-secret"),
 				}))
 			}
-			variations.Attach(mux, variations.NewService(logger.With(attr.SlogComponent("variations")), db, sessionManager))
-			customdomains.Attach(mux, customdomains.NewService(logger.With(attr.SlogComponent("customdomains")), db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
+			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
+			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

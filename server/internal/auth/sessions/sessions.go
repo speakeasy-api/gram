@@ -41,6 +41,8 @@ type Manager struct {
 }
 
 func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, speakeasyServerAddress string, speakeasySecretKey string, pylon *pylon.Pylon) *Manager {
+	logger = logger.With(attr.SlogComponent("sessions"))
+
 	return &Manager{
 		logger:                 logger.With(attr.SlogComponent("sessions")),
 		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
