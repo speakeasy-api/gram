@@ -157,14 +157,15 @@ type EnvironmentEntry struct {
 }
 
 type ExternalOauthServerMetadatum struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	Slug      string
-	Metadata  []byte
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
-	DeletedAt pgtype.Timestamptz
-	Deleted   bool
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	Slug             string
+	Metadata         []byte
+	SecurityKeyNames []string
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+	DeletedAt        pgtype.Timestamptz
+	Deleted          bool
 }
 
 type HttpSecurity struct {
