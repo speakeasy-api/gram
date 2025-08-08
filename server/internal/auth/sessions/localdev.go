@@ -48,6 +48,8 @@ var unsafeSessionData = []byte(`
 `)
 
 func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string) (*Manager, error) {
+	logger = logger.With(attr.SlogComponent("sessions"))
+
 	raw := unsafeSessionData
 	if localEnvPath != "" {
 		file, err := os.Open(filepath.Clean(localEnvPath))

@@ -52,6 +52,8 @@ type Service struct {
 }
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, openRouter openrouter.Provisioner) *Service {
+	logger = logger.With(attr.SlogComponent("chat"))
+
 	return &Service{
 		auth:           auth.New(logger, db, sessions),
 		sessions:       sessions,

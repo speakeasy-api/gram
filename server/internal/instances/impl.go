@@ -68,6 +68,7 @@ func NewService(
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
+	logger = logger.With(attr.SlogComponent("instances"))
 
 	return &Service{
 		logger:           logger,

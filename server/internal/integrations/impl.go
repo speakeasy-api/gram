@@ -17,6 +17,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/integrations/server"
 	gen "github.com/speakeasy-api/gram/server/gen/integrations"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -39,6 +40,8 @@ var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+	logger = logger.With(attr.SlogComponent("integrations"))
+
 	return &Service{
 		tracer: otel.Tracer("github.com/speakeasy-api/gram/server/internal/packages"),
 		logger: logger,

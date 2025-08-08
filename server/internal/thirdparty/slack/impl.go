@@ -92,6 +92,8 @@ func SlackClientID(env string) string {
 var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, enc *encryption.Client, redisClient *redis.Client, client *slack_client.SlackClient, temporal client.Client, cfg Configurations) *Service {
+	logger = logger.With(attr.SlogComponent("slack"))
+
 	return &Service{
 		tracer:              otel.Tracer("github.com/speakeasy-api/gram/server/internal/auth"),
 		logger:              logger,
