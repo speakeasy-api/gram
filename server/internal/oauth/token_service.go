@@ -84,10 +84,6 @@ func (ts *TokenService) ExchangeAuthorizationCode(ctx context.Context, req *Toke
 		return nil, fmt.Errorf("failed to store token: %w", err)
 	}
 
-	ts.logger.InfoContext(ctx, "authorization code exchanged for tokens",
-		attr.SlogOAuthClientID(req.ClientID),
-		attr.SlogOAuthScope(grant.Scope))
-
 	return token, nil
 }
 

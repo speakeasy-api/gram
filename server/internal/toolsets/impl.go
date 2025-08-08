@@ -59,6 +59,8 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+	logger = logger.With(attr.SlogComponent("toolsets"))
+
 	return &Service{
 		tracer:          otel.Tracer("github.com/speakeasy-api/gram/server/internal/toolsets"),
 		logger:          logger,

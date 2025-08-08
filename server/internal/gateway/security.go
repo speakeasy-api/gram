@@ -80,7 +80,7 @@ func processSecurity(
 
 					if username == "" || password == "" {
 						logger.ErrorContext(ctx, "missing username or password value for basic auth",
-							attr.SlogValueString(fmt.Sprintf("env_username=%t env_password=%t", security.EnvVariables[0] == "", security.EnvVariables[1] == "")),
+							attr.SlogValueString(fmt.Sprintf("env_username_present=%t env_password_present=%t", security.EnvVariables[0] == "", security.EnvVariables[1] == "")),
 							attr.SlogSecurityScheme(security.Scheme.Value))
 					} else {
 						req.SetBasicAuth(username, password)
@@ -413,7 +413,6 @@ func getTokenFromCache(ctx context.Context, logger *slog.Logger, tokenCache cach
 	token = cachedToken.AccessToken
 	// we do this in case the underlying cache implementation does not support TTL
 	if time.Since(cachedToken.CreatedAt) > cachedToken.ExpiresIn {
-		logger.InfoContext(ctx, "cached client credentials token has expired", attr.SlogCacheKey(cacheKey))
 		if err := tokenCache.Delete(ctx, clientCredentialsTokenCache{
 			ProjectID:   cachedToken.ProjectID,
 			ClientID:    cachedToken.ClientID,
