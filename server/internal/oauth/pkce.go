@@ -105,7 +105,6 @@ func (s *PKCEService) VerifyCodeChallenge(ctx context.Context, codeVerifier, cod
 		return fmt.Errorf("PKCE verification failed")
 	}
 
-	s.logger.InfoContext(ctx, "PKCE verification successful", attr.SlogPKCEMethod(method))
 	return nil
 }
 
