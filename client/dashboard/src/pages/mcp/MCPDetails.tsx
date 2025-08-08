@@ -46,7 +46,7 @@ export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
 
   const toolset = useToolsetSuspense({ slug: toolsetSlug! });
-  const showOAuthButton =
+  const activeOAuthAuthCode =
     toolset.data.securityVariables?.some(
       (secVar) =>
         secVar.type === "oauth2" &&
@@ -73,7 +73,7 @@ export function MCPDetailPage() {
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
-              {!showOAuthButton ? (
+              {!activeOAuthAuthCode || !toolset.data.mcpIsPublic ? (
                 <span className="inline-block">
                   <Button
                     variant="secondary"
@@ -97,9 +97,9 @@ export function MCPDetailPage() {
                 </Button>
               )}
             </TooltipTrigger>
-            {!showOAuthButton && (
+            {!activeOAuthAuthCode || !toolset.data.mcpIsPublic && (
               <TooltipContent>
-                This MCP server does not require the OAuth authorization code flow
+                {!activeOAuthAuthCode ? "This MCP server does not require the OAuth authorization code flow" : "This MCP Server must not be private to enable OAuth"}
               </TooltipContent>
             )}
           </Tooltip>

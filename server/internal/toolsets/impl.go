@@ -394,6 +394,10 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, err
 	}
 
+	if toolsetDetails.McpIsPublic == nil || !*toolsetDetails.McpIsPublic {
+		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have external OAuth servers").Log(ctx, s.logger)
+	}
+
 	if toolsetDetails.ExternalOauthServer != nil {
 		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server already exists").Log(ctx, s.logger)
 	}
