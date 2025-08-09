@@ -107,8 +107,6 @@ func (o OauthProxyClientInfo) AdditionalCacheKeys() []string {
 }
 
 func (o OauthProxyClientInfo) TTL() time.Duration {
-	// we are responding to mcp clients wiht a client registration expiry of 15 days
-	// it seems most respect this so we may start enforcing this TTL in our storage
-	// we will not until we finish evaluating that
-	return 0
+	// we double the client expiration time we send to MCP clients for safety
+	return time.Until(o.ClientSecretExpiresAt) * 2
 }
