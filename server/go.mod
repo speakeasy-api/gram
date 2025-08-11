@@ -24,7 +24,7 @@ require (
 	github.com/itchyny/gojq v0.12.17
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/microcosm-cc/bluemonday v1.0.27
-	github.com/pb33f/libopenapi v0.25.2
+	github.com/pb33f/libopenapi v0.25.3
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
 	github.com/posthog/posthog-go v1.6.1
 	github.com/redis/go-redis/extra/redisotel/v9 v9.12.0
