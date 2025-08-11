@@ -46,7 +46,11 @@ func newApp() *cli.App {
 				GitSHA:  GitSHA,
 			})
 
-			logger := slog.New(o11y.NewLogHandler(c.String("log-level"), c.Bool("log-pretty")))
+			logger := slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
+				RawLevel:    c.String("log-level"),
+				Pretty:      c.Bool("log-pretty"),
+				DataDogAttr: os.Getenv("DD_SERVICE") != "",
+			}))
 
 			// Sets GOMAXPROCS to match the Linux container CPU quota.
 			_, err := maxprocs.Set(maxprocs.Logger(nil))
