@@ -22,10 +22,12 @@ type Client struct {
 	DeleteToolsetEndpoint            goa.Endpoint
 	GetToolsetEndpoint               goa.Endpoint
 	CheckMCPSlugAvailabilityEndpoint goa.Endpoint
+	AddExternalOAuthServerEndpoint   goa.Endpoint
+	RemoveOAuthServerEndpoint        goa.Endpoint
 }
 
 // NewClient initializes a "toolsets" service client given the endpoints.
-func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToolset, checkMCPSlugAvailability goa.Endpoint) *Client {
+func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToolset, checkMCPSlugAvailability, addExternalOAuthServer, removeOAuthServer goa.Endpoint) *Client {
 	return &Client{
 		CreateToolsetEndpoint:            createToolset,
 		ListToolsetsEndpoint:             listToolsets,
@@ -33,6 +35,8 @@ func NewClient(createToolset, listToolsets, updateToolset, deleteToolset, getToo
 		DeleteToolsetEndpoint:            deleteToolset,
 		GetToolsetEndpoint:               getToolset,
 		CheckMCPSlugAvailabilityEndpoint: checkMCPSlugAvailability,
+		AddExternalOAuthServerEndpoint:   addExternalOAuthServer,
+		RemoveOAuthServerEndpoint:        removeOAuthServer,
 	}
 }
 
@@ -163,4 +167,50 @@ func (c *Client) CheckMCPSlugAvailability(ctx context.Context, p *CheckMCPSlugAv
 		return
 	}
 	return ires.(bool), nil
+}
+
+// AddExternalOAuthServer calls the "addExternalOAuthServer" endpoint of the
+// "toolsets" service.
+// AddExternalOAuthServer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) AddExternalOAuthServer(ctx context.Context, p *AddExternalOAuthServerPayload) (res *types.Toolset, err error) {
+	var ires any
+	ires, err = c.AddExternalOAuthServerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.Toolset), nil
+}
+
+// RemoveOAuthServer calls the "removeOAuthServer" endpoint of the "toolsets"
+// service.
+// RemoveOAuthServer may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) RemoveOAuthServer(ctx context.Context, p *RemoveOAuthServerPayload) (res *types.Toolset, err error) {
+	var ires any
+	ires, err = c.RemoveOAuthServerEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.Toolset), nil
 }

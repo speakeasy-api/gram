@@ -150,6 +150,54 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "checkMCPSlugAvailability")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CheckMCPSlugAvailability"}`)
 	})
+
+	Method("addExternalOAuthServer", func() {
+		Description("Associate an external OAuth server with a toolset")
+
+		Payload(func() {
+			Extend(AddExternalOAuthServerForm)
+			security.SessionPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.addExternalOAuthServer")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "addExternalOAuthServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "addExternalOAuthServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "AddExternalOAuthServer"}`)
+	})
+
+	Method("removeOAuthServer", func() {
+		Description("Remove OAuth server association from a toolset")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the toolset")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			Param("slug")
+			POST("/rpc/toolsets.removeOAuthServer")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "removeOAuthServer")
+		Meta("openapi:extension:x-speakeasy-name-override", "removeOAuthServer")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RemoveOAuthServer"}`)
+	})
 })
 
 var CreateToolsetForm = Type("CreateToolsetForm", func() {
@@ -178,4 +226,11 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	security.ProjectPayload()
 	Required("slug")
+})
+
+var AddExternalOAuthServerForm = Type("AddExternalOAuthServerForm", func() {
+	Attribute("slug", shared.Slug, "The slug of the toolset to update")
+	Attribute("external_oauth_server", shared.ExternalOAuthServerForm, "The external OAuth server data to create and associate with the toolset")
+	security.ProjectPayload()
+	Required("slug", "external_oauth_server")
 })

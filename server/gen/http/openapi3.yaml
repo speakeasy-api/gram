@@ -5331,6 +5331,111 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListTools
+    /rpc/toolsets.addExternalOAuthServer:
+        post:
+            description: Associate an external OAuth server with a toolset
+            operationId: addExternalOAuthServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The slug of the toolset to update
+                  in: query
+                  name: slug
+                  required: true
+                  schema:
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    maxLength: 40
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/AddExternalOAuthServerRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Toolset'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: addExternalOAuthServer toolsets
+            tags:
+                - toolsets
+            x-speakeasy-name-override: addExternalOAuthServer
+            x-speakeasy-react-hook:
+                name: AddExternalOAuthServer
     /rpc/toolsets.checkMCPSlugAvailability:
         get:
             description: Check if a MCP slug is available
@@ -5808,6 +5913,105 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListToolsets
+    /rpc/toolsets.removeOAuthServer:
+        post:
+            description: Remove OAuth server association from a toolset
+            operationId: removeOAuthServer
+            parameters:
+                - allowEmptyValue: true
+                  description: The slug of the toolset
+                  in: query
+                  name: slug
+                  required: true
+                  schema:
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    maxLength: 40
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Toolset'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: removeOAuthServer toolsets
+            tags:
+                - toolsets
+            x-speakeasy-name-override: removeOAuthServer
+            x-speakeasy-react-hook:
+                name: RemoveOAuthServer
     /rpc/toolsets.update:
         post:
             description: Update a toolset's properties including name, description, and HTTP tools
@@ -6234,6 +6438,28 @@ components:
                     description: The version of the package.
             required:
                 - name
+        AddExternalOAuthServerForm:
+            type: object
+            properties:
+                external_oauth_server:
+                    $ref: '#/components/schemas/ExternalOAuthServerForm'
+                project_slug_input:
+                    type: string
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+            required:
+                - slug
+                - external_oauth_server
+        AddExternalOAuthServerRequestBody:
+            type: object
+            properties:
+                external_oauth_server:
+                    $ref: '#/components/schemas/ExternalOAuthServerForm'
+            required:
+                - external_oauth_server
         AddOpenAPIv3DeploymentAssetForm:
             type: object
             properties:
@@ -7130,6 +7356,19 @@ components:
                 - metadata
                 - created_at
                 - updated_at
+        ExternalOAuthServerForm:
+            type: object
+            properties:
+                metadata:
+                    description: The metadata for the external OAuth server
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+            required:
+                - slug
+                - metadata
         GetDeploymentForm:
             type: object
             properties:

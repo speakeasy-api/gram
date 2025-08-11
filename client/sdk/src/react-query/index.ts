@@ -5,6 +5,7 @@
 export { GramProvider, useGramContext } from "./_context.js";
 export * from "./_types.js";
 
+export * from "./addExternalOAuthServer.js";
 export * from "./checkMCPSlugAvailability.js";
 export * from "./createAPIKey.js";
 export * from "./createDeployment.js";
@@ -46,6 +47,7 @@ export * from "./publishPackage.js";
 export * from "./redeployDeployment.js";
 export * from "./register.js";
 export * from "./registerDomain.js";
+export * from "./removeOAuthServer.js";
 export * from "./renderTemplate.js";
 export * from "./renderTemplateByID.js";
 export * from "./revokeAPIKey.js";

@@ -1426,6 +1426,485 @@ func DecodeCheckMCPSlugAvailabilityResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildAddExternalOAuthServerRequest instantiates a HTTP request object with
+// method and path set to call the "toolsets" service "addExternalOAuthServer"
+// endpoint
+func (c *Client) BuildAddExternalOAuthServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: AddExternalOAuthServerToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "addExternalOAuthServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeAddExternalOAuthServerRequest returns an encoder for requests sent to
+// the toolsets addExternalOAuthServer server.
+func EncodeAddExternalOAuthServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.AddExternalOAuthServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "addExternalOAuthServer", "*toolsets.AddExternalOAuthServerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		body := NewAddExternalOAuthServerRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("toolsets", "addExternalOAuthServer", err)
+		}
+		return nil
+	}
+}
+
+// DecodeAddExternalOAuthServerResponse returns a decoder for responses
+// returned by the toolsets addExternalOAuthServer endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeAddExternalOAuthServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeAddExternalOAuthServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body AddExternalOAuthServerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+			}
+			err = ValidateAddExternalOAuthServerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+			}
+			res := NewAddExternalOAuthServerToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body AddExternalOAuthServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+			}
+			err = ValidateAddExternalOAuthServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+			}
+			return nil, NewAddExternalOAuthServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body AddExternalOAuthServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+			}
+			err = ValidateAddExternalOAuthServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+			}
+			return nil, NewAddExternalOAuthServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body AddExternalOAuthServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+			}
+			err = ValidateAddExternalOAuthServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+			}
+			return nil, NewAddExternalOAuthServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body AddExternalOAuthServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+			}
+			err = ValidateAddExternalOAuthServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+			}
+			return nil, NewAddExternalOAuthServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body AddExternalOAuthServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+			}
+			err = ValidateAddExternalOAuthServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+			}
+			return nil, NewAddExternalOAuthServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body AddExternalOAuthServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+			}
+			err = ValidateAddExternalOAuthServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+			}
+			return nil, NewAddExternalOAuthServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body AddExternalOAuthServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+			}
+			err = ValidateAddExternalOAuthServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+			}
+			return nil, NewAddExternalOAuthServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body AddExternalOAuthServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+				}
+				err = ValidateAddExternalOAuthServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+				}
+				return nil, NewAddExternalOAuthServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body AddExternalOAuthServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+				}
+				err = ValidateAddExternalOAuthServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+				}
+				return nil, NewAddExternalOAuthServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "addExternalOAuthServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body AddExternalOAuthServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "addExternalOAuthServer", err)
+			}
+			err = ValidateAddExternalOAuthServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "addExternalOAuthServer", err)
+			}
+			return nil, NewAddExternalOAuthServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "addExternalOAuthServer", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRemoveOAuthServerRequest instantiates a HTTP request object with method
+// and path set to call the "toolsets" service "removeOAuthServer" endpoint
+func (c *Client) BuildRemoveOAuthServerRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RemoveOAuthServerToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "removeOAuthServer", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRemoveOAuthServerRequest returns an encoder for requests sent to the
+// toolsets removeOAuthServer server.
+func EncodeRemoveOAuthServerRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.RemoveOAuthServerPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "removeOAuthServer", "*toolsets.RemoveOAuthServerPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeRemoveOAuthServerResponse returns a decoder for responses returned by
+// the toolsets removeOAuthServer endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeRemoveOAuthServerResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRemoveOAuthServerResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RemoveOAuthServerResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+			}
+			err = ValidateRemoveOAuthServerResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+			}
+			res := NewRemoveOAuthServerToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RemoveOAuthServerUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+			}
+			err = ValidateRemoveOAuthServerUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+			}
+			return nil, NewRemoveOAuthServerUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RemoveOAuthServerForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+			}
+			err = ValidateRemoveOAuthServerForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+			}
+			return nil, NewRemoveOAuthServerForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RemoveOAuthServerBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+			}
+			err = ValidateRemoveOAuthServerBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+			}
+			return nil, NewRemoveOAuthServerBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RemoveOAuthServerNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+			}
+			err = ValidateRemoveOAuthServerNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+			}
+			return nil, NewRemoveOAuthServerNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RemoveOAuthServerConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+			}
+			err = ValidateRemoveOAuthServerConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+			}
+			return nil, NewRemoveOAuthServerConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RemoveOAuthServerUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+			}
+			err = ValidateRemoveOAuthServerUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+			}
+			return nil, NewRemoveOAuthServerUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RemoveOAuthServerInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+			}
+			err = ValidateRemoveOAuthServerInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+			}
+			return nil, NewRemoveOAuthServerInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RemoveOAuthServerInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+				}
+				err = ValidateRemoveOAuthServerInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+				}
+				return nil, NewRemoveOAuthServerInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RemoveOAuthServerUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+				}
+				err = ValidateRemoveOAuthServerUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+				}
+				return nil, NewRemoveOAuthServerUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "removeOAuthServer", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RemoveOAuthServerGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "removeOAuthServer", err)
+			}
+			err = ValidateRemoveOAuthServerGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "removeOAuthServer", err)
+			}
+			return nil, NewRemoveOAuthServerGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "removeOAuthServer", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalSecurityVariableResponseBodyToTypesSecurityVariable builds a value
 // of type *types.SecurityVariable from a value of type
 // *SecurityVariableResponseBody.
@@ -1762,6 +2241,30 @@ func unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(v *Promp
 	res := &types.PromptTemplateEntry{
 		ID:   *v.ID,
 		Name: types.Slug(*v.Name),
+	}
+
+	return res
+}
+
+// marshalTypesExternalOAuthServerFormToExternalOAuthServerFormRequestBody
+// builds a value of type *ExternalOAuthServerFormRequestBody from a value of
+// type *types.ExternalOAuthServerForm.
+func marshalTypesExternalOAuthServerFormToExternalOAuthServerFormRequestBody(v *types.ExternalOAuthServerForm) *ExternalOAuthServerFormRequestBody {
+	res := &ExternalOAuthServerFormRequestBody{
+		Slug:     string(v.Slug),
+		Metadata: v.Metadata,
+	}
+
+	return res
+}
+
+// marshalExternalOAuthServerFormRequestBodyToTypesExternalOAuthServerForm
+// builds a value of type *types.ExternalOAuthServerForm from a value of type
+// *ExternalOAuthServerFormRequestBody.
+func marshalExternalOAuthServerFormRequestBodyToTypesExternalOAuthServerForm(v *ExternalOAuthServerFormRequestBody) *types.ExternalOAuthServerForm {
+	res := &types.ExternalOAuthServerForm{
+		Slug:     types.Slug(v.Slug),
+		Metadata: v.Metadata,
 	}
 
 	return res

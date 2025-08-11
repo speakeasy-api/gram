@@ -36,3 +36,13 @@ func GetToolsetToolsetsPath() string {
 func CheckMCPSlugAvailabilityToolsetsPath() string {
 	return "/rpc/toolsets.checkMCPSlugAvailability"
 }
+
+// AddExternalOAuthServerToolsetsPath returns the URL path to the toolsets service addExternalOAuthServer HTTP endpoint.
+func AddExternalOAuthServerToolsetsPath() string {
+	return "/rpc/toolsets.addExternalOAuthServer"
+}
+
+// RemoveOAuthServerToolsetsPath returns the URL path to the toolsets service removeOAuthServer HTTP endpoint.
+func RemoveOAuthServerToolsetsPath() string {
+	return "/rpc/toolsets.removeOAuthServer"
+}

@@ -2,9 +2,11 @@ package toolsets
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -31,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -50,6 +53,7 @@ type Service struct {
 	auth            *auth.Auth
 	toolsets        *Toolsets
 	domainsRepo     *domainsRepo.Queries
+	oauthRepo       *oauthRepo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -66,6 +70,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		environmentRepo: environmentsRepo.New(db),
 		toolsets:        NewToolsets(db),
 		domainsRepo:     domainsRepo.New(db),
+		oauthRepo:       oauthRepo.New(db),
 	}
 }
 
@@ -372,4 +377,124 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func (s *Service) CheckMCPSlugAvailability(ctx context.Context, payload *gen.CheckMCPSlugAvailabilityPayload) (bool, error) {
 	//nolint:wrapcheck // Wrapping adds no value here
 	return s.repo.CheckMCPSlugAvailability(ctx, conv.ToPGText(conv.ToLower(payload.Slug)))
+}
+
+func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddExternalOAuthServerPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	if authCtx.AccountType == "free" {
+		return nil, oops.E(oops.CodeForbidden, nil, "free accounts cannot add external OAuth servers").Log(ctx, s.logger)
+	}
+
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug))
+	if err != nil {
+		return nil, err
+	}
+
+	if toolsetDetails.McpIsPublic == nil || !*toolsetDetails.McpIsPublic {
+		return nil, oops.E(oops.CodeBadRequest, nil, "private MCP servers cannot have external OAuth servers").Log(ctx, s.logger)
+	}
+
+	if toolsetDetails.ExternalOauthServer != nil {
+		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server already exists").Log(ctx, s.logger)
+	}
+
+	oauth2AuthCodeSecurityCount := 0
+	for _, securityVariable := range toolsetDetails.SecurityVariables {
+		if securityVariable.Type != nil && *securityVariable.Type == "oauth2" && securityVariable.OauthTypes != nil && slices.Contains(securityVariable.OauthTypes, "authorization_code") {
+			oauth2AuthCodeSecurityCount++
+		}
+	}
+
+	if oauth2AuthCodeSecurityCount > 1 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "multiple OAuth2 security schemes detected").Log(ctx, s.logger)
+	}
+
+	// Marshal metadata to JSON bytes
+	metadataBytes, err := json.Marshal(payload.ExternalOauthServer.Metadata)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid metadata format").Log(ctx, s.logger)
+	}
+
+	// Create the external OAuth server metadata entry
+	externalOAuthServer, err := s.oauthRepo.CreateExternalOAuthServerMetadata(ctx, oauthRepo.CreateExternalOAuthServerMetadataParams{
+		ProjectID: *authCtx.ProjectID,
+		Slug:      conv.ToLower(payload.ExternalOauthServer.Slug),
+		Metadata:  metadataBytes,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create external OAuth server").Log(ctx, s.logger)
+	}
+
+	// Associate it with the toolset
+	_, err = s.repo.UpdateToolsetExternalOAuthServer(ctx, repo.UpdateToolsetExternalOAuthServerParams{
+		Slug:                  conv.ToLower(payload.Slug),
+		ProjectID:             *authCtx.ProjectID,
+		ExternalOauthServerID: uuid.NullUUID{UUID: externalOAuthServer.ID, Valid: true},
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to associate external OAuth server with toolset").Log(ctx, s.logger)
+	}
+
+	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug))
+	if err != nil {
+		return nil, err
+	}
+
+	return toolsetDetails, nil
+}
+
+func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAuthServerPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	// Get the current toolset to find which OAuth server to remove
+	existingToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").Log(ctx, s.logger)
+	}
+
+	// Remove external OAuth server metadata if it exists
+	if existingToolset.ExternalOauthServerID.Valid {
+		err = s.oauthRepo.DeleteExternalOAuthServerMetadata(ctx, oauthRepo.DeleteExternalOAuthServerMetadataParams{
+			ProjectID: *authCtx.ProjectID,
+			ID:        existingToolset.ExternalOauthServerID.UUID,
+		})
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to delete external OAuth server metadata").Log(ctx, s.logger)
+		}
+	}
+
+	// Clear OAuth server associations from toolset
+	_, err = s.repo.ClearToolsetOAuthServers(ctx, repo.ClearToolsetOAuthServersParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to remove OAuth server from toolset").Log(ctx, s.logger)
+	}
+
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug))
+	if err != nil {
+		return nil, err
+	}
+
+	return toolsetDetails, nil
 }

@@ -1,11 +1,12 @@
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
-import { OAuthSetupModal } from "@/components/OAuthSetupModal";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TextArea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
@@ -20,14 +21,16 @@ import { cn, getServerURL } from "@/lib/utils";
 import { Toolset, ToolsetEntry } from "@gram/client/models/components";
 import {
   invalidateAllToolset,
+  useAddExternalOAuthServerMutation,
   useGetDomain,
   useListTools,
+  useRemoveOAuthServerMutation,
   useToolsetSuspense,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
 import { Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Globe } from "lucide-react";
+import { Globe, Trash2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Outlet, useParams } from "react-router";
@@ -43,7 +46,7 @@ export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
 
   const toolset = useToolsetSuspense({ slug: toolsetSlug! });
-  const showOAuthButton =
+  const activeOAuthAuthCode =
     toolset.data.securityVariables?.some(
       (secVar) =>
         secVar.type === "oauth2" &&
@@ -67,19 +70,40 @@ export function MCPDetailPage() {
         className="mb-8 justify-between"
       >
         <Heading variant="h2">MCP Details</Heading>
-        {showOAuthButton && (
-          <Button
-            variant="secondary"
-            size="lg"
-            onClick={() =>
-              isOAuthConnected
-                ? setIsOAuthDetailsModalOpen(true)
-                : setIsOAuthModalOpen(true)
-            }
-          >
-            {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
-          </Button>
-        )}
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {!activeOAuthAuthCode || !toolset.data.mcpIsPublic ? (
+                <span className="inline-block">
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    disabled={true}
+                  >
+                    {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
+                  </Button>
+                </span>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  onClick={() =>
+                    isOAuthConnected
+                      ? setIsOAuthDetailsModalOpen(true)
+                      : setIsOAuthModalOpen(true)
+                  }
+                >
+                  {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
+                </Button>
+              )}
+            </TooltipTrigger>
+            {!activeOAuthAuthCode || !toolset.data.mcpIsPublic && (
+              <TooltipContent>
+                {!activeOAuthAuthCode ? "This MCP server does not require the OAuth authorization code flow" : "This MCP Server must not be private to enable OAuth"}
+              </TooltipContent>
+            )}
+          </Tooltip>
+        </TooltipProvider>
       </Stack>
       <PageSection
         heading="Source Toolset"
@@ -94,6 +118,7 @@ export function MCPDetailPage() {
         isOpen={isOAuthModalOpen}
         onClose={() => setIsOAuthModalOpen(false)}
         toolsetSlug={toolset.data.slug}
+        toolset={toolset.data}
       />
       <OAuthDetailsModal
         isOpen={isOAuthDetailsModalOpen}
@@ -709,56 +734,250 @@ function ConnectOAuthModal({
   isOpen,
   onClose,
   toolsetSlug,
+  toolset,
 }: {
   isOpen: boolean;
   onClose: () => void;
   toolsetSlug: string;
+  toolset: Toolset;
 }) {
   const session = useSession();
-  const telemetry = useTelemetry();
+  const queryClient = useQueryClient();
   const isAccountUpgrade = session.gramAccountType === "free";
-  const [isRequesting, setIsRequesting] = useState(false);
 
-  const handleAction = async () => {
-    telemetry.capture("feature_requested", {
-      action: "mcp_oauth_integration",
-      slug: toolsetSlug,
-    });
+  // For free accounts, show the FeatureRequestModal
+  if (isAccountUpgrade) {
+    return (
+      <FeatureRequestModal
+        isOpen={isOpen}
+        onClose={onClose}
+        title="Connect OAuth"
+        description="A Managed OAuth integration requires upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
+        actionType="mcp_oauth_integration"
+        icon={Globe}
+        telemetryData={{ slug: toolsetSlug }}
+        accountUpgrade={isAccountUpgrade}
+      />
+    );
+  }
 
-    if (!isAccountUpgrade) {
-      setIsRequesting(true);
-      try {
-        toast.success("Help requested - we'll be in touch soon!");
-        onClose();
-      } catch {
-        toast.error("Failed to request help");
-      } finally {
-        setIsRequesting(false);
-      }
-    }
-  };
-
+  // For non-free accounts, show the tab modal
   return (
-    <OAuthSetupModal
+    <OAuthTabModal
       isOpen={isOpen}
       onClose={onClose}
-      title="Connect OAuth"
-      description={
-        isAccountUpgrade
-          ? "A Managed OAuth integration requires upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
-          : "Gram can help you connect an OAuth provider directly to your MCP server. Book a meeting and we'll help you get started."
-      }
-      icon={Globe}
-      docsUrl="https://docs.getgram.ai/build-mcp/adding-oauth"
-      primaryAction={{
-        label: isAccountUpgrade ? "Book Meeting" : "Request Help",
-        href: isAccountUpgrade
-          ? "https://calendly.com/sagar-speakeasy/30min"
-          : undefined,
-        onClick: handleAction,
-        isLoading: isRequesting,
+      toolsetSlug={toolsetSlug}
+      toolset={toolset}
+      onSuccess={() => {
+        invalidateAllToolset(queryClient);
+        toast.success("External OAuth server configured successfully");
+        onClose();
       }}
     />
+  );
+}
+
+function OAuthTabModal({
+  isOpen,
+  onClose,
+  toolsetSlug,
+  toolset,
+  onSuccess,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  toolsetSlug: string;
+  toolset: Toolset;
+  onSuccess: () => void;
+}) {
+  const [activeTab, setActiveTab] = useState("external");
+  const [externalSlug, setExternalSlug] = useState("");
+  const [metadataJson, setMetadataJson] = useState("");
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const telemetry = useTelemetry();
+
+  // Check if there are multiple OAuth2 authorization_code security variables
+  const oauth2AuthCodeCount = toolset.securityVariables?.filter(
+    (secVar) =>
+      secVar.type === "oauth2" &&
+      secVar.oauthTypes?.includes("authorization_code")
+  ).length ?? 0;
+
+  const hasMultipleOAuth2AuthCode = oauth2AuthCodeCount > 1;
+  const queryClient = useQueryClient();
+
+  const handleBookMeeting = () => {
+    telemetry.capture("feature_requested", {
+      action: "mcp_oauth_integration",
+      toolset_slug: toolsetSlug,
+    });
+    window.open("https://calendly.com/sagar-speakeasy/30min", "_blank");
+  };
+
+  const addExternalOAuthMutation = useAddExternalOAuthServerMutation({
+    onSuccess: () => {
+      // Invalidate both the specific toolset and all toolsets
+      invalidateAllToolset(queryClient);
+      
+      telemetry.capture("mcp_event", {
+        action: "external_oauth_configured",
+        slug: toolsetSlug,
+      });
+
+      onSuccess();
+    },
+    onError: (error) => {
+      console.error("Failed to configure external OAuth:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to configure OAuth"
+      );
+    },
+  });
+
+  const handleExternalSubmit = () => {
+    // Validate JSON
+    let parsedMetadata;
+    try {
+      parsedMetadata = JSON.parse(metadataJson);
+    } catch (_e) {
+      setJsonError("Invalid JSON format");
+      return;
+    }
+
+    if (!externalSlug.trim()) {
+      toast.error("Please provide a slug for the OAuth server");
+      return;
+    }
+
+    // Validate required OAuth endpoints
+    const requiredEndpoints = ['authorization_endpoint', 'token_endpoint', 'registration_endpoint'];
+    const missingEndpoints = requiredEndpoints.filter(endpoint => !parsedMetadata[endpoint]);
+    
+    if (missingEndpoints.length > 0) {
+      setJsonError(`Missing required endpoints: ${missingEndpoints.join(', ')}`);
+      return;
+    }
+
+    setJsonError(null);
+    addExternalOAuthMutation.mutate({
+      request: {
+        slug: toolsetSlug,
+        addExternalOAuthServerRequestBody: {
+          externalOauthServer: {
+            slug: externalSlug,
+            metadata: parsedMetadata,
+          },
+        },
+      },
+    });
+  };
+
+
+  return (
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <Dialog.Content className="max-w-6xl max-h-[90vh] overflow-hidden">
+          <Dialog.Header>
+            <Dialog.Title>Connect OAuth</Dialog.Title>
+          </Dialog.Header>
+          
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1">
+            <TabsList>
+              <TabsTrigger value="external">External Server</TabsTrigger>
+              <TabsTrigger value="proxy">OAuth Proxy</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="external" className="space-y-4 overflow-auto max-h-[60vh]">
+              {hasMultipleOAuth2AuthCode && (
+                <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
+                  <Type small className="text-red-600 mt-1">
+                    Not Supported: This MCP server has {oauth2AuthCodeCount} OAuth2 security schemes detected.
+                  </Type>
+                </div>
+              )}
+              <div>
+                <Type className="font-medium mb-2">External OAuth Server Configuration</Type>
+                <Type muted small className="mb-4">
+                  Configure your MCP server to use an external authorization server if your API fits the very specific MCP OAuth requirements. <Link external to="https://docs.getgram.ai/host-mcp/adding-oauth#authorization-code">Docs</Link>
+                </Type>
+                
+                <Stack gap={4}>
+                  <div>
+                    <Type className="font-medium mb-2">OAuth Server Slug</Type>
+                    <Input
+                      placeholder="my-oauth-server"
+                      value={externalSlug}
+                      onChange={setExternalSlug}
+                      maxLength={40}
+                    />
+                  </div>
+
+                  <div>
+                    <Type className="font-medium mb-2">OAuth Authorization Server Metadata</Type>
+                    {jsonError && (
+                      <Type className="text-red-500 text-sm mt-1 !text-red-500">{jsonError}</Type>
+                    )}
+                    <TextArea
+                      placeholder={`{
+  "issuer": "https://your-oauth-server.com",
+  "authorization_endpoint": "https://your-oauth-server.com/oauth/authorize",
+  "registration_endpoint": "https://your-oauth-server.com/oauth/register",
+  "token_endpoint": "https://your-oauth-server.com/oauth/token",
+  "scopes_supported": ["read", "write"],
+  "response_types_supported": ["code"],
+  "grant_types_supported": ["authorization_code"],
+  "token_endpoint_auth_methods_supported": [
+    "client_secret_post"
+  ],
+  "code_challenge_methods_supported": [
+    "plain",
+    "S256"
+  ]
+}`}
+                      value={metadataJson}
+                      onChange={(value: string) => {
+                        setMetadataJson(value);
+                        setJsonError(null);
+                      }}
+                      rows={12}
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                </Stack>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="proxy" className="space-y-4">
+              <div>
+                <Type className="font-medium mb-2">OAuth Proxy</Type>
+                <Type muted small>
+                  Gram can help you get started with an OAuth proxy when you don't fit the very specific MCP OAuth requirements. Book a meeting and we'll help you get started.
+                </Type>
+                <div className="mt-6 flex gap-3 justify-end items-center">
+                  <Button variant="outline" onClick={() => window.open("https://docs.getgram.ai/host-mcp/adding-oauth#oauth-proxy", "_blank")}>
+                    View Docs
+                  </Button>
+                  <Button onClick={handleBookMeeting}>
+                    Book Meeting
+                  </Button>
+                </div>
+              </div>
+            </TabsContent>
+          </Tabs>
+
+          <Dialog.Footer className="flex justify-end">
+            {activeTab === "external" && (
+              <Button
+                onClick={handleExternalSubmit}
+                disabled={hasMultipleOAuth2AuthCode || addExternalOAuthMutation.isPending || !externalSlug.trim() || !metadataJson.trim()}
+              >
+                {addExternalOAuthMutation.isPending ? "Configuring..." : "Configure External OAuth"}
+              </Button>
+            )}
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    </>
   );
 }
 
@@ -772,18 +991,43 @@ function OAuthDetailsModal({
   toolset: Toolset;
 }) {
   const { url: mcpUrl } = useMcpUrl(toolset);
+  const queryClient = useQueryClient();
+  
+  const removeOAuthMutation = useRemoveOAuthServerMutation({
+    onSuccess: () => {
+      invalidateAllToolset(queryClient);
+      onClose();
+    },
+  });
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <Dialog.Content className="max-w-2xl">
-        <Dialog.Header>
+      <Dialog.Content className="max-w-2xl max-h-[80vh] flex flex-col">
+        <Dialog.Header className="flex-shrink-0">
           <Dialog.Title>
             {toolset.externalOauthServer
               ? "External OAuth Configuration"
               : "OAuth Proxy Configuration"}
           </Dialog.Title>
         </Dialog.Header>
-        <Stack gap={4}>
+        <div className="flex-1 overflow-y-auto">
+          <Stack gap={4}>
+          {toolset.oauthProxyServer && (
+            <div className="flex items-center justify-between">
+              <Type className="font-medium">OAuth Proxy Server</Type>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="hover:bg-destructive hover:text-white border-none"
+                onClick={() => removeOAuthMutation.mutate({
+                  request: { slug: toolset.slug }
+                })}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Unlink
+              </Button>
+            </div>
+          )}
           {toolset.oauthProxyServer?.oauthProxyProviders?.map((provider) => (
             <Stack key={provider.id} gap={2}>
               <Stack gap={2} className="pl-4">
@@ -830,10 +1074,32 @@ function OAuthDetailsModal({
           ))}
           {toolset.externalOauthServer && (
             <Stack gap={2}>
+              <div className="flex items-center justify-between">
+                <Type className="font-medium">External OAuth Server</Type>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-destructive hover:border-destructive"
+                  tooltip="Unlink this OAuth config from your MCP Server"
+                  onClick={() => removeOAuthMutation.mutate({
+                    request: { slug: toolset.slug }
+                  })}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
               <Stack gap={2} className="pl-4">
                 <div>
                   <Type small className="font-medium text-muted-foreground">
-                    OAuth Authorization Server Metadata:
+                    External OAuth Server Slug:
+                  </Type>
+                  <CodeBlock className="mt-1">
+                    {toolset.externalOauthServer.slug}
+                  </CodeBlock>
+                </div>
+                <div>
+                  <Type small className="font-medium text-muted-foreground">
+                    OAuth Authorization Server Discovery URL:
                   </Type>
                   <CodeBlock className="mt-1">
                     {mcpUrl
@@ -845,10 +1111,19 @@ function OAuthDetailsModal({
                       : ""}
                   </CodeBlock>
                 </div>
+                <div>
+                  <Type small className="font-medium text-muted-foreground">
+                    OAuth Authorization Server Metadata:
+                  </Type>
+                  <CodeBlock className="mt-1">
+                    {JSON.stringify(toolset.externalOauthServer.metadata, null, 2)}
+                  </CodeBlock>
+                </div>
               </Stack>
             </Stack>
           )}
-        </Stack>
+          </Stack>
+        </div>
       </Dialog.Content>
     </Dialog>
   );

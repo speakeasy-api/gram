@@ -283,3 +283,94 @@ func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug s
 
 	return v, nil
 }
+
+// BuildAddExternalOAuthServerPayload builds the payload for the toolsets
+// addExternalOAuthServer endpoint from CLI flags.
+func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody string, toolsetsAddExternalOAuthServerSlug string, toolsetsAddExternalOAuthServerSessionToken string, toolsetsAddExternalOAuthServerProjectSlugInput string) (*toolsets.AddExternalOAuthServerPayload, error) {
+	var err error
+	var body AddExternalOAuthServerRequestBody
+	{
+		err = json.Unmarshal([]byte(toolsetsAddExternalOAuthServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Ab et quod dolores pariatur.\",\n         \"slug\": \"02h\"\n      }\n   }'")
+		}
+		if body.ExternalOauthServer == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("external_oauth_server", "body"))
+		}
+		if body.ExternalOauthServer != nil {
+			if err2 := ValidateExternalOAuthServerFormRequestBody(body.ExternalOauthServer); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var slug string
+	{
+		slug = toolsetsAddExternalOAuthServerSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsAddExternalOAuthServerSessionToken != "" {
+			sessionToken = &toolsetsAddExternalOAuthServerSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsAddExternalOAuthServerProjectSlugInput != "" {
+			projectSlugInput = &toolsetsAddExternalOAuthServerProjectSlugInput
+		}
+	}
+	v := &toolsets.AddExternalOAuthServerPayload{}
+	if body.ExternalOauthServer != nil {
+		v.ExternalOauthServer = marshalExternalOAuthServerFormRequestBodyToTypesExternalOAuthServerForm(body.ExternalOauthServer)
+	}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildRemoveOAuthServerPayload builds the payload for the toolsets
+// removeOAuthServer endpoint from CLI flags.
+func BuildRemoveOAuthServerPayload(toolsetsRemoveOAuthServerSlug string, toolsetsRemoveOAuthServerSessionToken string, toolsetsRemoveOAuthServerProjectSlugInput string) (*toolsets.RemoveOAuthServerPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = toolsetsRemoveOAuthServerSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsRemoveOAuthServerSessionToken != "" {
+			sessionToken = &toolsetsRemoveOAuthServerSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsRemoveOAuthServerProjectSlugInput != "" {
+			projectSlugInput = &toolsetsRemoveOAuthServerProjectSlugInput
+		}
+	}
+	v := &toolsets.RemoveOAuthServerPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

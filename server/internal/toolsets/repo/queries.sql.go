@@ -36,6 +36,46 @@ func (q *Queries) CheckMCPSlugAvailability(ctx context.Context, mcpSlug pgtype.T
 	return exists, err
 }
 
+const clearToolsetOAuthServers = `-- name: ClearToolsetOAuthServers :one
+UPDATE toolsets
+SET 
+    external_oauth_server_id = NULL
+  , oauth_proxy_server_id = NULL
+  , updated_at = clock_timestamp()
+WHERE slug = $1 AND project_id = $2
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, mcp_slug, mcp_is_public, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+`
+
+type ClearToolsetOAuthServersParams struct {
+	Slug      string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ClearToolsetOAuthServers(ctx context.Context, arg ClearToolsetOAuthServersParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, clearToolsetOAuthServers, arg.Slug, arg.ProjectID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.HttpToolNames,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const clearToolsetPromptTemplates = `-- name: ClearToolsetPromptTemplates :exec
 DELETE FROM toolset_prompts
 WHERE project_id = $1
@@ -509,6 +549,46 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 		arg.Slug,
 		arg.ProjectID,
 	)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.HttpToolNames,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const updateToolsetExternalOAuthServer = `-- name: UpdateToolsetExternalOAuthServer :one
+UPDATE toolsets
+SET 
+    external_oauth_server_id = $1
+  , updated_at = clock_timestamp()
+WHERE slug = $2 AND project_id = $3
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, mcp_slug, mcp_is_public, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateToolsetExternalOAuthServerParams struct {
+	ExternalOauthServerID uuid.NullUUID
+	Slug                  string
+	ProjectID             uuid.UUID
+}
+
+func (q *Queries) UpdateToolsetExternalOAuthServer(ctx context.Context, arg UpdateToolsetExternalOAuthServerParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, updateToolsetExternalOAuthServer, arg.ExternalOauthServerID, arg.Slug, arg.ProjectID)
 	var i Toolset
 	err := row.Scan(
 		&i.ID,

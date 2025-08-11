@@ -395,12 +395,17 @@ func DescribeToolset(
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").Log(ctx, logger)
 		}
-		if err == nil {
+		if len(externalOauthMetadata.Metadata) > 0 {
+			var metadata interface{}
+			if err := json.Unmarshal(externalOauthMetadata.Metadata, &metadata); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal external oauth metadata").Log(ctx, logger)
+			}
+
 			externalOAuthServer = &types.ExternalOAuthServer{
 				ID:        externalOauthMetadata.ID.String(),
 				ProjectID: externalOauthMetadata.ProjectID.String(),
 				Slug:      types.Slug(externalOauthMetadata.Slug),
-				Metadata:  externalOauthMetadata.Metadata,
+				Metadata:  metadata,
 				CreatedAt: externalOauthMetadata.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt: externalOauthMetadata.UpdatedAt.Time.Format(time.RFC3339),
 			}
