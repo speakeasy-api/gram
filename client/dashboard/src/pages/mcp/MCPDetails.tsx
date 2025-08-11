@@ -61,9 +61,6 @@ export function MCPDetailPage() {
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
   }, []);
-  
-  console.log(toolset.data.mcpIsPublic);
-  console.log(activeOAuthAuthCode);
 
   return (
     <Stack>
