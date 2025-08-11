@@ -26,14 +26,25 @@ var temporalKeys = map[string]attr.Key{
 	"RunID":        attr.TemporalRunIDKey,
 }
 
-func NewLogHandler(rawLevel string, pretty bool) slog.Handler {
-	rl := rawLevel
+type LogHandlerOptions struct {
+	// RawLevel is the log level as a string, e.g., "info", "debug", etc.
+	RawLevel string
+	// Pretty indicates whether to use pretty logging.
+	Pretty bool
+	// DataDogAttr indicates whether to add DataDog specific attributes to logs
+	// instead of vendor-agnostic equivalents.
+	DataDogAttr bool
+}
+
+func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
+	rl := opts.RawLevel
 	if rl == "" {
 		rl = "error"
 	}
 
-	if pretty {
+	if opts.Pretty {
 		return &ContextHandler{
+			DataDogAttr: opts.DataDogAttr,
 			Handler: charmlog.NewWithOptions(os.Stderr, charmlog.Options{
 				ReportCaller: true,
 				Level:        LogLevels[rl].Charm,
@@ -41,6 +52,7 @@ func NewLogHandler(rawLevel string, pretty bool) slog.Handler {
 		}
 	} else {
 		return &ContextHandler{
+			DataDogAttr: opts.DataDogAttr,
 			Handler: slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 				AddSource: true,
 				Level:     LogLevels[rl].Slog,
@@ -64,7 +76,8 @@ func NewLogHandler(rawLevel string, pretty bool) slog.Handler {
 }
 
 type ContextHandler struct {
-	Handler slog.Handler
+	Handler     slog.Handler
+	DataDogAttr bool
 }
 
 var _ slog.Handler = (*ContextHandler)(nil)
@@ -74,20 +87,36 @@ func (h *ContextHandler) Enabled(ctx context.Context, level slog.Level) bool {
 }
 
 func (h *ContextHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	return &ContextHandler{Handler: h.Handler.WithAttrs(attrs)}
+	return &ContextHandler{
+		Handler:     h.Handler.WithAttrs(attrs),
+		DataDogAttr: h.DataDogAttr,
+	}
 }
 
 func (h *ContextHandler) WithGroup(name string) slog.Handler {
-	return &ContextHandler{Handler: h.Handler.WithGroup(name)}
+	return &ContextHandler{
+		Handler:     h.Handler.WithGroup(name),
+		DataDogAttr: h.DataDogAttr,
+	}
 }
 
 func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
 	spanCtx := trace.SpanContextFromContext(ctx)
 	if spanCtx.HasTraceID() {
-		record.Add(attr.SlogTraceID(spanCtx.TraceID().String()))
+		id := spanCtx.TraceID().String()
+		if h.DataDogAttr {
+			record.Add(attr.SlogDataDogTraceID(id))
+		} else {
+			record.Add(attr.SlogTraceID(id))
+		}
 	}
 	if spanCtx.HasSpanID() {
-		record.Add(attr.SlogSpanID(spanCtx.SpanID().String()))
+		id := spanCtx.SpanID().String()
+		if h.DataDogAttr {
+			record.Add(attr.SlogDataDogSpanID(id))
+		} else {
+			record.Add(attr.SlogSpanID(id))
+		}
 	}
 
 	if service, ok := ctx.Value(goa.ServiceKey).(string); ok {

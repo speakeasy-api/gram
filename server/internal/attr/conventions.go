@@ -35,9 +35,12 @@ const (
 	ExpectedKey = attribute.Key("expected")
 	NameKey     = attribute.Key("name")
 	ReasonKey   = attribute.Key("reason")
-	SpanIDKey   = attribute.Key("span.id")
-	TraceIDKey  = attribute.Key("trace.id")
 	ValueKey    = attribute.Key("value")
+
+	SpanIDKey         = attribute.Key("span.id")
+	TraceIDKey        = attribute.Key("trace.id")
+	DataDogTraceIDKey = attribute.Key("dd.trace_id")
+	DataDogSpanIDKey  = attribute.Key("dd.span_id")
 
 	GoaServiceKey = attribute.Key("goa.service")
 	GoaMethodKey  = attribute.Key("goa.method")
@@ -201,6 +204,16 @@ func SlogSpanID(v string) slog.Attr      { return slog.String(string(SpanIDKey),
 
 func TraceID(v string) attribute.KeyValue { return TraceIDKey.String(v) }
 func SlogTraceID(v string) slog.Attr      { return slog.String(string(TraceIDKey), v) }
+
+func DataDogTraceID(v string) attribute.KeyValue { return DataDogTraceIDKey.String(v) }
+func SlogDataDogTraceID(v string) slog.Attr {
+	return slog.String(string(DataDogTraceIDKey), v)
+}
+
+func DataDogSpanID(v string) attribute.KeyValue { return DataDogSpanIDKey.String(v) }
+func SlogDataDogSpanID(v string) slog.Attr {
+	return slog.String(string(DataDogSpanIDKey), v)
+}
 
 func ValueAny(v any) attribute.KeyValue       { return ValueKey.String(fmt.Sprintf("%v", v)) }
 func SlogValueAny(v any) slog.Attr            { return slog.Any(string(ValueKey), v) }
