@@ -102,9 +102,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		projectID = uuid.NullUUID{UUID: uuid.UUID{}, Valid: false}
 	}
 
-	scopes := map[string]struct{}{
-		APIKeyScopeConsumer.String(): {},
-	}
+	scopes := map[string]struct{}{}
 	for _, rawscope := range payload.Scopes {
 		scope, ok := APIKeyScopes[rawscope]
 		if !ok || scope == APIKeyScopeInvalid {
@@ -112,6 +110,12 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		}
 
 		scopes[scope.String()] = struct{}{}
+	}
+
+	if len(scopes) == 0 {
+		scopes = map[string]struct{}{
+			APIKeyScopeConsumer.String(): {},
+		}
 	}
 
 	finalScopes := slices.Sorted(maps.Keys(scopes))

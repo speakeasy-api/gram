@@ -76,7 +76,7 @@ func TestKeysService_CreateKey(t *testing.T) {
 		require.Greater(t, len(*key.Key), 64) // Should be prefix + token
 		require.Contains(t, *key.Key, "gram_local_")
 		require.NotEmpty(t, key.KeyPrefix)
-		require.Equal(t, []string{"consumer", "producer"}, key.Scopes)
+		require.Equal(t, []string{"producer"}, key.Scopes)
 		require.NotEmpty(t, key.CreatedAt)
 		require.NotEmpty(t, key.UpdatedAt)
 
