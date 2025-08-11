@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -245,8 +246,17 @@ func (itp *ToolProxy) Do(
 		return oops.E(oops.CodeInvalid, nil, "no server URL provided for tool").Log(ctx, logger)
 	}
 
-	// Create a new request
-	fullURL := strings.TrimRight(serverURL, "/") + "/" + strings.TrimLeft(requestPath, "/")
+	fullURL, err := url.JoinPath(serverURL, requestPath)
+	var urlErr *url.Error
+	switch {
+	case errors.As(err, &urlErr) && urlErr.Err != nil:
+		return oops.E(oops.CodeInvalid, err, "error parsing server url: %s", urlErr.Err.Error()).Log(ctx, logger)
+	case err != nil:
+		// we do not want to print the full err here because it may leak the server URL which can contain
+		// sensitive information like usernames, passwords, etc.
+		return oops.E(oops.CodeInvalid, err, "error parsing server url").Log(ctx, logger)
+	}
+
 	var req *http.Request
 	if strings.HasPrefix(tool.RequestContentType.Value, "application/x-www-form-urlencoded") {
 		encoded := ""
