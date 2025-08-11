@@ -33,7 +33,7 @@ require (
 	github.com/samber/slog-multi v1.4.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/sourcegraph/conc v0.3.0
-	github.com/speakeasy-api/openapi v0.2.5-0.20250811033926-52a6fb0e9a7a
+	github.com/speakeasy-api/openapi v0.2.5-0.20250811062834-1fd9aeafd768
 	github.com/testcontainers/testcontainers-go v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.38.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.38.0

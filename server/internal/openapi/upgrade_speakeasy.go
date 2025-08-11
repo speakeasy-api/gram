@@ -22,6 +22,6 @@ func upgradeOpenAPI30To31Speakeasy(ctx context.Context, doc *openapi.OpenAPI) (*
 	return &upgradeOpenAPI30To31ResultSpeakeasy{
 		Upgraded: upgraded,
 		Document: doc,
-		Issues:   []error{},
+		Issues:   nil,
 	}, nil
 }

@@ -20,9 +20,12 @@ import (
 func TestDoProcess_Equal(t *testing.T) {
 	t.Parallel()
 
-	p := &ToolExtractor{}
-
-	ctx := context.Background()
+	p := &ToolExtractor{
+		logger:       nil,
+		db:           nil,
+		feature:      nil,
+		assetStorage: nil,
+	}
 
 	libopenapiMockedDBTX := &MockedDBTX{
 		recordedQueryRows: [][]any{},
@@ -49,15 +52,19 @@ func TestDoProcess_Equal(t *testing.T) {
 			ID:      "a",
 			AssetID: "b",
 		},
-		ProjectID:    projectID,
-		DeploymentID: deploymentID,
-		DocumentID:   openapiDocID,
+		ProjectID:          projectID,
+		DeploymentID:       deploymentID,
+		DocumentID:         openapiDocID,
+		DocURL:             nil,
+		ProjectSlug:        "c",
+		OrgSlug:            "d",
+		OnOperationSkipped: nil,
 	}
 
-	libOpenAPIResult, err := p.doLibOpenAPI(ctx, nil, libopenapiTx, data, tet)
+	libOpenAPIResult, err := p.doLibOpenAPI(t.Context(), nil, libopenapiTx, data, tet)
 	require.NoError(t, err)
 
-	speakeasyResult, err := p.doSpeakeasy(ctx, nil, speakeasyTx, data, tet)
+	speakeasyResult, err := p.doSpeakeasy(t.Context(), nil, speakeasyTx, data, tet)
 	require.NoError(t, err)
 
 	assert.Equal(t, libOpenAPIResult.DocumentUpgrade, speakeasyResult.DocumentUpgrade)
@@ -70,6 +77,8 @@ func TestDoProcess_Equal(t *testing.T) {
 // compareJSONWithResponseSchema compares JSON strings that may contain <ResponseSchema> tags
 // Handles both literal tags and Unicode-escaped tags (\\u003cResponseSchema\\u003e)
 func compareJSONWithResponseSchema(t *testing.T, expectedJSON, actualJSON string, msgAndArgs ...interface{}) bool {
+	t.Helper()
+
 	// Create regex patterns for both literal and Unicode-escaped ResponseSchema tags
 	// Match from the first { to the last } within the tags
 	patterns := []*regexp.Regexp{
@@ -132,13 +141,15 @@ func compareJSONWithResponseSchema(t *testing.T, expectedJSON, actualJSON string
 // assertRecordedCalls compares two recorded call slices (recordedExec or recordedQueryRows)
 // and uses JSONEq for []byte fields to properly compare JSON content, recursively handling nested structures
 func assertRecordedCalls(t *testing.T, expected, actual [][]any, msgAndArgs ...interface{}) bool {
-	if !assert.Equal(t, len(expected), len(actual), msgAndArgs...) {
+	t.Helper()
+
+	if !assert.Len(t, actual, len(expected), msgAndArgs...) {
 		return false
 	}
 
 	for i, expectedCall := range expected {
 		actualCall := actual[i]
-		if !assert.Equal(t, len(expectedCall), len(actualCall), "call %d has different number of arguments", i) {
+		if !assert.Len(t, actualCall, len(expectedCall), "call %d has different number of arguments", i) {
 			return false
 		}
 
@@ -156,6 +167,8 @@ func assertRecordedCalls(t *testing.T, expected, actual [][]any, msgAndArgs ...i
 
 // compareRecursively compares two values recursively, handling []byte fields with JSON comparison
 func compareRecursively(t *testing.T, expected, actual interface{}, callIndex, argIndex int) bool {
+	t.Helper()
+
 	// Check if both arguments are []byte (or uint8 slice) using reflection
 	expectedValue := reflect.ValueOf(expected)
 	actualValue := reflect.ValueOf(actual)
@@ -211,7 +224,7 @@ func compareRecursively(t *testing.T, expected, actual interface{}, callIndex, a
 	actualSlice, actualIsSlice := actual.([]interface{})
 	if expectedIsSlice && actualIsSlice {
 		if len(expectedSlice) != len(actualSlice) {
-			return assert.Equal(t, len(expectedSlice), len(actualSlice),
+			return assert.Len(t, actualSlice, len(expectedSlice),
 				"call %d, arg %d: slice length differs", callIndex, argIndex)
 		}
 		for i, expectedItem := range expectedSlice {
@@ -227,7 +240,7 @@ func compareRecursively(t *testing.T, expected, actual interface{}, callIndex, a
 	actualMap, actualIsMap := actual.(map[string]interface{})
 	if expectedIsMap && actualIsMap {
 		if len(expectedMap) != len(actualMap) {
-			return assert.Equal(t, len(expectedMap), len(actualMap),
+			return assert.Len(t, actualMap, len(expectedMap),
 				"call %d, arg %d: map length differs", callIndex, argIndex)
 		}
 		for key, expectedValue := range expectedMap {

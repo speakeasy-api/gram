@@ -116,11 +116,11 @@ func selectResponseSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 	schemaToBestContentType := make(map[string]string)
 
 	for code, r := range op.GetResponses().All() {
-		// TODO: determine if we want to deal with the validation errors
 		_, err := r.Resolve(ctx, openapi.ResolveOptions{
 			TargetLocation:      "/",
 			RootDocument:        doc,
 			DisableExternalRefs: true,
+			SkipValidation:      true,
 		})
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("error resolving response: %w", err)
@@ -208,7 +208,7 @@ func selectResponseSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 			var selectedSchemaHash string
 			for contentType, content := range selectedResponse.GetContent().All() {
 				if contenttypes.IsJSON(contentType) || contenttypes.IsYAML(contentType) {
-					hash := hashing.Hash(content.GetSchema())
+					hash := hashing.Hash(content.Schema)
 
 					if schemaToBestMediaType[hash] != nil {
 						selectedSchemaHash = hash

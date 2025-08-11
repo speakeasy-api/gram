@@ -43,8 +43,7 @@ func (p *ToolExtractor) doSpeakeasy(
 ) (*ToolExtractorResult, error) {
 	docInfo := task.DocInfo
 
-	// TODO: determine if we want to deal with the validation errors
-	doc, _, err := openapi.Unmarshal(ctx, bytes.NewReader(data))
+	doc, _, err := openapi.Unmarshal(ctx, bytes.NewReader(data), openapi.WithSkipValidation())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error opening openapi document").Log(ctx, logger)
 	}
@@ -81,7 +80,7 @@ func (p *ToolExtractor) doSpeakeasy(
 		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error serializing global security").Log(ctx, logger)
 	}
 
-	securitySchemesParams, errs := extractSecuritySchemesSpeakeasy(ctx, doc, task)
+	securitySchemesParams, errs := extractSecuritySchemesSpeakeasy(ctx, logger, docInfo, doc, task)
 	if len(errs) > 0 {
 		for _, err := range errs {
 			_ = oops.E(oops.CodeUnexpected, err, "%s: error parsing security schemes: %s", docInfo.Name, err.Error()).Log(ctx, logger)
@@ -104,16 +103,17 @@ func (p *ToolExtractor) doSpeakeasy(
 	globalDefaultServer := extractDefaultServerSpeakeasy(ctx, logger, docInfo, doc.GetServers())
 
 	for path, pi := range doc.Paths.All() {
-		// TODO: determine if we want to deal with the validation errors
 		_, err := pi.Resolve(ctx, openapi.ResolveOptions{
 			TargetLocation:      "/",
 			RootDocument:        doc,
 			DisableExternalRefs: true,
+			SkipValidation:      true,
 		})
 		if err != nil {
-			_ = oops.E(oops.CodeUnexpected, err, "%s: error resolving path: %s", docInfo.Name, err.Error()).Log(ctx, logger)
+			logger.ErrorContext(ctx, fmt.Sprintf("%s: %s %s", docInfo.Name, "error resolving path", err.Error()), attr.SlogEvent("openapi:error"))
 			continue
 		}
+
 		pathItem := pi.GetObject()
 
 		ops := []operationMetadata[openapi.Operation]{
@@ -224,7 +224,7 @@ func serializeSecuritySpeakeasy(security []*openapi.SecurityRequirement) ([]byte
 	return bs, nil
 }
 
-func extractSecuritySchemesSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, task ToolExtractorTask) (map[string]*repo.CreateHTTPSecurityParams, []error) {
+func extractSecuritySchemesSpeakeasy(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, doc *openapi.OpenAPI, task ToolExtractorTask) (map[string]*repo.CreateHTTPSecurityParams, []error) {
 	slug := string(task.DocInfo.Slug)
 
 	if doc.Components == nil || doc.Components.SecuritySchemes == nil || doc.Components.SecuritySchemes.Len() == 0 {
@@ -235,14 +235,14 @@ func extractSecuritySchemesSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, 
 
 	res := make(map[string]*repo.CreateHTTPSecurityParams)
 	for key, s := range doc.GetComponents().GetSecuritySchemes().All() {
-		// TODO: determine if we want to deal with the validation errors
 		_, err := s.Resolve(ctx, openapi.ResolveOptions{
 			TargetLocation:      "/",
 			RootDocument:        doc,
 			DisableExternalRefs: true,
+			SkipValidation:      true,
 		})
 		if err != nil {
-			errs = append(errs, fmt.Errorf("%s (%d:%d): error resolving security scheme: %w", key, s.GetRootNodeLine(), s.GetRootNodeColumn(), err))
+			logger.ErrorContext(ctx, fmt.Sprintf("%s: %s %s", docInfo.Name, "error resolving security scheme", err.Error()), attr.SlogEvent("openapi:error"))
 			continue
 		}
 		sec := s.GetObject()
@@ -353,7 +353,7 @@ func extractDefaultServerSpeakeasy(ctx context.Context, logger *slog.Logger, doc
 }
 
 func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.Queries, doc *openapi.OpenAPI, task operationTask[openapi.Operation, openapi.ReferencedParameter]) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
-	empty := repo.CreateOpenAPIv3ToolDefinitionParams{}
+	empty := repo.CreateOpenAPIv3ToolDefinitionParams{} //nolint:exhaustruct //empty struct
 
 	projectID := task.extractTask.ProjectID
 	deploymentID := task.extractTask.DeploymentID
@@ -397,6 +397,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 			TargetLocation:      "/",
 			RootDocument:        doc,
 			DisableExternalRefs: true,
+			SkipValidation:      true,
 		})
 		if err != nil {
 			return empty, fmt.Errorf("error resolving request body: %w", err)
@@ -424,11 +425,11 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 	pathParams := orderedmap.New[string, *openapi.Parameter]()
 
 	for _, p := range append(sharedParameters, op.Parameters...) {
-		// TODO: determine if we want to deal with the validation errors
 		_, err := p.Resolve(ctx, openapi.ResolveOptions{
 			TargetLocation:      "/",
 			RootDocument:        doc,
 			DisableExternalRefs: true,
+			SkipValidation:      true,
 		})
 		if err != nil {
 			return empty, fmt.Errorf("error resolving parameter: %w", err)
@@ -442,6 +443,8 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 			pathParams.Set(param.Name, param)
 		case openapi.ParameterInQuery:
 			queryParams.Set(param.Name, param)
+		default:
+			continue
 		}
 	}
 
@@ -579,7 +582,7 @@ type capturedRequestBodySpeakeasy struct {
 }
 
 func captureRequestBodySpeakeasy(ctx context.Context, doc *openapi.OpenAPI, requestBody *openapi.RequestBody) (capturedRequestBodySpeakeasy, error) {
-	empty := capturedRequestBodySpeakeasy{}
+	empty := capturedRequestBodySpeakeasy{} //nolint:exhaustruct // empty struct
 
 	if requestBody == nil || requestBody.GetContent().Len() == 0 {
 		return empty, nil
@@ -677,6 +680,7 @@ func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 				TargetLocation:      "/",
 				RootDocument:        doc,
 				DisableExternalRefs: true,
+				SkipValidation:      true,
 			})
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("error resolving parameter schema: %w", err)
@@ -696,6 +700,11 @@ func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 			mergeDefs(ctx, logger, defs, d)
 		}
 
+		required := param.Required
+		if param.GetIn() == openapi.ParameterInPath {
+			required = pointer.From(true)
+		}
+
 		proxy := &OpenapiV3ParameterProxy{
 			// We don't need the schema when plucking out the serialzating settings
 			// for a parameter. It would only bloat the database so we're stripping
@@ -704,7 +713,7 @@ func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 			In:              param.GetIn().String(),
 			Name:            param.GetName(),
 			Description:     param.GetDescription(),
-			Required:        param.Required,
+			Required:        required,
 			Deprecated:      param.GetDeprecated(),
 			AllowEmptyValue: param.GetAllowEmptyValue(),
 			Style:           pointer.Value(param.Style).String(),
@@ -712,7 +721,7 @@ func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 		}
 
 		obj.Properties.Set(param.Name, paramSchema)
-		if param.Required != nil && *param.Required {
+		if pointer.Value(required) {
 			obj.Required = append(obj.Required, param.Name)
 		}
 

@@ -99,6 +99,7 @@ linters:
         - '^k8s.io/apimachinery/pkg/apis/meta/v1\..+$'
         - '^k8s.io/api/networking/v1\..+$'
         - '^github.com/posthog/posthog-go\..+$'
+        - "^github\\.com/speakeasy-api/openapi/.*"
     exhaustive:
       check:
         - switch
@@ -146,7 +147,7 @@ linters:
         - "(go.temporal.io/sdk/internal.WorkflowInboundInterceptor).ExecuteWorkflow("
         - "(go.temporal.io/sdk/internal.ActivityInboundInterceptor).ExecuteActivity("
         - "(go.temporal.io/sdk/internal.Future).Get("
-        
+
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/sessions.Manager).Authenticate("
         - "(*github.com/speakeasy-api/gram/server/internal/openapi.ToolExtractor).Do("

@@ -55,7 +55,6 @@ type capturedResponseBodyLibOpenAPI struct {
 	schema       []byte
 	contentTypes []string
 	statusCodes  []string
-	defs         Defs
 }
 
 func captureResponseBodyLibOpenAPI(ctx context.Context, logger *slog.Logger, op *v3.Operation) (*capturedResponseBodyLibOpenAPI, error) {
