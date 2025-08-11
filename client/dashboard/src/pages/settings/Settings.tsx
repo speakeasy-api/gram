@@ -279,7 +279,7 @@ export default function Settings() {
           columns={apiKeyColumns}
           data={keysData?.keys ?? []}
           rowKey={(row) => row.id}
-          className="h-fit max-h-[500px] overflow-y-auto"
+          className="min-h-fit max-h-[500px] overflow-y-auto"
           noResultsMessage={
             <Stack
               gap={2}
