@@ -1,10 +1,14 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { AnyField } from "@/components/moon/any-field";
+import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useSession } from "@/contexts/Auth";
@@ -32,10 +36,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCustomDomain } from "../mcp/MCPDetails";
-import { InputField } from "@/components/moon/input-field";
-import { AnyField } from "@/components/moon/any-field";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export default function Settings() {
   const organization = useOrganization();
@@ -279,6 +279,7 @@ export default function Settings() {
           columns={apiKeyColumns}
           data={keysData?.keys ?? []}
           rowKey={(row) => row.id}
+          className="h-fit max-h-[500px] overflow-y-auto"
           noResultsMessage={
             <Stack
               gap={2}
@@ -452,6 +453,9 @@ export default function Settings() {
           )}
         </Stack>
         <Table
+          data={domain?.domain ? [domain] : []}
+          rowKey={(row) => row.id}
+          className="min-h-fit"
           noResultsMessage={
             <Stack
               gap={2}
@@ -510,8 +514,6 @@ export default function Settings() {
               ),
             },
           ]}
-          data={domain?.domain ? [domain] : []}
-          rowKey={(row) => row.id}
         />
 
         <Dialog
