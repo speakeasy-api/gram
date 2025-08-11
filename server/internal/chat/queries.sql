@@ -26,6 +26,7 @@ RETURNING id;
 INSERT INTO chat_messages (
     chat_id
   , role
+  , project_id
   , content
   , model
   , message_id
@@ -37,7 +38,7 @@ INSERT INTO chat_messages (
   , completion_tokens
   , total_tokens
 )
-VALUES (@chat_id, @role, @content, @model, @message_id, @tool_call_id, @user_id, @finish_reason, @tool_calls, @prompt_tokens, @completion_tokens, @total_tokens);
+VALUES (@chat_id, @role, @project_id::uuid, @content, @model, @message_id, @tool_call_id, @user_id, @finish_reason, @tool_calls, @prompt_tokens, @completion_tokens, @total_tokens);
 
 -- name: ListChats :many
 SELECT 
@@ -79,7 +80,7 @@ WHERE c.project_id = @project_id AND c.user_id = @user_id;
 SELECT * FROM chats WHERE id = @id;
 
 -- name: ListChatMessages :many
-SELECT * FROM chat_messages WHERE chat_id = @chat_id;
+SELECT * FROM chat_messages WHERE chat_id = @chat_id AND (project_id IS NULL OR project_id = @project_id::uuid);
 
 -- name: CountChatMessages :one
 SELECT COUNT(*) FROM chat_messages WHERE chat_id = @chat_id;

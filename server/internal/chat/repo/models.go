@@ -24,6 +24,7 @@ type Chat struct {
 type ChatMessage struct {
 	ID               uuid.UUID
 	ChatID           uuid.UUID
+	ProjectID        uuid.NullUUID
 	Role             string
 	Content          string
 	Model            pgtype.Text

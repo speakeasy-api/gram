@@ -550,6 +550,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   
   chat_id uuid NOT NULL,
+  project_id uuid,
   role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system', 'tool')),
   content TEXT NOT NULL,
   model TEXT,
