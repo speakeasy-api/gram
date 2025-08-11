@@ -26,6 +26,7 @@ func (q *Queries) CountChatMessages(ctx context.Context, chatID uuid.UUID) (int6
 type CreateChatMessageParams struct {
 	ChatID           uuid.UUID
 	Role             string
+	ProjectID        uuid.UUID
 	Content          string
 	Model            pgtype.Text
 	MessageID        pgtype.Text
@@ -60,11 +61,16 @@ func (q *Queries) GetChat(ctx context.Context, id uuid.UUID) (Chat, error) {
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
-SELECT id, chat_id, role, content, model, message_id, tool_call_id, user_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, created_at FROM chat_messages WHERE chat_id = $1
+SELECT id, chat_id, project_id, role, content, model, message_id, tool_call_id, user_id, finish_reason, tool_calls, prompt_tokens, completion_tokens, total_tokens, created_at FROM chat_messages WHERE chat_id = $1 AND (project_id IS NULL OR project_id = $2::uuid)
 `
 
-func (q *Queries) ListChatMessages(ctx context.Context, chatID uuid.UUID) ([]ChatMessage, error) {
-	rows, err := q.db.Query(ctx, listChatMessages, chatID)
+type ListChatMessagesParams struct {
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesParams) ([]ChatMessage, error) {
+	rows, err := q.db.Query(ctx, listChatMessages, arg.ChatID, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +81,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, chatID uuid.UUID) ([]Cha
 		if err := rows.Scan(
 			&i.ID,
 			&i.ChatID,
+			&i.ProjectID,
 			&i.Role,
 			&i.Content,
 			&i.Model,

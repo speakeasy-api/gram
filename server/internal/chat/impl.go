@@ -150,7 +150,15 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat").Log(ctx, s.logger)
 	}
 
-	messages, err := s.repo.ListChatMessages(ctx, chat.ID)
+	// older chat_messages may not have project_id in the model, but it will always exist on the chat
+	if chat.ProjectID != *authCtx.ProjectID {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	messages, err := s.repo.ListChatMessages(ctx, repo.ListChatMessagesParams{
+		ChatID:    chat.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load chat messages").Log(ctx, s.logger)
 	}
@@ -283,6 +291,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			ctx:                  ctx,
 			isStreaming:          isStreaming,
 			chatID:               chatID,
+			projectID:            *authCtx.ProjectID,
 			repo:                 s.repo,
 			messageContent:       &strings.Builder{},
 			accumulatedToolCalls: make(map[int]openrouter.ToolCall),
@@ -394,6 +403,7 @@ func (s *Service) startOrResumeChat(ctx context.Context, orgID string, projectID
 		for _, msg := range request.Messages[int(chatCount):] {
 			_, err := s.repo.CreateChatMessage(ctx, []repo.CreateChatMessageParams{{
 				ChatID:           chatID,
+				ProjectID:        projectID,
 				Role:             msg.Role,
 				Model:            conv.ToPGText(request.Model),
 				Content:          msg.Content,
@@ -424,6 +434,7 @@ type responseCaptor struct {
 	logger               *slog.Logger
 	isStreaming          bool
 	chatID               uuid.UUID
+	projectID            uuid.UUID
 	messageContent       *strings.Builder
 	messageID            string
 	model                string
@@ -465,6 +476,7 @@ func (r *responseCaptor) Write(b []byte) (int, error) {
 		// TODO batch insert the messages
 		_, err := r.repo.CreateChatMessage(r.ctx, []repo.CreateChatMessageParams{{
 			ChatID:           r.chatID,
+			ProjectID:        r.projectID,
 			MessageID:        conv.ToPGText(r.messageID),
 			Role:             "assistant",
 			Model:            conv.ToPGText(r.model),
