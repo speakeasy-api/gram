@@ -17,6 +17,8 @@ import (
 type CreateKeyRequestBody struct {
 	// The name of the key
 	Name string `form:"name" json:"name" xml:"name"`
+	// The scopes of the key that determines its permissions.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 }
 
 // CreateKeyResponseBody is the type of the "keys" service "createKey" endpoint
@@ -619,6 +621,14 @@ type KeyResponseBody struct {
 func NewCreateKeyRequestBody(p *keys.CreateKeyPayload) *CreateKeyRequestBody {
 	body := &CreateKeyRequestBody{
 		Name: p.Name,
+	}
+	if p.Scopes != nil {
+		body.Scopes = make([]string, len(p.Scopes))
+		for i, val := range p.Scopes {
+			body.Scopes[i] = val
+		}
+	} else {
+		body.Scopes = []string{}
 	}
 	return body
 }

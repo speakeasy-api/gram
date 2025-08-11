@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -100,12 +102,26 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		projectID = uuid.NullUUID{UUID: uuid.UUID{}, Valid: false}
 	}
 
+	scopes := map[string]struct{}{
+		APIKeyScopeConsumer.String(): {},
+	}
+	for _, rawscope := range payload.Scopes {
+		scope, ok := APIKeyScopes[rawscope]
+		if !ok || scope == APIKeyScopeInvalid {
+			return nil, oops.E(oops.CodeBadRequest, nil, "invalid api key scope: %s", scope).Log(ctx, s.logger)
+		}
+
+		scopes[scope.String()] = struct{}{}
+	}
+
+	finalScopes := slices.Sorted(maps.Keys(scopes))
+
 	createdKey, err := s.repo.CreateAPIKey(ctx, repo.CreateAPIKeyParams{
 		OrganizationID:  authCtx.ActiveOrganizationID,
 		Name:            payload.Name,
 		KeyHash:         keyHash,
 		KeyPrefix:       s.keyPrefix + token[:5],
-		Scopes:          []string{string(APIKeyScopesConsumer)}, // this is the only default scopes for now
+		Scopes:          finalScopes,
 		CreatedByUserID: authCtx.UserID,
 		ProjectID:       projectID,
 	})

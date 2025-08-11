@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	keys "github.com/speakeasy-api/gram/server/gen/keys"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildCreateKeyPayload builds the payload for the keys createKey endpoint
@@ -22,7 +23,16 @@ func BuildCreateKeyPayload(keysCreateKeyBody string, keysCreateKeySessionToken s
 	{
 		err = json.Unmarshal([]byte(keysCreateKeyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"Et quia nemo sed ut.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"Et quia nemo sed ut.\",\n      \"scopes\": [\n         \"Blanditiis eos laboriosam eum nobis laudantium nam.\"\n      ]\n   }'")
+		}
+		if body.Scopes == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+		}
+		if len(body.Scopes) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes", body.Scopes, len(body.Scopes), 1, true))
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
 	var sessionToken *string
@@ -33,6 +43,14 @@ func BuildCreateKeyPayload(keysCreateKeyBody string, keysCreateKeySessionToken s
 	}
 	v := &keys.CreateKeyPayload{
 		Name: body.Name,
+	}
+	if body.Scopes != nil {
+		v.Scopes = make([]string, len(body.Scopes))
+		for i, val := range body.Scopes {
+			v.Scopes[i] = val
+		}
+	} else {
+		v.Scopes = []string{}
 	}
 	v.SessionToken = sessionToken
 

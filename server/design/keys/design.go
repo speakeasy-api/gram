@@ -76,10 +76,14 @@ var _ = Service("keys", func() {
 })
 
 var CreateKeyForm = Type("CreateKeyForm", func() {
-	Required("name", "project_id")
+	Required("name", "scopes")
 
 	Attribute("name", String, "The name of the key")
-	Required("name")
+	Attribute("scopes", ArrayOf(String), func() {
+		Description("The scopes of the key that determines its permissions.")
+
+		MinLength(1)
+	})
 })
 
 var ListKeysResult = Type("ListKeysResult", func() {

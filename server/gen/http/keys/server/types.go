@@ -17,6 +17,8 @@ import (
 type CreateKeyRequestBody struct {
 	// The name of the key
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The scopes of the key that determines its permissions.
+	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 }
 
 // CreateKeyResponseBody is the type of the "keys" service "createKey" endpoint
@@ -1079,6 +1081,10 @@ func NewCreateKeyPayload(body *CreateKeyRequestBody, sessionToken *string) *keys
 	v := &keys.CreateKeyPayload{
 		Name: *body.Name,
 	}
+	v.Scopes = make([]string, len(body.Scopes))
+	for i, val := range body.Scopes {
+		v.Scopes[i] = val
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -1106,6 +1112,12 @@ func NewRevokeKeyPayload(id string, sessionToken *string) *keys.RevokeKeyPayload
 func ValidateCreateKeyRequestBody(body *CreateKeyRequestBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Scopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
+	}
+	if len(body.Scopes) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.scopes", body.Scopes, len(body.Scopes), 1, true))
 	}
 	return
 }

@@ -58,7 +58,7 @@ variations (upsert-global|delete-global|list-global)
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + ` assets serve-image --id "Ducimus ut quis quisquam." --session-token "Eligendi quod quasi molestiae quia dolores id." --apikey-token "Praesentium omnis ducimus."` + "\n" +
+	return os.Args[0] + ` assets serve-image --id "Perspiciatis vel quasi sed." --session-token "Ut quis." --apikey-token "Maxime eligendi quod quasi."` + "\n" +
 		os.Args[0] + ` auth callback --code "Occaecati odit consectetur eum sit sunt perferendis."` + "\n" +
 		os.Args[0] + ` chat list-chats --session-token "Saepe et quis sunt debitis." --project-slug-input "Et nihil rerum reprehenderit optio omnis."` + "\n" +
 		os.Args[0] + ` deployments get-deployment --id "Ut eum neque numquam ea incidunt." --apikey-token "Architecto voluptatem provident fugiat quasi qui." --session-token "Reprehenderit occaecati ratione quia rerum distinctio." --project-slug-input "Voluptatem suscipit."` + "\n" +
@@ -1185,7 +1185,7 @@ Serve an image from Gram.
     -apikey-token STRING: 
 
 Example:
-    %[1]s assets serve-image --id "Ducimus ut quis quisquam." --session-token "Eligendi quod quasi molestiae quia dolores id." --apikey-token "Praesentium omnis ducimus."
+    %[1]s assets serve-image --id "Perspiciatis vel quasi sed." --session-token "Ut quis." --apikey-token "Maxime eligendi quod quasi."
 `, os.Args[0])
 }
 
@@ -1201,7 +1201,7 @@ Upload an image to Gram.
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-image --content-type "Rem tenetur." --content-length 661434298717688843 --apikey-token "Enim deleniti facere quod." --project-slug-input "Aut veritatis ut totam quam." --session-token "Quas incidunt et eos rerum velit itaque." --stream "goa.png"
+    %[1]s assets upload-image --content-type "Voluptate ab nemo maiores reprehenderit maxime cumque." --content-length 7313465399507410664 --apikey-token "Provident rem." --project-slug-input "Fuga quis enim deleniti facere." --session-token "Aut aut veritatis ut totam quam." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -1217,7 +1217,7 @@ Upload an OpenAPI v3 document to Gram.
     -stream STRING: path to file containing the streamed request body
 
 Example:
-    %[1]s assets upload-open-ap-iv3 --content-type "Consequatur sit qui impedit sapiente est vel." --content-length 5828889599409448074 --apikey-token "Pariatur temporibus." --project-slug-input "Ipsam nostrum sed quae provident officiis fugiat." --session-token "Et et ut non." --stream "goa.png"
+    %[1]s assets upload-open-ap-iv3 --content-type "Ut quisquam." --content-length 831200430315536375 --apikey-token "Consequatur sit qui impedit sapiente est vel." --project-slug-input "Commodi pariatur temporibus." --session-token "Ipsam nostrum sed quae provident officiis fugiat." --stream "goa.png"
 `, os.Args[0])
 }
 
@@ -1231,7 +1231,7 @@ Serve an OpenAPIv3 asset from Gram.
     -session-token STRING: 
 
 Example:
-    %[1]s assets serve-open-ap-iv3 --id "Modi et." --project-id "Hic praesentium." --apikey-token "Nihil mollitia ex fugiat." --session-token "Dolores cum."
+    %[1]s assets serve-open-ap-iv3 --id "Nesciunt qui sapiente sed vero." --project-id "Et rerum hic." --apikey-token "At nihil mollitia ex fugiat." --session-token "Dolores cum."
 `, os.Args[0])
 }
 
@@ -1857,8 +1857,11 @@ Create a new api key
 
 Example:
     %[1]s keys create-key --body '{
-      "name": "Et quia nemo sed ut."
-   }' --session-token "Odit blanditiis eos laboriosam eum."
+      "name": "Et quia nemo sed ut.",
+      "scopes": [
+         "Blanditiis eos laboriosam eum nobis laudantium nam."
+      ]
+   }' --session-token "Repellat sed quia sed quas excepturi rerum."
 `, os.Args[0])
 }
 
@@ -1869,7 +1872,7 @@ List all api keys for an organization
     -session-token STRING: 
 
 Example:
-    %[1]s keys list-keys --session-token "Eos et consequatur."
+    %[1]s keys list-keys --session-token "Vitae est."
 `, os.Args[0])
 }
 
@@ -1881,7 +1884,7 @@ Revoke a api key
     -session-token STRING: 
 
 Example:
-    %[1]s keys revoke-key --id "Porro exercitationem." --session-token "Id maxime minima nihil facilis dolorem voluptatum."
+    %[1]s keys revoke-key --id "Nihil facilis dolorem voluptatum aut." --session-token "Accusamus aut adipisci iure."
 `, os.Args[0])
 }
 
@@ -1913,18 +1916,18 @@ Create a new package for a project.
 
 Example:
     %[1]s packages create-package --body '{
-      "description": "184",
-      "image_asset_id": "5dz",
+      "description": "lw0",
+      "image_asset_id": "jxh",
       "keywords": [
-         "Sapiente sed.",
-         "Aut quis sed aut.",
-         "Voluptatem voluptatem tempore cupiditate cumque eos consequatur."
+         "Aut debitis voluptatem voluptatem tempore cupiditate cumque.",
+         "Consequatur doloremque magni reiciendis excepturi distinctio.",
+         "Sed placeat aperiam."
       ],
-      "name": "d9z",
-      "summary": "gad",
-      "title": "kv1",
-      "url": "05l"
-   }' --apikey-token "Sit sed placeat aperiam doloribus minus ea." --session-token "Ea nemo sed sit vero earum aliquid." --project-slug-input "Commodi doloribus ipsa."
+      "name": "1zg",
+      "summary": "4p0",
+      "title": "dv1",
+      "url": "952"
+   }' --apikey-token "Nemo sed sit vero earum aliquid." --session-token "Commodi doloribus ipsa." --project-slug-input "Error inventore."
 `, os.Args[0])
 }
 
@@ -1939,18 +1942,18 @@ Update package details.
 
 Example:
     %[1]s packages update-package --body '{
-      "description": "6jn",
-      "id": "jok",
-      "image_asset_id": "ag1",
+      "description": "5hw",
+      "id": "trq",
+      "image_asset_id": "1ww",
       "keywords": [
-         "Amet quia et ex.",
-         "Quas maiores esse perspiciatis exercitationem.",
-         "Et est atque tempora voluptas incidunt quam."
+         "Exercitationem fuga et est atque.",
+         "Voluptas incidunt quam nam.",
+         "Molestias consequuntur deserunt debitis qui eaque quia."
       ],
-      "summary": "atr",
-      "title": "17n",
-      "url": "xvg"
-   }' --apikey-token "Debitis qui." --session-token "Quia excepturi." --project-slug-input "Qui vel adipisci et iusto iusto quam."
+      "summary": "vgw",
+      "title": "jno",
+      "url": "3j6"
+   }' --apikey-token "Et iusto." --session-token "Quam ab sunt mollitia deserunt." --project-slug-input "Et ea corrupti sunt sed deserunt."
 `, os.Args[0])
 }
 
@@ -1963,7 +1966,7 @@ List all packages for a project.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s packages list-packages --apikey-token "Quis quia aliquam corrupti sed aliquam." --session-token "Ut quaerat reiciendis exercitationem eius veritatis." --project-slug-input "Qui iste ut."
+    %[1]s packages list-packages --apikey-token "Eius veritatis facilis qui iste ut." --session-token "Pariatur accusamus tempore qui est rerum error." --project-slug-input "Voluptates unde officiis."
 `, os.Args[0])
 }
 
@@ -1977,7 +1980,7 @@ List published versions of a package.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s packages list-versions --name "Et repudiandae voluptatum hic." --apikey-token "In iure qui molestiae quis facilis." --session-token "Asperiores est vel nesciunt tempora." --project-slug-input "Aspernatur magnam facilis commodi eum voluptatem repellat."
+    %[1]s packages list-versions --name "Asperiores est vel nesciunt tempora." --apikey-token "Aspernatur magnam facilis commodi eum voluptatem repellat." --session-token "Aliquid quasi rem id." --project-slug-input "Expedita hic neque esse praesentium est accusantium."
 `, os.Args[0])
 }
 
@@ -1992,9 +1995,9 @@ Publish a new version of a package.
 
 Example:
     %[1]s packages publish --body '{
-      "deployment_id": "Vel ad voluptatibus consequatur reiciendis voluptatum eveniet.",
-      "name": "Eius suscipit magni.",
-      "version": "In natus illo rerum voluptatum ducimus aliquid.",
+      "deployment_id": "Voluptatum eveniet.",
+      "name": "Rerum voluptatum ducimus.",
+      "version": "Ad vel ad voluptatibus consequatur.",
       "visibility": "private"
    }' --apikey-token "Enim deserunt et." --session-token "Quod soluta voluptatibus cum." --project-slug-input "Adipisci consequatur provident deleniti consectetur."
 `, os.Args[0])
