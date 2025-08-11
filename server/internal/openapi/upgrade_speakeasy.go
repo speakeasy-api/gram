@@ -14,12 +14,13 @@ type upgradeOpenAPI30To31ResultSpeakeasy struct {
 }
 
 func upgradeOpenAPI30To31Speakeasy(ctx context.Context, doc *openapi.OpenAPI) (*upgradeOpenAPI30To31ResultSpeakeasy, error) {
-	if err := openapi.Upgrade(ctx, doc); err != nil {
+	upgraded, err := openapi.Upgrade(ctx, doc)
+	if err != nil {
 		return nil, fmt.Errorf("error upgrading document: %w", err)
 	}
 
 	return &upgradeOpenAPI30To31ResultSpeakeasy{
-		Upgraded: true,
+		Upgraded: upgraded,
 		Document: doc,
 		Issues:   []error{},
 	}, nil

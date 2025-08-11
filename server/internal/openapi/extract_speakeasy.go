@@ -76,7 +76,7 @@ func (p *ToolExtractor) doSpeakeasy(
 		}
 	}
 
-	globalSecurity, err := serializeSecuritySpeakeasy(ctx, doc.GetSecurity())
+	globalSecurity, err := serializeSecuritySpeakeasy(doc.GetSecurity())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error serializing global security").Log(ctx, logger)
 	}
@@ -195,20 +195,14 @@ func (p *ToolExtractor) doSpeakeasy(
 	}, nil
 }
 
-func serializeSecuritySpeakeasy(ctx context.Context, security []*openapi.SecurityRequirement) ([]byte, error) {
+func serializeSecuritySpeakeasy(security []*openapi.SecurityRequirement) ([]byte, error) {
 	if len(security) == 0 {
 		return nil, nil
 	}
 
 	acc := make([]map[string][]string, 0, len(security))
 	for _, group := range security {
-		containsEmptyRequirement := false
-		for _, ref := range group.All() {
-			if len(ref) == 0 {
-				containsEmptyRequirement = true
-			}
-		}
-
+		containsEmptyRequirement := group.Len() == 0
 		if containsEmptyRequirement {
 			acc = append(acc, make(map[string][]string))
 			continue
@@ -513,7 +507,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 		}
 	}
 
-	security, err := serializeSecuritySpeakeasy(ctx, op.GetSecurity())
+	security, err := serializeSecuritySpeakeasy(op.GetSecurity())
 	if err != nil {
 		loc := "-"
 		node := op.GetCore().Security.GetKeyNodeOrRoot(op.GetRootNode())
@@ -713,7 +707,7 @@ func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 			Required:        param.Required,
 			Deprecated:      param.GetDeprecated(),
 			AllowEmptyValue: param.GetAllowEmptyValue(),
-			Style:           param.GetStyle().String(),
+			Style:           pointer.Value(param.Style).String(),
 			Explode:         param.Explode,
 		}
 

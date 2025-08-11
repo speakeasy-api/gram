@@ -61,7 +61,7 @@ func getResponseFilterSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 
 		responseFilter = &models.ResponseFilter{
 			Type:         *responseFilterType,
-			Schema:       schemaBytes,
+			Schema:       buf.Bytes(),
 			StatusCodes:  capturedResponseBody.statusCodes,
 			ContentTypes: capturedResponseBody.contentTypes,
 		}
