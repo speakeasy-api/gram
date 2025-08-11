@@ -1,6 +1,7 @@
 package keys_test
 
 import (
+	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,6 +11,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
+func randstr(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[rand.Intn(len(charset))]
+	}
+	return "-" + string(b)
+}
+
 func TestKeysService_CreateKey(t *testing.T) {
 	t.Parallel()
 
@@ -18,15 +28,17 @@ func TestKeysService_CreateKey(t *testing.T) {
 	t.Run("successful key creation with default scope", func(t *testing.T) {
 		t.Parallel()
 
+		name := "test-api-key" + randstr(6)
+
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
 			SessionToken: nil,
-			Name:         "test-api-key",
+			Name:         name,
 			Scopes:       []string{},
 		})
 		require.NoError(t, err)
 
 		require.NotEmpty(t, key.ID)
-		require.Equal(t, "test-api-key", key.Name)
+		require.Equal(t, name, key.Name)
 		require.NotEmpty(t, key.OrganizationID)
 		require.NotEmpty(t, key.CreatedByUserID)
 		require.NotNil(t, key.Key)
@@ -46,15 +58,17 @@ func TestKeysService_CreateKey(t *testing.T) {
 	t.Run("successful key creation with custom scope", func(t *testing.T) {
 		t.Parallel()
 
+		name := "test-api-key" + randstr(6)
+
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
 			SessionToken: nil,
-			Name:         "test-api-key",
+			Name:         name,
 			Scopes:       []string{"producer"},
 		})
 		require.NoError(t, err)
 
 		require.NotEmpty(t, key.ID)
-		require.Equal(t, "test-api-key", key.Name)
+		require.Equal(t, name, key.Name)
 		require.NotEmpty(t, key.OrganizationID)
 		require.NotEmpty(t, key.CreatedByUserID)
 		require.NotNil(t, key.Key)
@@ -62,7 +76,7 @@ func TestKeysService_CreateKey(t *testing.T) {
 		require.Greater(t, len(*key.Key), 64) // Should be prefix + token
 		require.Contains(t, *key.Key, "gram_local_")
 		require.NotEmpty(t, key.KeyPrefix)
-		require.Equal(t, []string{"producer"}, key.Scopes)
+		require.Equal(t, []string{"consumer", "producer"}, key.Scopes)
 		require.NotEmpty(t, key.CreatedAt)
 		require.NotEmpty(t, key.UpdatedAt)
 
@@ -74,15 +88,17 @@ func TestKeysService_CreateKey(t *testing.T) {
 	t.Run("successful key creation with multiple scopes", func(t *testing.T) {
 		t.Parallel()
 
+		name := "test-api-key" + randstr(6)
+
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
 			SessionToken: nil,
-			Name:         "test-api-key",
+			Name:         name,
 			Scopes:       []string{"producer", "consumer"},
 		})
 		require.NoError(t, err)
 
 		require.NotEmpty(t, key.ID)
-		require.Equal(t, "test-api-key", key.Name)
+		require.Equal(t, name, key.Name)
 		require.NotEmpty(t, key.OrganizationID)
 		require.NotEmpty(t, key.CreatedByUserID)
 		require.NotNil(t, key.Key)
@@ -104,7 +120,7 @@ func TestKeysService_CreateKey(t *testing.T) {
 
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
 			SessionToken: nil,
-			Name:         "test-api-key",
+			Name:         "test-api-key" + randstr(6),
 			Scopes:       []string{"nonexistent_scope"},
 		})
 		var oopsErr *oops.ShareableError
@@ -119,7 +135,7 @@ func TestKeysService_CreateKey(t *testing.T) {
 
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
 			SessionToken: nil,
-			Name:         "test-api-key",
+			Name:         "test-api-key" + randstr(6),
 			Scopes:       []string{"nonexistent_scope", "consumer"}, // one valid, one invalid
 		})
 		var oopsErr *oops.ShareableError
