@@ -77,6 +77,7 @@ export function APIsContent() {
   const finishUpload = () => {
     setNewDocumentDialogOpen(false);
     setChangeDocumentTargetSlug(null);
+    undoSpecUpload(); // Reset the file state
     refetch();
     refetchAssets();
   };
@@ -113,7 +114,6 @@ export function APIsContent() {
     </Dialog>
   );
 
-
   const logsCta = useMemo(() => {
     if (!deployment || !deploymentLogsSummary) {
       return null;
@@ -140,7 +140,10 @@ export function APIsContent() {
         variant="ghost"
         href={routes.deployments.deployment.href(deployment.id)}
         tooltip={tooltip}
-        className={cn(hasErrors && "text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/20!")}
+        className={cn(
+          hasErrors &&
+            "text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/20!"
+        )}
       >
         {icon}
         History
@@ -214,7 +217,12 @@ export function APIsContent() {
         {newDocumentDialog}
         <Dialog
           open={changeDocumentTargetSlug !== null}
-          onOpenChange={() => setChangeDocumentTargetSlug(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setChangeDocumentTargetSlug(null);
+              undoSpecUpload(); // Reset the file state when dialog closes
+            }
+          }}
         >
           <Dialog.Content className="max-w-2xl!">
             <Dialog.Header>
@@ -239,11 +247,17 @@ export function APIsContent() {
             <Dialog.Footer>
               <Button
                 variant="ghost"
-                onClick={() => setChangeDocumentTargetSlug(null)}
+                onClick={() => {
+                  setChangeDocumentTargetSlug(null);
+                  undoSpecUpload(); // Reset the file state when dialog closes
+                }}
               >
                 Back
               </Button>
-              <Button onClick={() => deploySpecUpdate(changeDocumentTargetSlug!)} disabled={!file || isDeploying || !changeDocumentTargetSlug}>
+              <Button
+                onClick={() => deploySpecUpdate(changeDocumentTargetSlug!)}
+                disabled={!file || isDeploying || !changeDocumentTargetSlug}
+              >
                 {isDeploying && <Spinner />}
                 {isDeploying ? "Deploying..." : "Deploy"}
               </Button>

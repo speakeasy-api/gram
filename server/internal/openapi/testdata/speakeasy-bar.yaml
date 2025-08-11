@@ -1,0 +1,957 @@
+openapi: 3.1.0
+info:
+  title: The Speakeasy Bar
+  version: 1.0.0
+  summary: A bar that serves drinks.
+  description: A secret underground bar that serves drinks to those in the know.
+  contact:
+    name: Speakeasy Support
+    url: https://support.speakeasy.bar
+    email: support@speakeasy.bar
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: https://speakeasy.bar/terms
+externalDocs:
+  url: https://docs.speakeasy.bar
+  description: The Speakeasy Bar Documentation.
+servers:
+  - url: https://earwig-precise-explicitly.ngrok-free.app
+    description: The production server.
+security:
+  - apiKey: []
+tags:
+  - name: drinks
+    description: The drinks endpoints.
+  - name: ingredients
+    description: The ingredients endpoints.
+  - name: orders
+    description: The orders endpoints.
+  - name: authentication
+    description: The authentication endpoints.
+  - name: configuration
+    description: The configuration endpoints.
+paths:
+  /authenticate:
+    post:
+      operationId: authenticate
+      summary: Authenticate with the API by providing a username and password.
+      security: []
+      tags:
+        - authentication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: The api key to use for authenticated endpoints.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+        "401":
+          description: Invalid credentials provided.
+        "5XX":
+          $ref: "#/components/responses/APIError"
+        default:
+          $ref: "#/components/responses/UnknownError"
+
+  /drinks:
+    get:
+      x-gram:
+        responseFilterType: jq
+      operationId: listDrinks
+      summary: Get a list of drinks.
+      description: Get a list of drinks, if authenticated this will include stock levels and product codes otherwise it will only include public information.
+      security:
+        - {}
+        - { apiKey: [] }
+      tags:
+        - drinks
+      parameters:
+        - name: type
+          in: query
+          description: The type of drink to filter by. If not provided all drinks will be returned.
+          required: false
+          schema:
+            $ref: "#/components/schemas/DrinkType"
+      responses:
+        "200":
+          description: A list of drinks.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  oneOf:
+                    - $ref: "#/components/schemas/Drink"
+                    - $ref: "#/components/schemas/PublicDrink"
+                  discriminator:
+                    propertyName: dataLevel
+                    mapping:
+                      unauthenticated: "#/components/schemas/PublicDrink"
+                      authenticated: "#/components/schemas/Drink"
+              examples:
+                unauthenticated_drinks:
+                  $ref: "#/components/examples/unauthenticated_drinks"
+                authenticated_drinks:
+                  $ref: "#/components/examples/authenticated_drinks"
+        "5XX":
+          $ref: "#/components/responses/APIError"
+        default:
+          $ref: "#/components/responses/UnknownError"
+    post:
+      summary: Create a drink.
+      description: Create a drink. Only available when authenticated.
+      security:
+        - apiKey: []
+      tags:
+        - drinks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Drink"
+            examples:
+              old_fashioned:
+                $ref: "#/components/examples/drink_json"
+          text/*: # Upload any text based description of a drink
+            schema:
+              type: string
+              format: text
+            examples:
+              old_fashioned:
+                $ref: "#/components/examples/drink_text"
+          text/csv: # Upload a CSV file (this will take precedence over text/*)
+            schema:
+              $ref: "#/components/schemas/Drink"
+            examples:
+              old_fashioned:
+                $ref: "#/components/examples/drink_csv"
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  description: The name of the drink.
+                  type: string
+                  examples:
+                    - Old Fashioned
+                    - Manhattan
+                    - Negroni
+                type:
+                  $ref: "#/components/schemas/DrinkType"
+                price:
+                  description: The price of one unit of the drink in US cents.
+                  type: number
+                  examples:
+                    - 1000
+                    - 1200
+                    - 1500
+                photo:
+                  description: A photo of the drink.
+                  type: string
+                  format: binary
+            encoding:
+              photo:
+                contentType: image/jpeg, image/png
+                headers:
+                  Content-Disposition:
+                    description: Specifies the disposition of the file (attachment and file name).
+                    schema:
+                      type: string
+                      default: 'form-data; name="photo"; filename="default.jpg"'
+                allowReserved: false
+            examples:
+              old_fashioned:
+                $ref: "#/components/examples/drink_multipart"
+      responses:
+        "200":
+          description: The drink was created successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Drink"
+              examples:
+                old_fashioned:
+                  summary: An Old Fashioned
+                  value:
+                    {
+                      "name": "Old Fashioned",
+                      "type": "cocktail",
+                      "price": 1000,
+                      "photo": "https://speakeasy.bar/drinks/old_fashioned.jpg",
+                    }
+            application/xml:
+              schema:
+                $ref: "#/components/schemas/Drink"
+              examples:
+                old_fashioned:
+                  $ref: "#/components/examples/drink_response_xml"
+        "5XX":
+          $ref: "#/components/responses/APIError"
+        default:
+          $ref: "#/components/responses/UnknownError"
+
+  /drinks/{productCode}:
+    get:
+      operationId: getDrink
+      summary: Get a drink.
+      description: Get a drink by product code. Only available when authenticated.
+      security:
+        - apiKey: []
+      tags:
+        - drinks
+      parameters:
+        - name: productCode
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/DrinkProductCode"
+      responses:
+        "200":
+          description: A drink.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Drink"
+          headers:
+            X-RateLimit-Remaining:
+              description: The number of requests left for the time window.
+              schema:
+                type: integer
+                example: 99
+            Last-Modified:
+              description: The time at which the information was last modified.
+              schema:
+                type: string
+                format: date-time
+                example: "2024-01-26T18:25:43.511Z"
+            Cache-Control:
+              description: Instructions for caching mechanisms in both requests and responses.
+              schema:
+                type: string
+                example: no-cache
+          links:
+            listIngredients:
+              operationId: listIngredients
+              parameters:
+                drinkIngredients: $response.body#/ingredients
+              description: The list of ingredients returned by the `getDrink` operation can be used as an input to the `listIngredients` operation, to retrieve additional details about the ingredients required to make the drink.
+        "5XX":
+          $ref: "#/components/responses/APIError"
+        default:
+          $ref: "#/components/responses/UnknownError"
+    patch:
+      operationId: updateDrink
+      summary: Update a drink.
+      description: Update a drink. Only available when authenticated.
+      security:
+        - apiKey: []
+      tags:
+        - drinks
+      parameters:
+        - name: productCode
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/DrinkProductCode"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Drink"
+            examples:
+              old_fashioned:
+                $ref: "#/components/examples/drink_json"
+          text/*: # Upload any text based description of a drink
+            schema:
+              type: string
+              format: text
+            examples:
+              old_fashioned:
+                $ref: "#/components/examples/drink_text"
+          text/csv: # Upload a CSV file (this will take precedence over text/*)
+            schema:
+              $ref: "#/components/schemas/Drink"
+            examples:
+              old_fashioned:
+                $ref: "#/components/examples/drink_csv"
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name:
+                  description: The name of the drink.
+                  type: string
+                  examples:
+                    - Old Fashioned
+                    - Manhattan
+                    - Negroni
+                type:
+                  $ref: "#/components/schemas/DrinkType"
+                price:
+                  description: The price of one unit of the drink in US cents.
+                  type: number
+                  examples:
+                    - 1000 # $10.00
+                    - 1200 # $12.00
+                    - 1500 # $15.00
+                photo:
+                  description: A photo of the drink.
+                  type: string
+                  format: binary
+            examples:
+              old_fashioned:
+                $ref: "#/components/examples/drink_multipart"
+      responses:
+        "200":
+          description: The drink was updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Drink"
+              examples:
+                old_fashioned:
+                  summary: An Old Fashioned
+                  value:
+                    {
+                      "name": "Old Fashioned",
+                      "type": "cocktail",
+                      "price": 1000,
+                      "photo": "https://speakeasy.bar/drinks/old_fashioned.jpg",
+                    }
+            application/xml:
+              schema:
+                $ref: "#/components/schemas/Drink"
+              examples:
+                old_fashioned:
+                  $ref: "#/components/examples/drink_response_xml"
+        "5XX":
+          $ref: "#/components/responses/APIError"
+        default:
+          $ref: "#/components/responses/UnknownError"
+    delete:
+      operationId: deleteDrink
+      summary: Delete a drink.
+      description: Delete a drink. Only available when authenticated.
+      security:
+        - apiKey: []
+      tags:
+        - drinks
+      parameters:
+        - name: productCode
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/DrinkProductCode"
+      responses:
+        "200":
+          description: The drink was deleted successfully.
+        "5XX":
+          $ref: "#/components/responses/APIError"
+        default:
+          $ref: "#/components/responses/UnknownError"
+
+  /drinks/search:
+    get:
+      operationId: searchDrinks
+      summary: Search for drinks.
+      description: Search for drinks, if authenticated this will include stock levels and product codes otherwise it will only include public information.
+      security:
+        - {}
+        - apiKey: []
+      tags:
+        - drinks
+      parameters:
+        - name: query
+          in: query
+          description: The search query.
+          required: true
+          schema:
+            type: string
+          examples:
+            old_fashioned:
+              summary: Search for Old Fashioned
+              value: Old Fashioned
+            manhattan:
+              summary: Search for Manhattan
+              value: Manhattan
+        - name: type
+          in: query
+          description: The type of drink to filter by. If not provided all drinks will be returned.
+          required: false
+          schema:
+            $ref: "#/components/schemas/DrinkType"
+      responses:
+        "200":
+          description: A list of drinks.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Drink"
+        "5XX":
+          $ref: "#/components/responses/APIError"
+        default:
+          $ref: "#/components/responses/UnknownError"
+
+  /ingredients:
+    get:
+      x-gram:
+        responseFilterType: jq
+      operationId: listIngredients
+      summary: Get a list of ingredients.
+      description: Get a list of ingredients, if authenticated this will include stock levels and product codes otherwise it will only include public information.
+      tags:
+        - ingredients
+      parameters:
+        - name: ingredients
+          in: query
+          description: A list of ingredients to filter by. If not provided all ingredients will be returned.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+        - name: drinkIngredients
+          in: query
+          description: A list of drink ingredients to filter by. If not provided all ingredients will be returned.
+          required: false
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: object
+      responses:
+        "200":
+          description: A list of ingredients.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Ingredient"
+        "5XX":
+          $ref: "#/components/responses/APIError"
+        default:
+          $ref: "#/components/responses/UnknownError"
+
+  /order:
+    post:
+      operationId: createOrder
+      summary: Create an order.
+      description: Create an order for a drink.
+      tags:
+        - orders
+      parameters:
+        - name: callback_url
+          in: query
+          description: The url to call when the order is updated.
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/DrinkOrder"
+                - $ref: "#/components/schemas/IngredientOrder"
+              discriminator:
+                propertyName: orderType
+                mapping:
+                  drink: "#/components/schemas/DrinkOrder"
+                  ingredient: "#/components/schemas/IngredientOrder"
+      responses:
+        "200":
+          description: The order was created successfully.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/DrinkOrder"
+                  - $ref: "#/components/schemas/IngredientOrder"
+                discriminator:
+                  propertyName: orderType
+                  mapping:
+                    drink: "#/components/schemas/DrinkOrder"
+                    ingredient: "#/components/schemas/IngredientOrder"
+              examples:
+                pending_order:
+                  summary: Pending order
+                  description: The order was created successfully but is still pending.
+                  value: '{"type": "drink", "productCode": "AC-A2DF3", "quantity": 1, "status": "pending"}'
+                completed_order:
+                  summary: Completed order
+                  description: The order was completed immediately as there was enough stock to fulfill it.
+                  value: '{"type": "ingredient", "productCode": "NAC-3F2D1", "quantity": 3, "status": "complete"}'
+            application/xml:
+              schema:
+                $ref: "#/components/schemas/Order"
+              example:
+                summary: A pending order for one Old Fashioned
+                value: '<order type="drink" productCode="AC-A2DF3" quantity="1" status="pending"/>'
+        "5XX":
+          $ref: "#/components/responses/APIError"
+        default:
+          $ref: "#/components/responses/UnknownError"
+      callbacks:
+        orderUpdate:
+          "{$request.query.callback_url}":
+            post:
+              summary: Receive order updates.
+              description: Receive order updates from the supplier, this will be called whenever the status of an order changes.
+              tags:
+                - orders
+              requestBody:
+                required: true
+                content:
+                  application/json:
+                    schema:
+                      type: object
+                      properties:
+                        order:
+                          $ref: "#/components/schemas/Order"
+              responses:
+                "200":
+                  description: The order update was received successfully.
+                "5XX":
+                  $ref: "#/components/responses/APIError"
+                default:
+                  $ref: "#/components/responses/UnknownError"
+  /webhooks/subscribe:
+    post:
+      operationId: subscribeToWebhooks
+      summary: Subscribe to webhooks.
+      description: Subscribe to webhooks.
+      tags:
+        - configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  url:
+                    type: string
+                  webhook:
+                    type: string
+                    enum:
+                      - stockUpdate
+      responses:
+        "200":
+          description: The webhook was subscribed to successfully.
+        "5XX":
+          $ref: "#/components/responses/APIError"
+        default:
+          $ref: "#/components/responses/UnknownError"
+webhooks:
+  stockUpdate:
+    post:
+      summary: Receive stock updates.
+      description: Receive stock updates from the bar, this will be called whenever the stock levels of a drink or ingredient changes.
+      tags:
+        - drinks
+        - ingredients
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                drink:
+                  $ref: "#/components/schemas/Drink"
+                ingredient:
+                  $ref: "#/components/schemas/Ingredient"
+      responses:
+        "200":
+          description: The stock update was received successfully.
+        "5XX":
+          $ref: "#/components/responses/APIError"
+        default:
+          $ref: "#/components/responses/UnknownError"
+components:
+  schemas:
+    APIError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required:
+        - code
+        - message
+    DrinkProductCode:
+      description: The product code of a drink, only available when authenticated.
+      type: string
+      examples:
+        - "AC-A2DF3"
+        - "NAC-3F2D1"
+        - "APM-1F2D3"
+    PublicDrink:
+      type: object
+      properties:
+        name:
+          description: The name of the drink.
+          type: string
+          examples:
+            - Old Fashioned
+            - Manhattan
+            - Negroni
+        type:
+          $ref: "#/components/schemas/DrinkType"
+        price:
+          description: The price of one unit of the drink in US cents.
+          type: number
+          examples:
+            - 1000 # $10.00
+            - 1200 # $12.00
+            - 1500 # $15.00
+        photo:
+          description: A photo of the drink.
+          type: string
+          format: uri
+          examples:
+            - "https://speakeasy.bar/drinks/old_fashioned.jpg"
+            - "https://speakeasy.bar/drinks/manhattan.jpg"
+            - "https://speakeasy.bar/drinks/negroni.jpg"
+        dataLevel:
+          description: The level of data included in the response.
+          type: string
+          enum:
+            - unauthenticated
+          readOnly: true
+      required:
+        - name
+        - price
+    Drink:
+      allOf:
+        - $ref: "#/components/schemas/PublicDrink"
+        - type: object
+          properties:
+            stock:
+              description: The number of units of the drink in stock, only available when authenticated.
+              type: integer
+              readOnly: true
+            productCode:
+              $ref: "#/components/schemas/DrinkProductCode"
+            ingredients:
+              description: The ingredients required to make the drink, only available when authenticated.
+              type: array
+              items:
+                $ref: "#/components/schemas/DrinkIngredient"
+            dataLevel:
+              description: The level of data included in the response.
+              type: string
+              enum:
+                - authenticated
+              readOnly: true
+            healthRating:
+              description: The health rating of the drink, only available when authenticated.
+              type: string
+              enum:
+                - good
+                - fair
+                - poor
+          required:
+            - healthRating
+      required:
+        - name
+        - price
+        - productCode
+    DrinkType:
+      description: The type of drink.
+      type: string
+      enum:
+        - cocktail
+        - non-alcoholic
+        - beer
+        - wine
+        - spirit
+        - other
+    DrinkIngredient:
+      description: An ingredient required to make a drink.
+      type: object
+      properties:
+        ingredientProductCode:
+          $ref: "#/components/schemas/IngredientProductCode"
+        quantity:
+          description: The number of units of the ingredient required to make the drink.
+          type: integer
+          minimum: 1
+      required:
+        - ingredientProductCode
+        - quantity
+    IngredientProductCode:
+      description: The product code of an ingredient, only available when authenticated.
+      type: string
+      examples:
+        - "AC-A2DF3"
+        - "NAC-3F2D1"
+        - "APM-1F2D3"
+    Ingredient:
+      type: object
+      properties:
+        name:
+          description: The name of the ingredient.
+          type: string
+          examples:
+            - Sugar Syrup
+            - Angostura Bitters
+            - Orange Peel
+        type:
+          $ref: "#/components/schemas/IngredientType"
+        stock:
+          description: The number of units of the ingredient in stock, only available when authenticated.
+          type: integer
+          examples:
+            - 10
+            - 5
+            - 0
+          readOnly: true
+        productCode:
+          $ref: "#/components/schemas/IngredientProductCode"
+        photo:
+          description: A photo of the ingredient.
+          type: string
+          format: uri
+          examples:
+            - https://speakeasy.bar/ingredients/sugar_syrup.jpg
+            - https://speakeasy.bar/ingredients/angostura_bitters.jpg
+            - https://speakeasy.bar/ingredients/orange_peel.jpg
+      required:
+        - name
+        - type
+    IngredientType:
+      description: The type of ingredient.
+      type: string
+      enum:
+        - fresh
+        - long-life
+        - packaged
+    Order:
+      description: An order for a drink or ingredient.
+      type: object
+      properties:
+        orderType:
+          description: The type of order.
+          type: string
+          enum:
+            - drink
+            - ingredient
+        productCode:
+          description: The product code of the drink or ingredient.
+          type: string
+          examples:
+            - "AC-A2DF3"
+            - "NAC-3F2D1"
+            - "APM-1F2D3"
+        quantity:
+          description: The number of units of the drink or ingredient to order.
+          type: integer
+          minimum: 1
+        status:
+          description: The status of the order.
+          type: string
+          enum:
+            - pending
+            - processing
+            - complete
+          readOnly: true
+      required:
+        - orderType
+        - productCode
+        - quantity
+        - status
+    DrinkOrder:
+      allOf:
+        - $ref: "#/components/schemas/Order"
+        - type: object
+          properties:
+            orderType:
+              type: string
+              enum:
+                - drink
+            barCounter:
+              description: The bar counter to collect the drink from.
+              type: string
+              enum:
+                - upstairs
+                - outside
+                - lounge
+    IngredientOrder:
+      allOf:
+        - $ref: "#/components/schemas/Order"
+        - type: object
+          properties:
+            orderType:
+              type: string
+              enum:
+                - ingredient
+            deliveryAddress:
+              description: The address to deliver the ingredient to.
+              type: string
+              examples:
+                - "123 Main St, Anytown, USA"
+                - "456 Elm St, Anytown, USA"
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      name: Authorization
+      in: header
+  responses:
+    APIError:
+      description: An error occurred interacting with the API.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIError"
+    UnknownError:
+      description: An unknown error occurred interacting with the API.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  examples:
+    unauthenticated_drinks:
+      summary: A list of drinks for unauthenticated users
+      value:
+        [
+          {
+            "name": "Old Fashioned",
+            "type": "cocktail",
+            "price": 1000,
+            "photo": "https://speakeasy.bar/drinks/old_fashioned.jpg",
+            "dataLevel": "unauthenticated",
+          },
+          {
+            "name": "Manhattan",
+            "type": "cocktail",
+            "price": 1200,
+            "photo": "https://speakeasy.bar/drinks/manhattan.jpg",
+            "dataLevel": "unauthenticated",
+          },
+          {
+            "name": "Negroni",
+            "type": "cocktail",
+            "price": 1500,
+            "photo": "https://speakeasy.bar/drinks/negroni.jpg",
+            "dataLevel": "unauthenticated",
+          },
+        ]
+    authenticated_drinks:
+      summary: A list of drinks for authenticated users
+      value:
+        [
+          {
+            "name": "Old Fashioned",
+            "type": "cocktail",
+            "price": 1000,
+            "photo": "https://speakeasy.bar/drinks/old_fashioned.jpg",
+            "productCode": "AC-A2DF3",
+            "stock": 100,
+            "dataLevel": "authenticated",
+          },
+          {
+            "name": "Manhattan",
+            "type": "cocktail",
+            "price": 1200,
+            "photo": "https://speakeasy.bar/drinks/manhattan.jpg",
+            "productCode": "AC-A2DF4",
+            "stock": 50,
+            "dataLevel": "authenticated",
+          },
+          {
+            "name": "Negroni",
+            "type": "cocktail",
+            "price": 1500,
+            "photo": "https://speakeasy.bar/drinks/negroni.jpg",
+            "productCode": "AC-A2DF5",
+            "stock": 0,
+            "dataLevel": "authenticated",
+          },
+        ]
+    drink_response_xml:
+      summary: An Old Fashioned XML response
+      value: '<drink name="Old Fashioned" type="cocktail" price="1000" photo="https://speakeasy.bar/drinks/old_fashioned.jpg"/>'
+    drink_json:
+      summary: An Old Fashioned JSON
+      value:
+        {
+          "name": "Old Fashioned",
+          "type": "cocktail",
+          "price": 1000,
+          "photo": "https://speakeasy.bar/drinks/old_fashioned.jpg",
+        }
+    drink_text:
+      summary: An Old Fashioned text description
+      value: "Old Fashioned\n\nA classic cocktail made with bourbon, bitters, sugar and a twist of orange peel."
+    drink_csv:
+      summary: An Old Fashioned CSV with a photo
+      value: "name,type,price,photo
+        Old Fashioned,cocktail,1000,https://speakeasy.bar/drinks/old_fashioned.jpg"
+    drink_multipart:
+      summary: An Old Fashioned multipart form with a photo
+      value: 'Content-length: 123
+        Content-type: multipart/form-data; boundary=----WebKitFormBoundarybHA3AiiDK7ZdXqj
+
+        ------WebKitFormBoundarybHA3AiiDK7ZdXqj
+        Content-Disposition: form-data; name="name"
+        Content-type: text/plain
+
+        Old Fashioned
+
+        ------WebKitFormBoundarybHA3AiiDK7ZdXqj
+        Content-Disposition: form-data; name="type"
+        Content-type: text/plain
+
+        cocktail
+
+        ------WebKitFormBoundarybHA3AiiDK7ZdXqj
+        Content-Disposition: form-data; name="price"
+        Content-type: text/plain
+
+        1000
+
+        ------WebKitFormBoundarybHA3AiiDK7ZdXqj
+        Content-Disposition: form-data; name="photo"; filename="old_fashioned.jpg"
+        Content-type: image/jpeg
+
+        content of old_fashioned.jpg...
+
+        ------WebKitFormBoundarybHA3AiiDK7ZdXqj--
+        '

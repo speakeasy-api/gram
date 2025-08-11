@@ -42,7 +42,7 @@ components:
 	v3Model, errs := document.BuildV3Model()
 	require.Empty(t, errs)
 
-	schema, err := extractJSONSchemaFromYaml("Foo", v3Model.Model.Components.Schemas.GetOrZero("Foo"))
+	schema, err := extractJSONSchemaFromYamlLibOpenAPI("Foo", v3Model.Model.Components.Schemas.GetOrZero("Foo"))
 	require.NoError(t, err)
 
 	assert.JSONEq(t, `{"type":"object","properties":{"bar":{"type":"object","properties":{"baz":{"type":"string"}}}}}`, string(schema))
@@ -107,7 +107,7 @@ components:
 			v3Model, errs := document.BuildV3Model()
 			require.Empty(t, errs)
 
-			_, err = extractJSONSchemaFromYaml("Foo", v3Model.Model.Components.Schemas.GetOrZero("Foo"))
+			_, err = extractJSONSchemaFromYamlLibOpenAPI("Foo", v3Model.Model.Components.Schemas.GetOrZero("Foo"))
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "circular reference")
 		})
