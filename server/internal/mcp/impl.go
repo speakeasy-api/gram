@@ -416,7 +416,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 		}
 
 		tokenInputs = append(tokenInputs, oauthTokenInputs{
-			securityKeys: []string{""},
+			securityKeys: []string{},
 			Token:        token,
 		})
 	case toolset.OauthProxyServerID.Valid:
@@ -445,37 +445,6 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			if err != nil {
 				return oops.E(oops.CodeUnauthorized, err, "failed to authorize with API key").Log(ctx, s.logger)
 			}
-		}
-	}
-
-	// TODO: How do we actually validate an external token is still active
-	if toolset.ExternalOauthServerID.Valid {
-		if token == "" {
-			s.logger.WarnContext(ctx, "No authorization token provided")
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
-			return oops.E(oops.CodeUnauthorized, nil, "unauthorized")
-		}
-
-		tokenInputs = append(tokenInputs, oauthTokenInputs{
-			securityKeys: []string{""},
-			Token:        token,
-		})
-	}
-
-	// Validate OAuth access token
-	if toolset.OauthProxyServerID.Valid {
-		token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
-		if err != nil {
-			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
-			return oops.E(oops.CodeUnauthorized, err, "invalid or expired access token").Log(ctx, s.logger)
-		}
-		s.logger.InfoContext(ctx, "OAuth token validated successfully", attr.SlogToolsetID(toolset.ID.String()))
-
-		for _, externalSecret := range token.ExternalSecrets {
-			tokenInputs = append(tokenInputs, oauthTokenInputs{
-				securityKeys: externalSecret.SecurityKeys,
-				Token:        externalSecret.Token,
-			})
 		}
 	}
 
