@@ -513,6 +513,7 @@ function SidebarMenuButton({
   const { isMobile, state } = useSidebar();
 
   // Determine the component to use based on href and asChild
+  // Links must be Link (and not `a` or `button`) to work properly with react-router
   const Comp: React.ElementType = asChild ? Slot : props.href ? Link : "button";
 
   const button = (
