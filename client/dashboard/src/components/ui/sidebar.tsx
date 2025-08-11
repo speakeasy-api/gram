@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Link } from "@/components/ui/link";
 import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
@@ -136,7 +137,7 @@ function SidebarProvider({
             } as React.CSSProperties
           }
           className={cn(
-            "group/sidebar-wrapper has-data-[variant=inset]:bg-sidebar flex min-h-svh w-full",
+            "group/sidebar-wrapper  has-data-[variant=inset]:bg-sidebar overflow-hidden flex min-h-svh w-full",
             className
           )}
           {...props}
@@ -512,7 +513,8 @@ function SidebarMenuButton({
   const { isMobile, state } = useSidebar();
 
   // Determine the component to use based on href and asChild
-  const Comp: React.ElementType = asChild ? Slot : (props.href ? "a" : "button");
+  // Links must be Link (and not `a` or `button`) to work properly with react-router
+  const Comp: React.ElementType = asChild ? Slot : props.href ? Link : "button";
 
   const button = (
     <Comp
@@ -525,7 +527,8 @@ function SidebarMenuButton({
         className,
         "cursor-pointer trans"
       )}
-      {...(props.href && props.href.startsWith("http") ? { target: "_blank" } : {})}
+      {...(props.href && { to: props.href })}
+      {...(props.href && props.href.startsWith("http") && { external: true })}
       {...props}
     />
   );
