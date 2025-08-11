@@ -127,14 +127,26 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	if _, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
+	upsertStarted := time.Now()
+	user, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
 		ID:          validateResp.User.ID,
 		Email:       validateResp.User.Email,
 		DisplayName: validateResp.User.DisplayName,
 		PhotoUrl:    conv.PtrToPGText(validateResp.User.PhotoURL),
 		Admin:       validateResp.User.Admin,
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, fmt.Errorf("failed to upsert user: %w", err)
+	}
+
+	// Check if user was created in this upsert (allowing for some clock skew and processing time)
+	if user.CreatedAt.Valid && user.CreatedAt.Time.After(upsertStarted.Add(-1*time.Second)) {
+		if err := s.posthog.CaptureEvent(ctx, "is_first_time_user_signup", user.Email, map[string]interface{}{
+			"email":        user.Email,
+			"display_name": user.DisplayName,
+		}); err != nil {
+			s.logger.ErrorContext(ctx, "failed to capture is_first_time_user_signup event", attr.SlogError(err))
+		}
 	}
 
 	var adminOverride string

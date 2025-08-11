@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 )
 
@@ -284,8 +285,10 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	pylon, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
 
+	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host")
+
 	// Create session manager with mock server URL
-	sessionManager := sessions.NewManager(logger, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon)
+	sessionManager := sessions.NewManager(logger, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog)
 
 	authConfigs := auth.AuthConfigurations{
 		SpeakeasyServerAddress: mockServer.URL,
