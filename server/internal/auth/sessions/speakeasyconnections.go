@@ -127,7 +127,7 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	userUpdatedAt := time.Now()
+	upsertStarted := time.Now()
 	user, err := s.userRepo.UpsertUser(ctx, userRepo.UpsertUserParams{
 		ID:          validateResp.User.ID,
 		Email:       validateResp.User.Email,
@@ -140,7 +140,7 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 	}
 
 	// Check if user was created recently (allowing for some clock skew and processing time)
-	if user.CreatedAt.Valid && user.CreatedAt.Time.After(userUpdatedAt) {
+	if user.CreatedAt.Valid && user.CreatedAt.Time.After(upsertStarted.Add(-1*time.Second)) {
 		if err := s.posthog.CaptureEvent(ctx, "is_first_time_user_signup", user.Email, map[string]interface{}{
 			"email":        user.Email,
 			"display_name": user.DisplayName,
