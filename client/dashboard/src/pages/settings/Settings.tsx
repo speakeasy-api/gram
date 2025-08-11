@@ -229,7 +229,7 @@ export default function Settings() {
       key: "scopes",
       header: "Scopes",
       width: "1fr",
-      render: (key: Key) => <Type variant="body">{key.scopes.join(",")}</Type>,
+      render: (key: Key) => <Type variant="body">{key.scopes.join(", ")}</Type>,
     },
     {
       key: "createdAt",
