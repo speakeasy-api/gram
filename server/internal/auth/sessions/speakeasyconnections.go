@@ -139,7 +139,7 @@ func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) 
 		return nil, fmt.Errorf("failed to upsert user: %w", err)
 	}
 
-	// Check if user was created recently (allowing for some clock skew and processing time)
+	// Check if user was created in this upsert (allowing for some clock skew and processing time)
 	if user.CreatedAt.Valid && user.CreatedAt.Time.After(upsertStarted.Add(-1*time.Second)) {
 		if err := s.posthog.CaptureEvent(ctx, "is_first_time_user_signup", user.Email, map[string]interface{}{
 			"email":        user.Email,
