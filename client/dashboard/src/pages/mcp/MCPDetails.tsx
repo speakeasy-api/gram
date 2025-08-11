@@ -61,6 +61,9 @@ export function MCPDetailPage() {
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
   }, []);
+  
+  console.log(toolset.data.mcpIsPublic);
+  console.log(activeOAuthAuthCode);
 
   return (
     <Stack>
@@ -97,7 +100,7 @@ export function MCPDetailPage() {
                 </Button>
               )}
             </TooltipTrigger>
-            {!activeOAuthAuthCode || !toolset.data.mcpIsPublic && (
+            {(!activeOAuthAuthCode || !toolset.data.mcpIsPublic) && (
               <TooltipContent>
                 {!activeOAuthAuthCode ? "This MCP server does not require the OAuth authorization code flow" : "This MCP Server must not be private to enable OAuth"}
               </TooltipContent>
