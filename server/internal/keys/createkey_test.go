@@ -1,13 +1,15 @@
 package keys_test
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/keys"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -15,7 +17,8 @@ func randstr(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, length)
 	for i := range b {
-		b[i] = charset[rand.Intn(len(charset))]
+		n := must.Value(rand.Int(rand.Reader, big.NewInt(int64(len(charset)))))
+		b[i] = charset[int(n.Int64())]
 	}
 	return "-" + string(b)
 }
