@@ -16,7 +16,6 @@ Create a new project.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="createProject" method="post" path="/rpc/projects.create" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -111,7 +110,6 @@ List all projects for an organization.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="listProjects" method="get" path="/rpc/projects.list" -->
 ```typescript
 import { Gram } from "@gram/client";
 

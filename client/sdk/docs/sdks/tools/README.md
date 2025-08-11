@@ -15,7 +15,6 @@ List all tools for a project
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="listTools" method="get" path="/rpc/tools.list" -->
 ```typescript
 import { Gram } from "@gram/client";
 

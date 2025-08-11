@@ -12,6 +12,10 @@ export type CreateKeyForm = {
    * The name of the key
    */
   name: string;
+  /**
+   * The scopes of the key that determines its permissions.
+   */
+  scopes: Array<string>;
 };
 
 /** @internal */
@@ -21,11 +25,13 @@ export const CreateKeyForm$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   name: z.string(),
+  scopes: z.array(z.string()),
 });
 
 /** @internal */
 export type CreateKeyForm$Outbound = {
   name: string;
+  scopes: Array<string>;
 };
 
 /** @internal */
@@ -35,6 +41,7 @@ export const CreateKeyForm$outboundSchema: z.ZodType<
   CreateKeyForm
 > = z.object({
   name: z.string(),
+  scopes: z.array(z.string()),
 });
 
 /**

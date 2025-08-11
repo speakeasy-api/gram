@@ -21,7 +21,6 @@ Create a deployment to load tool definitions.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="createDeployment" method="post" path="/rpc/deployments.create" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -122,7 +121,6 @@ Create a new deployment with additional or updated tool sources.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="evolveDeployment" method="post" path="/rpc/deployments.evolve" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -211,7 +209,6 @@ Get a deployment by its ID.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getDeployment" method="get" path="/rpc/deployments.get" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -311,7 +308,6 @@ Get the latest deployment for a project.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getLatestDeployment" method="get" path="/rpc/deployments.latest" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -407,7 +403,6 @@ List all deployments in descending order of creation.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="listDeployments" method="get" path="/rpc/deployments.list" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -503,7 +498,6 @@ Get logs for a deployment.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getDeploymentLogs" method="get" path="/rpc/deployments.logs" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -603,7 +597,6 @@ Redeploys an existing deployment.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="redeployDeployment" method="post" path="/rpc/deployments.redeploy" -->
 ```typescript
 import { Gram } from "@gram/client";
 

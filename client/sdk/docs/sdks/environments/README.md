@@ -18,7 +18,6 @@ Create a new environment
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="createEnvironment" method="post" path="/rpc/environments.create" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -125,7 +124,6 @@ Delete an environment
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="deleteEnvironment" method="delete" path="/rpc/environments.delete" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -214,7 +212,6 @@ List all environments for an organization
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="listEnvironments" method="get" path="/rpc/environments.list" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -310,7 +307,6 @@ Update an environment
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="updateEnvironment" method="post" path="/rpc/environments.update" -->
 ```typescript
 import { Gram } from "@gram/client";
 

@@ -17,7 +17,6 @@ Delete a custom domain
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="deleteDomain" method="delete" path="/rpc/domain.delete" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -102,7 +101,6 @@ Get the custom domain for a project
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getDomain" method="get" path="/rpc/domain.get" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -198,7 +196,6 @@ Create a custom domain for a organization
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="registerDomain" method="post" path="/rpc/domain.register" -->
 ```typescript
 import { Gram } from "@gram/client";
 

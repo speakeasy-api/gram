@@ -16,7 +16,6 @@ Get a third-party integration by ID or name.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="integrations#get" method="get" path="/rpc/integrations.get" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -112,7 +111,6 @@ List available third-party integrations.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="listIntegrations" method="get" path="/rpc/integrations.list" -->
 ```typescript
 import { Gram } from "@gram/client";
 

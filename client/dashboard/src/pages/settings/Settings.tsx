@@ -9,7 +9,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
-import { cn } from "@/lib/utils";
+import { assert, cn } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage";
@@ -32,12 +32,15 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCustomDomain } from "../mcp/MCPDetails";
+import { InputField } from "@/components/moon/input-field";
+import { AnyField } from "@/components/moon/any-field";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export default function Settings() {
   const organization = useOrganization();
   const session = useSession();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [newKeyName, setNewKeyName] = useState("");
   const [keyToRevoke, setKeyToRevoke] = useState<Key | null>(null);
   const [newlyCreatedKey, setNewlyCreatedKey] = useState<Key | null>(null);
   const [isCopied, setIsCopied] = useState(false);
@@ -102,7 +105,6 @@ export default function Settings() {
 
   const createKeyMutation = useCreateAPIKeyMutation({
     onSuccess: async (data) => {
-      setNewKeyName("");
       setNewlyCreatedKey(data);
       await invalidateListAPIKeys(queryClient, [{ gramSession: "" }]);
       await queryClient.refetchQueries({
@@ -136,15 +138,31 @@ export default function Settings() {
     },
   });
 
-  const handleCreateKey = () => {
-    createKeyMutation.mutate({
-      security: { sessionHeaderGramSession: "" },
-      request: {
-        createKeyForm: {
-          name: newKeyName,
+  const handleCreateKey: React.FormEventHandler<HTMLFormElement> = (e) => {
+    e.preventDefault();
+    const formEl = e.currentTarget;
+    const formData = new FormData(formEl);
+    const newKeyName = formData.get("name");
+    assert(typeof newKeyName === "string", "Key name must be a string");
+    const scope = formData.get("scope");
+    assert(typeof scope === "string", "Scope must be a string");
+
+    createKeyMutation.mutate(
+      {
+        security: { sessionHeaderGramSession: "" },
+        request: {
+          createKeyForm: {
+            name: newKeyName,
+            scopes: [scope],
+          },
         },
       },
-    });
+      {
+        onSuccess: () => {
+          formEl.reset();
+        },
+      }
+    );
   };
 
   const handleRevokeKey = () => {
@@ -293,9 +311,9 @@ export default function Settings() {
             </Dialog.Header>
             {newlyCreatedKey ? (
               <div className="space-y-4 py-4">
-                <div className="rounded-lg border-yellow-500/50 bg-yellow-50/50 text-yellow-600 p-4 text-sm">
-                  You won't be able to see this token value again once you close
-                  this dialog.
+                <div className="rounded-lg border border-yellow-500/50 bg-yellow-600/50 text-foreground p-4 text-sm">
+                  You will not be able to see this token value again once you
+                  close this dialog. Copy it now and store it securely.
                 </div>
                 <div className="flex items-center space-x-2 bg-muted p-3 rounded-md">
                   <code className="flex-1 break-all">
@@ -319,26 +337,55 @@ export default function Settings() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Enter key name"
-                    value={newKeyName}
-                    onChange={setNewKeyName}
-                  />
-                </div>
+              <form className="space-y-4 py-4" onSubmit={handleCreateKey}>
+                <InputField
+                  label="Key name"
+                  name="name"
+                  required
+                  autoFocus
+                  autoCapitalize="off"
+                  autoComplete="off"
+                  autoCorrect="off"
+                />
+
+                <AnyField
+                  label="Scope"
+                  optionality="hidden"
+                  render={() => {
+                    return (
+                      <RadioGroup name="scope" defaultValue="consumer">
+                        <div className="flex items-center gap-3">
+                          <RadioGroupItem value="consumer" id="r1" />
+                          <Label className="leading-normal" htmlFor="r1">
+                            Consumer: can query/modify toolsets, read data and
+                            access MCP servers.
+                          </Label>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <RadioGroupItem value="producer" id="r2" />
+                          <Label className="leading-normal" htmlFor="r2">
+                            Producer: can upload OpenAPI documents, trigger
+                            deployments, query/modify toolsets, read data and
+                            access MCP servers.
+                          </Label>
+                        </div>
+                      </RadioGroup>
+                    );
+                  }}
+                />
                 <div className="flex justify-end space-x-2">
-                  <Button variant="secondary" onClick={handleCloseCreateDialog}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={handleCloseCreateDialog}
+                  >
                     Cancel
                   </Button>
-                  <Button
-                    onClick={handleCreateKey}
-                    disabled={!newKeyName || createKeyMutation.isPending}
-                  >
+                  <Button type="submit" disabled={createKeyMutation.isPending}>
                     Create
                   </Button>
                 </div>
-              </div>
+              </form>
             )}
           </Dialog.Content>
         </Dialog>
@@ -600,8 +647,8 @@ export default function Settings() {
         </Stack>
         <div className="space-y-4">
           <Type variant="body" muted>
-            LLM Credits are used only for the in dashboard playground and other AI-powered in
-            dashboard experiences.
+            LLM Credits are used only for the in dashboard playground and other
+            AI-powered in dashboard experiences.
           </Type>
           {creditUsage && (
             <div className="space-y-2">

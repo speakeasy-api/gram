@@ -1,6 +1,6 @@
 {
   "name": "@gram/client",
-  "version": "0.12.46",
+  "version": "0.12.49",
   "author": "Speakeasy",
   "type": "module",
   "main": "./esm/index.js",
@@ -56,7 +56,8 @@
   "peerDependencies": {
     "@tanstack/react-query": "^5",
     "react": "^18 || ^19",
-    "react-dom": "^18 || ^19"
+    "react-dom": "^18 || ^19",
+    "zod": "^3"
   },
   "peerDependenciesMeta": {
     "@tanstack/react-query": {"optional":true},
@@ -70,10 +71,11 @@
     "@types/react-dom": "catalog:",
     "eslint": "^9.19.0",
     "globals": "^15.14.0",
-    "typescript": "~5.8.3",
-    "typescript-eslint": "^8.26.0"
+    "typescript": "^5.4.5",
+    "typescript-eslint": "^8.22.0",
+    "zod": "^3.25.17"
   },
   "dependencies": {
-    "zod": "^3.20.0"
+    
   }
 }

@@ -19,7 +19,6 @@ Proxies to auth login through speakeasy oidc.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="slackLogin" method="get" path="/rpc/{project_slug}/slack.login" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -91,7 +90,6 @@ Handles the authentication callback.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="slackCallback" method="get" path="/rpc/slack.callback" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -164,7 +162,6 @@ delete slack connection for an organization and project.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="deleteSlackConnection" method="delete" path="/rpc/slack.deleteConnection" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -249,7 +246,6 @@ get slack connection for an organization and project.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getSlackConnection" method="get" path="/rpc/slack.getConnection" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -345,7 +341,6 @@ update slack connection for an organization and project.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="updateSlackConnection" method="post" path="/rpc/slack.updateConnection" -->
 ```typescript
 import { Gram } from "@gram/client";
 
