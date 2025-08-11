@@ -53,10 +53,10 @@ func TestService_ServeOpenAPIv3_Success(t *testing.T) {
 
 	// Call ServeOpenAPIv3
 	result, body, err := ti.service.ServeOpenAPIv3(ctx, &assets.ServeOpenAPIv3Form{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               asset.ID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		ProjectID:    projectID.String(),
+		ID:           asset.ID.String(),
 	})
 
 	require.NoError(t, err)
@@ -84,10 +84,10 @@ func TestService_ServeOpenAPIv3_Unauthorized(t *testing.T) {
 	ctx := t.Context()
 
 	_, _, err := ti.service.ServeOpenAPIv3(ctx, &assets.ServeOpenAPIv3Form{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               uuid.New().String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		ProjectID:    "",
+		ID:           uuid.New().String(),
 	})
 
 	var oopsErr *oops.ShareableError
@@ -99,12 +99,16 @@ func TestService_ServeOpenAPIv3_InvalidAssetID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAssetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
 
 	_, _, err := ti.service.ServeOpenAPIv3(ctx, &assets.ServeOpenAPIv3Form{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               "invalid-uuid",
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		ProjectID:    projectID.String(),
+		ID:           "invalid-uuid",
 	})
 
 	var oopsErr *oops.ShareableError
@@ -117,12 +121,16 @@ func TestService_ServeOpenAPIv3_EmptyAssetID(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAssetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
 
 	_, _, err := ti.service.ServeOpenAPIv3(ctx, &assets.ServeOpenAPIv3Form{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               "00000000-0000-0000-0000-000000000000",
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		ProjectID:    projectID.String(),
+		ID:           "00000000-0000-0000-0000-000000000000",
 	})
 
 	var oopsErr *oops.ShareableError
@@ -135,14 +143,18 @@ func TestService_ServeOpenAPIv3_AssetNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAssetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
 
 	nonExistentID := uuid.New()
 
 	_, _, err := ti.service.ServeOpenAPIv3(ctx, &assets.ServeOpenAPIv3Form{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               nonExistentID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		ProjectID:    projectID.String(),
+		ID:           nonExistentID.String(),
 	})
 
 	var oopsErr *oops.ShareableError
@@ -154,6 +166,10 @@ func TestService_ServeOpenAPIv3_WrongProject(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestAssetsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
 
 	// Create asset for different project
 	differentProjectID := uuid.New()
@@ -170,10 +186,10 @@ func TestService_ServeOpenAPIv3_WrongProject(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _, err = ti.service.ServeOpenAPIv3(ctx, &assets.ServeOpenAPIv3Form{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               asset.ID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		ProjectID:    projectID.String(),
+		ID:           asset.ID.String(),
 	})
 
 	var oopsErr *oops.ShareableError
@@ -204,10 +220,10 @@ func TestService_ServeOpenAPIv3_FileNotInStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _, err = ti.service.ServeOpenAPIv3(ctx, &assets.ServeOpenAPIv3Form{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               asset.ID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		ProjectID:    projectID.String(),
+		ID:           asset.ID.String(),
 	})
 
 	var oopsErr *oops.ShareableError
@@ -238,10 +254,10 @@ func TestService_ServeOpenAPIv3_InvalidAssetURL(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _, err = ti.service.ServeOpenAPIv3(ctx, &assets.ServeOpenAPIv3Form{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               asset.ID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		ProjectID:    projectID.String(),
+		ID:           asset.ID.String(),
 	})
 
 	var oopsErr *oops.ShareableError
@@ -287,10 +303,10 @@ func TestService_ServeOpenAPIv3_JSONContent(t *testing.T) {
 
 	// Call ServeOpenAPIv3
 	result, body, err := ti.service.ServeOpenAPIv3(ctx, &assets.ServeOpenAPIv3Form{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               asset.ID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		ProjectID:    projectID.String(),
+		ID:           asset.ID.String(),
 	})
 
 	require.NoError(t, err)
@@ -359,10 +375,10 @@ func TestService_ServeOpenAPIv3_CrossProjectAccess(t *testing.T) {
 
 	// Ensure we can access it with the same auth context
 	result, body, err := ti.service.ServeOpenAPIv3(ctx1, &assets.ServeOpenAPIv3Form{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               asset.ID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		ProjectID:    project1ID.String(),
+		ID:           asset.ID.String(),
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -377,10 +393,10 @@ func TestService_ServeOpenAPIv3_CrossProjectAccess(t *testing.T) {
 
 	// Ensure we cannot access it from the auth context of a different project
 	_, _, err = ti.service.ServeOpenAPIv3(ctx2, &assets.ServeOpenAPIv3Form{
-		SessionToken:     nil,
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		ID:               asset.ID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+		ProjectID:    project2ID.String(),
+		ID:           asset.ID.String(),
 	})
 
 	var oopsErr *oops.ShareableError

@@ -7,6 +7,8 @@ package repo
 
 import (
 	"context"
+
+	"github.com/google/uuid"
 )
 
 const listProjectsByOrganization = `-- name: ListProjectsByOrganization :many
@@ -44,4 +46,25 @@ func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID
 		return nil, err
 	}
 	return items, nil
+}
+
+const pokeProjectByID = `-- name: PokeProjectByID :one
+SELECT id
+FROM projects
+WHERE
+  organization_id = $1
+  AND id = $2
+  AND deleted IS FALSE
+`
+
+type PokeProjectByIDParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) PokeProjectByID(ctx context.Context, arg PokeProjectByIDParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, pokeProjectByID, arg.OrganizationID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }

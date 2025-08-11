@@ -92,6 +92,7 @@ type ListAssetsResult struct {
 // ServeImageForm is the payload type of the assets service serveImage method.
 type ServeImageForm struct {
 	SessionToken *string
+	ApikeyToken  *string
 	// The ID of the asset to serve
 	ID string
 }
@@ -106,11 +107,12 @@ type ServeImageResult struct {
 // ServeOpenAPIv3Form is the payload type of the assets service serveOpenAPIv3
 // method.
 type ServeOpenAPIv3Form struct {
-	ApikeyToken      *string
-	SessionToken     *string
-	ProjectSlugInput *string
+	ApikeyToken  *string
+	SessionToken *string
 	// The ID of the asset to serve
 	ID string
+	// The procect ID that the asset belongs to
+	ProjectID string
 }
 
 // ServeOpenAPIv3Result is the result type of the assets service serveOpenAPIv3

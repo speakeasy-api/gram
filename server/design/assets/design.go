@@ -17,6 +17,7 @@ var _ = Service("assets", func() {
 
 	Method("serveImage", func() {
 		Description("Serve an image from Gram.")
+		Security(security.ByKey)
 		Security(security.Session)
 
 		Payload(ServeImageForm)
@@ -33,6 +34,7 @@ var _ = Service("assets", func() {
 			})
 
 			security.SessionHeader()
+			security.ByKeyHeader()
 			SkipResponseBodyEncodeDecode()
 		})
 
@@ -88,12 +90,16 @@ var _ = Service("assets", func() {
 	Method("serveOpenAPIv3", func() {
 		Description("Serve an OpenAPIv3 asset from Gram.")
 
+		Security(security.ByKey)
+		Security(security.Session)
+
 		Payload(ServeOpenAPIv3Form)
 		Result(ServeOpenAPIv3Result)
 
 		HTTP(func() {
 			GET("/rpc/assets.serveOpenAPIv3")
 			Param("id")
+			Param("project_id")
 
 			Response(StatusOK, func() {
 				Header("content_type:Content-Type")
@@ -102,7 +108,6 @@ var _ = Service("assets", func() {
 			})
 
 			security.ByKeyHeader()
-			security.ProjectHeader()
 			security.SessionHeader()
 			SkipResponseBodyEncodeDecode()
 		})
@@ -146,6 +151,7 @@ var ListAssetsResult = Type("ListAssetsResult", func() {
 var ServeImageForm = Type("ServeImageForm", func() {
 	Required("id")
 	security.SessionPayload()
+	security.ByKeyPayload()
 
 	Attribute("id", String, "The ID of the asset to serve")
 })
@@ -191,12 +197,13 @@ var UploadImageResult = Type("UploadImageResult", func() {
 })
 
 var ServeOpenAPIv3Form = Type("ServeOpenAPIv3Form", func() {
-	Required("id")
+	Required("id", "project_id")
+
 	security.ByKeyPayload()
 	security.SessionPayload()
-	security.ProjectPayload()
 
 	Attribute("id", String, "The ID of the asset to serve")
+	Attribute("project_id", String, "The procect ID that the asset belongs to")
 })
 
 var ServeOpenAPIv3Result = Type("ServeOpenAPIv3Result", func() {

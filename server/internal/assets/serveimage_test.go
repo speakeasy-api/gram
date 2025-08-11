@@ -49,6 +49,7 @@ func TestService_ServeImage_Success(t *testing.T) {
 	// Call ServeImage
 	result, body, err := ti.service.ServeImage(ctx, &assets.ServeImageForm{
 		SessionToken: nil,
+		ApikeyToken:  nil,
 		ID:           asset.ID.String(),
 	})
 
@@ -78,6 +79,7 @@ func TestService_ServeImage_Unauthorized(t *testing.T) {
 
 	_, _, err := ti.service.ServeImage(ctx, &assets.ServeImageForm{
 		SessionToken: nil,
+		ApikeyToken:  nil,
 		ID:           uuid.New().String(),
 	})
 
@@ -93,6 +95,7 @@ func TestService_ServeImage_InvalidAssetID(t *testing.T) {
 
 	_, _, err := ti.service.ServeImage(ctx, &assets.ServeImageForm{
 		SessionToken: nil,
+		ApikeyToken:  nil,
 		ID:           "invalid-uuid",
 	})
 
@@ -110,6 +113,7 @@ func TestService_ServeImage_AssetNotFound(t *testing.T) {
 
 	_, _, err := ti.service.ServeImage(ctx, &assets.ServeImageForm{
 		SessionToken: nil,
+		ApikeyToken:  nil,
 		ID:           nonExistentID.String(),
 	})
 
@@ -139,6 +143,7 @@ func TestService_ServeImage_FileNotInStorage(t *testing.T) {
 
 	_, _, err = ti.service.ServeImage(ctx, &assets.ServeImageForm{
 		SessionToken: nil,
+		ApikeyToken:  nil,
 		ID:           asset.ID.String(),
 	})
 
@@ -168,6 +173,7 @@ func TestService_ServeImage_InvalidAssetURL(t *testing.T) {
 
 	_, _, err = ti.service.ServeImage(ctx, &assets.ServeImageForm{
 		SessionToken: nil,
+		ApikeyToken:  nil,
 		ID:           asset.ID.String(),
 	})
 
