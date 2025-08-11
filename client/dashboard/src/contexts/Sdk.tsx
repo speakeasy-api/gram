@@ -19,7 +19,7 @@ export const useSdkClient = () => {
 export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
   const { projectSlug } = useSlugs();
   const { handleError } = useErrorHandler();
-  const telemetry = useTelemetry();
+  // const telemetry = useTelemetry();
 
   const queryClient = useMemo(
     () =>
@@ -79,7 +79,7 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
 
       datadogRum.stopSession();
       datadogRum.clearUser();
-      telemetry.reset();
+      // telemetry.reset();
       if (typeof localStorage !== "undefined") {
         localStorage.clear();
       }

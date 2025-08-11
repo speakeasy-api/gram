@@ -26,13 +26,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [evalsModalOpen, setEvalsModalOpen] = React.useState(false);
 
   const topNavGroups = {
-    create: [
-      routes.toolsets,
-      routes.customTools,
-      routes.prompts,
-      routes.environments,
-    ],
-    consume: [routes.playground, routes.mcp, routes.sdks],
+    create: [routes.toolsets, routes.customTools, routes.prompts],
+    consume: [routes.playground, routes.mcp, routes.environments],
   };
 
   const bottomNav = [routes.deployments, routes.settings, routes.docs];
