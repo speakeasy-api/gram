@@ -13,6 +13,7 @@ import { useParams } from "react-router";
 import { DeploymentLink } from "./Deployments";
 import { ToolsList } from "./ToolsList";
 import { Type } from "@/components/ui/type";
+import { useProject } from "@/contexts/Auth";
 
 export default function DeploymentPage() {
   const { deploymentId } = useParams();
@@ -36,6 +37,7 @@ export default function DeploymentPage() {
 
 function DeploymentLogs(props: { deploymentId: string }) {
   const { deploymentId } = props;
+  const project = useProject();
   const { data: deployment } = useDeploymentSuspense(
     { id: deploymentId },
     undefined,
@@ -58,13 +60,17 @@ function DeploymentLogs(props: { deploymentId: string }) {
           Overview
         </Heading>
         <dl className="grid grid-cols-[max-content_1fr] gap-x-4">
-          <dt><Type muted>Created</Type></dt>
+          <dt>
+            <Type muted>Created</Type>
+          </dt>
           <dd>
             <HumanizeDateTime date={deployment.createdAt} />
           </dd>
           {deployment.clonedFrom ? (
             <>
-              <dt><Type muted>Predecessor</Type></dt>
+              <dt>
+                <Type muted>Predecessor</Type>
+              </dt>
               <dd>
                 <DeploymentLink id={deployment.clonedFrom} />
               </dd>
@@ -83,6 +89,7 @@ function DeploymentLogs(props: { deploymentId: string }) {
               getServerURL()
             );
             downloadURL.searchParams.set("id", asset.assetId);
+            downloadURL.searchParams.set("project_id", project.id);
 
             return (
               <li

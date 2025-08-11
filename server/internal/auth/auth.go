@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/repo"
@@ -90,4 +91,29 @@ func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, proj
 
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 	return ctx, nil
+}
+
+func (s *Auth) CheckProjectAccess(ctx context.Context, logger *slog.Logger, projectID uuid.UUID) error {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok {
+		return oops.E(oops.CodeUnauthorized, nil, "no session found")
+	}
+
+	id, err := s.repo.PokeProjectByID(ctx, repo.PokeProjectByIDParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      projectID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return oops.C(oops.CodeForbidden).Log(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	case err != nil:
+		return oops.E(oops.CodeUnexpected, err, "error checking project access").Log(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	}
+
+	if id == uuid.Nil {
+		err := errors.New("check project access by id: database returned nil project id")
+		return oops.E(oops.CodeForbidden, err, "%s", oops.CodeForbidden.UserMessage()).Log(ctx, logger, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
+	}
+
+	return nil
 }

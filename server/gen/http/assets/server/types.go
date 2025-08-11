@@ -1693,10 +1693,11 @@ func NewListAssetsGatewayErrorResponseBody(res *goa.ServiceError) *ListAssetsGat
 }
 
 // NewServeImageForm builds a assets service serveImage endpoint payload.
-func NewServeImageForm(id string, sessionToken *string) *assets.ServeImageForm {
+func NewServeImageForm(id string, sessionToken *string, apikeyToken *string) *assets.ServeImageForm {
 	v := &assets.ServeImageForm{}
 	v.ID = id
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 
 	return v
 }
@@ -1728,11 +1729,11 @@ func NewUploadOpenAPIv3Form(contentType string, contentLength int64, apikeyToken
 
 // NewServeOpenAPIv3Form builds a assets service serveOpenAPIv3 endpoint
 // payload.
-func NewServeOpenAPIv3Form(id string, apikeyToken *string, projectSlugInput *string, sessionToken *string) *assets.ServeOpenAPIv3Form {
+func NewServeOpenAPIv3Form(id string, projectID string, apikeyToken *string, sessionToken *string) *assets.ServeOpenAPIv3Form {
 	v := &assets.ServeOpenAPIv3Form{}
 	v.ID = id
+	v.ProjectID = projectID
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 	v.SessionToken = sessionToken
 
 	return v

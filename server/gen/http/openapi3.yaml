@@ -221,6 +221,13 @@ paths:
                   schema:
                     description: Session header
                     type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
             responses:
                 "200":
                     content:
@@ -295,6 +302,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: serveImage assets
             tags:
@@ -316,18 +324,19 @@ paths:
                     description: The ID of the asset to serve
                     type: string
                 - allowEmptyValue: true
+                  description: The procect ID that the asset belongs to
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    description: The procect ID that the asset belongs to
+                    type: string
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
                   schema:
                     description: API Key header
-                    type: string
-                - allowEmptyValue: true
-                  description: project header
-                  in: header
-                  name: Gram-Project
-                  schema:
-                    description: project header
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -411,9 +420,7 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
-                  project_slug_header_Gram-Project: []
-                - project_slug_header_Gram-Project: []
-                  session_header_Gram-Session: []
+                - session_header_Gram-Session: []
             summary: serveOpenAPIv3 assets
             tags:
                 - assets
@@ -8536,6 +8543,8 @@ components:
         ServeImageForm:
             type: object
             properties:
+                apikey_token:
+                    type: string
                 id:
                     type: string
                     description: The ID of the asset to serve
@@ -8565,12 +8574,14 @@ components:
                 id:
                     type: string
                     description: The ID of the asset to serve
-                project_slug_input:
+                project_id:
                     type: string
+                    description: The procect ID that the asset belongs to
                 session_token:
                     type: string
             required:
                 - id
+                - project_id
         ServeOpenAPIv3Result:
             type: object
             properties:

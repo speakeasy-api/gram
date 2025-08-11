@@ -149,6 +149,7 @@ linters:
         - "(go.temporal.io/sdk/internal.Future).Get("
 
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
+        - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).CheckProjectAccess("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/sessions.Manager).Authenticate("
         - "(*github.com/speakeasy-api/gram/server/internal/openapi.ToolExtractor).Do("
 

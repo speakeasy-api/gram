@@ -520,7 +520,7 @@ func sniffMimeType(source io.ReadSeeker, params sniffMimeTypeParams) (mtype stri
 
 func (s *Service) ServeOpenAPIv3(ctx context.Context, payload *gen.ServeOpenAPIv3Form) (*gen.ServeOpenAPIv3Result, io.ReadCloser, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+	if !ok || authCtx == nil {
 		return nil, nil, oops.C(oops.CodeUnauthorized)
 	}
 
@@ -532,14 +532,27 @@ func (s *Service) ServeOpenAPIv3(ctx context.Context, payload *gen.ServeOpenAPIv
 		return nil, nil, oops.E(oops.CodeBadRequest, nil, "asset id cannot be empty")
 	}
 
+	projectID, err := uuid.Parse(payload.ProjectID)
+	if err != nil {
+		return nil, nil, oops.E(oops.CodeBadRequest, err, "invalid project id").Log(ctx, s.logger)
+	}
+	if projectID == uuid.Nil {
+		return nil, nil, oops.E(oops.CodeBadRequest, nil, "project id cannot be empty")
+	}
+
+	// This check is important to ensure the client has access to the project they specified in the request.
+	if err := s.auth.CheckProjectAccess(ctx, s.logger, projectID); err != nil {
+		return nil, nil, err
+	}
+
 	logger := s.logger.With(
 		attr.SlogAssetID(assetID.String()),
-		attr.SlogProjectID(authCtx.ProjectID.String()),
+		attr.SlogProjectID(projectID.String()),
 	)
 
 	row, err := s.repo.GetOpenAPIv3AssetURL(ctx, repo.GetOpenAPIv3AssetURLParams{
 		ID:        assetID,
-		ProjectID: *authCtx.ProjectID,
+		ProjectID: projectID,
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):

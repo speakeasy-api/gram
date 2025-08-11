@@ -16,7 +16,7 @@ import (
 
 // BuildServeImagePayload builds the payload for the assets serveImage endpoint
 // from CLI flags.
-func BuildServeImagePayload(assetsServeImageID string, assetsServeImageSessionToken string) (*assets.ServeImageForm, error) {
+func BuildServeImagePayload(assetsServeImageID string, assetsServeImageSessionToken string, assetsServeImageApikeyToken string) (*assets.ServeImageForm, error) {
 	var id string
 	{
 		id = assetsServeImageID
@@ -27,9 +27,16 @@ func BuildServeImagePayload(assetsServeImageID string, assetsServeImageSessionTo
 			sessionToken = &assetsServeImageSessionToken
 		}
 	}
+	var apikeyToken *string
+	{
+		if assetsServeImageApikeyToken != "" {
+			apikeyToken = &assetsServeImageApikeyToken
+		}
+	}
 	v := &assets.ServeImageForm{}
 	v.ID = id
 	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }
@@ -122,21 +129,19 @@ func BuildUploadOpenAPIv3Payload(assetsUploadOpenAPIv3ContentType string, assets
 
 // BuildServeOpenAPIv3Payload builds the payload for the assets serveOpenAPIv3
 // endpoint from CLI flags.
-func BuildServeOpenAPIv3Payload(assetsServeOpenAPIv3ID string, assetsServeOpenAPIv3ApikeyToken string, assetsServeOpenAPIv3ProjectSlugInput string, assetsServeOpenAPIv3SessionToken string) (*assets.ServeOpenAPIv3Form, error) {
+func BuildServeOpenAPIv3Payload(assetsServeOpenAPIv3ID string, assetsServeOpenAPIv3ProjectID string, assetsServeOpenAPIv3ApikeyToken string, assetsServeOpenAPIv3SessionToken string) (*assets.ServeOpenAPIv3Form, error) {
 	var id string
 	{
 		id = assetsServeOpenAPIv3ID
+	}
+	var projectID string
+	{
+		projectID = assetsServeOpenAPIv3ProjectID
 	}
 	var apikeyToken *string
 	{
 		if assetsServeOpenAPIv3ApikeyToken != "" {
 			apikeyToken = &assetsServeOpenAPIv3ApikeyToken
-		}
-	}
-	var projectSlugInput *string
-	{
-		if assetsServeOpenAPIv3ProjectSlugInput != "" {
-			projectSlugInput = &assetsServeOpenAPIv3ProjectSlugInput
 		}
 	}
 	var sessionToken *string
@@ -147,8 +152,8 @@ func BuildServeOpenAPIv3Payload(assetsServeOpenAPIv3ID string, assetsServeOpenAP
 	}
 	v := &assets.ServeOpenAPIv3Form{}
 	v.ID = id
+	v.ProjectID = projectID
 	v.ApikeyToken = apikeyToken
-	v.ProjectSlugInput = projectSlugInput
 	v.SessionToken = sessionToken
 
 	return v, nil

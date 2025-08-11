@@ -43,6 +43,7 @@ func DecodeServeImageRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		var (
 			id           string
 			sessionToken *string
+			apikeyToken  *string
 			err          error
 		)
 		id = r.URL.Query().Get("id")
@@ -53,10 +54,21 @@ func DecodeServeImageRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewServeImageForm(id, sessionToken)
+		payload := NewServeImageForm(id, sessionToken, apikeyToken)
+		if payload.ApikeyToken != nil {
+			if strings.Contains(*payload.ApikeyToken, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
+				payload.ApikeyToken = &cred
+			}
+		}
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -721,23 +733,24 @@ func EncodeServeOpenAPIv3Response(encoder func(context.Context, http.ResponseWri
 func DecodeServeOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (any, error) {
 	return func(r *http.Request) (any, error) {
 		var (
-			id               string
-			apikeyToken      *string
-			projectSlugInput *string
-			sessionToken     *string
-			err              error
+			id           string
+			projectID    string
+			apikeyToken  *string
+			sessionToken *string
+			err          error
 		)
-		id = r.URL.Query().Get("id")
+		qp := r.URL.Query()
+		id = qp.Get("id")
 		if id == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
+		}
+		projectID = qp.Get("project_id")
+		if projectID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "query string"))
 		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
-		}
-		projectSlugInputRaw := r.Header.Get("Gram-Project")
-		if projectSlugInputRaw != "" {
-			projectSlugInput = &projectSlugInputRaw
 		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
@@ -746,19 +759,12 @@ func DecodeServeOpenAPIv3Request(mux goahttp.Muxer, decoder func(*http.Request) 
 		if err != nil {
 			return nil, err
 		}
-		payload := NewServeOpenAPIv3Form(id, apikeyToken, projectSlugInput, sessionToken)
+		payload := NewServeOpenAPIv3Form(id, projectID, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
 				payload.ApikeyToken = &cred
-			}
-		}
-		if payload.ProjectSlugInput != nil {
-			if strings.Contains(*payload.ProjectSlugInput, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
-				payload.ProjectSlugInput = &cred
 			}
 		}
 		if payload.SessionToken != nil {
