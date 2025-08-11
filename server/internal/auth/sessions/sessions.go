@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -38,9 +39,10 @@ type Manager struct {
 	orgRepo                *orgRepo.Queries
 	userRepo               *userRepo.Queries
 	pylon                  *pylon.Pylon
+	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
 }
 
-func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, speakeasyServerAddress string, speakeasySecretKey string, pylon *pylon.Pylon) *Manager {
+func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, speakeasyServerAddress string, speakeasySecretKey string, pylon *pylon.Pylon, posthog *posthog.Posthog) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
 
 	return &Manager{
@@ -54,6 +56,7 @@ func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client
 		orgRepo:                orgRepo.New(db),
 		userRepo:               userRepo.New(db),
 		pylon:                  pylon,
+		posthog:                posthog,
 	}
 }
 

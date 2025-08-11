@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -76,6 +77,8 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 		return nil, fmt.Errorf("failed to create fake pylon: %w", err)
 	}
 
+	fakePosthog := posthog.New(context.Background(), logger, "test-posthog-key", "test-posthog-host")
+
 	return &Manager{
 		logger:                 logger.With(attr.SlogComponent("sessions")),
 		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
@@ -87,6 +90,7 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 		orgRepo:                orgRepo.New(db),
 		userRepo:               userRepo.New(db),
 		pylon:                  fakePylon,
+		posthog:                fakePosthog,
 	}, nil
 }
 

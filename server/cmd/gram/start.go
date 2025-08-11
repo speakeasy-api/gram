@@ -324,10 +324,16 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create pylon client: %w", err)
 			}
 
+			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"))
+			var features feature.Provider = posthogClient
+			if c.String("environment") == "local" {
+				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+			}
+
 			localEnvPath := c.String("unsafe-local-env-path")
 			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(logger, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient)
+				sessionManager = sessions.NewManager(logger, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient)
 			} else {
 				logger.WarnContext(ctx, "enabling unsafe session store", attr.SlogFilePath(localEnvPath))
 				s, err := sessions.NewUnsafeManager(logger, db, redisClient, cache.Suffix("gram-local"), localEnvPath)
@@ -358,12 +364,6 @@ func newStartCommand() *cli.Command {
 			})
 			if err != nil {
 				return fmt.Errorf("failed to create temporal client: %w", err)
-			}
-
-			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"))
-			var features feature.Provider = posthogClient
-			if c.String("environment") == "local" {
-				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
 			if temporalClient == nil {
