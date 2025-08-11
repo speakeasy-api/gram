@@ -31,14 +31,16 @@ func TestKeysService_ListKeys(t *testing.T) {
 
 		// Create a few keys
 		key1, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
-			Name:         "key-1",
 			SessionToken: nil,
+			Name:         "key-1",
+			Scopes:       []string{"consumer"},
 		})
 		require.NoError(t, err)
 
 		key2, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
-			Name:         "key-2",
 			SessionToken: nil,
+			Name:         "key-2",
+			Scopes:       []string{"consumer"},
 		})
 		require.NoError(t, err)
 

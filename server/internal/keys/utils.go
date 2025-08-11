@@ -6,14 +6,32 @@ import (
 	"fmt"
 )
 
-type APIKeyScopes string
+type APIKeyScope int
 
 const randomKeyLength = 64
 
 const (
-	APIKeyScopesConsumer APIKeyScopes = "consumer" // allows api key access a tool consumer
-	APIKeyScopesProducer APIKeyScopes = "producer" // allows api key access a tool producer
+	APIKeyScopeInvalid  APIKeyScope = iota
+	APIKeyScopeConsumer APIKeyScope = iota
+	APIKeyScopeProducer APIKeyScope = iota
 )
+
+var APIKeyScopes = map[string]APIKeyScope{
+	"invalid":  APIKeyScopeInvalid,
+	"consumer": APIKeyScopeConsumer,
+	"producer": APIKeyScopeProducer,
+}
+
+func (scope APIKeyScope) String() string {
+	switch scope {
+	case APIKeyScopeConsumer:
+		return "consumer"
+	case APIKeyScopeProducer:
+		return "producer"
+	default:
+		return "invalid"
+	}
+}
 
 func (s *Service) generateToken() (string, error) {
 	randomBytes := make([]byte, randomKeyLength/2) // there are 2 hex chars per byte, we can guarantee output of 64 chars this way

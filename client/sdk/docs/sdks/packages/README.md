@@ -19,7 +19,6 @@ Create a new package for a project.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="createPackage" method="post" path="/rpc/packages.create" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -116,7 +115,6 @@ List all packages for a project.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="listPackages" method="get" path="/rpc/packages.list" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -212,7 +210,6 @@ List published versions of a package.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="listVersions" method="get" path="/rpc/packages.listVersions" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -312,7 +309,6 @@ Publish a new version of a package.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="publish" method="post" path="/rpc/packages.publish" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -411,7 +407,6 @@ Update package details.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="updatePackage" method="put" path="/rpc/packages.update" -->
 ```typescript
 import { Gram } from "@gram/client";
 

@@ -8,6 +8,10 @@ import { CreateAPIKeyRequest } from "@gram/client/models/operations";
 let value: CreateAPIKeyRequest = {
   createKeyForm: {
     name: "<value>",
+    scopes: [
+      "<value 1>",
+      "<value 2>",
+    ],
   },
 };
 ```

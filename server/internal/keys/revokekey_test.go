@@ -20,8 +20,9 @@ func TestKeysService_RevokeKey(t *testing.T) {
 
 		// Create a key first
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
-			Name:         "key-to-revoke",
 			SessionToken: nil,
+			Name:         "key-to-revoke",
+			Scopes:       []string{"consumer"},
 		})
 		require.NoError(t, err)
 
@@ -98,20 +99,23 @@ func TestKeysService_RevokeKey(t *testing.T) {
 
 		// Create multiple keys
 		key1, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
-			Name:         "key-1-to-revoke",
 			SessionToken: nil,
+			Name:         "key-1-to-revoke",
+			Scopes:       []string{"consumer"},
 		})
 		require.NoError(t, err)
 
 		key2, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
-			Name:         "key-2-to-revoke",
 			SessionToken: nil,
+			Name:         "key-2-to-revoke",
+			Scopes:       []string{"consumer"},
 		})
 		require.NoError(t, err)
 
 		key3, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
-			Name:         "key-3-to-keep",
 			SessionToken: nil,
+			Name:         "key-3-to-keep",
+			Scopes:       []string{"producer"},
 		})
 		require.NoError(t, err)
 

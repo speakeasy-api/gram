@@ -19,7 +19,6 @@ List all assets for a project.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="listAssets" method="get" path="/rpc/assets.list" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -115,7 +114,6 @@ Serve an image from Gram.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="serveImage" method="get" path="/rpc/assets.serveImage" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -215,7 +213,6 @@ Serve an OpenAPIv3 asset from Gram.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="serveOpenAPIv3" method="get" path="/rpc/assets.serveOpenAPIv3" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -315,7 +312,6 @@ Upload an image to Gram.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="uploadImage" method="post" path="/rpc/assets.uploadImage" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -404,7 +400,6 @@ Upload an OpenAPI v3 document to Gram.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="uploadOpenAPIv3Asset" method="post" path="/rpc/assets.uploadOpenAPIv3" -->
 ```typescript
 import { Gram } from "@gram/client";
 

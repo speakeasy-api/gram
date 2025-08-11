@@ -51,6 +51,8 @@ type CreateKeyPayload struct {
 	SessionToken *string
 	// The name of the key
 	Name string
+	// The scopes of the key that determines its permissions.
+	Scopes []string
 }
 
 // Key is the result type of the keys service createKey method.
