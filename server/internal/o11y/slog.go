@@ -104,18 +104,16 @@ func (h *ContextHandler) Handle(ctx context.Context, record slog.Record) error {
 	spanCtx := trace.SpanContextFromContext(ctx)
 	if spanCtx.HasTraceID() {
 		id := spanCtx.TraceID().String()
+		record.Add(attr.SlogTraceID(id))
 		if h.DataDogAttr {
 			record.Add(attr.SlogDataDogTraceID(id))
-		} else {
-			record.Add(attr.SlogTraceID(id))
 		}
 	}
 	if spanCtx.HasSpanID() {
 		id := spanCtx.SpanID().String()
+		record.Add(attr.SlogSpanID(id))
 		if h.DataDogAttr {
 			record.Add(attr.SlogDataDogSpanID(id))
-		} else {
-			record.Add(attr.SlogSpanID(id))
 		}
 	}
 
