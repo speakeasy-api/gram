@@ -42,7 +42,7 @@ export default function Home() {
       {
         threshold: 0,
         rootMargin: "-80px 0px 0px 0px",
-      }
+      },
     );
 
     const currentButtonsRef = buttonsRef.current;
@@ -152,7 +152,7 @@ export default function Home() {
                         },
                         {
                           text: "Book a demo",
-                          href: "https://calendly.com/sagar-speakeasy/30min",
+                          href: "https://www.speakeasy.com/book-demo",
                           variant: "primary-dark",
                           size: "chunky",
                         },
