@@ -333,7 +333,6 @@ function AssetViewDialog({
   // const client = useSdkClient();
   const { projectSlug } = useParams();
   const project = useProject();
-  const { session } = useSession();
   const [content, setContent] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -348,9 +347,7 @@ function AssetViewDialog({
     }
 
     fetch(downloadURL, {
-      headers: {
-        "gram-session": session,
-      },
+      credentials: "same-origin",
     }).then((assetData) => {
       if (!assetData.ok) {
         setContent("");
