@@ -26,7 +26,7 @@ import {
   useOnboardingSteps,
 } from "../../onboarding/Onboarding";
 import { ApisEmptyState } from "./ApisEmptyState";
-import { useProject, useSession } from "@/contexts/Auth";
+import { useProject } from "@/contexts/Auth";
 
 export default function OpenAPIDocuments() {
   return (
