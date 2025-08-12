@@ -272,6 +272,10 @@ func (s *Service) Logout(ctx context.Context, payload *gen.LogoutPayload) (res *
 		return nil, oops.E(oops.CodeUnexpected, err, "error invalidating user").Log(ctx, s.logger)
 	}
 
+	if err := s.sessions.RevokeTokenFromSpeakeasy(ctx, *authCtx.SessionID); err != nil {
+		s.logger.ErrorContext(ctx, "error revoking token", attr.SlogError(err))
+	}
+
 	if err := s.sessions.ClearSession(ctx, sessions.Session{
 		SessionID:            *authCtx.SessionID,
 		ActiveOrganizationID: authCtx.ActiveOrganizationID,
