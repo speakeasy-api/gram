@@ -26,6 +26,7 @@ import {
   useOnboardingSteps,
 } from "../../onboarding/Onboarding";
 import { ApisEmptyState } from "./ApisEmptyState";
+import { useProject } from "@/contexts/Auth";
 
 export default function OpenAPIDocuments() {
   return (
@@ -331,11 +332,13 @@ function AssetViewDialog({
 }) {
   // const client = useSdkClient();
   const { projectSlug } = useParams();
+  const project = useProject();
   const [content, setContent] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
 
   const downloadURL = new URL("/rpc/assets.serveOpenAPIv3", getServerURL());
   downloadURL.searchParams.set("id", asset.id);
+  downloadURL.searchParams.set("project_id", project.id);
 
   useEffect(() => {
     if (!open || !projectSlug) {
@@ -344,9 +347,7 @@ function AssetViewDialog({
     }
 
     fetch(downloadURL, {
-      headers: {
-        "gram-project": projectSlug,
-      },
+      credentials: "same-origin",
     }).then((assetData) => {
       if (!assetData.ok) {
         setContent("");
