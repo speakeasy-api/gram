@@ -78,7 +78,7 @@ export function Type({
   if (muted) {
     baseClass += " text-muted-foreground";
   } else if (destructive) {
-    baseClass += " text-destructive-foreground";
+    baseClass += " text-default-destructive";
   } else {
     baseClass += " text-stone-800 dark:text-stone-200";
   }

@@ -48,7 +48,10 @@ export default function Onboarding() {
   );
 }
 
-export function useOnboardingSteps(existingDocumentSlug?: string, checkDocumentSlugUnique = true) {
+export function useOnboardingSteps(
+  existingDocumentSlug?: string,
+  checkDocumentSlugUnique = true
+) {
   const project = useProject();
   const session = useSession();
   const client = useSdkClient();
@@ -135,33 +138,54 @@ export function useOnboardingSteps(existingDocumentSlug?: string, checkDocumentS
     }
   };
 
-  const createDeployment = async (documentSlug?: string) => {
+  const createDeployment = async (documentSlug?: string, forceNew = false) => {
     if (!asset || !apiName) {
       throw new Error("Asset or file not found");
     }
 
     setCreatingDeployment(true);
 
-    const createResult = await client.deployments.evolveDeployment({
-      evolveForm: {
-        upsertOpenapiv3Assets: [
-          {
-            assetId: asset.asset.id,
-            name: documentSlug ?? apiName,
-            slug: documentSlug ?? slugify(apiName),
-          },
-        ],
-      },
-    });
+    let deployment: Deployment | undefined;
+    if (forceNew) {
+      const createResult = await client.deployments.create({
+        idempotencyKey: crypto.randomUUID(),
+        createDeploymentRequestBody: {
+          openapiv3Assets: [
+            {
+              assetId: asset.asset.id,
+              name: documentSlug ?? apiName,
+              slug: documentSlug ?? slugify(apiName),
+            },
+          ],
+        },
+      });
 
-    let deployment = createResult.deployment;
+      deployment = createResult.deployment;
+    } else {
+      const createResult = await client.deployments.evolveDeployment({
+        evolveForm: {
+          upsertOpenapiv3Assets: [
+            {
+              assetId: asset.asset.id,
+              name: documentSlug ?? apiName,
+              slug: documentSlug ?? slugify(apiName),
+            },
+          ],
+        },
+      });
+
+      deployment = createResult.deployment;
+    }
 
     if (!deployment) {
       throw new Error("Deployment not found");
     }
 
     // Wait for deployment to finish
-    while (deployment.status !== "completed" && deployment.status !== "failed") {
+    while (
+      deployment.status !== "completed" &&
+      deployment.status !== "failed"
+    ) {
       await new Promise((resolve) => setTimeout(resolve, 100));
       deployment = await client.deployments.getById({
         id: deployment.id,
@@ -212,7 +236,10 @@ export function useOnboardingSteps(existingDocumentSlug?: string, checkDocumentS
   };
 }
 
-const useAssetNumtools = (assetId: string | undefined, deployment: Deployment | undefined) => {
+const useAssetNumtools = (
+  assetId: string | undefined,
+  deployment: Deployment | undefined
+) => {
   const { data: tools } = useListTools({
     deploymentId: deployment?.id,
   });
@@ -287,7 +314,10 @@ export function OnboardingContent({
               placeholder="My API"
               disabled={!!existingDocumentSlug}
             />
-            <Button onClick={() => createDeployment()} disabled={!!apiNameError}>
+            <Button
+              onClick={() => createDeployment()}
+              disabled={!!apiNameError}
+            >
               Continue
             </Button>
           </Stack>
@@ -343,7 +373,10 @@ export function OnboardingContent({
   );
 }
 
-export function DeploymentLogs(props: { deploymentId: string; onlyErrors?: boolean }) {
+export function DeploymentLogs(props: {
+  deploymentId: string;
+  onlyErrors?: boolean;
+}) {
   const { data, status, error } = useDeploymentLogs({
     deploymentId: props.deploymentId,
   });
@@ -393,12 +426,17 @@ export function DeploymentLogs(props: { deploymentId: string; onlyErrors?: boole
 export function useIsProjectEmpty() {
   const { projectSlug } = useParams();
 
-  const { data: deployment, isLoading: isDeploymentLoading } = useLatestDeployment({ gramProject: projectSlug });
-  const { data: toolsets, isLoading: isToolsetsLoading } = useListToolsets({ gramProject: projectSlug });
+  const { data: deployment, isLoading: isDeploymentLoading } =
+    useLatestDeployment({ gramProject: projectSlug });
+  const { data: toolsets, isLoading: isToolsetsLoading } = useListToolsets({
+    gramProject: projectSlug,
+  });
 
   return {
     isLoading: isDeploymentLoading || isToolsetsLoading,
-    isEmpty: isDeploymentEmpty(deployment?.deployment) && toolsets?.toolsets.length === 0
+    isEmpty:
+      isDeploymentEmpty(deployment?.deployment) &&
+      toolsets?.toolsets.length === 0,
   };
 }
 

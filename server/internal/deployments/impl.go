@@ -383,6 +383,12 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		dep.Status = status
 	}
 
+	// Re-read the deployment to get the latest status, tool count etc
+	dep, err = mv.DescribeDeployment(ctx, logger, s.repo, mv.ProjectID(projectID), mv.DeploymentID(newID))
+	if err != nil {
+		return nil, err
+	}
+
 	return &gen.CreateDeploymentResult{
 		Deployment: dep,
 	}, nil
