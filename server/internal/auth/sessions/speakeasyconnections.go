@@ -94,6 +94,30 @@ func (s *Manager) ExchangeTokenFromSpeakeasy(ctx context.Context, code string) (
 	return exchangeResp.IDToken, nil
 }
 
+func (s *Manager) RevokeTokenFromSpeakeasy(ctx context.Context, idToken string) error {
+	// Create the HTTP request
+	req, err := http.NewRequestWithContext(ctx, "POST", s.speakeasyServerAddress+"/v1/speakeasy_provider/revoke", nil)
+	if err != nil {
+		return fmt.Errorf("failed to create revoke token request: %w", err)
+	}
+
+	req.Header.Set("speakeasy-auth-provider-key", s.speakeasySecretKey)
+	req.Header.Set("speakeasy-auth-provider-id-token", idToken)
+
+	// Send the request
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to perform token revocation: %w", err)
+	}
+
+	// Check for non-200 status
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("token revocation failed with status %s", resp.Status)
+	}
+
+	return nil
+}
+
 func (s *Manager) GetUserInfoFromSpeakeasy(ctx context.Context, idToken string) (*CachedUserInfo, error) {
 	client := &http.Client{
 		Timeout: 10 * time.Second,
