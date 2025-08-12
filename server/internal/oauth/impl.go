@@ -326,7 +326,11 @@ func (s *Service) handleAuthorizationComplete(w http.ResponseWriter, r *http.Req
 			return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
 		}
 
-		clientID = envMap["client_id"]
+		for k, v := range envMap {
+			if strings.ToLower(k) == "client_id" {
+				clientID = v
+			}
+		}
 	}
 
 	if clientID == "" {
@@ -539,11 +543,13 @@ func (s *Service) handleAuthorizationCallback(w http.ResponseWriter, r *http.Req
 			return oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, s.logger)
 		}
 
-		if clientID == "" {
-			clientID = envMap["client_id"]
-		}
-		if clientSecret == "" {
-			clientSecret = envMap["client_secret"]
+		for k, v := range envMap {
+			if clientID == "" && strings.ToLower(k) == "client_id" {
+				clientID = v
+			}
+			if clientSecret == "" && strings.ToLower(k) == "client_secret" {
+				clientSecret = v
+			}
 		}
 	}
 
