@@ -109,6 +109,11 @@ func (s *Manager) RevokeTokenFromSpeakeasy(ctx context.Context, idToken string) 
 	if err != nil {
 		return fmt.Errorf("failed to perform token revocation: %w", err)
 	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			s.logger.ErrorContext(context.Background(), "failed to close response body", attr.SlogError(err))
+		}
+	}()
 
 	// Check for non-200 status
 	if resp.StatusCode != http.StatusOK {
