@@ -95,6 +95,10 @@ func (s *Manager) ExchangeTokenFromSpeakeasy(ctx context.Context, code string) (
 }
 
 func (s *Manager) RevokeTokenFromSpeakeasy(ctx context.Context, idToken string) error {
+	if s.unsafeLocal {
+		return nil
+	}
+
 	// Create the HTTP request
 	req, err := http.NewRequestWithContext(ctx, "POST", s.speakeasyServerAddress+"/v1/speakeasy_provider/revoke", nil)
 	if err != nil {
