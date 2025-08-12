@@ -60,7 +60,7 @@ ON CONFLICT (id) DO UPDATE SET
   photo_url = EXCLUDED.photo_url,
   admin = EXCLUDED.admin,
   updated_at = clock_timestamp()
-RETURNING id, email, display_name, photo_url, admin, created_at, updated_at
+RETURNING id, email, display_name, photo_url, admin, created_at, updated_at, (xmax = 0) AS was_created
 `
 
 type UpsertUserParams struct {
@@ -71,7 +71,18 @@ type UpsertUserParams struct {
 	Admin       bool
 }
 
-func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (User, error) {
+type UpsertUserRow struct {
+	ID          string
+	Email       string
+	DisplayName string
+	PhotoUrl    pgtype.Text
+	Admin       bool
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	WasCreated  bool
+}
+
+func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (UpsertUserRow, error) {
 	row := q.db.QueryRow(ctx, upsertUser,
 		arg.ID,
 		arg.Email,
@@ -79,7 +90,7 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (User, e
 		arg.PhotoUrl,
 		arg.Admin,
 	)
-	var i User
+	var i UpsertUserRow
 	err := row.Scan(
 		&i.ID,
 		&i.Email,
@@ -88,6 +99,7 @@ func (q *Queries) UpsertUser(ctx context.Context, arg UpsertUserParams) (User, e
 		&i.Admin,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.WasCreated,
 	)
 	return i, err
 }

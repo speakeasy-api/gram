@@ -7,7 +7,7 @@ ON CONFLICT (id) DO UPDATE SET
   photo_url = EXCLUDED.photo_url,
   admin = EXCLUDED.admin,
   updated_at = clock_timestamp()
-RETURNING *;
+RETURNING *, (xmax = 0) AS was_created;
 
 -- name: GetUser :one
 SELECT * FROM users
