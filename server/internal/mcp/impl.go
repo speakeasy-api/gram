@@ -408,7 +408,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	var tokenInputs []oauthTokenInputs
 
 	switch {
-	case toolset.ExternalOauthServerID.Valid:
+	case toolset.McpIsPublic && toolset.ExternalOauthServerID.Valid:
 		if token == "" {
 			s.logger.WarnContext(ctx, "No authorization token provided")
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
@@ -419,7 +419,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 			securityKeys: []string{},
 			Token:        token,
 		})
-	case toolset.OauthProxyServerID.Valid:
+	case toolset.McpIsPublic && toolset.OauthProxyServerID.Valid:
 		token, err := s.oauthService.ValidateAccessToken(ctx, toolset.ID, token)
 		if err != nil {
 			w.Header().Set("WWW-Authenticate", fmt.Sprintf(`Bearer resource_metadata=%s`, baseURL+"/.well-known/oauth-protected-resource/mcp/"+mcpSlug))
