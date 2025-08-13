@@ -445,12 +445,11 @@ func (s *Service) RenderTemplateJSON(ctx context.Context, promptJSON string) (st
 		}
 	}
 
-	renderedPrompt := fmt.Sprintf(`Here are instructions on how to use the other tools in this toolset to complete the task.
-Do NOT use this tool (%s) again when executing the plan.
-
-<Purpose>
+	renderedPrompt := fmt.Sprintf(`<Purpose>
   <Instruction>
-    You will be provided with a <Purpose>, a list of <Inputs>, and a <Plan>. Your goal is to use the <Plan> and <Inputs> to complete the <Purpose>.
+    - The following is a step-by-step plan to achieve a <Purpose>. It relies on executing other tools available in context to achieve the desired purpose
+    - Do NOT use this tool (%s) again when executing the plan.
+    - You will be provided with a <Purpose>, a list of <Inputs>, and a <Plan>. Your goal is to use the <Plan> and <Inputs> to complete the <Purpose>.
   </Instruction>
   <Purpose>
     %s
