@@ -37,6 +37,11 @@ const (
 	ToolCallSourceMCP    ToolCallSource = "mcp"
 )
 
+const (
+	HeaderProxiedResponse  = "X-Gram-Proxy-Response"
+	HeaderFilteredResponse = "X-Gram-Proxy-ResponseFiltered"
+)
+
 var proxiedHeaders = []string{
 	"Cache-Control",
 	"Content-Language",
@@ -513,13 +518,13 @@ func reverseProxyRequest(ctx context.Context,
 		http.SetCookie(w, cookie)
 	}
 
-	// Copy status code
-	if responseStatusCodeCapture != nil {
-		*responseStatusCodeCapture = resp.StatusCode
-	}
-	w.WriteHeader(resp.StatusCode)
+	span.SetAttributes(attr.HTTPResponseExternal(true))
+	w.Header().Set(HeaderProxiedResponse, "1")
 
+	finalStatusCode := resp.StatusCode
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
+		w.WriteHeader(finalStatusCode)
+
 		// Streaming mode: flush after each chunk
 		logger.InfoContext(ctx, "streaming with flush", attr.SlogHTTPResponseHeaderContentType(resp.Header.Get("Content-Type")))
 
@@ -550,15 +555,22 @@ func reverseProxyRequest(ctx context.Context,
 
 		result := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
 		if result != nil {
-			w.WriteHeader(result.statusCode)
 			w.Header().Set("Content-Type", result.contentType)
+			w.Header().Set(HeaderFilteredResponse, "1")
+			span.SetAttributes(attr.HTTPResponseFiltered(true))
+			finalStatusCode = result.statusCode
 			body = result.resp
 		}
 
+		w.WriteHeader(finalStatusCode)
 		if _, err := io.Copy(w, body); err != nil {
 			span.SetStatus(codes.Error, err.Error())
 			logger.ErrorContext(ctx, "failed to copy response body", attr.SlogError(err))
 		}
+	}
+
+	if responseStatusCodeCapture != nil {
+		*responseStatusCodeCapture = finalStatusCode
 	}
 
 	return nil

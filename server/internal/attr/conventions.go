@@ -72,6 +72,8 @@ const (
 	HTTPEncodingStyleKey           = attribute.Key("gram.http.encoding.style")
 	HTTPParamNameKey               = attribute.Key("gram.http.param.name")
 	HTTPParamValueKey              = attribute.Key("gram.http.param.value")
+	HTTPResponseExternalKey        = attribute.Key("gram.http.response.external")
+	HTTPResponseFilteredKey        = attribute.Key("gram.http.response.filtered")
 	HTTPStatusCodePatternKey       = attribute.Key("gram.http.status_code_pattern")
 	IngressNameKey                 = attribute.Key("gram.ingress.name")
 	McpMethodKey                   = attribute.Key("gram.mcp.method")
@@ -278,6 +280,12 @@ func SlogFilterExpression(v string) slog.Attr      { return slog.String(string(F
 
 func HTTPEncodingStyle(v string) attribute.KeyValue { return HTTPEncodingStyleKey.String(v) }
 func SlogHTTPEncodingStyle(v string) slog.Attr      { return slog.String(string(HTTPEncodingStyleKey), v) }
+
+func HTTPResponseExternal(v bool) attribute.KeyValue { return HTTPResponseExternalKey.Bool(v) }
+func SlogHTTPResponseExternal(v bool) slog.Attr      { return slog.Bool(string(HTTPResponseExternalKey), v) }
+
+func HTTPResponseFiltered(v bool) attribute.KeyValue { return HTTPResponseFilteredKey.Bool(v) }
+func SlogHTTPResponseFiltered(v bool) slog.Attr      { return slog.Bool(string(HTTPResponseFilteredKey), v) }
 
 func HTTPStatusCodePattern(v string) attribute.KeyValue { return HTTPStatusCodePatternKey.String(v) }
 func SlogHTTPStatusCodePattern(v string) slog.Attr {
