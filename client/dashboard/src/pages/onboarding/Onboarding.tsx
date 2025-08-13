@@ -145,8 +145,10 @@ export function useOnboardingSteps(
 
     setCreatingDeployment(true);
 
+    const shouldCreateNew = forceNew && (!latestDeployment || latestDeployment?.deployment?.toolCount === 0);
+
     let deployment: Deployment | undefined;
-    if (forceNew) {
+    if (shouldCreateNew) {
       const createResult = await client.deployments.create({
         idempotencyKey: crypto.randomUUID(),
         createDeploymentRequestBody: {
