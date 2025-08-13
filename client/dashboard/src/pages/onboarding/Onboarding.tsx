@@ -145,7 +145,7 @@ export function useOnboardingSteps(
 
     setCreatingDeployment(true);
 
-    const shouldCreateNew = forceNew && (!latestDeployment || latestDeployment?.deployment?.toolCount === 0);
+    const shouldCreateNew = !latestDeployment || (forceNew && latestDeployment.deployment?.toolCount === 0);
 
     let deployment: Deployment | undefined;
     if (shouldCreateNew) {
