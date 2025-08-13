@@ -336,7 +336,7 @@ const UploadStep = ({
 
   const onContinue = async () => {
     setToolsetName(slugify(apiName || "my-toolset"));
-    const deployment = await createDeployment();
+    const deployment = await createDeployment(undefined, true);
 
     if (deployment?.toolCount === 0 || deployment?.status === "failed") {
       setDeploymentToShowLogsFor(deployment?.id);
