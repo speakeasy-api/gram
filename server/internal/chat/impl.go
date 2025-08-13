@@ -245,7 +245,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	slogArgs := []any{
 		attr.SlogProjectID(authCtx.ProjectID.String()),
 		attr.SlogOrganizationID(orgID),
-		attr.OrganizationSlug(authCtx.OrganizationSlug),
+		attr.SlogOrganizationSlug(authCtx.OrganizationSlug),
 		attr.SlogUserID(userID),
 		attr.SlogOrganizationAccountType(authCtx.AccountType),
 	}

@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -62,13 +65,25 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			r = r.WithContext(ctx)
 			next.ServeHTTP(rw, r)
 
-			logger.InfoContext(ctx, "response",
+			attrs := []any{
 				attr.SlogHTTPRequestMethod(r.Method),
 				attr.SlogURLOriginal(r.URL.String()),
 				attr.SlogHTTPResponseStatusCode(rw.statusCode),
 				attr.SlogHTTPServerRequestDuration(time.Since(start).Seconds()),
 				attr.SlogHostName(r.Host),
-			)
+			}
+
+			proxied := conv.Default(rw.Header().Get(gateway.HeaderProxiedResponse), "0")
+			if ok, err := strconv.ParseBool(proxied); err == nil && ok {
+				attrs = append(attrs, attr.SlogHTTPResponseExternal(true))
+			}
+
+			filtered := conv.Default(rw.Header().Get(gateway.HeaderFilteredResponse), "0")
+			if ok, err := strconv.ParseBool(filtered); err == nil && ok {
+				attrs = append(attrs, attr.SlogHTTPResponseFiltered(true))
+			}
+
+			logger.InfoContext(ctx, "response", attrs...)
 		})
 	}
 }
