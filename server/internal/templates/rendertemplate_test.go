@@ -610,7 +610,7 @@ func TestTemplatesService_RenderTemplate_HigherOrderTool_Success(t *testing.T) {
 	require.NoError(t, err, "render template with higher order tool")
 
 	require.NotNil(t, result, "result is nil")
-	require.Contains(t, result.Prompt, "Here are instructions on how to use the other tools", "should contain XML header")
+	require.Contains(t, result.Prompt, "It relies on executing other tools available in context to achieve the desired purpose", "should contain XML header")
 	require.Contains(t, result.Prompt, "Test purpose", "should contain purpose")
 	require.Contains(t, result.Prompt, "Do NOT use this tool (test_tool) again", "should contain tool name")
 }
