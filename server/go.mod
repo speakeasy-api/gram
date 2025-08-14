@@ -26,6 +26,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/pb33f/libopenapi v0.25.3
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
+	github.com/polarsource/polar-go v0.8.1
 	github.com/posthog/posthog-go v1.6.3
 	github.com/redis/go-redis/extra/redisotel/v9 v9.12.0
 	github.com/redis/go-redis/v9 v9.12.0
@@ -156,7 +157,6 @@ require (
 	github.com/pganalyze/pg_query_go/v6 v6.1.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
-	github.com/polarsource/polar-go v0.8.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/redis/go-redis/extra/rediscmd/v9 v9.12.0 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
