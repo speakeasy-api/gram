@@ -81,6 +81,7 @@ export const TelemetryProvider = (props: { children: ReactNode }) => {
         trackUserInteractions: true,
         trackResources: true,
         defaultPrivacyLevel: "mask-user-input",
+        version: __GRAM_GIT_SHA__ || null,
       });
     }
   }, []);

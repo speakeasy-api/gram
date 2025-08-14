@@ -1,5 +1,6 @@
 FROM node:22.18.0-alpine3.22@sha256:dbb65b3b08bd9d4d4a85299ad4d668b0e709a0601cecb5969f4dbb1dd89408aa AS build
 
+ARG GRAM_GIT_SHA
 ARG NODE_ENV=production
 ENV NODE_ENV=${NODE_ENV}
 

@@ -139,6 +139,7 @@ jobs:
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
           build-args: |
             GIT_USERNAME=speakeasybot
+            GRAM_GIT_SHA=${{ github.sha }}
 
   server-build-lint:
     runs-on: ubicloud-standard-4
