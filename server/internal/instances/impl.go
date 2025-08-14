@@ -334,6 +334,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	totalBytes := requestNumBytes + outputNumBytes
 	projectID := authCtx.ProjectID.String()
 
+	//nolint:exhaustruct // Lots of optional fields
 	_, err = s.polar.Events.Ingest(context.Background(), polarComponents.EventsIngest{
 		Events: []polarComponents.Events{
 			{
