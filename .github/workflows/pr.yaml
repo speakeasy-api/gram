@@ -308,7 +308,7 @@ jobs:
         if: ${{ needs.changes.outputs.client == 'true' }}
         run: pnpm build
 
-      - name: Upload sourcemaps to DataDog
+      - name: Upload source maps to DataDog
         if: ${{ needs.changes.outputs.client == 'true' }}
         run: mise run datadog:sourcemaps --git-sha "${{ github.sha }}"
 
