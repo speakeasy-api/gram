@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"math"
 	"net/http"
+	"slices"
 
 	"github.com/hashicorp/go-cleanhttp"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,6 +30,10 @@ var creditsAccountTypeMap = map[string]int{
 	"pro":        50,
 	"enterprise": 50,
 	"":           5, // safety default
+}
+
+var specialLimitOrgs = []string{
+	"5a25158b-24dc-4d49-b03d-e85acfbea59c", // speakeasy-team
 }
 
 type Provisioner interface {
@@ -74,7 +79,7 @@ func (o *OpenRouter) ProvisionAPIKey(ctx context.Context, orgID string) (string,
 			return "", oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
 		}
 
-		creditAmount := creditsAccountTypeMap[org.GramAccountType]
+		creditAmount := getLimitForOrg(org)
 
 		keyResponse, err := o.createOpenRouterAPIKey(ctx, orgID, org.Slug, creditAmount)
 		if err != nil {
@@ -128,7 +133,8 @@ func (o *OpenRouter) RefreshAPIKeyLimit(ctx context.Context, orgID string) (int,
 		return 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
 	}
 
-	limit := creditsAccountTypeMap[org.GramAccountType]
+	limit := getLimitForOrg(org)
+
 	floatLimit := float64(limit)
 	err = o.updateOpenRouterAPIKey(ctx, key.KeyHash, updateKeyRequest{
 		Limit:    &floatLimit,
@@ -161,7 +167,7 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 	if err != nil {
 		return 0, 0, oops.E(oops.CodeUnexpected, err, "failed to get organization").Log(ctx, o.logger)
 	}
-	limit := creditsAccountTypeMap[org.GramAccountType]
+	limit := getLimitForOrg(org)
 
 	key, err := o.repo.GetOpenRouterAPIKey(ctx, orgID)
 	if err != nil {
@@ -203,6 +209,13 @@ func (o *OpenRouter) GetCreditsUsed(ctx context.Context, orgID string) (float64,
 	}
 
 	return creditsUsed, limit, nil
+}
+
+func getLimitForOrg(org orgRepo.OrganizationMetadatum) int {
+	if slices.Contains(specialLimitOrgs, org.ID) {
+		return 500
+	}
+	return creditsAccountTypeMap[org.GramAccountType]
 }
 
 type updateKeyRequest struct {

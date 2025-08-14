@@ -525,7 +525,8 @@ function SidebarMenuButton({
       className={cn(
         sidebarMenuButtonVariants({ variant, size }),
         className,
-        "cursor-pointer trans"
+        "cursor-pointer trans",
+        props.href && "hover:no-underline"
       )}
       {...(props.href && { to: props.href })}
       {...(props.href && props.href.startsWith("http") && { external: true })}

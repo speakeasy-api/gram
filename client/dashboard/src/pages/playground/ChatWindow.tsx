@@ -335,6 +335,13 @@ function ChatInner({
             displayMessage +=
               " Please start a new chat history and consider enabling *Auto-Summarize* for your tool or revise your prompt.";
           }
+
+          // Improve the error message for the case where the model is out of credits
+          if (displayMessage.includes("requires more credits")) {
+            displayMessage =
+              "You have reached your monthly credit limit. Reach out to the Speakeasy team to upgrade your account.";
+          }
+
           appendDisplayOnlyMessage(`**Model Error:** *${displayMessage}*`);
         }
       },
