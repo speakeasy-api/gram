@@ -97,50 +97,6 @@ jobs:
           echo "Running image..."
           docker run --rm ${{ steps.build.outputs.image-tag }} version
 
-  docker-build-client:
-    runs-on: ubicloud-standard-4
-    needs: changes
-    env:
-      GOMAXPROCS: 4
-    steps:
-      - name: Skip if no client changes exist
-        if: needs.changes.outputs.client != 'true'
-        run: echo "No client changes detected — skipping docker-build-client job."
-
-      # - name: Checkout
-      #   if: needs.changes.outputs.client == 'true'
-      #   uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      # - id: "auth"
-      #   if: needs.changes.outputs.client == 'true'
-      #   name: "Authenticate to Google Cloud"
-      #   uses: google-github-actions/auth@b7593ed2efd1c1617e1b0254da33b86225adb2a5 # v2.1.12
-      #   with:
-      #     token_format: "access_token"
-      #     workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
-      #     service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
-      # - name: Login to GCR
-      #   if: needs.changes.outputs.client == 'true'
-      #   uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
-      #   with:
-      #     registry: gcr.io/linen-analyst-344721
-      #     username: oauth2accesstoken
-      #     password: ${{ steps.auth.outputs.access_token }}
-      # - name: Build and Push Registry image to GCR
-      #   id: build
-      #   if: needs.changes.outputs.client == 'true'
-      #   uses: ./.github/workflows/composite/build-push
-      #   with:
-      #     registry: ${{ env.REGISTRY }}
-      #     username: oauth2accesstoken
-      #     password: ${{ steps.auth.outputs.access_token }}
-      #     image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-dashboard
-      #     context: .
-      #     file: client/Dockerfile
-      #     git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
-      #     build-args: |
-      #       GIT_USERNAME=speakeasybot
-      #       GRAM_GIT_SHA=${{ github.sha }}
-
   server-build-lint:
     runs-on: ubicloud-standard-4
     needs: changes
