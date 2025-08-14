@@ -16,5 +16,4 @@ fi
 exec pnpm datadog-ci sourcemaps upload ./client/dashboard/dist \
   --service gram \
   --release-version "${usage_git_sha:?}" \
-  --minified-path-prefix / \
-  --dry-run
+  --minified-path-prefix /
