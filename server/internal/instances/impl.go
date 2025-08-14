@@ -293,7 +293,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnexpected, err, "failed to read request body").Log(ctx, logger)
 	}
 
-	bytesProcessed := int64(len(requestBodyBytes))
+	requestNumBytes := int64(len(requestBodyBytes))
 
 	requestBody = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
 
@@ -330,7 +330,8 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		return nil
 	}
 
-	bytesProcessed += int64(interceptor.buffer.Len())
+	outputNumBytes := int64(interceptor.buffer.Len())
+	totalBytes := requestNumBytes + outputNumBytes
 	projectID := authCtx.ProjectID.String()
 
 	_, err = s.polar.Events.Ingest(context.Background(), polarComponents.EventsIngest{
@@ -341,8 +342,14 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 					ExternalCustomerID: authCtx.ActiveOrganizationID,
 					Name: "tool-call",
 					Metadata: map[string]polarComponents.EventCreateExternalCustomerMetadata{
-						"num_bytes": {
-							Integer: &bytesProcessed,
+						"request_bytes": {
+							Integer: &requestNumBytes,
+						},
+						"output_bytes": {
+							Integer: &outputNumBytes,
+						},
+						"total_bytes": {
+							Integer: &totalBytes,
 						},
 						"tool_id": {
 							Str: &toolID,
