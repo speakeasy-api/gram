@@ -1,11 +1,14 @@
 import { cn } from "@/lib/utils";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 
-function Skeleton({ className, ...props }: React.ComponentProps<"div">) {
+function Skeleton({ className, ...props }: React.ComponentProps<"span">) {
   return (
-    <div
+    <span
       data-slot="skeleton"
-      className={cn("bg-foreground/7 animate-pulse rounded-md", className)}
+      className={cn(
+        "block bg-foreground/7 animate-pulse rounded-md",
+        className
+      )}
       {...props}
     />
   );
