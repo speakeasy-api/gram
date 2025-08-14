@@ -310,6 +310,8 @@ jobs:
 
       - name: Upload source maps to DataDog
         if: ${{ needs.changes.outputs.client == 'true' }}
+        env:
+          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
         run: mise run datadog:sourcemaps --git-sha "${{ github.sha }}"
 
       - name: Lint
