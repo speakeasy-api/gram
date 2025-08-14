@@ -351,7 +351,7 @@ jobs:
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
           image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-dashboard
-          context: .
+          context: ./client/dashboard
           file: client/dashboard/Dockerfile
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
 
