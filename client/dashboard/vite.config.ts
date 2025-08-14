@@ -18,16 +18,18 @@ if (process.env["GRAM_SSL_KEY_FILE"] && process.env["GRAM_SSL_CERT_FILE"]) {
 export default defineConfig({
   define: {
     __GRAM_SERVER_URL__: JSON.stringify(process.env["GRAM_SERVER_URL"]),
+    __GRAM_GIT_SHA__: JSON.stringify(process.env["GRAM_GIT_SHA"] || ""),
   },
   build: {
-    target: 'es2022',
+    target: "es2022",
+    sourcemap: true,
   },
   esbuild: {
-    target: 'es2022',
+    target: "es2022",
   },
   optimizeDeps: {
     esbuildOptions: {
-      target: 'es2022',
+      target: "es2022",
     },
   },
   server: {
