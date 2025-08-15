@@ -13,7 +13,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.6.1",
+  "packageManager": "pnpm@10.14.0",
   "devDependencies": {
     "@datadog/datadog-ci": "^3.18.0",
     "@types/fs-extra": "^11.0.4",
