@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 
+	polargo "github.com/polarsource/polar-go"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -28,6 +29,7 @@ type WorkerOptions struct {
 	OpenRouter          openrouter.Provisioner
 	K8sClient           *k8s.KubernetesClients
 	ExpectedTargetCNAME string
+	Polar               *polargo.Polar
 }
 
 func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage assets.BlobStore) *WorkerOptions {
@@ -40,6 +42,7 @@ func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage 
 		OpenRouter:          nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
+		Polar:               nil,
 	}
 }
 
@@ -58,6 +61,7 @@ func NewTemporalWorker(
 		OpenRouter:          nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
+		Polar:               nil,
 	}
 
 	for _, o := range options {
@@ -70,6 +74,7 @@ func NewTemporalWorker(
 			OpenRouter:          conv.Default(o.OpenRouter, opts.OpenRouter),
 			K8sClient:           conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME: conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
+			Polar:               conv.Default(o.Polar, opts.Polar),
 		}
 	}
 
@@ -92,6 +97,7 @@ func NewTemporalWorker(
 		opts.OpenRouter,
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
+		opts.Polar,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -102,11 +108,13 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.RefreshOpenRouterKey)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
+	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(SlackEventWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
+	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 
 	return temporalWorker
 }

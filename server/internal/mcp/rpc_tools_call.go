@@ -60,8 +60,10 @@ func handleToolsCall(
 		return nil, err
 	}
 
+	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
-		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, requestContext.Host+requestContext.ReqURL, params.Name)
+		mcpURL = requestContext.Host+requestContext.ReqURL
+		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
 	}
 
 	toolsetHelpers := toolsets.NewToolsets(db)
@@ -111,9 +113,10 @@ func handleToolsCall(
 			PromptID:         &higherOrderTool.ID,
 			PromptName:       string(higherOrderTool.Name),
 			ProjectID:        payload.projectID.String(),
+			ToolsetSlug:      &payload.toolset,
+			MCPURL:           &mcpURL,
 			ProjectSlug:      nil, // TODO: do we need these slugs for prompt calls?
 			OrganizationSlug: nil,
-			ToolsetSlug:      &payload.toolset,
 			ChatID:           nil,
 		})	
 
@@ -189,6 +192,7 @@ func handleToolsCall(
 		ProjectSlug:      &executionPlan.ProjectSlug,
 		OrganizationSlug: &executionPlan.OrganizationSlug,
 		ToolsetSlug:      &payload.toolset,
+		MCPURL:           &mcpURL,
 		ChatID:           nil,
 	})
 

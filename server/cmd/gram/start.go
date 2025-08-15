@@ -507,6 +507,7 @@ func newStartCommand() *cli.Command {
 						OpenRouter:          openRouter,
 						K8sClient:           k8sClient,
 						ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
+						Polar:               polarClient,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))
