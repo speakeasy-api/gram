@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/sdk/client"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/about"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -428,6 +429,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 
+			about.Attach(mux, about.NewService(logger, tracerProvider))
 			auth.Attach(mux, auth.NewService(logger, db, sessionManager, auth.AuthConfigurations{
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
 				GramServerURL:          c.String("server-url"),

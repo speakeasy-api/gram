@@ -4,6 +4,7 @@ import (
 	. "goa.design/goa/v3/dsl"
 	_ "goa.design/plugins/v3/otel"
 
+	_ "github.com/speakeasy-api/gram/server/design/about"
 	_ "github.com/speakeasy-api/gram/server/design/assets"
 	_ "github.com/speakeasy-api/gram/server/design/auth"
 	_ "github.com/speakeasy-api/gram/server/design/chat"
