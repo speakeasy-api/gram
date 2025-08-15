@@ -1,0 +1,11 @@
+## This file contains configuration overrides that are used when building the
+## Gram dashboard with Vite for production.
+
+[env]
+## Both the Gram server and dashboard (client) are accesses on https://app.getgram.ai.
+GRAM_SERVER_URL = false
+## Not needed for production builds, but can be useful for local development.
+GRAM_SSL_CERT_FILE = false
+GRAM_SSL_KEY_FILE = false
+## Not needed for production builds, used by vite dev server.
+VITE_DEV_HOSTNAMES = false
