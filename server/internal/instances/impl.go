@@ -36,6 +36,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/polarsource/polar-go"
+	polarComponents "github.com/polarsource/polar-go/models/components"
 )
 
 const tooldIdQueryParam = "tool_id"
@@ -51,6 +53,7 @@ type Service struct {
 	env              *environments.EnvironmentEntries
 	toolProxy        *gateway.ToolProxy
 	posthog          *posthog.Posthog
+	polar            *polargo.Polar
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -65,6 +68,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	posthog *posthog.Posthog,
+	polar *polargo.Polar,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
@@ -79,6 +83,7 @@ func NewService(
 		environmentsRepo: envRepo,
 		env:              env,
 		posthog:          posthog,
+		polar:            polar,
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			traceProvider,
@@ -288,6 +293,8 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnexpected, err, "failed to read request body").Log(ctx, logger)
 	}
 
+	requestNumBytes := int64(len(requestBodyBytes))
+
 	requestBody = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
 
 	// Use a response interceptor that completely captures the response
@@ -313,6 +320,66 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	_, err = w.Write(interceptor.buffer.Bytes())
 	if err != nil {
 		return fmt.Errorf("failed to write response: %w", err)
+	}
+
+	/**
+	 * Finally, capture the usage for billing purposes
+	 */
+
+	if s.polar == nil {
+		return nil
+	}
+
+	outputNumBytes := int64(interceptor.buffer.Len())
+	totalBytes := requestNumBytes + outputNumBytes
+	projectID := authCtx.ProjectID.String()
+
+	_, err = s.polar.Events.Ingest(context.Background(), polarComponents.EventsIngest{
+		Events: []polarComponents.Events{
+			{
+				Type: polarComponents.EventsTypeEventCreateExternalCustomer,
+				EventCreateExternalCustomer: &polarComponents.EventCreateExternalCustomer{
+					ExternalCustomerID: authCtx.ActiveOrganizationID,
+					Name: "tool-call",
+					Metadata: map[string]polarComponents.EventCreateExternalCustomerMetadata{
+						"request_bytes": {
+							Integer: &requestNumBytes,
+						},
+						"output_bytes": {
+							Integer: &outputNumBytes,
+						},
+						"total_bytes": {
+							Integer: &totalBytes,
+						},
+						"tool_id": {
+							Str: &toolID,
+						},
+						"tool_name": {
+							Str: &executionInfo.Tool.Name,
+						},
+						"project_id": {
+							Str: &projectID,
+						},
+						"project_slug": {
+							Str: authCtx.ProjectSlug,
+						},
+						"organization_slug": {
+							Str: &executionInfo.OrganizationSlug,
+						},
+						"toolset_slug": {
+							Str: &toolsetSlug,
+						},
+						"chat_id": {
+							Str: &chatID,
+						},
+					},
+				},
+			},
+		},
+	})
+
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to ingest usage event to Polar", attr.SlogError(err))
 	}
 
 	return nil

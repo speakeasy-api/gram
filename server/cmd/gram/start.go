@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	polargo "github.com/polarsource/polar-go"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
@@ -245,6 +246,12 @@ func newStartCommand() *cli.Command {
 				EnvVars:  []string{"POSTHOG_API_KEY"},
 				Required: false,
 			},
+			&cli.StringFlag{
+				Name:     "polar-api-key",
+				Usage:    "The polar API key",
+				EnvVars:  []string{"POLAR_API_KEY"},
+				Required: false,
+			},
 			&cli.StringSliceFlag{
 				Name:     "disallowed-cidr-blocks",
 				Usage:    "List of CIDR blocks to block for SSRF protection",
@@ -329,6 +336,14 @@ func newStartCommand() *cli.Command {
 			var features feature.Provider = posthogClient
 			if c.String("environment") == "local" {
 				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+			}
+
+			var polarClient *polargo.Polar
+			polarKey := c.String("polar-api-key")
+			if polarKey == "" {
+				logger.WarnContext(ctx, "polar api key is not set, skipping Polar client")
+			} else {
+				polarClient = polargo.New(polargo.WithSecurity(polarKey))
 			}
 
 			localEnvPath := c.String("unsafe-local-env-path")
@@ -448,7 +463,7 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger, db, sessionManager))
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env)
 			oauth.Attach(mux, oauthService)
-			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient))
+			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient, polarClient))
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService))
 			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter))
 			if slackClient.Enabled() {
