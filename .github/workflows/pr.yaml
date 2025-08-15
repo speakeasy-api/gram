@@ -266,7 +266,7 @@ jobs:
         if: ${{ needs.changes.outputs.client == 'true' }}
         env:
           NODE_ENV: production
-        run: pnpm build
+        run: mise exec --env viteprod -- pnpm build
 
       - name: Upload source maps to DataDog
         if: ${{ needs.changes.outputs.client == 'true' }}
