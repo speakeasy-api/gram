@@ -19,8 +19,9 @@
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^22.13.17",
     "typescript": "catalog:",
-    "zx": "^8.8.0"
+    "zx": "^8.4.0"
   },
+  "dependencies": {},
   "pnpm": {
     "overrides": {}
   }
