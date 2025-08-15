@@ -44,7 +44,9 @@ import (
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/polarsource/polar-go"
 )
 
 type Service struct {
@@ -61,6 +63,7 @@ type Service struct {
 	toolProxy    *gateway.ToolProxy
 	oauthService *oauth.Service
 	oauthRepo    *oauth_repo.Queries
+	usageClient  *usage.PolarClient
 }
 
 type oauthTokenInputs struct {
@@ -96,6 +99,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	oauthService *oauth.Service,
+	polar *polargo.Polar,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -122,6 +126,7 @@ func NewService(
 		),
 		oauthService: oauthService,
 		oauthRepo:    oauth_repo.New(db),
+		usageClient:  usage.NewPolarClient(polar, logger),
 	}
 }
 
@@ -714,7 +719,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.usageClient)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req)
 	case "prompts/get":
