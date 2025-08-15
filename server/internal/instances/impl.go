@@ -17,6 +17,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	polargo "github.com/polarsource/polar-go"
 	srv "github.com/speakeasy-api/gram/server/gen/http/instances/server"
 	gen "github.com/speakeasy-api/gram/server/gen/instances"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -37,7 +38,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/usage"
-	"github.com/polarsource/polar-go"
 )
 
 const tooldIdQueryParam = "tool_id"
@@ -324,18 +324,18 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
-	
+
 	go s.usageClient.TrackToolCallUsage(context.Background(), usage.ToolCallUsageEvent{
-		ExternalCustomerID: authCtx.ActiveOrganizationID,
-		RequestBytes:       requestNumBytes,
-		OutputBytes:        outputNumBytes,
-		ToolID:             toolID,
-		ToolName:           executionInfo.Tool.Name,
-		ProjectID:          authCtx.ProjectID.String(),
-		ProjectSlug:        authCtx.ProjectSlug,
-		OrganizationSlug:   &executionInfo.OrganizationSlug,
-		ToolsetSlug:        &toolsetSlug,
-		ChatID:             &chatID,
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		RequestBytes:     requestNumBytes,
+		OutputBytes:      outputNumBytes,
+		ToolID:           toolID,
+		ToolName:         executionInfo.Tool.Name,
+		ProjectID:        authCtx.ProjectID.String(),
+		ProjectSlug:      authCtx.ProjectSlug,
+		OrganizationSlug: &executionInfo.OrganizationSlug,
+		ToolsetSlug:      &toolsetSlug,
+		ChatID:           &chatID,
 	})
 
 	return nil
