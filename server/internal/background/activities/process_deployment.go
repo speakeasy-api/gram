@@ -173,9 +173,19 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
 		Limit:        1,
 	})
-	if err != nil || len(tools) == 0 {
+	if err != nil {
+		err = oops.E(oops.CodeUnexpected, err, "failed to read list of tools in deployment").Log(ctx, p.logger)
+		return temporal.NewApplicationErrorWithOptions("deployment tools could not be verified", "deployment_error", temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Cause:        err,
+		})
+	}
+
+	// If there were documents to process in this deployment but no tools were created then we consider this a failure.
+	expectsTools := len(deployment.Openapiv3Assets) > 0
+	if expectsTools && len(tools) == 0 {
 		err = oops.E(oops.CodeUnexpected, err, "no tools were created for deployment").Log(ctx, p.logger)
-		return temporal.NewApplicationErrorWithOptions("openapiv3 document was not processed successfully", "openapi_doc_error", temporal.ApplicationErrorOptions{
+		return temporal.NewApplicationErrorWithOptions("empty deployment was not expected", "deployment_error", temporal.ApplicationErrorOptions{
 			NonRetryable: true,
 			Cause:        err,
 		})
