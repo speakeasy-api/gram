@@ -670,11 +670,6 @@ const DefaultLogo = () => (
     <motion.span
       layoutId="main-icon"
       className="font-thin text-foreground text-6xl select-none"
-      style={{
-        fontFamily: "Tobias, sans-serif",
-        letterSpacing: "-0.05em",
-        transform: "translateY(-0.17em)", // Optical centering
-      }}
       transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
     >
       <GramLogo className="w-18" variant="icon" />
