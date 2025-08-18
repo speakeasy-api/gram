@@ -1,5 +1,4 @@
 import { Expandable } from "@/components/expandable";
-import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ProjectSelector } from "@/components/project-menu";
@@ -43,6 +42,7 @@ import { useParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useOnboardingSteps } from "./Onboarding";
+import { GramLogo } from "@/components/gram-logo";
 
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
@@ -150,7 +150,7 @@ const LHS = ({
           justify={"space-between"}
           className="w-full border-b h-16 px-6 mb-8"
         >
-          <GramLogo className="text-[28px]" />
+          <GramLogo className="w-25" />
           <a href="https://docs.getgram.ai/" target="_blank">
             <Type mono className="text-[15px] font-normal">
               VIEW DOCS
@@ -677,7 +677,7 @@ const DefaultLogo = () => (
       }}
       transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
     >
-      g
+      <GramLogo className="w-25" variant="icon" />
     </motion.span>
   </motion.div>
 );
