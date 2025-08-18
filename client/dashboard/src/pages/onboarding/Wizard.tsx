@@ -136,7 +136,7 @@ const LHS = ({
       </div>
     ) : (
       <span className="text-body-sm text-muted-foreground">
-        © 2025 speakeasy
+        © 2025 Speakeasy
       </span>
     );
 
