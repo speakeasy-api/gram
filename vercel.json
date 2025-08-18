@@ -1,0 +1,10 @@
+{
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "getgram.ai" }],
+      "destination": "https://www.speakeasy.com/product/gram",
+      "permanent": true
+    }
+  ]
+}
