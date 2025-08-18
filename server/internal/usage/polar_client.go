@@ -2,11 +2,17 @@ package usage
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"time"
 
 	polargo "github.com/polarsource/polar-go"
 	polarComponents "github.com/polarsource/polar-go/models/components"
+	polarOperations "github.com/polarsource/polar-go/models/operations"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+	gen "github.com/speakeasy-api/gram/server/gen/usage"
 )
 
 type PolarClient struct {
@@ -205,11 +211,11 @@ func (p *PolarClient) TrackPromptCallUsage(ctx context.Context, event PromptCall
 }
 
 type PlatformUsageEvent struct {
-	OrganizationID      string
-	PublicMCPServers    int64
-	PrivateMCPServers   int64
-	TotalToolsets       int64
-	TotalTools          int64
+	OrganizationID    string
+	PublicMCPServers  int64
+	PrivateMCPServers int64
+	TotalToolsets     int64
+	TotalTools        int64
 }
 
 func (p *PolarClient) TrackPlatformUsage(ctx context.Context, event PlatformUsageEvent) {
@@ -248,4 +254,47 @@ func (p *PolarClient) TrackPlatformUsage(ctx context.Context, event PlatformUsag
 	if err != nil {
 		p.logger.ErrorContext(ctx, "failed to ingest platform usage event to Polar", attr.SlogError(err))
 	}
+}
+
+const (
+	toolCallsMeterID = "7ec16f6d-6189-4262-9898-c64bed7b8a91"
+	serversMeterID   = "servers"
+
+	freeTierToolCalls = 1000
+	freeTierServers   = 1
+)
+
+func (p *PolarClient) GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error) {
+	if p.polar == nil {
+		return nil, oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not get period usage")
+	}
+
+	// TODO: Handle the case where the user has a subscription
+
+	// For free tier, we need to read the meter directly because the user won't have a subscription
+	res, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
+		ID: toolCallsMeterID,
+		ExternalCustomerID: &polarOperations.MetersQuantitiesQueryParamExternalCustomerIDFilter{
+			Str: &orgID,
+		},
+		StartTimestamp: time.Now().Add(-1 * time.Hour * 24 * 30),
+		EndTimestamp:   time.Now(),
+		Interval:       polarComponents.TimeIntervalDay,
+	})
+
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "Could not get period usage")
+	}
+
+	toolCalls := 0
+	for _, quantity := range res.MeterQuantities.Quantities {
+		toolCalls += int(quantity.Quantity)
+	}
+
+	return &gen.PeriodUsage{
+		ToolCalls: toolCalls,
+		MaxToolCalls: freeTierToolCalls,
+		Servers: 1, // TODO
+		MaxServers: freeTierServers,
+	}, nil
 }

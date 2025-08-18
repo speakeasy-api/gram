@@ -29,6 +29,7 @@ import (
 	templatesc "github.com/speakeasy-api/gram/server/gen/http/templates/client"
 	toolsc "github.com/speakeasy-api/gram/server/gen/http/tools/client"
 	toolsetsc "github.com/speakeasy-api/gram/server/gen/http/toolsets/client"
+	usagec "github.com/speakeasy-api/gram/server/gen/http/usage/client"
 	variationsc "github.com/speakeasy-api/gram/server/gen/http/variations/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
@@ -54,6 +55,7 @@ slack (callback|login|get-slack-connection|update-slack-connection|delete-slack-
 templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)
 tools list-tools
 toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|add-externaloauth-server|removeoauth-server)
+usage get-period-usage
 variations (upsert-global|delete-global|list-global)
 `
 }
@@ -435,6 +437,12 @@ func ParseEndpoint(
 		toolsetsRemoveOAuthServerSessionTokenFlag     = toolsetsRemoveOAuthServerFlags.String("session-token", "", "")
 		toolsetsRemoveOAuthServerProjectSlugInputFlag = toolsetsRemoveOAuthServerFlags.String("project-slug-input", "", "")
 
+		usageFlags = flag.NewFlagSet("usage", flag.ContinueOnError)
+
+		usageGetPeriodUsageFlags                = flag.NewFlagSet("get-period-usage", flag.ExitOnError)
+		usageGetPeriodUsageSessionTokenFlag     = usageGetPeriodUsageFlags.String("session-token", "", "")
+		usageGetPeriodUsageProjectSlugInputFlag = usageGetPeriodUsageFlags.String("project-slug-input", "", "")
+
 		variationsFlags = flag.NewFlagSet("variations", flag.ContinueOnError)
 
 		variationsUpsertGlobalFlags                = flag.NewFlagSet("upsert-global", flag.ExitOnError)
@@ -549,6 +557,9 @@ func ParseEndpoint(
 	toolsetsAddExternalOAuthServerFlags.Usage = toolsetsAddExternalOAuthServerUsage
 	toolsetsRemoveOAuthServerFlags.Usage = toolsetsRemoveOAuthServerUsage
 
+	usageFlags.Usage = usageUsage
+	usageGetPeriodUsageFlags.Usage = usageGetPeriodUsageUsage
+
 	variationsFlags.Usage = variationsUsage
 	variationsUpsertGlobalFlags.Usage = variationsUpsertGlobalUsage
 	variationsDeleteGlobalFlags.Usage = variationsDeleteGlobalUsage
@@ -601,6 +612,8 @@ func ParseEndpoint(
 			svcf = toolsFlags
 		case "toolsets":
 			svcf = toolsetsFlags
+		case "usage":
+			svcf = usageFlags
 		case "variations":
 			svcf = variationsFlags
 		default:
@@ -868,6 +881,13 @@ func ParseEndpoint(
 
 			case "removeoauth-server":
 				epf = toolsetsRemoveOAuthServerFlags
+
+			}
+
+		case "usage":
+			switch epn {
+			case "get-period-usage":
+				epf = usageGetPeriodUsageFlags
 
 			}
 
@@ -1160,6 +1180,13 @@ func ParseEndpoint(
 			case "removeoauth-server":
 				endpoint = c.RemoveOAuthServer()
 				data, err = toolsetsc.BuildRemoveOAuthServerPayload(*toolsetsRemoveOAuthServerSlugFlag, *toolsetsRemoveOAuthServerSessionTokenFlag, *toolsetsRemoveOAuthServerProjectSlugInputFlag)
+			}
+		case "usage":
+			c := usagec.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-period-usage":
+				endpoint = c.GetPeriodUsage()
+				data, err = usagec.BuildGetPeriodUsagePayload(*usageGetPeriodUsageSessionTokenFlag, *usageGetPeriodUsageProjectSlugInputFlag)
 			}
 		case "variations":
 			c := variationsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2506,6 +2533,31 @@ Example:
 `, os.Args[0])
 }
 
+// usageUsage displays the usage of the usage command and its subcommands.
+func usageUsage() {
+	fmt.Fprintf(os.Stderr, `Read usage for gram.
+Usage:
+    %[1]s [globalflags] usage COMMAND [flags]
+
+COMMAND:
+    get-period-usage: Get the usage for a project for a given period
+
+Additional help:
+    %[1]s usage COMMAND --help
+`, os.Args[0])
+}
+func usageGetPeriodUsageUsage() {
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] usage get-period-usage -session-token STRING -project-slug-input STRING
+
+Get the usage for a project for a given period
+    -session-token STRING: 
+    -project-slug-input STRING: 
+
+Example:
+    %[1]s usage get-period-usage --session-token "Ex illum." --project-slug-input "Sint et pariatur."
+`, os.Args[0])
+}
+
 // variationsUsage displays the usage of the variations command and its
 // subcommands.
 func variationsUsage() {
@@ -2533,20 +2585,18 @@ Create or update a globally defined tool variation.
 
 Example:
     %[1]s variations upsert-global --body '{
-      "confirm": "always",
-      "confirm_prompt": "Et pariatur.",
-      "description": "Neque nobis maiores et rerum et.",
-      "name": "Suscipit iure illo blanditiis enim sunt mollitia.",
-      "src_tool_name": "Ex illum.",
-      "summarizer": "Fugit ut porro.",
-      "summary": "Harum qui velit et.",
+      "confirm": "never",
+      "confirm_prompt": "Ut porro perferendis.",
+      "description": "Eius fugiat voluptatem.",
+      "name": "Culpa maiores ut facilis corporis aspernatur illo.",
+      "src_tool_name": "Repellendus rerum et ea ab voluptatum quis.",
+      "summarizer": "Debitis velit ab illo.",
+      "summary": "Sit et et qui aliquid.",
       "tags": [
-         "Deserunt quo.",
-         "Deleniti et numquam.",
-         "Eveniet tenetur omnis est et.",
-         "Repellendus rerum et ea ab voluptatum quis."
+         "Rerum dicta.",
+         "Odio voluptatem."
       ]
-   }' --session-token "Vitae culpa maiores ut facilis." --apikey-token "Aspernatur illo." --project-slug-input "Sit et et qui aliquid."
+   }' --session-token "Totam odit esse." --apikey-token "Reprehenderit ut asperiores tempora vel consequuntur et." --project-slug-input "Vel vel iure commodi mollitia."
 `, os.Args[0])
 }
 
@@ -2560,7 +2610,7 @@ Create or update a globally defined tool variation.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s variations delete-global --variation-id "Iure commodi mollitia." --session-token "Expedita veritatis beatae placeat." --apikey-token "Quam quia et sunt velit." --project-slug-input "Commodi doloribus."
+    %[1]s variations delete-global --variation-id "Quos est." --session-token "Quibusdam aut sequi delectus." --apikey-token "Nulla qui officia." --project-slug-input "Fugit enim nemo culpa."
 `, os.Args[0])
 }
 
@@ -2573,6 +2623,6 @@ List globally defined tool variations.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s variations list-global --session-token "Sapiente ad voluptatum voluptatem." --apikey-token "Sit labore." --project-slug-input "Itaque nostrum eos iste sapiente dolore omnis."
+    %[1]s variations list-global --session-token "Ullam odit eveniet qui." --apikey-token "Recusandae dolore ipsa." --project-slug-input "Delectus ut nesciunt cupiditate quia quis."
 `, os.Args[0])
 }
