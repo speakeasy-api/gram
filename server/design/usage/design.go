@@ -42,4 +42,26 @@ var _ = Service("usage", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "getPeriodUsage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getPeriodUsage"}`)
 	})
+
+	Method("createCheckout", func() {
+		Description("Create a checkout link for upgrading to the business plan")
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(String)
+
+		HTTP(func() {
+			POST("/rpc/usage.createCheckout")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createCheckout")
+		Meta("openapi:extension:x-speakeasy-name-override", "createCheckout")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createCheckout"}`)
+	})
 })

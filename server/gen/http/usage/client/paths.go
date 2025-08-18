@@ -11,3 +11,8 @@ package client
 func GetPeriodUsageUsagePath() string {
 	return "/rpc/usage.getPeriodUsage"
 }
+
+// CreateCheckoutUsagePath returns the URL path to the usage service createCheckout HTTP endpoint.
+func CreateCheckoutUsagePath() string {
+	return "/rpc/usage.createCheckout"
+}

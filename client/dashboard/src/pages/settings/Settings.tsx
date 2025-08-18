@@ -13,7 +13,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
-import { assert, cn } from "@/lib/utils";
+import { assert, cn, getServerURL } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage";
@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCustomDomain } from "../mcp/MCPDetails";
+import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 
 export default function Settings() {
   const organization = useOrganization();
@@ -67,10 +68,10 @@ export default function Settings() {
     refetch: domainRefetch,
   } = useCustomDomain();
 
-  const { data: creditUsage } = useGetCreditUsage(
-    { gramSession: "" },
-    { sessionHeaderGramSession: "" }
-  );
+  const { data: creditUsage } = useGetCreditUsage();
+  const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
+    throwOnError: !getServerURL().includes("localhost"),
+  });
 
   // Initialize domain input with existing domain if available
   useEffect(() => {
@@ -652,6 +653,29 @@ export default function Settings() {
             LLM Credits are used only for the in dashboard playground and other
             AI-powered in dashboard experiences.
           </Type>
+          {periodUsage && (
+            <div>
+              <Type variant="body" className="font-medium">
+                {periodUsage.toolCalls} / {periodUsage.maxToolCalls}
+              </Type>
+            </div>
+          )}
+          {true && ( // TODO: check account type
+            <>
+              <a
+                href="https://buy.polar.sh/polar_cl_IBpixsNww7zw8PqNa6aPtxGB5EtJiW6WpMNvM3o9lfW"
+                data-polar-checkout
+              data-polar-checkout-theme="dark"
+            >
+              Upgrade
+            </a>
+            <script
+                src="https://cdn.jsdelivr.net/npm/@polar-sh/checkout@0.1/dist/embed.global.js"
+                defer
+                data-auto-init
+              ></script>
+            </>
+          )}
           {creditUsage && (
             <div className="space-y-2">
               <div className="flex justify-between items-center">

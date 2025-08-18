@@ -10,9 +10,9 @@ import (
 	polarComponents "github.com/polarsource/polar-go/models/components"
 	polarOperations "github.com/polarsource/polar-go/models/operations"
 
+	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	gen "github.com/speakeasy-api/gram/server/gen/usage"
 )
 
 type PolarClient struct {
@@ -271,30 +271,55 @@ func (p *PolarClient) GetPeriodUsage(ctx context.Context, orgID string) (*gen.Pe
 
 	// TODO: Handle the case where the user has a subscription
 
+	customerFilter2 := polarOperations.CreateMetersQuantitiesQueryParamCustomerIDFilterStr(orgID)
+	customerFilter := polarOperations.CreateMetersQuantitiesQueryParamExternalCustomerIDFilterStr(orgID)
+
+	println("GETTING FOR ORG ID", orgID)
+
 	// For free tier, we need to read the meter directly because the user won't have a subscription
 	res, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
-		ID: toolCallsMeterID,
-		ExternalCustomerID: &polarOperations.MetersQuantitiesQueryParamExternalCustomerIDFilter{
-			Str: &orgID,
-		},
-		StartTimestamp: time.Now().Add(-1 * time.Hour * 24 * 30),
-		EndTimestamp:   time.Now(),
-		Interval:       polarComponents.TimeIntervalDay,
+		ID:                 toolCallsMeterID,
+		CustomerID:         &customerFilter2,
+		ExternalCustomerID: &customerFilter,
+		StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
+		EndTimestamp:       time.Now(),
+		Interval:           polarComponents.TimeIntervalDay,
 	})
+
+	req := res.GetHTTPMeta().Request.URL.String()
+	println(req)
 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "Could not get period usage")
 	}
 
-	toolCalls := 0
-	for _, quantity := range res.MeterQuantities.Quantities {
-		toolCalls += int(quantity.Quantity)
+	return &gen.PeriodUsage{
+		ToolCalls:    int(res.MeterQuantities.Total),
+		MaxToolCalls: freeTierToolCalls,
+		Servers:      1, // TODO
+		MaxServers:   freeTierServers,
+	}, nil
+}
+
+const (
+	gramBusinessProductID = "1361707d-e9c2-4693-91bd-0789fbc09d68"
+)
+
+func (p *PolarClient) CreateCheckout(ctx context.Context, orgID string) (string, error) {
+	if p.polar == nil {
+		return "", oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not create checkout link")
 	}
 
-	return &gen.PeriodUsage{
-		ToolCalls: toolCalls,
-		MaxToolCalls: freeTierToolCalls,
-		Servers: 1, // TODO
-		MaxServers: freeTierServers,
-	}, nil
+	res, err := p.polar.Checkouts.Create(ctx, polarComponents.CheckoutCreate{
+		ExternalCustomerID: &orgID,
+		Products: []string{
+			gramBusinessProductID,
+		},
+	})
+
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "Could not create checkout link")
+	}
+
+	return res.Checkout.URL, nil
 }

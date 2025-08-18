@@ -251,3 +251,232 @@ func DecodeGetPeriodUsageResponse(decoder func(*http.Response) goahttp.Decoder, 
 		}
 	}
 }
+
+// BuildCreateCheckoutRequest instantiates a HTTP request object with method
+// and path set to call the "usage" service "createCheckout" endpoint
+func (c *Client) BuildCreateCheckoutRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateCheckoutUsagePath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "createCheckout", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateCheckoutRequest returns an encoder for requests sent to the
+// usage createCheckout server.
+func EncodeCreateCheckoutRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*usage.CreateCheckoutPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("usage", "createCheckout", "*usage.CreateCheckoutPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateCheckoutResponse returns a decoder for responses returned by the
+// usage createCheckout endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeCreateCheckoutResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateCheckoutResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body string
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+			}
+			return body, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateCheckoutUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+			}
+			err = ValidateCreateCheckoutUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+			}
+			return nil, NewCreateCheckoutUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateCheckoutForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+			}
+			err = ValidateCreateCheckoutForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+			}
+			return nil, NewCreateCheckoutForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateCheckoutBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+			}
+			err = ValidateCreateCheckoutBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+			}
+			return nil, NewCreateCheckoutBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateCheckoutNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+			}
+			err = ValidateCreateCheckoutNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+			}
+			return nil, NewCreateCheckoutNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateCheckoutConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+			}
+			err = ValidateCreateCheckoutConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+			}
+			return nil, NewCreateCheckoutConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateCheckoutUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+			}
+			err = ValidateCreateCheckoutUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+			}
+			return nil, NewCreateCheckoutUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateCheckoutInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+			}
+			err = ValidateCreateCheckoutInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+			}
+			return nil, NewCreateCheckoutInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateCheckoutInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				}
+				err = ValidateCreateCheckoutInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+				}
+				return nil, NewCreateCheckoutInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateCheckoutUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+				}
+				err = ValidateCreateCheckoutUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+				}
+				return nil, NewCreateCheckoutUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "createCheckout", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateCheckoutGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "createCheckout", err)
+			}
+			err = ValidateCreateCheckoutGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "createCheckout", err)
+			}
+			return nil, NewCreateCheckoutGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "createCheckout", resp.StatusCode, string(body))
+		}
+	}
+}

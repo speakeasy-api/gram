@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	polargo "github.com/polarsource/polar-go"
 	srv "github.com/speakeasy-api/gram/server/gen/http/usage/server"
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -20,21 +21,24 @@ import (
 )
 
 type Service struct {
-	tracer         trace.Tracer
-	logger         *slog.Logger
-	auth           *auth.Auth
-	polarClient    *PolarClient
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	auth        *auth.Auth
+	polarClient *PolarClient
 }
+
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, polar *PolarClient) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, polar *polargo.Polar) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
+	polarClient := NewPolarClient(polar, logger)
+
 	return &Service{
-		tracer:         otel.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
-		logger:         logger,
-		auth:           auth.New(logger, db, sessions),
-		polarClient:    polar,
+		tracer:      otel.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
+		logger:      logger,
+		auth:        auth.New(logger, db, sessions),
+		polarClient: polarClient,
 	}
 }
 
@@ -57,6 +61,15 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	
+
 	return s.polarClient.GetPeriodUsage(ctx, authCtx.ActiveOrganizationID)
+}
+
+func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckoutPayload) (res string, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
+		return "", oops.C(oops.CodeUnauthorized)
+	}
+
+	return s.polarClient.CreateCheckout(ctx, authCtx.ActiveOrganizationID)
 }

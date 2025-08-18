@@ -32,3 +32,25 @@ func BuildGetPeriodUsagePayload(usageGetPeriodUsageSessionToken string, usageGet
 
 	return v, nil
 }
+
+// BuildCreateCheckoutPayload builds the payload for the usage createCheckout
+// endpoint from CLI flags.
+func BuildCreateCheckoutPayload(usageCreateCheckoutSessionToken string, usageCreateCheckoutProjectSlugInput string) (*usage.CreateCheckoutPayload, error) {
+	var sessionToken *string
+	{
+		if usageCreateCheckoutSessionToken != "" {
+			sessionToken = &usageCreateCheckoutSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if usageCreateCheckoutProjectSlugInput != "" {
+			projectSlugInput = &usageCreateCheckoutProjectSlugInput
+		}
+	}
+	v := &usage.CreateCheckoutPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

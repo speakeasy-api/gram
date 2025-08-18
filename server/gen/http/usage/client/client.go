@@ -21,6 +21,10 @@ type Client struct {
 	// getPeriodUsage endpoint.
 	GetPeriodUsageDoer goahttp.Doer
 
+	// CreateCheckout Doer is the HTTP client used to make requests to the
+	// createCheckout endpoint.
+	CreateCheckoutDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -42,6 +46,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		GetPeriodUsageDoer:  doer,
+		CreateCheckoutDoer:  doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -69,6 +74,30 @@ func (c *Client) GetPeriodUsage() goa.Endpoint {
 		resp, err := c.GetPeriodUsageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "getPeriodUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateCheckout returns an endpoint that makes HTTP requests to the usage
+// service createCheckout server.
+func (c *Client) CreateCheckout() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateCheckoutRequest(c.encoder)
+		decodeResponse = DecodeCreateCheckoutResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateCheckoutRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateCheckoutDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "createCheckout", err)
 		}
 		return decodeResponse(resp)
 	}

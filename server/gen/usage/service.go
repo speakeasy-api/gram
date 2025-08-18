@@ -18,6 +18,8 @@ import (
 type Service interface {
 	// Get the usage for a project for a given period
 	GetPeriodUsage(context.Context, *GetPeriodUsagePayload) (res *PeriodUsage, err error)
+	// Create a checkout link for upgrading to the business plan
+	CreateCheckout(context.Context, *CreateCheckoutPayload) (res string, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -40,7 +42,14 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"getPeriodUsage"}
+var MethodNames = [2]string{"getPeriodUsage", "createCheckout"}
+
+// CreateCheckoutPayload is the payload type of the usage service
+// createCheckout method.
+type CreateCheckoutPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
 
 // GetPeriodUsagePayload is the payload type of the usage service
 // getPeriodUsage method.
