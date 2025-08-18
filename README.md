@@ -3,7 +3,7 @@
 [![Gram](banner.png)](https://getgram.ai)
 
   <div>
-    <a href="https://docs.getgram.ai/" target="_blank"><b>Docs</b></a>&nbsp;&nbsp;//&nbsp;&nbsp;<a href="https://join.slack.com/t/speakeasy-dev/shared_invite/zt-1cwb3flxz-lS5SyZxAsF_3NOq5xc8Cjw" target="_blank"><b>Join us on Slack</b></a>
+    <a href="https://docs.getgram.ai/" target="_blank"><b>Docs</b></a>&nbsp;&nbsp;//&nbsp;&nbsp;<a href="https://go.speakeasy.com/slack" target="_blank"><b>Join us on Slack</b></a>
   </div>
   <br />
 </div>
