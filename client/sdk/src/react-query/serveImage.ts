@@ -90,7 +90,13 @@ export function prefetchServeImage(
 
 export function setServeImageData(
   client: QueryClient,
-  queryKeyBase: [parameters: { id: string; gramSession?: string | undefined }],
+  queryKeyBase: [
+    parameters: {
+      id: string;
+      gramSession?: string | undefined;
+      gramKey?: string | undefined;
+    },
+  ],
   data: ServeImageQueryData,
 ): ServeImageQueryData | undefined {
   const key = queryKeyServeImage(...queryKeyBase);
@@ -101,7 +107,11 @@ export function setServeImageData(
 export function invalidateServeImage(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { id: string; gramSession?: string | undefined }]
+    [parameters: {
+      id: string;
+      gramSession?: string | undefined;
+      gramKey?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
@@ -134,6 +144,7 @@ export function buildServeImageQuery(
     queryKey: queryKeyServeImage({
       id: request.id,
       gramSession: request.gramSession,
+      gramKey: request.gramKey,
     }),
     queryFn: async function serveImageQueryFn(
       ctx,
@@ -155,7 +166,11 @@ export function buildServeImageQuery(
 }
 
 export function queryKeyServeImage(
-  parameters: { id: string; gramSession?: string | undefined },
+  parameters: {
+    id: string;
+    gramSession?: string | undefined;
+    gramKey?: string | undefined;
+  },
 ): QueryKey {
   return ["@gram/client", "assets", "serveImage", parameters];
 }

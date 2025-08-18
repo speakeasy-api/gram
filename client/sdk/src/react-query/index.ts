@@ -25,6 +25,7 @@ export * from "./deploymentLogs.js";
 export * from "./evolveDeployment.js";
 export * from "./getCreditUsage.js";
 export * from "./getDomain.js";
+export * from "./getPeriodUsage.js";
 export * from "./getSlackConnection.js";
 export * from "./globalVariations.js";
 export * from "./instance.js";

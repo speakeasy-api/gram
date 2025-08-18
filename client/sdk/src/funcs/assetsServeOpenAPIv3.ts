@@ -95,15 +95,12 @@ async function $do(
 
   const query = encodeFormQuery({
     "id": payload.id,
+    "project_id": payload.project_id,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
     "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
-      explode: false,
-      charEncoding: "none",
-    }),
-    "Gram-Project": encodeSimple("Gram-Project", payload["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -118,24 +115,14 @@ async function $do(
       {
         fieldName: "Gram-Key",
         type: "apiKey:header",
-        value: security?.option1?.apikeyHeaderGramKey,
-      },
-      {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option1?.projectSlugHeaderGramProject,
+        value: security?.apikeyHeaderGramKey,
       },
     ],
     [
       {
-        fieldName: "Gram-Project",
-        type: "apiKey:header",
-        value: security?.option2?.projectSlugHeaderGramProject,
-      },
-      {
         fieldName: "Gram-Session",
         type: "apiKey:header",
-        value: security?.option2?.sessionHeaderGramSession,
+        value: security?.sessionHeaderGramSession,
       },
     ],
   );

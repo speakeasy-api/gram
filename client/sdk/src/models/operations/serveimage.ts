@@ -9,6 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ServeImageSecurity = {
+  apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -21,6 +22,10 @@ export type ServeImageRequest = {
    * Session header
    */
   gramSession?: string | undefined;
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
 };
 
 export type ServeImageResponse = {
@@ -34,15 +39,18 @@ export const ServeImageSecurity$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  "apikey_header_Gram-Key": z.string().optional(),
   "session_header_Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
     "session_header_Gram-Session": "sessionHeaderGramSession",
   });
 });
 
 /** @internal */
 export type ServeImageSecurity$Outbound = {
+  "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -52,9 +60,11 @@ export const ServeImageSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ServeImageSecurity
 > = z.object({
+  apikeyHeaderGramKey: z.string().optional(),
   sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
     sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });
@@ -98,9 +108,11 @@ export const ServeImageRequest$inboundSchema: z.ZodType<
 > = z.object({
   id: z.string(),
   "Gram-Session": z.string().optional(),
+  "Gram-Key": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "Gram-Session": "gramSession",
+    "Gram-Key": "gramKey",
   });
 });
 
@@ -108,6 +120,7 @@ export const ServeImageRequest$inboundSchema: z.ZodType<
 export type ServeImageRequest$Outbound = {
   id: string;
   "Gram-Session"?: string | undefined;
+  "Gram-Key"?: string | undefined;
 };
 
 /** @internal */
@@ -118,9 +131,11 @@ export const ServeImageRequest$outboundSchema: z.ZodType<
 > = z.object({
   id: z.string(),
   gramSession: z.string().optional(),
+  gramKey: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     gramSession: "Gram-Session",
+    gramKey: "Gram-Key",
   });
 });
 

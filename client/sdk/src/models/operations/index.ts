@@ -26,6 +26,7 @@ export * from "./getdeploymentlogs.js";
 export * from "./getdomain.js";
 export * from "./getinstance.js";
 export * from "./getlatestdeployment.js";
+export * from "./getperiodusage.js";
 export * from "./getslackconnection.js";
 export * from "./gettemplate.js";
 export * from "./gettoolset.js";

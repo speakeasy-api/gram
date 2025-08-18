@@ -3,13 +3,14 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeFormQuery, encodeSimple } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -26,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * serveImage assets
+ * getPeriodUsage usage
  *
  * @remarks
- * Serve an image from Gram.
+ * Get the usage for a project for a given period
  */
-export function assetsServeImage(
+export function usageGetPeriodUsage(
   client: GramCore,
-  request: operations.ServeImageRequest,
-  security?: operations.ServeImageSecurity | undefined,
+  request?: operations.GetPeriodUsageRequest | undefined,
+  security?: operations.GetPeriodUsageSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.ServeImageResponse,
+    components.PeriodUsage,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -60,13 +61,13 @@ export function assetsServeImage(
 
 async function $do(
   client: GramCore,
-  request: operations.ServeImageRequest,
-  security?: operations.ServeImageSecurity | undefined,
+  request?: operations.GetPeriodUsageRequest | undefined,
+  security?: operations.GetPeriodUsageSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.ServeImageResponse,
+      components.PeriodUsage,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -82,7 +83,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => operations.ServeImageRequest$outboundSchema.parse(value),
+    (value) =>
+      operations.GetPeriodUsageRequest$outboundSchema.optional().parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -91,19 +93,15 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/assets.serveImage")();
-
-  const query = encodeFormQuery({
-    "id": payload.id,
-  });
+  const path = pathToFunc("/rpc/usage.getPeriodUsage")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+    "Gram-Project": encodeSimple("Gram-Project", payload?.["Gram-Project"], {
       explode: false,
       charEncoding: "none",
     }),
-    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),
@@ -112,12 +110,10 @@ async function $do(
   const requestSecurity = resolveSecurity(
     [
       {
-        fieldName: "Gram-Key",
+        fieldName: "Gram-Project",
         type: "apiKey:header",
-        value: security?.apikeyHeaderGramKey,
+        value: security?.projectSlugHeaderGramProject,
       },
-    ],
-    [
       {
         fieldName: "Gram-Session",
         type: "apiKey:header",
@@ -129,7 +125,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "serveImage",
+    operationID: "getPeriodUsage",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -147,7 +143,6 @@ async function $do(
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -185,7 +180,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.ServeImageResponse,
+    components.PeriodUsage,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -196,11 +191,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.stream(200, operations.ServeImageResponse$inboundSchema, {
-      ctype: "application/json",
-      hdrs: true,
-      key: "Result",
-    }),
+    M.json(200, components.PeriodUsage$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,
