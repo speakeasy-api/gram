@@ -677,7 +677,7 @@ const DefaultLogo = () => (
       }}
       transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
     >
-      <GramLogo className="w-25" variant="icon" />
+      <GramLogo className="w-18" variant="icon" />
     </motion.span>
   </motion.div>
 );
