@@ -336,6 +336,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		OrganizationSlug: &executionInfo.OrganizationSlug,
 		ToolsetSlug:      &toolsetSlug,
 		ChatID:           &chatID,
+		MCPURL:           nil, // Not applicable for direct tool calls
 	})
 
 	return nil

@@ -18,6 +18,7 @@ import { Slack } from "./slack.js";
 import { Templates } from "./templates.js";
 import { Tools } from "./tools.js";
 import { Toolsets } from "./toolsets.js";
+import { Usage } from "./usage.js";
 import { Variations } from "./variations.js";
 
 export class Gram extends ClientSDK {
@@ -94,6 +95,11 @@ export class Gram extends ClientSDK {
   private _toolsets?: Toolsets;
   get toolsets(): Toolsets {
     return (this._toolsets ??= new Toolsets(this._options));
+  }
+
+  private _usage?: Usage;
+  get usage(): Usage {
+    return (this._usage ??= new Usage(this._options));
   }
 
   private _variations?: Variations;

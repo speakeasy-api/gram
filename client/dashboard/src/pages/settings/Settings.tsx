@@ -13,7 +13,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { HumanizeDateTime } from "@/lib/dates";
-import { assert, cn } from "@/lib/utils";
+import { assert, cn, getServerURL } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage";
@@ -36,6 +36,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCustomDomain } from "../mcp/MCPDetails";
+import { PolarEmbedCheckout } from '@polar-sh/checkout/embed'
+import { useSdkClient } from "@/contexts/Sdk";
 
 export default function Settings() {
   const organization = useOrganization();
@@ -67,10 +69,10 @@ export default function Settings() {
     refetch: domainRefetch,
   } = useCustomDomain();
 
-  const { data: creditUsage } = useGetCreditUsage(
-    { gramSession: "" },
-    { sessionHeaderGramSession: "" }
-  );
+  const { data: creditUsage } = useGetCreditUsage();
+  // const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
+  //   throwOnError: !getServerURL().includes("localhost"),
+  // });
 
   // Initialize domain input with existing domain if available
   useEffect(() => {
@@ -693,4 +695,27 @@ export default function Settings() {
       </Page.Body>
     </Page>
   );
+}
+
+//eslint-disable-next-line @typescript-eslint/no-unused-vars
+const CheckoutLink = () => {
+  const [checkoutLink, setCheckoutLink] = useState("")
+  const client = useSdkClient();
+
+  useEffect(() => {
+    PolarEmbedCheckout.init()
+    client.usage.createCheckout().then((link) => {
+      setCheckoutLink(link);
+    });
+  }, [])
+
+  return (
+    <a
+      href={checkoutLink}
+      data-polar-checkout
+      data-polar-checkout-theme="light"
+    >
+      Upgrade
+    </a>
+  )
 }
