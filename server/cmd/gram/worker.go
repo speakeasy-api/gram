@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	polargo "github.com/polarsource/polar-go"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -22,7 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
-	polargo "github.com/polarsource/polar-go"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"

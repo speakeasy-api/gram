@@ -55,6 +55,7 @@ import (
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/variations"
 )
 
@@ -476,6 +477,7 @@ func newStartCommand() *cli.Command {
 			}
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
+			usage.Attach(mux, usage.NewService(logger, db, sessionManager, polarClient, serverURL))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

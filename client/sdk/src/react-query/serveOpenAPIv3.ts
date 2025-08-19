@@ -93,8 +93,8 @@ export function setServeOpenAPIv3Data(
   queryKeyBase: [
     parameters: {
       id: string;
+      projectId: string;
       gramKey?: string | undefined;
-      gramProject?: string | undefined;
       gramSession?: string | undefined;
     },
   ],
@@ -110,8 +110,8 @@ export function invalidateServeOpenAPIv3(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       id: string;
+      projectId: string;
       gramKey?: string | undefined;
-      gramProject?: string | undefined;
       gramSession?: string | undefined;
     }]
   >,
@@ -145,8 +145,8 @@ export function buildServeOpenAPIv3Query(
   return {
     queryKey: queryKeyServeOpenAPIv3({
       id: request.id,
+      projectId: request.projectId,
       gramKey: request.gramKey,
-      gramProject: request.gramProject,
       gramSession: request.gramSession,
     }),
     queryFn: async function serveOpenAPIv3QueryFn(
@@ -171,8 +171,8 @@ export function buildServeOpenAPIv3Query(
 export function queryKeyServeOpenAPIv3(
   parameters: {
     id: string;
+    projectId: string;
     gramKey?: string | undefined;
-    gramProject?: string | undefined;
     gramSession?: string | undefined;
   },
 ): QueryKey {

@@ -1,4 +1,4 @@
-package toolsets
+package domains
 
 import (
 	"github.com/speakeasy-api/gram/server/design/security"

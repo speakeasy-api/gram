@@ -99,6 +99,10 @@ async function $do(
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
+    "Gram-Key": encodeSimple("Gram-Key", payload["Gram-Key"], {
+      explode: false,
+      charEncoding: "none",
+    }),
     "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
@@ -106,6 +110,13 @@ async function $do(
   }));
 
   const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.apikeyHeaderGramKey,
+      },
+    ],
     [
       {
         fieldName: "Gram-Session",
