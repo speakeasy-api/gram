@@ -168,7 +168,7 @@ func (p *PolarClient) TrackToolCallUsage(ctx context.Context, event ToolCallUsag
 		}
 	}
 
-	_, err := p.polar.Events.Ingest(context.Background(), polarComponents.EventsIngest{
+	_, err := p.polar.Events.Ingest(ctx, polarComponents.EventsIngest{
 		Events: []polarComponents.Events{
 			{
 				Type: polarComponents.EventsTypeEventCreateExternalCustomer,
@@ -261,7 +261,7 @@ func (p *PolarClient) TrackPromptCallUsage(ctx context.Context, event PromptCall
 		}
 	}
 
-	_, err := p.polar.Events.Ingest(context.Background(), polarComponents.EventsIngest{
+	_, err := p.polar.Events.Ingest(ctx, polarComponents.EventsIngest{
 		Events: []polarComponents.Events{
 			{
 				Type: polarComponents.EventsTypeEventCreateExternalCustomer,
@@ -307,7 +307,7 @@ func (p *PolarClient) TrackPlatformUsage(ctx context.Context, event PlatformUsag
 		},
 	}
 
-	_, err := p.polar.Events.Ingest(context.Background(), polarComponents.EventsIngest{
+	_, err := p.polar.Events.Ingest(ctx, polarComponents.EventsIngest{
 		Events: []polarComponents.Events{
 			{
 				Type: polarComponents.EventsTypeEventCreateExternalCustomer,
