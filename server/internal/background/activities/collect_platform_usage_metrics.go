@@ -47,7 +47,7 @@ func (c *CollectPlatformUsageMetrics) Do(ctx context.Context) error {
 	}
 
 	for _, metric := range metrics {
-		go c.usageClient.TrackPlatformUsage(ctx, usage.PlatformUsageEvent{
+		go c.usageClient.TrackPlatformUsage(context.Background(), usage.PlatformUsageEvent{
 			OrganizationID:    metric.OrganizationID,
 			PublicMCPServers:  metric.PublicMcpServers,
 			PrivateMCPServers: metric.PrivateMcpServers,
