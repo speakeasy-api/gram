@@ -11,8 +11,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-type CollectPlatformUsageMetricsParams struct{}
-
 type PlatformUsageMetricsClient struct {
 	Temporal client.Client
 }
@@ -24,10 +22,10 @@ func (c *PlatformUsageMetricsClient) StartCollectPlatformUsageMetrics(ctx contex
 		TaskQueue: string(TaskQueueMain),
 		// Allow restarting if needed
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-	}, CollectPlatformUsageMetricsWorkflow, CollectPlatformUsageMetricsParams{})
+	}, CollectPlatformUsageMetricsWorkflow)
 }
 
-func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context, params CollectPlatformUsageMetricsParams) error {
+func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Starting platform usage metrics collection")
 
@@ -49,4 +47,27 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context, params CollectPla
 
 	logger.Info("Platform usage metrics collection completed successfully")
 	return nil
+}
+
+func AddPlatformUsageMetricsSchedule(ctx context.Context, temporalClient client.Client) error {
+	scheduleID := "v1:collect-platform-usage-metrics-schedule"
+	workflowID := "v1:collect-platform-usage-metrics/scheduled"
+
+	_, err := temporalClient.ScheduleClient().Create(ctx, client.ScheduleOptions{
+		ID:   scheduleID,
+		Spec: client.ScheduleSpec{
+			Intervals: []client.ScheduleIntervalSpec{
+				{
+					Every: 24 * time.Hour,
+				},
+			},
+		},
+		Action: &client.ScheduleWorkflowAction{
+			ID:        workflowID,	
+			Workflow:  CollectPlatformUsageMetricsWorkflow,
+			TaskQueue: string(TaskQueueMain),
+		},
+	})
+	
+	return err
 }

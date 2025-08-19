@@ -1,6 +1,7 @@
 package background
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -115,6 +116,10 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
+
+	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
+		logger.Error("failed to add platform usage metrics schedule", "error", err.Error())
+	}
 
 	return temporalWorker
 }
