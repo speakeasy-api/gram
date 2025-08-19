@@ -36,7 +36,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCustomDomain } from "../mcp/MCPDetails";
-import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
 import { PolarEmbedCheckout } from '@polar-sh/checkout/embed'
 import { useSdkClient } from "@/contexts/Sdk";
 
@@ -71,9 +70,9 @@ export default function Settings() {
   } = useCustomDomain();
 
   const { data: creditUsage } = useGetCreditUsage();
-  const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
-    throwOnError: !getServerURL().includes("localhost"),
-  });
+  // const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
+  //   throwOnError: !getServerURL().includes("localhost"),
+  // });
 
   // Initialize domain input with existing domain if available
   useEffect(() => {
@@ -655,16 +654,6 @@ export default function Settings() {
             LLM Credits are used only for the in dashboard playground and other
             AI-powered in dashboard experiences.
           </Type>
-          {periodUsage && (
-            <div>
-              <Type variant="body" className="font-medium">
-                {periodUsage.toolCalls} / {periodUsage.maxToolCalls}
-              </Type>
-            </div>
-          )}
-          {false && ( // TODO: check account type 
-            <CheckoutLink />
-          )}
           {creditUsage && (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
@@ -708,6 +697,7 @@ export default function Settings() {
   );
 }
 
+//eslint-disable-next-line @typescript-eslint/no-unused-vars
 const CheckoutLink = () => {
   const [checkoutLink, setCheckoutLink] = useState("")
   const client = useSdkClient();
