@@ -3,6 +3,7 @@ package usage
 import (
 	"context"
 	"log/slog"
+	"net/url"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	polargo "github.com/polarsource/polar-go"
@@ -25,11 +26,12 @@ type Service struct {
 	logger      *slog.Logger
 	auth        *auth.Auth
 	polarClient *PolarClient
+	serverURL   *url.URL
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, polar *polargo.Polar) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, polar *polargo.Polar, serverURL *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	polarClient := NewPolarClient(polar, logger)
@@ -39,6 +41,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		logger:      logger,
 		auth:        auth.New(logger, db, sessions),
 		polarClient: polarClient,
+		serverURL:   serverURL,
 	}
 }
 
@@ -71,5 +74,5 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	return s.polarClient.CreateCheckout(ctx, authCtx.ActiveOrganizationID)
+	return s.polarClient.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String())
 }

@@ -8,6 +8,7 @@ export * from "./_types.js";
 export * from "./addExternalOAuthServer.js";
 export * from "./checkMCPSlugAvailability.js";
 export * from "./createAPIKey.js";
+export * from "./createCheckout.js";
 export * from "./createDeployment.js";
 export * from "./createEnvironment.js";
 export * from "./createPackage.js";

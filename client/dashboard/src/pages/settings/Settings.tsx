@@ -37,6 +37,8 @@ import {
 import { useEffect, useState } from "react";
 import { useCustomDomain } from "../mcp/MCPDetails";
 import { useGetPeriodUsage } from "@gram/client/react-query/getPeriodUsage.js";
+import { PolarEmbedCheckout } from '@polar-sh/checkout/embed'
+import { useSdkClient } from "@/contexts/Sdk";
 
 export default function Settings() {
   const organization = useOrganization();
@@ -660,21 +662,8 @@ export default function Settings() {
               </Type>
             </div>
           )}
-          {true && ( // TODO: check account type
-            <>
-              <a
-                href="https://buy.polar.sh/polar_cl_IBpixsNww7zw8PqNa6aPtxGB5EtJiW6WpMNvM3o9lfW"
-                data-polar-checkout
-              data-polar-checkout-theme="dark"
-            >
-              Upgrade
-            </a>
-            <script
-                src="https://cdn.jsdelivr.net/npm/@polar-sh/checkout@0.1/dist/embed.global.js"
-                defer
-                data-auto-init
-              ></script>
-            </>
+          {false && ( // TODO: check account type 
+            <CheckoutLink />
           )}
           {creditUsage && (
             <div className="space-y-2">
@@ -717,4 +706,26 @@ export default function Settings() {
       </Page.Body>
     </Page>
   );
+}
+
+const CheckoutLink = () => {
+  const [checkoutLink, setCheckoutLink] = useState("")
+  const client = useSdkClient();
+
+  useEffect(() => {
+    PolarEmbedCheckout.init()
+    client.usage.createCheckout().then((link) => {
+      setCheckoutLink(link);
+    });
+  }, [])
+
+  return (
+    <a
+      href={checkoutLink}
+      data-polar-checkout
+      data-polar-checkout-theme="light"
+    >
+      Upgrade
+    </a>
+  )
 }

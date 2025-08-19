@@ -477,7 +477,7 @@ func newStartCommand() *cli.Command {
 			}
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
-			usage.Attach(mux, usage.NewService(logger, db, sessionManager, polarClient))
+			usage.Attach(mux, usage.NewService(logger, db, sessionManager, polarClient, serverURL))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

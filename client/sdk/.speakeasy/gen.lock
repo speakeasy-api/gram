@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 9f22848d50670287b13483be59e37951
+  docChecksum: 4f5313f8c29188a30b212d382ad3702b
   docVersion: 0.0.1
   speakeasyVersion: 1.585.0
   generationVersion: 2.660.0
-  releaseVersion: 0.12.50
-  configChecksum: 77ca4a577586d78b95da918033cf896f
+  releaseVersion: 0.12.51
+  configChecksum: 6d2dc40890ef5cf6a6e1cbe0909c1ab4
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -156,6 +156,8 @@ generatedFiles:
   - docs/models/operations/checkmcpslugavailabilitysecurity.md
   - docs/models/operations/createapikeyrequest.md
   - docs/models/operations/createapikeysecurity.md
+  - docs/models/operations/createcheckoutrequest.md
+  - docs/models/operations/createcheckoutsecurity.md
   - docs/models/operations/createdeploymentrequest.md
   - docs/models/operations/createdeploymentsecurity.md
   - docs/models/operations/createdeploymentsecurityoption1.md
@@ -428,6 +430,7 @@ generatedFiles:
   - src/funcs/toolsetsList.ts
   - src/funcs/toolsetsRemoveOAuthServer.ts
   - src/funcs/toolsetsUpdateBySlug.ts
+  - src/funcs/usageCreateCheckout.ts
   - src/funcs/usageGetPeriodUsage.ts
   - src/funcs/variationsDeleteGlobal.ts
   - src/funcs/variationsListGlobal.ts
@@ -564,6 +567,7 @@ generatedFiles:
   - src/models/operations/authlogin.ts
   - src/models/operations/checkmcpslugavailability.ts
   - src/models/operations/createapikey.ts
+  - src/models/operations/createcheckout.ts
   - src/models/operations/createdeployment.ts
   - src/models/operations/createenvironment.ts
   - src/models/operations/createpackage.ts
@@ -631,6 +635,7 @@ generatedFiles:
   - src/react-query/addExternalOAuthServer.ts
   - src/react-query/checkMCPSlugAvailability.ts
   - src/react-query/createAPIKey.ts
+  - src/react-query/createCheckout.ts
   - src/react-query/createDeployment.ts
   - src/react-query/createEnvironment.ts
   - src/react-query/createPackage.ts
@@ -1439,5 +1444,14 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createCheckout:
+    speakeasy-default-create-checkout:
+      responses:
+        "200":
+          application/json: "<value>"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}
