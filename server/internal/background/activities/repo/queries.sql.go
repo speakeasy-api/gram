@@ -52,6 +52,7 @@ type GetPlatformUsageMetricsRow struct {
 	TotalTools        int64
 }
 
+// Get comprehensive platform usage metrics per organization
 func (q *Queries) GetPlatformUsageMetrics(ctx context.Context) ([]GetPlatformUsageMetricsRow, error) {
 	rows, err := q.db.Query(ctx, getPlatformUsageMetrics)
 	if err != nil {
