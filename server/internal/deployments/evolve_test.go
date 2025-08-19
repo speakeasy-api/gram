@@ -222,6 +222,90 @@ func TestDeploymentsService_Evolve_ExcludeAssets(t *testing.T) {
 	require.Equal(t, "doc-2", evolved.Deployment.Openapiv3Assets[0].Name, "wrong asset remained")
 }
 
+func TestDeploymentsService_Evolve_ExcludeAllAssets(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload two OpenAPI assets
+	bs1 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares1, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs1.Len()),
+	}, io.NopCloser(bs1))
+	require.NoError(t, err, "upload first openapi v3 asset")
+
+	bs2 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/petstore-valid.yaml"))
+	ares2, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs2.Len()),
+	}, io.NopCloser(bs2))
+	require.NoError(t, err, "upload second openapi v3 asset")
+
+	// Create initial deployment with both assets
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-initial-deployment-all-excluded",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares1.Asset.ID,
+				Name:    "doc-1",
+				Slug:    "doc-1",
+			},
+			{
+				AssetID: ares2.Asset.ID,
+				Name:    "doc-2",
+				Slug:    "doc-2",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create initial deployment")
+	require.Len(t, initial.Deployment.Openapiv3Assets, 2, "expected 2 assets in initial deployment")
+
+	// Verify initial deployment has tools
+	repo := testrepo.New(ti.conn)
+	initialTools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(initial.Deployment.ID))
+	require.NoError(t, err, "list initial deployment tools")
+	require.NotEmpty(t, initialTools, "expected tools in initial deployment")
+
+	// Evolve deployment to exclude all assets
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:            nil,
+		SessionToken:           nil,
+		ProjectSlugInput:       nil,
+		DeploymentID:           nil,
+		UpsertOpenapiv3Assets:  []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{ares1.Asset.ID, ares2.Asset.ID},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment")
+
+	require.NotEqual(t, initial.Deployment.ID, evolved.Deployment.ID, "evolved deployment should have different ID")
+	require.Equal(t, "completed", evolved.Deployment.Status, "deployment status is not completed")
+	require.Empty(t, evolved.Deployment.Openapiv3Assets, "expected 0 openapi assets after excluding all")
+
+	// Verify no tools remain in the deployment
+	evolvedTools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(evolved.Deployment.ID))
+	require.NoError(t, err, "list evolved deployment tools")
+	require.Empty(t, evolvedTools, "expected no tools after excluding all assets")
+}
+
 func TestDeploymentsService_Evolve_UpsertPackages(t *testing.T) {
 	t.Parallel()
 

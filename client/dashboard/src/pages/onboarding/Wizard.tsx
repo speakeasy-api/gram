@@ -1,5 +1,4 @@
 import { Expandable } from "@/components/expandable";
-import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ProjectSelector } from "@/components/project-menu";
@@ -43,6 +42,7 @@ import { useParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useOnboardingSteps } from "./Onboarding";
+import { GramLogo } from "@/components/gram-logo";
 
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
@@ -136,7 +136,7 @@ const LHS = ({
       </div>
     ) : (
       <span className="text-body-sm text-muted-foreground">
-        © 2025 speakeasy
+        © 2025 Speakeasy
       </span>
     );
 
@@ -150,7 +150,7 @@ const LHS = ({
           justify={"space-between"}
           className="w-full border-b h-16 px-6 mb-8"
         >
-          <GramLogo className="text-[28px]" />
+          <GramLogo className="w-25" />
           <a href="https://docs.getgram.ai/" target="_blank">
             <Type mono className="text-[15px] font-normal">
               VIEW DOCS
@@ -670,14 +670,9 @@ const DefaultLogo = () => (
     <motion.span
       layoutId="main-icon"
       className="font-thin text-foreground text-6xl select-none"
-      style={{
-        fontFamily: "Tobias, sans-serif",
-        letterSpacing: "-0.05em",
-        transform: "translateY(-0.17em)", // Optical centering
-      }}
       transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
     >
-      g
+      <GramLogo className="w-18" variant="icon" />
     </motion.span>
   </motion.div>
 );

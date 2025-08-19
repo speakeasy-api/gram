@@ -16,9 +16,9 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { ChartNoAxesCombinedIcon, TestTubeDiagonal } from "lucide-react";
 import * as React from "react";
 import { FeatureRequestModal } from "./FeatureRequestModal";
-import { GramLogo } from "./gram-logo";
 import { ProjectMenu } from "./project-menu";
 import { Type } from "./ui/type";
+import { GramLogo } from "./gram-logo";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
@@ -42,9 +42,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 asChild
                 className="data-[slot=sidebar-menu-button]:!p-1.5 h-12"
               >
-                <Stack direction={"horizontal"} gap={2}>
-                  <GramLogo className="text-3xl" />
-                  <Type variant="small" muted className="self-end">
+                <Stack direction={"horizontal"} align={"center"} gap={2}>
+                  <GramLogo className="w-25" />
+                  <Type variant="small" muted>
                     v0.8.2 (beta)
                   </Type>
                 </Stack>
