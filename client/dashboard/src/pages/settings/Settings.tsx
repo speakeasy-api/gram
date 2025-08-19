@@ -36,6 +36,8 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCustomDomain } from "../mcp/MCPDetails";
+// import { PolarEmbedCheckout } from '@polar-sh/checkout/embed'
+// import { useSdkClient } from "@/contexts/Sdk";
 
 export default function Settings() {
   const organization = useOrganization();
@@ -67,10 +69,10 @@ export default function Settings() {
     refetch: domainRefetch,
   } = useCustomDomain();
 
-  const { data: creditUsage } = useGetCreditUsage(
-    { gramSession: "" },
-    { sessionHeaderGramSession: "" }
-  );
+  const { data: creditUsage } = useGetCreditUsage();
+  // const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
+  //   throwOnError: !getServerURL().includes("localhost"),
+  // });
 
   // Initialize domain input with existing domain if available
   useEffect(() => {
@@ -694,3 +696,25 @@ export default function Settings() {
     </Page>
   );
 }
+
+// const CheckoutLink = () => {
+//   const [checkoutLink, setCheckoutLink] = useState("")
+//   const client = useSdkClient();
+
+//   useEffect(() => {
+//     PolarEmbedCheckout.init()
+//     client.usage.createCheckout().then((link) => {
+//       setCheckoutLink(link);
+//     });
+//   }, [])
+
+//   return (
+//     <a
+//       href={checkoutLink}
+//       data-polar-checkout
+//       data-polar-checkout-theme="light"
+//     >
+//       Upgrade
+//     </a>
+//   )
+// }

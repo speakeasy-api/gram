@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 484527a13feac1bcd991722a5f292cce
+  docChecksum: 4f5313f8c29188a30b212d382ad3702b
   docVersion: 0.0.1
   speakeasyVersion: 1.585.0
   generationVersion: 2.660.0
-  releaseVersion: 0.12.49
-  configChecksum: 51619cf04deeedeef5ecc7a9c83c7a46
+  releaseVersion: 0.12.51
+  configChecksum: 6d2dc40890ef5cf6a6e1cbe0909c1ab4
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -110,6 +110,7 @@ generatedFiles:
   - docs/models/components/organizationentry.md
   - docs/models/components/package.md
   - docs/models/components/packageversion.md
+  - docs/models/components/periodusage.md
   - docs/models/components/project.md
   - docs/models/components/projectentry.md
   - docs/models/components/prompttemplate.md
@@ -155,6 +156,8 @@ generatedFiles:
   - docs/models/operations/checkmcpslugavailabilitysecurity.md
   - docs/models/operations/createapikeyrequest.md
   - docs/models/operations/createapikeysecurity.md
+  - docs/models/operations/createcheckoutrequest.md
+  - docs/models/operations/createcheckoutsecurity.md
   - docs/models/operations/createdeploymentrequest.md
   - docs/models/operations/createdeploymentsecurity.md
   - docs/models/operations/createdeploymentsecurityoption1.md
@@ -213,6 +216,8 @@ generatedFiles:
   - docs/models/operations/getlatestdeploymentsecurity.md
   - docs/models/operations/getlatestdeploymentsecurityoption1.md
   - docs/models/operations/getlatestdeploymentsecurityoption2.md
+  - docs/models/operations/getperiodusagerequest.md
+  - docs/models/operations/getperiodusagesecurity.md
   - docs/models/operations/getslackconnectionrequest.md
   - docs/models/operations/getslackconnectionsecurity.md
   - docs/models/operations/gettemplaterequest.md
@@ -299,8 +304,6 @@ generatedFiles:
   - docs/models/operations/serveopenapiv3request.md
   - docs/models/operations/serveopenapiv3response.md
   - docs/models/operations/serveopenapiv3security.md
-  - docs/models/operations/serveopenapiv3securityoption1.md
-  - docs/models/operations/serveopenapiv3securityoption2.md
   - docs/models/operations/sessioninforequest.md
   - docs/models/operations/sessioninforesponse.md
   - docs/models/operations/sessioninfosecurity.md
@@ -355,6 +358,7 @@ generatedFiles:
   - docs/sdks/templates/README.md
   - docs/sdks/tools/README.md
   - docs/sdks/toolsets/README.md
+  - docs/sdks/usage/README.md
   - docs/sdks/variations/README.md
   - eslint.config.mjs
   - examples/.env.template
@@ -426,6 +430,8 @@ generatedFiles:
   - src/funcs/toolsetsList.ts
   - src/funcs/toolsetsRemoveOAuthServer.ts
   - src/funcs/toolsetsUpdateBySlug.ts
+  - src/funcs/usageCreateCheckout.ts
+  - src/funcs/usageGetPeriodUsage.ts
   - src/funcs/variationsDeleteGlobal.ts
   - src/funcs/variationsListGlobal.ts
   - src/funcs/variationsUpsertGlobal.ts
@@ -519,6 +525,7 @@ generatedFiles:
   - src/models/components/organizationentry.ts
   - src/models/components/package.ts
   - src/models/components/packageversion.ts
+  - src/models/components/periodusage.ts
   - src/models/components/project.ts
   - src/models/components/projectentry.ts
   - src/models/components/prompttemplate.ts
@@ -560,6 +567,7 @@ generatedFiles:
   - src/models/operations/authlogin.ts
   - src/models/operations/checkmcpslugavailability.ts
   - src/models/operations/createapikey.ts
+  - src/models/operations/createcheckout.ts
   - src/models/operations/createdeployment.ts
   - src/models/operations/createenvironment.ts
   - src/models/operations/createpackage.ts
@@ -579,6 +587,7 @@ generatedFiles:
   - src/models/operations/getdomain.ts
   - src/models/operations/getinstance.ts
   - src/models/operations/getlatestdeployment.ts
+  - src/models/operations/getperiodusage.ts
   - src/models/operations/getslackconnection.ts
   - src/models/operations/gettemplate.ts
   - src/models/operations/gettoolset.ts
@@ -626,6 +635,7 @@ generatedFiles:
   - src/react-query/addExternalOAuthServer.ts
   - src/react-query/checkMCPSlugAvailability.ts
   - src/react-query/createAPIKey.ts
+  - src/react-query/createCheckout.ts
   - src/react-query/createDeployment.ts
   - src/react-query/createEnvironment.ts
   - src/react-query/createPackage.ts
@@ -643,6 +653,7 @@ generatedFiles:
   - src/react-query/evolveDeployment.ts
   - src/react-query/getCreditUsage.ts
   - src/react-query/getDomain.ts
+  - src/react-query/getPeriodUsage.ts
   - src/react-query/getSlackConnection.ts
   - src/react-query/globalVariations.ts
   - src/react-query/index.ts
@@ -702,6 +713,7 @@ generatedFiles:
   - src/sdk/templates.ts
   - src/sdk/tools.ts
   - src/sdk/toolsets.ts
+  - src/sdk/usage.ts
   - src/sdk/variations.ts
   - src/types/async.ts
   - src/types/blobs.ts
@@ -1334,6 +1346,7 @@ examples:
       parameters:
         query:
           id: "<id>"
+          project_id: "<id>"
       responses:
         "200":
           application/json: "x-file: example.file"
@@ -1418,6 +1431,24 @@ examples:
       responses:
         "200":
           application/json: {"created_at": "2023-08-30T05:28:04.458Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2023-10-21T14:21:06.001Z"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getPeriodUsage:
+    speakeasy-default-get-period-usage:
+      responses:
+        "200":
+          application/json: {"max_servers": 754388, "max_tool_calls": 298053, "servers": 409506, "tool_calls": 709134}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  createCheckout:
+    speakeasy-default-create-checkout:
+      responses:
+        "200":
+          application/json: "<value>"
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

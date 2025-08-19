@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 type toolsCallParams struct {
@@ -41,6 +42,7 @@ func handleToolsCall(
 	payload *mcpInputs,
 	req *rawRequest,
 	toolProxy *gateway.ToolProxy,
+	usageClient *usage.PolarClient,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -58,8 +60,10 @@ func handleToolsCall(
 		return nil, err
 	}
 
+	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
-		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, requestContext.Host+requestContext.ReqURL, params.Name)
+		mcpURL = requestContext.Host+requestContext.ReqURL
+		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
 	}
 
 	toolsetHelpers := toolsets.NewToolsets(db)
@@ -97,6 +101,24 @@ func handleToolsCall(
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to execute prompt").Log(ctx, logger)
 		}
+
+		// Track prompt call usage
+		requestBytes := int64(len(params.Arguments))
+		outputBytes := int64(len(promptData))
+
+		go usageClient.TrackPromptCallUsage(context.Background(), usage.PromptCallUsageEvent{
+			OrganizationID:   toolset.OrganizationID,
+			RequestBytes:     requestBytes,
+			OutputBytes:      outputBytes,
+			PromptID:         &higherOrderTool.ID,
+			PromptName:       string(higherOrderTool.Name),
+			ProjectID:        payload.projectID.String(),
+			ToolsetSlug:      &payload.toolset,
+			MCPURL:           &mcpURL,
+			ProjectSlug:      nil, // TODO: do we need these slugs for prompt calls?
+			OrganizationSlug: nil,
+			ChatID:           nil,
+		})	
 
 		return formatHigherOrderToolResult(ctx, logger, req, promptData)
 	}
@@ -149,10 +171,30 @@ func handleToolsCall(
 		statusCode: http.StatusOK,
 	}
 
+	requestBodyBytes := params.Arguments
+	requestBytes := int64(len(requestBodyBytes))
+
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan.Tool)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}
+
+	// Track tool call usage
+	outputBytes := int64(rw.body.Len())
+
+	go usageClient.TrackToolCallUsage(context.Background(), usage.ToolCallUsageEvent{
+		OrganizationID:   toolset.OrganizationID,
+		RequestBytes:     requestBytes,
+		OutputBytes:      outputBytes,
+		ToolID:           *toolID,
+		ToolName:         params.Name,
+		ProjectID:        payload.projectID.String(),
+		ProjectSlug:      &executionPlan.ProjectSlug,
+		OrganizationSlug: &executionPlan.OrganizationSlug,
+		ToolsetSlug:      &payload.toolset,
+		MCPURL:           &mcpURL,
+		ChatID:           nil,
+	})
 
 	chunk, err := formatResult(*rw)
 	if err != nil {

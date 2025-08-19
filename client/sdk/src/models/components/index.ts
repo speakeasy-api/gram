@@ -71,6 +71,7 @@ export * from "./openapiv3deploymentasset.js";
 export * from "./organizationentry.js";
 export * from "./package.js";
 export * from "./packageversion.js";
+export * from "./periodusage.js";
 export * from "./project.js";
 export * from "./projectentry.js";
 export * from "./prompttemplate.js";

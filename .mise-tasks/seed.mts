@@ -357,6 +357,7 @@ async function createPackage(init: {
     url,
   } = init;
 
+  //eslint-disable-next-line @typescript-eslint/no-unsafe-assignment  
   const imageRes = await fetch(`${baseURL}/rpc/assets.uploadImage`, {
     method: "POST",
     headers: {
@@ -364,7 +365,7 @@ async function createPackage(init: {
       "Gram-Session": sessionId ?? "",
       "Gram-Project": projectSlug,
     },
-    body: await fs.readFile(image),
+    body: await fs.readFile(image) as any, // This is causing a type error
   });
   if (!imageRes.ok) {
     await logBadResponse(imageRes);

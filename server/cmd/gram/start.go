@@ -55,6 +55,7 @@ import (
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/speakeasy-api/gram/server/internal/variations"
 )
 
@@ -343,7 +344,7 @@ func newStartCommand() *cli.Command {
 			if polarKey == "" {
 				logger.WarnContext(ctx, "polar api key is not set, skipping Polar client")
 			} else {
-				polarClient = polargo.New(polargo.WithSecurity(polarKey))
+				polarClient = polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
 			}
 
 			localEnvPath := c.String("unsafe-local-env-path")
@@ -464,7 +465,7 @@ func newStartCommand() *cli.Command {
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env)
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient, polarClient))
-			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService))
+			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService, polarClient))
 			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
@@ -476,6 +477,7 @@ func newStartCommand() *cli.Command {
 			}
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
+			usage.Attach(mux, usage.NewService(logger, db, sessionManager, polarClient, serverURL))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
@@ -507,6 +509,7 @@ func newStartCommand() *cli.Command {
 						OpenRouter:          openRouter,
 						K8sClient:           k8sClient,
 						ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
+						Polar:               polarClient,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

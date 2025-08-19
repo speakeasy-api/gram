@@ -21,6 +21,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/tools"
 	_ "github.com/speakeasy-api/gram/server/design/toolsets"
 	_ "github.com/speakeasy-api/gram/server/design/variations"
+	_ "github.com/speakeasy-api/gram/server/design/usage"
 )
 
 var _ = API("gram", func() {

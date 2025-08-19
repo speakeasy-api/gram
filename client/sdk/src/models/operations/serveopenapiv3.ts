@@ -8,19 +8,9 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type ServeOpenAPIv3SecurityOption1 = {
-  apikeyHeaderGramKey: string;
-  projectSlugHeaderGramProject: string;
-};
-
-export type ServeOpenAPIv3SecurityOption2 = {
-  projectSlugHeaderGramProject: string;
-  sessionHeaderGramSession: string;
-};
-
 export type ServeOpenAPIv3Security = {
-  option1?: ServeOpenAPIv3SecurityOption1 | undefined;
-  option2?: ServeOpenAPIv3SecurityOption2 | undefined;
+  apikeyHeaderGramKey?: string | undefined;
+  sessionHeaderGramSession?: string | undefined;
 };
 
 export type ServeOpenAPIv3Request = {
@@ -29,13 +19,13 @@ export type ServeOpenAPIv3Request = {
    */
   id: string;
   /**
+   * The procect ID that the asset belongs to
+   */
+  projectId: string;
+  /**
    * API Key header
    */
   gramKey?: string | undefined;
-  /**
-   * project header
-   */
-  gramProject?: string | undefined;
   /**
    * Session header
    */
@@ -48,162 +38,24 @@ export type ServeOpenAPIv3Response = {
 };
 
 /** @internal */
-export const ServeOpenAPIv3SecurityOption1$inboundSchema: z.ZodType<
-  ServeOpenAPIv3SecurityOption1,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  "apikey_header_Gram-Key": z.string(),
-  "project_slug_header_Gram-Project": z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
-    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
-  });
-});
-
-/** @internal */
-export type ServeOpenAPIv3SecurityOption1$Outbound = {
-  "apikey_header_Gram-Key": string;
-  "project_slug_header_Gram-Project": string;
-};
-
-/** @internal */
-export const ServeOpenAPIv3SecurityOption1$outboundSchema: z.ZodType<
-  ServeOpenAPIv3SecurityOption1$Outbound,
-  z.ZodTypeDef,
-  ServeOpenAPIv3SecurityOption1
-> = z.object({
-  apikeyHeaderGramKey: z.string(),
-  projectSlugHeaderGramProject: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    apikeyHeaderGramKey: "apikey_header_Gram-Key",
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace ServeOpenAPIv3SecurityOption1$ {
-  /** @deprecated use `ServeOpenAPIv3SecurityOption1$inboundSchema` instead. */
-  export const inboundSchema = ServeOpenAPIv3SecurityOption1$inboundSchema;
-  /** @deprecated use `ServeOpenAPIv3SecurityOption1$outboundSchema` instead. */
-  export const outboundSchema = ServeOpenAPIv3SecurityOption1$outboundSchema;
-  /** @deprecated use `ServeOpenAPIv3SecurityOption1$Outbound` instead. */
-  export type Outbound = ServeOpenAPIv3SecurityOption1$Outbound;
-}
-
-export function serveOpenAPIv3SecurityOption1ToJSON(
-  serveOpenAPIv3SecurityOption1: ServeOpenAPIv3SecurityOption1,
-): string {
-  return JSON.stringify(
-    ServeOpenAPIv3SecurityOption1$outboundSchema.parse(
-      serveOpenAPIv3SecurityOption1,
-    ),
-  );
-}
-
-export function serveOpenAPIv3SecurityOption1FromJSON(
-  jsonString: string,
-): SafeParseResult<ServeOpenAPIv3SecurityOption1, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => ServeOpenAPIv3SecurityOption1$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ServeOpenAPIv3SecurityOption1' from JSON`,
-  );
-}
-
-/** @internal */
-export const ServeOpenAPIv3SecurityOption2$inboundSchema: z.ZodType<
-  ServeOpenAPIv3SecurityOption2,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  "project_slug_header_Gram-Project": z.string(),
-  "session_header_Gram-Session": z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
-    "session_header_Gram-Session": "sessionHeaderGramSession",
-  });
-});
-
-/** @internal */
-export type ServeOpenAPIv3SecurityOption2$Outbound = {
-  "project_slug_header_Gram-Project": string;
-  "session_header_Gram-Session": string;
-};
-
-/** @internal */
-export const ServeOpenAPIv3SecurityOption2$outboundSchema: z.ZodType<
-  ServeOpenAPIv3SecurityOption2$Outbound,
-  z.ZodTypeDef,
-  ServeOpenAPIv3SecurityOption2
-> = z.object({
-  projectSlugHeaderGramProject: z.string(),
-  sessionHeaderGramSession: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    projectSlugHeaderGramProject: "project_slug_header_Gram-Project",
-    sessionHeaderGramSession: "session_header_Gram-Session",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace ServeOpenAPIv3SecurityOption2$ {
-  /** @deprecated use `ServeOpenAPIv3SecurityOption2$inboundSchema` instead. */
-  export const inboundSchema = ServeOpenAPIv3SecurityOption2$inboundSchema;
-  /** @deprecated use `ServeOpenAPIv3SecurityOption2$outboundSchema` instead. */
-  export const outboundSchema = ServeOpenAPIv3SecurityOption2$outboundSchema;
-  /** @deprecated use `ServeOpenAPIv3SecurityOption2$Outbound` instead. */
-  export type Outbound = ServeOpenAPIv3SecurityOption2$Outbound;
-}
-
-export function serveOpenAPIv3SecurityOption2ToJSON(
-  serveOpenAPIv3SecurityOption2: ServeOpenAPIv3SecurityOption2,
-): string {
-  return JSON.stringify(
-    ServeOpenAPIv3SecurityOption2$outboundSchema.parse(
-      serveOpenAPIv3SecurityOption2,
-    ),
-  );
-}
-
-export function serveOpenAPIv3SecurityOption2FromJSON(
-  jsonString: string,
-): SafeParseResult<ServeOpenAPIv3SecurityOption2, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => ServeOpenAPIv3SecurityOption2$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'ServeOpenAPIv3SecurityOption2' from JSON`,
-  );
-}
-
-/** @internal */
 export const ServeOpenAPIv3Security$inboundSchema: z.ZodType<
   ServeOpenAPIv3Security,
   z.ZodTypeDef,
   unknown
 > = z.object({
-  Option1: z.lazy(() => ServeOpenAPIv3SecurityOption1$inboundSchema).optional(),
-  Option2: z.lazy(() => ServeOpenAPIv3SecurityOption2$inboundSchema).optional(),
+  "apikey_header_Gram-Key": z.string().optional(),
+  "session_header_Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    "Option1": "option1",
-    "Option2": "option2",
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
+    "session_header_Gram-Session": "sessionHeaderGramSession",
   });
 });
 
 /** @internal */
 export type ServeOpenAPIv3Security$Outbound = {
-  Option1?: ServeOpenAPIv3SecurityOption1$Outbound | undefined;
-  Option2?: ServeOpenAPIv3SecurityOption2$Outbound | undefined;
+  "apikey_header_Gram-Key"?: string | undefined;
+  "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
@@ -212,14 +64,12 @@ export const ServeOpenAPIv3Security$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ServeOpenAPIv3Security
 > = z.object({
-  option1: z.lazy(() => ServeOpenAPIv3SecurityOption1$outboundSchema)
-    .optional(),
-  option2: z.lazy(() => ServeOpenAPIv3SecurityOption2$outboundSchema)
-    .optional(),
+  apikeyHeaderGramKey: z.string().optional(),
+  sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    option1: "Option1",
-    option2: "Option2",
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
+    sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });
 
@@ -261,13 +111,13 @@ export const ServeOpenAPIv3Request$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   id: z.string(),
+  project_id: z.string(),
   "Gram-Key": z.string().optional(),
-  "Gram-Project": z.string().optional(),
   "Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    "project_id": "projectId",
     "Gram-Key": "gramKey",
-    "Gram-Project": "gramProject",
     "Gram-Session": "gramSession",
   });
 });
@@ -275,8 +125,8 @@ export const ServeOpenAPIv3Request$inboundSchema: z.ZodType<
 /** @internal */
 export type ServeOpenAPIv3Request$Outbound = {
   id: string;
+  project_id: string;
   "Gram-Key"?: string | undefined;
-  "Gram-Project"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -287,13 +137,13 @@ export const ServeOpenAPIv3Request$outboundSchema: z.ZodType<
   ServeOpenAPIv3Request
 > = z.object({
   id: z.string(),
+  projectId: z.string(),
   gramKey: z.string().optional(),
-  gramProject: z.string().optional(),
   gramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
+    projectId: "project_id",
     gramKey: "Gram-Key",
-    gramProject: "Gram-Project",
     gramSession: "Gram-Session",
   });
 });

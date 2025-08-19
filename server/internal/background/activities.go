@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
+	polargo "github.com/polarsource/polar-go"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 type Activities struct {
@@ -27,6 +29,7 @@ type Activities struct {
 	refreshOpenRouterKey   *activities.RefreshOpenRouterKey
 	verifyCustomDomain     *activities.VerifyCustomDomain
 	customDomainIngress    *activities.CustomDomainIngress
+	collectPlatformUsageMetrics *activities.CollectPlatformUsageMetrics
 }
 
 func NewActivities(
@@ -40,7 +43,9 @@ func NewActivities(
 	openrouter openrouter.Provisioner,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
+	polar *polargo.Polar,
 ) *Activities {
+	usageClient := usage.NewPolarClient(polar, logger)
 	return &Activities{
 		processDeployment:      activities.NewProcessDeployment(logger, meterProvider, db, features, assetStorage),
 		transitionDeployment:   activities.NewTransitionDeployment(logger, db),
@@ -50,6 +55,7 @@ func NewActivities(
 		refreshOpenRouterKey:   activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 		verifyCustomDomain:     activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		customDomainIngress:    activities.NewCustomDomainIngress(logger, db, k8sClient),
+		collectPlatformUsageMetrics: activities.NewCollectPlatformUsageMetrics(logger, db, usageClient),
 	}
 }
 
@@ -83,4 +89,8 @@ func (a *Activities) VerifyCustomDomain(ctx context.Context, input activities.Ve
 
 func (a *Activities) CustomDomainIngress(ctx context.Context, input activities.CustomDomainIngressArgs) error {
 	return a.customDomainIngress.Do(ctx, input)
+}
+
+func (a *Activities) CollectPlatformUsageMetrics(ctx context.Context) error {
+	return a.collectPlatformUsageMetrics.Do(ctx)
 }

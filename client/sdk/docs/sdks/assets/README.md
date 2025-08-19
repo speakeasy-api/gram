@@ -221,6 +221,7 @@ const gram = new Gram();
 async function run() {
   const result = await gram.assets.serveOpenAPIv3({
     id: "<id>",
+    projectId: "<id>",
   });
 
   console.log(result);
@@ -244,6 +245,7 @@ const gram = new GramCore();
 async function run() {
   const res = await assetsServeOpenAPIv3(gram, {
     id: "<id>",
+    projectId: "<id>",
   });
   if (res.ok) {
     const { value: result } = res;

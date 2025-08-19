@@ -17,6 +17,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
+	polargo "github.com/polarsource/polar-go"
 	srv "github.com/speakeasy-api/gram/server/gen/http/instances/server"
 	gen "github.com/speakeasy-api/gram/server/gen/instances"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -36,8 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
-	"github.com/polarsource/polar-go"
-	polarComponents "github.com/polarsource/polar-go/models/components"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 const tooldIdQueryParam = "tool_id"
@@ -53,7 +53,7 @@ type Service struct {
 	env              *environments.EnvironmentEntries
 	toolProxy        *gateway.ToolProxy
 	posthog          *posthog.Posthog
-	polar            *polargo.Polar
+	usageClient      *usage.PolarClient
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -83,7 +83,7 @@ func NewService(
 		environmentsRepo: envRepo,
 		env:              env,
 		posthog:          posthog,
-		polar:            polar,
+		usageClient:      usage.NewPolarClient(polar, logger),
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			traceProvider,
@@ -322,65 +322,22 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		return fmt.Errorf("failed to write response: %w", err)
 	}
 
-	/**
-	 * Finally, capture the usage for billing purposes
-	 */
-
-	if s.polar == nil {
-		return nil
-	}
-
+	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
-	totalBytes := requestNumBytes + outputNumBytes
-	projectID := authCtx.ProjectID.String()
 
-	_, err = s.polar.Events.Ingest(context.Background(), polarComponents.EventsIngest{
-		Events: []polarComponents.Events{
-			{
-				Type: polarComponents.EventsTypeEventCreateExternalCustomer,
-				EventCreateExternalCustomer: &polarComponents.EventCreateExternalCustomer{
-					ExternalCustomerID: authCtx.ActiveOrganizationID,
-					Name: "tool-call",
-					Metadata: map[string]polarComponents.EventCreateExternalCustomerMetadata{
-						"request_bytes": {
-							Integer: &requestNumBytes,
-						},
-						"output_bytes": {
-							Integer: &outputNumBytes,
-						},
-						"total_bytes": {
-							Integer: &totalBytes,
-						},
-						"tool_id": {
-							Str: &toolID,
-						},
-						"tool_name": {
-							Str: &executionInfo.Tool.Name,
-						},
-						"project_id": {
-							Str: &projectID,
-						},
-						"project_slug": {
-							Str: authCtx.ProjectSlug,
-						},
-						"organization_slug": {
-							Str: &executionInfo.OrganizationSlug,
-						},
-						"toolset_slug": {
-							Str: &toolsetSlug,
-						},
-						"chat_id": {
-							Str: &chatID,
-						},
-					},
-				},
-			},
-		},
+	go s.usageClient.TrackToolCallUsage(context.Background(), usage.ToolCallUsageEvent{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		RequestBytes:     requestNumBytes,
+		OutputBytes:      outputNumBytes,
+		ToolID:           toolID,
+		ToolName:         executionInfo.Tool.Name,
+		ProjectID:        authCtx.ProjectID.String(),
+		ProjectSlug:      authCtx.ProjectSlug,
+		OrganizationSlug: &executionInfo.OrganizationSlug,
+		ToolsetSlug:      &toolsetSlug,
+		ChatID:           &chatID,
+		MCPURL:           nil, // Not applicable for direct tool calls
 	})
-
-	if err != nil {
-		logger.ErrorContext(ctx, "failed to ingest usage event to Polar", attr.SlogError(err))
-	}
 
 	return nil
 }

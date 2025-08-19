@@ -45,7 +45,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <Stack direction={"horizontal"} align={"center"} gap={2}>
                   <GramLogo className="w-25" />
                   <Type variant="small" muted>
-                    v0.8.2 (beta)
+                    v0.8.7 (beta)
                   </Type>
                 </Stack>
               </SidebarMenuButton>
