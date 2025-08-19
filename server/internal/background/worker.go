@@ -2,12 +2,14 @@ package background
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
 	polargo "github.com/polarsource/polar-go"
@@ -118,7 +120,9 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
-		logger.Error("failed to add platform usage metrics schedule", "error", err.Error())
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.Error("failed to add platform usage metrics schedule", "error", err.Error())
+		}
 	}
 
 	return temporalWorker
