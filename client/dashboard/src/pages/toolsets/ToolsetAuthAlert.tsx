@@ -142,8 +142,7 @@ function ToolsetPageAuthAlert({
   return (
     <Alert variant="warning" dismissible={true} className="rounded-xs">
       <span className="text-sm">
-        Set environment variables to test this toolset in MCP clients using your
-        GRAM_KEY.{" "}
+        Set environment variables to test this toolset in the Playground or to manage authentication with a GRAM_KEY.{" "}
         <button
           type="button"
           onClick={onConfigureClick}
