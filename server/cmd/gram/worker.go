@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	polargo "github.com/polarsource/polar-go"
@@ -305,7 +306,7 @@ func newWorkerCommand() *cli.Command {
 			if polarKey == "" {
 				logger.WarnContext(ctx, "polar api key is not set, skipping Polar client")
 			} else {
-				polarClient = polargo.New(polargo.WithSecurity(polarKey))
+				polarClient = polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second))
 			}
 
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, meterProvider, &background.WorkerOptions{

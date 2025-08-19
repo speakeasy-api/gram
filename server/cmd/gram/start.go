@@ -344,7 +344,7 @@ func newStartCommand() *cli.Command {
 			if polarKey == "" {
 				logger.WarnContext(ctx, "polar api key is not set, skipping Polar client")
 			} else {
-				polarClient = polargo.New(polargo.WithSecurity(polarKey))
+				polarClient = polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
 			}
 
 			localEnvPath := c.String("unsafe-local-env-path")

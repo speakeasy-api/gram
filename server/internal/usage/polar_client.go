@@ -93,7 +93,7 @@ func NewPolarClient(polar *polargo.Polar, logger *slog.Logger) *PolarClient {
 // NewPolarClientWithLogging creates a new Polar client with HTTP request logging
 func NewPolarClientWithLogging(polarKey string, logger *slog.Logger) *polargo.Polar {
 	httpClient := newLoggingHTTPClient(logger, 30*time.Second)
-	return polargo.New(polargo.WithSecurity(polarKey), polargo.WithClient(httpClient))
+	return polargo.New(polargo.WithSecurity(polarKey), polargo.WithClient(httpClient), polargo.WithTimeout(30*time.Second))
 }
 
 type ToolCallUsageEvent struct {
