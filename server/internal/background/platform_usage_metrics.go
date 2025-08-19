@@ -68,6 +68,9 @@ func AddPlatformUsageMetricsSchedule(ctx context.Context, temporalClient client.
 			TaskQueue: string(TaskQueueMain),
 		},
 	})
+	if err != nil {
+		return fmt.Errorf("failed to create platform usage metrics schedule: %w", err)
+	}
 	
-	return err
+	return nil
 }

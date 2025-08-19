@@ -14,6 +14,7 @@ import (
 
 	polargo "github.com/polarsource/polar-go"
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -121,7 +122,7 @@ func NewTemporalWorker(
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.Error("failed to add platform usage metrics schedule", "error", err.Error())
+			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
 		}
 	}
 
