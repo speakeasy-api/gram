@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -15,7 +16,7 @@ type CollectPlatformUsageMetrics struct {
 	logger      *slog.Logger
 	db          *pgxpool.Pool
 	usageClient *usage.PolarClient
-	repo           *repo.Queries
+	repo        *repo.Queries
 }
 
 func NewCollectPlatformUsageMetrics(logger *slog.Logger, db *pgxpool.Pool, usageClient *usage.PolarClient) *CollectPlatformUsageMetrics {
@@ -46,15 +47,24 @@ func (c *CollectPlatformUsageMetrics) Do(ctx context.Context) error {
 		return fmt.Errorf("failed to get platform usage metrics: %w", err)
 	}
 
+	var wg sync.WaitGroup
 	for _, metric := range metrics {
-		go c.usageClient.TrackPlatformUsage(context.Background(), usage.PlatformUsageEvent{
-			OrganizationID:    metric.OrganizationID,
-			PublicMCPServers:  metric.PublicMcpServers,
-			PrivateMCPServers: metric.PrivateMcpServers,
-			TotalToolsets:     metric.TotalToolsets,
-			TotalTools:        metric.TotalTools,
-		})
+		wg.Add(1)
+		go func(m repo.GetPlatformUsageMetricsRow) {
+			defer wg.Done()
+			// Use the passed context instead of creating a new one
+			c.usageClient.TrackPlatformUsage(ctx, usage.PlatformUsageEvent{
+				OrganizationID:    m.OrganizationID,
+				PublicMCPServers:  m.PublicMcpServers,
+				PrivateMCPServers: m.PrivateMcpServers,
+				TotalToolsets:     m.TotalToolsets,
+				TotalTools:        m.TotalTools,
+			})
+		}(metric)
 	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	c.logger.InfoContext(ctx, "Platform usage metrics collection completed successfully")
 	return nil
