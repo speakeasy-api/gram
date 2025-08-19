@@ -8,7 +8,6 @@ import (
 
 	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/urfave/cli/v2"
-	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -52,14 +51,8 @@ func newApp() *cli.App {
 				DataDogAttr: os.Getenv("DD_SERVICE") != "",
 			}))
 
-			// Sets GOMAXPROCS to match the Linux container CPU quota.
-			_, err := maxprocs.Set(maxprocs.Logger(nil))
-			if err != nil {
-				logger.ErrorContext(c.Context, "automaxprocs", attr.SlogError(err))
-			}
-
 			// Sets `GOMEMLIMIT` to 90% of cgroup's memory limit.
-			_, err = memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(nil))
+			_, err := memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(nil))
 			if err != nil {
 				logger.ErrorContext(c.Context, "automemlimit", attr.SlogError(err))
 			}

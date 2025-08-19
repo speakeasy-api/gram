@@ -26,6 +26,9 @@ updates:
       testcontainers:
         patterns:
           - "github.com/testcontainers/*"
+      kubernetes:
+        patterns:
+          - "k8s.io/*"
   - package-ecosystem: "docker"
     directory: "/server"
     schedule:

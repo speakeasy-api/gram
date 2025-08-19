@@ -1,4 +1,4 @@
-FROM golang:1.24.6-alpine3.21 AS builder
+FROM golang:1.25.0-alpine3.22@sha256:5dffbd69b37b8e9fc35d94817e94bc7bf4fd047147e3c5353d357bd3492992bf AS builder
 
 ARG GIT_SHA=unset
 
@@ -22,7 +22,7 @@ RUN chmod +x /app/bin/gram
 
 ### --- ###
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:cdf4daaf154e3e27cfffc799c16f343a384228f38646928a1513d925f473cb46
 
 WORKDIR /app
 
