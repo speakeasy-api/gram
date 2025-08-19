@@ -11,7 +11,7 @@
 "aqua:pvolok/mprocs" = "0.7.2"
 "ubi:sbdchd/squawk" = "1.6.1"
 "ubi:speakeasy-api/speakeasy" = "1.585.0"
-go = "1.24.6"
+go = "1.25.0"
 jq = "1.7.1"
 nodejs = "22.14.0"
 watchexec = "2.3.0"

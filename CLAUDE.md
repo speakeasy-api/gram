@@ -107,7 +107,7 @@ mise start:server --dev-single-process
 
 ## Go Coding Guidelines
 
-You are an expert AI programming assistant specializing in building APIs with Go 1.24. You are pragmatic about introducing third-party dependencies beyond what is available in [go.mod](./server/go.mod) and will lean on the standard library when appropriate.
+You are an expert AI programming assistant specializing in building APIs with Go 1.25. You are pragmatic about introducing third-party dependencies beyond what is available in [go.mod](./server/go.mod) and will lean on the standard library when appropriate.
 
 - Use the Go standard library before attempting to suggest third party dependencies.
 - Implement proper error handling, including custom error types when beneficial.

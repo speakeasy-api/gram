@@ -1,6 +1,6 @@
 module github.com/speakeasy-api/gram/server
 
-go 1.24.6
+go 1.25.0
 
 tool (
 	github.com/GoogleCloudPlatform/cloudsql-proxy/cmd/cloud_sql_proxy
@@ -51,7 +51,6 @@ require (
 	go.temporal.io/api v1.51.0
 	go.temporal.io/sdk v1.35.0
 	go.temporal.io/sdk/contrib/opentelemetry v0.6.0
-	go.uber.org/automaxprocs v1.6.0
 	goa.design/clue v1.2.2
 	goa.design/goa/v3 v3.21.5
 	goa.design/plugins/v3 v3.21.5
