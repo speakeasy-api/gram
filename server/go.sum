@@ -479,8 +479,8 @@ github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9yS
 github.com/sourcegraph/conc v0.3.0/go.mod h1:Sdozi7LEKbFPqYX2/J+iBAM6HpqSLTASQIKqDmF7Mt0=
 github.com/speakeasy-api/jsonpath v0.6.2 h1:Mys71yd6u8kuowNCR0gCVPlVAHCmKtoGXYoAtcEbqXQ=
 github.com/speakeasy-api/jsonpath v0.6.2/go.mod h1:ymb2iSkyOycmzKwbEAYPJV/yi2rSmvBCLZJcyD+VVWw=
-github.com/speakeasy-api/openapi v1.0.1 h1:xlXIfmGNXNAENy3lypwsRs2BmiBIeCpqdraZgWBqD1k=
-github.com/speakeasy-api/openapi v1.0.1/go.mod h1:HK+i+u4IyDkBY6gn4QI/658v0Vi8SQ2/395GclcLC44=
+github.com/speakeasy-api/openapi v1.1.1 h1:qs9f7lQG6eTRzI5rlw3u+GUVqeuZIJP5NGJJ9Ch8tw4=
+github.com/speakeasy-api/openapi v1.1.1/go.mod h1:3Y1ahB5Bsn66sLBTkSBYPxkMZK+3QndhDgUZt0cDnWE=
 github.com/spf13/cobra v1.9.1 h1:CXSaggrXdbHK9CF+8ywj8Amf7PBRmPCOJugH954Nnlo=
 github.com/spf13/cobra v1.9.1/go.mod h1:nDyEzZ8ogv936Cinf6g1RU9MRY64Ir93oCnqb9wxYW0=
 github.com/spf13/pflag v1.0.6 h1:jFzHGLGAlb3ruxLB8MhbI6A8+AQX/2eW4qeyNZXNp2o=
