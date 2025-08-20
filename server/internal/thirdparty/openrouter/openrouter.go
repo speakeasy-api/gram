@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/hashicorp/go-cleanhttp"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -63,7 +63,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, env string, provisioningKey stri
 		logger:          logger,
 		repo:            repo.New(db),
 		orgRepo:         orgRepo.New(db),
-		orClient:        cleanhttp.DefaultPooledClient(),
+		orClient:        retryablehttp.NewClient().StandardClient(),
 		refresher:       refresher,
 	}
 }
