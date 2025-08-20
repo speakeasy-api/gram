@@ -1,4 +1,4 @@
-FROM golang:1.25.0-alpine3.22@sha256:5dffbd69b37b8e9fc35d94817e94bc7bf4fd047147e3c5353d357bd3492992bf AS builder
+FROM golang:1.25.0-alpine3.22@sha256:f18a072054848d87a8077455f0ac8a25886f2397f88bfdd222d6fafbb5bba440 AS builder
 
 ARG GIT_SHA=unset
 
