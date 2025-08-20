@@ -237,6 +237,29 @@ CREATE TABLE IF NOT EXISTS deployments_openapiv3_assets (
   CONSTRAINT deployments_openapiv3_documents_deployment_id_slug_key UNIQUE (deployment_id, slug)
 );
 
+CREATE TABLE IF NOT EXISTS tool_functions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  deployment_id uuid NOT NULL,
+
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+
+  language TEXT NOT NULL,
+  -- either asset_id or inline code must be provided
+  asset_id uuid,
+  code TEXT,
+
+  -- Record<string, { description?: string }>
+  variables JSONB,
+
+  input_schema JSONB,
+
+  CONSTRAINT tool_functions_pkey PRIMARY KEY (id),
+  CONSTRAINT tool_functions_deployment_id_fkey FOREIGN key (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
+  CONSTRAINT tool_functions_asset_id_fkey FOREIGN key (asset_id) REFERENCES assets (id) ON DELETE CASCADE,
+  CONSTRAINT tool_functions_deployment_id_name_key UNIQUE (deployment_id, name)
+);
+
 CREATE TABLE IF NOT EXISTS deployments_packages (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   deployment_id uuid NOT NULL,
