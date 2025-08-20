@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { GramLogoHorizontal } from "./variants/horizontal";
 import { GramIcon } from "./variants/icon";
 import { GramLogoVertical } from "./variants/vertical";
@@ -14,5 +15,7 @@ export const GramLogo = ({
     vertical: GramLogoVertical,
     icon: GramIcon,
   };
-  return <div className={className}>{variantsMap[variant]()}</div>;
+  return (
+    <div className={cn("dark:invert", className)}>{variantsMap[variant]()}</div>
+  );
 };
