@@ -127,7 +127,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        uses: jdx/mise-action@c0b8518a9f5e56c720e9545c993b77ff15dc7b27 # v3.0.2
         with:
           install: true
           cache: true
@@ -193,7 +193,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        uses: jdx/mise-action@c0b8518a9f5e56c720e9545c993b77ff15dc7b27 # v3.0.2
         with:
           install: true
           cache: true
@@ -238,7 +238,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        uses: jdx/mise-action@c0b8518a9f5e56c720e9545c993b77ff15dc7b27 # v3.0.2
         with:
           install: true
           cache: true
@@ -332,7 +332,7 @@ jobs:
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2.4.4
+        uses: jdx/mise-action@c0b8518a9f5e56c720e9545c993b77ff15dc7b27 # v3.0.2
         with:
           install: true
           cache: true
