@@ -16,8 +16,9 @@ import (
 
 // Endpoints wraps the "usage" service endpoints.
 type Endpoints struct {
-	GetPeriodUsage goa.Endpoint
-	CreateCheckout goa.Endpoint
+	GetPeriodUsage        goa.Endpoint
+	CreateCustomerSession goa.Endpoint
+	CreateCheckout        goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "usage" service with endpoints.
@@ -25,14 +26,16 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		GetPeriodUsage: NewGetPeriodUsageEndpoint(s, a.APIKeyAuth),
-		CreateCheckout: NewCreateCheckoutEndpoint(s, a.APIKeyAuth),
+		GetPeriodUsage:        NewGetPeriodUsageEndpoint(s, a.APIKeyAuth),
+		CreateCustomerSession: NewCreateCustomerSessionEndpoint(s, a.APIKeyAuth),
+		CreateCheckout:        NewCreateCheckoutEndpoint(s, a.APIKeyAuth),
 	}
 }
 
 // Use applies the given middleware to all the "usage" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPeriodUsage = m(e.GetPeriodUsage)
+	e.CreateCustomerSession = m(e.CreateCustomerSession)
 	e.CreateCheckout = m(e.CreateCheckout)
 }
 
@@ -68,6 +71,41 @@ func NewGetPeriodUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.GetPeriodUsage(ctx, p)
+	}
+}
+
+// NewCreateCustomerSessionEndpoint returns an endpoint function that calls the
+// method "createCustomerSession" of service "usage".
+func NewCreateCustomerSessionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CreateCustomerSessionPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.CreateCustomerSession(ctx, p)
 	}
 }
 

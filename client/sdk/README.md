@@ -236,6 +236,7 @@ run();
 ### [usage](docs/sdks/usage/README.md)
 
 * [createCheckout](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
+* [createCustomerSession](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 * [getPeriodUsage](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 
 ### [variations](docs/sdks/variations/README.md)
@@ -325,6 +326,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`toolsetsUpdateBySlug`](docs/sdks/toolsets/README.md#updatebyslug) - updateToolset toolsets
 - [`toolsList`](docs/sdks/tools/README.md#list) - listTools tools
 - [`usageCreateCheckout`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
+- [`usageCreateCustomerSession`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`usageGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 - [`variationsDeleteGlobal`](docs/sdks/variations/README.md#deleteglobal) - deleteGlobal variations
 - [`variationsListGlobal`](docs/sdks/variations/README.md#listglobal) - listGlobal variations
@@ -359,6 +361,7 @@ To learn about this feature and how to get started, check
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
+- [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage
 - [`useCreateDeploymentMutation`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`useCreateEnvironmentMutation`](docs/sdks/environments/README.md#create) - createEnvironment environments
 - [`useCreatePackageMutation`](docs/sdks/packages/README.md#create) - createPackage packages

@@ -3,6 +3,7 @@
  */
 
 import { usageCreateCheckout } from "../funcs/usageCreateCheckout.js";
+import { usageCreateCustomerSession } from "../funcs/usageCreateCustomerSession.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -22,6 +23,25 @@ export class Usage extends ClientSDK {
     options?: RequestOptions,
   ): Promise<string> {
     return unwrapAsync(usageCreateCheckout(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * createCustomerSession usage
+   *
+   * @remarks
+   * Create a customer session for the user
+   */
+  async createCustomerSession(
+    request?: operations.CreateCustomerSessionRequest | undefined,
+    security?: operations.CreateCustomerSessionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<string> {
+    return unwrapAsync(usageCreateCustomerSession(
       this,
       request,
       security,

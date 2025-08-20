@@ -7,14 +7,15 @@ import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useOrganization, useSession } from "@/contexts/Auth";
+import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
-import { assert, cn } from "@/lib/utils";
+import { assert, cn, getServerURL } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
+import { useGetPeriodUsage } from "@gram/client/react-query";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage";
 import {
@@ -23,6 +24,7 @@ import {
 } from "@gram/client/react-query/listAPIKeys";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
+import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -36,8 +38,6 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCustomDomain } from "../mcp/MCPDetails";
-// import { PolarEmbedCheckout } from '@polar-sh/checkout/embed'
-// import { useSdkClient } from "@/contexts/Sdk";
 
 export default function Settings() {
   const organization = useOrganization();
@@ -70,9 +70,11 @@ export default function Settings() {
   } = useCustomDomain();
 
   const { data: creditUsage } = useGetCreditUsage();
-  // const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
-  //   throwOnError: !getServerURL().includes("localhost"),
-  // });
+  const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
+    throwOnError: !getServerURL().includes("localhost"),
+  });
+
+  const isAdmin = useIsAdmin();
 
   // Initialize domain input with existing domain if available
   useEffect(() => {
@@ -654,6 +656,43 @@ export default function Settings() {
             LLM Credits are used only for the in dashboard playground and other
             AI-powered in dashboard experiences.
           </Type>
+          {/* TODO: DO NOT SHIP THIS UNTIL THE PERIOD USAGE REFLECTS THE ORG (SDK BUG SOLVED) */}
+          {periodUsage && isAdmin && (
+            <>
+              <div>
+                <Type variant="body" className="font-medium">
+                  Tool Calls: {periodUsage.toolCalls} /{" "}
+                  {periodUsage.maxToolCalls}
+                </Type>
+                <UsageProgress
+                  value={225}
+                  included={100}
+                  overageIncrement={100}
+                  // value={periodUsage.toolCalls}
+                  // included={periodUsage.maxToolCalls}
+                  // overageIncrement={periodUsage.maxToolCalls}
+                />
+              </div>
+              <div>
+                <Type variant="body" className="font-medium">
+                  Servers: {periodUsage.servers} / {periodUsage.maxServers}
+                </Type>
+                <UsageProgress
+                  value={3}
+                  included={5}
+                  overageIncrement={1}
+                  // value={periodUsage.servers}
+                  // included={periodUsage.maxServers}
+                  // overageIncrement={1}
+                />
+              </div>
+            </>
+          )}
+          {session.gramAccountType === "free" ? (
+            <CheckoutLink />
+          ) : (
+            <PolarPortalLink />
+          )}
           {creditUsage && (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
@@ -669,16 +708,10 @@ export default function Settings() {
                   </span>
                 </Type>
               </div>
-              <Progress
+              <UsageProgress
                 value={creditUsage.creditsUsed}
-                max={creditUsage.monthlyCredits}
-                className="h-4"
-                indicatorClassName={cn(
-                  "bg-gradient-to-r",
-                  creditUsage.creditsUsed >= creditUsage.monthlyCredits * 0.75
-                    ? "from-red-400 to-red-600 dark:from-red-700 dark:to-red-500"
-                    : "from-green-400 to-green-600 dark:from-green-700 dark:to-green-500"
-                )}
+                included={creditUsage.monthlyCredits}
+                overageIncrement={creditUsage.monthlyCredits}
               />
             </div>
           )}
@@ -697,24 +730,141 @@ export default function Settings() {
   );
 }
 
-// const CheckoutLink = () => {
-//   const [checkoutLink, setCheckoutLink] = useState("")
-//   const client = useSdkClient();
+const UsageProgress = ({
+  value,
+  included,
+  overageIncrement,
+}: {
+  value: number;
+  included: number;
+  overageIncrement: number;
+}) => {
+  const anyOverage = value > included;
+  const overageMax =
+    Math.ceil((value - included) / overageIncrement) * overageIncrement; // Compute next increment
+  const totalMax = included + overageMax;
 
-//   useEffect(() => {
-//     PolarEmbedCheckout.init()
-//     client.usage.createCheckout().then((link) => {
-//       setCheckoutLink(link);
-//     });
-//   }, [])
+  // Calculate the proportional width for the included section
+  const includedWidth = (included / totalMax) * 100;
+  const overageWidth = (overageMax / totalMax) * 100;
 
-//   return (
-//     <a
-//       href={checkoutLink}
-//       data-polar-checkout
-//       data-polar-checkout-theme="light"
-//     >
-//       Upgrade
-//     </a>
-//   )
-// }
+  const includedProgress = (
+    <div
+      className={cn(
+        "h-4 bg-muted dark:bg-neutral-800 rounded-md overflow-hidden relative",
+        anyOverage && "rounded-r-none"
+      )}
+      style={{ width: `${includedWidth}%` }}
+    >
+      <div
+        className="h-full bg-gradient-to-r from-green-400 to-green-600 dark:from-green-700 dark:to-green-500 transition-all duration-300"
+        style={{
+          width: `${Math.min((value / included) * 100, 100)}%`,
+        }}
+      />
+    </div>
+  );
+
+  const overageProgress = anyOverage ? (
+    <div
+      className="h-4 bg-muted dark:bg-neutral-800 rounded-r-md overflow-hidden relative"
+      style={{ width: `${overageWidth}%` }}
+    >
+      <div
+        className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600 dark:from-yellow-700 dark:to-yellow-500 transition-all duration-300"
+        style={{
+          width: `${Math.min(((value - included) / overageMax) * 100, 100)}%`,
+        }}
+      />
+    </div>
+  ) : null;
+
+  return (
+    <div className="relative">
+      {/* Progress bars */}
+      <div className="flex w-full">
+        {includedProgress}
+        {overageProgress}
+      </div>
+      {/* Included label on left side, always show */}
+      <div
+        className="absolute -top-5 text-xs text-muted-foreground whitespace-nowrap"
+        style={{ right: `${Math.max(0, 100 - includedWidth + 1)}%` }}
+      >
+        Included: {included.toLocaleString()}
+      </div>
+
+      {/* Divider line and labels for overage */}
+      {anyOverage && (
+        <>
+          <div
+            className="absolute bottom-0 w-[2px] h-8 bg-neutral-600"
+            style={{ left: `${includedWidth}%` }}
+          />
+          {/* Overage label on right side */}
+          <div
+            className="absolute -top-5 text-xs text-muted-foreground whitespace-nowrap"
+            style={{ left: `${includedWidth + 1}%` }}
+          >
+            Overage: {(value - included).toLocaleString()}
+          </div>
+
+          {/* Additional overage increment dividers */}
+          {Array.from(
+            { length: Math.floor((value - included) / overageIncrement) },
+            (_, index) => {
+              const incrementPosition =
+                includedWidth +
+                (((index + 1) * overageIncrement) / totalMax) * 100;
+              return (
+                <div
+                  key={index}
+                  className="absolute bottom-0 w-[2px] h-5 bg-neutral-600"
+                  style={{ left: `${incrementPosition}%` }}
+                />
+              );
+            }
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
+const PolarPortalLink = () => {
+  const client = useSdkClient();
+
+  return (
+    <Button
+      onClick={() => {
+        client.usage.createCustomerSession().then((link) => {
+          window.open(link, "_blank");
+        });
+      }}
+    >
+      Manage Billing
+    </Button>
+  );
+};
+
+const CheckoutLink = () => {
+  const [checkoutLink, setCheckoutLink] = useState("");
+  const client = useSdkClient();
+
+  useEffect(() => {
+    PolarEmbedCheckout.init();
+    client.usage.createCheckout().then((link) => {
+      setCheckoutLink(link);
+    });
+  }, []);
+
+  return (
+    <a
+      href={checkoutLink}
+      data-polar-checkout
+      data-polar-checkout-theme="light"
+    >
+      Upgrade
+    </a>
+  );
+};

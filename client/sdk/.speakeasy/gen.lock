@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 4f5313f8c29188a30b212d382ad3702b
+  docChecksum: d892e05d9e15293a0b17477eb8179269
   docVersion: 0.0.1
   speakeasyVersion: 1.585.0
   generationVersion: 2.660.0
-  releaseVersion: 0.12.51
-  configChecksum: 6d2dc40890ef5cf6a6e1cbe0909c1ab4
+  releaseVersion: 0.12.53
+  configChecksum: 2c0372314de7bb10ad2d30a77d818c36
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -158,6 +158,8 @@ generatedFiles:
   - docs/models/operations/createapikeysecurity.md
   - docs/models/operations/createcheckoutrequest.md
   - docs/models/operations/createcheckoutsecurity.md
+  - docs/models/operations/createcustomersessionrequest.md
+  - docs/models/operations/createcustomersessionsecurity.md
   - docs/models/operations/createdeploymentrequest.md
   - docs/models/operations/createdeploymentsecurity.md
   - docs/models/operations/createdeploymentsecurityoption1.md
@@ -431,6 +433,7 @@ generatedFiles:
   - src/funcs/toolsetsRemoveOAuthServer.ts
   - src/funcs/toolsetsUpdateBySlug.ts
   - src/funcs/usageCreateCheckout.ts
+  - src/funcs/usageCreateCustomerSession.ts
   - src/funcs/usageGetPeriodUsage.ts
   - src/funcs/variationsDeleteGlobal.ts
   - src/funcs/variationsListGlobal.ts
@@ -568,6 +571,7 @@ generatedFiles:
   - src/models/operations/checkmcpslugavailability.ts
   - src/models/operations/createapikey.ts
   - src/models/operations/createcheckout.ts
+  - src/models/operations/createcustomersession.ts
   - src/models/operations/createdeployment.ts
   - src/models/operations/createenvironment.ts
   - src/models/operations/createpackage.ts
@@ -636,6 +640,7 @@ generatedFiles:
   - src/react-query/checkMCPSlugAvailability.ts
   - src/react-query/createAPIKey.ts
   - src/react-query/createCheckout.ts
+  - src/react-query/createCustomerSession.ts
   - src/react-query/createDeployment.ts
   - src/react-query/createEnvironment.ts
   - src/react-query/createPackage.ts
@@ -1439,7 +1444,7 @@ examples:
     speakeasy-default-get-period-usage:
       responses:
         "200":
-          application/json: {"max_servers": 754388, "max_tool_calls": 298053, "servers": 409506, "tool_calls": 709134}
+          application/json: {"actual_public_server_count": 754388, "max_servers": 754388, "max_tool_calls": 298053, "servers": 409506, "tool_calls": 709134}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -1453,5 +1458,14 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  createCustomerSession:
+    speakeasy-default-create-customer-session:
+      responses:
+        "200":
+          application/json: "<value>"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

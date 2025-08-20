@@ -18,6 +18,8 @@ import (
 type Service interface {
 	// Get the usage for a project for a given period
 	GetPeriodUsage(context.Context, *GetPeriodUsagePayload) (res *PeriodUsage, err error)
+	// Create a customer session for the user
+	CreateCustomerSession(context.Context, *CreateCustomerSessionPayload) (res string, err error)
 	// Create a checkout link for upgrading to the business plan
 	CreateCheckout(context.Context, *CreateCheckoutPayload) (res string, err error)
 }
@@ -42,11 +44,18 @@ const ServiceName = "usage"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"getPeriodUsage", "createCheckout"}
+var MethodNames = [3]string{"getPeriodUsage", "createCustomerSession", "createCheckout"}
 
 // CreateCheckoutPayload is the payload type of the usage service
 // createCheckout method.
 type CreateCheckoutPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// CreateCustomerSessionPayload is the payload type of the usage service
+// createCustomerSession method.
+type CreateCustomerSessionPayload struct {
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -64,10 +73,12 @@ type PeriodUsage struct {
 	ToolCalls int
 	// The maximum number of tool calls allowed
 	MaxToolCalls int
-	// The number of servers used
+	// The number of servers used, according to the Polar meter
 	Servers int
 	// The maximum number of servers allowed
 	MaxServers int
+	// The number of servers set to public at the time of the request
+	ActualPublicServerCount int
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

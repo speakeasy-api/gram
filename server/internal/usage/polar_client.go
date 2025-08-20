@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	polargo "github.com/polarsource/polar-go"
@@ -327,7 +328,7 @@ func (p *PolarClient) TrackPlatformUsage(ctx context.Context, event PlatformUsag
 
 const (
 	toolCallsMeterID = "7ec16f6d-6189-4262-9898-c64bed7b8a91"
-	serversMeterID   = "servers"
+	serversMeterID   = "da08b57c-e3f0-4758-bddc-55e4a4cbbebc"
 
 	freeTierToolCalls = 1000
 	freeTierServers   = 1
@@ -338,12 +339,41 @@ func (p *PolarClient) GetPeriodUsage(ctx context.Context, orgID string) (*gen.Pe
 		return nil, oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not get period usage")
 	}
 
-	// TODO: Handle the case where the user has a subscription
+	customer, err := p.polar.Customers.GetStateExternal(ctx, orgID)
+	if err != nil && !strings.Contains(err.Error(), "ResourceNotFound") {
+		return nil, oops.E(oops.CodeUnexpected, err, "Could not get customer state")
+	}
+
+	if customer != nil {
+		var toolCallMeter *polarComponents.CustomerStateMeter
+		var serverMeter *polarComponents.CustomerStateMeter
+
+		for _, meter := range customer.CustomerState.ActiveMeters {
+			if meter.MeterID == toolCallsMeterID {
+				toolCallMeter = &meter
+			}
+			if meter.MeterID == serversMeterID {
+				serverMeter = &meter
+			}
+		}
+
+		if toolCallMeter == nil || serverMeter == nil {
+			return nil, oops.E(oops.CodeUnexpected, errors.New("missing meters"), "Could not get usage from customer state")
+		}
+
+		return &gen.PeriodUsage{
+			ToolCalls:    int(toolCallMeter.ConsumedUnits),
+			MaxToolCalls: int(toolCallMeter.CreditedUnits),
+			Servers:      int(serverMeter.ConsumedUnits),
+			MaxServers:   int(serverMeter.CreditedUnits),
+			ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
+		}, nil
+	}
 
 	customerFilter := polarOperations.CreateMetersQuantitiesQueryParamExternalCustomerIDFilterStr(orgID)
 
 	// For free tier, we need to read the meter directly because the user won't have a subscription
-	res, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
+	toolCallsRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
 		ID:                 toolCallsMeterID,
 		ExternalCustomerID: &customerFilter,
 		StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
@@ -352,14 +382,27 @@ func (p *PolarClient) GetPeriodUsage(ctx context.Context, orgID string) (*gen.Pe
 	})
 
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "Could not get period usage")
+		return nil, oops.E(oops.CodeUnexpected, err, "Could not get tool call usage")
+	}
+
+	serversRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
+		ID:                 serversMeterID,
+		ExternalCustomerID: &customerFilter,
+		StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
+		EndTimestamp:       time.Now(),
+		Interval:           polarComponents.TimeIntervalDay,
+	})
+
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "Could not get server usage")
 	}
 
 	return &gen.PeriodUsage{
-		ToolCalls:    int(res.MeterQuantities.Total),
+		ToolCalls:    int(toolCallsRes.MeterQuantities.Total),
 		MaxToolCalls: freeTierToolCalls,
-		Servers:      1, // TODO
+		Servers:      int(serversRes.MeterQuantities.Total),
 		MaxServers:   freeTierServers,
+		ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
 	}, nil
 }
 
@@ -385,4 +428,22 @@ func (p *PolarClient) CreateCheckout(ctx context.Context, orgID string, serverUR
 	}
 
 	return res.Checkout.URL, nil
+}
+
+func (p *PolarClient) CreateCustomerSession(ctx context.Context, orgID string) (string, error) {
+	if p.polar == nil {
+		return "", oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not create customer session")
+	}
+	
+	res, err := p.polar.CustomerSessions.Create(ctx, polarOperations.CustomerSessionsCreateCustomerSessionCreate{
+		CustomerSessionCustomerExternalIDCreate: &polarComponents.CustomerSessionCustomerExternalIDCreate{
+			ExternalCustomerID: orgID,
+		},
+	})
+
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "Could not create customer session")
+	}
+
+	return res.CustomerSession.CustomerPortalURL, nil
 }

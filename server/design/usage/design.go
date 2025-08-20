@@ -10,10 +10,11 @@ import (
 var PeriodUsage = Type("PeriodUsage", func() {
 	Attribute("tool_calls", Int, "The number of tool calls used")
 	Attribute("max_tool_calls", Int, "The maximum number of tool calls allowed")
-	Attribute("servers", Int, "The number of servers used")
+	Attribute("servers", Int, "The number of servers used, according to the Polar meter")
 	Attribute("max_servers", Int, "The maximum number of servers allowed")
+	Attribute("actual_public_server_count", Int, "The number of servers set to public at the time of the request")
 
-	Required("tool_calls", "max_tool_calls", "servers", "max_servers")
+	Required("tool_calls", "max_tool_calls", "servers", "max_servers", "actual_public_server_count")
 })
 
 var _ = Service("usage", func() {
@@ -41,6 +42,28 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "getPeriodUsage")
 		Meta("openapi:extension:x-speakeasy-name-override", "getPeriodUsage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getPeriodUsage"}`)
+	})
+
+	Method("createCustomerSession", func() {
+		Description("Create a customer session for the user")
+		
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(String)
+		
+		HTTP(func() {
+			POST("/rpc/usage.createCustomerSession")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+		
+		Meta("openapi:operationId", "createCustomerSession")
+		Meta("openapi:extension:x-speakeasy-name-override", "createCustomerSession")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createCustomerSession"}`)
 	})
 
 	Method("createCheckout", func() {
