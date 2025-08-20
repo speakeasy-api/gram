@@ -1,0 +1,22 @@
+{
+  "type": "module",
+  "name": "@gram/functions",
+  "private": true,
+  "version": "0.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest --run"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.14.0",
+  "devDependencies": {
+    "@types/node": "^22.13.17",
+    "msw": "^2.11.3",
+    "typescript": "catalog:",
+    "vitest": "^3.2.4"
+  }
+}

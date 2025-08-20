@@ -1,0 +1,36 @@
+contents:
+  repositories:
+    - './packages'
+    - https://dl-cdn.alpinelinux.org/alpine/v3.22/main
+  packages:
+    - alpine-base
+    - gram-runner
+    - ca-certificates
+    - python3=3.12.11-r0
+
+accounts:
+  groups:
+    - groupname: gram
+      gid: 10000
+  users:
+    - username: gram
+      uid: 10000
+      shell: /bin/sh
+  run-as: gram
+
+work-dir: /srv/app
+
+paths:
+  - path: /data
+    type: directory
+    uid: 10000
+    gid: 10000
+    permissions: 0o755
+  - path: /srv/app
+    type: directory
+    uid: 10000
+    gid: 10000
+    permissions: 0o755
+
+environment:
+  PATH: /usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin

@@ -3,7 +3,7 @@
 
 set -e
 
-mods="server cli"
+mods="server cli functions"
 
 for mod in $mods; do
   echo "$mod"
