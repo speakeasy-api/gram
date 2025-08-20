@@ -131,6 +131,7 @@ jobs:
         with:
           install: true
           cache: true
+          env: false
 
       - name: Prepare GitHub Actions environment
         if: ${{ needs.changes.outputs.server == 'true' }}
@@ -197,6 +198,7 @@ jobs:
         with:
           install: true
           cache: true
+          env: false
 
       - name: Prepare GitHub Actions environment
         if: ${{ needs.changes.outputs.server == 'true' }}
@@ -242,6 +244,7 @@ jobs:
         with:
           install: true
           cache: true
+          env: false
 
       - name: Prepare GitHub Actions environment
         if: ${{ needs.changes.outputs.client == 'true' }}
@@ -336,6 +339,7 @@ jobs:
         with:
           install: true
           cache: true
+          env: false
 
       - name: Prepare GitHub Actions environment
         if: ${{ needs.changes.outputs.client == 'true' }}
