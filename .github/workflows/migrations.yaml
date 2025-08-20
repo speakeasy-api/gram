@@ -23,6 +23,7 @@ jobs:
         with:
           install: true
           cache: true
+          env: false
       - name: Prepare GitHub Actions environment
         run: mise run github
       - name: Lint migrations
