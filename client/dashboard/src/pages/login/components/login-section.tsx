@@ -99,7 +99,7 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
     <div className="flex flex-col justify-center items-center w-full md:w-1/2 min-h-screen p-8 md:p-16 bg-white relative">
       <div className="w-full flex flex-col items-center gap-8 max-w-xs">
         <div className="flex flex-col items-center gap-4">
-          <GramLogo className="w-25 mb-2" variant="vertical" />
+          <GramLogo className="w-25 mb-2 dark:!invert-0" variant="vertical" />
           <p className="text-body-lg text-center dark:text-black">
             Create, Curate and Host high quality MCP servers for every use case.
             Enable AI to connect with your APIs.
