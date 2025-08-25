@@ -7,11 +7,15 @@ import { useMemo } from "react";
 export function EnvironmentDropdown({
   selectedEnvironment,
   setSelectedEnvironment,
+  tooltip = "Switch environments",
+  label,
   visibilityThreshold = 0,
   className,
 }: {
   selectedEnvironment: string | null;
   setSelectedEnvironment: (environment: string) => void;
+  tooltip?: string;
+  label?: string;
   visibilityThreshold?: number;
   className?: string;
 }) {
@@ -34,6 +38,7 @@ export function EnvironmentDropdown({
 
   return (
     <Combobox
+      label={label}
       items={allItems}
       selected={selectedEnvironmentData ? {
         label: selectedEnvironmentData.name,
@@ -42,7 +47,7 @@ export function EnvironmentDropdown({
       onSelectionChange={(item) => {
         setSelectedEnvironment(item.value);
       }}
-      tooltip="Switch environments"
+      tooltip={tooltip}
       className={cn("max-w-fit", className)}
     >
       <Type variant="small">{selectedEnvironmentData?.name || selectedEnvironment}</Type>
