@@ -250,6 +250,7 @@ var CreateDeploymentForm = Type("CreateDeploymentForm", func() {
 	})
 
 	Attribute("openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm))
+	Attribute("tool_functions", ArrayOf(AddToolFunctionForm))
 	Attribute("packages", ArrayOf(AddDeploymentPackageForm))
 })
 
@@ -264,6 +265,33 @@ var AddOpenAPIv3DeploymentAssetForm = Type("AddOpenAPIv3DeploymentAssetForm", fu
 	})
 	Attribute("slug", shared.Slug, func() {
 		Description("The slug to give the document as it will be displayed in URLs.")
+	})
+})
+
+var AddToolFunctionForm = Type("AddToolFunctionForm", func() {
+	Required("name", "description", "code", "language", "response_content_type")
+
+	Attribute("name", shared.Slug, func() {
+		Description("The tool name.")
+	})
+	Attribute("description", String, func() {
+		Description("The description of the tool provided to LLMs.")
+	})
+	Attribute("code", String, func() {
+		Description("The code to execute when the corresponding tool is called.")
+	})
+	Attribute("language", MapOf(String, String), func() {
+		Description("The language of the code asset. This is used to determine how to execute the code.")
+	})
+	Attribute("response_content_type", String, func() {
+		Description("The content type of the response.")
+	})
+
+	Attribute("input_schema", String, func() {
+		Description("The JSON Schema that represents the parameters.")
+	})
+	Attribute("variables", ArrayOf(ToolFunctionVariable), func() {
+		Description("The environment variables to pass into the code execution context.")
 	})
 })
 
@@ -340,8 +368,10 @@ var EvolveForm = Type("EvolveForm", func() {
 	Attribute("deployment_id", String, "The ID of the deployment to evolve. If omitted, the latest deployment will be used.")
 	Attribute("upsert_openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm), "The OpenAPI 3.x documents to upsert in the new deployment.")
 	Attribute("upsert_packages", ArrayOf(AddPackageForm), "The packages to upsert in the new deployment.")
-	Attribute("exclude_openapiv3_assets", ArrayOf(String), "The OpenAPI 3.x documents to exclude from the new deployment when cloning a previous deployment.")
+	Attribute("upsert_tool_functions", ArrayOf(AddToolFunctionForm), "The tool functions to upsert in the new deployment.")
+	Attribute("exclude_openapiv3_assets", ArrayOf(String), "The OpenAPI 3.x documents, identified by slug, to exclude from the new deployment when cloning a previous deployment.")
 	Attribute("exclude_packages", ArrayOf(String), "The packages to exclude from the new deployment when cloning a previous deployment.")
+	Attribute("exclude_tool_functions", ArrayOf(String), "The tool functions, identified by name, to exclude from the new deployment when cloning a previous deployment.")
 })
 
 var EvolveResult = Type("EvolveResult", func() {
@@ -378,4 +408,18 @@ var DeploymentLogEvent = Type("DeploymentLogEvent", func() {
 	Attribute("created_at", String, "The creation date of the log event")
 	Attribute("event", String, "The type of event that occurred")
 	Attribute("message", String, "The message of the log event")
+})
+
+var ToolFunctionVariable = Type("ToolFunctionVariable", func() {
+	Description("An environment variable definition to pass into custom code execution contexts.")
+
+	Required("name")
+
+	Attribute("name", String, func() {
+		Description("The name of the variable.")
+	})
+
+	Attribute("description", String, func() {
+		Description("The description of the variable.")
+	})
 })
