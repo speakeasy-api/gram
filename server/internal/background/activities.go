@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 
 	polargo "github.com/polarsource/polar-go"
@@ -17,7 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
-	"github.com/speakeasy-api/gram/server/internal/usage"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 )
 
 type Activities struct {
@@ -43,9 +44,10 @@ func NewActivities(
 	openrouter openrouter.Provisioner,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
-	polar *polargo.Polar,
+	polarClientRaw *polargo.Polar,
+	redisClient *redis.Client,
 ) *Activities {
-	usageClient := usage.NewPolarClient(polar, logger)
+	polarClient := polar.NewClient(polarClientRaw, logger, redisClient)
 	return &Activities{
 		processDeployment:      activities.NewProcessDeployment(logger, meterProvider, db, features, assetStorage),
 		transitionDeployment:   activities.NewTransitionDeployment(logger, db),
@@ -55,7 +57,7 @@ func NewActivities(
 		refreshOpenRouterKey:   activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 		verifyCustomDomain:     activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		customDomainIngress:    activities.NewCustomDomainIngress(logger, db, k8sClient),
-		collectPlatformUsageMetrics: activities.NewCollectPlatformUsageMetrics(logger, db, usageClient),
+		collectPlatformUsageMetrics: activities.NewCollectPlatformUsageMetrics(logger, db, polarClient),
 	}
 }
 

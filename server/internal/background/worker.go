@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
@@ -34,6 +35,7 @@ type WorkerOptions struct {
 	K8sClient           *k8s.KubernetesClients
 	ExpectedTargetCNAME string
 	Polar               *polargo.Polar
+	RedisClient         *redis.Client
 }
 
 func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage assets.BlobStore) *WorkerOptions {
@@ -102,6 +104,7 @@ func NewTemporalWorker(
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
 		opts.Polar,
+		opts.RedisClient,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -35,9 +36,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
-	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 const tooldIdQueryParam = "tool_id"
@@ -53,7 +54,7 @@ type Service struct {
 	env              *environments.EnvironmentEntries
 	toolProxy        *gateway.ToolProxy
 	posthog          *posthog.Posthog
-	usageClient      *usage.PolarClient
+	usageClient      *polar.Client
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -68,7 +69,8 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	posthog *posthog.Posthog,
-	polar *polargo.Polar,
+	polarClientRaw *polargo.Polar,
+	redisClient *redis.Client,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
@@ -83,7 +85,7 @@ func NewService(
 		environmentsRepo: envRepo,
 		env:              env,
 		posthog:          posthog,
-		usageClient:      usage.NewPolarClient(polar, logger),
+		usageClient:      polar.NewClient(polarClientRaw, logger, redisClient),
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			traceProvider,
@@ -325,7 +327,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
 
-	go s.usageClient.TrackToolCallUsage(context.Background(), usage.ToolCallUsageEvent{
+	go s.usageClient.TrackToolCallUsage(context.Background(), polar.ToolCallUsageEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		RequestBytes:     requestNumBytes,
 		OutputBytes:      outputNumBytes,

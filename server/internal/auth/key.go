@@ -13,8 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 )
 
 func GetAPIKeyHash(key string) (string, error) {
@@ -26,13 +28,15 @@ type ByKey struct {
 	keyDB   *repo.Queries
 	orgRepo *orgRepo.Queries
 	logger  *slog.Logger
+	polarClient *polar.Client
 }
 
-func NewKeyAuth(db *pgxpool.Pool, logger *slog.Logger) *ByKey {
+func NewKeyAuth(db *pgxpool.Pool, logger *slog.Logger, polarClient *polar.Client) *ByKey {
 	return &ByKey{
 		keyDB:   repo.New(db),
 		orgRepo: orgRepo.New(db),
 		logger:  logger,
+		polarClient: polarClient,
 	}
 }
 
@@ -64,7 +68,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		}
 	}
 
-	org, err := k.orgRepo.GetOrganizationMetadata(ctx, apiKey.OrganizationID)
+	org, err := mv.DescribeOrganization(ctx, k.logger, k.orgRepo, apiKey.OrganizationID, k.polarClient)
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading organization")
 	}

@@ -350,10 +350,10 @@ func newStartCommand() *cli.Command {
 			localEnvPath := c.String("unsafe-local-env-path")
 			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(logger, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient)
+				sessionManager = sessions.NewManager(logger, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, polarClient)
 			} else {
 				logger.WarnContext(ctx, "enabling unsafe session store", attr.SlogFilePath(localEnvPath))
-				s, err := sessions.NewUnsafeManager(logger, db, redisClient, cache.Suffix("gram-local"), localEnvPath)
+				s, err := sessions.NewUnsafeManager(logger, db, redisClient, cache.Suffix("gram-local"), localEnvPath, polarClient)
 				if err != nil {
 					return fmt.Errorf("failed to create unsafe session manager: %w", err)
 				}
@@ -464,8 +464,8 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger, db, sessionManager))
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env)
 			oauth.Attach(mux, oauthService)
-			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient, polarClient))
-			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService, polarClient))
+			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient, polarClient, redisClient))
+			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService, polarClient, redisClient))
 			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
@@ -473,11 +473,11 @@ func newStartCommand() *cli.Command {
 					SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("site-url")),
 					SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
 					SlackSigningSecret: c.String("slack-signing-secret"),
-				}))
+				}))	
 			}
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
-			usage.Attach(mux, usage.NewService(logger, db, sessionManager, polarClient, serverURL))
+			usage.Attach(mux, usage.NewService(logger, db, sessionManager, polarClient, serverURL, redisClient))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

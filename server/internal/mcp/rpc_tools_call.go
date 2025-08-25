@@ -24,8 +24,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
-	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 type toolsCallParams struct {
@@ -42,7 +42,7 @@ func handleToolsCall(
 	payload *mcpInputs,
 	req *rawRequest,
 	toolProxy *gateway.ToolProxy,
-	usageClient *usage.PolarClient,
+	usageClient *polar.Client,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -106,7 +106,7 @@ func handleToolsCall(
 		requestBytes := int64(len(params.Arguments))
 		outputBytes := int64(len(promptData))
 
-		go usageClient.TrackPromptCallUsage(context.Background(), usage.PromptCallUsageEvent{
+		go usageClient.TrackPromptCallUsage(context.Background(), polar.PromptCallUsageEvent{
 			OrganizationID:   toolset.OrganizationID,
 			RequestBytes:     requestBytes,
 			OutputBytes:      outputBytes,
@@ -182,7 +182,7 @@ func handleToolsCall(
 	// Track tool call usage
 	outputBytes := int64(rw.body.Len())
 
-	go usageClient.TrackToolCallUsage(context.Background(), usage.ToolCallUsageEvent{
+	go usageClient.TrackToolCallUsage(context.Background(), polar.ToolCallUsageEvent{
 		OrganizationID:   toolset.OrganizationID,
 		RequestBytes:     requestBytes,
 		OutputBytes:      outputBytes,

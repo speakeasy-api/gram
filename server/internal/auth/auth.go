@@ -28,7 +28,7 @@ func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Aut
 	return &Auth{
 		logger:   logger,
 		db:       db,
-		keys:     NewKeyAuth(db, logger),
+		keys:     NewKeyAuth(db, logger, sessions.PolarClient),
 		sessions: sessions,
 		repo:     repo.New(db),
 	}

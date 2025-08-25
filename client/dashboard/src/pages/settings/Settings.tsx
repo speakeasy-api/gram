@@ -16,7 +16,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert, cn, getServerURL } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
-import { useGetPeriodUsage } from "@gram/client/react-query";
+import { useGetPeriodUsage, useGetUsageTiers } from "@gram/client/react-query";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage";
 import {
@@ -52,8 +52,6 @@ export default function Settings() {
   const [isCnameCopied, setIsCnameCopied] = useState(false);
   const [isTxtCopied, setIsTxtCopied] = useState(false);
   const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
-  const [isCreditUpgradeModalOpen, setIsCreditUpgradeModalOpen] =
-    useState(false);
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
   const CNAME_VALUE = "cname.getgram.ai.";
@@ -69,13 +67,6 @@ export default function Settings() {
     isLoading: domainIsLoading,
     refetch: domainRefetch,
   } = useCustomDomain();
-
-  const { data: creditUsage } = useGetCreditUsage();
-  const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
-    throwOnError: !getServerURL().includes("localhost"),
-  });
-
-  const isAdmin = useIsAdmin();
 
   // Initialize domain input with existing domain if available
   useEffect(() => {
@@ -643,106 +634,117 @@ export default function Settings() {
           icon={Globe}
           accountUpgrade
         />
-
-        <Stack direction="horizontal" justify="space-between" className="mt-8">
-          <Heading variant="h4">Credit Usage</Heading>
-          {session.gramAccountType === "free" && (
-            <Button onClick={() => setIsCreditUpgradeModalOpen(true)}>
-              Upgrade Account
-            </Button>
-          )}
-        </Stack>
-        <div className="space-y-4">
-          <Type variant="body" muted>
-            LLM Credits are used only for the in dashboard playground and other
-            AI-powered in dashboard experiences.
-          </Type>
-          {/* TODO: DO NOT SHIP THIS UNTIL THE PERIOD USAGE REFLECTS THE ORG (SDK BUG SOLVED) */}
-          {isAdmin &&
-            (periodUsage ? (
-              <>
-                <div>
-                  <Type variant="body" className="font-medium">
-                    Tool Calls: {periodUsage.toolCalls} /{" "}
-                    {periodUsage.maxToolCalls}
-                  </Type>
-                  <UsageProgress
-                    value={225}
-                    included={100}
-                    overageIncrement={100}
-                    // value={periodUsage.toolCalls}
-                    // included={periodUsage.maxToolCalls}
-                    // overageIncrement={periodUsage.maxToolCalls}
-                  />
-                </div>
-                <div>
-                  <Type variant="body" className="font-medium">
-                    Servers: {periodUsage.servers} / {periodUsage.maxServers}
-                  </Type>
-                  <UsageProgress
-                    value={3}
-                    included={5}
-                    overageIncrement={1}
-                    // value={periodUsage.servers}
-                    // included={periodUsage.maxServers}
-                    // overageIncrement={1}
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <Skeleton className="h-4 w-1/3" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-1/3" />
-                <Skeleton className="h-4 w-full" />
-              </>
-            ))}
-          {session.gramAccountType === "free" ? (
-            <CheckoutLink />
-          ) : (
-            <PolarPortalLink />
-          )}
-          {creditUsage ? (
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <Type variant="body" className="font-medium">
-                  {Math.min(
-                    creditUsage.creditsUsed,
-                    creditUsage.monthlyCredits
-                  ).toLocaleString()}{" "}
-                  / {creditUsage.monthlyCredits.toLocaleString()}
-                  <span className="text-muted-foreground font-thin">
-                    {" "}
-                    credits used this month
-                  </span>
-                </Type>
-              </div>
-              <UsageProgress
-                value={creditUsage.creditsUsed}
-                included={creditUsage.monthlyCredits}
-                overageIncrement={creditUsage.monthlyCredits}
-              />
-            </div>
-          ) : (
-            <>
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="h-4 w-full" />
-            </>
-          )}
-        </div>
-
-        <FeatureRequestModal
-          isOpen={isCreditUpgradeModalOpen}
-          onClose={() => setIsCreditUpgradeModalOpen(false)}
-          title="Increase Credit Limit"
-          description={`To increase your monthly credit limit upgrade from the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
-          actionType="credit_upgrade"
-          accountUpgrade
-        />
+        <BillingSection />
       </Page.Body>
     </Page>
   );
 }
+
+const BillingSection = () => {
+  const session = useSession();
+  const [isCreditUpgradeModalOpen, setIsCreditUpgradeModalOpen] =
+    useState(false);
+
+  const { data: creditUsage } = useGetCreditUsage();
+  const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
+    throwOnError: !getServerURL().includes("localhost"),
+  });
+
+  const isAdmin = useIsAdmin();
+
+  return (
+    <>
+      <Stack direction="horizontal" justify="space-between" className="mt-8">
+        <Heading variant="h4">Billing</Heading>
+        {session.gramAccountType === "free" ? (
+          <UpgradeLink />
+        ) : (
+          <PolarPortalLink />
+        )}
+      </Stack>
+      <div className="space-y-4">
+        <Type variant="body" muted>
+          LLM Credits are used only for the in dashboard playground and other
+          AI-powered in dashboard experiences.
+        </Type>
+        {/* TODO: DO NOT SHIP THIS UNTIL THE PERIOD USAGE REFLECTS THE ORG (SDK BUG SOLVED) */}
+        {isAdmin &&
+          (periodUsage ? (
+            <>
+              <div>
+                <Type variant="body" className="font-medium">
+                  Tool Calls{" "}
+                  <span className="text-muted-foreground font-thin">
+                    ({periodUsage.toolCalls}/{periodUsage.maxToolCalls})
+                  </span>
+                </Type>
+                <UsageProgress
+                  value={periodUsage.toolCalls}
+                  included={periodUsage.maxToolCalls}
+                  overageIncrement={periodUsage.maxToolCalls}
+                />
+              </div>
+              <div>
+                <Type variant="body" className="font-medium">
+                  Servers{" "}
+                  <span className="text-muted-foreground font-thin">
+                    ({periodUsage.servers}/{periodUsage.maxServers})
+                  </span>
+                </Type>
+                <UsageProgress
+                  value={periodUsage.servers}
+                  included={periodUsage.maxServers}
+                  overageIncrement={1}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-4 w-full" />
+            </>
+          ))}
+        {creditUsage ? (
+          <div className="space-y-2">
+            <div className="flex justify-between items-center">
+              <Type variant="body" className="font-medium">
+                {Math.min(
+                  creditUsage.creditsUsed,
+                  creditUsage.monthlyCredits
+                ).toLocaleString()}{" "}
+                / {creditUsage.monthlyCredits.toLocaleString()}
+                <span className="text-muted-foreground font-thin">
+                  {" "}
+                  credits used this month
+                </span>
+              </Type>
+            </div>
+            <UsageProgress
+              value={creditUsage.creditsUsed}
+              included={creditUsage.monthlyCredits}
+              overageIncrement={creditUsage.monthlyCredits}
+            />
+          </div>
+        ) : (
+          <>
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-full" />
+          </>
+        )}
+      </div>
+      <FeatureRequestModal
+        isOpen={isCreditUpgradeModalOpen}
+        onClose={() => setIsCreditUpgradeModalOpen(false)}
+        title="Increase Credit Limit"
+        description={`To increase your monthly credit limit upgrade from the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
+        actionType="credit_upgrade"
+        accountUpgrade
+      />
+    </>
+  );
+};
 
 const UsageProgress = ({
   value,
@@ -861,7 +863,7 @@ const PolarPortalLink = () => {
   );
 };
 
-const CheckoutLink = () => {
+const UpgradeLink = () => {
   const [checkoutLink, setCheckoutLink] = useState("");
   const client = useSdkClient();
 

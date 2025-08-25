@@ -2,12 +2,14 @@ package usage
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/url"
+	"strconv"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	polargo "github.com/polarsource/polar-go"
+	polarComponents "github.com/polarsource/polar-go/models/components"
 	srv "github.com/speakeasy-api/gram/server/gen/http/usage/server"
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -16,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -27,17 +30,17 @@ type Service struct {
 	tracer      trace.Tracer
 	logger      *slog.Logger
 	auth        *auth.Auth
-	polarClient *PolarClient
+	polarClient *polar.Client
 	serverURL   *url.URL
 	repo        *repo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, polar *polargo.Polar, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, polarClientRaw *polargo.Polar, serverURL *url.URL, redisClient *redis.Client) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
-	polarClient := NewPolarClient(polar, logger)
+	polarClient := polar.NewClient(polarClientRaw, logger, redisClient)
 
 	return &Service{
 		tracer:      otel.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
@@ -79,6 +82,7 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 		return nil, oops.E(oops.CodeUnexpected, err, "Could not get public server count")
 	}
 
+	// We don't populate the maximums using GetUsageTiers because we want to reflect the actual granted credits, not the current product limits which may have changed.
 	return &gen.PeriodUsage{
 		ToolCalls:               polarUsage.ToolCalls,
 		MaxToolCalls:            polarUsage.MaxToolCalls,
@@ -94,23 +98,55 @@ func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err e
 		return nil, err
 	}
 
-	j, _ := json.Marshal(product)
-	println(j)
+	var toolCallsIncluded, mcpServersIncluded int64
+	var toolCallPrice, mcpServerPrice float64
+
+	for _, benefit := range product.Benefits {
+		if benefit.Type == polarComponents.BenefitUnionTypeBenefitMeterCredit && benefit.BenefitMeterCredit != nil {
+			if benefit.BenefitMeterCredit.Properties.MeterID == polar.ToolCallsMeterID {
+				toolCallsIncluded = benefit.BenefitMeterCredit.Properties.Units
+			}
+			if benefit.BenefitMeterCredit.Properties.MeterID == polar.ServersMeterID {
+				mcpServersIncluded = benefit.BenefitMeterCredit.Properties.Units
+			}
+		}
+	}
+
+	for _, price := range product.Prices {
+		if price.Type == polarComponents.PricesTypeProductPrice && price.ProductPrice != nil && price.ProductPrice.ProductPriceMeteredUnit != nil {
+			if price.ProductPrice.ProductPriceMeteredUnit.MeterID == polar.ToolCallsMeterID {
+				meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
+				toolCallPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
+				if err != nil {
+					return nil, err
+				}
+				toolCallPrice = toolCallPrice / 100 // Result from Polar is in cents
+			}
+			if price.ProductPrice.ProductPriceMeteredUnit.MeterID == polar.ServersMeterID {
+				meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
+				mcpServerPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
+				if err != nil {
+					return nil, err
+				}
+				mcpServerPrice = mcpServerPrice / 100 // Result from Polar is in cents
+			}
+		}
+	}
 
 	return &gen.UsageTiers{
 		Free: &gen.TierLimits{
 			BasePrice: 0,
-			IncludedToolCalls: 1000,
-			IncludedServers: 1,
-			PricePerAdditionalToolCall: 0.0001,
-			PricePerAdditionalServer: 0.0001,
+			IncludedToolCalls: polar.FreeTierToolCalls,
+			IncludedServers: polar.FreeTierServers,
+			PricePerAdditionalToolCall: 0,
+			PricePerAdditionalServer: 0,
 		},
 		Business: &gen.TierLimits{
 			BasePrice: 0,
-			IncludedToolCalls: 1000,
-			IncludedServers: 1,
-			PricePerAdditionalToolCall: 0.0001,
-			PricePerAdditionalServer: 0.0001,
+			IncludedToolCalls: int(toolCallsIncluded),
+			IncludedServers: int(mcpServersIncluded),
+			PricePerAdditionalToolCall: toolCallPrice,
+			PricePerAdditionalServer: mcpServerPrice,
 		},
 	}, nil
 }
