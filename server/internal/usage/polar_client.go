@@ -447,3 +447,16 @@ func (p *PolarClient) CreateCustomerSession(ctx context.Context, orgID string) (
 
 	return res.CustomerSession.CustomerPortalURL, nil
 }
+
+func (p *PolarClient) GetGramBusinessProduct(ctx context.Context) (*polarComponents.Product, error) {
+	if p.polar == nil {
+		return nil, oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not get product")
+	}
+
+	res, err := p.polar.Products.Get(ctx, gramBusinessProductID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "Could not get product")
+	}
+
+	return res.Product, nil
+}

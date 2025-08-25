@@ -12,6 +12,11 @@ func GetPeriodUsageUsagePath() string {
 	return "/rpc/usage.getPeriodUsage"
 }
 
+// GetUsageTiersUsagePath returns the URL path to the usage service getUsageTiers HTTP endpoint.
+func GetUsageTiersUsagePath() string {
+	return "/rpc/usage.getUsageTiers"
+}
+
 // CreateCustomerSessionUsagePath returns the URL path to the usage service createCustomerSession HTTP endpoint.
 func CreateCustomerSessionUsagePath() string {
 	return "/rpc/usage.createCustomerSession"

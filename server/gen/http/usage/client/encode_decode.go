@@ -252,6 +252,220 @@ func DecodeGetPeriodUsageResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
+// BuildGetUsageTiersRequest instantiates a HTTP request object with method and
+// path set to call the "usage" service "getUsageTiers" endpoint
+func (c *Client) BuildGetUsageTiersRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetUsageTiersUsagePath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("usage", "getUsageTiers", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeGetUsageTiersResponse returns a decoder for responses returned by the
+// usage getUsageTiers endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeGetUsageTiersResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetUsageTiersResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetUsageTiersResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+			}
+			err = ValidateGetUsageTiersResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+			}
+			res := NewGetUsageTiersUsageTiersOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetUsageTiersUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+			}
+			err = ValidateGetUsageTiersUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+			}
+			return nil, NewGetUsageTiersUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetUsageTiersForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+			}
+			err = ValidateGetUsageTiersForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+			}
+			return nil, NewGetUsageTiersForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetUsageTiersBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+			}
+			err = ValidateGetUsageTiersBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+			}
+			return nil, NewGetUsageTiersBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetUsageTiersNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+			}
+			err = ValidateGetUsageTiersNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+			}
+			return nil, NewGetUsageTiersNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetUsageTiersConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+			}
+			err = ValidateGetUsageTiersConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+			}
+			return nil, NewGetUsageTiersConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetUsageTiersUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+			}
+			err = ValidateGetUsageTiersUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+			}
+			return nil, NewGetUsageTiersUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetUsageTiersInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+			}
+			err = ValidateGetUsageTiersInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+			}
+			return nil, NewGetUsageTiersInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetUsageTiersInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+				}
+				err = ValidateGetUsageTiersInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+				}
+				return nil, NewGetUsageTiersInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetUsageTiersUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+				}
+				err = ValidateGetUsageTiersUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+				}
+				return nil, NewGetUsageTiersUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("usage", "getUsageTiers", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetUsageTiersGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("usage", "getUsageTiers", err)
+			}
+			err = ValidateGetUsageTiersGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("usage", "getUsageTiers", err)
+			}
+			return nil, NewGetUsageTiersGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("usage", "getUsageTiers", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateCustomerSessionRequest instantiates a HTTP request object with
 // method and path set to call the "usage" service "createCustomerSession"
 // endpoint
@@ -709,4 +923,18 @@ func DecodeCreateCheckoutResponse(decoder func(*http.Response) goahttp.Decoder, 
 			return nil, goahttp.ErrInvalidResponse("usage", "createCheckout", resp.StatusCode, string(body))
 		}
 	}
+}
+
+// unmarshalTierLimitsResponseBodyToUsageTierLimits builds a value of type
+// *usage.TierLimits from a value of type *TierLimitsResponseBody.
+func unmarshalTierLimitsResponseBodyToUsageTierLimits(v *TierLimitsResponseBody) *usage.TierLimits {
+	res := &usage.TierLimits{
+		BasePrice:                  *v.BasePrice,
+		IncludedToolCalls:          *v.IncludedToolCalls,
+		IncludedServers:            *v.IncludedServers,
+		PricePerAdditionalToolCall: *v.PricePerAdditionalToolCall,
+		PricePerAdditionalServer:   *v.PricePerAdditionalServer,
+	}
+
+	return res
 }

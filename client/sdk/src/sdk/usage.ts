@@ -5,6 +5,7 @@
 import { usageCreateCheckout } from "../funcs/usageCreateCheckout.js";
 import { usageCreateCustomerSession } from "../funcs/usageCreateCustomerSession.js";
 import { usageGetPeriodUsage } from "../funcs/usageGetPeriodUsage.js";
+import { usageGetUsageTiers } from "../funcs/usageGetUsageTiers.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -64,6 +65,21 @@ export class Usage extends ClientSDK {
       this,
       request,
       security,
+      options,
+    ));
+  }
+
+  /**
+   * getUsageTiers usage
+   *
+   * @remarks
+   * Get the usage tiers
+   */
+  async getUsageTiers(
+    options?: RequestOptions,
+  ): Promise<components.UsageTiers> {
+    return unwrapAsync(usageGetUsageTiers(
+      this,
       options,
     ));
   }

@@ -8,6 +8,7 @@ import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
@@ -657,43 +658,51 @@ export default function Settings() {
             AI-powered in dashboard experiences.
           </Type>
           {/* TODO: DO NOT SHIP THIS UNTIL THE PERIOD USAGE REFLECTS THE ORG (SDK BUG SOLVED) */}
-          {periodUsage && isAdmin && (
-            <>
-              <div>
-                <Type variant="body" className="font-medium">
-                  Tool Calls: {periodUsage.toolCalls} /{" "}
-                  {periodUsage.maxToolCalls}
-                </Type>
-                <UsageProgress
-                  value={225}
-                  included={100}
-                  overageIncrement={100}
-                  // value={periodUsage.toolCalls}
-                  // included={periodUsage.maxToolCalls}
-                  // overageIncrement={periodUsage.maxToolCalls}
-                />
-              </div>
-              <div>
-                <Type variant="body" className="font-medium">
-                  Servers: {periodUsage.servers} / {periodUsage.maxServers}
-                </Type>
-                <UsageProgress
-                  value={3}
-                  included={5}
-                  overageIncrement={1}
-                  // value={periodUsage.servers}
-                  // included={periodUsage.maxServers}
-                  // overageIncrement={1}
-                />
-              </div>
-            </>
-          )}
+          {isAdmin &&
+            (periodUsage ? (
+              <>
+                <div>
+                  <Type variant="body" className="font-medium">
+                    Tool Calls: {periodUsage.toolCalls} /{" "}
+                    {periodUsage.maxToolCalls}
+                  </Type>
+                  <UsageProgress
+                    value={225}
+                    included={100}
+                    overageIncrement={100}
+                    // value={periodUsage.toolCalls}
+                    // included={periodUsage.maxToolCalls}
+                    // overageIncrement={periodUsage.maxToolCalls}
+                  />
+                </div>
+                <div>
+                  <Type variant="body" className="font-medium">
+                    Servers: {periodUsage.servers} / {periodUsage.maxServers}
+                  </Type>
+                  <UsageProgress
+                    value={3}
+                    included={5}
+                    overageIncrement={1}
+                    // value={periodUsage.servers}
+                    // included={periodUsage.maxServers}
+                    // overageIncrement={1}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-4 w-full" />
+              </>
+            ))}
           {session.gramAccountType === "free" ? (
             <CheckoutLink />
           ) : (
             <PolarPortalLink />
           )}
-          {creditUsage && (
+          {creditUsage ? (
             <div className="space-y-2">
               <div className="flex justify-between items-center">
                 <Type variant="body" className="font-medium">
@@ -714,6 +723,11 @@ export default function Settings() {
                 overageIncrement={creditUsage.monthlyCredits}
               />
             </div>
+          ) : (
+            <>
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-4 w-full" />
+            </>
           )}
         </div>
 
@@ -806,7 +820,7 @@ const UsageProgress = ({
             className="absolute -top-5 text-xs text-muted-foreground whitespace-nowrap"
             style={{ left: `${includedWidth + 1}%` }}
           >
-            Overage: {(value - included).toLocaleString()}
+            Extra: {(value - included).toLocaleString()}
           </div>
 
           {/* Additional overage increment dividers */}

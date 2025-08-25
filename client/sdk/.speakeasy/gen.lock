@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: d892e05d9e15293a0b17477eb8179269
+  docChecksum: e8869a7b4ae45cd15732281cee54c7a1
   docVersion: 0.0.1
   speakeasyVersion: 1.585.0
   generationVersion: 2.660.0
-  releaseVersion: 0.12.53
-  configChecksum: 2c0372314de7bb10ad2d30a77d818c36
+  releaseVersion: 0.12.54
+  configChecksum: 0b8a44f4c33ed434df00ed2225fc7027
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -129,6 +129,7 @@ generatedFiles:
   - docs/models/components/responsefilter.md
   - docs/models/components/securityvariable.md
   - docs/models/components/servervariable.md
+  - docs/models/components/tierlimits.md
   - docs/models/components/toolset.md
   - docs/models/components/toolsetentry.md
   - docs/models/components/toolvariation.md
@@ -145,6 +146,7 @@ generatedFiles:
   - docs/models/components/uploadopenapiv3result.md
   - docs/models/components/upsertglobaltoolvariationform.md
   - docs/models/components/upsertglobaltoolvariationresult.md
+  - docs/models/components/usagetiers.md
   - docs/models/components/visibility.md
   - docs/models/errors/serviceerror.md
   - docs/models/operations/addexternaloauthserverrequest.md
@@ -435,6 +437,7 @@ generatedFiles:
   - src/funcs/usageCreateCheckout.ts
   - src/funcs/usageCreateCustomerSession.ts
   - src/funcs/usageGetPeriodUsage.ts
+  - src/funcs/usageGetUsageTiers.ts
   - src/funcs/variationsDeleteGlobal.ts
   - src/funcs/variationsListGlobal.ts
   - src/funcs/variationsUpsertGlobal.ts
@@ -544,6 +547,7 @@ generatedFiles:
   - src/models/components/responsefilter.ts
   - src/models/components/securityvariable.ts
   - src/models/components/servervariable.ts
+  - src/models/components/tierlimits.ts
   - src/models/components/toolset.ts
   - src/models/components/toolsetentry.ts
   - src/models/components/toolvariation.ts
@@ -558,6 +562,7 @@ generatedFiles:
   - src/models/components/uploadopenapiv3result.ts
   - src/models/components/upsertglobaltoolvariationform.ts
   - src/models/components/upsertglobaltoolvariationresult.ts
+  - src/models/components/usagetiers.ts
   - src/models/errors/apierror.ts
   - src/models/errors/gramerror.ts
   - src/models/errors/httpclienterrors.ts
@@ -660,6 +665,7 @@ generatedFiles:
   - src/react-query/getDomain.ts
   - src/react-query/getPeriodUsage.ts
   - src/react-query/getSlackConnection.ts
+  - src/react-query/getUsageTiers.ts
   - src/react-query/globalVariations.ts
   - src/react-query/index.ts
   - src/react-query/instance.ts
@@ -1467,5 +1473,14 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getUsageTiers:
+    speakeasy-default-get-usage-tiers:
+      responses:
+        "200":
+          application/json: {"business": {"base_price": 6666.51, "included_servers": 925792, "included_tool_calls": 306325, "price_per_additional_server": 302.79, "price_per_additional_tool_call": 7563.66}, "free": {"base_price": 7355.72, "included_servers": 180790, "included_tool_calls": 683591, "price_per_additional_server": 678.32, "price_per_additional_tool_call": 7255.78}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

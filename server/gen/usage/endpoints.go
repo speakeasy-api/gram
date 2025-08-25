@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "usage" service endpoints.
 type Endpoints struct {
 	GetPeriodUsage        goa.Endpoint
+	GetUsageTiers         goa.Endpoint
 	CreateCustomerSession goa.Endpoint
 	CreateCheckout        goa.Endpoint
 }
@@ -27,6 +28,7 @@ func NewEndpoints(s Service) *Endpoints {
 	a := s.(Auther)
 	return &Endpoints{
 		GetPeriodUsage:        NewGetPeriodUsageEndpoint(s, a.APIKeyAuth),
+		GetUsageTiers:         NewGetUsageTiersEndpoint(s),
 		CreateCustomerSession: NewCreateCustomerSessionEndpoint(s, a.APIKeyAuth),
 		CreateCheckout:        NewCreateCheckoutEndpoint(s, a.APIKeyAuth),
 	}
@@ -35,6 +37,7 @@ func NewEndpoints(s Service) *Endpoints {
 // Use applies the given middleware to all the "usage" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetPeriodUsage = m(e.GetPeriodUsage)
+	e.GetUsageTiers = m(e.GetUsageTiers)
 	e.CreateCustomerSession = m(e.CreateCustomerSession)
 	e.CreateCheckout = m(e.CreateCheckout)
 }
@@ -71,6 +74,14 @@ func NewGetPeriodUsageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return s.GetPeriodUsage(ctx, p)
+	}
+}
+
+// NewGetUsageTiersEndpoint returns an endpoint function that calls the method
+// "getUsageTiers" of service "usage".
+func NewGetUsageTiersEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.GetUsageTiers(ctx)
 	}
 }
 

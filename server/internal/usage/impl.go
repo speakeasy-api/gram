@@ -2,6 +2,7 @@ package usage
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/url"
 
@@ -84,6 +85,33 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 		Servers:                 polarUsage.Servers,
 		MaxServers:              polarUsage.MaxServers,
 		ActualPublicServerCount: int(actualPublicServerCount),
+	}, nil
+}
+
+func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err error) {
+	product, err := s.polarClient.GetGramBusinessProduct(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	j, _ := json.Marshal(product)
+	println(j)
+
+	return &gen.UsageTiers{
+		Free: &gen.TierLimits{
+			BasePrice: 0,
+			IncludedToolCalls: 1000,
+			IncludedServers: 1,
+			PricePerAdditionalToolCall: 0.0001,
+			PricePerAdditionalServer: 0.0001,
+		},
+		Business: &gen.TierLimits{
+			BasePrice: 0,
+			IncludedToolCalls: 1000,
+			IncludedServers: 1,
+			PricePerAdditionalToolCall: 0.0001,
+			PricePerAdditionalServer: 0.0001,
+		},
 	}, nil
 }
 

@@ -21,6 +21,10 @@ type Client struct {
 	// getPeriodUsage endpoint.
 	GetPeriodUsageDoer goahttp.Doer
 
+	// GetUsageTiers Doer is the HTTP client used to make requests to the
+	// getUsageTiers endpoint.
+	GetUsageTiersDoer goahttp.Doer
+
 	// CreateCustomerSession Doer is the HTTP client used to make requests to the
 	// createCustomerSession endpoint.
 	CreateCustomerSessionDoer goahttp.Doer
@@ -50,6 +54,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		GetPeriodUsageDoer:        doer,
+		GetUsageTiersDoer:         doer,
 		CreateCustomerSessionDoer: doer,
 		CreateCheckoutDoer:        doer,
 		RestoreResponseBody:       restoreBody,
@@ -79,6 +84,25 @@ func (c *Client) GetPeriodUsage() goa.Endpoint {
 		resp, err := c.GetPeriodUsageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "getPeriodUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetUsageTiers returns an endpoint that makes HTTP requests to the usage
+// service getUsageTiers server.
+func (c *Client) GetUsageTiers() goa.Endpoint {
+	var (
+		decodeResponse = DecodeGetUsageTiersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUsageTiersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUsageTiersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getUsageTiers", err)
 		}
 		return decodeResponse(resp)
 	}

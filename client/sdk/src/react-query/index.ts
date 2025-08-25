@@ -29,6 +29,7 @@ export * from "./getCreditUsage.js";
 export * from "./getDomain.js";
 export * from "./getPeriodUsage.js";
 export * from "./getSlackConnection.js";
+export * from "./getUsageTiers.js";
 export * from "./globalVariations.js";
 export * from "./instance.js";
 export * from "./integrationsIntegrationsNumberGet.js";

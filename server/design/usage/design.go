@@ -17,6 +17,23 @@ var PeriodUsage = Type("PeriodUsage", func() {
 	Required("tool_calls", "max_tool_calls", "servers", "max_servers", "actual_public_server_count")
 })
 
+var TierLimits = Type("TierLimits", func() {
+	Attribute("base_price", Float64, "The base price for the tier")
+	Attribute("included_tool_calls", Int, "The number of tool calls included in the tier")
+	Attribute("included_servers", Int, "The number of servers included in the tier")
+	Attribute("price_per_additional_tool_call", Float64, "The price per additional tool call")
+	Attribute("price_per_additional_server", Float64, "The price per additional server")
+	
+	Required("base_price", "included_tool_calls", "included_servers", "price_per_additional_tool_call", "price_per_additional_server")
+})
+
+var UsageTiers = Type("UsageTiers", func() {
+	Attribute("free", TierLimits, "The limits for the free tier")
+	Attribute("business", TierLimits, "The limits for the business tier")
+
+	Required("free", "business")
+})
+
 var _ = Service("usage", func() {
 	Description("Read usage for gram.")
 	Security(security.Session, security.ProjectSlug)
@@ -42,6 +59,23 @@ var _ = Service("usage", func() {
 		Meta("openapi:operationId", "getPeriodUsage")
 		Meta("openapi:extension:x-speakeasy-name-override", "getPeriodUsage")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getPeriodUsage"}`)
+	})
+
+	Method("getUsageTiers", func() {
+		Description("Get the usage tiers")
+
+		NoSecurity()
+
+		Result(UsageTiers)
+
+		HTTP(func() {
+			GET("/rpc/usage.getUsageTiers")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getUsageTiers")
+		Meta("openapi:extension:x-speakeasy-name-override", "getUsageTiers")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "getUsageTiers"}`)
 	})
 
 	Method("createCustomerSession", func() {
