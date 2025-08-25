@@ -1,21 +1,22 @@
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
 import { Message } from "@ai-sdk/react";
-import { Stack } from "@speakeasy-api/moonshine";
-import { useState } from "react";
-import { SdkContent } from "../sdk/SDK";
+import { useListEnvironments } from "@gram/client/react-query";
+import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { ChatConfig, ChatWindow } from "./ChatWindow";
 import { PanelHeader } from "./Playground";
 
 export function PlaygroundRHS({
   configRef,
   dynamicToolset,
+  setSelectedEnvironment,
 }: {
   configRef: ChatConfig;
   dynamicToolset: boolean;
+  setSelectedEnvironment: (environment: string) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<"chat" | "agents">("chat");
+  const { data: environmentsData } = useListEnvironments();
+  const selectedEnvironment = configRef.current.environmentSlug;
 
+  const environments = environmentsData?.environments;
   const initialMessages: Message[] = [
     {
       id: "1",
@@ -26,35 +27,24 @@ export function PlaygroundRHS({
   ];
 
   return (
-    <Tabs
-      value={activeTab}
-      onValueChange={(value) => setActiveTab(value as "chat" | "agents")}
-      className="h-full relative"
-    >
+    <>
       <PanelHeader side="right">
-        <Stack direction="horizontal" gap={2} align="center">
-          <Type className="font-medium">Use with: </Type>
-          <TabsList>
-            <TabsTrigger value="chat">Chat</TabsTrigger>
-            <TabsTrigger value="agents">SDKs</TabsTrigger>
-          </TabsList>
-        </Stack>
+        {environments && environments.length > 0 && (
+          <EnvironmentDropdown
+            label="Environment"
+            tooltip="Set the active environment"
+            selectedEnvironment={selectedEnvironment}
+            setSelectedEnvironment={setSelectedEnvironment}
+          />
+        )}
       </PanelHeader>
       <div className="h-[calc(100%-61px)] pl-8 pr-4 pt-4">
-        <TabsContent value="chat" className="h-full">
-          <ChatWindow
-            configRef={configRef}
-            dynamicToolset={dynamicToolset}
-            initialMessages={initialMessages}
-          />
-        </TabsContent>
-        <TabsContent value="agents" className="h-full overflow-auto pb-4 pr-4">
-          <SdkContent
-            toolset={configRef.current.toolsetSlug ?? undefined}
-            environment={configRef.current.environmentSlug ?? undefined}
-          />
-        </TabsContent>
+        <ChatWindow
+          configRef={configRef}
+          dynamicToolset={dynamicToolset}
+          initialMessages={initialMessages}
+        />
       </div>
-    </Tabs>
+    </>
   );
 }
