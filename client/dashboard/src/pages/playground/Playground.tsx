@@ -1,7 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Combobox, DropdownItem } from "@/components/ui/combobox";
-import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useIsAdmin } from "@/contexts/Auth";
 import {
@@ -14,7 +13,6 @@ import { capitalize, cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   useListChats,
-  useListEnvironments,
   useListToolsets,
 } from "@gram/client/react-query/index.js";
 import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
@@ -22,7 +20,6 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
-import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { ToolsetView } from "../toolsets/Toolset";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
@@ -154,6 +151,7 @@ function PlaygroundInner() {
             <PlaygroundRHS
               configRef={chatConfigRef}
               dynamicToolset={dynamicToolset}
+              setSelectedEnvironment={setSelectedEnvironment}
             />
           </ResizablePanel.Pane>
         </ResizablePanel>
@@ -176,12 +174,10 @@ export function ToolsetPanel({
   setDynamicToolset: (dynamicToolset: boolean) => void;
 }) {
   const { data: toolsetsData } = useListToolsets();
-  const { data: environmentsData } = useListEnvironments();
   const isAdmin = useIsAdmin();
   const routes = useRoutes();
 
   const toolsets = toolsetsData?.toolsets;
-  const environments = environmentsData?.environments;
 
   const selectedToolset = configRef.current.toolsetSlug;
   const selectedEnvironment = configRef.current.environmentSlug;
@@ -198,14 +194,13 @@ export function ToolsetPanel({
   }, [toolsets, configRef, setSelectedToolset, setSelectedEnvironment]);
 
   useEffect(() => {
-    if (environments?.[0] && configRef.current.environmentSlug === null) {
-      if (toolset?.defaultEnvironmentSlug) {
-        setSelectedEnvironment(toolset.defaultEnvironmentSlug);
-      } else {
-        setSelectedEnvironment(environments[0].slug);
-      }
+    if (
+      configRef.current.environmentSlug === null &&
+      toolset?.defaultEnvironmentSlug
+    ) {
+      setSelectedEnvironment(toolset.defaultEnvironmentSlug);
     }
-  }, [environments, configRef, setSelectedEnvironment, toolset]);
+  }, [configRef, setSelectedEnvironment, toolset]);
 
   useEffect(() => {
     const isDynamic =
@@ -262,15 +257,6 @@ export function ToolsetPanel({
               </Stack>
             )}
           </Stack>
-          {environments && environments.length > 0 && (
-            <Stack direction="horizontal" gap={2} align="center">
-              <Heading variant="h5">Active environment: </Heading>
-              <EnvironmentDropdown
-                selectedEnvironment={selectedEnvironment}
-                setSelectedEnvironment={setSelectedEnvironment}
-              />
-            </Stack>
-          )}
         </Stack>
       </PanelHeader>
       {content}
@@ -283,7 +269,7 @@ export const PanelHeader = ({
   children,
 }: {
   side: "left" | "right";
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) => {
   return (
     <div
