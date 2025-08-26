@@ -318,7 +318,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
     };
 
     // Only allow toggling if the user is not on the free tier or if they have no public servers
-    let disabled = true;
+    let disabled = false; // TODO: Flip this to true when we want to start gating (when an upgrade flow is in place)
     if (session.gramAccountType !== "free") {
       disabled = false;
     } else if (periodUsage && periodUsage.actualPublicServerCount == 0) {
