@@ -11,13 +11,18 @@ import (
 	)
 
 type PolarCustomerState struct {
-	polarComponents.CustomerState
+	OrganizationID string // the Speakeasy organization ID (not the Polar organization ID)
+	*polarComponents.CustomerState // nil means no state yet exists for this customer
 }
 
 var _ cache.CacheableObject[PolarCustomerState] = (*PolarCustomerState)(nil)
 
 func (p PolarCustomerState) CacheKey() string {
-	return fmt.Sprintf("polar_customer_state:%s", p.CustomerState.OrganizationID)
+	return orgCacheKey(p.OrganizationID)
+}
+
+func orgCacheKey(orgID string) string {
+	return fmt.Sprintf("polar_customer_state:%s", orgID)
 }
 
 func (p PolarCustomerState) TTL() time.Duration {
@@ -29,8 +34,8 @@ func (p PolarCustomerState) AdditionalCacheKeys() []string {
 }
 
 func (p *Client) GetCustomerState(ctx context.Context, orgID string) (*polarComponents.CustomerState, error) {
-	if customerState, err := p.customerStateCache.Get(ctx, PolarCustomerState{CustomerState: polarComponents.CustomerState{OrganizationID: orgID}}.CacheKey()); err == nil {
-		return &customerState.CustomerState, nil
+	if customerState, err := p.customerStateCache.Get(ctx, orgCacheKey(orgID)); err == nil {
+		return customerState.CustomerState, nil
 	}
 
 	customerState, err := p.getCustomerState(ctx, orgID)
@@ -38,7 +43,7 @@ func (p *Client) GetCustomerState(ctx context.Context, orgID string) (*polarComp
 		return nil, err
 	}
 
-	if err = p.customerStateCache.Store(ctx, PolarCustomerState{CustomerState: *customerState}); err != nil {
+	if err = p.customerStateCache.Store(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: customerState}); err != nil {
 		p.logger.ErrorContext(ctx, "failed to cache customer state", attr.SlogError(err))
 	}
 

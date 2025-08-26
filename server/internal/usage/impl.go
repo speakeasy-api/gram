@@ -77,6 +77,7 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 		return nil, err
 	}
 
+	// The actual number of public servers right this moment, which may not be updated in Polar yet.
 	actualPublicServerCount, err := s.repo.GetPublicServerCount(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "Could not get public server count")

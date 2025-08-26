@@ -16,7 +16,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert, cn, getServerURL } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
-import { useGetPeriodUsage, useGetUsageTiers } from "@gram/client/react-query";
+import { useGetPeriodUsage } from "@gram/client/react-query";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage";
 import {
@@ -33,6 +33,7 @@ import {
   CheckCircle2,
   Copy,
   Globe,
+  Info,
   Loader2,
   Trash2,
   X,
@@ -653,7 +654,7 @@ const BillingSection = () => {
   const isAdmin = useIsAdmin();
 
   return (
-    <>
+    <div className="pb-16">
       <Stack direction="horizontal" justify="space-between" className="mt-8">
         <Heading variant="h4">Billing</Heading>
         {session.gramAccountType === "free" ? (
@@ -664,20 +665,21 @@ const BillingSection = () => {
       </Stack>
       <div className="space-y-4">
         <Type variant="body" muted>
-          LLM Credits are used only for the in dashboard playground and other
-          AI-powered in dashboard experiences.
+          A summary of your organization's usage this period. Please visit the billing portal to see complete details or manage your account.
         </Type>
         {/* TODO: DO NOT SHIP THIS UNTIL THE PERIOD USAGE REFLECTS THE ORG (SDK BUG SOLVED) */}
         {isAdmin &&
           (periodUsage ? (
             <>
               <div>
-                <Type variant="body" className="font-medium">
-                  Tool Calls{" "}
-                  <span className="text-muted-foreground font-thin">
-                    ({periodUsage.toolCalls}/{periodUsage.maxToolCalls})
-                  </span>
-                </Type>
+                <Stack direction="horizontal" align="center" gap={1}>
+                  <Type variant="body" className="font-medium">
+                    Tool Calls
+                  </Type>
+                  <SimpleTooltip tooltip="The number of tool calls processed this period across all your organization's MCP servers.">
+                    <Info className="w-4 h-4 text-muted-foreground" />
+                  </SimpleTooltip>
+                </Stack>
                 <UsageProgress
                   value={periodUsage.toolCalls}
                   included={periodUsage.maxToolCalls}
@@ -685,14 +687,16 @@ const BillingSection = () => {
                 />
               </div>
               <div>
-                <Type variant="body" className="font-medium">
-                  Servers{" "}
-                  <span className="text-muted-foreground font-thin">
-                    ({periodUsage.servers}/{periodUsage.maxServers})
-                  </span>
-                </Type>
+                <Stack direction="horizontal" align="center" gap={1}>
+                  <Type variant="body" className="font-medium">
+                    Servers
+                  </Type>
+                  <SimpleTooltip tooltip="The number of public MCP servers across your organization.">
+                    <Info className="w-4 h-4 text-muted-foreground" />
+                  </SimpleTooltip>
+                </Stack>
                 <UsageProgress
-                  value={periodUsage.servers}
+                  value={periodUsage.actualPublicServerCount}
                   included={periodUsage.maxServers}
                   overageIncrement={1}
                 />
@@ -707,20 +711,15 @@ const BillingSection = () => {
             </>
           ))}
         {creditUsage ? (
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
+          <div>
+            <Stack direction="horizontal" align="center" gap={1}>
               <Type variant="body" className="font-medium">
-                {Math.min(
-                  creditUsage.creditsUsed,
-                  creditUsage.monthlyCredits
-                ).toLocaleString()}{" "}
-                / {creditUsage.monthlyCredits.toLocaleString()}
-                <span className="text-muted-foreground font-thin">
-                  {" "}
-                  credits used this month
-                </span>
+                Credits
               </Type>
-            </div>
+              <SimpleTooltip tooltip="The number of credits used this month for AI-powered dashboard experiences.">
+                <Info className="w-4 h-4 text-muted-foreground" />
+              </SimpleTooltip>
+            </Stack>
             <UsageProgress
               value={creditUsage.creditsUsed}
               included={creditUsage.monthlyCredits}
@@ -742,7 +741,7 @@ const BillingSection = () => {
         actionType="credit_upgrade"
         accountUpgrade
       />
-    </>
+    </div>
   );
 };
 
@@ -757,7 +756,7 @@ const UsageProgress = ({
 }) => {
   const anyOverage = value > included;
   const overageMax =
-    Math.ceil((value - included) / overageIncrement) * overageIncrement; // Compute next increment
+    Math.ceil((value - included + 1) / overageIncrement) * overageIncrement; // Compute next increment. +1 because we always want to show the next increment.
   const totalMax = included + overageMax;
 
   // Calculate the proportional width for the included section

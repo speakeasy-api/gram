@@ -352,7 +352,7 @@ func (p *Client) GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodU
 		return nil, oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not get period usage")
 	}
 
-	customer, err := p.GetCustomerState(ctx, orgID)
+	customer, err := p.GetCustomerState(ctx, "123")//orgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "Could not get customer state")
 	}
