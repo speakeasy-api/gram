@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	polargo "github.com/polarsource/polar-go"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
 
@@ -91,7 +92,8 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "")
+	polar := polargo.New(polargo.WithSecurity("test-polar-key"))
+	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", polar)
 	require.NoError(t, err)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)

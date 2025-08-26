@@ -49,6 +49,7 @@ func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage 
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
 		Polar:               nil,
+		RedisClient:         nil,
 	}
 }
 
@@ -68,6 +69,7 @@ func NewTemporalWorker(
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
 		Polar:               nil,
+		RedisClient:         nil,
 	}
 
 	for _, o := range options {
@@ -81,6 +83,7 @@ func NewTemporalWorker(
 			K8sClient:           conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME: conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
 			Polar:               conv.Default(o.Polar, opts.Polar),
+			RedisClient:         conv.Default(o.RedisClient, opts.RedisClient),
 		}
 	}
 

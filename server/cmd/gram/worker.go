@@ -319,6 +319,7 @@ func newWorkerCommand() *cli.Command {
 				K8sClient:           k8sClient,
 				ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
 				Polar:               polarClient,
+				RedisClient:         redisClient,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

@@ -74,7 +74,7 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 
 	polarUsage, err := s.polarClient.GetPeriodUsage(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get period usage from polar")
 	}
 
 	// The actual number of public servers right this moment, which may not be updated in Polar yet.
@@ -96,7 +96,7 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err error) {
 	product, err := s.polarClient.GetGramBusinessProduct(ctx)
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get gram business product from polar")
 	}
 
 	var toolCallsIncluded, mcpServersIncluded int64
@@ -119,17 +119,17 @@ func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err e
 				meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
 				toolCallPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
 				if err != nil {
-					return nil, err
+					return nil, oops.E(oops.CodeUnexpected, err, "failed to parse tool call price")
 				}
-				toolCallPrice = toolCallPrice / 100 // Result from Polar is in cents
+				toolCallPrice /= 100 // Result from Polar is in cents
 			}
 			if price.ProductPrice.ProductPriceMeteredUnit.MeterID == polar.ServersMeterID {
 				meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
 				mcpServerPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
 				if err != nil {
-					return nil, err
+					return nil, oops.E(oops.CodeUnexpected, err, "failed to parse mcp server price")
 				}
-				mcpServerPrice = mcpServerPrice / 100 // Result from Polar is in cents
+				mcpServerPrice /= 100 // Result from Polar is in cents
 			}
 		}
 	}
@@ -158,7 +158,11 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	return s.polarClient.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String())
+	checkoutURL, err := s.polarClient.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String())
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout")
+	}
+	return checkoutURL, nil
 }
 
 func (s *Service) CreateCustomerSession(ctx context.Context, payload *gen.CreateCustomerSessionPayload) (res string, err error) {
@@ -167,5 +171,9 @@ func (s *Service) CreateCustomerSession(ctx context.Context, payload *gen.Create
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	return s.polarClient.CreateCustomerSession(ctx, authCtx.ActiveOrganizationID)
+	sessionURL, err := s.polarClient.CreateCustomerSession(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return "", oops.E(oops.CodeUnexpected, err, "failed to create customer session")
+	}
+	return sessionURL, nil
 }
