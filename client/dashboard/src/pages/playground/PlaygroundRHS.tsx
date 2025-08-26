@@ -8,10 +8,12 @@ export function PlaygroundRHS({
   configRef,
   dynamicToolset,
   setSelectedEnvironment,
+  initialPrompt,
 }: {
   configRef: ChatConfig;
   dynamicToolset: boolean;
   setSelectedEnvironment: (environment: string) => void;
+  initialPrompt?: string | null;
 }) {
   const { data: environmentsData } = useListEnvironments();
   const selectedEnvironment = configRef.current.environmentSlug;
@@ -43,6 +45,7 @@ export function PlaygroundRHS({
           configRef={configRef}
           dynamicToolset={dynamicToolset}
           initialMessages={initialMessages}
+          initialPrompt={initialPrompt}
         />
       </div>
     </>

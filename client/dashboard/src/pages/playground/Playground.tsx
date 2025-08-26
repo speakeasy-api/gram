@@ -48,6 +48,9 @@ function PlaygroundInner() {
     searchParams.get("environment") ?? null
   );
   const [dynamicToolset, setDynamicToolset] = useState(false);
+  
+  // Get prompt from URL params if available
+  const initialPrompt = searchParams.get("prompt");
 
   // We use a ref so that we can hot-swap the toolset and environment without causing a re-render
   const chatConfigRef = useRef({
@@ -152,6 +155,7 @@ function PlaygroundInner() {
               configRef={chatConfigRef}
               dynamicToolset={dynamicToolset}
               setSelectedEnvironment={setSelectedEnvironment}
+              initialPrompt={initialPrompt}
             />
           </ResizablePanel.Pane>
         </ResizablePanel>
