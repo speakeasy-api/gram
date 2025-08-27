@@ -15,7 +15,7 @@ go = "1.25.0"
 golangci-lint = "2.4.0"
 jq = "1.7.1"
 melange = "0.30.6"
-nodejs = "22.14.0"
+nodejs = "22.18.0"
 watchexec = "2.3.0"
 gum = "0.16.0"
 

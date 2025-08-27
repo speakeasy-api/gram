@@ -3,7 +3,6 @@ package main
 import (
 	"archive/zip"
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -17,6 +16,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/speakeasy-api/gram/functions/internal/javascript"
 )
 
 type cancellationError struct{ msg string }
@@ -25,26 +26,33 @@ func (e *cancellationError) Error() string { return e.msg }
 
 var (
 	cancelCauseHandlerCompleted error = &cancellationError{msg: "handler completed"}
-	cancelCauseTimeout          error = &cancellationError{msg: "handler timeout"}
+	cancelCauseHostTimeout      error = &cancellationError{msg: "host timeout"}
 	cancelCauseTerminated       error = &cancellationError{msg: "terminated by function runner"}
 )
 
 type ToolCallRequest struct {
 	ToolName    string            `json:"name"`
 	Input       json.RawMessage   `json:"input"`
-	Environment map[string]string `json:"environment"`
+	Environment map[string]string `json:"environment,omitempty,omitzero"`
 }
 
 func main() {
 	if err := unzipCode("/data/code.zip", "/srv/app"); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to unzip code: %s\n", err.Error())
 		os.Exit(1)
+		return
+	}
+
+	if err := os.WriteFile("/srv/app/gram-start.mjs", javascript.Entrypoint, 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "write javascript entrypoint: %s\n", err.Error())
+		os.Exit(1)
+		return
 	}
 
 	ctx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
 
-	ctx, timeoutCancel := context.WithTimeoutCause(ctx, 5*time.Minute, cancelCauseTimeout)
+	ctx, timeoutCancel := context.WithTimeoutCause(ctx, 5*time.Minute, cancelCauseHostTimeout)
 	defer timeoutCancel()
 
 	sigch := make(chan os.Signal, 1)
@@ -82,26 +90,39 @@ func main() {
 
 		var req ToolCallRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			msg := fmt.Sprintf("invalid request: %s", err.Error())
+			msg := fmt.Sprintf("deserialize tool call request: %s", err.Error())
 			http.Error(w, msg, http.StatusBadRequest)
 			return
 		}
 
-		stdoutReader, stdoutWriter, err := os.Pipe()
+		reqCopy := req
+		reqCopy.Environment = nil
+		reqArg, err := json.Marshal(reqCopy)
 		if err != nil {
-			msg := fmt.Sprintf("failed to create pipe: %s", err.Error())
+			msg := fmt.Sprintf("serialize tool call request: %s", err.Error())
 			http.Error(w, msg, http.StatusInternalServerError)
 			return
 		}
-		defer stdoutWriter.Close()
-		defer stdoutReader.Close()
 
-		stderr := bytes.NewBuffer(nil)
+		if len(req.Input) == 0 {
+			msg := "invalid request: missing input"
+			http.Error(w, msg, http.StatusBadRequest)
+			return
+		}
 
-		cmd := exec.CommandContext(r.Context(), "python3", "/srv/app/functions.py")
+		resultReader, resultWriter, err := os.Pipe()
+		if err != nil {
+			msg := fmt.Sprintf("create pipe: %s", err.Error())
+			http.Error(w, msg, http.StatusInternalServerError)
+			return
+		}
+		defer resultWriter.Close()
+		defer resultReader.Close()
+
+		cmd := exec.CommandContext(r.Context(), "node", "/srv/app/gram-start.mjs", resultWriter.Name(), string(reqArg))
 		cmd.Dir = "/srv/app"
-		cmd.Stdout = stdoutWriter
-		cmd.Stderr = stderr
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 		cmd.Env = make([]string, 0, len(req.Environment))
 		for key, value := range req.Environment {
 			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%q", key, value))
@@ -109,14 +130,14 @@ func main() {
 
 		err = cmd.Start()
 		if err != nil {
-			msg := fmt.Sprintf("failed to execute tool: %s", err.Error())
+			msg := fmt.Sprintf("execute tool: %s", err.Error())
 			http.Error(w, msg, http.StatusInternalServerError)
 			return
 		}
 
-		response, err := http.ReadResponse(bufio.NewReader(stdoutReader), nil)
+		response, err := http.ReadResponse(bufio.NewReader(resultReader), nil)
 		if err != nil {
-			msg := fmt.Sprintf("failed to read response: %s", err.Error())
+			msg := fmt.Sprintf("read response: %s", err.Error())
 			http.Error(w, msg, http.StatusInternalServerError)
 			return
 		}
@@ -124,19 +145,18 @@ func main() {
 
 		w.WriteHeader(response.StatusCode)
 		if _, err := io.Copy(w, response.Body); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to copy response body: %s\n", err.Error())
+			fmt.Fprintf(os.Stderr, "copy response body: %s\n", err.Error())
 		}
 
 		if err := cmd.Wait(); err != nil {
-			fmt.Fprintln(os.Stderr, stderr.String())
-			fmt.Fprintln(os.Stderr, err.Error())
+			fmt.Fprintf(os.Stderr, "tool execution error: %s\n", err.Error())
 		}
 	}))
 
 	srv := &http.Server{
 		Addr:              ":8888",
 		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
+		ReadHeaderTimeout: 30 * time.Second,
 		BaseContext: func(net.Listener) context.Context {
 			return ctx
 		},
@@ -163,6 +183,7 @@ func main() {
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		fmt.Fprintf(os.Stderr, "server error: %s\n", err.Error())
 		os.Exit(1)
+		return
 	}
 }
 
