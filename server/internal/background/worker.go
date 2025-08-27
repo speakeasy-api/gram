@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
 type WorkerOptions struct {
@@ -36,6 +37,7 @@ type WorkerOptions struct {
 	ExpectedTargetCNAME string
 	Polar               *polargo.Polar
 	RedisClient         *redis.Client
+	PosthogClient       *posthog.Posthog
 }
 
 func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage assets.BlobStore) *WorkerOptions {
@@ -50,6 +52,7 @@ func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage 
 		ExpectedTargetCNAME: "",
 		Polar:               nil,
 		RedisClient:         nil,
+		PosthogClient:       nil,
 	}
 }
 
@@ -70,6 +73,7 @@ func NewTemporalWorker(
 		ExpectedTargetCNAME: "",
 		Polar:               nil,
 		RedisClient:         nil,
+		PosthogClient:       nil,
 	}
 
 	for _, o := range options {
@@ -84,6 +88,7 @@ func NewTemporalWorker(
 			ExpectedTargetCNAME: conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
 			Polar:               conv.Default(o.Polar, opts.Polar),
 			RedisClient:         conv.Default(o.RedisClient, opts.RedisClient),
+			PosthogClient:       conv.Default(o.PosthogClient, opts.PosthogClient),
 		}
 	}
 
@@ -108,6 +113,7 @@ func NewTemporalWorker(
 		opts.ExpectedTargetCNAME,
 		opts.Polar,
 		opts.RedisClient,
+		opts.PosthogClient,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -119,6 +125,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
+	temporalWorker.RegisterActivity(activities.ReportFreeTierOverage)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(SlackEventWorkflow)
