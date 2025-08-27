@@ -7,9 +7,9 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	polargo "github.com/polarsource/polar-go"
 	polarComponents "github.com/polarsource/polar-go/models/components"
+	"github.com/redis/go-redis/v9"
 	srv "github.com/speakeasy-api/gram/server/gen/http/usage/server"
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -94,26 +94,22 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 }
 
 func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err error) {
-	product, err := s.polarClient.GetGramBusinessProduct(ctx)
+	freeTierProduct, err := s.polarClient.GetGramFreeTierProduct(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get gram free tier product from polar")
+	}
+
+	proProduct, err := s.polarClient.GetGramProProduct(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get gram business product from polar")
 	}
 
-	var toolCallsIncluded, mcpServersIncluded int64
+	freeTierLimits := polar.ExtractTierLimits(freeTierProduct)
+	proTierLimits := polar.ExtractTierLimits(proProduct)
+
 	var toolCallPrice, mcpServerPrice float64
 
-	for _, benefit := range product.Benefits {
-		if benefit.Type == polarComponents.BenefitUnionTypeBenefitMeterCredit && benefit.BenefitMeterCredit != nil {
-			if benefit.BenefitMeterCredit.Properties.MeterID == polar.ToolCallsMeterID {
-				toolCallsIncluded = benefit.BenefitMeterCredit.Properties.Units
-			}
-			if benefit.BenefitMeterCredit.Properties.MeterID == polar.ServersMeterID {
-				mcpServersIncluded = benefit.BenefitMeterCredit.Properties.Units
-			}
-		}
-	}
-
-	for _, price := range product.Prices {
+	for _, price := range proProduct.Prices {
 		if price.Type == polarComponents.PricesTypeProductPrice && price.ProductPrice != nil && price.ProductPrice.ProductPriceMeteredUnit != nil {
 			if price.ProductPrice.ProductPriceMeteredUnit.MeterID == polar.ToolCallsMeterID {
 				meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
@@ -136,18 +132,18 @@ func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err e
 
 	return &gen.UsageTiers{
 		Free: &gen.TierLimits{
-			BasePrice: 0,
-			IncludedToolCalls: polar.FreeTierToolCalls,
-			IncludedServers: polar.FreeTierServers,
+			BasePrice:                  0,
+			IncludedToolCalls:          freeTierLimits.ToolCalls,
+			IncludedServers:            freeTierLimits.Servers,
 			PricePerAdditionalToolCall: 0,
-			PricePerAdditionalServer: 0,
+			PricePerAdditionalServer:   0,
 		},
 		Business: &gen.TierLimits{
-			BasePrice: 0,
-			IncludedToolCalls: int(toolCallsIncluded),
-			IncludedServers: int(mcpServersIncluded),
+			BasePrice:                  0,
+			IncludedToolCalls:          proTierLimits.ToolCalls,
+			IncludedServers:            proTierLimits.Servers,
 			PricePerAdditionalToolCall: toolCallPrice,
-			PricePerAdditionalServer: mcpServerPrice,
+			PricePerAdditionalServer:   mcpServerPrice,
 		},
 	}, nil
 }
