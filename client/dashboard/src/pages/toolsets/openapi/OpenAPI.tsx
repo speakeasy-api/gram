@@ -7,6 +7,7 @@ import { SkeletonCode } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { UpdatedAt } from "@/components/updated-at";
 import FileUpload from "@/components/upload";
+import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { cn, getServerURL } from "@/lib/utils";
 import { useDeploymentLogsSummary } from "@/pages/deployments/Deployment";
@@ -26,7 +27,6 @@ import {
   useOnboardingSteps,
 } from "../../onboarding/Onboarding";
 import { ApisEmptyState } from "./ApisEmptyState";
-import { useProject } from "@/contexts/Auth";
 
 export default function OpenAPIDocuments() {
   return (
@@ -152,6 +152,27 @@ export function APIsContent() {
     );
   }, [deployment, deploymentLogsSummary]);
 
+
+  const deploymentAssets: NamedAsset[] = useMemo(() => {
+    if (!deployment || !assets) {
+      return [];
+    }
+
+    return deployment.openapiv3Assets.map((deploymentAsset) => {
+      const asset = assets.assets.find(
+        (a) => a.id === deploymentAsset.assetId
+      );
+      if (!asset) {
+        throw new Error(`Asset ${deploymentAsset.assetId} not found`);
+      }
+      return {
+        ...asset,
+        name: deploymentAsset.name,
+        slug: deploymentAsset.slug,
+      };
+    });
+  }, [deployment, assets]);
+
   if (!isLoading && deploymentIsEmpty) {
     return (
       <>
@@ -171,16 +192,6 @@ export function APIsContent() {
 
     refetch();
   };
-
-  const usedAssets: NamedAsset[] =
-    assets?.assets.flatMap((asset) => {
-      const deploymentAsset = deployment?.openapiv3Assets.find(
-        (a) => a.assetId === asset.id
-      );
-      return deploymentAsset
-        ? [{ ...asset, name: deploymentAsset.name, slug: deploymentAsset.slug }]
-        : [];
-    }) || [];
 
   const deploySpecUpdate = async (documentSlug: string) => {
     setIsDeploying(true);
@@ -206,7 +217,7 @@ export function APIsContent() {
       </Page.Section.CTA>
       <Page.Section.Body>
         <MiniCards isLoading={isLoading}>
-          {usedAssets?.map((asset: NamedAsset) => (
+          {deploymentAssets?.map((asset: NamedAsset) => (
             <OpenAPICard
               key={asset.id}
               asset={asset}

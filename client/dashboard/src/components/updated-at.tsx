@@ -19,7 +19,7 @@ export function UpdatedAt({
       className={cn("text-sm", italic && "italic", className)}
     >
       {"Updated "}
-      <HumanizeDateTime date={new Date(date)} includeTime={false} />
+      <HumanizeDateTime date={date} includeTime={false} />
     </Type>
   );
 }
