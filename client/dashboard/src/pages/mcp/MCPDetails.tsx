@@ -811,7 +811,7 @@ function OAuthTabModal({
       action: "mcp_oauth_integration",
       toolset_slug: toolsetSlug,
     });
-    window.open("https://calendly.com/sagar-speakeasy/30min", "_blank");
+    window.open("https://calendly.com/d/crtj-3tk-wpd/demo-with-speakeasy", "_blank");
   };
 
   const addExternalOAuthMutation = useAddExternalOAuthServerMutation({
