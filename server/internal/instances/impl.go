@@ -335,6 +335,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		ToolName:         executionInfo.Tool.Name,
 		ProjectID:        authCtx.ProjectID.String(),
 		ProjectSlug:      authCtx.ProjectSlug,
+		Type:             polar.ToolCallType_HTTP,
 		OrganizationSlug: &executionInfo.OrganizationSlug,
 		ToolsetSlug:      &toolsetSlug,
 		ChatID:           &chatID,

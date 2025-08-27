@@ -102,20 +102,20 @@ func handleToolsCall(
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to execute prompt").Log(ctx, logger)
 		}
 
-		// Track prompt call usage
 		requestBytes := int64(len(params.Arguments))
 		outputBytes := int64(len(promptData))
 
-		go usageClient.TrackPromptCallUsage(context.Background(), polar.PromptCallUsageEvent{
+		go usageClient.TrackToolCallUsage(context.Background(), polar.ToolCallUsageEvent{
 			OrganizationID:   toolset.OrganizationID,
 			RequestBytes:     requestBytes,
 			OutputBytes:      outputBytes,
-			PromptID:         &higherOrderTool.ID,
-			PromptName:       string(higherOrderTool.Name),
+			ToolID:           higherOrderTool.ID,
+			ToolName:         string(higherOrderTool.Name),
+			Type:             polar.ToolCallType_HigherOrder,
 			ProjectID:        payload.projectID.String(),
 			ToolsetSlug:      &payload.toolset,
 			MCPURL:           &mcpURL,
-			ProjectSlug:      nil, // TODO: do we need these slugs for prompt calls?
+			ProjectSlug:      nil, // This data is only there for debugging, but we don't have it here
 			OrganizationSlug: nil,
 			ChatID:           nil,
 		})	

@@ -848,6 +848,7 @@ const UsageProgress = ({
 
 const PolarPortalLink = () => {
   const client = useSdkClient();
+  const session = useSession();
 
   return (
     <Button
@@ -856,6 +857,8 @@ const PolarPortalLink = () => {
           window.open(link, "_blank");
         });
       }}
+      disabled={session.gramAccountType === "enterprise"}
+      tooltip={session.gramAccountType === "enterprise" ? "Enterprise: Contact support to manage billing" : undefined}
     >
       Manage Billing
     </Button>

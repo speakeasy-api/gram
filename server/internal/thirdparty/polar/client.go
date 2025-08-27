@@ -101,6 +101,13 @@ func NewClientWithLogging(polarKey string, logger *slog.Logger) *polargo.Polar {
 	return polargo.New(polargo.WithSecurity(polarKey), polargo.WithClient(httpClient), polargo.WithTimeout(30*time.Second))
 }
 
+type ToolCallType string
+
+const (
+	ToolCallType_HTTP ToolCallType = "http"
+	ToolCallType_HigherOrder ToolCallType = "higher-order"
+)
+
 type ToolCallUsageEvent struct {
 	OrganizationID   string
 	RequestBytes     int64
@@ -113,6 +120,7 @@ type ToolCallUsageEvent struct {
 	ToolsetSlug      *string
 	ChatID           *string
 	MCPURL           *string
+	Type             ToolCallType
 }
 
 func (p *Client) TrackToolCallUsage(ctx context.Context, event ToolCallUsageEvent) {
@@ -121,6 +129,7 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event ToolCallUsageEven
 	}
 
 	totalBytes := event.RequestBytes + event.OutputBytes
+	typeStr := string(event.Type)
 
 	metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
 		"request_bytes": {
@@ -140,6 +149,9 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event ToolCallUsageEven
 		},
 		"project_id": {
 			Str: &event.ProjectID,
+		},
+		"type": {
+			Str: &typeStr,
 		},
 	}
 
