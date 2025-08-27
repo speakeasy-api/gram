@@ -288,7 +288,7 @@ const UploadStep = ({
     setApiName,
     apiNameError,
     undoSpecUpload,
-  } = useOnboardingSteps(undefined, false);
+  } = useOnboardingSteps(false);
 
   const [deploymentToShowLogsFor, setDeploymentToShowLogsFor] =
     useState<string>();

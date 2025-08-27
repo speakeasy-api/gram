@@ -49,7 +49,6 @@ export default function Onboarding() {
 }
 
 export function useOnboardingSteps(
-  existingDocumentSlug?: string,
   checkDocumentSlugUnique = true
 ) {
   const project = useProject();
@@ -62,9 +61,7 @@ export function useOnboardingSteps(
   const [file, setFile] = useState<File>();
   const [asset, setAsset] = useState<UploadOpenAPIv3Result>();
   const [creatingDeployment, setCreatingDeployment] = useState(false);
-  const [apiName, setApiName] = useState<string | undefined>(
-    existingDocumentSlug
-  );
+  const [apiName, setApiName] = useState<string | undefined>();
   const [deployment, setDeployment] = useState<Deployment>();
 
   // If an existing document slug was NOT provided, then we need to make sure the provided slug
@@ -77,7 +74,6 @@ export function useOnboardingSteps(
     }
 
     if (
-      !existingDocumentSlug &&
       checkDocumentSlugUnique &&
       latestDeployment?.deployment?.openapiv3Assets
         .map((a) => a.slug)
@@ -261,11 +257,9 @@ const useAssetNumtools = (
 };
 
 export function OnboardingContent({
-  existingDocumentSlug,
   onOnboardingComplete,
   className,
 }: {
-  existingDocumentSlug?: string;
   onOnboardingComplete?: (deployment: Deployment) => void;
   className?: string;
 }) {
@@ -280,7 +274,7 @@ export function OnboardingContent({
     apiNameError,
     file,
     asset,
-  } = useOnboardingSteps(existingDocumentSlug);
+  } = useOnboardingSteps();
 
   const numtools = useAssetNumtools(asset?.asset.id, createdDeployment);
 
@@ -314,7 +308,6 @@ export function OnboardingContent({
               value={apiName}
               onChange={setApiName}
               placeholder="My API"
-              disabled={!!existingDocumentSlug}
             />
             <Button
               onClick={() => createDeployment()}
