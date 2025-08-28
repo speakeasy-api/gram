@@ -665,7 +665,8 @@ const BillingSection = () => {
       </Stack>
       <div className="space-y-4">
         <Type variant="body" muted>
-          A summary of your organization's usage this period. Please visit the billing portal to see complete details or manage your account.
+          A summary of your organization's usage this period. Please visit the
+          billing portal to see complete details or manage your account.
         </Type>
         {/* TODO: DO NOT SHIP THIS UNTIL THE PERIOD USAGE REFLECTS THE ORG (SDK BUG SOLVED) */}
         {isAdmin &&
@@ -696,7 +697,7 @@ const BillingSection = () => {
                   </SimpleTooltip>
                 </Stack>
                 <UsageProgress
-                  value={periodUsage.actualPublicServerCount} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
+                  value={0} //periodUsage.actualPublicServerCount} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
                   included={periodUsage.maxServers}
                   overageIncrement={1}
                 />
@@ -801,24 +802,26 @@ const UsageProgress = ({
         {includedProgress}
         {overageProgress}
       </div>
-      {/* Included label on left side, always show */}
+      {/* Included label underneath, always show */}
       <div
-        className="absolute -top-5 text-xs text-muted-foreground whitespace-nowrap"
-        style={{ right: `${Math.max(0, 100 - includedWidth + 1)}%` }}
+        className="absolute top-5 text-xs text-muted-foreground whitespace-nowrap"
+        style={{ right: `${101 - includedWidth}%` }}
       >
-        Included: {included.toLocaleString()}
+        {anyOverage
+          ? `Included: ${included.toLocaleString()}`
+          : `${value.toLocaleString()} / ${included.toLocaleString()}`}
       </div>
 
       {/* Divider line and labels for overage */}
       {anyOverage && (
         <>
           <div
-            className="absolute bottom-0 w-[2px] h-8 bg-neutral-600"
+            className="absolute top-0 w-[2px] h-8 bg-neutral-600"
             style={{ left: `${includedWidth}%` }}
           />
-          {/* Overage label on right side */}
+          {/* Overage label underneath */}
           <div
-            className="absolute -top-5 text-xs text-muted-foreground whitespace-nowrap"
+            className="absolute top-5 text-xs text-muted-foreground whitespace-nowrap"
             style={{ left: `${includedWidth + 1}%` }}
           >
             Extra: {(value - included).toLocaleString()}
@@ -834,7 +837,7 @@ const UsageProgress = ({
               return (
                 <div
                   key={index}
-                  className="absolute bottom-0 w-[2px] h-5 bg-neutral-600"
+                  className="absolute top-0 w-[2px] h-5 bg-neutral-600"
                   style={{ left: `${incrementPosition}%` }}
                 />
               );
@@ -858,7 +861,11 @@ const PolarPortalLink = () => {
         });
       }}
       disabled={session.gramAccountType === "enterprise"}
-      tooltip={session.gramAccountType === "enterprise" ? "Enterprise: Contact support to manage billing" : undefined}
+      tooltip={
+        session.gramAccountType === "enterprise"
+          ? "Enterprise: Contact support to manage billing"
+          : undefined
+      }
     >
       Manage Billing
     </Button>
