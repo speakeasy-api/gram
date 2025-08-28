@@ -696,7 +696,7 @@ const BillingSection = () => {
                   </SimpleTooltip>
                 </Stack>
                 <UsageProgress
-                  value={periodUsage.actualPublicServerCount}
+                  value={periodUsage.actualPublicServerCount} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
                   included={periodUsage.maxServers}
                   overageIncrement={1}
                 />
@@ -848,6 +848,7 @@ const UsageProgress = ({
 
 const PolarPortalLink = () => {
   const client = useSdkClient();
+  const session = useSession();
 
   return (
     <Button
@@ -856,6 +857,8 @@ const PolarPortalLink = () => {
           window.open(link, "_blank");
         });
       }}
+      disabled={session.gramAccountType === "enterprise"}
+      tooltip={session.gramAccountType === "enterprise" ? "Enterprise: Contact support to manage billing" : undefined}
     >
       Manage Billing
     </Button>

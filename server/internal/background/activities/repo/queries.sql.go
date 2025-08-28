@@ -9,6 +9,42 @@ import (
 	"context"
 )
 
+const getAllOrganizations = `-- name: GetAllOrganizations :many
+SELECT id, name, slug, gram_account_type FROM organization_metadata
+`
+
+type GetAllOrganizationsRow struct {
+	ID              string
+	Name            string
+	Slug            string
+	GramAccountType string
+}
+
+func (q *Queries) GetAllOrganizations(ctx context.Context) ([]GetAllOrganizationsRow, error) {
+	rows, err := q.db.Query(ctx, getAllOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAllOrganizationsRow
+	for rows.Next() {
+		var i GetAllOrganizationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.GramAccountType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPlatformUsageMetrics = `-- name: GetPlatformUsageMetrics :many
 WITH latest_deployments AS (
   SELECT DISTINCT ON (project_id) project_id, id as deployment_id

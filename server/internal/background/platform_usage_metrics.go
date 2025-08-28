@@ -45,6 +45,12 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 		return fmt.Errorf("failed to collect platform usage metrics: %w", err)
 	}
 
+	err = workflow.ExecuteActivity(ctx, a.ReportFreeTierOverage).Get(ctx, nil)
+	if err != nil {
+		logger.Error("failed to report free tier overages", "error", err.Error())
+		return fmt.Errorf("failed to report free tier overages: %w", err)
+	}
+
 	logger.Info("Platform usage metrics collection completed successfully")
 	return nil
 }

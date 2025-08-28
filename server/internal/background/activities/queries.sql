@@ -32,4 +32,6 @@ SELECT
   COALESCE(tlm.total_tools, 0) as total_tools
 FROM toolset_metrics tm
 FULL OUTER JOIN tool_metrics tlm ON tm.organization_id = tlm.organization_id;
-	
+
+-- name: GetAllOrganizations :many
+SELECT id, name, slug, gram_account_type FROM organization_metadata;

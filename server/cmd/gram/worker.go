@@ -320,6 +320,7 @@ func newWorkerCommand() *cli.Command {
 				ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
 				Polar:               polarClient,
 				RedisClient:         redisClient,
+				PosthogClient:       posthogClient,
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())

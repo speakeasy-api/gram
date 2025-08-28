@@ -52,7 +52,6 @@ func (c *CollectPlatformUsageMetrics) Do(ctx context.Context) error {
 		wg.Add(1)
 		go func(m repo.GetPlatformUsageMetricsRow) {
 			defer wg.Done()
-			// Use the passed context instead of creating a new one
 			c.usageClient.TrackPlatformUsage(ctx, polar.PlatformUsageEvent{
 				OrganizationID:    m.OrganizationID,
 				PublicMCPServers:  m.PublicMcpServers,
