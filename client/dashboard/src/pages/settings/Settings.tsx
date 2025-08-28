@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert, cn, getServerURL } from "@/lib/utils";
@@ -650,8 +650,6 @@ const BillingSection = () => {
   const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
     throwOnError: !getServerURL().includes("localhost"),
   });
-
-  const isAdmin = useIsAdmin();
 
   return (
     <div className="pb-16">
