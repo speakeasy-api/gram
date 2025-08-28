@@ -19,9 +19,11 @@ import (
 
 // Server lists the usage service endpoint HTTP handlers.
 type Server struct {
-	Mounts         []*MountPoint
-	GetPeriodUsage http.Handler
-	CreateCheckout http.Handler
+	Mounts                []*MountPoint
+	GetPeriodUsage        http.Handler
+	GetUsageTiers         http.Handler
+	CreateCustomerSession http.Handler
+	CreateCheckout        http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -52,10 +54,14 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"GetPeriodUsage", "GET", "/rpc/usage.getPeriodUsage"},
+			{"GetUsageTiers", "GET", "/rpc/usage.getUsageTiers"},
+			{"CreateCustomerSession", "POST", "/rpc/usage.createCustomerSession"},
 			{"CreateCheckout", "POST", "/rpc/usage.createCheckout"},
 		},
-		GetPeriodUsage: NewGetPeriodUsageHandler(e.GetPeriodUsage, mux, decoder, encoder, errhandler, formatter),
-		CreateCheckout: NewCreateCheckoutHandler(e.CreateCheckout, mux, decoder, encoder, errhandler, formatter),
+		GetPeriodUsage:        NewGetPeriodUsageHandler(e.GetPeriodUsage, mux, decoder, encoder, errhandler, formatter),
+		GetUsageTiers:         NewGetUsageTiersHandler(e.GetUsageTiers, mux, decoder, encoder, errhandler, formatter),
+		CreateCustomerSession: NewCreateCustomerSessionHandler(e.CreateCustomerSession, mux, decoder, encoder, errhandler, formatter),
+		CreateCheckout:        NewCreateCheckoutHandler(e.CreateCheckout, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -65,6 +71,8 @@ func (s *Server) Service() string { return "usage" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetPeriodUsage = m(s.GetPeriodUsage)
+	s.GetUsageTiers = m(s.GetUsageTiers)
+	s.CreateCustomerSession = m(s.CreateCustomerSession)
 	s.CreateCheckout = m(s.CreateCheckout)
 }
 
@@ -74,6 +82,8 @@ func (s *Server) MethodNames() []string { return usage.MethodNames[:] }
 // Mount configures the mux to serve the usage endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetPeriodUsageHandler(mux, h.GetPeriodUsage)
+	MountGetUsageTiersHandler(mux, h.GetUsageTiers)
+	MountCreateCustomerSessionHandler(mux, h.CreateCustomerSession)
 	MountCreateCheckoutHandler(mux, h.CreateCheckout)
 }
 
@@ -112,6 +122,105 @@ func NewGetPeriodUsageHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getPeriodUsage")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetUsageTiersHandler configures the mux to serve the "usage" service
+// "getUsageTiers" endpoint.
+func MountGetUsageTiersHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/usage.getUsageTiers", otelhttp.WithRouteTag("/rpc/usage.getUsageTiers", f).ServeHTTP)
+}
+
+// NewGetUsageTiersHandler creates a HTTP handler which loads the HTTP request
+// and calls the "usage" service "getUsageTiers" endpoint.
+func NewGetUsageTiersHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		encodeResponse = EncodeGetUsageTiersResponse(encoder)
+		encodeError    = EncodeGetUsageTiersError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getUsageTiers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
+		var err error
+		res, err := endpoint(ctx, nil)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCreateCustomerSessionHandler configures the mux to serve the "usage"
+// service "createCustomerSession" endpoint.
+func MountCreateCustomerSessionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/usage.createCustomerSession", otelhttp.WithRouteTag("/rpc/usage.createCustomerSession", f).ServeHTTP)
+}
+
+// NewCreateCustomerSessionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "usage" service "createCustomerSession" endpoint.
+func NewCreateCustomerSessionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCreateCustomerSessionRequest(mux, decoder)
+		encodeResponse = EncodeCreateCustomerSessionResponse(encoder)
+		encodeError    = EncodeCreateCustomerSessionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "createCustomerSession")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "usage")
 		payload, err := decodeRequest(r)
 		if err != nil {

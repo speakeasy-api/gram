@@ -13,7 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/packages/semver"
 )
 
 func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.Queries, projectID ProjectID, depID DeploymentID) (*types.Deployment, error) {
@@ -63,7 +63,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 			attachedPackages = append(attachedPackages, &types.DeploymentPackage{
 				ID:   pkgID.String(),
 				Name: pkgName,
-				Version: packages.Semver{
+				Version: semver.Semver{
 					Valid:      true,
 					Major:      r.PackageVersionMajor.Int64,
 					Minor:      r.PackageVersionMinor.Int64,

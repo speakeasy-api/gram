@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/packages/repo"
+	"github.com/speakeasy-api/gram/server/internal/packages/semver"
 )
 
 var nilID uuid.NullUUID
@@ -85,7 +86,7 @@ func (s *Service) ListPackages(ctx context.Context, form *gen.ListPackagesPayloa
 	}
 
 	for _, pkg := range packages {
-		versionString := Semver{
+		versionString := semver.Semver{
 			Valid:      true,
 			Major:      pkg.VersionMajor.Int64,
 			Minor:      pkg.VersionMinor.Int64,
@@ -305,7 +306,7 @@ func (s *Service) ListVersions(ctx context.Context, form *gen.ListVersionsPayloa
 
 	versions := make([]*gen.PackageVersion, 0, len(versionRows))
 	for _, row := range versionRows {
-		sv := Semver{
+		sv := semver.Semver{
 			Valid:      true,
 			Major:      row.VersionMajor,
 			Minor:      row.VersionMinor,
@@ -338,7 +339,7 @@ func (s *Service) Publish(ctx context.Context, form *gen.PublishPayload) (res *g
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 
-	semver, err := ParseSemver(form.Version)
+	semver, err := semver.ParseSemver(form.Version)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "error parsing version").Log(ctx, logger)
 	}
@@ -433,9 +434,9 @@ func describePackage(
 		deletedAt = conv.Ptr(row.Package.DeletedAt.Time.Format(time.RFC3339))
 	}
 
-	var semver *string
+	var versionString *string
 	if row.VersionMajor.Valid && row.VersionMinor.Valid && row.VersionPatch.Valid {
-		sv := Semver{
+		sv := semver.Semver{
 			Valid:      true,
 			Major:      row.VersionMajor.Int64,
 			Minor:      row.VersionMinor.Int64,
@@ -443,7 +444,7 @@ func describePackage(
 			Prerelease: conv.PtrValOr(conv.FromPGText[string](row.VersionPrerelease), ""),
 			Build:      conv.PtrValOr(conv.FromPGText[string](row.VersionBuild), ""),
 		}
-		semver = conv.Ptr(sv.String())
+		versionString = conv.Ptr(sv.String())
 	}
 
 	pkg := &gen.Package{
@@ -461,7 +462,7 @@ func describePackage(
 		CreatedAt:      row.Package.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      row.Package.UpdatedAt.Time.Format(time.RFC3339),
 		DeletedAt:      deletedAt,
-		LatestVersion:  semver,
+		LatestVersion:  versionString,
 	}
 
 	return pkg, nil

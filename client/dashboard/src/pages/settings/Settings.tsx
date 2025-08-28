@@ -7,14 +7,16 @@ import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useOrganization, useSession } from "@/contexts/Auth";
+import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
+import { useSdkClient } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
-import { assert, cn } from "@/lib/utils";
+import { assert, cn, getServerURL } from "@/lib/utils";
 import { Key } from "@gram/client/models/components";
+import { useGetPeriodUsage } from "@gram/client/react-query";
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useGetCreditUsage } from "@gram/client/react-query/getCreditUsage";
 import {
@@ -23,6 +25,7 @@ import {
 } from "@gram/client/react-query/listAPIKeys";
 import { useRegisterDomainMutation } from "@gram/client/react-query/registerDomain";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
+import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -30,14 +33,13 @@ import {
   CheckCircle2,
   Copy,
   Globe,
+  Info,
   Loader2,
   Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCustomDomain } from "../mcp/MCPDetails";
-// import { PolarEmbedCheckout } from '@polar-sh/checkout/embed'
-// import { useSdkClient } from "@/contexts/Sdk";
 
 export default function Settings() {
   const organization = useOrganization();
@@ -51,8 +53,6 @@ export default function Settings() {
   const [isCnameCopied, setIsCnameCopied] = useState(false);
   const [isTxtCopied, setIsTxtCopied] = useState(false);
   const [isCustomDomainModalOpen, setIsCustomDomainModalOpen] = useState(false);
-  const [isCreditUpgradeModalOpen, setIsCreditUpgradeModalOpen] =
-    useState(false);
   const [domainInput, setDomainInput] = useState("");
   const [domainError, setDomainError] = useState("");
   const CNAME_VALUE = "cname.getgram.ai.";
@@ -68,11 +68,6 @@ export default function Settings() {
     isLoading: domainIsLoading,
     refetch: domainRefetch,
   } = useCustomDomain();
-
-  const { data: creditUsage } = useGetCreditUsage();
-  // const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
-  //   throwOnError: !getServerURL().includes("localhost"),
-  // });
 
   // Initialize domain input with existing domain if available
   useEffect(() => {
@@ -640,81 +635,254 @@ export default function Settings() {
           icon={Globe}
           accountUpgrade
         />
-
-        <Stack direction="horizontal" justify="space-between" className="mt-8">
-          <Heading variant="h4">Credit Usage</Heading>
-          {session.gramAccountType === "free" && (
-            <Button onClick={() => setIsCreditUpgradeModalOpen(true)}>
-              Upgrade Account
-            </Button>
-          )}
-        </Stack>
-        <div className="space-y-4">
-          <Type variant="body" muted>
-            LLM Credits are used only for the in dashboard playground and other
-            AI-powered in dashboard experiences.
-          </Type>
-          {creditUsage && (
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <Type variant="body" className="font-medium">
-                  {Math.min(
-                    creditUsage.creditsUsed,
-                    creditUsage.monthlyCredits
-                  ).toLocaleString()}{" "}
-                  / {creditUsage.monthlyCredits.toLocaleString()}
-                  <span className="text-muted-foreground font-thin">
-                    {" "}
-                    credits used this month
-                  </span>
-                </Type>
-              </div>
-              <Progress
-                value={creditUsage.creditsUsed}
-                max={creditUsage.monthlyCredits}
-                className="h-4"
-                indicatorClassName={cn(
-                  "bg-gradient-to-r",
-                  creditUsage.creditsUsed >= creditUsage.monthlyCredits * 0.75
-                    ? "from-red-400 to-red-600 dark:from-red-700 dark:to-red-500"
-                    : "from-green-400 to-green-600 dark:from-green-700 dark:to-green-500"
-                )}
-              />
-            </div>
-          )}
-        </div>
-
-        <FeatureRequestModal
-          isOpen={isCreditUpgradeModalOpen}
-          onClose={() => setIsCreditUpgradeModalOpen(false)}
-          title="Increase Credit Limit"
-          description={`To increase your monthly credit limit upgrade from the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
-          actionType="credit_upgrade"
-          accountUpgrade
-        />
+        <BillingSection />
       </Page.Body>
     </Page>
   );
 }
 
-// const CheckoutLink = () => {
-//   const [checkoutLink, setCheckoutLink] = useState("")
-//   const client = useSdkClient();
+const BillingSection = () => {
+  const session = useSession();
+  const [isCreditUpgradeModalOpen, setIsCreditUpgradeModalOpen] =
+    useState(false);
 
-//   useEffect(() => {
-//     PolarEmbedCheckout.init()
-//     client.usage.createCheckout().then((link) => {
-//       setCheckoutLink(link);
-//     });
-//   }, [])
+  const { data: creditUsage } = useGetCreditUsage();
+  const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
+    throwOnError: !getServerURL().includes("localhost"),
+  });
 
-//   return (
-//     <a
-//       href={checkoutLink}
-//       data-polar-checkout
-//       data-polar-checkout-theme="light"
-//     >
-//       Upgrade
-//     </a>
-//   )
-// }
+  const isAdmin = useIsAdmin();
+
+  return (
+    <div className="pb-16">
+      <Stack direction="horizontal" justify="space-between" className="mt-8">
+        <Heading variant="h4">Billing</Heading>
+        {session.gramAccountType === "free" ? (
+          <UpgradeLink />
+        ) : (
+          <PolarPortalLink />
+        )}
+      </Stack>
+      <div className="space-y-4">
+        <Type variant="body" muted>
+          A summary of your organization's usage this period. Please visit the billing portal to see complete details or manage your account.
+        </Type>
+        {/* TODO: DO NOT SHIP THIS UNTIL THE PERIOD USAGE REFLECTS THE ORG (SDK BUG SOLVED) */}
+        {isAdmin &&
+          (periodUsage ? (
+            <>
+              <div>
+                <Stack direction="horizontal" align="center" gap={1}>
+                  <Type variant="body" className="font-medium">
+                    Tool Calls
+                  </Type>
+                  <SimpleTooltip tooltip="The number of tool calls processed this period across all your organization's MCP servers.">
+                    <Info className="w-4 h-4 text-muted-foreground" />
+                  </SimpleTooltip>
+                </Stack>
+                <UsageProgress
+                  value={periodUsage.toolCalls}
+                  included={periodUsage.maxToolCalls}
+                  overageIncrement={periodUsage.maxToolCalls}
+                />
+              </div>
+              <div>
+                <Stack direction="horizontal" align="center" gap={1}>
+                  <Type variant="body" className="font-medium">
+                    Servers
+                  </Type>
+                  <SimpleTooltip tooltip="The number of public MCP servers across your organization.">
+                    <Info className="w-4 h-4 text-muted-foreground" />
+                  </SimpleTooltip>
+                </Stack>
+                <UsageProgress
+                  value={periodUsage.actualPublicServerCount} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
+                  included={periodUsage.maxServers}
+                  overageIncrement={1}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-4 w-full" />
+            </>
+          ))}
+        {creditUsage ? (
+          <div>
+            <Stack direction="horizontal" align="center" gap={1}>
+              <Type variant="body" className="font-medium">
+                Credits
+              </Type>
+              <SimpleTooltip tooltip="The number of credits used this month for AI-powered dashboard experiences.">
+                <Info className="w-4 h-4 text-muted-foreground" />
+              </SimpleTooltip>
+            </Stack>
+            <UsageProgress
+              value={creditUsage.creditsUsed}
+              included={creditUsage.monthlyCredits}
+              overageIncrement={creditUsage.monthlyCredits}
+            />
+          </div>
+        ) : (
+          <>
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-full" />
+          </>
+        )}
+      </div>
+      <FeatureRequestModal
+        isOpen={isCreditUpgradeModalOpen}
+        onClose={() => setIsCreditUpgradeModalOpen(false)}
+        title="Increase Credit Limit"
+        description={`To increase your monthly credit limit upgrade from the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
+        actionType="credit_upgrade"
+        accountUpgrade
+      />
+    </div>
+  );
+};
+
+const UsageProgress = ({
+  value,
+  included,
+  overageIncrement,
+}: {
+  value: number;
+  included: number;
+  overageIncrement: number;
+}) => {
+  const anyOverage = value > included;
+  const overageMax =
+    Math.ceil((value - included + 1) / overageIncrement) * overageIncrement; // Compute next increment. +1 because we always want to show the next increment.
+  const totalMax = included + overageMax;
+
+  // Calculate the proportional width for the included section
+  const includedWidth = (included / totalMax) * 100;
+  const overageWidth = (overageMax / totalMax) * 100;
+
+  const includedProgress = (
+    <div
+      className={cn(
+        "h-4 bg-muted dark:bg-neutral-800 rounded-md overflow-hidden relative",
+        anyOverage && "rounded-r-none"
+      )}
+      style={{ width: `${includedWidth}%` }}
+    >
+      <div
+        className="h-full bg-gradient-to-r from-green-400 to-green-600 dark:from-green-700 dark:to-green-500 transition-all duration-300"
+        style={{
+          width: `${Math.min((value / included) * 100, 100)}%`,
+        }}
+      />
+    </div>
+  );
+
+  const overageProgress = anyOverage ? (
+    <div
+      className="h-4 bg-muted dark:bg-neutral-800 rounded-r-md overflow-hidden relative"
+      style={{ width: `${overageWidth}%` }}
+    >
+      <div
+        className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600 dark:from-yellow-700 dark:to-yellow-500 transition-all duration-300"
+        style={{
+          width: `${Math.min(((value - included) / overageMax) * 100, 100)}%`,
+        }}
+      />
+    </div>
+  ) : null;
+
+  return (
+    <div className="relative">
+      {/* Progress bars */}
+      <div className="flex w-full">
+        {includedProgress}
+        {overageProgress}
+      </div>
+      {/* Included label on left side, always show */}
+      <div
+        className="absolute -top-5 text-xs text-muted-foreground whitespace-nowrap"
+        style={{ right: `${Math.max(0, 100 - includedWidth + 1)}%` }}
+      >
+        Included: {included.toLocaleString()}
+      </div>
+
+      {/* Divider line and labels for overage */}
+      {anyOverage && (
+        <>
+          <div
+            className="absolute bottom-0 w-[2px] h-8 bg-neutral-600"
+            style={{ left: `${includedWidth}%` }}
+          />
+          {/* Overage label on right side */}
+          <div
+            className="absolute -top-5 text-xs text-muted-foreground whitespace-nowrap"
+            style={{ left: `${includedWidth + 1}%` }}
+          >
+            Extra: {(value - included).toLocaleString()}
+          </div>
+
+          {/* Additional overage increment dividers */}
+          {Array.from(
+            { length: Math.floor((value - included) / overageIncrement) },
+            (_, index) => {
+              const incrementPosition =
+                includedWidth +
+                (((index + 1) * overageIncrement) / totalMax) * 100;
+              return (
+                <div
+                  key={index}
+                  className="absolute bottom-0 w-[2px] h-5 bg-neutral-600"
+                  style={{ left: `${incrementPosition}%` }}
+                />
+              );
+            }
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
+const PolarPortalLink = () => {
+  const client = useSdkClient();
+  const session = useSession();
+
+  return (
+    <Button
+      onClick={() => {
+        client.usage.createCustomerSession().then((link) => {
+          window.open(link, "_blank");
+        });
+      }}
+      disabled={session.gramAccountType === "enterprise"}
+      tooltip={session.gramAccountType === "enterprise" ? "Enterprise: Contact support to manage billing" : undefined}
+    >
+      Manage Billing
+    </Button>
+  );
+};
+
+const UpgradeLink = () => {
+  const [checkoutLink, setCheckoutLink] = useState("");
+  const client = useSdkClient();
+
+  useEffect(() => {
+    PolarEmbedCheckout.init();
+    client.usage.createCheckout().then((link) => {
+      setCheckoutLink(link);
+    });
+  }, []);
+
+  return (
+    <a
+      href={checkoutLink}
+      data-polar-checkout
+      data-polar-checkout-theme="light"
+    >
+      Upgrade
+    </a>
+  );
+};

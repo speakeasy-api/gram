@@ -24,8 +24,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
-	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 type toolsCallParams struct {
@@ -42,7 +42,7 @@ func handleToolsCall(
 	payload *mcpInputs,
 	req *rawRequest,
 	toolProxy *gateway.ToolProxy,
-	usageClient *usage.PolarClient,
+	usageClient usage_types.UsageClient,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -102,20 +102,20 @@ func handleToolsCall(
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to execute prompt").Log(ctx, logger)
 		}
 
-		// Track prompt call usage
 		requestBytes := int64(len(params.Arguments))
 		outputBytes := int64(len(promptData))
 
-		go usageClient.TrackPromptCallUsage(context.Background(), usage.PromptCallUsageEvent{
+		go usageClient.TrackToolCallUsage(context.Background(), usage_types.ToolCallUsageEvent{
 			OrganizationID:   toolset.OrganizationID,
 			RequestBytes:     requestBytes,
 			OutputBytes:      outputBytes,
-			PromptID:         &higherOrderTool.ID,
-			PromptName:       string(higherOrderTool.Name),
+			ToolID:           higherOrderTool.ID,
+			ToolName:         string(higherOrderTool.Name),
+			Type:             usage_types.ToolCallType_HigherOrder,
 			ProjectID:        payload.projectID.String(),
 			ToolsetSlug:      &payload.toolset,
 			MCPURL:           &mcpURL,
-			ProjectSlug:      nil, // TODO: do we need these slugs for prompt calls?
+			ProjectSlug:      nil, // This data is only there for debugging, but we don't have it here
 			OrganizationSlug: nil,
 			ChatID:           nil,
 		})	
@@ -182,7 +182,7 @@ func handleToolsCall(
 	// Track tool call usage
 	outputBytes := int64(rw.body.Len())
 
-	go usageClient.TrackToolCallUsage(context.Background(), usage.ToolCallUsageEvent{
+	go usageClient.TrackToolCallUsage(context.Background(), usage_types.ToolCallUsageEvent{
 		OrganizationID:   toolset.OrganizationID,
 		RequestBytes:     requestBytes,
 		OutputBytes:      outputBytes,
@@ -194,6 +194,7 @@ func handleToolsCall(
 		ToolsetSlug:      &payload.toolset,
 		MCPURL:           &mcpURL,
 		ChatID:           nil,
+		Type:             usage_types.ToolCallType_HTTP,
 	})
 
 	chunk, err := formatResult(*rw)

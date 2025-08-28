@@ -6,18 +6,20 @@
 import { PeriodUsage } from "@gram/client/models/components";
 
 let value: PeriodUsage = {
-  maxServers: 159907,
-  maxToolCalls: 620048,
-  servers: 836123,
-  toolCalls: 213289,
+  actualPublicServerCount: 159907,
+  maxServers: 620048,
+  maxToolCalls: 836123,
+  servers: 213289,
+  toolCalls: 182877,
 };
 ```
 
 ## Fields
 
-| Field                                    | Type                                     | Required                                 | Description                              |
-| ---------------------------------------- | ---------------------------------------- | ---------------------------------------- | ---------------------------------------- |
-| `maxServers`                             | *number*                                 | :heavy_check_mark:                       | The maximum number of servers allowed    |
-| `maxToolCalls`                           | *number*                                 | :heavy_check_mark:                       | The maximum number of tool calls allowed |
-| `servers`                                | *number*                                 | :heavy_check_mark:                       | The number of servers used               |
-| `toolCalls`                              | *number*                                 | :heavy_check_mark:                       | The number of tool calls used            |
+| Field                                                          | Type                                                           | Required                                                       | Description                                                    |
+| -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
+| `actualPublicServerCount`                                      | *number*                                                       | :heavy_check_mark:                                             | The number of servers set to public at the time of the request |
+| `maxServers`                                                   | *number*                                                       | :heavy_check_mark:                                             | The maximum number of servers allowed                          |
+| `maxToolCalls`                                                 | *number*                                                       | :heavy_check_mark:                                             | The maximum number of tool calls allowed                       |
+| `servers`                                                      | *number*                                                       | :heavy_check_mark:                                             | The number of servers used, according to the Polar meter       |
+| `toolCalls`                                                    | *number*                                                       | :heavy_check_mark:                                             | The number of tool calls used                                  |

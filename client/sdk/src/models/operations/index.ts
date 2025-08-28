@@ -8,6 +8,7 @@ export * from "./authlogin.js";
 export * from "./checkmcpslugavailability.js";
 export * from "./createapikey.js";
 export * from "./createcheckout.js";
+export * from "./createcustomersession.js";
 export * from "./createdeployment.js";
 export * from "./createenvironment.js";
 export * from "./createpackage.js";
