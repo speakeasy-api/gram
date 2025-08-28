@@ -4,20 +4,31 @@ import (
 	"archive/zip"
 	"bufio"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
 	"github.com/speakeasy-api/gram/functions/internal/javascript"
+	"github.com/speakeasy-api/gram/functions/internal/python"
+)
+
+var (
+	language = flag.String("language", "javascript", "Programming language for the function. Can be 'javascript', 'typescript', or 'python'.")
+	codePath = flag.String("codePath", "/data/code.zip", "Path to the code zip file")
+	workDir  = flag.String("workDir", "/srv/app", "Working directory for the application")
 )
 
 type cancellationError struct{ msg string }
@@ -36,15 +47,35 @@ type ToolCallRequest struct {
 	Environment map[string]string `json:"environment,omitempty,omitzero"`
 }
 
+type Args struct {
+	codePath string
+	workDir  string
+	language string
+}
+
 func main() {
-	if err := unzipCode("/data/code.zip", "/srv/app"); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to unzip code: %s\n", err.Error())
+	cmdOut := flag.CommandLine.Output()
+
+	flag.Parse()
+
+	args, err := validateArgs()
+	if err != nil {
+		flag.Usage()
+		fmt.Fprintln(cmdOut)
+		fmt.Fprintf(cmdOut, "invalid arguments: %s\n", err.Error())
 		os.Exit(1)
 		return
 	}
 
-	if err := os.WriteFile("/srv/app/gram-start.mjs", javascript.Entrypoint, 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "write javascript entrypoint: %s\n", err.Error())
+	if err := unzipCode(args.codePath, args.workDir); err != nil {
+		fmt.Fprintf(cmdOut, "unzip code: %s\n", err.Error())
+		os.Exit(1)
+		return
+	}
+
+	command, program, err := prepareProgram(args.workDir, args.language)
+	if err != nil {
+		fmt.Fprintf(cmdOut, "prepare program: %s\n", err.Error())
 		os.Exit(1)
 		return
 	}
@@ -110,17 +141,16 @@ func main() {
 			return
 		}
 
-		resultReader, resultWriter, err := os.Pipe()
+		fifoPath, cleanup, err := mkfifo()
 		if err != nil {
 			msg := fmt.Sprintf("create pipe: %s", err.Error())
 			http.Error(w, msg, http.StatusInternalServerError)
 			return
 		}
-		defer resultWriter.Close()
-		defer resultReader.Close()
+		defer cleanup()
 
-		cmd := exec.CommandContext(r.Context(), "node", "/srv/app/gram-start.mjs", resultWriter.Name(), string(reqArg))
-		cmd.Dir = "/srv/app"
+		cmd := exec.CommandContext(r.Context(), command, filepath.Base(program), fifoPath, string(reqArg))
+		cmd.Dir = args.workDir
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Env = make([]string, 0, len(req.Environment))
@@ -135,6 +165,14 @@ func main() {
 			return
 		}
 
+		resultReader, err := os.OpenFile(fifoPath, os.O_RDONLY|syscall.O_NONBLOCK, os.ModeNamedPipe)
+		if err != nil {
+			msg := fmt.Sprintf("open pipe (ro): %s", err.Error())
+			http.Error(w, msg, http.StatusInternalServerError)
+			return
+		}
+		defer resultReader.Close()
+
 		response, err := http.ReadResponse(bufio.NewReader(resultReader), nil)
 		if err != nil {
 			msg := fmt.Sprintf("read response: %s", err.Error())
@@ -145,11 +183,11 @@ func main() {
 
 		w.WriteHeader(response.StatusCode)
 		if _, err := io.Copy(w, response.Body); err != nil {
-			fmt.Fprintf(os.Stderr, "copy response body: %s\n", err.Error())
+			fmt.Fprintf(cmdOut, "copy response body: %s\n", err.Error())
 		}
 
 		if err := cmd.Wait(); err != nil {
-			fmt.Fprintf(os.Stderr, "tool execution error: %s\n", err.Error())
+			fmt.Fprintf(cmdOut, "tool execution error: %s\n", err.Error())
 		}
 	}))
 
@@ -167,21 +205,21 @@ func main() {
 
 		var cancellation *cancellationError
 		if errors.As(context.Cause(ctx), &cancellation) {
-			fmt.Fprintf(os.Stderr, "shutting down: %s\n", cancellation.Error())
+			fmt.Fprintf(cmdOut, "shutting down: %s\n", cancellation.Error())
 		} else {
-			fmt.Fprintln(os.Stderr, "shutting down")
+			fmt.Fprintln(cmdOut, "shutting down")
 		}
 
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer shutdownCancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
-			fmt.Fprintf(os.Stderr, "shutdown error: %s\n", err.Error())
+			fmt.Fprintf(cmdOut, "shutdown error: %s\n", err.Error())
 		}
 	}()
 
-	err := srv.ListenAndServe()
+	err = srv.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
-		fmt.Fprintf(os.Stderr, "server error: %s\n", err.Error())
+		fmt.Fprintf(cmdOut, "server error: %s\n", err.Error())
 		os.Exit(1)
 		return
 	}
@@ -190,6 +228,9 @@ func main() {
 func unzipCode(zipPath string, dest string) error {
 	zipFile, err := zip.OpenReader(zipPath)
 	if err != nil {
+		if zipFile != nil {
+			zipFile.Close()
+		}
 		return fmt.Errorf("%s: open zip file: %w", zipPath, err)
 	}
 	defer zipFile.Close()
@@ -200,10 +241,6 @@ func unzipCode(zipPath string, dest string) error {
 		}
 	}
 
-	if err := os.Remove(zipPath); err != nil {
-		return fmt.Errorf("%s: remove zip file: %w", zipPath, err)
-	}
-
 	return nil
 }
 
@@ -211,7 +248,7 @@ func handleZipFile(file *zip.File, dest string) error {
 	path := filepath.Join(dest, file.Name)
 
 	if file.FileInfo().IsDir() {
-		if err := os.MkdirAll(path, 0o755); err != nil {
+		if err := os.MkdirAll(path, 0755); err != nil {
 			return fmt.Errorf("%s: create directory: %w", path, err)
 		}
 		return nil
@@ -228,7 +265,7 @@ func handleZipFile(file *zip.File, dest string) error {
 	}
 	defer fileReader.Close()
 
-	targetFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+	targetFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
 	if err != nil {
 		return fmt.Errorf("%s: create target file: %w", path, err)
 	}
@@ -240,4 +277,120 @@ func handleZipFile(file *zip.File, dest string) error {
 	}
 
 	return nil
+}
+
+func validateArgs() (*Args, error) {
+	if language == nil || *language == "" {
+		return nil, fmt.Errorf("language is required")
+	}
+	switch *language {
+	case "javascript", "typescript", "python":
+	default:
+		return nil, fmt.Errorf("unsupported language: %s", *language)
+	}
+
+	if codePath == nil || *codePath == "" {
+		return nil, fmt.Errorf("codePath is required")
+	}
+
+	codeStat, err := os.Stat(*codePath)
+	if err != nil {
+		return nil, fmt.Errorf("stat: %s: %w", *codePath, err)
+	}
+	if !codeStat.Mode().IsRegular() {
+		return nil, fmt.Errorf("stat: %s: not a regular file", *codePath)
+	}
+
+	if workDir == nil || *workDir == "" {
+		return nil, fmt.Errorf("workDir is required")
+	}
+
+	wdStat, err := os.Stat(*workDir)
+	switch {
+	case err == nil:
+		if !wdStat.IsDir() {
+			return nil, fmt.Errorf("stat: %s: not a directory", *workDir)
+		}
+	case errors.Is(err, os.ErrNotExist):
+		if err := os.MkdirAll(*workDir, 0755); err != nil {
+			return nil, fmt.Errorf("create dir: %s: %w", *workDir, err)
+		}
+	default:
+		return nil, fmt.Errorf("stat: %s: %w", *workDir, err)
+	}
+
+	return &Args{
+		codePath: *codePath,
+		workDir:  *workDir,
+		language: *language,
+	}, nil
+}
+
+func prepareProgram(workDir string, language string) (string, string, error) {
+	switch language {
+	case "javascript", "typescript":
+		entryPath := filepath.Join(workDir, "gram-start.mjs")
+
+		if err := os.WriteFile(entryPath, javascript.Entrypoint, 0644); err != nil {
+			return "", "", fmt.Errorf("write %s entrypoint (%s): %w", language, entryPath, err)
+		}
+
+		return "node", entryPath, nil
+	case "python":
+		entryPath := filepath.Join(workDir, "gram_start.py")
+
+		if err := os.WriteFile(entryPath, python.Entrypoint, 0644); err != nil {
+			return "", "", fmt.Errorf("write %s entrypoint (%s): %w", language, entryPath, err)
+		}
+
+		return "python", entryPath, nil
+	default:
+		return "", "", fmt.Errorf("unsupported language: %s", language)
+	}
+}
+
+func mkfifo() (string, func() error, error) {
+	if runtime.GOOS == "windows" {
+		return "", nil, fmt.Errorf("named pipes on Windows are not supported in this implementation")
+	}
+
+	suffix, err := alphanum(8)
+	if err != nil {
+		return "", nil, fmt.Errorf("generate fifo suffix: %w", err)
+	}
+
+	tmpDir := os.TempDir()
+	path := filepath.Join(tmpDir, fmt.Sprintf("fifo-%s", suffix))
+
+	err = syscall.Mkfifo(path, 0666)
+	if err != nil {
+		return "", nil, fmt.Errorf("make fifo %s: %w", path, err)
+	}
+
+	cleanup := func() error {
+		err := os.Remove(path)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove fifo %s: %w", path, err)
+		}
+		return nil
+	}
+
+	return path, cleanup, nil
+}
+
+func alphanum(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+	maxnum := big.NewInt(int64(len(charset)))
+
+	result := make([]byte, length)
+	for i := range result {
+		num, err := rand.Int(rand.Reader, maxnum)
+		if err != nil {
+			return "", err
+		}
+		result[i] = charset[num.Int64()]
+	}
+
+	return string(result), nil
 }

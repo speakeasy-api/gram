@@ -108,17 +108,25 @@ async function writeHTTPResponse(pipeStream, response) {
 const USER_CODE_PATH = path.join(process.cwd(), "functions.js");
 
 export async function main(args = process.argv, codePath = USER_CODE_PATH) {
-  const { handleToolCall: func } = await import(codePath);
-  if (typeof func !== "function") {
-    const filename = path.basename(codePath);
-    throw new Error(`handleToolCall in ${filename} is not a function`);
-  }
-
   const { pipePath, toolCall } = parseArgs(args);
 
-  const pipeStream = createWriteStream(pipePath, { flush: true });
-  const response = await callTool(func, toolCall.name, toolCall.input);
-  await writeHTTPResponse(pipeStream, response);
+  const pipeStream = createWriteStream(pipePath, {
+    flags: "w",
+    autoClose: true,
+  });
+
+  try {
+    const { handleToolCall: func } = await import(codePath);
+    if (typeof func !== "function") {
+      const filename = path.basename(codePath);
+      throw new Error(`handleToolCall in ${filename} is not a function`);
+    }
+
+    const response = await callTool(func, toolCall.name, toolCall.input);
+    await writeHTTPResponse(pipeStream, response);
+  } finally {
+    pipeStream.close();
+  }
 }
 
 if (import.meta.url.startsWith("file:")) {
