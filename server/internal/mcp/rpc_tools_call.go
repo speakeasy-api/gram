@@ -24,7 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
+	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -42,7 +42,7 @@ func handleToolsCall(
 	payload *mcpInputs,
 	req *rawRequest,
 	toolProxy *gateway.ToolProxy,
-	usageClient *polar.Client,
+	usageClient usage_types.UsageClient,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -105,13 +105,13 @@ func handleToolsCall(
 		requestBytes := int64(len(params.Arguments))
 		outputBytes := int64(len(promptData))
 
-		go usageClient.TrackToolCallUsage(context.Background(), polar.ToolCallUsageEvent{
+		go usageClient.TrackToolCallUsage(context.Background(), usage_types.ToolCallUsageEvent{
 			OrganizationID:   toolset.OrganizationID,
 			RequestBytes:     requestBytes,
 			OutputBytes:      outputBytes,
 			ToolID:           higherOrderTool.ID,
 			ToolName:         string(higherOrderTool.Name),
-			Type:             polar.ToolCallType_HigherOrder,
+			Type:             usage_types.ToolCallType_HigherOrder,
 			ProjectID:        payload.projectID.String(),
 			ToolsetSlug:      &payload.toolset,
 			MCPURL:           &mcpURL,
@@ -182,7 +182,7 @@ func handleToolsCall(
 	// Track tool call usage
 	outputBytes := int64(rw.body.Len())
 
-	go usageClient.TrackToolCallUsage(context.Background(), polar.ToolCallUsageEvent{
+	go usageClient.TrackToolCallUsage(context.Background(), usage_types.ToolCallUsageEvent{
 		OrganizationID:   toolset.OrganizationID,
 		RequestBytes:     requestBytes,
 		OutputBytes:      outputBytes,
@@ -194,6 +194,7 @@ func handleToolsCall(
 		ToolsetSlug:      &payload.toolset,
 		MCPURL:           &mcpURL,
 		ChatID:           nil,
+		Type:             usage_types.ToolCallType_HTTP,
 	})
 
 	chunk, err := formatResult(*rw)

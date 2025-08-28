@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 var (
@@ -290,9 +291,12 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	// Create polar client for testing
 	polar := polargo.New(polargo.WithSecurity("test-polar-key"))
+	
+	// Create usage client from polar client
+	usageClient := usage.NewClient(polar, logger, redisClient)
 
 	// Create session manager with mock server URL
-	sessionManager := sessions.NewManager(logger, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, polar)
+	sessionManager := sessions.NewManager(logger, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, usageClient)
 
 	authConfigs := auth.AuthConfigurations{
 		SpeakeasyServerAddress: mockServer.URL,

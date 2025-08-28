@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/redis/go-redis/v9"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
@@ -30,7 +29,6 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 
-	polargo "github.com/polarsource/polar-go"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
@@ -45,7 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
+	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -64,7 +62,7 @@ type Service struct {
 	toolProxy    *gateway.ToolProxy
 	oauthService *oauth.Service
 	oauthRepo    *oauth_repo.Queries
-	usageClient  *polar.Client
+	usageClient  usage_types.UsageClient
 }
 
 type oauthTokenInputs struct {
@@ -100,8 +98,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	oauthService *oauth.Service,
-	polarClientRaw *polargo.Polar,
-	redisClient *redis.Client,
+	usageClient usage_types.UsageClient,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -128,7 +125,7 @@ func NewService(
 		),
 		oauthService: oauthService,
 		oauthRepo:    oauth_repo.New(db),
-		usageClient:  polar.NewClient(polarClientRaw, logger, redisClient),
+		usageClient:  usageClient,
 	}
 }
 

@@ -6,8 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	polargo "github.com/polarsource/polar-go"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
+	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -43,12 +42,11 @@ type Manager struct {
 	userRepo               *userRepo.Queries
 	pylon                  *pylon.Pylon
 	posthog                *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	PolarClient            *polar.Client
+	customerProvider       usage_types.CustomerStateProvider
 }
 
-func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, speakeasyServerAddress string, speakeasySecretKey string, pylon *pylon.Pylon, posthog *posthog.Posthog, polarClientRaw *polargo.Polar) *Manager {
+func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, speakeasyServerAddress string, speakeasySecretKey string, pylon *pylon.Pylon, posthog *posthog.Posthog, customerProvider usage_types.CustomerStateProvider) *Manager {
 	logger = logger.With(attr.SlogComponent("sessions"))
-	polarClient := polar.NewClient(polarClientRaw, logger, redisClient)
 
 	return &Manager{
 		logger:                 logger.With(attr.SlogComponent("sessions")),
@@ -62,7 +60,7 @@ func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client
 		userRepo:               userRepo.New(db),
 		pylon:                  pylon,
 		posthog:                posthog,
-		PolarClient:            polarClient,
+		customerProvider:       customerProvider,
 	}
 }
 
@@ -115,7 +113,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		return ctx, oops.C(oops.CodeForbidden)
 	}
 
-	orgMetadata, err := s.DescribeOrganization(ctx, session.ActiveOrganizationID)
+	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgRepo, session.ActiveOrganizationID, s.customerProvider)
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "error getting organization metadata").Log(ctx, s.logger)
 	}
@@ -128,12 +126,10 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 	return ctx, nil
 }
 
-func (s *Manager) DescribeOrganization(ctx context.Context, orgID string) (*orgRepo.OrganizationMetadatum, error) {
-	orgMetadata, err := mv.DescribeOrganization(ctx, s.logger, s.orgRepo, orgID, s.PolarClient)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error getting organization metadata").Log(ctx, s.logger)
-	}
-	return orgMetadata, nil
+// CustomerProvider returns the customer provider for use by the auth system
+// Essentialy prevents us from having to pass the customer provider to every single service that has auth
+func (s *Manager) CustomerProvider() usage_types.CustomerStateProvider {
+	return s.customerProvider
 }
 
 func (s *Manager) StoreSession(ctx context.Context, session Session) error {

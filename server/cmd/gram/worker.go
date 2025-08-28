@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
@@ -301,12 +302,13 @@ func newWorkerCommand() *cli.Command {
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
 			
-			var polarClient *polargo.Polar
+			var usageClient *usage.Client
 			polarKey := c.String("polar-api-key")
 			if polarKey == "" {
-				logger.WarnContext(ctx, "polar api key is not set, skipping Polar client")
+				logger.WarnContext(ctx, "polar api key is not set, skipping usage client")
 			} else {
-				polarClient = polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second))
+				polarClient := polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second))
+				usageClient = usage.NewClient(polarClient, logger, redisClient)
 			}
 
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, meterProvider, &background.WorkerOptions{
@@ -318,7 +320,7 @@ func newWorkerCommand() *cli.Command {
 				OpenRouter:          openRouter,
 				K8sClient:           k8sClient,
 				ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
-				Polar:               polarClient,
+				UsageClient:         usageClient,
 				RedisClient:         redisClient,
 				PosthogClient:       posthogClient,
 			})

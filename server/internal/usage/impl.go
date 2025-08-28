@@ -7,9 +7,7 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	polargo "github.com/polarsource/polar-go"
 	polarComponents "github.com/polarsource/polar-go/models/components"
-	"github.com/redis/go-redis/v9"
 	srv "github.com/speakeasy-api/gram/server/gen/http/usage/server"
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -19,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
+	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -30,23 +29,21 @@ type Service struct {
 	tracer      trace.Tracer
 	logger      *slog.Logger
 	auth        *auth.Auth
-	polarClient *polar.Client
+	usageClient usage_types.UsageClient
 	serverURL   *url.URL
 	repo        *repo.Queries
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, polarClientRaw *polargo.Polar, serverURL *url.URL, redisClient *redis.Client) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, usageClient usage_types.UsageClient, serverURL *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
-
-	polarClient := polar.NewClient(polarClientRaw, logger, redisClient)
 
 	return &Service{
 		tracer:      otel.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
 		logger:      logger,
 		auth:        auth.New(logger, db, sessions),
-		polarClient: polarClient,
+		usageClient: usageClient,
 		serverURL:   serverURL,
 		repo:        repo.New(db),
 	}
@@ -72,7 +69,7 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	polarUsage, err := s.polarClient.GetPeriodUsage(ctx, authCtx.ActiveOrganizationID)
+	polarUsage, err := s.usageClient.GetPeriodUsage(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get period usage from polar")
 	}
@@ -94,12 +91,12 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 }
 
 func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err error) {
-	freeTierProduct, err := s.polarClient.GetGramFreeTierProduct(ctx)
+	freeTierProduct, err := s.usageClient.GetGramFreeTierProduct(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get gram free tier product from polar")
 	}
 
-	proProduct, err := s.polarClient.GetGramProProduct(ctx)
+	proProduct, err := s.usageClient.GetGramProProduct(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get gram business product from polar")
 	}
@@ -154,7 +151,7 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	checkoutURL, err := s.polarClient.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String())
+	checkoutURL, err := s.usageClient.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String())
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout")
 	}
@@ -167,7 +164,7 @@ func (s *Service) CreateCustomerSession(ctx context.Context, payload *gen.Create
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	sessionURL, err := s.polarClient.CreateCustomerSession(ctx, authCtx.ActiveOrganizationID)
+	sessionURL, err := s.usageClient.CreateCustomerSession(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to create customer session")
 	}

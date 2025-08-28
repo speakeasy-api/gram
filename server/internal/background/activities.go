@@ -6,10 +6,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
 
-	polargo "github.com/polarsource/polar-go"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -17,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
+	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 )
@@ -46,11 +44,9 @@ func NewActivities(
 	openrouter openrouter.Provisioner,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
-	polarClientRaw *polargo.Polar,
-	redisClient *redis.Client,
+	usageClient usage_types.UsageClient,
 	posthogClient *posthog.Posthog,
 ) *Activities {
-	polarClient := polar.NewClient(polarClientRaw, logger, redisClient)
 	return &Activities{
 		processDeployment:           activities.NewProcessDeployment(logger, meterProvider, db, features, assetStorage),
 		transitionDeployment:        activities.NewTransitionDeployment(logger, db),
@@ -60,8 +56,8 @@ func NewActivities(
 		refreshOpenRouterKey:        activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 		verifyCustomDomain:          activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		customDomainIngress:         activities.NewCustomDomainIngress(logger, db, k8sClient),
-		collectPlatformUsageMetrics: activities.NewCollectPlatformUsageMetrics(logger, db, polarClient),
-		reportFreeTierOverage:       activities.NewReportFreeTierOverage(logger, db, polarClient, posthogClient),
+		collectPlatformUsageMetrics: activities.NewCollectPlatformUsageMetrics(logger, db, usageClient),
+		reportFreeTierOverage:       activities.NewReportFreeTierOverage(logger, db, usageClient, posthogClient),
 	}
 }
 

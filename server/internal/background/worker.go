@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
-	polargo "github.com/polarsource/polar-go"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
@@ -24,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/usage/types"
 )
 
 type WorkerOptions struct {
@@ -35,7 +35,7 @@ type WorkerOptions struct {
 	OpenRouter          openrouter.Provisioner
 	K8sClient           *k8s.KubernetesClients
 	ExpectedTargetCNAME string
-	Polar               *polargo.Polar
+	UsageClient         usage_types.UsageClient
 	RedisClient         *redis.Client
 	PosthogClient       *posthog.Posthog
 }
@@ -50,7 +50,7 @@ func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage 
 		OpenRouter:          nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
-		Polar:               nil,
+		UsageClient:         nil,
 		RedisClient:         nil,
 		PosthogClient:       nil,
 	}
@@ -71,7 +71,7 @@ func NewTemporalWorker(
 		OpenRouter:          nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
-		Polar:               nil,
+		UsageClient:         nil,
 		RedisClient:         nil,
 		PosthogClient:       nil,
 	}
@@ -86,7 +86,7 @@ func NewTemporalWorker(
 			OpenRouter:          conv.Default(o.OpenRouter, opts.OpenRouter),
 			K8sClient:           conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME: conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
-			Polar:               conv.Default(o.Polar, opts.Polar),
+			UsageClient:         conv.Default(o.UsageClient, opts.UsageClient),
 			RedisClient:         conv.Default(o.RedisClient, opts.RedisClient),
 			PosthogClient:       conv.Default(o.PosthogClient, opts.PosthogClient),
 		}
@@ -111,8 +111,7 @@ func NewTemporalWorker(
 		opts.OpenRouter,
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
-		opts.Polar,
-		opts.RedisClient,
+		opts.UsageClient,
 		opts.PosthogClient,
 	)
 

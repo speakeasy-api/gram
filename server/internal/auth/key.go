@@ -16,8 +16,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
+	"github.com/speakeasy-api/gram/server/internal/usage/types"
 )
+
+// For auth, we only need the customer state provider functionality
+type UsageClient = usage_types.CustomerStateProvider
 
 func GetAPIKeyHash(key string) (string, error) {
 	hash := sha256.Sum256([]byte(key))
@@ -25,18 +28,18 @@ func GetAPIKeyHash(key string) (string, error) {
 }
 
 type ByKey struct {
-	keyDB   *repo.Queries
-	orgRepo *orgRepo.Queries
-	logger  *slog.Logger
-	polarClient *polar.Client
+	keyDB       *repo.Queries
+	orgRepo     *orgRepo.Queries
+	logger      *slog.Logger
+	usageClient UsageClient
 }
 
-func NewKeyAuth(db *pgxpool.Pool, logger *slog.Logger, polarClient *polar.Client) *ByKey {
+func NewKeyAuth(db *pgxpool.Pool, logger *slog.Logger, usageClient UsageClient) *ByKey {
 	return &ByKey{
-		keyDB:   repo.New(db),
-		orgRepo: orgRepo.New(db),
-		logger:  logger,
-		polarClient: polarClient,
+		keyDB:       repo.New(db),
+		orgRepo:     orgRepo.New(db),
+		logger:      logger,
+		usageClient: usageClient,
 	}
 }
 
@@ -68,7 +71,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		}
 	}
 
-	org, err := mv.DescribeOrganization(ctx, k.logger, k.orgRepo, apiKey.OrganizationID, k.polarClient)
+	org, err := mv.DescribeOrganization(ctx, k.logger, k.orgRepo, apiKey.OrganizationID, k.usageClient)
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading organization")
 	}

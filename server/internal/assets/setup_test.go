@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 var (
@@ -63,7 +64,8 @@ func newTestAssetsService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	polar := polargo.New(polargo.WithSecurity("test-polar-key"))
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", polar)
+	usageClient := usage.NewClient(polar, logger, redisClient)
+	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", usageClient)
 	require.NoError(t, err)
 
 	storage := assetstest.NewTestBlobStore(t)
