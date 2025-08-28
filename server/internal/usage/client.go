@@ -20,7 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
-	"github.com/speakeasy-api/gram/server/internal/usage/types"
+	usage_types "github.com/speakeasy-api/gram/server/internal/usage/types"
 )
 
 // loggingTransport wraps an http.RoundTripper and logs requests before sending them
@@ -103,7 +103,6 @@ func NewClientWithLogging(polarKey string, logger *slog.Logger) *polargo.Polar {
 	return polargo.New(polargo.WithSecurity(polarKey), polargo.WithClient(httpClient), polargo.WithTimeout(30*time.Second))
 }
 
-
 func (p *Client) TrackToolCallUsage(ctx context.Context, event usage_types.ToolCallUsageEvent) {
 	if p.polar == nil {
 		return
@@ -184,7 +183,6 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event usage_types.ToolC
 	}
 }
 
-
 func (p *Client) TrackPromptCallUsage(ctx context.Context, event usage_types.PromptCallUsageEvent) {
 	if p.polar == nil {
 		return
@@ -264,7 +262,6 @@ func (p *Client) TrackPromptCallUsage(ctx context.Context, event usage_types.Pro
 	}
 }
 
-
 func (p *Client) TrackPlatformUsage(ctx context.Context, event usage_types.PlatformUsageEvent) {
 	if p.polar == nil {
 		return
@@ -303,7 +300,6 @@ func (p *Client) TrackPlatformUsage(ctx context.Context, event usage_types.Platf
 	}
 }
 
-
 func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComponents.CustomerState, error) {
 	if p == nil || p.polar == nil {
 		return nil, oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not get customer state")
@@ -323,10 +319,10 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 
 func (p *Client) GetCustomerState(ctx context.Context, orgID string) (*usage_types.CustomerState, error) {
 	var polarCustomerState *polarComponents.CustomerState
-	
+
 	if customerState, err := p.customerStateCache.Get(ctx, polar.OrgCacheKey(orgID)); err == nil {
 		polarCustomerState = customerState.CustomerState
-	} else  {
+	} else {
 		polarCustomerState, err = p.getCustomerState(ctx, orgID)
 		if err != nil {
 			return nil, err
@@ -341,17 +337,19 @@ func (p *Client) GetCustomerState(ctx context.Context, orgID string) (*usage_typ
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "Could not get period usage")
 	}
-	
+
 	customerState := &usage_types.CustomerState{
-		OrganizationID:      orgID,
-		Tier:                usage_types.Tier_Free,
-		PeriodUsage:         periodUsage,
+		OrganizationID: orgID,
+		Tier:           usage_types.Tier_Free,
+		PeriodUsage:    periodUsage,
 	}
 
-	for _, sub := range polarCustomerState.ActiveSubscriptions {
-		if sub.ProductID == polar.GramProProductID {
-			customerState.Tier = usage_types.Tier_Business
-			break
+	if polarCustomerState != nil {
+		for _, sub := range polarCustomerState.ActiveSubscriptions {
+			if sub.ProductID == polar.GramProProductID {
+				customerState.Tier = usage_types.Tier_Business
+				break
+			}
 		}
 	}
 
@@ -416,7 +414,7 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 	}
 
 	freeTierLimits := polar.ExtractTierLimits(freeTierProduct)
-	if (freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0) {
+	if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 {
 		return nil, oops.E(oops.CodeUnexpected, errors.New("missing free tier limits"), "Could not get free tier limits")
 	}
 
@@ -485,7 +483,7 @@ func (p *Client) GetGramFreeTierProduct(ctx context.Context) (*polarComponents.P
 	if p.polar == nil {
 		return nil, oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not get product")
 	}
-	
+
 	res, err := p.polar.Products.Get(ctx, polar.GramFreeTierProductID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "Could not get product")
