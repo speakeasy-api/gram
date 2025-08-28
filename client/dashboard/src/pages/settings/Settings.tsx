@@ -665,51 +665,51 @@ const BillingSection = () => {
       </Stack>
       <div className="space-y-4">
         <Type variant="body" muted>
-          A summary of your organization's usage this period. Please visit the billing portal to see complete details or manage your account.
+          A summary of your organization's usage this period. Please visit the
+          billing portal to see complete details or manage your account.
         </Type>
         {/* TODO: DO NOT SHIP THIS UNTIL THE PERIOD USAGE REFLECTS THE ORG (SDK BUG SOLVED) */}
-        {isAdmin &&
-          (periodUsage ? (
-            <>
-              <div>
-                <Stack direction="horizontal" align="center" gap={1}>
-                  <Type variant="body" className="font-medium">
-                    Tool Calls
-                  </Type>
-                  <SimpleTooltip tooltip="The number of tool calls processed this period across all your organization's MCP servers.">
-                    <Info className="w-4 h-4 text-muted-foreground" />
-                  </SimpleTooltip>
-                </Stack>
-                <UsageProgress
-                  value={periodUsage.toolCalls}
-                  included={periodUsage.maxToolCalls}
-                  overageIncrement={periodUsage.maxToolCalls}
-                />
-              </div>
-              <div>
-                <Stack direction="horizontal" align="center" gap={1}>
-                  <Type variant="body" className="font-medium">
-                    Servers
-                  </Type>
-                  <SimpleTooltip tooltip="The number of public MCP servers across your organization.">
-                    <Info className="w-4 h-4 text-muted-foreground" />
-                  </SimpleTooltip>
-                </Stack>
-                <UsageProgress
-                  value={periodUsage.actualPublicServerCount} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
-                  included={periodUsage.maxServers}
-                  overageIncrement={1}
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="h-4 w-full" />
-            </>
-          ))}
+        {periodUsage ? (
+          <>
+            <div>
+              <Stack direction="horizontal" align="center" gap={1}>
+                <Type variant="body" className="font-medium">
+                  Tool Calls
+                </Type>
+                <SimpleTooltip tooltip="The number of tool calls processed this period across all your organization's MCP servers.">
+                  <Info className="w-4 h-4 text-muted-foreground" />
+                </SimpleTooltip>
+              </Stack>
+              <UsageProgress
+                value={periodUsage.toolCalls}
+                included={periodUsage.maxToolCalls}
+                overageIncrement={periodUsage.maxToolCalls}
+              />
+            </div>
+            <div>
+              <Stack direction="horizontal" align="center" gap={1}>
+                <Type variant="body" className="font-medium">
+                  Servers
+                </Type>
+                <SimpleTooltip tooltip="The number of public MCP servers across your organization.">
+                  <Info className="w-4 h-4 text-muted-foreground" />
+                </SimpleTooltip>
+              </Stack>
+              <UsageProgress
+                value={periodUsage.actualPublicServerCount} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
+                included={periodUsage.maxServers}
+                overageIncrement={1}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-full" />
+          </>
+        )}
         {creditUsage ? (
           <div>
             <Stack direction="horizontal" align="center" gap={1}>
@@ -858,7 +858,11 @@ const PolarPortalLink = () => {
         });
       }}
       disabled={session.gramAccountType === "enterprise"}
-      tooltip={session.gramAccountType === "enterprise" ? "Enterprise: Contact support to manage billing" : undefined}
+      tooltip={
+        session.gramAccountType === "enterprise"
+          ? "Enterprise: Contact support to manage billing"
+          : undefined
+      }
     >
       Manage Billing
     </Button>
