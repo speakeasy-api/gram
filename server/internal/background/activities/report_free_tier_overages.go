@@ -53,10 +53,9 @@ func (r *ReportFreeTierOverage) Do(ctx context.Context) error {
 			return err
 		}
 
-		// TODO
-		// if org.GramAccountType != "free" {
-		// 	continue
-		// }
+		if org.GramAccountType != "free" {
+			continue
+		}
 
 		usage, err := r.usageClient.GetPeriodUsage(ctx, org.ID)
 		if err != nil {
