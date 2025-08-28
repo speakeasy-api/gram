@@ -6213,6 +6213,95 @@ paths:
             x-speakeasy-name-override: createCheckout
             x-speakeasy-react-hook:
                 name: createCheckout
+    /rpc/usage.createCustomerSession:
+        post:
+            description: Create a customer session for the user
+            operationId: createCustomerSession
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                type: string
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: createCustomerSession usage
+            tags:
+                - usage
+            x-speakeasy-name-override: createCustomerSession
+            x-speakeasy-react-hook:
+                name: createCustomerSession
     /rpc/usage.getPeriodUsage:
         get:
             description: Get the usage for a project for a given period
@@ -6302,6 +6391,77 @@ paths:
             x-speakeasy-name-override: getPeriodUsage
             x-speakeasy-react-hook:
                 name: getPeriodUsage
+    /rpc/usage.getUsageTiers:
+        get:
+            description: Get the usage tiers
+            operationId: getUsageTiers
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UsageTiers'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            summary: getUsageTiers usage
+            tags:
+                - usage
+            x-speakeasy-name-override: getUsageTiers
+            x-speakeasy-react-hook:
+                name: getUsageTiers
     /rpc/variations.deleteGlobal:
         delete:
             description: Create or update a globally defined tool variation.
@@ -8446,6 +8606,10 @@ components:
         PeriodUsage:
             type: object
             properties:
+                actual_public_server_count:
+                    type: integer
+                    description: The number of servers set to public at the time of the request
+                    format: int64
                 max_servers:
                     type: integer
                     description: The maximum number of servers allowed
@@ -8456,7 +8620,7 @@ components:
                     format: int64
                 servers:
                     type: integer
-                    description: The number of servers used
+                    description: The number of servers used, according to the Polar meter
                     format: int64
                 tool_calls:
                     type: integer
@@ -8467,6 +8631,7 @@ components:
                 - max_tool_calls
                 - servers
                 - max_servers
+                - actual_public_server_count
         Project:
             type: object
             properties:
@@ -8818,6 +8983,35 @@ components:
             required:
                 - description
                 - env_variables
+        TierLimits:
+            type: object
+            properties:
+                base_price:
+                    type: number
+                    description: The base price for the tier
+                    format: double
+                included_servers:
+                    type: integer
+                    description: The number of servers included in the tier
+                    format: int64
+                included_tool_calls:
+                    type: integer
+                    description: The number of tool calls included in the tier
+                    format: int64
+                price_per_additional_server:
+                    type: number
+                    description: The price per additional server
+                    format: double
+                price_per_additional_tool_call:
+                    type: number
+                    description: The price per additional tool call
+                    format: double
+            required:
+                - base_price
+                - included_tool_calls
+                - included_servers
+                - price_per_additional_tool_call
+                - price_per_additional_server
         ToolVariation:
             type: object
             properties:
@@ -9335,6 +9529,16 @@ components:
                     $ref: '#/components/schemas/ToolVariation'
             required:
                 - variation
+        UsageTiers:
+            type: object
+            properties:
+                business:
+                    $ref: '#/components/schemas/TierLimits'
+                free:
+                    $ref: '#/components/schemas/TierLimits'
+            required:
+                - free
+                - business
     securitySchemes:
         apikey_header_Authorization:
             type: apiKey

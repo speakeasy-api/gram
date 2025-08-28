@@ -43,10 +43,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	"github.com/speakeasy-api/gram/server/internal/usage"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
-	"github.com/polarsource/polar-go"
 )
 
 type Service struct {
@@ -63,7 +62,7 @@ type Service struct {
 	toolProxy    *gateway.ToolProxy
 	oauthService *oauth.Service
 	oauthRepo    *oauth_repo.Queries
-	usageClient  *usage.PolarClient
+	usageClient  usage_types.UsageClient
 }
 
 type oauthTokenInputs struct {
@@ -99,7 +98,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	oauthService *oauth.Service,
-	polar *polargo.Polar,
+	usageClient usage_types.UsageClient,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -126,7 +125,7 @@ func NewService(
 		),
 		oauthService: oauthService,
 		oauthRepo:    oauth_repo.New(db),
-		usageClient:  usage.NewPolarClient(polar, logger),
+		usageClient:  usageClient,
 	}
 }
 

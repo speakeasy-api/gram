@@ -21,6 +21,14 @@ type Client struct {
 	// getPeriodUsage endpoint.
 	GetPeriodUsageDoer goahttp.Doer
 
+	// GetUsageTiers Doer is the HTTP client used to make requests to the
+	// getUsageTiers endpoint.
+	GetUsageTiersDoer goahttp.Doer
+
+	// CreateCustomerSession Doer is the HTTP client used to make requests to the
+	// createCustomerSession endpoint.
+	CreateCustomerSessionDoer goahttp.Doer
+
 	// CreateCheckout Doer is the HTTP client used to make requests to the
 	// createCheckout endpoint.
 	CreateCheckoutDoer goahttp.Doer
@@ -45,13 +53,15 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetPeriodUsageDoer:  doer,
-		CreateCheckoutDoer:  doer,
-		RestoreResponseBody: restoreBody,
-		scheme:              scheme,
-		host:                host,
-		decoder:             dec,
-		encoder:             enc,
+		GetPeriodUsageDoer:        doer,
+		GetUsageTiersDoer:         doer,
+		CreateCustomerSessionDoer: doer,
+		CreateCheckoutDoer:        doer,
+		RestoreResponseBody:       restoreBody,
+		scheme:                    scheme,
+		host:                      host,
+		decoder:                   dec,
+		encoder:                   enc,
 	}
 }
 
@@ -74,6 +84,49 @@ func (c *Client) GetPeriodUsage() goa.Endpoint {
 		resp, err := c.GetPeriodUsageDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("usage", "getPeriodUsage", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetUsageTiers returns an endpoint that makes HTTP requests to the usage
+// service getUsageTiers server.
+func (c *Client) GetUsageTiers() goa.Endpoint {
+	var (
+		decodeResponse = DecodeGetUsageTiersResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetUsageTiersRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetUsageTiersDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "getUsageTiers", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateCustomerSession returns an endpoint that makes HTTP requests to the
+// usage service createCustomerSession server.
+func (c *Client) CreateCustomerSession() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateCustomerSessionRequest(c.encoder)
+		decodeResponse = DecodeCreateCustomerSessionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateCustomerSessionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateCustomerSessionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("usage", "createCustomerSession", err)
 		}
 		return decodeResponse(resp)
 	}

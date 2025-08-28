@@ -10,6 +10,10 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type PeriodUsage = {
   /**
+   * The number of servers set to public at the time of the request
+   */
+  actualPublicServerCount: number;
+  /**
    * The maximum number of servers allowed
    */
   maxServers: number;
@@ -18,7 +22,7 @@ export type PeriodUsage = {
    */
   maxToolCalls: number;
   /**
-   * The number of servers used
+   * The number of servers used, according to the Polar meter
    */
   servers: number;
   /**
@@ -33,12 +37,14 @@ export const PeriodUsage$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  actual_public_server_count: z.number().int(),
   max_servers: z.number().int(),
   max_tool_calls: z.number().int(),
   servers: z.number().int(),
   tool_calls: z.number().int(),
 }).transform((v) => {
   return remap$(v, {
+    "actual_public_server_count": "actualPublicServerCount",
     "max_servers": "maxServers",
     "max_tool_calls": "maxToolCalls",
     "tool_calls": "toolCalls",
@@ -47,6 +53,7 @@ export const PeriodUsage$inboundSchema: z.ZodType<
 
 /** @internal */
 export type PeriodUsage$Outbound = {
+  actual_public_server_count: number;
   max_servers: number;
   max_tool_calls: number;
   servers: number;
@@ -59,12 +66,14 @@ export const PeriodUsage$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   PeriodUsage
 > = z.object({
+  actualPublicServerCount: z.number().int(),
   maxServers: z.number().int(),
   maxToolCalls: z.number().int(),
   servers: z.number().int(),
   toolCalls: z.number().int(),
 }).transform((v) => {
   return remap$(v, {
+    actualPublicServerCount: "actual_public_server_count",
     maxServers: "max_servers",
     maxToolCalls: "max_tool_calls",
     toolCalls: "tool_calls",
