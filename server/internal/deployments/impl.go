@@ -30,7 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	packages "github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/packages/semver"
 	packagesRepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
 	"go.temporal.io/sdk/client"
 )
@@ -678,7 +678,7 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 			projectID = row.ProjectID
 			versionID = row.PackageVersionID
 		} else {
-			semver, err := packages.ParseSemver(version)
+			semver, err := semver.ParseSemver(version)
 			if err != nil {
 				return nil, oops.E(oops.CodeBadRequest, err, "error parsing semver").Log(ctx, s.logger)
 			}

@@ -8,28 +8,29 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
-	polargo "github.com/polarsource/polar-go"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
-	"github.com/speakeasy-api/gram/server/internal/usage"
 )
 
 type Activities struct {
-	processDeployment      *activities.ProcessDeployment
-	transitionDeployment   *activities.TransitionDeployment
-	getSlackProjectContext *activities.GetSlackProjectContext
-	postSlackMessage       *activities.PostSlackMessage
-	slackChatCompletion    *activities.SlackChatCompletion
-	refreshOpenRouterKey   *activities.RefreshOpenRouterKey
-	verifyCustomDomain     *activities.VerifyCustomDomain
-	customDomainIngress    *activities.CustomDomainIngress
+	processDeployment           *activities.ProcessDeployment
+	transitionDeployment        *activities.TransitionDeployment
+	getSlackProjectContext      *activities.GetSlackProjectContext
+	postSlackMessage            *activities.PostSlackMessage
+	slackChatCompletion         *activities.SlackChatCompletion
+	refreshOpenRouterKey        *activities.RefreshOpenRouterKey
+	verifyCustomDomain          *activities.VerifyCustomDomain
+	customDomainIngress         *activities.CustomDomainIngress
 	collectPlatformUsageMetrics *activities.CollectPlatformUsageMetrics
+	reportFreeTierOverage       *activities.ReportFreeTierOverage
 }
 
 func NewActivities(
@@ -43,19 +44,20 @@ func NewActivities(
 	openrouter openrouter.Provisioner,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
-	polar *polargo.Polar,
+	usageClient usage_types.UsageClient,
+	posthogClient *posthog.Posthog,
 ) *Activities {
-	usageClient := usage.NewPolarClient(polar, logger)
 	return &Activities{
-		processDeployment:      activities.NewProcessDeployment(logger, meterProvider, db, features, assetStorage),
-		transitionDeployment:   activities.NewTransitionDeployment(logger, db),
-		getSlackProjectContext: activities.NewSlackProjectContextActivity(logger, db, slackClient),
-		postSlackMessage:       activities.NewPostSlackMessageActivity(logger, slackClient),
-		slackChatCompletion:    activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
-		refreshOpenRouterKey:   activities.NewRefreshOpenRouterKey(logger, db, openrouter),
-		verifyCustomDomain:     activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
-		customDomainIngress:    activities.NewCustomDomainIngress(logger, db, k8sClient),
+		processDeployment:           activities.NewProcessDeployment(logger, meterProvider, db, features, assetStorage),
+		transitionDeployment:        activities.NewTransitionDeployment(logger, db),
+		getSlackProjectContext:      activities.NewSlackProjectContextActivity(logger, db, slackClient),
+		postSlackMessage:            activities.NewPostSlackMessageActivity(logger, slackClient),
+		slackChatCompletion:         activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
+		refreshOpenRouterKey:        activities.NewRefreshOpenRouterKey(logger, db, openrouter),
+		verifyCustomDomain:          activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
+		customDomainIngress:         activities.NewCustomDomainIngress(logger, db, k8sClient),
 		collectPlatformUsageMetrics: activities.NewCollectPlatformUsageMetrics(logger, db, usageClient),
+		reportFreeTierOverage:       activities.NewReportFreeTierOverage(logger, db, usageClient, posthogClient),
 	}
 }
 
@@ -93,4 +95,8 @@ func (a *Activities) CustomDomainIngress(ctx context.Context, input activities.C
 
 func (a *Activities) CollectPlatformUsageMetrics(ctx context.Context) error {
 	return a.collectPlatformUsageMetrics.Do(ctx)
+}
+
+func (a *Activities) ReportFreeTierOverage(ctx context.Context) error {
+	return a.reportFreeTierOverage.Do(ctx)
 }

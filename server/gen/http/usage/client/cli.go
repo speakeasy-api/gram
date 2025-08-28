@@ -33,6 +33,28 @@ func BuildGetPeriodUsagePayload(usageGetPeriodUsageSessionToken string, usageGet
 	return v, nil
 }
 
+// BuildCreateCustomerSessionPayload builds the payload for the usage
+// createCustomerSession endpoint from CLI flags.
+func BuildCreateCustomerSessionPayload(usageCreateCustomerSessionSessionToken string, usageCreateCustomerSessionProjectSlugInput string) (*usage.CreateCustomerSessionPayload, error) {
+	var sessionToken *string
+	{
+		if usageCreateCustomerSessionSessionToken != "" {
+			sessionToken = &usageCreateCustomerSessionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if usageCreateCustomerSessionProjectSlugInput != "" {
+			projectSlugInput = &usageCreateCustomerSessionProjectSlugInput
+		}
+	}
+	v := &usage.CreateCustomerSessionPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCreateCheckoutPayload builds the payload for the usage createCheckout
 // endpoint from CLI flags.
 func BuildCreateCheckoutPayload(usageCreateCheckoutSessionToken string, usageCreateCheckoutProjectSlugInput string) (*usage.CreateCheckoutPayload, error) {

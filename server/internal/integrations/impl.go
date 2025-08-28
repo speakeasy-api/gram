@@ -25,7 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/integrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/packages/semver"
 )
 
 type Service struct {
@@ -98,7 +98,7 @@ func (s *Service) Get(ctx context.Context, form *gen.GetPayload) (res *gen.GetIn
 		return nil, oops.E(oops.CodeUnexpected, err, "error getting integration").Log(ctx, s.logger)
 	}
 
-	v := packages.Semver{
+	v := semver.Semver{
 		Valid:      true,
 		Major:      row.VersionMajor,
 		Minor:      row.VersionMinor,
@@ -118,7 +118,7 @@ func (s *Service) Get(ctx context.Context, form *gen.GetPayload) (res *gen.GetIn
 	versions := make([]*gen.IntegrationVersion, 0, len(versionRows))
 	for _, row := range versionRows {
 		versions = append(versions, &gen.IntegrationVersion{
-			Version: packages.Semver{
+			Version: semver.Semver{
 				Valid:      true,
 				Major:      row.Major,
 				Minor:      row.Minor,
@@ -161,7 +161,7 @@ func (s *Service) List(ctx context.Context, form *gen.ListPayload) (res *gen.Lis
 			continue
 		}
 
-		v := packages.Semver{
+		v := semver.Semver{
 			Valid:      true,
 			Major:      row.VersionMajor,
 			Minor:      row.VersionMinor,

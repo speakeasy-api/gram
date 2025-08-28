@@ -19,10 +19,21 @@ type GetPeriodUsageResponseBody struct {
 	ToolCalls int `form:"tool_calls" json:"tool_calls" xml:"tool_calls"`
 	// The maximum number of tool calls allowed
 	MaxToolCalls int `form:"max_tool_calls" json:"max_tool_calls" xml:"max_tool_calls"`
-	// The number of servers used
+	// The number of servers used, according to the Polar meter
 	Servers int `form:"servers" json:"servers" xml:"servers"`
 	// The maximum number of servers allowed
 	MaxServers int `form:"max_servers" json:"max_servers" xml:"max_servers"`
+	// The number of servers set to public at the time of the request
+	ActualPublicServerCount int `form:"actual_public_server_count" json:"actual_public_server_count" xml:"actual_public_server_count"`
+}
+
+// GetUsageTiersResponseBody is the type of the "usage" service "getUsageTiers"
+// endpoint HTTP response body.
+type GetUsageTiersResponseBody struct {
+	// The limits for the free tier
+	Free *TierLimitsResponseBody `form:"free" json:"free" xml:"free"`
+	// The limits for the business tier
+	Business *TierLimitsResponseBody `form:"business" json:"business" xml:"business"`
 }
 
 // GetPeriodUsageUnauthorizedResponseBody is the type of the "usage" service
@@ -192,6 +203,376 @@ type GetPeriodUsageUnexpectedResponseBody struct {
 // GetPeriodUsageGatewayErrorResponseBody is the type of the "usage" service
 // "getPeriodUsage" endpoint HTTP response body for the "gateway_error" error.
 type GetPeriodUsageGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUsageTiersUnauthorizedResponseBody is the type of the "usage" service
+// "getUsageTiers" endpoint HTTP response body for the "unauthorized" error.
+type GetUsageTiersUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUsageTiersForbiddenResponseBody is the type of the "usage" service
+// "getUsageTiers" endpoint HTTP response body for the "forbidden" error.
+type GetUsageTiersForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUsageTiersBadRequestResponseBody is the type of the "usage" service
+// "getUsageTiers" endpoint HTTP response body for the "bad_request" error.
+type GetUsageTiersBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUsageTiersNotFoundResponseBody is the type of the "usage" service
+// "getUsageTiers" endpoint HTTP response body for the "not_found" error.
+type GetUsageTiersNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUsageTiersConflictResponseBody is the type of the "usage" service
+// "getUsageTiers" endpoint HTTP response body for the "conflict" error.
+type GetUsageTiersConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUsageTiersUnsupportedMediaResponseBody is the type of the "usage" service
+// "getUsageTiers" endpoint HTTP response body for the "unsupported_media"
+// error.
+type GetUsageTiersUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUsageTiersInvalidResponseBody is the type of the "usage" service
+// "getUsageTiers" endpoint HTTP response body for the "invalid" error.
+type GetUsageTiersInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUsageTiersInvariantViolationResponseBody is the type of the "usage"
+// service "getUsageTiers" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetUsageTiersInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUsageTiersUnexpectedResponseBody is the type of the "usage" service
+// "getUsageTiers" endpoint HTTP response body for the "unexpected" error.
+type GetUsageTiersUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetUsageTiersGatewayErrorResponseBody is the type of the "usage" service
+// "getUsageTiers" endpoint HTTP response body for the "gateway_error" error.
+type GetUsageTiersGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomerSessionUnauthorizedResponseBody is the type of the "usage"
+// service "createCustomerSession" endpoint HTTP response body for the
+// "unauthorized" error.
+type CreateCustomerSessionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomerSessionForbiddenResponseBody is the type of the "usage"
+// service "createCustomerSession" endpoint HTTP response body for the
+// "forbidden" error.
+type CreateCustomerSessionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomerSessionBadRequestResponseBody is the type of the "usage"
+// service "createCustomerSession" endpoint HTTP response body for the
+// "bad_request" error.
+type CreateCustomerSessionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomerSessionNotFoundResponseBody is the type of the "usage" service
+// "createCustomerSession" endpoint HTTP response body for the "not_found"
+// error.
+type CreateCustomerSessionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomerSessionConflictResponseBody is the type of the "usage" service
+// "createCustomerSession" endpoint HTTP response body for the "conflict" error.
+type CreateCustomerSessionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomerSessionUnsupportedMediaResponseBody is the type of the "usage"
+// service "createCustomerSession" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CreateCustomerSessionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomerSessionInvalidResponseBody is the type of the "usage" service
+// "createCustomerSession" endpoint HTTP response body for the "invalid" error.
+type CreateCustomerSessionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomerSessionInvariantViolationResponseBody is the type of the
+// "usage" service "createCustomerSession" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CreateCustomerSessionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomerSessionUnexpectedResponseBody is the type of the "usage"
+// service "createCustomerSession" endpoint HTTP response body for the
+// "unexpected" error.
+type CreateCustomerSessionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateCustomerSessionGatewayErrorResponseBody is the type of the "usage"
+// service "createCustomerSession" endpoint HTTP response body for the
+// "gateway_error" error.
+type CreateCustomerSessionGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -389,14 +770,42 @@ type CreateCheckoutGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// TierLimitsResponseBody is used to define fields on response body types.
+type TierLimitsResponseBody struct {
+	// The base price for the tier
+	BasePrice float64 `form:"base_price" json:"base_price" xml:"base_price"`
+	// The number of tool calls included in the tier
+	IncludedToolCalls int `form:"included_tool_calls" json:"included_tool_calls" xml:"included_tool_calls"`
+	// The number of servers included in the tier
+	IncludedServers int `form:"included_servers" json:"included_servers" xml:"included_servers"`
+	// The price per additional tool call
+	PricePerAdditionalToolCall float64 `form:"price_per_additional_tool_call" json:"price_per_additional_tool_call" xml:"price_per_additional_tool_call"`
+	// The price per additional server
+	PricePerAdditionalServer float64 `form:"price_per_additional_server" json:"price_per_additional_server" xml:"price_per_additional_server"`
+}
+
 // NewGetPeriodUsageResponseBody builds the HTTP response body from the result
 // of the "getPeriodUsage" endpoint of the "usage" service.
 func NewGetPeriodUsageResponseBody(res *usage.PeriodUsage) *GetPeriodUsageResponseBody {
 	body := &GetPeriodUsageResponseBody{
-		ToolCalls:    res.ToolCalls,
-		MaxToolCalls: res.MaxToolCalls,
-		Servers:      res.Servers,
-		MaxServers:   res.MaxServers,
+		ToolCalls:               res.ToolCalls,
+		MaxToolCalls:            res.MaxToolCalls,
+		Servers:                 res.Servers,
+		MaxServers:              res.MaxServers,
+		ActualPublicServerCount: res.ActualPublicServerCount,
+	}
+	return body
+}
+
+// NewGetUsageTiersResponseBody builds the HTTP response body from the result
+// of the "getUsageTiers" endpoint of the "usage" service.
+func NewGetUsageTiersResponseBody(res *usage.UsageTiers) *GetUsageTiersResponseBody {
+	body := &GetUsageTiersResponseBody{}
+	if res.Free != nil {
+		body.Free = marshalUsageTierLimitsToTierLimitsResponseBody(res.Free)
+	}
+	if res.Business != nil {
+		body.Business = marshalUsageTierLimitsToTierLimitsResponseBody(res.Business)
 	}
 	return body
 }
@@ -531,6 +940,296 @@ func NewGetPeriodUsageUnexpectedResponseBody(res *goa.ServiceError) *GetPeriodUs
 // the result of the "getPeriodUsage" endpoint of the "usage" service.
 func NewGetPeriodUsageGatewayErrorResponseBody(res *goa.ServiceError) *GetPeriodUsageGatewayErrorResponseBody {
 	body := &GetPeriodUsageGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUsageTiersUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "getUsageTiers" endpoint of the "usage" service.
+func NewGetUsageTiersUnauthorizedResponseBody(res *goa.ServiceError) *GetUsageTiersUnauthorizedResponseBody {
+	body := &GetUsageTiersUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUsageTiersForbiddenResponseBody builds the HTTP response body from the
+// result of the "getUsageTiers" endpoint of the "usage" service.
+func NewGetUsageTiersForbiddenResponseBody(res *goa.ServiceError) *GetUsageTiersForbiddenResponseBody {
+	body := &GetUsageTiersForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUsageTiersBadRequestResponseBody builds the HTTP response body from
+// the result of the "getUsageTiers" endpoint of the "usage" service.
+func NewGetUsageTiersBadRequestResponseBody(res *goa.ServiceError) *GetUsageTiersBadRequestResponseBody {
+	body := &GetUsageTiersBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUsageTiersNotFoundResponseBody builds the HTTP response body from the
+// result of the "getUsageTiers" endpoint of the "usage" service.
+func NewGetUsageTiersNotFoundResponseBody(res *goa.ServiceError) *GetUsageTiersNotFoundResponseBody {
+	body := &GetUsageTiersNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUsageTiersConflictResponseBody builds the HTTP response body from the
+// result of the "getUsageTiers" endpoint of the "usage" service.
+func NewGetUsageTiersConflictResponseBody(res *goa.ServiceError) *GetUsageTiersConflictResponseBody {
+	body := &GetUsageTiersConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUsageTiersUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "getUsageTiers" endpoint of the "usage" service.
+func NewGetUsageTiersUnsupportedMediaResponseBody(res *goa.ServiceError) *GetUsageTiersUnsupportedMediaResponseBody {
+	body := &GetUsageTiersUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUsageTiersInvalidResponseBody builds the HTTP response body from the
+// result of the "getUsageTiers" endpoint of the "usage" service.
+func NewGetUsageTiersInvalidResponseBody(res *goa.ServiceError) *GetUsageTiersInvalidResponseBody {
+	body := &GetUsageTiersInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUsageTiersInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getUsageTiers" endpoint of the "usage" service.
+func NewGetUsageTiersInvariantViolationResponseBody(res *goa.ServiceError) *GetUsageTiersInvariantViolationResponseBody {
+	body := &GetUsageTiersInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUsageTiersUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getUsageTiers" endpoint of the "usage" service.
+func NewGetUsageTiersUnexpectedResponseBody(res *goa.ServiceError) *GetUsageTiersUnexpectedResponseBody {
+	body := &GetUsageTiersUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetUsageTiersGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "getUsageTiers" endpoint of the "usage" service.
+func NewGetUsageTiersGatewayErrorResponseBody(res *goa.ServiceError) *GetUsageTiersGatewayErrorResponseBody {
+	body := &GetUsageTiersGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomerSessionUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "createCustomerSession" endpoint of the "usage"
+// service.
+func NewCreateCustomerSessionUnauthorizedResponseBody(res *goa.ServiceError) *CreateCustomerSessionUnauthorizedResponseBody {
+	body := &CreateCustomerSessionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomerSessionForbiddenResponseBody builds the HTTP response body
+// from the result of the "createCustomerSession" endpoint of the "usage"
+// service.
+func NewCreateCustomerSessionForbiddenResponseBody(res *goa.ServiceError) *CreateCustomerSessionForbiddenResponseBody {
+	body := &CreateCustomerSessionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomerSessionBadRequestResponseBody builds the HTTP response body
+// from the result of the "createCustomerSession" endpoint of the "usage"
+// service.
+func NewCreateCustomerSessionBadRequestResponseBody(res *goa.ServiceError) *CreateCustomerSessionBadRequestResponseBody {
+	body := &CreateCustomerSessionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomerSessionNotFoundResponseBody builds the HTTP response body
+// from the result of the "createCustomerSession" endpoint of the "usage"
+// service.
+func NewCreateCustomerSessionNotFoundResponseBody(res *goa.ServiceError) *CreateCustomerSessionNotFoundResponseBody {
+	body := &CreateCustomerSessionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomerSessionConflictResponseBody builds the HTTP response body
+// from the result of the "createCustomerSession" endpoint of the "usage"
+// service.
+func NewCreateCustomerSessionConflictResponseBody(res *goa.ServiceError) *CreateCustomerSessionConflictResponseBody {
+	body := &CreateCustomerSessionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomerSessionUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "createCustomerSession" endpoint of the
+// "usage" service.
+func NewCreateCustomerSessionUnsupportedMediaResponseBody(res *goa.ServiceError) *CreateCustomerSessionUnsupportedMediaResponseBody {
+	body := &CreateCustomerSessionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomerSessionInvalidResponseBody builds the HTTP response body
+// from the result of the "createCustomerSession" endpoint of the "usage"
+// service.
+func NewCreateCustomerSessionInvalidResponseBody(res *goa.ServiceError) *CreateCustomerSessionInvalidResponseBody {
+	body := &CreateCustomerSessionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomerSessionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "createCustomerSession" endpoint of the
+// "usage" service.
+func NewCreateCustomerSessionInvariantViolationResponseBody(res *goa.ServiceError) *CreateCustomerSessionInvariantViolationResponseBody {
+	body := &CreateCustomerSessionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomerSessionUnexpectedResponseBody builds the HTTP response body
+// from the result of the "createCustomerSession" endpoint of the "usage"
+// service.
+func NewCreateCustomerSessionUnexpectedResponseBody(res *goa.ServiceError) *CreateCustomerSessionUnexpectedResponseBody {
+	body := &CreateCustomerSessionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateCustomerSessionGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "createCustomerSession" endpoint of the "usage"
+// service.
+func NewCreateCustomerSessionGatewayErrorResponseBody(res *goa.ServiceError) *CreateCustomerSessionGatewayErrorResponseBody {
+	body := &CreateCustomerSessionGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -685,6 +1384,16 @@ func NewCreateCheckoutGatewayErrorResponseBody(res *goa.ServiceError) *CreateChe
 // payload.
 func NewGetPeriodUsagePayload(sessionToken *string, projectSlugInput *string) *usage.GetPeriodUsagePayload {
 	v := &usage.GetPeriodUsagePayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCreateCustomerSessionPayload builds a usage service createCustomerSession
+// endpoint payload.
+func NewCreateCustomerSessionPayload(sessionToken *string, projectSlugInput *string) *usage.CreateCustomerSessionPayload {
+	v := &usage.CreateCustomerSessionPayload{}
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
