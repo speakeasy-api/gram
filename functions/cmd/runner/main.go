@@ -165,15 +165,37 @@ func main() {
 			return
 		}
 
-		resultReader, err := os.OpenFile(fifoPath, os.O_RDONLY|syscall.O_NONBLOCK, os.ModeNamedPipe)
-		if err != nil {
+		// Open the FIFO for reading in a separate goroutine to avoid blocking
+		// indefinitely.
+		// Using syscall.O_NONBLOCK is not a good idea because the sub-process
+		// might not open the FIFO for writing by the time this process attempts
+		// to read from the pipe. This can result in an io.UnexpectedEOF error.
+		pipech := make(chan *os.File, 1)
+		errch := make(chan error, 1)
+		go func() {
+			resultReader, err := os.OpenFile(fifoPath, os.O_RDONLY, os.ModeNamedPipe)
+			if err != nil {
+				errch <- err
+				return
+			}
+			pipech <- resultReader
+		}()
+
+		var pipe *os.File
+		select {
+		case <-r.Context().Done():
+			http.Error(w, "timed out waiting for sub-process", http.StatusRequestTimeout)
+			return
+		case err := <-errch:
 			msg := fmt.Sprintf("open pipe (ro): %s", err.Error())
 			http.Error(w, msg, http.StatusInternalServerError)
 			return
+		case f := <-pipech:
+			pipe = f
+			defer pipe.Close()
 		}
-		defer resultReader.Close()
 
-		response, err := http.ReadResponse(bufio.NewReader(resultReader), nil)
+		response, err := http.ReadResponse(bufio.NewReader(pipe), nil)
 		if err != nil {
 			msg := fmt.Sprintf("read response: %s", err.Error())
 			http.Error(w, msg, http.StatusInternalServerError)
