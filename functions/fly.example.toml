@@ -1,0 +1,36 @@
+# fly.toml app configuration file generated for misty-butterfly-979 on 2025-08-28T13:20:15Z
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'gram-images'
+primary_region = 'lhr'
+
+[build]
+image = 'registry.fly.io/gram-images:test-1'
+
+[deploy]
+strategy = "immediate"
+
+[processes]
+app = 'gram-runner'
+
+[http_service]
+internal_port = 8888
+force_https = true
+auto_stop_machines = 'stop'
+auto_start_machines = true
+min_machines_running = 0
+processes = ['app']
+
+[[files]]
+guest_path = '/data/code.zip'
+local_path = './scratch/code.zip'
+
+[[restart]]
+policy = 'never'
+
+[[vm]]
+memory = '1gb'
+cpu_kind = 'shared'
+cpus = 1
