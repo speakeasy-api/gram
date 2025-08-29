@@ -56,7 +56,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/usage"
-	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/speakeasy-api/gram/server/internal/variations"
 )
 
@@ -341,7 +340,7 @@ func newStartCommand() *cli.Command {
 			}
 
 			var polarClient *polargo.Polar
-			var usageClient usage_types.UsageClient
+			var usageClient *usage.Client
 			polarKey := c.String("polar-api-key")
 			if polarKey == "" {
 				logger.WarnContext(ctx, "polar api key is not set, skipping Polar client")
@@ -476,7 +475,7 @@ func newStartCommand() *cli.Command {
 					SignInRedirectURL:  auth.FormSignInRedirectURL(c.String("site-url")),
 					SlackAppInstallURL: slack.SlackInstallURL(c.String("environment")),
 					SlackSigningSecret: c.String("slack-signing-secret"),
-				}))	
+				}))
 			}
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
@@ -512,7 +511,8 @@ func newStartCommand() *cli.Command {
 						OpenRouter:          openRouter,
 						K8sClient:           k8sClient,
 						ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
-						UsageClient:         usageClient,
+						BillingTracker:      usageClient,
+						BillingRepository:   usageClient,
 						RedisClient:         redisClient,
 						PosthogClient:       posthogClient,
 					})

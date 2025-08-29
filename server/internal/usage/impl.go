@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
-	usage_types "github.com/speakeasy-api/gram/server/internal/usage/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -26,26 +25,26 @@ import (
 )
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	auth        *auth.Auth
-	usageClient usage_types.UsageClient
-	serverURL   *url.URL
-	repo        *repo.Queries
+	tracer    trace.Tracer
+	logger    *slog.Logger
+	auth      *auth.Auth
+	serverURL *url.URL
+	repo      *repo.Queries
+	polar     *Client
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, usageClient usage_types.UsageClient, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, polar *Client, serverURL *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	return &Service{
-		tracer:      otel.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
-		logger:      logger,
-		auth:        auth.New(logger, db, sessions),
-		usageClient: usageClient,
-		serverURL:   serverURL,
-		repo:        repo.New(db),
+		tracer:    otel.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
+		logger:    logger,
+		auth:      auth.New(logger, db, sessions),
+		serverURL: serverURL,
+		repo:      repo.New(db),
+		polar:     polar,
 	}
 }
 
@@ -69,7 +68,7 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	polarUsage, err := s.usageClient.GetPeriodUsage(ctx, authCtx.ActiveOrganizationID)
+	polarUsage, err := s.polar.GetPeriodUsage(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, s.logger)
 	}
@@ -91,12 +90,12 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 }
 
 func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err error) {
-	freeTierProduct, err := s.usageClient.GetGramFreeTierProduct(ctx)
+	freeTierProduct, err := s.polar.GetGramFreeTierProduct(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get gram free tier product").Log(ctx, s.logger)
 	}
 
-	proProduct, err := s.usageClient.GetGramProProduct(ctx)
+	proProduct, err := s.polar.GetGramProProduct(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get gram business product").Log(ctx, s.logger)
 	}
@@ -107,23 +106,29 @@ func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err e
 	var toolCallPrice, mcpServerPrice float64
 
 	for _, price := range proProduct.Prices {
-		if price.Type == polarComponents.PricesTypeProductPrice && price.ProductPrice != nil && price.ProductPrice.ProductPriceMeteredUnit != nil {
-			if price.ProductPrice.ProductPriceMeteredUnit.MeterID == polar.ToolCallsMeterID {
-				meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
-				toolCallPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
-				if err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "failed to parse tool call price").Log(ctx, s.logger)
-				}
-				toolCallPrice /= 100 // Result from Polar is in cents
+		if price.Type != polarComponents.PricesTypeProductPrice {
+			continue
+		}
+		if price.ProductPrice == nil || price.ProductPrice.ProductPriceMeteredUnit == nil {
+			continue
+		}
+
+		if price.ProductPrice.ProductPriceMeteredUnit.MeterID == polar.MeterIDToolCalls {
+			meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
+			toolCallPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to parse tool call price").Log(ctx, s.logger)
 			}
-			if price.ProductPrice.ProductPriceMeteredUnit.MeterID == polar.ServersMeterID {
-				meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
-				mcpServerPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
-				if err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "failed to parse mcp server price").Log(ctx, s.logger)
-				}
-				mcpServerPrice /= 100 // Result from Polar is in cents
+			toolCallPrice /= 100 // Result from Polar is in cents
+		}
+
+		if price.ProductPrice.ProductPriceMeteredUnit.MeterID == polar.MeterIDServers {
+			meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
+			mcpServerPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to parse mcp server price").Log(ctx, s.logger)
 			}
+			mcpServerPrice /= 100 // Result from Polar is in cents
 		}
 	}
 
@@ -151,7 +156,7 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	checkoutURL, err := s.usageClient.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String())
+	checkoutURL, err := s.polar.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String())
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout").Log(ctx, s.logger)
 	}
@@ -164,7 +169,7 @@ func (s *Service) CreateCustomerSession(ctx context.Context, payload *gen.Create
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	sessionURL, err := s.usageClient.CreateCustomerSession(ctx, authCtx.ActiveOrganizationID)
+	sessionURL, err := s.polar.CreateCustomerSession(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to create customer session").Log(ctx, s.logger)
 	}

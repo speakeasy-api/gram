@@ -301,7 +301,7 @@ func newWorkerCommand() *cli.Command {
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
-			
+
 			var usageClient *usage.Client
 			polarKey := c.String("polar-api-key")
 			if polarKey == "" {
@@ -320,7 +320,8 @@ func newWorkerCommand() *cli.Command {
 				OpenRouter:          openRouter,
 				K8sClient:           k8sClient,
 				ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
-				UsageClient:         usageClient,
+				BillingTracker:      usageClient,
+				BillingRepository:   usageClient,
 				RedisClient:         redisClient,
 				PosthogClient:       posthogClient,
 			})

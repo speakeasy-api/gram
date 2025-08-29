@@ -6,7 +6,7 @@ import (
 
 type TierLimits struct {
 	ToolCalls int
-	Servers int
+	Servers   int
 }
 
 func ExtractTierLimits(product *polarComponents.Product) TierLimits {
@@ -14,20 +14,20 @@ func ExtractTierLimits(product *polarComponents.Product) TierLimits {
 	freeTierServers := 0
 
 	for _, benefit := range product.Benefits {
-		if (benefit.BenefitMeterCredit == nil) {
+		if benefit.BenefitMeterCredit == nil {
 			continue
 		}
 		benefitProperties := benefit.BenefitMeterCredit.Properties
-		if (benefitProperties.MeterID == ToolCallsMeterID) {
+		if benefitProperties.MeterID == MeterIDToolCalls {
 			freeTierToolCalls = int(benefitProperties.Units)
 		}
-		if (benefitProperties.MeterID == ServersMeterID) {
+		if benefitProperties.MeterID == MeterIDServers {
 			freeTierServers = int(benefitProperties.Units)
 		}
 	}
 
 	return TierLimits{
 		ToolCalls: freeTierToolCalls,
-		Servers: freeTierServers,
+		Servers:   freeTierServers,
 	}
 }

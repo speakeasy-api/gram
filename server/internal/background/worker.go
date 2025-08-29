@@ -16,14 +16,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	"github.com/speakeasy-api/gram/server/internal/usage/types"
+	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 )
 
 type WorkerOptions struct {
@@ -35,7 +35,8 @@ type WorkerOptions struct {
 	OpenRouter          openrouter.Provisioner
 	K8sClient           *k8s.KubernetesClients
 	ExpectedTargetCNAME string
-	UsageClient         usage_types.UsageClient
+	BillingTracker      billing.Tracker
+	BillingRepository   billing.Repository
 	RedisClient         *redis.Client
 	PosthogClient       *posthog.Posthog
 }
@@ -50,7 +51,8 @@ func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage 
 		OpenRouter:          nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
-		UsageClient:         nil,
+		BillingTracker:      nil,
+		BillingRepository:   nil,
 		RedisClient:         nil,
 		PosthogClient:       nil,
 	}
@@ -71,7 +73,8 @@ func NewTemporalWorker(
 		OpenRouter:          nil,
 		K8sClient:           nil,
 		ExpectedTargetCNAME: "",
-		UsageClient:         nil,
+		BillingTracker:      nil,
+		BillingRepository:   nil,
 		RedisClient:         nil,
 		PosthogClient:       nil,
 	}
@@ -86,7 +89,8 @@ func NewTemporalWorker(
 			OpenRouter:          conv.Default(o.OpenRouter, opts.OpenRouter),
 			K8sClient:           conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME: conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
-			UsageClient:         conv.Default(o.UsageClient, opts.UsageClient),
+			BillingTracker:      conv.Default(o.BillingTracker, opts.BillingTracker),
+			BillingRepository:   conv.Default(o.BillingRepository, opts.BillingRepository),
 			RedisClient:         conv.Default(o.RedisClient, opts.RedisClient),
 			PosthogClient:       conv.Default(o.PosthogClient, opts.PosthogClient),
 		}
@@ -111,7 +115,8 @@ func NewTemporalWorker(
 		opts.OpenRouter,
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
-		opts.UsageClient,
+		opts.BillingTracker,
+		opts.BillingRepository,
 		opts.PosthogClient,
 	)
 
