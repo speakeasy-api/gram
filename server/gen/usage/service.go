@@ -85,7 +85,7 @@ type PeriodUsage struct {
 
 type TierLimits struct {
 	// The tier name
-	Tier *string
+	Name *string
 	// The base price for the tier
 	BasePrice float64
 	// The number of tool calls included in the tier

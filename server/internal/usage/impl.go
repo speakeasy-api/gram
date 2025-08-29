@@ -129,6 +129,7 @@ func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err e
 
 	return &gen.UsageTiers{
 		Free: &gen.TierLimits{
+			Name:                       &freeTierProduct.Name,
 			BasePrice:                  0,
 			IncludedToolCalls:          freeTierLimits.ToolCalls,
 			IncludedServers:            freeTierLimits.Servers,
@@ -136,6 +137,7 @@ func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err e
 			PricePerAdditionalServer:   0,
 		},
 		Pro: &gen.TierLimits{
+			Name:                       &proProduct.Name,
 			BasePrice:                  0,
 			IncludedToolCalls:          proTierLimits.ToolCalls,
 			IncludedServers:            proTierLimits.Servers,

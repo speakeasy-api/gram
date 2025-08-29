@@ -23,3 +23,4 @@ let value: TierLimits = {
 | `includedToolCalls`                           | *number*                                      | :heavy_check_mark:                            | The number of tool calls included in the tier |
 | `pricePerAdditionalServer`                    | *number*                                      | :heavy_check_mark:                            | The price per additional server               |
 | `pricePerAdditionalToolCall`                  | *number*                                      | :heavy_check_mark:                            | The price per additional tool call            |
+| `tier`                                        | *string*                                      | :heavy_minus_sign:                            | The tier name                                 |

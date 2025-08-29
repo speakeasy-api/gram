@@ -8998,6 +8998,9 @@ components:
                     type: integer
                     description: The number of tool calls included in the tier
                     format: int64
+                name:
+                    type: string
+                    description: The tier name
                 price_per_additional_server:
                     type: number
                     description: The price per additional server
@@ -9006,9 +9009,6 @@ components:
                     type: number
                     description: The price per additional tool call
                     format: double
-                tier:
-                    type: string
-                    description: The tier name
             required:
                 - base_price
                 - included_tool_calls

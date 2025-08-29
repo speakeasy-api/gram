@@ -802,7 +802,7 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 // *TierLimitsResponseBody from a value of type *usage.TierLimits.
 func marshalUsageTierLimitsToTierLimitsResponseBody(v *usage.TierLimits) *TierLimitsResponseBody {
 	res := &TierLimitsResponseBody{
-		Tier:                       v.Tier,
+		Name:                       v.Name,
 		BasePrice:                  v.BasePrice,
 		IncludedToolCalls:          v.IncludedToolCalls,
 		IncludedServers:            v.IncludedServers,

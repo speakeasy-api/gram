@@ -773,7 +773,7 @@ type CreateCheckoutGatewayErrorResponseBody struct {
 // TierLimitsResponseBody is used to define fields on response body types.
 type TierLimitsResponseBody struct {
 	// The tier name
-	Tier *string `form:"tier,omitempty" json:"tier,omitempty" xml:"tier,omitempty"`
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The base price for the tier
 	BasePrice *float64 `form:"base_price,omitempty" json:"base_price,omitempty" xml:"base_price,omitempty"`
 	// The number of tool calls included in the tier

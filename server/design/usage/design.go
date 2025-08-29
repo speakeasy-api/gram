@@ -18,7 +18,7 @@ var PeriodUsage = Type("PeriodUsage", func() {
 })
 
 var TierLimits = Type("TierLimits", func() {
-	Attribute("tier", String, "The tier name")
+	Attribute("name", String, "The tier name")
 	Attribute("base_price", Float64, "The base price for the tier")
 	Attribute("included_tool_calls", Int, "The number of tool calls included in the tier")
 	Attribute("included_servers", Int, "The number of servers included in the tier")

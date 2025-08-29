@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: e8869a7b4ae45cd15732281cee54c7a1
+  docChecksum: c16ed818a95468a2954ebc9b93fb91b1
   docVersion: 0.0.1
   speakeasyVersion: 1.585.0
   generationVersion: 2.660.0
-  releaseVersion: 0.12.54
-  configChecksum: 0b8a44f4c33ed434df00ed2225fc7027
+  releaseVersion: 0.12.55
+  configChecksum: be596ec76227d8b9e99b3d27062b8fb9
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -1477,7 +1477,7 @@ examples:
     speakeasy-default-get-usage-tiers:
       responses:
         "200":
-          application/json: {"business": {"base_price": 6666.51, "included_servers": 925792, "included_tool_calls": 306325, "price_per_additional_server": 302.79, "price_per_additional_tool_call": 7563.66}, "free": {"base_price": 7355.72, "included_servers": 180790, "included_tool_calls": 683591, "price_per_additional_server": 678.32, "price_per_additional_tool_call": 7255.78}}
+          application/json: {"free": {"base_price": 7355.72, "included_servers": 180790, "included_tool_calls": 683591, "price_per_additional_server": 678.32, "price_per_additional_tool_call": 7255.78}, "pro": {"base_price": 6666.51, "included_servers": 925792, "included_tool_calls": 306325, "price_per_additional_server": 302.79, "price_per_additional_tool_call": 7563.66}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":

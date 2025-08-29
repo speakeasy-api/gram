@@ -34871,6 +34871,10 @@ definitions:
                 description: The number of tool calls included in the tier
                 example: 9044419315957503001
                 format: int64
+            name:
+                type: string
+                description: The tier name
+                example: Id quae commodi ad.
             price_per_additional_server:
                 type: number
                 description: The price per additional server
@@ -34881,17 +34885,13 @@ definitions:
                 description: The price per additional tool call
                 example: 0.6157894637078484
                 format: double
-            tier:
-                type: string
-                description: The tier name
-                example: Id quae commodi ad.
         example:
             base_price: 0.3367714204340181
             included_servers: 5667772127086174382
             included_tool_calls: 2803520638907610611
+            name: Alias neque voluptatibus cupiditate nostrum.
             price_per_additional_server: 0.5362879349375024
             price_per_additional_tool_call: 0.7518509346681194
-            tier: Alias neque voluptatibus cupiditate nostrum.
         required:
             - base_price
             - included_tool_calls
@@ -42251,16 +42251,16 @@ definitions:
                 base_price: 0.6325264048178694
                 included_servers: 563931495952087076
                 included_tool_calls: 8644260210846577003
+                name: Reprehenderit ut asperiores tempora vel consequuntur et.
                 price_per_additional_server: 0.6198199678366133
                 price_per_additional_tool_call: 0.07648890525302271
-                tier: Reprehenderit ut asperiores tempora vel consequuntur et.
             pro:
                 base_price: 0.6325264048178694
                 included_servers: 563931495952087076
                 included_tool_calls: 8644260210846577003
+                name: Reprehenderit ut asperiores tempora vel consequuntur et.
                 price_per_additional_server: 0.6198199678366133
                 price_per_additional_tool_call: 0.07648890525302271
-                tier: Reprehenderit ut asperiores tempora vel consequuntur et.
         required:
             - free
             - pro

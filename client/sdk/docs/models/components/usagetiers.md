@@ -6,14 +6,14 @@
 import { UsageTiers } from "@gram/client/models/components";
 
 let value: UsageTiers = {
-  business: {
+  free: {
     basePrice: 754.33,
     includedServers: 650692,
     includedToolCalls: 589937,
     pricePerAdditionalServer: 2826.76,
     pricePerAdditionalToolCall: 8552.2,
   },
-  free: {
+  pro: {
     basePrice: 2511.29,
     includedServers: 7070,
     includedToolCalls: 806635,
@@ -27,5 +27,5 @@ let value: UsageTiers = {
 
 | Field                                                          | Type                                                           | Required                                                       | Description                                                    |
 | -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
-| `business`                                                     | [components.TierLimits](../../models/components/tierlimits.md) | :heavy_check_mark:                                             | N/A                                                            |
 | `free`                                                         | [components.TierLimits](../../models/components/tierlimits.md) | :heavy_check_mark:                                             | N/A                                                            |
+| `pro`                                                          | [components.TierLimits](../../models/components/tierlimits.md) | :heavy_check_mark:                                             | N/A                                                            |

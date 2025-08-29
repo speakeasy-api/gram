@@ -279,7 +279,7 @@ func (p *Client) GetCustomerState(ctx context.Context, orgID string) (*usage_typ
 	if polarCustomerState != nil {
 		for _, sub := range polarCustomerState.ActiveSubscriptions {
 			if sub.ProductID == polar.GramProProductID {
-				customerState.Tier = usage_types.Tier_Business
+				customerState.Tier = usage_types.Tier_Pro
 				break
 			}
 		}

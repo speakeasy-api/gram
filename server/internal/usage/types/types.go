@@ -55,7 +55,7 @@ type Tier string
 
 const (
 	Tier_Free     Tier = "free"
-	Tier_Business Tier = "business"
+	Tier_Pro Tier = "pro"
 )
 
 type CustomerState struct {
