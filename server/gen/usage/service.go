@@ -84,6 +84,8 @@ type PeriodUsage struct {
 }
 
 type TierLimits struct {
+	// The tier name
+	Tier *string
 	// The base price for the tier
 	BasePrice float64
 	// The number of tool calls included in the tier
@@ -100,8 +102,8 @@ type TierLimits struct {
 type UsageTiers struct {
 	// The limits for the free tier
 	Free *TierLimits
-	// The limits for the business tier
-	Business *TierLimits
+	// The limits for the pro tier
+	Pro *TierLimits
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

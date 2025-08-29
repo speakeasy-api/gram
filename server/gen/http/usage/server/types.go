@@ -32,8 +32,8 @@ type GetPeriodUsageResponseBody struct {
 type GetUsageTiersResponseBody struct {
 	// The limits for the free tier
 	Free *TierLimitsResponseBody `form:"free" json:"free" xml:"free"`
-	// The limits for the business tier
-	Business *TierLimitsResponseBody `form:"business" json:"business" xml:"business"`
+	// The limits for the pro tier
+	Pro *TierLimitsResponseBody `form:"pro" json:"pro" xml:"pro"`
 }
 
 // GetPeriodUsageUnauthorizedResponseBody is the type of the "usage" service
@@ -772,6 +772,8 @@ type CreateCheckoutGatewayErrorResponseBody struct {
 
 // TierLimitsResponseBody is used to define fields on response body types.
 type TierLimitsResponseBody struct {
+	// The tier name
+	Tier *string `form:"tier,omitempty" json:"tier,omitempty" xml:"tier,omitempty"`
 	// The base price for the tier
 	BasePrice float64 `form:"base_price" json:"base_price" xml:"base_price"`
 	// The number of tool calls included in the tier
@@ -804,8 +806,8 @@ func NewGetUsageTiersResponseBody(res *usage.UsageTiers) *GetUsageTiersResponseB
 	if res.Free != nil {
 		body.Free = marshalUsageTierLimitsToTierLimitsResponseBody(res.Free)
 	}
-	if res.Business != nil {
-		body.Business = marshalUsageTierLimitsToTierLimitsResponseBody(res.Business)
+	if res.Pro != nil {
+		body.Pro = marshalUsageTierLimitsToTierLimitsResponseBody(res.Pro)
 	}
 	return body
 }

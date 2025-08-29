@@ -135,7 +135,7 @@ func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err e
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
 		},
-		Business: &gen.TierLimits{
+		Pro: &gen.TierLimits{
 			BasePrice:                  0,
 			IncludedToolCalls:          proTierLimits.ToolCalls,
 			IncludedServers:            proTierLimits.Servers,

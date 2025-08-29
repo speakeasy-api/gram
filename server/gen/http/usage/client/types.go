@@ -32,8 +32,8 @@ type GetPeriodUsageResponseBody struct {
 type GetUsageTiersResponseBody struct {
 	// The limits for the free tier
 	Free *TierLimitsResponseBody `form:"free,omitempty" json:"free,omitempty" xml:"free,omitempty"`
-	// The limits for the business tier
-	Business *TierLimitsResponseBody `form:"business,omitempty" json:"business,omitempty" xml:"business,omitempty"`
+	// The limits for the pro tier
+	Pro *TierLimitsResponseBody `form:"pro,omitempty" json:"pro,omitempty" xml:"pro,omitempty"`
 }
 
 // GetPeriodUsageUnauthorizedResponseBody is the type of the "usage" service
@@ -772,6 +772,8 @@ type CreateCheckoutGatewayErrorResponseBody struct {
 
 // TierLimitsResponseBody is used to define fields on response body types.
 type TierLimitsResponseBody struct {
+	// The tier name
+	Tier *string `form:"tier,omitempty" json:"tier,omitempty" xml:"tier,omitempty"`
 	// The base price for the tier
 	BasePrice *float64 `form:"base_price,omitempty" json:"base_price,omitempty" xml:"base_price,omitempty"`
 	// The number of tool calls included in the tier
@@ -953,7 +955,7 @@ func NewGetPeriodUsageGatewayError(body *GetPeriodUsageGatewayErrorResponseBody)
 func NewGetUsageTiersUsageTiersOK(body *GetUsageTiersResponseBody) *usage.UsageTiers {
 	v := &usage.UsageTiers{}
 	v.Free = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Free)
-	v.Business = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Business)
+	v.Pro = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Pro)
 
 	return v
 }
@@ -1435,16 +1437,16 @@ func ValidateGetUsageTiersResponseBody(body *GetUsageTiersResponseBody) (err err
 	if body.Free == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("free", "body"))
 	}
-	if body.Business == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("business", "body"))
+	if body.Pro == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pro", "body"))
 	}
 	if body.Free != nil {
 		if err2 := ValidateTierLimitsResponseBody(body.Free); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
-	if body.Business != nil {
-		if err2 := ValidateTierLimitsResponseBody(body.Business); err2 != nil {
+	if body.Pro != nil {
+		if err2 := ValidateTierLimitsResponseBody(body.Pro); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}

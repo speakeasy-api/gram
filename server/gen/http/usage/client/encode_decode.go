@@ -929,6 +929,7 @@ func DecodeCreateCheckoutResponse(decoder func(*http.Response) goahttp.Decoder, 
 // *usage.TierLimits from a value of type *TierLimitsResponseBody.
 func unmarshalTierLimitsResponseBodyToUsageTierLimits(v *TierLimitsResponseBody) *usage.TierLimits {
 	res := &usage.TierLimits{
+		Tier:                       v.Tier,
 		BasePrice:                  *v.BasePrice,
 		IncludedToolCalls:          *v.IncludedToolCalls,
 		IncludedServers:            *v.IncludedServers,

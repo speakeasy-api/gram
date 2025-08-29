@@ -9006,6 +9006,9 @@ components:
                     type: number
                     description: The price per additional tool call
                     format: double
+                tier:
+                    type: string
+                    description: The tier name
             required:
                 - base_price
                 - included_tool_calls
@@ -9532,13 +9535,13 @@ components:
         UsageTiers:
             type: object
             properties:
-                business:
-                    $ref: '#/components/schemas/TierLimits'
                 free:
+                    $ref: '#/components/schemas/TierLimits'
+                pro:
                     $ref: '#/components/schemas/TierLimits'
             required:
                 - free
-                - business
+                - pro
     securitySchemes:
         apikey_header_Authorization:
             type: apiKey
