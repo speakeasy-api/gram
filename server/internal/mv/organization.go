@@ -7,7 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/usage/types"
+	usage_types "github.com/speakeasy-api/gram/server/internal/usage/types"
 )
 
 // Necessary to properly populate account type
@@ -27,7 +27,7 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 		return &org, nil
 	}
 
-	// This is used during auth, so try to avoid failing 
+	// This is used during auth, so try to avoid failing
 	customerState, err := customerProvider.GetCustomerState(ctx, orgID)
 	if err != nil {
 		logger.ErrorContext(ctx, "error getting customer state", attr.SlogError(err)) // TODO: set up an alert for this
