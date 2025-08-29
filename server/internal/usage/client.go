@@ -39,10 +39,6 @@ func NewClient(polarClient *polargo.Polar, logger *slog.Logger, redisClient *red
 }
 
 func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {
-	if p.polar == nil {
-		return
-	}
-
 	totalBytes := event.RequestBytes + event.OutputBytes
 	typeStr := string(event.Type)
 
@@ -119,10 +115,6 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallU
 }
 
 func (p *Client) TrackPromptCallUsage(ctx context.Context, event billing.PromptCallUsageEvent) {
-	if p.polar == nil {
-		return
-	}
-
 	totalBytes := event.RequestBytes + event.OutputBytes
 
 	metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
@@ -198,10 +190,6 @@ func (p *Client) TrackPromptCallUsage(ctx context.Context, event billing.PromptC
 }
 
 func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformUsageEvent) {
-	if p.polar == nil {
-		return
-	}
-
 	metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
 		"public_mcp_servers": {
 			Integer: &event.PublicMCPServers,

@@ -10,6 +10,7 @@ import (
 	polargo "github.com/polarsource/polar-go"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/control"
@@ -303,12 +304,14 @@ func newWorkerCommand() *cli.Command {
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
 
 			var usageClient *usage.Client
+			var billingTracker billing.Tracker = billing.NewNoopTracker(logger)
 			polarKey := c.String("polar-api-key")
 			if polarKey == "" {
 				logger.WarnContext(ctx, "polar api key is not set, skipping usage client")
 			} else {
 				polarClient := polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second))
 				usageClient = usage.NewClient(polarClient, logger, redisClient)
+				billingTracker = usageClient
 			}
 
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, meterProvider, &background.WorkerOptions{
@@ -320,7 +323,7 @@ func newWorkerCommand() *cli.Command {
 				OpenRouter:          openRouter,
 				K8sClient:           k8sClient,
 				ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
-				BillingTracker:      usageClient,
+				BillingTracker:      billingTracker,
 				BillingRepository:   usageClient,
 				RedisClient:         redisClient,
 				PosthogClient:       posthogClient,

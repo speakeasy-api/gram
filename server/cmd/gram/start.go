@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/control"
@@ -341,12 +342,14 @@ func newStartCommand() *cli.Command {
 
 			var polarClient *polargo.Polar
 			var usageClient *usage.Client
+			var billingTracker billing.Tracker = billing.NewNoopTracker(logger)
 			polarKey := c.String("polar-api-key")
 			if polarKey == "" {
 				logger.WarnContext(ctx, "polar api key is not set, skipping Polar client")
 			} else {
 				polarClient = polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
 				usageClient = usage.NewClient(polarClient, logger, redisClient)
+				billingTracker = usageClient
 			}
 
 			localEnvPath := c.String("unsafe-local-env-path")
@@ -466,8 +469,8 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger, db, sessionManager))
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env)
 			oauth.Attach(mux, oauthService)
-			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient, usageClient))
-			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService, usageClient))
+			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient, billingTracker))
+			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService, billingTracker))
 			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
@@ -511,7 +514,7 @@ func newStartCommand() *cli.Command {
 						OpenRouter:          openRouter,
 						K8sClient:           k8sClient,
 						ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
-						BillingTracker:      usageClient,
+						BillingTracker:      billingTracker,
 						BillingRepository:   usageClient,
 						RedisClient:         redisClient,
 						PosthogClient:       posthogClient,
