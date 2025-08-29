@@ -17,8 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
-	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
+	usage_types "github.com/speakeasy-api/gram/server/internal/usage/types"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -71,13 +71,13 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 
 	polarUsage, err := s.usageClient.GetPeriodUsage(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get period usage from polar")
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, s.logger)
 	}
 
 	// The actual number of public servers right this moment, which may not be updated in Polar yet.
 	actualPublicServerCount, err := s.repo.GetPublicServerCount(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "Could not get public server count")
+		return nil, oops.E(oops.CodeUnexpected, err, "could not get public server count").Log(ctx, s.logger)
 	}
 
 	// We don't populate the maximums using GetUsageTiers because we want to reflect the actual granted credits, not the current product limits which may have changed.
@@ -93,12 +93,12 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err error) {
 	freeTierProduct, err := s.usageClient.GetGramFreeTierProduct(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get gram free tier product from polar")
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get gram free tier product").Log(ctx, s.logger)
 	}
 
 	proProduct, err := s.usageClient.GetGramProProduct(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get gram business product from polar")
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get gram business product").Log(ctx, s.logger)
 	}
 
 	freeTierLimits := polar.ExtractTierLimits(freeTierProduct)
@@ -112,7 +112,7 @@ func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err e
 				meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
 				toolCallPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
 				if err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "failed to parse tool call price")
+					return nil, oops.E(oops.CodeUnexpected, err, "failed to parse tool call price").Log(ctx, s.logger)
 				}
 				toolCallPrice /= 100 // Result from Polar is in cents
 			}
@@ -120,7 +120,7 @@ func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err e
 				meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
 				mcpServerPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
 				if err != nil {
-					return nil, oops.E(oops.CodeUnexpected, err, "failed to parse mcp server price")
+					return nil, oops.E(oops.CodeUnexpected, err, "failed to parse mcp server price").Log(ctx, s.logger)
 				}
 				mcpServerPrice /= 100 // Result from Polar is in cents
 			}
@@ -153,7 +153,7 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 
 	checkoutURL, err := s.usageClient.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String())
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout")
+		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout").Log(ctx, s.logger)
 	}
 	return checkoutURL, nil
 }
@@ -166,7 +166,7 @@ func (s *Service) CreateCustomerSession(ctx context.Context, payload *gen.Create
 
 	sessionURL, err := s.usageClient.CreateCustomerSession(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "failed to create customer session")
+		return "", oops.E(oops.CodeUnexpected, err, "failed to create customer session").Log(ctx, s.logger)
 	}
 	return sessionURL, nil
 }
