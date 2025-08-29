@@ -23,15 +23,17 @@ var TierLimits = Type("TierLimits", func() {
 	Attribute("included_servers", Int, "The number of servers included in the tier")
 	Attribute("price_per_additional_tool_call", Float64, "The price per additional tool call")
 	Attribute("price_per_additional_server", Float64, "The price per additional server")
+	Attribute("description_bullets", ArrayOf(String), "The description bullets of the tier")
 	
-	Required("base_price", "included_tool_calls", "included_servers", "price_per_additional_tool_call", "price_per_additional_server")
+	Required("base_price", "included_tool_calls", "included_servers", "price_per_additional_tool_call", "price_per_additional_server", "description_bullets")
 })
 
 var UsageTiers = Type("UsageTiers", func() {
-	Attribute("free", TierLimits, "The limits for the free tier")
+	Attribute("free", TierLimits, "The limits for the free tier")	
 	Attribute("business", TierLimits, "The limits for the business tier")
+	Attribute("enterprise", TierLimits, "The limits for the enterprise tier")
 
-	Required("free", "business")
+	Required("free", "business", "enterprise")
 })
 
 var _ = Service("usage", func() {

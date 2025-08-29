@@ -34,6 +34,8 @@ type GetUsageTiersResponseBody struct {
 	Free *TierLimitsResponseBody `form:"free" json:"free" xml:"free"`
 	// The limits for the business tier
 	Business *TierLimitsResponseBody `form:"business" json:"business" xml:"business"`
+	// The limits for the enterprise tier
+	Enterprise *TierLimitsResponseBody `form:"enterprise" json:"enterprise" xml:"enterprise"`
 }
 
 // GetPeriodUsageUnauthorizedResponseBody is the type of the "usage" service
@@ -782,6 +784,8 @@ type TierLimitsResponseBody struct {
 	PricePerAdditionalToolCall float64 `form:"price_per_additional_tool_call" json:"price_per_additional_tool_call" xml:"price_per_additional_tool_call"`
 	// The price per additional server
 	PricePerAdditionalServer float64 `form:"price_per_additional_server" json:"price_per_additional_server" xml:"price_per_additional_server"`
+	// The description bullets of the tier
+	DescriptionBullets []string `form:"description_bullets" json:"description_bullets" xml:"description_bullets"`
 }
 
 // NewGetPeriodUsageResponseBody builds the HTTP response body from the result
@@ -806,6 +810,9 @@ func NewGetUsageTiersResponseBody(res *usage.UsageTiers) *GetUsageTiersResponseB
 	}
 	if res.Business != nil {
 		body.Business = marshalUsageTierLimitsToTierLimitsResponseBody(res.Business)
+	}
+	if res.Enterprise != nil {
+		body.Enterprise = marshalUsageTierLimitsToTierLimitsResponseBody(res.Enterprise)
 	}
 	return body
 }

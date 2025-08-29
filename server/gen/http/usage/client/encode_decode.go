@@ -935,6 +935,10 @@ func unmarshalTierLimitsResponseBodyToUsageTierLimits(v *TierLimitsResponseBody)
 		PricePerAdditionalToolCall: *v.PricePerAdditionalToolCall,
 		PricePerAdditionalServer:   *v.PricePerAdditionalServer,
 	}
+	res.DescriptionBullets = make([]string, len(v.DescriptionBullets))
+	for i, val := range v.DescriptionBullets {
+		res.DescriptionBullets[i] = val
+	}
 
 	return res
 }

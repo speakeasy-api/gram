@@ -94,6 +94,8 @@ type TierLimits struct {
 	PricePerAdditionalToolCall float64
 	// The price per additional server
 	PricePerAdditionalServer float64
+	// The description bullets of the tier
+	DescriptionBullets []string
 }
 
 // UsageTiers is the result type of the usage service getUsageTiers method.
@@ -102,6 +104,8 @@ type UsageTiers struct {
 	Free *TierLimits
 	// The limits for the business tier
 	Business *TierLimits
+	// The limits for the enterprise tier
+	Enterprise *TierLimits
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

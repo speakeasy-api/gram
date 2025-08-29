@@ -8990,6 +8990,11 @@ components:
                     type: number
                     description: The base price for the tier
                     format: double
+                description_bullets:
+                    type: array
+                    items:
+                        type: string
+                    description: The description bullets of the tier
                 included_servers:
                     type: integer
                     description: The number of servers included in the tier
@@ -9012,6 +9017,7 @@ components:
                 - included_servers
                 - price_per_additional_tool_call
                 - price_per_additional_server
+                - description_bullets
         ToolVariation:
             type: object
             properties:
@@ -9534,11 +9540,14 @@ components:
             properties:
                 business:
                     $ref: '#/components/schemas/TierLimits'
+                enterprise:
+                    $ref: '#/components/schemas/TierLimits'
                 free:
                     $ref: '#/components/schemas/TierLimits'
             required:
                 - free
                 - business
+                - enterprise
     securitySchemes:
         apikey_header_Authorization:
             type: apiKey

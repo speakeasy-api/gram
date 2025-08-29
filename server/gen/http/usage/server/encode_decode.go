@@ -808,6 +808,14 @@ func marshalUsageTierLimitsToTierLimitsResponseBody(v *usage.TierLimits) *TierLi
 		PricePerAdditionalToolCall: v.PricePerAdditionalToolCall,
 		PricePerAdditionalServer:   v.PricePerAdditionalServer,
 	}
+	if v.DescriptionBullets != nil {
+		res.DescriptionBullets = make([]string, len(v.DescriptionBullets))
+		for i, val := range v.DescriptionBullets {
+			res.DescriptionBullets[i] = val
+		}
+	} else {
+		res.DescriptionBullets = []string{}
+	}
 
 	return res
 }

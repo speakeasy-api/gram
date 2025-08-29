@@ -134,6 +134,10 @@ func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err e
 			IncludedServers:            freeTierLimits.Servers,
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
+			DescriptionBullets:         []string{
+				"Free tier",
+				"Update me",
+			},
 		},
 		Business: &gen.TierLimits{
 			BasePrice:                  0,
@@ -141,6 +145,21 @@ func (s *Service) GetUsageTiers(ctx context.Context) (res *gen.UsageTiers, err e
 			IncludedServers:            proTierLimits.Servers,
 			PricePerAdditionalToolCall: toolCallPrice,
 			PricePerAdditionalServer:   mcpServerPrice,
+			DescriptionBullets:         []string{
+				"Business tier",
+				"Update me",
+			},
+		},
+		Enterprise: &gen.TierLimits{
+			BasePrice:                  0,
+			IncludedToolCalls:          0,
+			IncludedServers:            0,
+			PricePerAdditionalToolCall: 0,
+			PricePerAdditionalServer:   0,
+			DescriptionBullets:         []string{
+				"Enterprise tier",
+				"Update me",
+			},
 		},
 	}, nil
 }
