@@ -21,6 +21,6 @@ let value: TierLimits = {
 | `basePrice`                                   | *number*                                      | :heavy_check_mark:                            | The base price for the tier                   |
 | `includedServers`                             | *number*                                      | :heavy_check_mark:                            | The number of servers included in the tier    |
 | `includedToolCalls`                           | *number*                                      | :heavy_check_mark:                            | The number of tool calls included in the tier |
+| `name`                                        | *string*                                      | :heavy_minus_sign:                            | The tier name                                 |
 | `pricePerAdditionalServer`                    | *number*                                      | :heavy_check_mark:                            | The price per additional server               |
 | `pricePerAdditionalToolCall`                  | *number*                                      | :heavy_check_mark:                            | The price per additional tool call            |
-| `tier`                                        | *string*                                      | :heavy_minus_sign:                            | The tier name                                 |

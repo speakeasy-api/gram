@@ -22,6 +22,10 @@ export type TierLimits = {
    */
   includedToolCalls: number;
   /**
+   * The tier name
+   */
+  name?: string | undefined;
+  /**
    * The price per additional server
    */
   pricePerAdditionalServer: number;
@@ -29,10 +33,6 @@ export type TierLimits = {
    * The price per additional tool call
    */
   pricePerAdditionalToolCall: number;
-  /**
-   * The tier name
-   */
-  tier?: string | undefined;
 };
 
 /** @internal */
@@ -44,9 +44,9 @@ export const TierLimits$inboundSchema: z.ZodType<
   base_price: z.number(),
   included_servers: z.number().int(),
   included_tool_calls: z.number().int(),
+  name: z.string().optional(),
   price_per_additional_server: z.number(),
   price_per_additional_tool_call: z.number(),
-  tier: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "base_price": "basePrice",
@@ -62,9 +62,9 @@ export type TierLimits$Outbound = {
   base_price: number;
   included_servers: number;
   included_tool_calls: number;
+  name?: string | undefined;
   price_per_additional_server: number;
   price_per_additional_tool_call: number;
-  tier?: string | undefined;
 };
 
 /** @internal */
@@ -76,9 +76,9 @@ export const TierLimits$outboundSchema: z.ZodType<
   basePrice: z.number(),
   includedServers: z.number().int(),
   includedToolCalls: z.number().int(),
+  name: z.string().optional(),
   pricePerAdditionalServer: z.number(),
   pricePerAdditionalToolCall: z.number(),
-  tier: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     basePrice: "base_price",
