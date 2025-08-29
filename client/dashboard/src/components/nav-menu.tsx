@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { AppRoute } from "@/routes";
 import { Type } from "./ui/type";
 import React from "react";
+import { ProductTierBadge } from "./product-tier-badge";
 
 export function NavMenu({
   items,
@@ -62,6 +63,7 @@ export function NavButton({
     >
       {Icon && <Icon className={cn("trans text-muted-foreground")} />}
       <Type variant="small">{titleNode ?? title}</Type>
+      {title === "Billing" && <ProductTierBadge />}
     </SidebarMenuButton>
   );
 }

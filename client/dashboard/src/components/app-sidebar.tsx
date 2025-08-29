@@ -30,7 +30,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     consume: [routes.playground, routes.mcp, routes.environments],
   };
 
-  const bottomNav = [routes.deployments, routes.settings, routes.docs];
+  const bottomNav = [routes.deployments, routes.billing, routes.settings, routes.docs];
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
