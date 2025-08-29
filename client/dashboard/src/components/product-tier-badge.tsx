@@ -10,10 +10,10 @@ export const ProductTierBadge = () => {
   }[session.gramAccountType];
 
   const classes = {
-    "free": "bg-gray-100 text-gray-800",
-    "pro": "bg-blue-100 text-blue-800",
-    "enterprise": "bg-green-100 text-green-800",
+    "free": "bg-neutral-700 text-white",
+    "pro": "bg-violet-500 text-white",
+    "enterprise": "bg-success-foreground text-success",
   }[session.gramAccountType];
 
-  return <div className={`text-xs text-muted-foreground px-1 py-0.5 rounded-md ${classes}`}>{name}</div>;
+  return <div className={`text-xs text-muted-foreground px-1 py-0.5 rounded-sm ${classes}`}>{name}</div>;
 };
