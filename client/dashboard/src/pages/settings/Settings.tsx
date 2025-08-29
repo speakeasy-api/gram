@@ -715,7 +715,7 @@ const BillingSection = () => {
           <div>
             <Stack direction="horizontal" align="center" gap={1}>
               <Type variant="body" className="font-medium">
-                Credits
+                Playground Credits
               </Type>
               <SimpleTooltip tooltip="The number of credits used this month for AI-powered dashboard experiences.">
                 <Info className="w-4 h-4 text-muted-foreground" />
