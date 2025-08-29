@@ -12,26 +12,27 @@ import (
 type Key = attribute.Key
 
 const (
-	ErrorMessageKey                  = semconv.ErrorMessageKey
-	FilePathKey                      = semconv.FilePathKey
-	HostNameKey                      = semconv.HostNameKey
-	HTTPRequestHeaderContentTypeKey  = attribute.Key("http.request.header.content_type")
-	HTTPRequestHeaderUserAgentKey    = attribute.Key("http.request.header.user_agent")
-	HTTPRequestMethodKey             = semconv.HTTPRequestMethodKey
-	HTTPRequestBodyKey               = attribute.Key("http.request.body")
-	HTTPRequestHeadersKey            = attribute.Key("http.request.headers")
-	HTTPResponseHeaderContentTypeKey = attribute.Key("http.response.header.content_type")
-	HTTPResponseStatusCodeKey        = semconv.HTTPResponseStatusCodeKey
-	HTTPRouteKey                     = semconv.HTTPRouteKey
-	HTTPServerRequestDurationKey     = attribute.Key("http.server.request.duration")
-	ServerAddressKey                 = semconv.ServerAddressKey
-	ServiceEnvKey                    = semconv.DeploymentEnvironmentNameKey
-	ServiceNameKey                   = semconv.ServiceNameKey
-	ServiceVersionKey                = semconv.ServiceVersionKey
-	URLDomainKey                     = semconv.URLDomainKey
-	URLFullKey                       = semconv.URLFullKey
-	URLOriginalKey                   = semconv.URLOriginalKey
-	UserIDKey                        = semconv.UserIDKey
+	ErrorMessageKey                   = semconv.ErrorMessageKey
+	FilePathKey                       = semconv.FilePathKey
+	HostNameKey                       = semconv.HostNameKey
+	HTTPRequestHeaderContentTypeKey   = attribute.Key("http.request.header.content_type")
+	HTTPRequestHeaderUserAgentKey     = attribute.Key("http.request.header.user_agent")
+	HTTPRequestMethodKey              = semconv.HTTPRequestMethodKey
+	HTTPRequestBodyKey                = attribute.Key("http.request.body")
+	HTTPRequestHeadersKey             = attribute.Key("http.request.headers")
+	HTTPResponseHeaderContentTypeKey  = attribute.Key("http.response.header.content_type")
+	HTTPResponseStatusCodeKey         = semconv.HTTPResponseStatusCodeKey
+	HTTPResponseOriginalStatusCodeKey = attribute.Key("http.response.original_status_code")
+	HTTPRouteKey                      = semconv.HTTPRouteKey
+	HTTPServerRequestDurationKey      = attribute.Key("http.server.request.duration")
+	ServerAddressKey                  = semconv.ServerAddressKey
+	ServiceEnvKey                     = semconv.DeploymentEnvironmentNameKey
+	ServiceNameKey                    = semconv.ServiceNameKey
+	ServiceVersionKey                 = semconv.ServiceVersionKey
+	URLDomainKey                      = semconv.URLDomainKey
+	URLFullKey                        = semconv.URLFullKey
+	URLOriginalKey                    = semconv.URLOriginalKey
+	UserIDKey                         = semconv.UserIDKey
 
 	ActualKey   = attribute.Key("actual")
 	EventKey    = attribute.Key("event")
@@ -140,13 +141,19 @@ func SlogHTTPRequestHeaderContentType(v string) slog.Attr {
 	return slog.String(string(HTTPRequestHeaderContentTypeKey), v)
 }
 
-func HTTPRequestHeaderUserAgent(v string) attribute.KeyValue { return HTTPRequestHeaderUserAgentKey.String(v) }
-func SlogHTTPRequestHeaderUserAgent(v string) slog.Attr { return slog.String(string(HTTPRequestHeaderUserAgentKey), v) }
+func HTTPRequestHeaderUserAgent(v string) attribute.KeyValue {
+	return HTTPRequestHeaderUserAgentKey.String(v)
+}
+func SlogHTTPRequestHeaderUserAgent(v string) slog.Attr {
+	return slog.String(string(HTTPRequestHeaderUserAgentKey), v)
+}
 
 func HTTPRequestBody(v string) attribute.KeyValue { return HTTPRequestBodyKey.String(v) }
-func SlogHTTPRequestBody(v string) slog.Attr { return slog.String(string(HTTPRequestBodyKey), v) }
+func SlogHTTPRequestBody(v string) slog.Attr      { return slog.String(string(HTTPRequestBodyKey), v) }
 
-func HTTPRequestHeaders(v any) attribute.KeyValue { return HTTPRequestHeadersKey.String(fmt.Sprintf("%v", v)) }
+func HTTPRequestHeaders(v any) attribute.KeyValue {
+	return HTTPRequestHeadersKey.String(fmt.Sprintf("%v", v))
+}
 func SlogHTTPRequestHeaders(v any) slog.Attr { return slog.Any(string(HTTPRequestHeadersKey), v) }
 
 func HTTPRequestMethod(v string) attribute.KeyValue { return HTTPRequestMethodKey.String(v) }
@@ -162,6 +169,13 @@ func SlogHTTPResponseHeaderContentType(v string) slog.Attr {
 func HTTPResponseStatusCode(v int) attribute.KeyValue { return HTTPResponseStatusCodeKey.Int(v) }
 func SlogHTTPResponseStatusCode(v int) slog.Attr {
 	return slog.Int(string(HTTPResponseStatusCodeKey), v)
+}
+
+func HTTPResponseOriginalStatusCode(v int) attribute.KeyValue {
+	return HTTPResponseOriginalStatusCodeKey.Int(v)
+}
+func SlogHTTPResponseOriginalStatusCode(v int) slog.Attr {
+	return slog.Int(string(HTTPResponseOriginalStatusCodeKey), v)
 }
 
 func HTTPRoute(v string) attribute.KeyValue { return HTTPRouteKey.String(v) }
