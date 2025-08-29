@@ -1,12 +1,10 @@
 package usage
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"io"
+	"fmt"
 	"log/slog"
-	"net/http"
 	"strings"
 	"time"
 
@@ -18,70 +16,10 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	usage_types "github.com/speakeasy-api/gram/server/internal/usage/types"
 )
-
-// loggingTransport wraps an http.RoundTripper and logs requests before sending them
-type loggingTransport struct {
-	transport http.RoundTripper
-	logger    *slog.Logger
-}
-
-// Useful for debugging Polar requests
-func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Log the request details
-	t.logger.InfoContext(req.Context(), "outgoing HTTP request to Polar",
-		attr.SlogHTTPRequestMethod(req.Method),
-		attr.SlogURLFull(req.URL.String()),
-		attr.SlogHostName(req.Host),
-		attr.SlogHTTPRequestHeaderUserAgent(req.UserAgent()),
-	)
-
-	// Log headers (excluding sensitive ones)
-	headers := make(map[string]string)
-	for key, values := range req.Header {
-		if key != "Authorization" && key != "X-API-Key" {
-			headers[key] = values[0] // Just log the first value for simplicity
-		} else {
-			headers[key] = "[REDACTED]"
-		}
-	}
-	t.logger.DebugContext(req.Context(), "request headers", attr.SlogHTTPRequestHeaders(headers))
-
-	// Log request body if present
-	if req.Body != nil {
-		bodyBytes, err := io.ReadAll(req.Body)
-		if err != nil {
-			t.logger.ErrorContext(req.Context(), "failed to read request body for logging", attr.SlogError(err))
-		} else {
-			t.logger.DebugContext(req.Context(), "request body", attr.SlogHTTPRequestBody(string(bodyBytes)))
-			// Recreate the body since we consumed it
-			req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		}
-	}
-
-	// Make the actual request
-	resp, err := t.transport.RoundTrip(req)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to perform HTTP request")
-	}
-	return resp, nil
-}
-
-// newLoggingHTTPClient creates an HTTP client with request logging
-func newLoggingHTTPClient(logger *slog.Logger, timeout time.Duration) *http.Client {
-	transport := &loggingTransport{
-		transport: http.DefaultTransport,
-		logger:    logger.With(attr.SlogComponent("polar-http-client")),
-	}
-
-	return &http.Client{
-		Transport: transport,
-		Timeout:   timeout,
-	}
-}
 
 type Client struct {
 	polar              *polargo.Polar
@@ -95,12 +33,6 @@ func NewClient(polarClient *polargo.Polar, logger *slog.Logger, redisClient *red
 		logger:             logger.With(attr.SlogComponent("polar-usage")),
 		customerStateCache: cache.NewTypedObjectCache[polar.PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
-}
-
-// NewClientWithLogging creates a new Polar client with HTTP request logging
-func NewClientWithLogging(polarKey string, logger *slog.Logger) *polargo.Polar {
-	httpClient := newLoggingHTTPClient(logger, 30*time.Second)
-	return polargo.New(polargo.WithSecurity(polarKey), polargo.WithClient(httpClient), polargo.WithTimeout(30*time.Second))
 }
 
 func (p *Client) TrackToolCallUsage(ctx context.Context, event usage_types.ToolCallUsageEvent) {
@@ -302,12 +234,12 @@ func (p *Client) TrackPlatformUsage(ctx context.Context, event usage_types.Platf
 
 func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComponents.CustomerState, error) {
 	if p == nil || p.polar == nil {
-		return nil, oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not get customer state")
+		return nil, fmt.Errorf("polar not initialized")
 	}
 
 	customer, err := p.polar.Customers.GetStateExternal(ctx, orgID)
 	if err != nil && !strings.Contains(err.Error(), "ResourceNotFound") {
-		return nil, oops.E(oops.CodeUnexpected, err, "Could not get customer state")
+		return nil, fmt.Errorf("query polar customer state: %w", err)
 	}
 
 	if customer == nil {
@@ -335,7 +267,7 @@ func (p *Client) GetCustomerState(ctx context.Context, orgID string) (*usage_typ
 
 	periodUsage, err := p.extractPeriodUsage(ctx, orgID, polarCustomerState)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "Could not get period usage")
+		return nil, fmt.Errorf("extract period usage: %w", err)
 	}
 
 	customerState := &usage_types.CustomerState{
@@ -371,7 +303,11 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 		}
 
 		if toolCallMeter == nil || serverMeter == nil {
-			return nil, oops.E(oops.CodeUnexpected, errors.New("missing meters"), "Could not get usage from customer state")
+			return nil, fmt.Errorf(
+				"missing meters (tool calls = %s, servers = %s)",
+				conv.Ternary(toolCallMeter == nil, "missing", "set"),
+				conv.Ternary(serverMeter == nil, "missing", "set"),
+			)
 		}
 
 		return &gen.PeriodUsage{
@@ -394,7 +330,7 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 		Interval:           polarComponents.TimeIntervalDay,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "Could not get tool call usage")
+		return nil, fmt.Errorf("get tool call usage: %w", err)
 	}
 
 	serversRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
@@ -405,17 +341,21 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 		Interval:           polarComponents.TimeIntervalDay,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "Could not get server usage")
+		return nil, fmt.Errorf("get server usage: %w", err)
 	}
 
 	freeTierProduct, err := p.GetGramFreeTierProduct(ctx)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "Could not get free tier product")
+		return nil, fmt.Errorf("get free tier product: %w", err)
 	}
 
 	freeTierLimits := polar.ExtractTierLimits(freeTierProduct)
 	if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 {
-		return nil, oops.E(oops.CodeUnexpected, errors.New("missing free tier limits"), "Could not get free tier limits")
+		return nil, fmt.Errorf(
+			"get free tier limits: missing limits (tool calls = %s, servers = %s)",
+			conv.Ternary(freeTierLimits.ToolCalls == 0, "missing", "set"),
+			conv.Ternary(freeTierLimits.Servers == 0, "missing", "set"),
+		)
 	}
 
 	return &gen.PeriodUsage{
@@ -430,12 +370,12 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 // GetPeriodUsage returns the period usage for the given organization ID as well as their tier limits.
 func (p *Client) GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error) {
 	if p.polar == nil {
-		return nil, oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not get period usage")
+		return nil, errors.New("polar not initialized")
 	}
 
 	customer, err := p.GetCustomerState(ctx, orgID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "Could not get customer state")
+		return nil, fmt.Errorf("get customer state: %w", err)
 	}
 
 	return customer.PeriodUsage, nil
@@ -443,7 +383,7 @@ func (p *Client) GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodU
 
 func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL string) (string, error) {
 	if p.polar == nil {
-		return "", oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not create checkout link")
+		return "", fmt.Errorf("polar not initialized")
 	}
 
 	res, err := p.polar.Checkouts.Create(ctx, polarComponents.CheckoutCreate{
@@ -455,7 +395,7 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 	})
 
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "Could not create checkout link")
+		return "", fmt.Errorf("create link: %w", err)
 	}
 
 	return res.Checkout.URL, nil
@@ -463,7 +403,7 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 
 func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (string, error) {
 	if p.polar == nil {
-		return "", oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not create customer session")
+		return "", fmt.Errorf("polar not initialized")
 	}
 
 	res, err := p.polar.CustomerSessions.Create(ctx, polarOperations.CustomerSessionsCreateCustomerSessionCreate{
@@ -473,7 +413,7 @@ func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (strin
 	})
 
 	if err != nil {
-		return "", oops.E(oops.CodeUnexpected, err, "Could not create customer session")
+		return "", fmt.Errorf("create polar customer session: %w", err)
 	}
 
 	return res.CustomerSession.CustomerPortalURL, nil
@@ -481,12 +421,12 @@ func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (strin
 
 func (p *Client) GetGramFreeTierProduct(ctx context.Context) (*polarComponents.Product, error) {
 	if p.polar == nil {
-		return nil, oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not get product")
+		return nil, fmt.Errorf("polar not initialized")
 	}
 
 	res, err := p.polar.Products.Get(ctx, polar.GramFreeTierProductID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "Could not get product")
+		return nil, fmt.Errorf("get polar product: %w", err)
 	}
 
 	return res.Product, nil
@@ -494,12 +434,12 @@ func (p *Client) GetGramFreeTierProduct(ctx context.Context) (*polarComponents.P
 
 func (p *Client) GetGramProProduct(ctx context.Context) (*polarComponents.Product, error) {
 	if p.polar == nil {
-		return nil, oops.E(oops.CodeUnexpected, errors.New("polar not initialized"), "Could not get product")
+		return nil, fmt.Errorf("polar not initialized")
 	}
 
 	res, err := p.polar.Products.Get(ctx, polar.GramProProductID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "Could not get product")
+		return nil, fmt.Errorf("get polar product: %w", err)
 	}
 
 	return res.Product, nil
