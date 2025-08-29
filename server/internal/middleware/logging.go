@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -65,12 +67,21 @@ func NewHTTPLoggingMiddleware(logger *slog.Logger) func(next http.Handler) http.
 			r = r.WithContext(ctx)
 			next.ServeHTTP(rw, r)
 
+			code := rw.statusCode
+			if errors.Is(ctx.Err(), context.Canceled) {
+				code = 499
+			}
+
 			attrs := []any{
 				attr.SlogHTTPRequestMethod(r.Method),
 				attr.SlogURLOriginal(r.URL.String()),
-				attr.SlogHTTPResponseStatusCode(rw.statusCode),
+				attr.SlogHTTPResponseStatusCode(code),
 				attr.SlogHTTPServerRequestDuration(time.Since(start).Seconds()),
 				attr.SlogHostName(r.Host),
+			}
+
+			if code != rw.statusCode {
+				attrs = append(attrs, attr.SlogHTTPResponseOriginalStatusCode(rw.statusCode))
 			}
 
 			proxied := conv.Default(rw.Header().Get(gateway.HeaderProxiedResponse), "0")
