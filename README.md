@@ -28,10 +28,10 @@
 
 Gram is a platform for creating, curating, and hosting MCP servers. Create agent tools from your API that just work. Curate and scope toolsets for every use case. Host and secure MCP servers with ease.
 
-With Gram you can:
-└ Host one or more remote MCP servers at `mcp.{your-company}.com`.
-└ Power agentic workflows or chat in your product by exposing context from your internal APIs to LLMs.  
-└ Manage and secure MCP servers for your entire organization through a unified control plane.
+With Gram you can:  
+└ Host one or more remote MCP servers at `mcp.{your-company}.com`.  
+└ Power agentic workflows or chat in your product by exposing context from your internal APIs to LLMs.    
+└ Manage and secure MCP servers for your entire organization through a unified control plane.  
 
 ## Features
 
