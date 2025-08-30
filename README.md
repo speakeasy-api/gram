@@ -26,19 +26,19 @@
 
 # Introduction
 
-Gram is a platform to create, curate and host MCP servers. Create agent tools from your API that just work. Curate and scope toolsets for every use case. Host and secure MCP servers with ease.
+Gram is a platform to create, curate, and host MCP servers. Create agent tools from your API that just work. Curate and scope toolsets for every use case. Host and secure MCP servers with ease.
 
-With Gram you can:  
-└ Host one or more official remote MCP servers at: `mcp.{your-company}.com`.  
+With Gram you can:
+└ Host one or more remote MCP servers at `mcp.{your-company}.com`.
 └ Power agentic workflows or chat in your product by exposing context from your internal APIs to LLMs.  
-└ Create a single control plane to manage and secure MCP servers for your entire organisation.
+└ Manage and secure MCP servers for your entire organization through a unified control plane.
 
 ## Features
 
-└ Minimal, lightweight, and open source.  
-└ Tools from multiple APIs scoped into toolsets.  
-└ Custom tool builder. Create higher order tools from existing endpoints.  
-└ OAuth support out of box: DCR, BYO Authorisation and standard flows.  
+└ Minimal, lightweight, and open source.
+└ Multiple APIs: Mix and match any number of APIs into toolsets.  
+└ Custom tool builder: Create higher-order tools by chaining existing endpoints.  
+└ OAuth support out-of-the-box: DCR, BYO Authorisation, and standard flows.  
 └ First class support for OpenAPI `3.0.X` and `3.1.X`.  
 └ Follows the [MCP](https://modelcontextprotocol.io/docs/getting-started/intro) specification.
 
