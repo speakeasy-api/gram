@@ -29,22 +29,23 @@
 Gram is a platform to create, curate and host MCP servers. Create agent tools from your API that just work. Curate and scope toolsets for every use case. Host and secure MCP servers with ease.
 
 With Gram you can:
-└ Host one or more official remote MCP servers at: `mcp.{your-company}.com`.
-└ Power agentic workflows or chat in your product by exposing context from your internal APIs to LLMs.
+└ Host one or more official remote MCP servers at: `mcp.{your-company}.com`.  
+└ Power agentic workflows or chat in your product by exposing context from your internal APIs to LLMs.  
 └ A single control plane to manage and secure MCP servers for your entire organisation.
 
 ## Features
 
-└ Minimal, lightweight, and open source.
-└ Tools from multiple APIs scoped into toolsets.
-└ Custom tool builder. Create higher order tools from existing endpoints.
-└ OAuth support out of box: DCR, BYO Authorisation and standard flows.
-└ First class support for OpenAPI `3.0.X` and `3.1.X`.
+└ Minimal, lightweight, and open source.  
+└ Tools from multiple APIs scoped into toolsets.  
+└ Custom tool builder. Create higher order tools from existing endpoints.  
+└ OAuth support out of box: DCR, BYO Authorisation and standard flows.  
+└ First class support for OpenAPI `3.0.X` and `3.1.X`.  
 └ Follows the [MCP](https://modelcontextprotocol.io/docs/getting-started/intro) specification.
 
 ## Contributing
 
-Contributions are welcome! Here's how you can develop on the stack and contribute to the project.
+Contributions are welcome! Please open an issue or discussion for questions or suggestions before starting significant work!
+Here's how you can develop on the stack and contribute to the project.
 
 ### Development
 
@@ -62,11 +63,11 @@ Please have a good title and description for your PR. Go nuts with streams of co
 
 ## Techstack
 
-└ [TypeScript](https://www.typescriptlang.org/) – dashboard language
-└ [Golang](https://go.dev/) - backend language
-└ [Goa](https://github.com/goadesign/goa) - design-first API framework
-└ [Temporal](https://temporal.io/) - workflow engine
-└ [Speakeasy](https://www.speakeasy.com/) - Generated SDKs. Spec hosted [here](http://app.getgram.ai/openapi.yaml)
+└ [TypeScript](https://www.typescriptlang.org/) – dashboard language.  
+└ [Golang](https://go.dev/) - backend language  
+└ [Goa](https://github.com/goadesign/goa) - design-first API framework.  
+└ [Temporal](https://temporal.io/) - workflow engine.  
+└ [Speakeasy](https://www.speakeasy.com/) - Generated SDKs. Spec hosted [here](http://app.getgram.ai/openapi.yaml).
 
 ## Documentation
 
