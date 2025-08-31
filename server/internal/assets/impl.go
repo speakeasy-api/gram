@@ -39,6 +39,13 @@ import (
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
+const (
+	mib                  = 1024 * 1024
+	MaxFileSizeFunctions = 15 * mib
+	MaxFileSizeOpenAPI   = 10 * mib
+	MaxFileSizeImage     = 4 * mib
+)
+
 type Service struct {
 	tracer  trace.Tracer
 	logger  *slog.Logger
@@ -166,7 +173,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 	}
 
 	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
-		maxLength:     4 * 1024 * 1024,
+		maxLength:     MaxFileSizeImage,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
 	})
@@ -193,7 +200,7 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse content type: %w", err), "error parsing content type")
 	}
 
-	mimeType, ext, err := sniffMimeType(result.file, sniffMimeTypeParams{
+	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
 		contentLength: payload.ContentLength,
 		inputMimeType: inContentType,
 		allowedTypes:  []string{"image/png", "image/jpeg", "image/gif", "image/webp"},
@@ -240,6 +247,95 @@ func (s *Service) UploadImage(ctx context.Context, payload *gen.UploadImageForm,
 	}, nil
 }
 
+func (s *Service) UploadFunctions(ctx context.Context, payload *gen.UploadFunctionsForm, reader io.ReadCloser) (*gen.UploadFunctionsResult, error) {
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return reader.Close()
+	})
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
+		maxLength:     MaxFileSizeFunctions,
+		contentLength: payload.ContentLength,
+		contentType:   payload.ContentType,
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return result.cleanup()
+	})
+
+	existing, err := s.findExistingAsset(ctx, &findAssetParams{
+		projectID: *authCtx.ProjectID,
+		hash:      result.hash,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if existing != nil {
+		return &gen.UploadFunctionsResult{Asset: existing}, nil
+	}
+
+	contentType, _, err := mime.ParseMediaType(payload.ContentType)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse content type: %w", err), "error parsing content type")
+	}
+
+	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
+		contentLength: payload.ContentLength,
+		inputMimeType: contentType,
+		allowedTypes:  []string{"application/zip", "application/x-zip-compressed", "application/x-zip"},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateFunctionsArchive(ctx, s.logger, result.file.Name()); err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid functions archive: %s", err.Error()).Log(ctx, s.logger)
+	}
+
+	filename := fmt.Sprintf("functions-%s%s", result.hash, ext)
+	uri, err := s.uploadAsset(ctx, &uploadAssetParams{
+		projectID:     *authCtx.ProjectID,
+		filename:      filename,
+		contentType:   mimeType,
+		contentLength: payload.ContentLength,
+		file:          result.file,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	asset, err := s.repo.CreateAsset(ctx, repo.CreateAssetParams{
+		Name:          filename,
+		Url:           uri.String(),
+		ProjectID:     *authCtx.ProjectID,
+		Sha256:        result.hash,
+		Kind:          "functions",
+		ContentType:   contentType,
+		ContentLength: payload.ContentLength,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("create asset in database: %w", err), "error saving document info")
+	}
+
+	return &gen.UploadFunctionsResult{
+		Asset: &gen.Asset{
+			ID:            asset.ID.String(),
+			Kind:          asset.Kind,
+			Sha256:        asset.Sha256,
+			ContentType:   asset.ContentType,
+			ContentLength: asset.ContentLength,
+			CreatedAt:     asset.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     asset.UpdatedAt.Time.Format(time.RFC3339),
+		},
+	}, nil
+}
+
 func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAPIv3Form, reader io.ReadCloser) (*gen.UploadOpenAPIv3Result, error) {
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return reader.Close()
@@ -251,7 +347,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 	}
 
 	result, err := s.downloadPendingAsset(ctx, reader, &downloadPendingAssetParams{
-		maxLength:     10 * 1024 * 1024,
+		maxLength:     MaxFileSizeOpenAPI,
 		contentLength: payload.ContentLength,
 		contentType:   payload.ContentType,
 	})
@@ -278,7 +374,7 @@ func (s *Service) UploadOpenAPIv3(ctx context.Context, payload *gen.UploadOpenAP
 		return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("parse content type: %w", err), "error parsing content type")
 	}
 
-	mimeType, ext, err := sniffMimeType(result.file, sniffMimeTypeParams{
+	mimeType, ext, err := sniffMimeType(sniffMimeTypeParams{
 		contentLength: payload.ContentLength,
 		inputMimeType: contentType,
 		allowedTypes:  []string{"application/yaml", "application/x-yaml", "text/yaml", "text/x-yaml", "application/json", "text/json"},
@@ -476,7 +572,7 @@ type sniffMimeTypeParams struct {
 	allowedTypes  []string
 }
 
-func sniffMimeType(source io.ReadSeeker, params sniffMimeTypeParams) (mtype string, ext string, err error) {
+func sniffMimeType(params sniffMimeTypeParams) (mtype string, ext string, err error) {
 	if err := inv.Check(
 		"sniff mime type parameters",
 		"contentLength is set", params.contentLength != 0,
@@ -504,6 +600,8 @@ func sniffMimeType(source io.ReadSeeker, params sniffMimeTypeParams) (mtype stri
 		exts = []string{".yaml"}
 	case "application/json", "text/json":
 		exts = []string{".json"}
+	case "application/zip", "application/x-zip-compressed", "application/x-zip":
+		exts = []string{".zip"}
 	default:
 		exts, err = mime.ExtensionsByType(params.inputMimeType)
 		if err != nil {
