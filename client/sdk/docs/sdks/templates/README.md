@@ -21,6 +21,7 @@ Create a new prompt template.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="createTemplate" method="post" path="/rpc/templates.create" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -119,6 +120,7 @@ Delete prompt template by its ID or name.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="deleteTemplate" method="delete" path="/rpc/templates.delete" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -203,6 +205,7 @@ Get prompt template by its ID or name.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="getTemplate" method="get" path="/rpc/templates.get" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -298,6 +301,7 @@ List available prompt template.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="listTemplates" method="get" path="/rpc/templates.list" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -393,6 +397,7 @@ Render a prompt template by ID with provided input data.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="renderTemplateByID" method="post" path="/rpc/templates.render" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -502,6 +507,7 @@ Render a prompt template directly with all template fields provided.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="renderTemplate" method="post" path="/rpc/templates.renderDirect" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -615,6 +621,7 @@ Update a prompt template.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="updateTemplate" method="post" path="/rpc/templates.update" -->
 ```typescript
 import { Gram } from "@gram/client";
 

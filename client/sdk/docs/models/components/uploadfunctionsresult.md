@@ -1,11 +1,11 @@
-# UploadOpenAPIv3Result
+# UploadFunctionsResult
 
 ## Example Usage
 
 ```typescript
-import { UploadOpenAPIv3Result } from "@gram/client/models/components";
+import { UploadFunctionsResult } from "@gram/client/models/components";
 
-let value: UploadOpenAPIv3Result = {
+let value: UploadFunctionsResult = {
   asset: {
     contentLength: 531000,
     contentType: "<value>",

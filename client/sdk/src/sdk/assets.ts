@@ -5,6 +5,7 @@
 import { assetsListAssets } from "../funcs/assetsListAssets.js";
 import { assetsServeImage } from "../funcs/assetsServeImage.js";
 import { assetsServeOpenAPIv3 } from "../funcs/assetsServeOpenAPIv3.js";
+import { assetsUploadFunctions } from "../funcs/assetsUploadFunctions.js";
 import { assetsUploadImage } from "../funcs/assetsUploadImage.js";
 import { assetsUploadOpenAPIv3 } from "../funcs/assetsUploadOpenAPIv3.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -63,6 +64,25 @@ export class Assets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<operations.ServeOpenAPIv3Response> {
     return unwrapAsync(assetsServeOpenAPIv3(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * uploadFunctions assets
+   *
+   * @remarks
+   * Upload functions to Gram.
+   */
+  async uploadFunctions(
+    request: operations.UploadFunctionsRequest,
+    security?: operations.UploadFunctionsSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.UploadFunctionsResult> {
+    return unwrapAsync(assetsUploadFunctions(
       this,
       request,
       security,
