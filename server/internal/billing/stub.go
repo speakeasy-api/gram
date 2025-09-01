@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/must"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
 type StubClient struct {
@@ -24,7 +25,9 @@ func NewStubClient(logger *slog.Logger) *StubClient {
 	if logger == nil {
 		logger = slog.Default()
 	}
+
 	return &StubClient{
+		mut:    sync.Mutex{},
 		logger: logger.With(attr.SlogComponent("billing-stub")),
 	}
 }
@@ -101,7 +104,7 @@ func (s *StubClient) TrackPlatformUsage(ctx context.Context, event PlatformUsage
 	pu.Servers = int(event.PrivateMCPServers)
 	pu.ActualPublicServerCount = int(event.PublicMCPServers)
 
-	if err := s.writePeriodUsage(event.OrganizationID, pu); err != nil {
+	if err := s.writePeriodUsage(ctx, event.OrganizationID, pu); err != nil {
 		s.logger.ErrorContext(ctx, "failed to write period usage file", attr.SlogError(err))
 		return
 	}
@@ -123,7 +126,7 @@ func (s *StubClient) TrackToolCallUsage(ctx context.Context, event ToolCallUsage
 
 	pu.ToolCalls += 1
 
-	if err := s.writePeriodUsage(event.OrganizationID, pu); err != nil {
+	if err := s.writePeriodUsage(ctx, event.OrganizationID, pu); err != nil {
 		s.logger.ErrorContext(ctx, "failed to write period usage file", attr.SlogError(err))
 		return
 	}
@@ -136,7 +139,7 @@ func (s *StubClient) ensureDataDir() (string, error) {
 	}
 
 	billingDir := filepath.Join(wd, "scratch")
-	if err := os.MkdirAll(billingDir, 0o755); err != nil {
+	if err := os.MkdirAll(billingDir, 0750); err != nil {
 		return "", fmt.Errorf("create billing scratch directory: %w", err)
 	}
 
@@ -159,7 +162,7 @@ func (s *StubClient) readPeriodUsage(orgID string) (*gen.PeriodUsage, error) {
 	}
 
 	usagefile := filepath.Join(datadir, fmt.Sprintf("billingusage-%s.local.json", orgID))
-	content, err := os.ReadFile(usagefile)
+	content, err := os.ReadFile(filepath.Clean(usagefile))
 	switch {
 	case errors.Is(err, os.ErrNotExist):
 		return zero, nil
@@ -179,18 +182,20 @@ func (s *StubClient) readPeriodUsage(orgID string) (*gen.PeriodUsage, error) {
 	return &pu, nil
 }
 
-func (s *StubClient) writePeriodUsage(orgID string, pu *gen.PeriodUsage) error {
+func (s *StubClient) writePeriodUsage(ctx context.Context, orgID string, pu *gen.PeriodUsage) error {
 	datadir, err := s.ensureDataDir()
 	if err != nil {
 		return fmt.Errorf("get or create local billing data dir: %w", err)
 	}
 
 	usagefile := filepath.Join(datadir, fmt.Sprintf("billingusage-%s.local.json", orgID))
-	f, err := os.Create(usagefile)
+	f, err := os.Create(filepath.Clean(usagefile))
 	if err != nil {
 		return fmt.Errorf("open local billing file: %w", err)
 	}
-	defer f.Close()
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return f.Close()
+	})
 
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
