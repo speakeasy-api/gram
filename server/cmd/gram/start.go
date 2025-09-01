@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
@@ -340,15 +341,15 @@ func newStartCommand() *cli.Command {
 				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
-			var polarClient *polargo.Polar
-			var usageClient *usage.Client
+			var polarsdk *polargo.Polar
+			var usageClient *polar.Client
 			var billingTracker billing.Tracker = billing.NewNoopTracker(logger)
 			polarKey := c.String("polar-api-key")
 			if polarKey == "" {
 				logger.WarnContext(ctx, "polar api key is not set, skipping Polar client")
 			} else {
-				polarClient = polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
-				usageClient = usage.NewClient(polarClient, logger, redisClient)
+				polarsdk = polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
+				usageClient = polar.NewClient(polarsdk, logger, redisClient)
 				billingTracker = usageClient
 			}
 

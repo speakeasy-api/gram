@@ -1,4 +1,4 @@
-package usage
+package polar
 
 import (
 	"context"
@@ -18,13 +18,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 )
 
 type Client struct {
 	polar              *polargo.Polar
 	logger             *slog.Logger
-	customerStateCache cache.TypedCacheObject[polar.PolarCustomerState]
+	customerStateCache cache.TypedCacheObject[PolarCustomerState]
 }
 
 var _ billing.Tracker = (*Client)(nil)
@@ -34,7 +33,7 @@ func NewClient(polarClient *polargo.Polar, logger *slog.Logger, redisClient *red
 	return &Client{
 		polar:              polarClient,
 		logger:             logger.With(attr.SlogComponent("polar-usage")),
-		customerStateCache: cache.NewTypedObjectCache[polar.PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
 }
 
@@ -243,7 +242,7 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Customer, error) {
 	var polarCustomerState *polarComponents.CustomerState
 
-	if customerState, err := p.customerStateCache.Get(ctx, polar.OrgCacheKey(orgID)); err == nil {
+	if customerState, err := p.customerStateCache.Get(ctx, OrgCacheKey(orgID)); err == nil {
 		polarCustomerState = customerState.CustomerState
 	} else {
 		polarCustomerState, err = p.getCustomerState(ctx, orgID)
@@ -251,7 +250,7 @@ func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Custom
 			return nil, err
 		}
 
-		if err = p.customerStateCache.Store(ctx, polar.PolarCustomerState{OrganizationID: orgID, CustomerState: polarCustomerState}); err != nil {
+		if err = p.customerStateCache.Store(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: polarCustomerState}); err != nil {
 			p.logger.ErrorContext(ctx, "failed to cache customer state", attr.SlogError(err))
 		}
 	}
@@ -269,7 +268,7 @@ func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Custom
 
 	if polarCustomerState != nil {
 		for _, sub := range polarCustomerState.ActiveSubscriptions {
-			if sub.ProductID == polar.ProductIDPro {
+			if sub.ProductID == ProductIDPro {
 				customerState.Tier = billing.TierBusiness
 				break
 			}
@@ -285,10 +284,10 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 		var serverMeter *polarComponents.CustomerStateMeter
 
 		for _, meter := range customer.ActiveMeters {
-			if meter.MeterID == polar.MeterIDToolCalls {
+			if meter.MeterID == MeterIDToolCalls {
 				toolCallMeter = &meter
 			}
-			if meter.MeterID == polar.MeterIDServers {
+			if meter.MeterID == MeterIDServers {
 				serverMeter = &meter
 			}
 		}
@@ -314,7 +313,7 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 
 	// For free tier, we need to read the meter directly because the user won't have a subscription
 	toolCallsRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
-		ID:                 polar.MeterIDToolCalls,
+		ID:                 MeterIDToolCalls,
 		ExternalCustomerID: &customerFilter,
 		StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
 		EndTimestamp:       time.Now(),
@@ -325,7 +324,7 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 	}
 
 	serversRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
-		ID:                 polar.MeterIDServers,
+		ID:                 MeterIDServers,
 		ExternalCustomerID: &customerFilter,
 		StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
 		EndTimestamp:       time.Now(),
@@ -340,7 +339,7 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 		return nil, fmt.Errorf("get free tier product: %w", err)
 	}
 
-	freeTierLimits := polar.ExtractTierLimits(freeTierProduct)
+	freeTierLimits := ExtractTierLimits(freeTierProduct)
 	if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 {
 		return nil, fmt.Errorf(
 			"get free tier limits: missing limits (tool calls = %s, servers = %s)",
@@ -381,7 +380,7 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 		ExternalCustomerID: &orgID,
 		EmbedOrigin:        &serverURL,
 		Products: []string{
-			polar.ProductIDPro,
+			ProductIDPro,
 		},
 	})
 
@@ -415,7 +414,7 @@ func (p *Client) GetGramFreeTierProduct(ctx context.Context) (*polarComponents.P
 		return nil, fmt.Errorf("polar not initialized")
 	}
 
-	res, err := p.polar.Products.Get(ctx, polar.ProductIDFree)
+	res, err := p.polar.Products.Get(ctx, ProductIDFree)
 	if err != nil {
 		return nil, fmt.Errorf("get polar product: %w", err)
 	}
@@ -428,7 +427,7 @@ func (p *Client) GetGramProProduct(ctx context.Context) (*polarComponents.Produc
 		return nil, fmt.Errorf("polar not initialized")
 	}
 
-	res, err := p.polar.Products.Get(ctx, polar.ProductIDPro)
+	res, err := p.polar.Products.Get(ctx, ProductIDPro)
 	if err != nil {
 		return nil, fmt.Errorf("get polar product: %w", err)
 	}

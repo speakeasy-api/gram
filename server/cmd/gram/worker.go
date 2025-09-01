@@ -22,10 +22,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
-	"github.com/speakeasy-api/gram/server/internal/usage"
 	"github.com/urfave/cli/v2"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
@@ -303,14 +303,14 @@ func newWorkerCommand() *cli.Command {
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
 
-			var usageClient *usage.Client
+			var usageClient *polar.Client
 			var billingTracker billing.Tracker = billing.NewNoopTracker(logger)
 			polarKey := c.String("polar-api-key")
 			if polarKey == "" {
 				logger.WarnContext(ctx, "polar api key is not set, skipping usage client")
 			} else {
-				polarClient := polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second))
-				usageClient = usage.NewClient(polarClient, logger, redisClient)
+				polarsdk := polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second))
+				usageClient = polar.NewClient(polarsdk, logger, redisClient)
 				billingTracker = usageClient
 			}
 

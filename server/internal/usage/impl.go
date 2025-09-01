@@ -30,12 +30,12 @@ type Service struct {
 	auth      *auth.Auth
 	serverURL *url.URL
 	repo      *repo.Queries
-	polar     *Client
+	polar     *polar.Client
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, polar *Client, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, polar *polar.Client, serverURL *url.URL) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	return &Service{

@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/usage"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 )
 
 var (
@@ -81,8 +81,8 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	polar := polargo.New(polargo.WithSecurity("test-polar-key"))
-	usageClient := usage.NewClient(polar, logger, redisClient)
+	polarsdk := polargo.New(polargo.WithSecurity("test-polar-key"))
+	usageClient := polar.NewClient(polarsdk, logger, redisClient)
 	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", usageClient)
 	require.NoError(t, err)
 
