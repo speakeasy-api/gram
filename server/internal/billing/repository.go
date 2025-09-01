@@ -9,8 +9,8 @@ import (
 type Tier string
 
 const (
-	TierFree     Tier = "free"
-	TierBusiness Tier = "business"
+	TierFree Tier = "free"
+	TierPro  Tier = "business"
 )
 
 type Customer struct {
@@ -24,4 +24,5 @@ type Repository interface {
 	GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error)
 	CreateCheckout(ctx context.Context, orgID string, serverURL string) (string, error)
 	CreateCustomerSession(ctx context.Context, orgID string) (string, error)
+	GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 }

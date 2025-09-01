@@ -9,7 +9,7 @@ type TierLimits struct {
 	Servers   int
 }
 
-func ExtractTierLimits(product *polarComponents.Product) TierLimits {
+func extractTierLimits(product *polarComponents.Product) TierLimits {
 	freeTierToolCalls := 0
 	freeTierServers := 0
 

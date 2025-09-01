@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -269,7 +270,7 @@ func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Custom
 	if polarCustomerState != nil {
 		for _, sub := range polarCustomerState.ActiveSubscriptions {
 			if sub.ProductID == ProductIDPro {
-				customerState.Tier = billing.TierBusiness
+				customerState.Tier = billing.TierPro
 				break
 			}
 		}
@@ -334,12 +335,12 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 		return nil, fmt.Errorf("get server usage: %w", err)
 	}
 
-	freeTierProduct, err := p.GetGramFreeTierProduct(ctx)
+	freeTierProduct, err := p.getProductByID(ctx, ProductIDFree)
 	if err != nil {
 		return nil, fmt.Errorf("get free tier product: %w", err)
 	}
 
-	freeTierLimits := ExtractTierLimits(freeTierProduct)
+	freeTierLimits := extractTierLimits(freeTierProduct)
 	if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 {
 		return nil, fmt.Errorf(
 			"get free tier limits: missing limits (tool calls = %s, servers = %s)",
@@ -409,25 +410,73 @@ func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (strin
 	return res.CustomerSession.CustomerPortalURL, nil
 }
 
-func (p *Client) GetGramFreeTierProduct(ctx context.Context) (*polarComponents.Product, error) {
-	if p.polar == nil {
-		return nil, fmt.Errorf("polar not initialized")
-	}
-
-	res, err := p.polar.Products.Get(ctx, ProductIDFree)
+func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
+	freeTierProduct, err := p.getProductByID(ctx, ProductIDFree)
 	if err != nil {
-		return nil, fmt.Errorf("get polar product: %w", err)
+		return nil, fmt.Errorf("failed to load Free tier product: %w", err)
 	}
 
-	return res.Product, nil
+	proTierProduct, err := p.getProductByID(ctx, ProductIDPro)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load Pro tier product: %w", err)
+	}
+
+	freeTierLimits := extractTierLimits(freeTierProduct)
+	proTierLimits := extractTierLimits(proTierProduct)
+
+	var toolCallPrice, mcpServerPrice float64
+
+	for _, price := range proTierProduct.Prices {
+		if price.Type != polarComponents.PricesTypeProductPrice {
+			continue
+		}
+		if price.ProductPrice == nil || price.ProductPrice.ProductPriceMeteredUnit == nil {
+			continue
+		}
+
+		if price.ProductPrice.ProductPriceMeteredUnit.MeterID == MeterIDToolCalls {
+			meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
+			toolCallPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse tool call price: %w", err)
+			}
+			toolCallPrice /= 100 // Result from Polar is in cents
+		}
+
+		if price.ProductPrice.ProductPriceMeteredUnit.MeterID == MeterIDServers {
+			meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
+			mcpServerPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse mcp server price: %w", err)
+			}
+			mcpServerPrice /= 100 // Result from Polar is in cents
+		}
+	}
+
+	return &gen.UsageTiers{
+		Free: &gen.TierLimits{
+			BasePrice:                  0,
+			IncludedToolCalls:          freeTierLimits.ToolCalls,
+			IncludedServers:            freeTierLimits.Servers,
+			PricePerAdditionalToolCall: 0,
+			PricePerAdditionalServer:   0,
+		},
+		Business: &gen.TierLimits{
+			BasePrice:                  0,
+			IncludedToolCalls:          proTierLimits.ToolCalls,
+			IncludedServers:            proTierLimits.Servers,
+			PricePerAdditionalToolCall: toolCallPrice,
+			PricePerAdditionalServer:   mcpServerPrice,
+		},
+	}, nil
 }
 
-func (p *Client) GetGramProProduct(ctx context.Context) (*polarComponents.Product, error) {
+func (p *Client) getProductByID(ctx context.Context, id string) (*polarComponents.Product, error) {
 	if p.polar == nil {
 		return nil, fmt.Errorf("polar not initialized")
 	}
 
-	res, err := p.polar.Products.Get(ctx, ProductIDPro)
+	res, err := p.polar.Products.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get polar product: %w", err)
 	}
