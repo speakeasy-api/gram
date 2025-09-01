@@ -4,13 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	polargo "github.com/polarsource/polar-go"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/background"
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/control"
@@ -22,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
@@ -303,15 +299,9 @@ func newWorkerCommand() *cli.Command {
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
 
-			var usageClient *polar.Client
-			var billingTracker billing.Tracker = billing.NewNoopTracker(logger)
-			polarKey := c.String("polar-api-key")
-			if polarKey == "" {
-				logger.WarnContext(ctx, "polar api key is not set, skipping usage client")
-			} else {
-				polarsdk := polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second))
-				usageClient = polar.NewClient(polarsdk, logger, redisClient)
-				billingTracker = usageClient
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, redisClient, c.String("environment"), c.String("polar-api-key"))
+			if err != nil {
+				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, meterProvider, &background.WorkerOptions{
@@ -324,7 +314,7 @@ func newWorkerCommand() *cli.Command {
 				K8sClient:           k8sClient,
 				ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
 				BillingTracker:      billingTracker,
-				BillingRepository:   usageClient,
+				BillingRepository:   billingRepo,
 				RedisClient:         redisClient,
 				PosthogClient:       posthogClient,
 			})

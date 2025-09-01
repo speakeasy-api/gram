@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/pgx-contrib/pgxotel"
+	polargo "github.com/polarsource/polar-go"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel"
@@ -31,9 +32,11 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 )
 
 type dbClientOptions struct {
@@ -246,4 +249,19 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	}
 
 	return inmem
+}
+
+func newBillingProvider(ctx context.Context, logger *slog.Logger, redisClient *redis.Client, env string, polarAPIKey string) (billing.Repository, billing.Tracker, error) {
+	switch {
+	case polarAPIKey != "":
+		polarsdk := polargo.New(polargo.WithSecurity(polarAPIKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
+		pclient := polar.NewClient(polarsdk, logger, redisClient)
+		return pclient, pclient, nil
+	case polarAPIKey == "" && env == "local":
+		logger.WarnContext(ctx, "using stub billing client: polar not configured")
+		stub := billing.NewStubClient(logger)
+		return stub, stub, nil
+	default:
+		return nil, nil, fmt.Errorf("billing provider is not configured")
+	}
 }

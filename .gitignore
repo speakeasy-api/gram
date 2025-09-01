@@ -12,7 +12,7 @@ junit-report.xml
 .idea
 /server/goa*
 /server/gram
-/scratch
+scratch/
 /local/ssl
 /local/keys
 .speakeasy/temp

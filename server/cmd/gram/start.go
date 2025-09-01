@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	polargo "github.com/polarsource/polar-go"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/urfave/cli/v2"
@@ -28,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/background"
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/control"
@@ -50,7 +48,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
@@ -341,25 +338,18 @@ func newStartCommand() *cli.Command {
 				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
-			var polarsdk *polargo.Polar
-			var usageClient *polar.Client
-			var billingTracker billing.Tracker = billing.NewNoopTracker(logger)
-			polarKey := c.String("polar-api-key")
-			if polarKey == "" {
-				logger.WarnContext(ctx, "polar api key is not set, skipping Polar client")
-			} else {
-				polarsdk = polargo.New(polargo.WithSecurity(polarKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
-				usageClient = polar.NewClient(polarsdk, logger, redisClient)
-				billingTracker = usageClient
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, redisClient, c.String("environment"), c.String("polar-api-key"))
+			if err != nil {
+				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
 			localEnvPath := c.String("unsafe-local-env-path")
 			var sessionManager *sessions.Manager
 			if localEnvPath == "" {
-				sessionManager = sessions.NewManager(logger, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, usageClient)
+				sessionManager = sessions.NewManager(logger, db, redisClient, cache.SuffixNone, c.String("speakeasy-server-address"), c.String("speakeasy-secret-key"), pylonClient, posthogClient, billingRepo)
 			} else {
 				logger.WarnContext(ctx, "enabling unsafe session store", attr.SlogFilePath(localEnvPath))
-				s, err := sessions.NewUnsafeManager(logger, db, redisClient, cache.Suffix("gram-local"), localEnvPath, usageClient)
+				s, err := sessions.NewUnsafeManager(logger, db, redisClient, cache.Suffix("gram-local"), localEnvPath, billingRepo)
 				if err != nil {
 					return fmt.Errorf("failed to create unsafe session manager: %w", err)
 				}
@@ -483,7 +473,7 @@ func newStartCommand() *cli.Command {
 			}
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
-			usage.Attach(mux, usage.NewService(logger, db, sessionManager, usageClient, serverURL))
+			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),
@@ -516,7 +506,7 @@ func newStartCommand() *cli.Command {
 						K8sClient:           k8sClient,
 						ExpectedTargetCNAME: customdomains.GetCustomDomainCNAME(c.String("environment")),
 						BillingTracker:      billingTracker,
-						BillingRepository:   usageClient,
+						BillingRepository:   billingRepo,
 						RedisClient:         redisClient,
 						PosthogClient:       posthogClient,
 					})
