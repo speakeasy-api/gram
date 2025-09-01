@@ -8,12 +8,12 @@
 
 set -euo pipefail
 
-mkdir -p ./local ./oci
+mkdir -p ./oci
 
-key_file="./local/melange-signing-key.rsa"
+key_file="../local/keys/melange-signing-key.rsa"
 if [ ! -f "$key_file" ]; then
   echo "Generating signing key for melange..."
-  mkdir -p ./local
+  mkdir -p ../local/keys
   melange keygen "$key_file"
 fi
 
@@ -23,7 +23,7 @@ melange build \
   --arch amd64,arm64,aarch64 \
   --runner docker \
   --git-repo-url https://github.com/speakeasy-api/gram \
-  --signing-key ./local/melange-signing-key.rsa \
+  --signing-key ../local/keys/melange-signing-key.rsa \
   ./config.yaml
 
 node_image_path=./oci/gram-funcs-node
