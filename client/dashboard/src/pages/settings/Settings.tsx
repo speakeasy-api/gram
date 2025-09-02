@@ -11,7 +11,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin, useOrganization, useSession } from "@/contexts/Auth";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { HumanizeDateTime } from "@/lib/dates";
 import { assert, cn, getServerURL } from "@/lib/utils";
@@ -651,8 +651,6 @@ const BillingSection = () => {
     throwOnError: !getServerURL().includes("localhost"),
   });
 
-  const isAdmin = useIsAdmin();
-
   return (
     <div className="pb-16">
       <Stack direction="horizontal" justify="space-between" className="mt-8">
@@ -669,48 +667,47 @@ const BillingSection = () => {
           billing portal to see complete details or manage your account.
         </Type>
         {/* TODO: DO NOT SHIP THIS UNTIL THE PERIOD USAGE REFLECTS THE ORG (SDK BUG SOLVED) */}
-        {isAdmin &&
-          (periodUsage ? (
-            <>
-              <div>
-                <Stack direction="horizontal" align="center" gap={1}>
-                  <Type variant="body" className="font-medium">
-                    Tool Calls
-                  </Type>
-                  <SimpleTooltip tooltip="The number of tool calls processed this period across all your organization's MCP servers.">
-                    <Info className="w-4 h-4 text-muted-foreground" />
-                  </SimpleTooltip>
-                </Stack>
-                <UsageProgress
-                  value={periodUsage.toolCalls}
-                  included={periodUsage.maxToolCalls}
-                  overageIncrement={periodUsage.maxToolCalls}
-                />
-              </div>
-              <div>
-                <Stack direction="horizontal" align="center" gap={1}>
-                  <Type variant="body" className="font-medium">
-                    Servers
-                  </Type>
-                  <SimpleTooltip tooltip="The number of public MCP servers across your organization.">
-                    <Info className="w-4 h-4 text-muted-foreground" />
-                  </SimpleTooltip>
-                </Stack>
-                <UsageProgress
-                  value={periodUsage.actualPublicServerCount} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
-                  included={periodUsage.maxServers}
-                  overageIncrement={1}
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-1/3" />
-              <Skeleton className="h-4 w-full" />
-            </>
-          ))}
+        {periodUsage ? (
+          <>
+            <div>
+              <Stack direction="horizontal" align="center" gap={1}>
+                <Type variant="body" className="font-medium">
+                  Tool Calls
+                </Type>
+                <SimpleTooltip tooltip="The number of tool calls processed this period across all your organization's MCP servers.">
+                  <Info className="w-4 h-4 text-muted-foreground" />
+                </SimpleTooltip>
+              </Stack>
+              <UsageProgress
+                value={periodUsage.toolCalls}
+                included={periodUsage.maxToolCalls}
+                overageIncrement={periodUsage.maxToolCalls}
+              />
+            </div>
+            <div>
+              <Stack direction="horizontal" align="center" gap={1}>
+                <Type variant="body" className="font-medium">
+                  Servers
+                </Type>
+                <SimpleTooltip tooltip="The number of public MCP servers across your organization.">
+                  <Info className="w-4 h-4 text-muted-foreground" />
+                </SimpleTooltip>
+              </Stack>
+              <UsageProgress
+                value={periodUsage.actualPublicServerCount} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
+                included={periodUsage.maxServers}
+                overageIncrement={1}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="h-4 w-full" />
+          </>
+        )}
         {creditUsage ? (
           <div>
             <Stack direction="horizontal" align="center" gap={1}>
