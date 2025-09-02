@@ -3361,13 +3361,14 @@ paths:
                   name: organization_id
                   required: true
                   type: string
+                - description: API Key header
+                  in: header
+                  name: Gram-Key
+                  required: false
+                  type: string
                 - description: Session header
                   in: header
                   name: Gram-Session
-                  required: false
-                  type: string
-                - in: header
-                  name: Authorization
                   required: false
                   type: string
             responses:
@@ -3416,7 +3417,7 @@ paths:
             schemes:
                 - http
             security:
-                - apikey_header_Authorization: []
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: listProjects projects
             tags:
@@ -44420,16 +44421,6 @@ definitions:
             - timeout
             - fault
 securityDefinitions:
-    apikey_header_Authorization:
-        type: apiKey
-        description: |-
-            key based auth.
-
-            **Security Scopes**:
-              * `consumer`: consumer based tool access
-              * `producer`: producer based tool access
-        name: Authorization
-        in: header
     apikey_header_Gram-Key:
         type: apiKey
         description: |-
