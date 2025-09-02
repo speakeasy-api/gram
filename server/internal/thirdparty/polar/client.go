@@ -250,10 +250,6 @@ func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformU
 }
 
 func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComponents.CustomerState, error) {
-	if p == nil || p.polar == nil {
-		return nil, fmt.Errorf("polar not initialized")
-	}
-
 	customer, err := p.polar.Customers.GetStateExternal(ctx, orgID)
 	if err != nil && !strings.Contains(err.Error(), "ResourceNotFound") {
 		return nil, fmt.Errorf("query polar customer state: %w", err)
@@ -386,10 +382,6 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 
 // GetPeriodUsage returns the period usage for the given organization ID as well as their tier limits.
 func (p *Client) GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error) {
-	if p.polar == nil {
-		return nil, errors.New("polar not initialized")
-	}
-
 	customer, err := p.GetCustomer(ctx, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("get customer state: %w", err)
@@ -399,10 +391,6 @@ func (p *Client) GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodU
 }
 
 func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL string) (string, error) {
-	if p.polar == nil {
-		return "", fmt.Errorf("polar not initialized")
-	}
-
 	res, err := p.polar.Checkouts.Create(ctx, polarComponents.CheckoutCreate{
 		ExternalCustomerID: &orgID,
 		EmbedOrigin:        &serverURL,
@@ -419,10 +407,6 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 }
 
 func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (string, error) {
-	if p.polar == nil {
-		return "", fmt.Errorf("polar not initialized")
-	}
-
 	res, err := p.polar.CustomerSessions.Create(ctx, polarOperations.CustomerSessionsCreateCustomerSessionCreate{
 		CustomerSessionCustomerExternalIDCreate: &polarComponents.CustomerSessionCustomerExternalIDCreate{
 			ExternalCustomerID: orgID,
@@ -498,10 +482,6 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 }
 
 func (p *Client) getProductByID(ctx context.Context, id string) (*polarComponents.Product, error) {
-	if p.polar == nil {
-		return nil, fmt.Errorf("polar not initialized")
-	}
-
 	res, err := p.polar.Products.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get polar product: %w", err)
