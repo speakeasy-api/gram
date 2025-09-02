@@ -23,6 +23,7 @@ import (
 type Server struct {
 	Mounts  []*MountPoint
 	Openapi http.Handler
+	Version http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -53,8 +54,10 @@ func New(
 	return &Server{
 		Mounts: []*MountPoint{
 			{"Openapi", "GET", "/openapi.yaml"},
+			{"Version", "GET", "/version"},
 		},
 		Openapi: NewOpenapiHandler(e.Openapi, mux, decoder, encoder, errhandler, formatter),
+		Version: NewVersionHandler(e.Version, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -64,6 +67,7 @@ func (s *Server) Service() string { return "about" }
 // Use wraps the server handlers with the given middleware.
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.Openapi = m(s.Openapi)
+	s.Version = m(s.Version)
 }
 
 // MethodNames returns the methods served.
@@ -72,6 +76,7 @@ func (s *Server) MethodNames() []string { return about.MethodNames[:] }
 // Mount configures the mux to serve the about endpoints.
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountOpenapiHandler(mux, h.Openapi)
+	MountVersionHandler(mux, h.Version)
 }
 
 // Mount configures the mux to serve the about endpoints.
@@ -156,6 +161,52 @@ func NewOpenapiHandler(
 		if _, err := io.Copy(w, buf); err != nil {
 			http.NewResponseController(w).Flush()
 			panic(http.ErrAbortHandler) // too late to write an error
+		}
+	})
+}
+
+// MountVersionHandler configures the mux to serve the "about" service
+// "version" endpoint.
+func MountVersionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/version", otelhttp.WithRouteTag("/version", f).ServeHTTP)
+}
+
+// NewVersionHandler creates a HTTP handler which loads the HTTP request and
+// calls the "about" service "version" endpoint.
+func NewVersionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		encodeResponse = EncodeVersionResponse(encoder)
+		encodeError    = EncodeVersionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "version")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "about")
+		var err error
+		res, err := endpoint(ctx, nil)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
 		}
 	})
 }

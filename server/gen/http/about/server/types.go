@@ -8,8 +8,20 @@
 package server
 
 import (
+	about "github.com/speakeasy-api/gram/server/gen/about"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// VersionResponseBody is the type of the "about" service "version" endpoint
+// HTTP response body.
+type VersionResponseBody struct {
+	// The version of the Gram server
+	ServerVersion string `form:"server_version" json:"server_version" xml:"server_version"`
+	// The version of the Gram dashboard
+	DashboardVersion string `form:"dashboard_version" json:"dashboard_version" xml:"dashboard_version"`
+	// The Git SHA of the current build
+	GitSha string `form:"git_sha" json:"git_sha" xml:"git_sha"`
+}
 
 // OpenapiUnauthorizedResponseBody is the type of the "about" service "openapi"
 // endpoint HTTP response body for the "unauthorized" error.
@@ -191,6 +203,197 @@ type OpenapiGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// VersionUnauthorizedResponseBody is the type of the "about" service "version"
+// endpoint HTTP response body for the "unauthorized" error.
+type VersionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VersionForbiddenResponseBody is the type of the "about" service "version"
+// endpoint HTTP response body for the "forbidden" error.
+type VersionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VersionBadRequestResponseBody is the type of the "about" service "version"
+// endpoint HTTP response body for the "bad_request" error.
+type VersionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VersionNotFoundResponseBody is the type of the "about" service "version"
+// endpoint HTTP response body for the "not_found" error.
+type VersionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VersionConflictResponseBody is the type of the "about" service "version"
+// endpoint HTTP response body for the "conflict" error.
+type VersionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VersionUnsupportedMediaResponseBody is the type of the "about" service
+// "version" endpoint HTTP response body for the "unsupported_media" error.
+type VersionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VersionInvalidResponseBody is the type of the "about" service "version"
+// endpoint HTTP response body for the "invalid" error.
+type VersionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VersionInvariantViolationResponseBody is the type of the "about" service
+// "version" endpoint HTTP response body for the "invariant_violation" error.
+type VersionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VersionUnexpectedResponseBody is the type of the "about" service "version"
+// endpoint HTTP response body for the "unexpected" error.
+type VersionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VersionGatewayErrorResponseBody is the type of the "about" service "version"
+// endpoint HTTP response body for the "gateway_error" error.
+type VersionGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// NewVersionResponseBody builds the HTTP response body from the result of the
+// "version" endpoint of the "about" service.
+func NewVersionResponseBody(res *about.VersionResult) *VersionResponseBody {
+	body := &VersionResponseBody{
+		ServerVersion:    res.ServerVersion,
+		DashboardVersion: res.DashboardVersion,
+		GitSha:           res.GitSha,
+	}
+	return body
+}
+
 // NewOpenapiUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "openapi" endpoint of the "about" service.
 func NewOpenapiUnauthorizedResponseBody(res *goa.ServiceError) *OpenapiUnauthorizedResponseBody {
@@ -321,6 +524,146 @@ func NewOpenapiUnexpectedResponseBody(res *goa.ServiceError) *OpenapiUnexpectedR
 // result of the "openapi" endpoint of the "about" service.
 func NewOpenapiGatewayErrorResponseBody(res *goa.ServiceError) *OpenapiGatewayErrorResponseBody {
 	body := &OpenapiGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVersionUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "version" endpoint of the "about" service.
+func NewVersionUnauthorizedResponseBody(res *goa.ServiceError) *VersionUnauthorizedResponseBody {
+	body := &VersionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVersionForbiddenResponseBody builds the HTTP response body from the
+// result of the "version" endpoint of the "about" service.
+func NewVersionForbiddenResponseBody(res *goa.ServiceError) *VersionForbiddenResponseBody {
+	body := &VersionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVersionBadRequestResponseBody builds the HTTP response body from the
+// result of the "version" endpoint of the "about" service.
+func NewVersionBadRequestResponseBody(res *goa.ServiceError) *VersionBadRequestResponseBody {
+	body := &VersionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVersionNotFoundResponseBody builds the HTTP response body from the result
+// of the "version" endpoint of the "about" service.
+func NewVersionNotFoundResponseBody(res *goa.ServiceError) *VersionNotFoundResponseBody {
+	body := &VersionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVersionConflictResponseBody builds the HTTP response body from the result
+// of the "version" endpoint of the "about" service.
+func NewVersionConflictResponseBody(res *goa.ServiceError) *VersionConflictResponseBody {
+	body := &VersionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVersionUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "version" endpoint of the "about" service.
+func NewVersionUnsupportedMediaResponseBody(res *goa.ServiceError) *VersionUnsupportedMediaResponseBody {
+	body := &VersionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVersionInvalidResponseBody builds the HTTP response body from the result
+// of the "version" endpoint of the "about" service.
+func NewVersionInvalidResponseBody(res *goa.ServiceError) *VersionInvalidResponseBody {
+	body := &VersionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVersionInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "version" endpoint of the "about" service.
+func NewVersionInvariantViolationResponseBody(res *goa.ServiceError) *VersionInvariantViolationResponseBody {
+	body := &VersionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVersionUnexpectedResponseBody builds the HTTP response body from the
+// result of the "version" endpoint of the "about" service.
+func NewVersionUnexpectedResponseBody(res *goa.ServiceError) *VersionUnexpectedResponseBody {
+	body := &VersionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVersionGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "version" endpoint of the "about" service.
+func NewVersionGatewayErrorResponseBody(res *goa.ServiceError) *VersionGatewayErrorResponseBody {
+	body := &VersionGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

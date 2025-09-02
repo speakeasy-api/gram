@@ -17,6 +17,7 @@ import (
 // Endpoints wraps the "about" service endpoints.
 type Endpoints struct {
 	Openapi goa.Endpoint
+	Version goa.Endpoint
 }
 
 // OpenapiResponseData holds both the result and the HTTP response body reader
@@ -32,12 +33,14 @@ type OpenapiResponseData struct {
 func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		Openapi: NewOpenapiEndpoint(s),
+		Version: NewVersionEndpoint(s),
 	}
 }
 
 // Use applies the given middleware to all the "about" service endpoints.
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Openapi = m(e.Openapi)
+	e.Version = m(e.Version)
 }
 
 // NewOpenapiEndpoint returns an endpoint function that calls the method
@@ -49,5 +52,13 @@ func NewOpenapiEndpoint(s Service) goa.Endpoint {
 			return nil, err
 		}
 		return &OpenapiResponseData{Result: res, Body: body}, nil
+	}
+}
+
+// NewVersionEndpoint returns an endpoint function that calls the method
+// "version" of service "about".
+func NewVersionEndpoint(s Service) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		return s.Version(ctx)
 	}
 }
