@@ -159,7 +159,7 @@ func (s *StubClient) readPeriodUsage(orgID string) (*gen.PeriodUsage, error) {
 		return nil, fmt.Errorf("get or create local billing data dir: %w", err)
 	}
 
-	tier := must.Value(s.GetUsageTiers(context.Background())).Business
+	tier := must.Value(s.GetUsageTiers(context.Background())).Pro
 	zero := &gen.PeriodUsage{
 		ToolCalls:               0,
 		MaxToolCalls:            tier.IncludedToolCalls,
