@@ -18,6 +18,7 @@ Create a checkout link for upgrading to the business plan
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="createCheckout" method="post" path="/rpc/usage.createCheckout" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -102,6 +103,7 @@ Create a customer session for the user
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="createCustomerSession" method="post" path="/rpc/usage.createCustomerSession" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -186,6 +188,7 @@ Get the usage for a project for a given period
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="getPeriodUsage" method="get" path="/rpc/usage.getPeriodUsage" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -281,6 +284,7 @@ Get the usage tiers
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="getUsageTiers" method="get" path="/rpc/usage.getUsageTiers" -->
 ```typescript
 import { Gram } from "@gram/client";
 

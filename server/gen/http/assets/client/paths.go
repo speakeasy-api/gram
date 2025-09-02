@@ -17,6 +17,11 @@ func UploadImageAssetsPath() string {
 	return "/rpc/assets.uploadImage"
 }
 
+// UploadFunctionsAssetsPath returns the URL path to the assets service uploadFunctions HTTP endpoint.
+func UploadFunctionsAssetsPath() string {
+	return "/rpc/assets.uploadFunctions"
+}
+
 // UploadOpenAPIv3AssetsPath returns the URL path to the assets service uploadOpenAPIv3 HTTP endpoint.
 func UploadOpenAPIv3AssetsPath() string {
 	return "/rpc/assets.uploadOpenAPIv3"

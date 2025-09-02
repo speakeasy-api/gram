@@ -747,11 +747,11 @@ func NewCreateProjectPayload(body *CreateProjectRequestBody, apikeyToken *string
 
 // NewListProjectsPayload builds a projects service listProjects endpoint
 // payload.
-func NewListProjectsPayload(organizationID string, sessionToken *string, apikeyToken *string) *projects.ListProjectsPayload {
+func NewListProjectsPayload(organizationID string, apikeyToken *string, sessionToken *string) *projects.ListProjectsPayload {
 	v := &projects.ListProjectsPayload{}
 	v.OrganizationID = organizationID
-	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
 
 	return v
 }

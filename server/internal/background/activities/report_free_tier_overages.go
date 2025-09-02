@@ -7,9 +7,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/repo"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 )
 
@@ -24,19 +24,19 @@ const (
 
 type ReportFreeTierOverage struct {
 	logger        *slog.Logger
-	usageClient   usage_types.UsageClient
+	billingRepo   billing.Repository
 	repo          *repo.Queries
 	orgRepo       *orgRepo.Queries
 	posthogClient *posthog.Posthog
 }
 
-func NewReportFreeTierOverage(logger *slog.Logger, db *pgxpool.Pool, usageClient usage_types.UsageClient, posthogClient *posthog.Posthog) *ReportFreeTierOverage {
+func NewReportFreeTierOverage(logger *slog.Logger, db *pgxpool.Pool, billingRepo billing.Repository, posthogClient *posthog.Posthog) *ReportFreeTierOverage {
 	repo := repo.New(db)
 	orgRepo := orgRepo.New(db)
 
 	return &ReportFreeTierOverage{
 		logger:        logger,
-		usageClient:   usageClient,
+		billingRepo:   billingRepo,
 		repo:          repo,
 		orgRepo:       orgRepo,
 		posthogClient: posthogClient,
@@ -53,7 +53,7 @@ func (r *ReportFreeTierOverage) Do(ctx context.Context) error {
 	}
 
 	for _, org := range orgs {
-		org, err := mv.DescribeOrganization(ctx, r.logger, r.orgRepo, org.ID, r.usageClient)
+		org, err := mv.DescribeOrganization(ctx, r.logger, r.orgRepo, r.billingRepo, org.ID)
 		if err != nil {
 			return err
 		}
@@ -62,7 +62,7 @@ func (r *ReportFreeTierOverage) Do(ctx context.Context) error {
 			continue
 		}
 
-		usage, err := r.usageClient.GetPeriodUsage(ctx, org.ID)
+		usage, err := r.billingRepo.GetPeriodUsage(ctx, org.ID)
 		if err != nil {
 			return fmt.Errorf("failed to get period usage for org %s: %w", org.ID, err)
 		}

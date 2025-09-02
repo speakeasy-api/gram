@@ -32,8 +32,8 @@ type GetPeriodUsageResponseBody struct {
 type GetUsageTiersResponseBody struct {
 	// The limits for the free tier
 	Free *TierLimitsResponseBody `form:"free" json:"free" xml:"free"`
-	// The limits for the business tier
-	Business *TierLimitsResponseBody `form:"business" json:"business" xml:"business"`
+	// The limits for the pro tier
+	Pro *TierLimitsResponseBody `form:"pro" json:"pro" xml:"pro"`
 	// The limits for the enterprise tier
 	Enterprise *TierLimitsResponseBody `form:"enterprise" json:"enterprise" xml:"enterprise"`
 }
@@ -808,8 +808,8 @@ func NewGetUsageTiersResponseBody(res *usage.UsageTiers) *GetUsageTiersResponseB
 	if res.Free != nil {
 		body.Free = marshalUsageTierLimitsToTierLimitsResponseBody(res.Free)
 	}
-	if res.Business != nil {
-		body.Business = marshalUsageTierLimitsToTierLimitsResponseBody(res.Business)
+	if res.Pro != nil {
+		body.Pro = marshalUsageTierLimitsToTierLimitsResponseBody(res.Pro)
 	}
 	if res.Enterprise != nil {
 		body.Enterprise = marshalUsageTierLimitsToTierLimitsResponseBody(res.Enterprise)

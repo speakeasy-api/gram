@@ -30,10 +30,10 @@ var TierLimits = Type("TierLimits", func() {
 
 var UsageTiers = Type("UsageTiers", func() {
 	Attribute("free", TierLimits, "The limits for the free tier")	
-	Attribute("business", TierLimits, "The limits for the business tier")
+	Attribute("pro", TierLimits, "The limits for the pro tier")
 	Attribute("enterprise", TierLimits, "The limits for the enterprise tier")
 
-	Required("free", "business", "enterprise")
+	Required("free", "pro", "enterprise")
 })
 
 var _ = Service("usage", func() {

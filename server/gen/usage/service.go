@@ -102,8 +102,8 @@ type TierLimits struct {
 type UsageTiers struct {
 	// The limits for the free tier
 	Free *TierLimits
-	// The limits for the business tier
-	Business *TierLimits
+	// The limits for the pro tier
+	Pro *TierLimits
 	// The limits for the enterprise tier
 	Enterprise *TierLimits
 }

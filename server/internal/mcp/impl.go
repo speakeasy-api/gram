@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	auth_repo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -43,7 +44,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -62,7 +62,7 @@ type Service struct {
 	toolProxy    *gateway.ToolProxy
 	oauthService *oauth.Service
 	oauthRepo    *oauth_repo.Queries
-	usageClient  usage_types.UsageClient
+	billing      billing.Tracker
 }
 
 type oauthTokenInputs struct {
@@ -98,7 +98,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	oauthService *oauth.Service,
-	usageClient usage_types.UsageClient,
+	billing billing.Tracker,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -125,7 +125,7 @@ func NewService(
 		),
 		oauthService: oauthService,
 		oauthRepo:    oauth_repo.New(db),
-		usageClient:  usageClient,
+		billing:      billing,
 	}
 }
 
@@ -718,7 +718,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.usageClient)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billing)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req)
 	case "prompts/get":

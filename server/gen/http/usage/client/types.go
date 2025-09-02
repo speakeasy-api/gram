@@ -32,8 +32,8 @@ type GetPeriodUsageResponseBody struct {
 type GetUsageTiersResponseBody struct {
 	// The limits for the free tier
 	Free *TierLimitsResponseBody `form:"free,omitempty" json:"free,omitempty" xml:"free,omitempty"`
-	// The limits for the business tier
-	Business *TierLimitsResponseBody `form:"business,omitempty" json:"business,omitempty" xml:"business,omitempty"`
+	// The limits for the pro tier
+	Pro *TierLimitsResponseBody `form:"pro,omitempty" json:"pro,omitempty" xml:"pro,omitempty"`
 	// The limits for the enterprise tier
 	Enterprise *TierLimitsResponseBody `form:"enterprise,omitempty" json:"enterprise,omitempty" xml:"enterprise,omitempty"`
 }
@@ -957,7 +957,7 @@ func NewGetPeriodUsageGatewayError(body *GetPeriodUsageGatewayErrorResponseBody)
 func NewGetUsageTiersUsageTiersOK(body *GetUsageTiersResponseBody) *usage.UsageTiers {
 	v := &usage.UsageTiers{}
 	v.Free = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Free)
-	v.Business = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Business)
+	v.Pro = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Pro)
 	v.Enterprise = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Enterprise)
 
 	return v
@@ -1440,8 +1440,8 @@ func ValidateGetUsageTiersResponseBody(body *GetUsageTiersResponseBody) (err err
 	if body.Free == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("free", "body"))
 	}
-	if body.Business == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("business", "body"))
+	if body.Pro == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pro", "body"))
 	}
 	if body.Enterprise == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("enterprise", "body"))
@@ -1451,8 +1451,8 @@ func ValidateGetUsageTiersResponseBody(body *GetUsageTiersResponseBody) (err err
 			err = goa.MergeErrors(err, err2)
 		}
 	}
-	if body.Business != nil {
-		if err2 := ValidateTierLimitsResponseBody(body.Business); err2 != nil {
+	if body.Pro != nil {
+		if err2 := ValidateTierLimitsResponseBody(body.Pro); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
