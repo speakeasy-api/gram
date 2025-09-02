@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -31,147 +32,176 @@ import (
 func newWorkerCommand() *cli.Command {
 	var shutdownFuncs []func(context.Context) error
 
+	flags := []cli.Flag{
+		&cli.StringFlag{
+			Name:     "environment",
+			Usage:    "The current server environment", // local, dev, prod
+			Required: true,
+			EnvVars:  []string{"GRAM_ENVIRONMENT"},
+		},
+		&cli.StringFlag{
+			Name:    "temporal-address",
+			Usage:   "The address of the temporal server",
+			EnvVars: []string{"TEMPORAL_ADDRESS"},
+			Value:   "localhost:7233",
+		},
+		&cli.StringFlag{
+			Name:    "temporal-namespace",
+			Usage:   "The temporal namespace to use",
+			EnvVars: []string{"TEMPORAL_NAMESPACE"},
+			Value:   "default",
+		},
+		&cli.StringFlag{
+			Name:    "temporal-client-cert",
+			Usage:   "Client cert of the Temporal server",
+			EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
+		},
+		&cli.StringFlag{
+			Name:    "temporal-client-key",
+			Usage:   "Client key of the Temporal server",
+			EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "control-address",
+			Value:   ":8081",
+			Usage:   "HTTP address to listen on",
+			EnvVars: []string{"GRAM_WORKER_CONTROL_ADDRESS"},
+		},
+		&cli.StringFlag{
+			Name:     "database-url",
+			Usage:    "Database URL",
+			EnvVars:  []string{"GRAM_DATABASE_URL"},
+			Required: true,
+		},
+		&cli.BoolFlag{
+			Name:    "unsafe-db-log",
+			Usage:   "Turn on unsafe database logging. WARNING: This will log all database queries and data to the console.",
+			EnvVars: []string{"GRAM_UNSAFE_DB_LOG"},
+			Value:   false,
+		},
+		&cli.BoolFlag{
+			Name:    "with-otel-tracing",
+			Usage:   "Enable OpenTelemetry traces",
+			EnvVars: []string{"GRAM_ENABLE_OTEL_TRACES"},
+		},
+		&cli.BoolFlag{
+			Name:    "with-otel-metrics",
+			Usage:   "Enable OpenTelemetry metrics",
+			EnvVars: []string{"GRAM_ENABLE_OTEL_METRICS"},
+		},
+		&cli.StringFlag{
+			Name:     "assets-backend",
+			Usage:    "The backend to use for managing assets",
+			EnvVars:  []string{"GRAM_ASSETS_BACKEND"},
+			Required: true,
+			Action: func(c *cli.Context, val string) error {
+				if val != "fs" && val != "gcs" {
+					return fmt.Errorf("invalid assets backend: %s", val)
+				}
+				return nil
+			},
+		},
+		&cli.StringFlag{
+			Name:     "assets-uri",
+			Usage:    "The location of the assets backend to connect to",
+			EnvVars:  []string{"GRAM_ASSETS_URI"},
+			Required: true,
+		},
+		&cli.StringFlag{
+			Name:     "encryption-key",
+			Usage:    "Key for App level AES encryption/decyryption",
+			Required: true,
+			EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
+		},
+		&cli.StringFlag{
+			Name:     "slack-client-secret",
+			Usage:    "The slack client secret",
+			EnvVars:  []string{"SLACK_CLIENT_SECRET"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:    "openrouter-dev-key",
+			Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
+			EnvVars: []string{"OPENROUTER_DEV_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "openrouter-provisioning-key",
+			Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
+			EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
+		},
+		&cli.StringFlag{
+			Name:    "redis-cache-addr",
+			Usage:   "Address of the redis cache server",
+			EnvVars: []string{"GRAM_REDIS_CACHE_ADDR"},
+		},
+		&cli.StringFlag{
+			Name:    "redis-cache-password",
+			Usage:   "Password for the redis cache server",
+			EnvVars: []string{"GRAM_REDIS_CACHE_PASSWORD"},
+		},
+		&cli.StringSliceFlag{
+			Name:     "disallowed-cidr-blocks",
+			Usage:    "List of CIDR blocks to block for SSRF protection",
+			EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "posthog-endpoint",
+			Usage:    "The endpoint to proxy product metrics too",
+			EnvVars:  []string{"POSTHOG_ENDPOINT"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "posthog-api-key",
+			Usage:    "The posthog public API key",
+			EnvVars:  []string{"POSTHOG_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "local-feature-flags-csv",
+			Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row).",
+			EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
+			Required: false,
+		},
+		&cli.StringFlag{
+			Name:     "polar-api-key",
+			Usage:    "The polar API key",
+			EnvVars:  []string{"POLAR_API_KEY"},
+			Required: false,
+		},
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:     "polar-product-id-pro",
+			Aliases:  []string{"polar.product_id_pro"},
+			Usage:    "The product ID of the pro tier in Polar",
+			EnvVars:  []string{"POLAR_PRODUCT_ID_PRO"},
+			Required: false,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:     "polar-meter-id-tool-calls",
+			Aliases:  []string{"polar.meter_id_tool_calls"},
+			Usage:    "The ID of the tool calls meter in Polar",
+			EnvVars:  []string{"POLAR_METER_ID_TOOL_CALLS"},
+			Required: false,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:     "polar-meter-id-servers",
+			Aliases:  []string{"polar.meter_id_servers"},
+			Usage:    "The ID of the servers meter in Polar",
+			EnvVars:  []string{"POLAR_METER_ID_SERVERS"},
+			Required: false,
+		}),
+		&cli.PathFlag{
+			Name:     "config-file",
+			Usage:    "Path to a config file to load. Supported formats are JSON, TOML and YAML.",
+			EnvVars:  []string{"GRAM_CONFIG_FILE"},
+			Required: false,
+		},
+	}
+
 	return &cli.Command{
 		Name:  "worker",
 		Usage: "Start the temporal worker",
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:     "environment",
-				Usage:    "The current server environment", // local, dev, prod
-				Required: true,
-				EnvVars:  []string{"GRAM_ENVIRONMENT"},
-			},
-			&cli.StringFlag{
-				Name:    "temporal-address",
-				Usage:   "The address of the temporal server",
-				EnvVars: []string{"TEMPORAL_ADDRESS"},
-				Value:   "localhost:7233",
-			},
-			&cli.StringFlag{
-				Name:    "temporal-namespace",
-				Usage:   "The temporal namespace to use",
-				EnvVars: []string{"TEMPORAL_NAMESPACE"},
-				Value:   "default",
-			},
-			&cli.StringFlag{
-				Name:    "temporal-client-cert",
-				Usage:   "Client cert of the Temporal server",
-				EnvVars: []string{"TEMPORAL_CLIENT_CERT"},
-			},
-			&cli.StringFlag{
-				Name:    "temporal-client-key",
-				Usage:   "Client key of the Temporal server",
-				EnvVars: []string{"TEMPORAL_CLIENT_KEY"},
-			},
-			&cli.StringFlag{
-				Name:    "control-address",
-				Value:   ":8081",
-				Usage:   "HTTP address to listen on",
-				EnvVars: []string{"GRAM_WORKER_CONTROL_ADDRESS"},
-			},
-			&cli.StringFlag{
-				Name:     "database-url",
-				Usage:    "Database URL",
-				EnvVars:  []string{"GRAM_DATABASE_URL"},
-				Required: true,
-			},
-			&cli.BoolFlag{
-				Name:    "unsafe-db-log",
-				Usage:   "Turn on unsafe database logging. WARNING: This will log all database queries and data to the console.",
-				EnvVars: []string{"GRAM_UNSAFE_DB_LOG"},
-				Value:   false,
-			},
-			&cli.BoolFlag{
-				Name:    "with-otel-tracing",
-				Usage:   "Enable OpenTelemetry traces",
-				EnvVars: []string{"GRAM_ENABLE_OTEL_TRACES"},
-			},
-			&cli.BoolFlag{
-				Name:    "with-otel-metrics",
-				Usage:   "Enable OpenTelemetry metrics",
-				EnvVars: []string{"GRAM_ENABLE_OTEL_METRICS"},
-			},
-			&cli.StringFlag{
-				Name:     "assets-backend",
-				Usage:    "The backend to use for managing assets",
-				EnvVars:  []string{"GRAM_ASSETS_BACKEND"},
-				Required: true,
-				Action: func(c *cli.Context, val string) error {
-					if val != "fs" && val != "gcs" {
-						return fmt.Errorf("invalid assets backend: %s", val)
-					}
-					return nil
-				},
-			},
-			&cli.StringFlag{
-				Name:     "assets-uri",
-				Usage:    "The location of the assets backend to connect to",
-				EnvVars:  []string{"GRAM_ASSETS_URI"},
-				Required: true,
-			},
-			&cli.StringFlag{
-				Name:     "encryption-key",
-				Usage:    "Key for App level AES encryption/decyryption",
-				Required: true,
-				EnvVars:  []string{"GRAM_ENCRYPTION_KEY"},
-			},
-			&cli.StringFlag{
-				Name:     "slack-client-secret",
-				Usage:    "The slack client secret",
-				EnvVars:  []string{"SLACK_CLIENT_SECRET"},
-				Required: false,
-			},
-			&cli.StringFlag{
-				Name:    "openrouter-dev-key",
-				Usage:   "Dev API key for OpenRouter (primarily for local development) - https://openrouter.ai/settings/keys",
-				EnvVars: []string{"OPENROUTER_DEV_KEY"},
-			},
-			&cli.StringFlag{
-				Name:    "openrouter-provisioning-key",
-				Usage:   "Provisioning key for OpenRouter to create new API keys for orgs - https://openrouter.ai/settings/provisioning-keys",
-				EnvVars: []string{"OPENROUTER_PROVISIONING_KEY"},
-			},
-			&cli.StringFlag{
-				Name:    "redis-cache-addr",
-				Usage:   "Address of the redis cache server",
-				EnvVars: []string{"GRAM_REDIS_CACHE_ADDR"},
-			},
-			&cli.StringFlag{
-				Name:    "redis-cache-password",
-				Usage:   "Password for the redis cache server",
-				EnvVars: []string{"GRAM_REDIS_CACHE_PASSWORD"},
-			},
-			&cli.StringSliceFlag{
-				Name:     "disallowed-cidr-blocks",
-				Usage:    "List of CIDR blocks to block for SSRF protection",
-				EnvVars:  []string{"GRAM_DISALLOWED_CIDR_BLOCKS"},
-				Required: false,
-			},
-			&cli.StringFlag{
-				Name:     "posthog-endpoint",
-				Usage:    "The endpoint to proxy product metrics too",
-				EnvVars:  []string{"POSTHOG_ENDPOINT"},
-				Required: false,
-			},
-			&cli.StringFlag{
-				Name:     "posthog-api-key",
-				Usage:    "The posthog public API key",
-				EnvVars:  []string{"POSTHOG_API_KEY"},
-				Required: false,
-			},
-			&cli.StringFlag{
-				Name:     "local-feature-flags-csv",
-				Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row).",
-				EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
-				Required: false,
-			},
-			&cli.StringFlag{
-				Name:     "polar-api-key",
-				Usage:    "The polar API key",
-				EnvVars:  []string{"POLAR_API_KEY"},
-				Required: false,
-			},
-		},
+		Flags: flags,
 		Action: func(c *cli.Context) error {
 			serviceName := "gram-worker"
 			serviceEnv := c.String("environment")
@@ -299,7 +329,7 @@ func newWorkerCommand() *cli.Command {
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, redisClient, c.String("environment"), c.String("polar-api-key"))
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, redisClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
@@ -320,6 +350,9 @@ func newWorkerCommand() *cli.Command {
 			})
 
 			return temporalWorker.Run(worker.InterruptCh())
+		},
+		Before: func(ctx *cli.Context) error {
+			return loadConfigFromFile(ctx, flags)
 		},
 		After: func(c *cli.Context) error {
 			return runShutdown(PullLogger(c.Context), c.Context, shutdownFuncs)

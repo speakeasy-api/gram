@@ -9,7 +9,7 @@ type TierLimits struct {
 	Servers   int
 }
 
-func extractTierLimits(product *polarComponents.Product) TierLimits {
+func extractTierLimits(catalog *Catalog, product *polarComponents.Product) TierLimits {
 	freeTierToolCalls := 0
 	freeTierServers := 0
 
@@ -18,10 +18,10 @@ func extractTierLimits(product *polarComponents.Product) TierLimits {
 			continue
 		}
 		benefitProperties := benefit.BenefitMeterCredit.Properties
-		if benefitProperties.MeterID == MeterIDToolCalls {
+		if benefitProperties.MeterID == catalog.MeterIDToolCalls {
 			freeTierToolCalls = int(benefitProperties.Units)
 		}
-		if benefitProperties.MeterID == MeterIDServers {
+		if benefitProperties.MeterID == catalog.MeterIDServers {
 			freeTierServers = int(benefitProperties.Units)
 		}
 	}

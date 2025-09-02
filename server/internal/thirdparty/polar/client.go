@@ -21,19 +21,45 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
+type Catalog struct {
+	ProductIDFree string
+	ProductIDPro  string
+
+	MeterIDToolCalls string
+	MeterIDServers   string
+}
+
+func (c *Catalog) Validate() error {
+	if c.ProductIDFree == "" {
+		return errors.New("missing free tier product id in catalog")
+	}
+	if c.ProductIDPro == "" {
+		return errors.New("missing pro tier product id in catalog")
+	}
+	if c.MeterIDToolCalls == "" {
+		return errors.New("missing tool calls meter id in catalog")
+	}
+	if c.MeterIDServers == "" {
+		return errors.New("missing servers meter id in catalog")
+	}
+	return nil
+}
+
 type Client struct {
-	polar              *polargo.Polar
 	logger             *slog.Logger
+	polar              *polargo.Polar
+	catalog            *Catalog
 	customerStateCache cache.TypedCacheObject[PolarCustomerState]
 }
 
 var _ billing.Tracker = (*Client)(nil)
 var _ billing.Repository = (*Client)(nil)
 
-func NewClient(polarClient *polargo.Polar, logger *slog.Logger, redisClient *redis.Client) *Client {
+func NewClient(polarClient *polargo.Polar, logger *slog.Logger, redisClient *redis.Client, catalog *Catalog) *Client {
 	return &Client{
-		polar:              polarClient,
 		logger:             logger.With(attr.SlogComponent("polar-usage")),
+		polar:              polarClient,
+		catalog:            catalog,
 		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
 }
@@ -269,7 +295,7 @@ func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Custom
 
 	if polarCustomerState != nil {
 		for _, sub := range polarCustomerState.ActiveSubscriptions {
-			if sub.ProductID == ProductIDPro {
+			if sub.ProductID == p.catalog.ProductIDPro {
 				customerState.Tier = billing.TierPro
 				break
 			}
@@ -285,10 +311,10 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 		var serverMeter *polarComponents.CustomerStateMeter
 
 		for _, meter := range customer.ActiveMeters {
-			if meter.MeterID == MeterIDToolCalls {
+			if meter.MeterID == p.catalog.MeterIDToolCalls {
 				toolCallMeter = &meter
 			}
-			if meter.MeterID == MeterIDServers {
+			if meter.MeterID == p.catalog.MeterIDServers {
 				serverMeter = &meter
 			}
 		}
@@ -314,7 +340,7 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 
 	// For free tier, we need to read the meter directly because the user won't have a subscription
 	toolCallsRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
-		ID:                 MeterIDToolCalls,
+		ID:                 p.catalog.MeterIDToolCalls,
 		ExternalCustomerID: &customerFilter,
 		StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
 		EndTimestamp:       time.Now(),
@@ -325,7 +351,7 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 	}
 
 	serversRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
-		ID:                 MeterIDServers,
+		ID:                 p.catalog.MeterIDServers,
 		ExternalCustomerID: &customerFilter,
 		StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
 		EndTimestamp:       time.Now(),
@@ -335,12 +361,12 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 		return nil, fmt.Errorf("get server usage: %w", err)
 	}
 
-	freeTierProduct, err := p.getProductByID(ctx, ProductIDFree)
+	freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDFree)
 	if err != nil {
 		return nil, fmt.Errorf("get free tier product: %w", err)
 	}
 
-	freeTierLimits := extractTierLimits(freeTierProduct)
+	freeTierLimits := extractTierLimits(p.catalog, freeTierProduct)
 	if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 {
 		return nil, fmt.Errorf(
 			"get free tier limits: missing limits (tool calls = %s, servers = %s)",
@@ -381,7 +407,7 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 		ExternalCustomerID: &orgID,
 		EmbedOrigin:        &serverURL,
 		Products: []string{
-			ProductIDPro,
+			p.catalog.ProductIDPro,
 		},
 	})
 
@@ -411,18 +437,18 @@ func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (strin
 }
 
 func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
-	freeTierProduct, err := p.getProductByID(ctx, ProductIDFree)
+	freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDFree)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Free tier product: %w", err)
 	}
 
-	proTierProduct, err := p.getProductByID(ctx, ProductIDPro)
+	proTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDPro)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Pro tier product: %w", err)
 	}
 
-	freeTierLimits := extractTierLimits(freeTierProduct)
-	proTierLimits := extractTierLimits(proTierProduct)
+	freeTierLimits := extractTierLimits(p.catalog, freeTierProduct)
+	proTierLimits := extractTierLimits(p.catalog, proTierProduct)
 
 	var toolCallPrice, mcpServerPrice float64
 
@@ -434,7 +460,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			continue
 		}
 
-		if price.ProductPrice.ProductPriceMeteredUnit.MeterID == MeterIDToolCalls {
+		if price.ProductPrice.ProductPriceMeteredUnit.MeterID == p.catalog.MeterIDToolCalls {
 			meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
 			toolCallPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
 			if err != nil {
@@ -443,7 +469,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			toolCallPrice /= 100 // Result from Polar is in cents
 		}
 
-		if price.ProductPrice.ProductPriceMeteredUnit.MeterID == MeterIDServers {
+		if price.ProductPrice.ProductPriceMeteredUnit.MeterID == p.catalog.MeterIDServers {
 			meterPrice := *price.ProductPrice.ProductPriceMeteredUnit
 			mcpServerPrice, err = strconv.ParseFloat(meterPrice.UnitAmount, 64)
 			if err != nil {

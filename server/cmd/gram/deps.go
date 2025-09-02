@@ -22,6 +22,8 @@ import (
 	polargo "github.com/polarsource/polar-go"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
+	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
@@ -38,6 +40,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 )
+
+func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
+	var cfgLoader cli.BeforeFunc = func(ctx *cli.Context) error { return nil }
+	switch filepath.Ext(c.Path("config-file")) {
+	case ".yaml", ".yml":
+		cfgLoader = altsrc.InitInputSourceWithContext(flags, altsrc.NewYamlSourceFromFlagFunc("config-file"))
+	case ".json":
+		cfgLoader = altsrc.InitInputSourceWithContext(flags, altsrc.NewJSONSourceFromFlagFunc("config-file"))
+	case ".toml":
+		cfgLoader = altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc("config-file"))
+	}
+	return cfgLoader(c)
+}
 
 type dbClientOptions struct {
 	enableUnsafeLogging bool
@@ -251,13 +266,22 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	return inmem
 }
 
-func newBillingProvider(ctx context.Context, logger *slog.Logger, redisClient *redis.Client, env string, polarAPIKey string) (billing.Repository, billing.Tracker, error) {
+func newBillingProvider(ctx context.Context, logger *slog.Logger, redisClient *redis.Client, c *cli.Context) (billing.Repository, billing.Tracker, error) {
 	switch {
-	case polarAPIKey != "":
-		polarsdk := polargo.New(polargo.WithSecurity(polarAPIKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
-		pclient := polar.NewClient(polarsdk, logger, redisClient)
+	case c.String("polar-api-key") != "":
+		catalog := &polar.Catalog{
+			ProductIDFree:    c.String("polar-product-id-free"),
+			ProductIDPro:     c.String("polar-product-id-pro"),
+			MeterIDToolCalls: c.String("polar-meter-id-tool-calls"),
+			MeterIDServers:   c.String("polar-meter-id-servers"),
+		}
+		if err := catalog.Validate(); err != nil {
+			return nil, nil, fmt.Errorf("invalid polar catalog configuration: %w", err)
+		}
+		polarsdk := polargo.New(polargo.WithSecurity(c.String("polar-api-key")), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
+		pclient := polar.NewClient(polarsdk, logger, redisClient, catalog)
 		return pclient, pclient, nil
-	case polarAPIKey == "" && env == "local":
+	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
 		stub := billing.NewStubClient(logger)
 		return stub, stub, nil
