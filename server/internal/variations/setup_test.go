@@ -7,11 +7,10 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	polargo "github.com/polarsource/polar-go"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/variations"
 	"github.com/stretchr/testify/require"
 )
@@ -58,11 +57,9 @@ func newTestVariationsService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	// Create polarsdk client for testing
-	polarsdk := polargo.New(polargo.WithSecurity("test-polar-key"))
-	usageClient := polar.NewClient(polarsdk, logger, redisClient)
+	billingClient := billing.NewStubClient(logger)
 
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", usageClient)
+	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
 	require.NoError(t, err)
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)

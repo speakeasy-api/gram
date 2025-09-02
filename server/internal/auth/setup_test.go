@@ -10,14 +10,13 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	polargo "github.com/polarsource/polar-go"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 )
@@ -289,10 +288,9 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host")
 
-	polarsdk := polargo.New(polargo.WithSecurity("test-polar-key"))
-	usageClient := polar.NewClient(polarsdk, logger, redisClient)
+	billingClient := billing.NewStubClient(logger)
 
-	sessionManager := sessions.NewManager(logger, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, usageClient)
+	sessionManager := sessions.NewManager(logger, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient)
 
 	authConfigs := auth.AuthConfigurations{
 		SpeakeasyServerAddress: mockServer.URL,
