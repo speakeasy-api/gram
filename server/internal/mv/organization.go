@@ -35,8 +35,8 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 	}
 
 	// Otherwise, the source of truth for account type is the Polar customer state
-	if customerTier != "" {
-		org.GramAccountType = string(customerTier)
+	if customerTier != nil {
+		org.GramAccountType = string(*customerTier)
 	}
 
 	return &org, nil

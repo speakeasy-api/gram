@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/openapi/pointer"
 )
 
 type Catalog struct {
@@ -274,36 +275,31 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 }
 
 // This is used during auth, so keep it as lightweight as possible.
-func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (billing.Tier, error) {
+func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (*billing.Tier, error) {
 	customerState, err := p.getCustomerState(ctx, orgID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	return p.extractCustomerTier(customerState)
 }
 
-func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerState) (billing.Tier, error) {
+func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerState) (*billing.Tier, error) {
 	if customerState != nil {
 		for _, sub := range customerState.ActiveSubscriptions {
 			if sub.ProductID == p.catalog.ProductIDPro {
-				return billing.TierPro, nil
+				return pointer.From(billing.TierPro), nil
 			}
 		}
 	}
 
-	return billing.TierFree, nil
+	return nil, nil
 }
 
 func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Customer, error) {
 	customerState, err := p.getCustomerState(ctx, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("get customer state: %w", err)
-	}
-
-	tier, err := p.extractCustomerTier(customerState)
-	if err != nil {
-		return nil, fmt.Errorf("extract customer tier: %w", err)
 	}
 
 	periodUsage, err := p.readPeriodUsage(ctx, orgID, customerState)
@@ -313,7 +309,6 @@ func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Custom
 
 	customer := &billing.Customer{
 		OrganizationID: orgID,
-		Tier:           tier,
 		PeriodUsage:    periodUsage,
 	}
 
