@@ -22,6 +22,8 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	Openapi(context.Context) (res *OpenapiResult, body io.ReadCloser, err error)
+	// Get version information for the Gram components.
+	Version(context.Context) (res *VersionResult, err error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -38,7 +40,7 @@ const ServiceName = "about"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"openapi"}
+var MethodNames = [2]string{"openapi", "version"}
 
 // OpenapiResult is the result type of the about service openapi method.
 type OpenapiResult struct {
@@ -46,6 +48,16 @@ type OpenapiResult struct {
 	ContentType string
 	// The content length of the OpenAPI document
 	ContentLength int64
+}
+
+// VersionResult is the result type of the about service version method.
+type VersionResult struct {
+	// The version of the Gram server
+	ServerVersion string
+	// The version of the Gram dashboard
+	DashboardVersion string
+	// The Git SHA of the current build
+	GitSha string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

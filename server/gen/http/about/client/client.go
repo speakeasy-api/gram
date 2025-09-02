@@ -22,6 +22,10 @@ type Client struct {
 	// endpoint.
 	OpenapiDoer goahttp.Doer
 
+	// Version Doer is the HTTP client used to make requests to the version
+	// endpoint.
+	VersionDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -43,6 +47,7 @@ func NewClient(
 ) *Client {
 	return &Client{
 		OpenapiDoer:         doer,
+		VersionDoer:         doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -72,5 +77,24 @@ func (c *Client) Openapi() goa.Endpoint {
 			return nil, err
 		}
 		return &about.OpenapiResponseData{Result: res.(*about.OpenapiResult), Body: resp.Body}, nil
+	}
+}
+
+// Version returns an endpoint that makes HTTP requests to the about service
+// version server.
+func (c *Client) Version() goa.Endpoint {
+	var (
+		decodeResponse = DecodeVersionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildVersionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.VersionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("about", "version", err)
+		}
+		return decodeResponse(resp)
 	}
 }

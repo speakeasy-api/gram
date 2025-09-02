@@ -11,3 +11,8 @@ package client
 func OpenapiAboutPath() string {
 	return "/openapi.yaml"
 }
+
+// VersionAboutPath returns the URL path to the about service version HTTP endpoint.
+func VersionAboutPath() string {
+	return "/version"
+}

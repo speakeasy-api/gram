@@ -17,12 +17,14 @@ import (
 // Client is the "about" service client.
 type Client struct {
 	OpenapiEndpoint goa.Endpoint
+	VersionEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "about" service client given the endpoints.
-func NewClient(openapi goa.Endpoint) *Client {
+func NewClient(openapi, version goa.Endpoint) *Client {
 	return &Client{
 		OpenapiEndpoint: openapi,
+		VersionEndpoint: version,
 	}
 }
 
@@ -47,4 +49,26 @@ func (c *Client) Openapi(ctx context.Context) (res *OpenapiResult, resp io.ReadC
 	}
 	o := ires.(*OpenapiResponseData)
 	return o.Result, o.Body, nil
+}
+
+// Version calls the "version" endpoint of the "about" service.
+// Version may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) Version(ctx context.Context) (res *VersionResult, err error) {
+	var ires any
+	ires, err = c.VersionEndpoint(ctx, nil)
+	if err != nil {
+		return
+	}
+	return ires.(*VersionResult), nil
 }

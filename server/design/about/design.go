@@ -30,4 +30,21 @@ var _ = Service("about", func() {
 			})
 		})
 	})
+
+	Method("version", func() {
+		Description("Get version information for the Gram components.")
+
+		Result(func() {
+			Attribute("server_version", String, "The version of the Gram server")
+			Attribute("dashboard_version", String, "The version of the Gram dashboard")
+			Attribute("git_sha", String, "The Git SHA of the current build")
+
+			Required("server_version", "dashboard_version", "git_sha")
+		})
+
+		HTTP(func() {
+			GET("/version")
+			Response(StatusOK)
+		})
+	})
 })

@@ -41,7 +41,7 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{
-		"about openapi",
+		"about (openapi|version)",
 		"assets (serve-image|upload-image|upload-functions|upload-open-ap-iv3|serve-open-ap-iv3|list-assets)",
 		"auth (callback|login|switch-scopes|logout|register|info)",
 		"chat (list-chats|load-chat|credit-usage)",
@@ -86,6 +86,8 @@ func ParseEndpoint(
 		aboutFlags = flag.NewFlagSet("about", flag.ContinueOnError)
 
 		aboutOpenapiFlags = flag.NewFlagSet("openapi", flag.ExitOnError)
+
+		aboutVersionFlags = flag.NewFlagSet("version", flag.ExitOnError)
 
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
@@ -513,6 +515,7 @@ func ParseEndpoint(
 	)
 	aboutFlags.Usage = aboutUsage
 	aboutOpenapiFlags.Usage = aboutOpenapiUsage
+	aboutVersionFlags.Usage = aboutVersionUsage
 
 	assetsFlags.Usage = assetsUsage
 	assetsServeImageFlags.Usage = assetsServeImageUsage
@@ -697,6 +700,9 @@ func ParseEndpoint(
 			switch epn {
 			case "openapi":
 				epf = aboutOpenapiFlags
+
+			case "version":
+				epf = aboutVersionFlags
 
 			}
 
@@ -1022,6 +1028,8 @@ func ParseEndpoint(
 			switch epn {
 			case "openapi":
 				endpoint = c.Openapi()
+			case "version":
+				endpoint = c.Version()
 			}
 		case "assets":
 			c := assetsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -1342,6 +1350,7 @@ func aboutUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] about COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    openapi: The OpenAPI description of the Gram API.`)
+	fmt.Fprintln(os.Stderr, `    version: Get version information for the Gram components.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s about COMMAND --help\n", os.Args[0])
@@ -1361,6 +1370,23 @@ func aboutOpenapiUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `about openapi`)
+}
+
+func aboutVersionUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] about version", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get version information for the Gram components.`)
+
+	// Flags list
+
+	// Example block: pass example as parameter to avoid format parsing of % characters
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `about version`)
 }
 
 // assetsUsage displays the usage of the assets command and its subcommands.

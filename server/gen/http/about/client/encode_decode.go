@@ -242,3 +242,217 @@ func DecodeOpenapiResponse(decoder func(*http.Response) goahttp.Decoder, restore
 		}
 	}
 }
+
+// BuildVersionRequest instantiates a HTTP request object with method and path
+// set to call the "about" service "version" endpoint
+func (c *Client) BuildVersionRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: VersionAboutPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("about", "version", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// DecodeVersionResponse returns a decoder for responses returned by the about
+// version endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeVersionResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeVersionResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body VersionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("about", "version", err)
+			}
+			err = ValidateVersionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("about", "version", err)
+			}
+			res := NewVersionResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body VersionUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("about", "version", err)
+			}
+			err = ValidateVersionUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("about", "version", err)
+			}
+			return nil, NewVersionUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body VersionForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("about", "version", err)
+			}
+			err = ValidateVersionForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("about", "version", err)
+			}
+			return nil, NewVersionForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body VersionBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("about", "version", err)
+			}
+			err = ValidateVersionBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("about", "version", err)
+			}
+			return nil, NewVersionBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body VersionNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("about", "version", err)
+			}
+			err = ValidateVersionNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("about", "version", err)
+			}
+			return nil, NewVersionNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body VersionConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("about", "version", err)
+			}
+			err = ValidateVersionConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("about", "version", err)
+			}
+			return nil, NewVersionConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body VersionUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("about", "version", err)
+			}
+			err = ValidateVersionUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("about", "version", err)
+			}
+			return nil, NewVersionUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body VersionInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("about", "version", err)
+			}
+			err = ValidateVersionInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("about", "version", err)
+			}
+			return nil, NewVersionInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body VersionInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("about", "version", err)
+				}
+				err = ValidateVersionInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("about", "version", err)
+				}
+				return nil, NewVersionInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body VersionUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("about", "version", err)
+				}
+				err = ValidateVersionUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("about", "version", err)
+				}
+				return nil, NewVersionUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("about", "version", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body VersionGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("about", "version", err)
+			}
+			err = ValidateVersionGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("about", "version", err)
+			}
+			return nil, NewVersionGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("about", "version", resp.StatusCode, string(body))
+		}
+	}
+}
