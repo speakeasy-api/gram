@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -24,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -42,7 +42,7 @@ func handleToolsCall(
 	payload *mcpInputs,
 	req *rawRequest,
 	toolProxy *gateway.ToolProxy,
-	usageClient usage_types.UsageClient,
+	billingTracker billing.Tracker,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -62,7 +62,7 @@ func handleToolsCall(
 
 	var mcpURL string
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
-		mcpURL = requestContext.Host+requestContext.ReqURL
+		mcpURL = requestContext.Host + requestContext.ReqURL
 		metrics.RecordMCPToolCall(ctx, toolset.OrganizationID, mcpURL, params.Name)
 	}
 
@@ -105,20 +105,20 @@ func handleToolsCall(
 		requestBytes := int64(len(params.Arguments))
 		outputBytes := int64(len(promptData))
 
-		go usageClient.TrackToolCallUsage(context.Background(), usage_types.ToolCallUsageEvent{
+		go billingTracker.TrackToolCallUsage(context.Background(), billing.ToolCallUsageEvent{
 			OrganizationID:   toolset.OrganizationID,
 			RequestBytes:     requestBytes,
 			OutputBytes:      outputBytes,
 			ToolID:           higherOrderTool.ID,
 			ToolName:         string(higherOrderTool.Name),
-			Type:             usage_types.ToolCallType_HigherOrder,
+			Type:             billing.ToolCallTypeHigherOrder,
 			ProjectID:        payload.projectID.String(),
 			ToolsetSlug:      &payload.toolset,
 			MCPURL:           &mcpURL,
 			ProjectSlug:      nil, // This data is only there for debugging, but we don't have it here
 			OrganizationSlug: nil,
 			ChatID:           nil,
-		})	
+		})
 
 		return formatHigherOrderToolResult(ctx, logger, req, promptData)
 	}
@@ -182,7 +182,7 @@ func handleToolsCall(
 	// Track tool call usage
 	outputBytes := int64(rw.body.Len())
 
-	go usageClient.TrackToolCallUsage(context.Background(), usage_types.ToolCallUsageEvent{
+	go billingTracker.TrackToolCallUsage(context.Background(), billing.ToolCallUsageEvent{
 		OrganizationID:   toolset.OrganizationID,
 		RequestBytes:     requestBytes,
 		OutputBytes:      outputBytes,
@@ -194,7 +194,7 @@ func handleToolsCall(
 		ToolsetSlug:      &payload.toolset,
 		MCPURL:           &mcpURL,
 		ChatID:           nil,
-		Type:             usage_types.ToolCallType_HTTP,
+		Type:             billing.ToolCallTypeHTTP,
 	})
 
 	chunk, err := formatResult(*rw)
