@@ -15,6 +15,7 @@ Load all relevant data for an instance of a toolset and environment
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="getInstance" method="get" path="/rpc/instances.get" -->
 ```typescript
 import { Gram } from "@gram/client";
 

@@ -84,6 +84,49 @@ func BuildUploadImagePayload(assetsUploadImageContentType string, assetsUploadIm
 	return v, nil
 }
 
+// BuildUploadFunctionsPayload builds the payload for the assets
+// uploadFunctions endpoint from CLI flags.
+func BuildUploadFunctionsPayload(assetsUploadFunctionsContentType string, assetsUploadFunctionsContentLength string, assetsUploadFunctionsApikeyToken string, assetsUploadFunctionsProjectSlugInput string, assetsUploadFunctionsSessionToken string) (*assets.UploadFunctionsForm, error) {
+	var err error
+	var contentType string
+	{
+		contentType = assetsUploadFunctionsContentType
+	}
+	var contentLength int64
+	{
+		contentLength, err = strconv.ParseInt(assetsUploadFunctionsContentLength, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for contentLength, must be INT64")
+		}
+	}
+	var apikeyToken *string
+	{
+		if assetsUploadFunctionsApikeyToken != "" {
+			apikeyToken = &assetsUploadFunctionsApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assetsUploadFunctionsProjectSlugInput != "" {
+			projectSlugInput = &assetsUploadFunctionsProjectSlugInput
+		}
+	}
+	var sessionToken *string
+	{
+		if assetsUploadFunctionsSessionToken != "" {
+			sessionToken = &assetsUploadFunctionsSessionToken
+		}
+	}
+	v := &assets.UploadFunctionsForm{}
+	v.ContentType = contentType
+	v.ContentLength = contentLength
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildUploadOpenAPIv3Payload builds the payload for the assets
 // uploadOpenAPIv3 endpoint from CLI flags.
 func BuildUploadOpenAPIv3Payload(assetsUploadOpenAPIv3ContentType string, assetsUploadOpenAPIv3ContentLength string, assetsUploadOpenAPIv3ApikeyToken string, assetsUploadOpenAPIv3ProjectSlugInput string, assetsUploadOpenAPIv3SessionToken string) (*assets.UploadOpenAPIv3Form, error) {

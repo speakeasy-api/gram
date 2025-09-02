@@ -67,6 +67,7 @@ export * from "./updatePackage.js";
 export * from "./updateSlackConnection.js";
 export * from "./updateTemplate.js";
 export * from "./updateToolset.js";
+export * from "./uploadFunctions.js";
 export * from "./uploadImage.js";
 export * from "./uploadOpenAPIv3.js";
 export * from "./upsertGlobalVariation.js";

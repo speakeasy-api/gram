@@ -212,7 +212,7 @@ export function ProjectMenu() {
           </SimpleTooltip>
           <NavButton
             title="Contact us"
-            href="https://calendly.com/sagar-speakeasy/gram-intro"
+            href="https://calendly.com/d/crtj-3tk-wpd/demo-with-speakeasy"
             Icon={() => <MessageCircle className="h-4 w-4" />}
             onClick={() => setOpen(false)}
           />

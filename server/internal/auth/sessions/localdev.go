@@ -15,11 +15,11 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/gen/auth"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
@@ -48,7 +48,7 @@ var unsafeSessionData = []byte(`
 }
 `)
 
-func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string, customerProvider usage_types.CustomerStateProvider) (*Manager, error) {
+func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string, billingRepo billing.Repository) (*Manager, error) {
 	logger = logger.With(attr.SlogComponent("sessions"))
 
 	raw := unsafeSessionData
@@ -66,7 +66,6 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 			return nil, fmt.Errorf("failed to read local env file: %w", err)
 		}
 	}
-
 
 	var data localEnvFile
 	if err := json.Unmarshal(raw, &data); err != nil {
@@ -92,7 +91,7 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 		userRepo:               userRepo.New(db),
 		pylon:                  fakePylon,
 		posthog:                fakePosthog,
-		customerProvider:       customerProvider,
+		billingRepo:            billingRepo,
 	}, nil
 }
 

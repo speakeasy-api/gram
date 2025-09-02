@@ -280,13 +280,13 @@ func EncodeListProjectsRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if !ok {
 			return goahttp.ErrInvalidType("projects", "listProjects", "*projects.ListProjectsPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Authorization", head)
 		}
 		values := req.URL.Query()
 		values.Add("organization_id", p.OrganizationID)
