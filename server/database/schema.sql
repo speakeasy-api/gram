@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS projects (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 40),
 
   organization_id TEXT NOT NULL,
+  logo_asset_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
