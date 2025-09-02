@@ -249,59 +249,83 @@ func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformU
 	}
 }
 
+// getCustomerState gets the customer state from the cache or Polar, and stores the result in the cache.
 func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComponents.CustomerState, error) {
-	customer, err := p.polar.Customers.GetStateExternal(ctx, orgID)
-	if err != nil && !strings.Contains(err.Error(), "ResourceNotFound") {
-		return nil, fmt.Errorf("query polar customer state: %w", err)
-	}
-
-	if customer == nil {
-		return nil, nil
-	}
-
-	return customer.CustomerState, nil
-}
-
-func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Customer, error) {
 	var polarCustomerState *polarComponents.CustomerState
 
 	if customerState, err := p.customerStateCache.Get(ctx, OrgCacheKey(orgID)); err == nil {
+		p.logger.DebugContext(ctx, "customer state found in cache")
+
 		polarCustomerState = customerState.CustomerState
 	} else {
-		polarCustomerState, err = p.getCustomerState(ctx, orgID)
-		if err != nil {
-			return nil, err
+		polarCustomerState, err := p.polar.Customers.GetStateExternal(ctx, orgID)
+		if err != nil && !strings.Contains(err.Error(), "ResourceNotFound") {
+			return nil, fmt.Errorf("query polar customer state: %w", err)
 		}
 
-		if err = p.customerStateCache.Store(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: polarCustomerState}); err != nil {
+		p.logger.DebugContext(ctx, "customer state found in Polar, storing in cache")
+
+		if err = p.customerStateCache.Store(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: polarCustomerState.CustomerState}); err != nil {
 			p.logger.ErrorContext(ctx, "failed to cache customer state", attr.SlogError(err))
 		}
 	}
 
-	periodUsage, err := p.extractPeriodUsage(ctx, orgID, polarCustomerState)
+	if polarCustomerState == nil {
+		return nil, nil
+	}
+
+	return polarCustomerState, nil
+}
+
+// This is used during auth, so keep it as lightweight as possible.
+func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (billing.Tier, error) {
+	customerState, err := p.getCustomerState(ctx, orgID)
 	if err != nil {
-		return nil, fmt.Errorf("extract period usage: %w", err)
+		return "", err
 	}
 
-	customerState := &billing.Customer{
-		OrganizationID: orgID,
-		Tier:           billing.TierFree,
-		PeriodUsage:    periodUsage,
-	}
+	return p.extractCustomerTier(customerState)
+}
 
-	if polarCustomerState != nil {
-		for _, sub := range polarCustomerState.ActiveSubscriptions {
+func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerState) (billing.Tier, error) {
+	if customerState != nil {
+		for _, sub := range customerState.ActiveSubscriptions {
 			if sub.ProductID == p.catalog.ProductIDPro {
-				customerState.Tier = billing.TierPro
-				break
+				return billing.TierPro, nil
 			}
 		}
 	}
 
-	return customerState, nil
+	return billing.TierFree, nil
 }
 
-func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer *polarComponents.CustomerState) (*gen.PeriodUsage, error) {
+func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Customer, error) {
+	customerState, err := p.getCustomerState(ctx, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("get customer state: %w", err)
+	}
+
+	tier, err := p.extractCustomerTier(customerState)
+	if err != nil {
+		return nil, fmt.Errorf("extract customer tier: %w", err)
+	}
+
+	periodUsage, err := p.readPeriodUsage(ctx, orgID, customerState)
+	if err != nil {
+		return nil, fmt.Errorf("extract period usage: %w", err)
+	}
+
+	customer := &billing.Customer{
+		OrganizationID: orgID,
+		Tier:           tier,
+		PeriodUsage:    periodUsage,
+	}
+
+	return customer, nil
+}
+
+// readPeriodUsage reads the period usage from the customer state if available, otherwise reads the usage from the meters directly.
+func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *polarComponents.CustomerState) (*gen.PeriodUsage, error) {
 	if customer != nil {
 		var toolCallMeter *polarComponents.CustomerStateMeter
 		var serverMeter *polarComponents.CustomerStateMeter
@@ -328,7 +352,7 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 			MaxToolCalls:            int(toolCallMeter.CreditedUnits),
 			Servers:                 int(serverMeter.ConsumedUnits),
 			MaxServers:              int(serverMeter.CreditedUnits),
-			ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
+			ActualPublicServerCount: 0, // Not related to polar, populated elsewhere
 		}, nil
 	}
 

@@ -35,6 +35,10 @@ func NewStubClient(logger *slog.Logger) *StubClient {
 var _ Tracker = (*StubClient)(nil)
 var _ Repository = (*StubClient)(nil)
 
+func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (Tier, error) {
+	return TierFree, nil
+}
+
 func (s *StubClient) CreateCheckout(ctx context.Context, orgID string, serverURL string) (string, error) {
 	return "", fmt.Errorf("not implemented")
 }
