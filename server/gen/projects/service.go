@@ -21,6 +21,8 @@ type Service interface {
 	CreateProject(context.Context, *CreateProjectPayload) (res *CreateProjectResult, err error)
 	// List all projects for an organization.
 	ListProjects(context.Context, *ListProjectsPayload) (res *ListProjectsResult, err error)
+	// Uploads a logo for a project.
+	SetLogo(context.Context, *UploadLogoForm) (res *UploadLogoResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -43,7 +45,7 @@ const ServiceName = "projects"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [2]string{"createProject", "listProjects"}
+var MethodNames = [3]string{"createProject", "listProjects", "setLogo"}
 
 // CreateProjectPayload is the payload type of the projects service
 // createProject method.
@@ -88,6 +90,8 @@ type Project struct {
 	Slug types.Slug
 	// The ID of the organization that owns the project
 	OrganizationID string
+	// The URL of the project logo
+	LogoURL *string
 	// The creation date of the project.
 	CreatedAt string
 	// The last update date of the project.
@@ -101,6 +105,21 @@ type ProjectEntry struct {
 	Name string
 	// The slug of the project
 	Slug types.Slug
+}
+
+// UploadLogoForm is the payload type of the projects service setLogo method.
+type UploadLogoForm struct {
+	ApikeyToken      *string
+	ProjectSlugInput *string
+	SessionToken     *string
+	// The ID of the asset to upload
+	AssetID string
+}
+
+// UploadLogoResult is the result type of the projects service setLogo method.
+type UploadLogoResult struct {
+	// The updated project with the new logo
+	Project *Project
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

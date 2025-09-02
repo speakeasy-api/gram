@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	CreateProject goa.Endpoint
 	ListProjects  goa.Endpoint
+	SetLogo       goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "projects" service with endpoints.
@@ -27,6 +28,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		CreateProject: NewCreateProjectEndpoint(s, a.APIKeyAuth),
 		ListProjects:  NewListProjectsEndpoint(s, a.APIKeyAuth),
+		SetLogo:       NewSetLogoEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -34,6 +36,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateProject = m(e.CreateProject)
 	e.ListProjects = m(e.ListProjects)
+	e.SetLogo = m(e.SetLogo)
 }
 
 // NewCreateProjectEndpoint returns an endpoint function that calls the method
@@ -103,5 +106,64 @@ func NewListProjectsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 			return nil, err
 		}
 		return s.ListProjects(ctx, p)
+	}
+}
+
+// NewSetLogoEndpoint returns an endpoint function that calls the method
+// "setLogo" of service "projects".
+func NewSetLogoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UploadLogoForm)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "session",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.SessionToken != nil {
+					key = *p.SessionToken
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetLogo(ctx, p)
 	}
 }

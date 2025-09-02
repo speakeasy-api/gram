@@ -4042,6 +4042,13 @@ paths:
                     description: The ID of the organization to list projects for
                     type: string
                 - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -4110,7 +4117,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Authorization: []
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: listProjects projects
             tags:
@@ -4118,6 +4125,110 @@ paths:
             x-speakeasy-name-override: list
             x-speakeasy-react-hook:
                 name: ListProjects
+    /rpc/projects.setLogo:
+        post:
+            description: Uploads a logo for a project.
+            operationId: setProjectLogo
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/UploadLogoForm2'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UploadLogoResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: setLogo projects
+            tags:
+                - projects
+            x-speakeasy-name-override: setLogo
+            x-speakeasy-react-hook:
+                name: setProjectLogo
     /rpc/slack.callback:
         get:
             description: Handles the authentication callback.
@@ -8642,6 +8753,9 @@ components:
                 id:
                     type: string
                     description: The ID of the project
+                logo_url:
+                    type: string
+                    description: The URL of the project logo
                 name:
                     type: string
                     description: The name of the project
@@ -9463,6 +9577,35 @@ components:
                     $ref: '#/components/schemas/Asset'
             required:
                 - asset
+        UploadLogoForm:
+            type: object
+            properties:
+                apikey_token:
+                    type: string
+                asset_id:
+                    type: string
+                    description: The ID of the asset to upload
+                project_slug_input:
+                    type: string
+                session_token:
+                    type: string
+            required:
+                - asset_id
+        UploadLogoForm2:
+            type: object
+            properties:
+                asset_id:
+                    type: string
+                    description: The ID of the asset to upload
+            required:
+                - asset_id
+        UploadLogoResult:
+            type: object
+            properties:
+                project:
+                    $ref: '#/components/schemas/Project'
+            required:
+                - project
         UploadOpenAPIv3Form:
             type: object
             properties:
@@ -9540,11 +9683,6 @@ components:
                 - free
                 - business
     securitySchemes:
-        apikey_header_Authorization:
-            type: apiKey
-            description: key based auth.
-            name: Authorization
-            in: header
         apikey_header_Gram-Key:
             type: apiKey
             description: key based auth.

@@ -45,6 +45,7 @@ var _ = Service("projects", func() {
 
 		HTTP(func() {
 			GET("/rpc/projects.list")
+			security.ByKeyHeader()
 			security.SessionHeader()
 
 			Param("organization_id")
@@ -53,6 +54,29 @@ var _ = Service("projects", func() {
 		Meta("openapi:operationId", "listProjects")
 		Meta("openapi:extension:x-speakeasy-name-override", "list")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListProjects"}`)
+	})
+
+	Method("setLogo", func() {
+		Description("Uploads a logo for a project.")
+
+		Security(security.ByKey, security.ProjectSlug, func() {
+			Scope("producer")
+		})
+		Security(security.ProjectSlug, security.Session)
+
+		Payload(UploadLogoForm)
+		Result(UploadLogoResult)
+
+		HTTP(func() {
+			POST("/rpc/projects.setLogo")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+		})
+
+		Meta("openapi:operationId", "setProjectLogo")
+		Meta("openapi:extension:x-speakeasy-name-override", "setLogo")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "setProjectLogo"}`)
 	})
 })
 
@@ -83,4 +107,19 @@ var ListProjectsResult = Type("ListProjectsResult", func() {
 	Required("projects")
 
 	Attribute("projects", ArrayOf(shared.ProjectEntry), "The list of projects")
+})
+
+var UploadLogoForm = Type("UploadLogoForm", func() {
+	Required("asset_id")
+	security.ByKeyPayload()
+	security.ProjectPayload()
+	security.SessionPayload()
+
+	Attribute("asset_id", String, "The ID of the asset to upload")
+})
+
+var UploadLogoResult = Type("UploadLogoResult", func() {
+	Required("project")
+
+	Attribute("project", shared.Project, "The updated project with the new logo")
 })

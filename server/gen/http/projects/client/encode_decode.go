@@ -280,13 +280,13 @@ func EncodeListProjectsRequest(encoder func(*http.Request) goahttp.Encoder) func
 		if !ok {
 			return goahttp.ErrInvalidType("projects", "listProjects", "*projects.ListProjectsPayload", v)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Authorization", head)
 		}
 		values := req.URL.Query()
 		values.Add("organization_id", p.OrganizationID)
@@ -494,6 +494,248 @@ func DecodeListProjectsResponse(decoder func(*http.Response) goahttp.Decoder, re
 	}
 }
 
+// BuildSetLogoRequest instantiates a HTTP request object with method and path
+// set to call the "projects" service "setLogo" endpoint
+func (c *Client) BuildSetLogoRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetLogoProjectsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("projects", "setLogo", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetLogoRequest returns an encoder for requests sent to the projects
+// setLogo server.
+func EncodeSetLogoRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*projects.UploadLogoForm)
+		if !ok {
+			return goahttp.ErrInvalidType("projects", "setLogo", "*projects.UploadLogoForm", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSetLogoRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("projects", "setLogo", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetLogoResponse returns a decoder for responses returned by the
+// projects setLogo endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeSetLogoResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetLogoResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetLogoResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
+			}
+			err = ValidateSetLogoResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setLogo", err)
+			}
+			res := NewSetLogoUploadLogoResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetLogoUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
+			}
+			err = ValidateSetLogoUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setLogo", err)
+			}
+			return nil, NewSetLogoUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetLogoForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
+			}
+			err = ValidateSetLogoForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setLogo", err)
+			}
+			return nil, NewSetLogoForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetLogoBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
+			}
+			err = ValidateSetLogoBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setLogo", err)
+			}
+			return nil, NewSetLogoBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetLogoNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
+			}
+			err = ValidateSetLogoNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setLogo", err)
+			}
+			return nil, NewSetLogoNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetLogoConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
+			}
+			err = ValidateSetLogoConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setLogo", err)
+			}
+			return nil, NewSetLogoConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetLogoUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
+			}
+			err = ValidateSetLogoUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setLogo", err)
+			}
+			return nil, NewSetLogoUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetLogoInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
+			}
+			err = ValidateSetLogoInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setLogo", err)
+			}
+			return nil, NewSetLogoInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetLogoInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
+				}
+				err = ValidateSetLogoInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "setLogo", err)
+				}
+				return nil, NewSetLogoInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetLogoUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
+				}
+				err = ValidateSetLogoUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("projects", "setLogo", err)
+				}
+				return nil, NewSetLogoUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("projects", "setLogo", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetLogoGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("projects", "setLogo", err)
+			}
+			err = ValidateSetLogoGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("projects", "setLogo", err)
+			}
+			return nil, NewSetLogoGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("projects", "setLogo", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalProjectResponseBodyToProjectsProject builds a value of type
 // *projects.Project from a value of type *ProjectResponseBody.
 func unmarshalProjectResponseBodyToProjectsProject(v *ProjectResponseBody) *projects.Project {
@@ -502,6 +744,7 @@ func unmarshalProjectResponseBodyToProjectsProject(v *ProjectResponseBody) *proj
 		Name:           *v.Name,
 		Slug:           types.Slug(*v.Slug),
 		OrganizationID: *v.OrganizationID,
+		LogoURL:        v.LogoURL,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}

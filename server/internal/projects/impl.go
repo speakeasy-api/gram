@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,6 +21,7 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/projects/server"
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -39,6 +41,7 @@ type Service struct {
 	envRepo  *envrepo.Queries
 	sessions *sessions.Manager
 	auth     *auth.Auth
+	assets   *assets.Service
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -166,5 +169,43 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 
 	return &gen.ListProjectsResult{
 		Projects: entries,
+	}, nil
+}
+
+func (s *Service) SetLogo(ctx context.Context, payload *gen.UploadLogoForm) (res *gen.UploadLogoResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	assetID, err := uuid.Parse(payload.AssetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error parsing asset ID").Log(ctx, s.logger)
+	}
+
+	updatedProject, err := s.repo.UploadProjectLogo(ctx, repo.UploadProjectLogoParams{
+		ProjectID:   *authCtx.ProjectID,
+		LogoAssetID: uuid.NullUUID{UUID: assetID, Valid: true},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating project logo").Log(ctx, s.logger)
+	}
+
+	projectResponse := &gen.Project{
+		ID:             updatedProject.ID.String(),
+		Name:           updatedProject.Name,
+		Slug:           types.Slug(updatedProject.Slug),
+		OrganizationID: updatedProject.OrganizationID,
+		CreatedAt:      updatedProject.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      updatedProject.UpdatedAt.Time.Format(time.RFC3339),
+	}
+
+	if updatedProject.LogoAssetID.Valid {
+		logoURL := fmt.Sprintf("/rpc/assets.serveImage?id=%s", updatedProject.LogoAssetID.UUID.String())
+		projectResponse.LogoURL = &logoURL
+	}
+
+	return &gen.UploadLogoResult{
+		Project: projectResponse,
 	}, nil
 }
