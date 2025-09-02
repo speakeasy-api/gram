@@ -18,9 +18,9 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 	}
 
 	// An org is enterprise if it's explicitly set to enterprise in the database
-	// if org.GramAccountType == "enterprise" { // TODO
-	// 	return &org, nil
-	// }
+	if org.GramAccountType == "enterprise" {
+		return &org, nil
+	}
 
 	if billingRepo == nil {
 		logger.WarnContext(ctx, "customer provider is not initialized, skipping customer state check")
