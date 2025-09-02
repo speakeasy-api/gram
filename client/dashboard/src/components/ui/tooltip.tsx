@@ -75,7 +75,7 @@ function SimpleTooltip({
         <TooltipTrigger asChild>
           <div>{children}</div>
         </TooltipTrigger>
-        <TooltipContent className="max-w-[500px]">{tooltip}</TooltipContent>
+        <TooltipContent className="min-w-1! max-w-[400px] w-fit">{tooltip}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );

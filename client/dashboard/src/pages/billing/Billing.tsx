@@ -71,6 +71,7 @@ const BillingPage = () => {
                     value={periodUsage.toolCalls}
                     included={periodUsage.maxToolCalls}
                     overageIncrement={periodUsage.maxToolCalls}
+                    noMax={session.gramAccountType === "enterprise"}
                   />
                 </div>
                 <div>
@@ -78,14 +79,15 @@ const BillingPage = () => {
                     <Type variant="body" className="font-medium">
                       Servers
                     </Type>
-                    <SimpleTooltip tooltip="The number of public MCP servers across your organization.">
+                    <SimpleTooltip tooltip="The number of public MCP servers across your organization. Note that this value is the maximum number active at a time during the billing period, and may not reflect the current number of public servers.">
                       <Info className="w-4 h-4 text-muted-foreground" />
                     </SimpleTooltip>
                   </Stack>
                   <UsageProgress
-                    value={periodUsage.actualPublicServerCount} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
+                    value={periodUsage.servers} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
                     included={periodUsage.maxServers}
                     overageIncrement={1}
+                    noMax={session.gramAccountType === "enterprise"}
                   />
                 </div>
               </>
@@ -137,14 +139,21 @@ const UsageProgress = ({
   value,
   included,
   overageIncrement,
+  noMax,
 }: {
   value: number;
   included: number;
   overageIncrement: number;
+  noMax?: boolean;
 }) => {
+  if (noMax) {
+    included = Math.max(1, value * 2);
+  }
+
   const anyOverage = value > included;
-  const overageMax =
-    Math.ceil((value - included + 1) / overageIncrement) * overageIncrement; // Compute next increment. +1 because we always want to show the next increment.
+  const overageMax = anyOverage
+    ? Math.ceil((value - included + 1) / overageIncrement) * overageIncrement // Compute next increment. +1 because we always want to show the next increment.
+    : 0;
   const totalMax = included + overageMax;
 
   // Calculate the proportional width for the included section
@@ -196,7 +205,9 @@ const UsageProgress = ({
       >
         {anyOverage
           ? `Included: ${included.toLocaleString()}`
-          : `${value.toLocaleString()} / ${included.toLocaleString()}`}
+          : `${value.toLocaleString()} / ${
+              noMax ? "No limit" : included.toLocaleString()
+            }`}
       </div>
 
       {/* Divider line and labels for overage */}

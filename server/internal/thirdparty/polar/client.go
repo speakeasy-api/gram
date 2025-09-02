@@ -302,6 +302,15 @@ func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Custom
 }
 
 func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer *polarComponents.CustomerState) (*gen.PeriodUsage, error) {
+	usage := gen.PeriodUsage{
+		// Set to -1 so we can tell if we've failed to get the usage
+		ToolCalls:               -1,
+		MaxToolCalls:            -1,
+		Servers:                 -1,
+		MaxServers:              -1,
+		ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
+	}
+
 	if customer != nil {
 		var toolCallMeter *polarComponents.CustomerStateMeter
 		var serverMeter *polarComponents.CustomerStateMeter
@@ -323,61 +332,67 @@ func (p *Client) extractPeriodUsage(ctx context.Context, orgID string, customer 
 			)
 		}
 
-		return &gen.PeriodUsage{
-			ToolCalls:               int(toolCallMeter.ConsumedUnits),
-			MaxToolCalls:            int(toolCallMeter.CreditedUnits),
-			Servers:                 int(serverMeter.ConsumedUnits),
-			MaxServers:              int(serverMeter.CreditedUnits),
-			ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
-		}, nil
+		usage.ToolCalls = int(toolCallMeter.ConsumedUnits)
+		usage.MaxToolCalls = int(toolCallMeter.CreditedUnits)
+		usage.Servers = int(serverMeter.ConsumedUnits)
+		usage.MaxServers = int(serverMeter.CreditedUnits)
 	}
+
+	/**
+	 * If we failed to get the usage from the customer state for any reason, read the usage from the meters directly.
+	 * This happens always for free tier, but also in other cases where the customer state is confused
+	 */
 
 	customerFilter := polarOperations.CreateMetersQuantitiesQueryParamExternalCustomerIDFilterStr(orgID)
 
-	// For free tier, we need to read the meter directly because the user won't have a subscription
-	toolCallsRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
-		ID:                 p.catalog.MeterIDToolCalls,
-		ExternalCustomerID: &customerFilter,
-		StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
-		EndTimestamp:       time.Now(),
-		Interval:           polarComponents.TimeIntervalDay,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("get tool call usage: %w", err)
+	if usage.ToolCalls == -1 {
+		// For free tier, we need to read the meter directly because the user won't have a subscription
+		toolCallsRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
+			ID:                 p.catalog.MeterIDToolCalls,
+			ExternalCustomerID: &customerFilter,
+			StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
+			EndTimestamp:       time.Now(),
+			Interval:           polarComponents.TimeIntervalDay,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get tool call usage: %w", err)
+		}
+
+		usage.ToolCalls = int(toolCallsRes.MeterQuantities.Total)
 	}
 
-	serversRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
-		ID:                 p.catalog.MeterIDServers,
-		ExternalCustomerID: &customerFilter,
-		StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
-		EndTimestamp:       time.Now(),
-		Interval:           polarComponents.TimeIntervalDay,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("get server usage: %w", err)
+	if usage.Servers == -1 {
+		serversRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
+			ID:                 p.catalog.MeterIDServers,
+			ExternalCustomerID: &customerFilter,
+			StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
+			EndTimestamp:       time.Now(),
+			Interval:           polarComponents.TimeIntervalDay,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get server usage: %w", err)
+		}
+
+		usage.Servers = int(serversRes.MeterQuantities.Total)
 	}
 
-	freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDFree)
-	if err != nil {
-		return nil, fmt.Errorf("get free tier product: %w", err)
+	if usage.MaxToolCalls == -1 || usage.MaxServers == -1 {
+		freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDFree)
+		if err != nil {
+			return nil, fmt.Errorf("get free tier product: %w", err)
+		}
+
+		freeTierLimits := extractTierLimits(p.catalog, freeTierProduct)
+		if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 {
+			return nil, fmt.Errorf(
+				"get free tier limits: missing limits (tool calls = %s, servers = %s)",
+				conv.Ternary(freeTierLimits.ToolCalls == 0, "missing", "set"),
+				conv.Ternary(freeTierLimits.Servers == 0, "missing", "set"),
+			)
+		}
 	}
 
-	freeTierLimits := extractTierLimits(p.catalog, freeTierProduct)
-	if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 {
-		return nil, fmt.Errorf(
-			"get free tier limits: missing limits (tool calls = %s, servers = %s)",
-			conv.Ternary(freeTierLimits.ToolCalls == 0, "missing", "set"),
-			conv.Ternary(freeTierLimits.Servers == 0, "missing", "set"),
-		)
-	}
-
-	return &gen.PeriodUsage{
-		ToolCalls:               int(toolCallsRes.MeterQuantities.Total),
-		MaxToolCalls:            freeTierLimits.ToolCalls,
-		Servers:                 int(serversRes.MeterQuantities.Total),
-		MaxServers:              freeTierLimits.Servers,
-		ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
-	}, nil
+	return &usage, nil
 }
 
 // GetPeriodUsage returns the period usage for the given organization ID as well as their tier limits.
