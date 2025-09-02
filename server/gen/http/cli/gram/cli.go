@@ -321,8 +321,8 @@ func ParseEndpoint(
 
 		projectsListProjectsFlags              = flag.NewFlagSet("list-projects", flag.ExitOnError)
 		projectsListProjectsOrganizationIDFlag = projectsListProjectsFlags.String("organization-id", "REQUIRED", "")
-		projectsListProjectsSessionTokenFlag   = projectsListProjectsFlags.String("session-token", "", "")
 		projectsListProjectsApikeyTokenFlag    = projectsListProjectsFlags.String("apikey-token", "", "")
+		projectsListProjectsSessionTokenFlag   = projectsListProjectsFlags.String("session-token", "", "")
 
 		slackFlags = flag.NewFlagSet("slack", flag.ContinueOnError)
 
@@ -1141,7 +1141,7 @@ func ParseEndpoint(
 				data, err = projectsc.BuildCreateProjectPayload(*projectsCreateProjectBodyFlag, *projectsCreateProjectApikeyTokenFlag, *projectsCreateProjectSessionTokenFlag)
 			case "list-projects":
 				endpoint = c.ListProjects()
-				data, err = projectsc.BuildListProjectsPayload(*projectsListProjectsOrganizationIDFlag, *projectsListProjectsSessionTokenFlag, *projectsListProjectsApikeyTokenFlag)
+				data, err = projectsc.BuildListProjectsPayload(*projectsListProjectsOrganizationIDFlag, *projectsListProjectsApikeyTokenFlag, *projectsListProjectsSessionTokenFlag)
 			}
 		case "slack":
 			c := slackc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2158,15 +2158,15 @@ Example:
 }
 
 func projectsListProjectsUsage() {
-	fmt.Fprintf(os.Stderr, `%[1]s [flags] projects list-projects -organization-id STRING -session-token STRING -apikey-token STRING
+	fmt.Fprintf(os.Stderr, `%[1]s [flags] projects list-projects -organization-id STRING -apikey-token STRING -session-token STRING
 
 List all projects for an organization.
     -organization-id STRING: 
-    -session-token STRING: 
     -apikey-token STRING: 
+    -session-token STRING: 
 
 Example:
-    %[1]s projects list-projects --organization-id "Dolor nostrum incidunt et inventore." --session-token "Aliquid consequatur quisquam molestias molestias repudiandae." --apikey-token "Sunt molestias non facilis qui maiores iste."
+    %[1]s projects list-projects --organization-id "Dolor nostrum incidunt et inventore." --apikey-token "Aliquid consequatur quisquam molestias molestias repudiandae." --session-token "Sunt molestias non facilis qui maiores iste."
 `, os.Args[0])
 }
 

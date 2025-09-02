@@ -261,26 +261,26 @@ func DecodeListProjectsRequest(mux goahttp.Muxer, decoder func(*http.Request) go
 	return func(r *http.Request) (*projects.ListProjectsPayload, error) {
 		var (
 			organizationID string
-			sessionToken   *string
 			apikeyToken    *string
+			sessionToken   *string
 			err            error
 		)
 		organizationID = r.URL.Query().Get("organization_id")
 		if organizationID == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "query string"))
 		}
+		apikeyTokenRaw := r.Header.Get("Gram-Key")
+		if apikeyTokenRaw != "" {
+			apikeyToken = &apikeyTokenRaw
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
 		}
-		apikeyTokenRaw := r.Header.Get("Authorization")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListProjectsPayload(organizationID, sessionToken, apikeyToken)
+		payload := NewListProjectsPayload(organizationID, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

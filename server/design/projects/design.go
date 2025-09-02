@@ -45,6 +45,7 @@ var _ = Service("projects", func() {
 
 		HTTP(func() {
 			GET("/rpc/projects.list")
+			security.ByKeyHeader()
 			security.SessionHeader()
 
 			Param("organization_id")

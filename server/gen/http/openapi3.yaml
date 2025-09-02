@@ -4153,6 +4153,13 @@ paths:
                     description: The ID of the organization to list projects for
                     type: string
                 - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -4221,7 +4228,7 @@ paths:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
             security:
-                - apikey_header_Authorization: []
+                - apikey_header_Gram-Key: []
                 - session_header_Gram-Session: []
             summary: listProjects projects
             tags:
@@ -9676,11 +9683,6 @@ components:
                 - free
                 - business
     securitySchemes:
-        apikey_header_Authorization:
-            type: apiKey
-            description: key based auth.
-            name: Authorization
-            in: header
         apikey_header_Gram-Key:
             type: apiKey
             description: key based auth.
