@@ -81,12 +81,19 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
 		},
-		Business: &gen.TierLimits{
+		Pro: &gen.TierLimits{
 			BasePrice:                  500,
 			IncludedToolCalls:          1e8,
 			IncludedServers:            50,
 			PricePerAdditionalToolCall: 0.00001,
 			PricePerAdditionalServer:   0.5,
+		},
+		Enterprise: &gen.TierLimits{
+			BasePrice:                  0,
+			IncludedToolCalls:          0,
+			IncludedServers:            0,
+			PricePerAdditionalToolCall: 0,
+			PricePerAdditionalServer:   0,
 		},
 	}, nil
 }

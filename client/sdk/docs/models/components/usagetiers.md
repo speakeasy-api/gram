@@ -6,19 +6,40 @@
 import { UsageTiers } from "@gram/client/models/components";
 
 let value: UsageTiers = {
-  business: {
+  enterprise: {
     basePrice: 754.33,
-    includedServers: 650692,
-    includedToolCalls: 589937,
-    pricePerAdditionalServer: 2826.76,
-    pricePerAdditionalToolCall: 8552.2,
+    descriptionBullets: [
+      "<value 1>",
+      "<value 2>",
+    ],
+    includedServers: 589937,
+    includedToolCalls: 282676,
+    pricePerAdditionalServer: 8552.2,
+    pricePerAdditionalToolCall: 2511.29,
   },
   free: {
-    basePrice: 2511.29,
-    includedServers: 7070,
-    includedToolCalls: 806635,
-    pricePerAdditionalServer: 9094.85,
-    pricePerAdditionalToolCall: 4293.67,
+    basePrice: 70.7,
+    descriptionBullets: [
+      "<value 1>",
+      "<value 2>",
+      "<value 3>",
+    ],
+    includedServers: 909485,
+    includedToolCalls: 429367,
+    pricePerAdditionalServer: 5627.19,
+    pricePerAdditionalToolCall: 3039.32,
+  },
+  pro: {
+    basePrice: 7708.76,
+    descriptionBullets: [
+      "<value 1>",
+      "<value 2>",
+      "<value 3>",
+    ],
+    includedServers: 949779,
+    includedToolCalls: 43495,
+    pricePerAdditionalServer: 4213.91,
+    pricePerAdditionalToolCall: 9758.63,
   },
 };
 ```
@@ -27,5 +48,6 @@ let value: UsageTiers = {
 
 | Field                                                          | Type                                                           | Required                                                       | Description                                                    |
 | -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
-| `business`                                                     | [components.TierLimits](../../models/components/tierlimits.md) | :heavy_check_mark:                                             | N/A                                                            |
+| `enterprise`                                                   | [components.TierLimits](../../models/components/tierlimits.md) | :heavy_check_mark:                                             | N/A                                                            |
 | `free`                                                         | [components.TierLimits](../../models/components/tierlimits.md) | :heavy_check_mark:                                             | N/A                                                            |
+| `pro`                                                          | [components.TierLimits](../../models/components/tierlimits.md) | :heavy_check_mark:                                             | N/A                                                            |
