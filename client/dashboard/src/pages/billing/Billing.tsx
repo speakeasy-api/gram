@@ -7,7 +7,7 @@ import { Type } from "@/components/ui/type";
 import { useIsAdmin, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
-import { useGetCreditUsage, useGetPeriodUsage } from "@gram/client/react-query";
+import { useGetCreditUsage, useGetPeriodUsage, useGetUsageTiers } from "@gram/client/react-query";
 import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
 import { Stack, cn } from "@speakeasy-api/moonshine";
 import { Info } from "lucide-react";
@@ -133,6 +133,16 @@ const BillingPage = () => {
       />
     </Page.Section>
   );
+};
+
+const UsageTiers = () => {
+  const { data: usageTiers } = useGetUsageTiers();
+
+  const UsageCard = ({ tier }: { tier: UsageTier }) => {
+    return <div>{tier.name}</div>;
+  };
+
+  return <div>{usageTiers?.map((tier) => tier.name)}</div>;
 };
 
 const UsageProgress = ({

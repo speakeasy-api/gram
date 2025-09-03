@@ -449,6 +449,9 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 				conv.Ternary(freeTierLimits.Servers == 0, "missing", "set"),
 			)
 		}
+
+		usage.MaxToolCalls = freeTierLimits.ToolCalls
+		usage.MaxServers = freeTierLimits.Servers
 	}
 
 	return &usage, nil
