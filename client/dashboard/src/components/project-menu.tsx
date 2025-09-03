@@ -163,7 +163,7 @@ export function ProjectMenu() {
                 {project?.slug ?? "Select Project"}
               </Type>
               <Type variant="small" muted className="truncate max-w-[120px]">
-                {organization?.slug}
+                {organization?.name}
               </Type>
             </Stack>
           </Stack>
@@ -175,7 +175,7 @@ export function ProjectMenu() {
           {adminOverride}
           <Stack gap={1}>
             <Type variant="small" className="px-2">
-              {organization?.slug}
+              {organization?.name}
             </Type>
             <Type muted variant="small" className="px-2 truncate">
               {session.user.email}
