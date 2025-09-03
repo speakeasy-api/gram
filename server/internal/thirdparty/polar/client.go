@@ -13,13 +13,14 @@ import (
 	polarComponents "github.com/polarsource/polar-go/models/components"
 	polarOperations "github.com/polarsource/polar-go/models/operations"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/openapi/pointer"
 )
 
 type Catalog struct {
@@ -48,6 +49,7 @@ func (c *Catalog) Validate() error {
 
 type Client struct {
 	logger             *slog.Logger
+	tracer             trace.Tracer
 	polar              *polargo.Polar
 	catalog            *Catalog
 	customerStateCache cache.TypedCacheObject[PolarCustomerState]
@@ -56,9 +58,10 @@ type Client struct {
 var _ billing.Tracker = (*Client)(nil)
 var _ billing.Repository = (*Client)(nil)
 
-func NewClient(polarClient *polargo.Polar, logger *slog.Logger, redisClient *redis.Client, catalog *Catalog) *Client {
+func NewClient(polarClient *polargo.Polar, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog) *Client {
 	return &Client{
 		logger:             logger.With(attr.SlogComponent("polar-usage")),
+		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/polar"),
 		polar:              polarClient,
 		catalog:            catalog,
 		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
@@ -66,6 +69,9 @@ func NewClient(polarClient *polargo.Polar, logger *slog.Logger, redisClient *red
 }
 
 func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.track_tool_call_usage")
+	defer span.End()
+
 	totalBytes := event.RequestBytes + event.OutputBytes
 	typeStr := string(event.Type)
 
@@ -137,11 +143,15 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallU
 	})
 
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		p.logger.ErrorContext(ctx, "failed to ingest usage event to Polar", attr.SlogError(err))
 	}
 }
 
 func (p *Client) TrackPromptCallUsage(ctx context.Context, event billing.PromptCallUsageEvent) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.track_prompt_call_usage")
+	defer span.End()
+
 	totalBytes := event.RequestBytes + event.OutputBytes
 
 	metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
@@ -212,11 +222,15 @@ func (p *Client) TrackPromptCallUsage(ctx context.Context, event billing.PromptC
 	})
 
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		p.logger.ErrorContext(ctx, "failed to ingest usage event to Polar", attr.SlogError(err))
 	}
 }
 
 func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformUsageEvent) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.track_platform_usage")
+	defer span.End()
+
 	metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
 		"public_mcp_servers": {
 			Integer: &event.PublicMCPServers,
@@ -246,6 +260,7 @@ func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformU
 	})
 
 	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		p.logger.ErrorContext(ctx, "failed to ingest platform usage event to Polar", attr.SlogError(err))
 	}
 }
@@ -280,7 +295,15 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 }
 
 // This is used during auth, so keep it as lightweight as possible.
-func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (*billing.Tier, error) {
+func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.Tier, err error) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer_tier")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	customerState, err := p.getCustomerState(ctx, orgID)
 	if err != nil {
 		return nil, err
@@ -293,7 +316,7 @@ func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerStat
 	if customerState != nil {
 		for _, sub := range customerState.ActiveSubscriptions {
 			if sub.ProductID == p.catalog.ProductIDPro {
-				return pointer.From(billing.TierPro), nil
+				return conv.Ptr(billing.TierPro), nil
 			}
 		}
 	}
@@ -301,7 +324,7 @@ func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerStat
 	return nil, nil
 }
 
-func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Customer, error) {
+func (p *Client) getCustomer(ctx context.Context, orgID string) (*billing.Customer, error) {
 	customerState, err := p.getCustomerState(ctx, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("get customer state: %w", err)
@@ -318,6 +341,18 @@ func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Custom
 	}
 
 	return customer, nil
+}
+
+func (p *Client) GetCustomer(ctx context.Context, orgID string) (c *billing.Customer, err error) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	return p.getCustomer(ctx, orgID)
 }
 
 // readPeriodUsage reads the period usage from the customer state if available, otherwise reads the usage from the meters directly.
@@ -401,8 +436,16 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 }
 
 // GetPeriodUsage returns the period usage for the given organization ID as well as their tier limits.
-func (p *Client) GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error) {
-	customer, err := p.GetCustomer(ctx, orgID)
+func (p *Client) GetPeriodUsage(ctx context.Context, orgID string) (pu *gen.PeriodUsage, err error) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.get_period_usage")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	customer, err := p.getCustomer(ctx, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("get customer state: %w", err)
 	}
@@ -410,7 +453,15 @@ func (p *Client) GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodU
 	return customer.PeriodUsage, nil
 }
 
-func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL string) (string, error) {
+func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL string) (u string, err error) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.create_checkout")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	res, err := p.polar.Checkouts.Create(ctx, polarComponents.CheckoutCreate{
 		ExternalCustomerID: &orgID,
 		EmbedOrigin:        &serverURL,
@@ -426,7 +477,15 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 	return res.Checkout.URL, nil
 }
 
-func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (string, error) {
+func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (cpu string, err error) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.create_customer_session")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	res, err := p.polar.CustomerSessions.Create(ctx, polarOperations.CustomerSessionsCreateCustomerSessionCreate{
 		CustomerSessionCustomerExternalIDCreate: &polarComponents.CustomerSessionCustomerExternalIDCreate{
 			ExternalCustomerID: orgID,
@@ -440,7 +499,15 @@ func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (strin
 	return res.CustomerSession.CustomerPortalURL, nil
 }
 
-func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
+func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err error) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.get_usage_tiers")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDFree)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load Free tier product: %w", err)

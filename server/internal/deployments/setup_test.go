@@ -80,7 +80,7 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	billingClient := billing.NewStubClient(logger)
+	billingClient := billing.NewStubClient(logger, tracerProvider)
 
 	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
 	require.NoError(t, err)

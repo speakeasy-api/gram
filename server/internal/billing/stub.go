@@ -12,17 +12,20 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/openapi/pointer"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type StubClient struct {
 	mut    sync.Mutex
 	logger *slog.Logger
+	tracer trace.Tracer
 }
 
-func NewStubClient(logger *slog.Logger) *StubClient {
+func NewStubClient(logger *slog.Logger, tracerProvider trace.TracerProvider) *StubClient {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -30,6 +33,7 @@ func NewStubClient(logger *slog.Logger) *StubClient {
 	return &StubClient{
 		mut:    sync.Mutex{},
 		logger: logger.With(attr.SlogComponent("billing-stub")),
+		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/billing"),
 	}
 }
 
@@ -37,19 +41,39 @@ var _ Tracker = (*StubClient)(nil)
 var _ Repository = (*StubClient)(nil)
 
 func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (*Tier, error) {
-	return pointer.From(TierFree), nil
+	_, span := s.tracer.Start(ctx, "stub_client.get_customer")
+	defer span.End()
+
+	return conv.Ptr(TierFree), nil
 }
 
 func (s *StubClient) CreateCheckout(ctx context.Context, orgID string, serverURL string) (string, error) {
+	_, span := s.tracer.Start(ctx, "stub_client.create_checkout")
+	span.SetStatus(codes.Error, "not implemented")
+	defer span.End()
+
 	return "", fmt.Errorf("not implemented")
 }
 
 func (s *StubClient) CreateCustomerSession(ctx context.Context, orgID string) (string, error) {
+	_, span := s.tracer.Start(ctx, "stub_client.create_customer_session")
+	span.SetStatus(codes.Error, "not implemented")
+	defer span.End()
+
 	return "", fmt.Errorf("not implemented")
 }
 
 // GetCustomer implements Repository.
 func (s *StubClient) GetCustomer(ctx context.Context, orgID string) (*Customer, error) {
+	_, span := s.tracer.Start(ctx, "stub_client.get_customer")
+	var err error
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -65,6 +89,15 @@ func (s *StubClient) GetCustomer(ctx context.Context, orgID string) (*Customer, 
 }
 
 func (s *StubClient) GetPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error) {
+	_, span := s.tracer.Start(ctx, "stub_client.get_period_usage")
+	var err error
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -77,6 +110,9 @@ func (s *StubClient) GetPeriodUsage(ctx context.Context, orgID string) (*gen.Per
 }
 
 func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
+	_, span := s.tracer.Start(ctx, "stub_client.get_usage_tiers")
+	defer span.End()
+
 	return &gen.UsageTiers{
 		Free: &gen.TierLimits{
 			BasePrice:                  0,
@@ -96,6 +132,10 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 }
 
 func (s *StubClient) TrackPlatformUsage(ctx context.Context, event PlatformUsageEvent) {
+	var err error
+	ctx, span := s.tracer.Start(ctx, "stub_client.track_platform_usage")
+	defer span.End()
+
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -109,16 +149,24 @@ func (s *StubClient) TrackPlatformUsage(ctx context.Context, event PlatformUsage
 	pu.ActualPublicServerCount = int(event.PublicMCPServers)
 
 	if err := s.writePeriodUsage(ctx, event.OrganizationID, pu); err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		s.logger.ErrorContext(ctx, "failed to write period usage file", attr.SlogError(err))
 		return
 	}
 }
 
 func (s *StubClient) TrackPromptCallUsage(ctx context.Context, event PromptCallUsageEvent) {
+	ctx, span := s.tracer.Start(ctx, "stub_client.track_prompt_call_usage")
+	span.SetStatus(codes.Error, "not implemented")
+	span.End()
 	s.logger.ErrorContext(ctx, "failed to track prompt call usage: not implemented")
 }
 
 func (s *StubClient) TrackToolCallUsage(ctx context.Context, event ToolCallUsageEvent) {
+	var err error
+	ctx, span := s.tracer.Start(ctx, "stub_client.track_tool_call_usage")
+	defer span.End()
+
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
@@ -131,6 +179,7 @@ func (s *StubClient) TrackToolCallUsage(ctx context.Context, event ToolCallUsage
 	pu.ToolCalls += 1
 
 	if err := s.writePeriodUsage(ctx, event.OrganizationID, pu); err != nil {
+		span.SetStatus(codes.Error, err.Error())
 		s.logger.ErrorContext(ctx, "failed to write period usage file", attr.SlogError(err))
 		return
 	}
