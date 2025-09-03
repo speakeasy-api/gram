@@ -272,6 +272,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	ctx := t.Context()
 	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
 
 	conn, err := infra.CloneTestDatabase(t, "authtest")
 	require.NoError(t, err)
@@ -288,7 +289,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host")
 
-	billingClient := billing.NewStubClient(logger)
+	billingClient := billing.NewStubClient(logger, tracerProvider)
 
 	sessionManager := sessions.NewManager(logger, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient)
 
