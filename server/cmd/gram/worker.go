@@ -170,6 +170,13 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:     "polar-product-id-free",
+			Aliases:  []string{"polar.product_id_basic"},
+			Usage:    "The product ID of the free tier in Polar",
+			EnvVars:  []string{"POLAR_PRODUCT_ID_FREE"},
+			Required: false,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:     "polar-product-id-pro",
 			Aliases:  []string{"polar.product_id_pro"},
 			Usage:    "The product ID of the pro tier in Polar",
@@ -329,7 +336,7 @@ func newWorkerCommand() *cli.Command {
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, redisClient, c)
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}

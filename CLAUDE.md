@@ -193,7 +193,7 @@ create table if not exists example (
 );
 ```
 
-Deleting rows with `DELETE FROM table` is not strongly discouraged. Instead,
+Deleting rows with `DELETE FROM table` is strongly discouraged. Instead,
 use:
 
 ```sql

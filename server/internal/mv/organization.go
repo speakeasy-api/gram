@@ -28,15 +28,15 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 	}
 
 	// This is used during auth, so try to avoid failing
-	customerState, err := billingRepo.GetCustomer(ctx, orgID)
+	customerTier, err := billingRepo.GetCustomerTier(ctx, orgID)
 	if err != nil {
 		logger.ErrorContext(ctx, "error getting customer state", attr.SlogError(err)) // TODO: set up an alert for this
 		return &org, nil
 	}
 
 	// Otherwise, the source of truth for account type is the Polar customer state
-	if customerState != nil && customerState.Tier != "" {
-		org.GramAccountType = string(customerState.Tier)
+	if customerTier != nil {
+		org.GramAccountType = string(*customerTier)
 	}
 
 	return &org, nil

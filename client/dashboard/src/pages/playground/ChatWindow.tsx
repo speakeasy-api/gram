@@ -64,11 +64,13 @@ export function ChatWindow({
   dynamicToolset = false,
   additionalActions,
   initialMessages,
+  initialPrompt,
 }: {
   configRef: ChatConfig;
   dynamicToolset?: boolean;
   additionalActions?: React.ReactNode;
   initialMessages?: Message[];
+  initialPrompt?: string | null;
 }) {
   const [model, setModel] = useState(defaultModel.value);
   const chatKey = `chat-${model}`;
@@ -83,6 +85,7 @@ export function ChatWindow({
       dynamicToolset={dynamicToolset}
       initialMessages={initialMessages}
       additionalActions={additionalActions}
+      _initialPrompt={initialPrompt}
     />
   );
 }
@@ -96,6 +99,7 @@ function ChatInner({
   dynamicToolset,
   initialMessages,
   additionalActions,
+  _initialPrompt,
 }: {
   model: string;
   setModel: (model: string) => void;
@@ -103,11 +107,29 @@ function ChatInner({
   dynamicToolset: boolean;
   initialMessages?: Message[];
   additionalActions?: React.ReactNode;
+  _initialPrompt?: string | null;
 }) {
   const session = useSession();
   const project = useProject();
   const telemetry = useTelemetry();
   const client = useSdkClient();
+
+  // TODO: Replace with proper AIChatContainer initialInput prop when available
+  useEffect(() => {
+    if (!_initialPrompt?.trim()) return;
+    
+    const timer = setTimeout(() => {
+      const textareas = document.querySelectorAll('textarea[placeholder*="message"], textarea[placeholder*="Message"]');
+      textareas.forEach(textarea => {
+        if (textarea instanceof HTMLTextAreaElement && !textarea.value) {
+          textarea.value = _initialPrompt;
+          textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      });
+    }, 500); // Wait for component to mount
+    
+    return () => clearTimeout(timer);
+  }, [_initialPrompt]);
 
   const chat = useChatContext();
   const { setMessages } = chat;
@@ -437,8 +459,9 @@ function ChatInner({
         content: msg,
       });
     },
-    [append]
+    [append, chatMessages, telemetry, model]
   );
+
 
   // This needs to be set so that the chat provider can append messages
   useEffect(() => {

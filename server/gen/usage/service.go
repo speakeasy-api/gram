@@ -84,27 +84,27 @@ type PeriodUsage struct {
 }
 
 type TierLimits struct {
-    // The base price for the tier
-    BasePrice float64
-    // The number of tool calls included in the tier
-    IncludedToolCalls int
-    // The number of servers included in the tier
-    IncludedServers int
-    // The number of credits included in the tier for playground and other
-    // dashboard activities
-    IncludedCredits int
-    // The price per additional tool call
-    PricePerAdditionalToolCall float64
-    // The price per additional server
-    PricePerAdditionalServer float64
-    // The price per additional credit
-    PricePerAdditionalCredit float64
-    // Key feature bullets of the tier
-    FeatureBullets []string
-    // Included items bullets of the tier
-    IncludedBullets []string
-    // Add-on items bullets of the tier (optional)
-    AddOnBullets []string
+	// The base price for the tier
+	BasePrice float64
+	// The number of tool calls included in the tier
+	IncludedToolCalls int
+	// The number of servers included in the tier
+	IncludedServers int
+	// The number of credits included in the tier for playground and other
+	// dashboard activities
+	IncludedCredits int
+	// The price per additional tool call
+	PricePerAdditionalToolCall float64
+	// The price per additional server
+	PricePerAdditionalServer float64
+	// The price per additional credit
+	PricePerAdditionalCredit float64
+	// Key feature bullets of the tier
+	FeatureBullets []string
+	// Included items bullets of the tier
+	IncludedBullets []string
+	// Add-on items bullets of the tier (optional)
+	AddOnBullets []string
 }
 
 // UsageTiers is the result type of the usage service getUsageTiers method.

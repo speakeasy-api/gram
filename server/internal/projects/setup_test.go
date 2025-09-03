@@ -1,4 +1,4 @@
-package deployments_test
+package projects_test
 
 import (
 	"context"
@@ -8,16 +8,13 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/client"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/deployments"
-	"github.com/speakeasy-api/gram/server/internal/feature"
-	packages "github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/projects"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -45,37 +42,22 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	service        *deployments.Service
-	feature        *feature.InMemory
-	assets         *assets.Service
-	packages       *packages.Service
+	service        *projects.Service
 	conn           *pgxpool.Pool
-	temporal       client.Client
 	sessionManager *sessions.Manager
+	assetStorage   assets.BlobStore
 }
 
-func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (context.Context, *testInstance) {
+func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
-	ctx := t.Context()
+	ctx := context.Background()
 
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
-	meterProvider := testenv.NewMeterProvider(t)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
-
-	f := &feature.InMemory{}
-
-	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage))
-	t.Cleanup(func() {
-		worker.Stop()
-		temporal.Close()
-		require.NoError(t, devserver.Stop(), "shutdown temporal")
-	})
-	require.NoError(t, worker.Start(), "start temporal worker")
 
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
@@ -87,17 +69,15 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage)
-	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
-	packagesSvc := packages.NewService(logger, conn, sessionManager)
+	// Create test asset storage for testing
+	assetStorage := assetstest.NewTestBlobStore(t)
+
+	svc := projects.NewService(logger, conn, sessionManager)
 
 	return ctx, &testInstance{
 		service:        svc,
-		feature:        f,
-		assets:         assetsSvc,
-		packages:       packagesSvc,
 		conn:           conn,
-		temporal:       temporal,
 		sessionManager: sessionManager,
+		assetStorage:   assetStorage,
 	}
 }

@@ -239,8 +239,6 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
       ? cur.filter((t) => t !== template)
       : [...cur, template];
 
-    console.log(updated);
-
     updateToolsetMutation.mutate({
       request: {
         slug: toolsetSlug,

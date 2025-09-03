@@ -880,9 +880,7 @@ const parsePrompt = (
       };
     }
   } catch (error) {
-    console.error(error);
-    // If JSON parsing fails, fall back to legacy parsing
-    console.log("Failed to parse as JSON, falling back to legacy parsing");
+    console.error("Failed to parse template as JSON, falling back to legacy parsing:", error);
   }
 
   // Legacy parsing logic (kept for backward compatibility)

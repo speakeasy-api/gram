@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -121,6 +122,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 			Name:           prj.Name,
 			Slug:           types.Slug(prj.Slug),
 			OrganizationID: prj.OrganizationID,
+			LogoAssetID:    nil,
 			CreatedAt:      prj.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:      prj.UpdatedAt.Time.Format(time.RFC3339),
 		},
@@ -166,5 +168,39 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 
 	return &gen.ListProjectsResult{
 		Projects: entries,
+	}, nil
+}
+
+func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoPayload) (res *gen.SetProjectLogoResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	assetID, err := uuid.Parse(payload.AssetID)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "error parsing asset ID").Log(ctx, s.logger)
+	}
+
+	updatedProject, err := s.repo.UploadProjectLogo(ctx, repo.UploadProjectLogoParams{
+		ProjectID:   *authCtx.ProjectID,
+		LogoAssetID: uuid.NullUUID{UUID: assetID, Valid: true},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error updating project logo").Log(ctx, s.logger)
+	}
+
+	projectResponse := &gen.Project{
+		ID:             updatedProject.ID.String(),
+		Name:           updatedProject.Name,
+		Slug:           types.Slug(updatedProject.Slug),
+		OrganizationID: updatedProject.OrganizationID,
+		LogoAssetID:    conv.FromNullableUUID(updatedProject.LogoAssetID),
+		CreatedAt:      updatedProject.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:      updatedProject.UpdatedAt.Time.Format(time.RFC3339),
+	}
+
+	return &gen.SetProjectLogoResult{
+		Project: projectResponse,
 	}, nil
 }

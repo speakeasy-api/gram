@@ -24,7 +24,7 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 	{
 		err = json.Unmarshal([]byte(projectsCreateProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"jzc\",\n      \"organization_id\": \"Doloribus iste maxime molestiae.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"ck7\",\n      \"organization_id\": \"Nulla non qui.\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
@@ -78,6 +78,45 @@ func BuildListProjectsPayload(projectsListProjectsOrganizationID string, project
 	v.OrganizationID = organizationID
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetLogoPayload builds the payload for the projects setLogo endpoint
+// from CLI flags.
+func BuildSetLogoPayload(projectsSetLogoBody string, projectsSetLogoApikeyToken string, projectsSetLogoSessionToken string, projectsSetLogoProjectSlugInput string) (*projects.SetLogoPayload, error) {
+	var err error
+	var body SetLogoRequestBody
+	{
+		err = json.Unmarshal([]byte(projectsSetLogoBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Fugiat possimus.\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if projectsSetLogoApikeyToken != "" {
+			apikeyToken = &projectsSetLogoApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if projectsSetLogoSessionToken != "" {
+			sessionToken = &projectsSetLogoSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if projectsSetLogoProjectSlugInput != "" {
+			projectSlugInput = &projectsSetLogoProjectSlugInput
+		}
+	}
+	v := &projects.SetLogoPayload{
+		AssetID: body.AssetID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }
