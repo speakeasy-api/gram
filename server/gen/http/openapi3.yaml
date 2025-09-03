@@ -427,6 +427,117 @@ paths:
             x-speakeasy-name-override: serveOpenAPIv3
             x-speakeasy-react-hook:
                 name: serveOpenAPIv3
+    /rpc/assets.uploadFunctions:
+        post:
+            description: Upload functions to Gram.
+            operationId: uploadFunctions
+            parameters:
+                - allowEmptyValue: true
+                  in: header
+                  name: Content-Type
+                  required: true
+                  schema:
+                    type: string
+                - allowEmptyValue: true
+                  in: header
+                  name: Content-Length
+                  required: true
+                  schema:
+                    format: int64
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UploadFunctionsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: uploadFunctions assets
+            tags:
+                - assets
+            x-speakeasy-name-override: uploadFunctions
+            x-speakeasy-react-hook:
+                name: UploadFunctions
     /rpc/assets.uploadImage:
         post:
             description: Upload an image to Gram.
@@ -6990,6 +7101,7 @@ components:
                     enum:
                         - openapiv3
                         - image
+                        - functions
                         - unknown
                 sha256:
                     type: string
@@ -9553,6 +9665,30 @@ components:
                     items:
                         type: string
                     description: List of prompt template names to include
+        UploadFunctionsForm:
+            type: object
+            properties:
+                apikey_token:
+                    type: string
+                content_length:
+                    type: integer
+                    format: int64
+                content_type:
+                    type: string
+                project_slug_input:
+                    type: string
+                session_token:
+                    type: string
+            required:
+                - content_type
+                - content_length
+        UploadFunctionsResult:
+            type: object
+            properties:
+                asset:
+                    $ref: '#/components/schemas/Asset'
+            required:
+                - asset
         UploadImageForm:
             type: object
             properties:

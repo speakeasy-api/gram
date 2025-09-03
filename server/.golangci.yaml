@@ -49,6 +49,9 @@ linters:
       - path: internal/o11y/setup\.go
         linters:
           - wrapcheck
+      - path: internal/billing/stub\.go
+        linters:
+          - musttag
   settings:
     sloglint:
       no-mixed-args: true

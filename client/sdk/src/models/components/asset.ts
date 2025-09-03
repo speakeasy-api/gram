@@ -12,6 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export const Kind = {
   Openapiv3: "openapiv3",
   Image: "image",
+  Functions: "functions",
   Unknown: "unknown",
 } as const;
 export type Kind = ClosedEnum<typeof Kind>;

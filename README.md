@@ -35,7 +35,7 @@ With Gram you can:
 
 ## Features
 
-└ Minimal, lightweight, and open source.
+└ Minimal, lightweight, and open source.  
 └ Multiple APIs: Mix and match any number of APIs into toolsets.  
 └ Custom tool builder: Create higher-order tools by chaining existing endpoints.  
 └ OAuth support out-of-the-box: DCR, BYO Authorisation, and standard flows.  

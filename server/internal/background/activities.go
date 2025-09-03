@@ -10,12 +10,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
-	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 )
@@ -44,7 +44,8 @@ func NewActivities(
 	openrouter openrouter.Provisioner,
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
-	usageClient usage_types.UsageClient,
+	billingTracker billing.Tracker,
+	billingRepo billing.Repository,
 	posthogClient *posthog.Posthog,
 ) *Activities {
 	return &Activities{
@@ -56,8 +57,8 @@ func NewActivities(
 		refreshOpenRouterKey:        activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 		verifyCustomDomain:          activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		customDomainIngress:         activities.NewCustomDomainIngress(logger, db, k8sClient),
-		collectPlatformUsageMetrics: activities.NewCollectPlatformUsageMetrics(logger, db, usageClient),
-		reportFreeTierOverage:       activities.NewReportFreeTierOverage(logger, db, usageClient, posthogClient),
+		collectPlatformUsageMetrics: activities.NewCollectPlatformUsageMetrics(logger, db, billingTracker),
+		reportFreeTierOverage:       activities.NewReportFreeTierOverage(logger, db, billingRepo, posthogClient),
 	}
 }
 

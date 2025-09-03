@@ -25,6 +25,8 @@ type Service interface {
 	ServeImage(context.Context, *ServeImageForm) (res *ServeImageResult, body io.ReadCloser, err error)
 	// Upload an image to Gram.
 	UploadImage(context.Context, *UploadImageForm, io.ReadCloser) (res *UploadImageResult, err error)
+	// Upload functions to Gram.
+	UploadFunctions(context.Context, *UploadFunctionsForm, io.ReadCloser) (res *UploadFunctionsResult, err error)
 	// Upload an OpenAPI v3 document to Gram.
 	UploadOpenAPIv3(context.Context, *UploadOpenAPIv3Form, io.ReadCloser) (res *UploadOpenAPIv3Result, err error)
 	// Serve an OpenAPIv3 asset from Gram.
@@ -57,7 +59,7 @@ const ServiceName = "assets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [5]string{"serveImage", "uploadImage", "uploadOpenAPIv3", "serveOpenAPIv3", "listAssets"}
+var MethodNames = [6]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "serveOpenAPIv3", "listAssets"}
 
 type Asset struct {
 	// The ID of the asset
@@ -121,6 +123,23 @@ type ServeOpenAPIv3Result struct {
 	ContentType   string
 	ContentLength int64
 	LastModified  string
+}
+
+// UploadFunctionsForm is the payload type of the assets service
+// uploadFunctions method.
+type UploadFunctionsForm struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	ContentType      string
+	ContentLength    int64
+}
+
+// UploadFunctionsResult is the result type of the assets service
+// uploadFunctions method.
+type UploadFunctionsResult struct {
+	// The asset entry that was created in Gram
+	Asset *Asset
 }
 
 // UploadImageForm is the payload type of the assets service uploadImage method.

@@ -20,6 +20,7 @@ Handles the authentication callback.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="authCallback" method="get" path="/rpc/auth.callback" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -90,6 +91,7 @@ Provides information about the current authentication status.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="sessionInfo" method="get" path="/rpc/auth.info" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -185,6 +187,7 @@ Proxies to auth login through speakeasy oidc.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="authLogin" method="get" path="/rpc/auth.login" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -250,6 +253,7 @@ Logs out the current user by clearing their session.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="logout" method="post" path="/rpc/auth.logout" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -334,6 +338,7 @@ Register a new org for a user with their session information.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="register" method="post" path="/rpc/auth.register" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -426,6 +431,7 @@ Switches the authentication scope to a different organization.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="switchAuthScopes" method="post" path="/rpc/auth.switchScopes" -->
 ```typescript
 import { Gram } from "@gram/client";
 

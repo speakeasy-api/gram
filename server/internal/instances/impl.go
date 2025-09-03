@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -34,7 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/usage/types"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
@@ -52,7 +52,7 @@ type Service struct {
 	env              *environments.EnvironmentEntries
 	toolProxy        *gateway.ToolProxy
 	posthog          *posthog.Posthog
-	usageClient      usage_types.UsageClient
+	billing          billing.Tracker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -67,7 +67,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	posthog *posthog.Posthog,
-	usageClient usage_types.UsageClient,
+	billing billing.Tracker,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
@@ -82,7 +82,7 @@ func NewService(
 		environmentsRepo: envRepo,
 		env:              env,
 		posthog:          posthog,
-		usageClient:      usageClient,
+		billing:          billing,
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			traceProvider,
@@ -324,7 +324,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
 
-	go s.usageClient.TrackToolCallUsage(context.Background(), usage_types.ToolCallUsageEvent{
+	go s.billing.TrackToolCallUsage(context.Background(), billing.ToolCallUsageEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		RequestBytes:     requestNumBytes,
 		OutputBytes:      outputNumBytes,
@@ -332,7 +332,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		ToolName:         executionInfo.Tool.Name,
 		ProjectID:        authCtx.ProjectID.String(),
 		ProjectSlug:      authCtx.ProjectSlug,
-		Type:             usage_types.ToolCallType_HTTP,
+		Type:             billing.ToolCallTypeHTTP,
 		OrganizationSlug: &executionInfo.OrganizationSlug,
 		ToolsetSlug:      &toolsetSlug,
 		ChatID:           &chatID,

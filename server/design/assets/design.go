@@ -65,6 +65,28 @@ var _ = Service("assets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadImage"}`)
 	})
 
+	Method("uploadFunctions", func() {
+		Description("Upload functions to Gram.")
+
+		Payload(UploadFunctionsForm)
+
+		Result(UploadFunctionsResult)
+
+		HTTP(func() {
+			POST("/rpc/assets.uploadFunctions")
+			Header("content_type:Content-Type")
+			Header("content_length:Content-Length")
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			security.SessionHeader()
+			SkipRequestBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "uploadFunctions")
+		Meta("openapi:extension:x-speakeasy-name-override", "uploadFunctions")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "UploadFunctions"}`)
+	})
+
 	Method("uploadOpenAPIv3", func() {
 		Description("Upload an OpenAPI v3 document to Gram.")
 
@@ -196,6 +218,22 @@ var UploadImageResult = Type("UploadImageResult", func() {
 	Attribute("asset", Asset, "The asset entry that was created in Gram")
 })
 
+var UploadFunctionsForm = Type("UploadFunctionsForm", func() {
+	Required("content_type", "content_length")
+	security.ByKeyPayload()
+	security.SessionPayload()
+	security.ProjectPayload()
+
+	Attribute("content_type", String)
+	Attribute("content_length", Int64)
+})
+
+var UploadFunctionsResult = Type("UploadFunctionsResult", func() {
+	Required("asset")
+
+	Attribute("asset", Asset, "The asset entry that was created in Gram")
+})
+
 var ServeOpenAPIv3Form = Type("ServeOpenAPIv3Form", func() {
 	Required("id", "project_id")
 
@@ -219,7 +257,7 @@ var Asset = Type("Asset", func() {
 
 	Attribute("id", String, "The ID of the asset")
 	Attribute("kind", String, func() {
-		Enum("openapiv3", "image", "unknown")
+		Enum("openapiv3", "image", "functions", "unknown")
 	})
 	Attribute("sha256", String, "The SHA256 hash of the asset")
 	Attribute("content_type", String, "The content type of the asset")

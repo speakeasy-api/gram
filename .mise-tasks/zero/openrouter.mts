@@ -29,7 +29,7 @@ async function run() {
   }
 
   console.log(
-    "💬 If you don't already have a key, you will need to ask the Gram team for OpenRouter access and create one here:"
+    "💬 If you don't already have an OpenRouter key, you will need to create one here:"
   );
   console.log("\thttps://openrouter.ai/settings/keys");
   const answer = await question(

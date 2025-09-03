@@ -10,6 +10,7 @@ Manages assets used by Gram projects.
 * [listAssets](#listassets) - listAssets assets
 * [serveImage](#serveimage) - serveImage assets
 * [serveOpenAPIv3](#serveopenapiv3) - serveOpenAPIv3 assets
+* [uploadFunctions](#uploadfunctions) - uploadFunctions assets
 * [uploadImage](#uploadimage) - uploadImage assets
 * [uploadOpenAPIv3](#uploadopenapiv3) - uploadOpenAPIv3 assets
 
@@ -19,6 +20,7 @@ List all assets for a project.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="listAssets" method="get" path="/rpc/assets.list" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -114,6 +116,7 @@ Serve an image from Gram.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="serveImage" method="get" path="/rpc/assets.serveImage" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -213,6 +216,7 @@ Serve an OpenAPIv3 asset from Gram.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="serveOpenAPIv3" method="get" path="/rpc/assets.serveOpenAPIv3" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -308,12 +312,102 @@ import {
 | errors.ServiceError               | 500, 502                          | application/json                  |
 | errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
 
+## uploadFunctions
+
+Upload functions to Gram.
+
+### Example Usage
+
+<!-- UsageSnippet language="typescript" operationID="uploadFunctions" method="post" path="/rpc/assets.uploadFunctions" -->
+```typescript
+import { Gram } from "@gram/client";
+
+const gram = new Gram();
+
+async function run() {
+  const result = await gram.assets.uploadFunctions({
+    contentLength: 858625,
+  });
+
+  console.log(result);
+}
+
+run();
+```
+
+### Standalone function
+
+The standalone function version of this method:
+
+```typescript
+import { GramCore } from "@gram/client/core.js";
+import { assetsUploadFunctions } from "@gram/client/funcs/assetsUploadFunctions.js";
+
+// Use `GramCore` for best tree-shaking performance.
+// You can create one instance of it to use across an application.
+const gram = new GramCore();
+
+async function run() {
+  const res = await assetsUploadFunctions(gram, {
+    contentLength: 858625,
+  });
+  if (res.ok) {
+    const { value: result } = res;
+    console.log(result);
+  } else {
+    console.log("assetsUploadFunctions failed:", res.error);
+  }
+}
+
+run();
+```
+
+### React hooks and utilities
+
+This method can be used in React components through the following hooks and
+associated utilities.
+
+> Check out [this guide][hook-guide] for information about each of the utilities
+> below and how to get started using React hooks.
+
+[hook-guide]: ../../../REACT_QUERY.md
+
+```tsx
+import {
+  // Mutation hook for triggering the API call.
+  useUploadFunctionsMutation
+} from "@gram/client/react-query/assetsUploadFunctions.js";
+```
+
+### Parameters
+
+| Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `request`                                                                                                                                                                      | [operations.UploadFunctionsRequest](../../models/operations/uploadfunctionsrequest.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.UploadFunctionsSecurity](../../models/operations/uploadfunctionssecurity.md)                                                                                       | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
+| `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
+| `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
+
+### Response
+
+**Promise\<[components.UploadFunctionsResult](../../models/components/uploadfunctionsresult.md)\>**
+
+### Errors
+
+| Error Type                        | Status Code                       | Content Type                      |
+| --------------------------------- | --------------------------------- | --------------------------------- |
+| errors.ServiceError               | 400, 401, 403, 404, 409, 415, 422 | application/json                  |
+| errors.ServiceError               | 500, 502                          | application/json                  |
+| errors.APIError                   | 4XX, 5XX                          | \*/\*                             |
+
 ## uploadImage
 
 Upload an image to Gram.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="uploadImage" method="post" path="/rpc/assets.uploadImage" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -402,6 +496,7 @@ Upload an OpenAPI v3 document to Gram.
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="uploadOpenAPIv3Asset" method="post" path="/rpc/assets.uploadOpenAPIv3" -->
 ```typescript
 import { Gram } from "@gram/client";
 
