@@ -774,23 +774,27 @@ type CreateCheckoutGatewayErrorResponseBody struct {
 
 // TierLimitsResponseBody is used to define fields on response body types.
 type TierLimitsResponseBody struct {
-	// The base price for the tier
-	BasePrice float64 `form:"base_price" json:"base_price" xml:"base_price"`
-	// The number of tool calls included in the tier
-	IncludedToolCalls int `form:"included_tool_calls" json:"included_tool_calls" xml:"included_tool_calls"`
-	// The number of servers included in the tier
-	IncludedServers int `form:"included_servers" json:"included_servers" xml:"included_servers"`
-	// The number of credits included in the tier for playground and other
-	// dashboard activities
-	IncludedCredits int `form:"included_credits" json:"included_credits" xml:"included_credits"`
-	// The price per additional tool call
-	PricePerAdditionalToolCall float64 `form:"price_per_additional_tool_call" json:"price_per_additional_tool_call" xml:"price_per_additional_tool_call"`
-	// The price per additional server
-	PricePerAdditionalServer float64 `form:"price_per_additional_server" json:"price_per_additional_server" xml:"price_per_additional_server"`
-	// The price per additional credit
-	PricePerAdditionalCredit float64 `form:"price_per_additional_credit" json:"price_per_additional_credit" xml:"price_per_additional_credit"`
-	// The description bullets of the tier
-	DescriptionBullets []string `form:"description_bullets" json:"description_bullets" xml:"description_bullets"`
+    // The base price for the tier
+    BasePrice float64 `form:"base_price" json:"base_price" xml:"base_price"`
+    // The number of tool calls included in the tier
+    IncludedToolCalls int `form:"included_tool_calls" json:"included_tool_calls" xml:"included_tool_calls"`
+    // The number of servers included in the tier
+    IncludedServers int `form:"included_servers" json:"included_servers" xml:"included_servers"`
+    // The number of credits included in the tier for playground and other
+    // dashboard activities
+    IncludedCredits int `form:"included_credits" json:"included_credits" xml:"included_credits"`
+    // The price per additional tool call
+    PricePerAdditionalToolCall float64 `form:"price_per_additional_tool_call" json:"price_per_additional_tool_call" xml:"price_per_additional_tool_call"`
+    // The price per additional server
+    PricePerAdditionalServer float64 `form:"price_per_additional_server" json:"price_per_additional_server" xml:"price_per_additional_server"`
+    // The price per additional credit
+    PricePerAdditionalCredit float64 `form:"price_per_additional_credit" json:"price_per_additional_credit" xml:"price_per_additional_credit"`
+    // Key feature bullets of the tier
+    FeatureBullets []string `form:"feature_bullets" json:"feature_bullets" xml:"feature_bullets"`
+    // Included items bullets of the tier
+    IncludedBullets []string `form:"included_bullets" json:"included_bullets" xml:"included_bullets"`
+    // Add-on items bullets of the tier (optional)
+    AddOnBullets *[]string `form:"add_on_bullets" json:"add_on_bullets" xml:"add_on_bullets"`
 }
 
 // NewGetPeriodUsageResponseBody builds the HTTP response body from the result

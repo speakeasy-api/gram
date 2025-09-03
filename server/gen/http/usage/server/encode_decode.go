@@ -801,23 +801,43 @@ func EncodeCreateCheckoutError(encoder func(context.Context, http.ResponseWriter
 // marshalUsageTierLimitsToTierLimitsResponseBody builds a value of type
 // *TierLimitsResponseBody from a value of type *usage.TierLimits.
 func marshalUsageTierLimitsToTierLimitsResponseBody(v *usage.TierLimits) *TierLimitsResponseBody {
-	res := &TierLimitsResponseBody{
-		BasePrice:                  v.BasePrice,
-		IncludedToolCalls:          v.IncludedToolCalls,
-		IncludedServers:            v.IncludedServers,
-		IncludedCredits:            v.IncludedCredits,
-		PricePerAdditionalToolCall: v.PricePerAdditionalToolCall,
-		PricePerAdditionalServer:   v.PricePerAdditionalServer,
-		PricePerAdditionalCredit:   v.PricePerAdditionalCredit,
-	}
-	if v.DescriptionBullets != nil {
-		res.DescriptionBullets = make([]string, len(v.DescriptionBullets))
-		for i, val := range v.DescriptionBullets {
-			res.DescriptionBullets[i] = val
-		}
-	} else {
-		res.DescriptionBullets = []string{}
-	}
+    res := &TierLimitsResponseBody{
+        BasePrice:                  v.BasePrice,
+        IncludedToolCalls:          v.IncludedToolCalls,
+        IncludedServers:            v.IncludedServers,
+        IncludedCredits:            v.IncludedCredits,
+        PricePerAdditionalToolCall: v.PricePerAdditionalToolCall,
+        PricePerAdditionalServer:   v.PricePerAdditionalServer,
+        PricePerAdditionalCredit:   v.PricePerAdditionalCredit,
+    }
+    if v.FeatureBullets != nil {
+        res.FeatureBullets = make([]string, len(v.FeatureBullets))
+        for i, val := range v.FeatureBullets {
+            res.FeatureBullets[i] = val
+        }
+    } else {
+        res.FeatureBullets = []string{}
+    }
 
-	return res
+    if v.IncludedBullets != nil {
+        res.IncludedBullets = make([]string, len(v.IncludedBullets))
+        for i, val := range v.IncludedBullets {
+            res.IncludedBullets[i] = val
+        }
+    } else {
+        res.IncludedBullets = []string{}
+    }
+
+    // For add-on bullets: optional, return null if empty
+    if v.AddOnBullets != nil && len(v.AddOnBullets) > 0 {
+        tmp := make([]string, len(v.AddOnBullets))
+        for i, val := range v.AddOnBullets {
+            tmp[i] = val
+        }
+        res.AddOnBullets = &tmp
+    } else {
+        res.AddOnBullets = nil
+    }
+
+    return res
 }

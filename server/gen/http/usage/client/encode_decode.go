@@ -928,19 +928,31 @@ func DecodeCreateCheckoutResponse(decoder func(*http.Response) goahttp.Decoder, 
 // unmarshalTierLimitsResponseBodyToUsageTierLimits builds a value of type
 // *usage.TierLimits from a value of type *TierLimitsResponseBody.
 func unmarshalTierLimitsResponseBodyToUsageTierLimits(v *TierLimitsResponseBody) *usage.TierLimits {
-	res := &usage.TierLimits{
-		BasePrice:                  *v.BasePrice,
-		IncludedToolCalls:          *v.IncludedToolCalls,
-		IncludedServers:            *v.IncludedServers,
-		IncludedCredits:            *v.IncludedCredits,
-		PricePerAdditionalToolCall: *v.PricePerAdditionalToolCall,
-		PricePerAdditionalServer:   *v.PricePerAdditionalServer,
-		PricePerAdditionalCredit:   *v.PricePerAdditionalCredit,
-	}
-	res.DescriptionBullets = make([]string, len(v.DescriptionBullets))
-	for i, val := range v.DescriptionBullets {
-		res.DescriptionBullets[i] = val
-	}
+    res := &usage.TierLimits{
+        BasePrice:                  *v.BasePrice,
+        IncludedToolCalls:          *v.IncludedToolCalls,
+        IncludedServers:            *v.IncludedServers,
+        IncludedCredits:            *v.IncludedCredits,
+        PricePerAdditionalToolCall: *v.PricePerAdditionalToolCall,
+        PricePerAdditionalServer:   *v.PricePerAdditionalServer,
+        PricePerAdditionalCredit:   *v.PricePerAdditionalCredit,
+    }
+    res.FeatureBullets = make([]string, len(v.FeatureBullets))
+    for i, val := range v.FeatureBullets {
+        res.FeatureBullets[i] = val
+    }
 
-	return res
+    res.IncludedBullets = make([]string, len(v.IncludedBullets))
+    for i, val := range v.IncludedBullets {
+        res.IncludedBullets[i] = val
+    }
+
+    if v.AddOnBullets != nil {
+        res.AddOnBullets = make([]string, len(*v.AddOnBullets))
+        for i, val := range *v.AddOnBullets {
+            res.AddOnBullets[i] = val
+        }
+    }
+
+    return res
 }
