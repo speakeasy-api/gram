@@ -22,7 +22,7 @@ type Service interface {
 	// List all projects for an organization.
 	ListProjects(context.Context, *ListProjectsPayload) (res *ListProjectsResult, err error)
 	// Uploads a logo for a project.
-	SetLogo(context.Context, *SetLogoForm) (res *SetLogoResult, err error)
+	SetLogo(context.Context, *SetLogoPayload) (res *SetProjectLogoResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -107,8 +107,8 @@ type ProjectEntry struct {
 	Slug types.Slug
 }
 
-// SetLogoForm is the payload type of the projects service setLogo method.
-type SetLogoForm struct {
+// SetLogoPayload is the payload type of the projects service setLogo method.
+type SetLogoPayload struct {
 	ApikeyToken      *string
 	ProjectSlugInput *string
 	SessionToken     *string
@@ -116,8 +116,9 @@ type SetLogoForm struct {
 	AssetID string
 }
 
-// SetLogoResult is the result type of the projects service setLogo method.
-type SetLogoResult struct {
+// SetProjectLogoResult is the result type of the projects service setLogo
+// method.
+type SetProjectLogoResult struct {
 	// The updated project with the new logo
 	Project *Project
 }

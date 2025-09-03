@@ -84,7 +84,7 @@ func BuildListProjectsPayload(projectsListProjectsOrganizationID string, project
 
 // BuildSetLogoPayload builds the payload for the projects setLogo endpoint
 // from CLI flags.
-func BuildSetLogoPayload(projectsSetLogoBody string, projectsSetLogoApikeyToken string, projectsSetLogoSessionToken string, projectsSetLogoProjectSlugInput string) (*projects.SetLogoForm, error) {
+func BuildSetLogoPayload(projectsSetLogoBody string, projectsSetLogoApikeyToken string, projectsSetLogoSessionToken string, projectsSetLogoProjectSlugInput string) (*projects.SetLogoPayload, error) {
 	var err error
 	var body SetLogoRequestBody
 	{
@@ -111,7 +111,7 @@ func BuildSetLogoPayload(projectsSetLogoBody string, projectsSetLogoApikeyToken 
 			projectSlugInput = &projectsSetLogoProjectSlugInput
 		}
 	}
-	v := &projects.SetLogoForm{
+	v := &projects.SetLogoPayload{
 		AssetID: body.AssetID,
 	}
 	v.ApikeyToken = apikeyToken

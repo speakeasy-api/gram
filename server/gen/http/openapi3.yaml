@@ -4266,14 +4266,14 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SetLogoForm2'
+                            $ref: '#/components/schemas/SetProjectLogoForm'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/SetLogoResult'
+                                $ref: '#/components/schemas/SetProjectLogoResult'
                     description: OK response.
                 "400":
                     content:
@@ -9209,21 +9209,7 @@ components:
             required:
                 - description
                 - env_variables
-        SetLogoForm:
-            type: object
-            properties:
-                apikey_token:
-                    type: string
-                asset_id:
-                    type: string
-                    description: The ID of the asset
-                project_slug_input:
-                    type: string
-                session_token:
-                    type: string
-            required:
-                - asset_id
-        SetLogoForm2:
+        SetProjectLogoForm:
             type: object
             properties:
                 asset_id:
@@ -9231,7 +9217,7 @@ components:
                     description: The ID of the asset
             required:
                 - asset_id
-        SetLogoResult:
+        SetProjectLogoResult:
             type: object
             properties:
                 project:

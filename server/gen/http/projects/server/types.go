@@ -650,7 +650,7 @@ func NewListProjectsResponseBody(res *projects.ListProjectsResult) *ListProjects
 
 // NewSetLogoResponseBody builds the HTTP response body from the result of the
 // "setLogo" endpoint of the "projects" service.
-func NewSetLogoResponseBody(res *projects.SetLogoResult) *SetLogoResponseBody {
+func NewSetLogoResponseBody(res *projects.SetProjectLogoResult) *SetLogoResponseBody {
 	body := &SetLogoResponseBody{}
 	if res.Project != nil {
 		body.Project = marshalProjectsProjectToProjectResponseBody(res.Project)
@@ -1102,9 +1102,9 @@ func NewListProjectsPayload(organizationID string, apikeyToken *string, sessionT
 	return v
 }
 
-// NewSetLogoForm builds a projects service setLogo endpoint payload.
-func NewSetLogoForm(body *SetLogoRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *projects.SetLogoForm {
-	v := &projects.SetLogoForm{
+// NewSetLogoPayload builds a projects service setLogo endpoint payload.
+func NewSetLogoPayload(body *SetLogoRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *projects.SetLogoPayload {
+	v := &projects.SetLogoPayload{
 		AssetID: *body.AssetID,
 	}
 	v.ApikeyToken = apikeyToken

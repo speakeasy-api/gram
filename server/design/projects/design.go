@@ -64,8 +64,13 @@ var _ = Service("projects", func() {
 		})
 		Security(security.ProjectSlug, security.Session)
 
-		Payload(SetLogoForm)
-		Result(SetLogoResult)
+		Payload(func() {
+			Extend(SetProjectLogoForm)
+			security.ByKeyPayload()
+			security.ProjectPayload()
+			security.SessionPayload()
+		})
+		Result(SetProjectLogoResult)
 
 		HTTP(func() {
 			POST("/rpc/projects.setLogo")
@@ -109,16 +114,13 @@ var ListProjectsResult = Type("ListProjectsResult", func() {
 	Attribute("projects", ArrayOf(shared.ProjectEntry), "The list of projects")
 })
 
-var SetLogoForm = Type("SetLogoForm", func() {
+var SetProjectLogoForm = Type("SetProjectLogoForm", func() {
 	Required("asset_id")
-	security.ByKeyPayload()
-	security.ProjectPayload()
-	security.SessionPayload()
 
 	Attribute("asset_id", String, "The ID of the asset")
 })
 
-var SetLogoResult = Type("SetLogoResult", func() {
+var SetProjectLogoResult = Type("SetProjectLogoResult", func() {
 	Required("project")
 
 	Attribute("project", shared.Project, "The updated project with the new logo")

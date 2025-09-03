@@ -3456,14 +3456,14 @@ paths:
                   name: SetLogoRequestBody
                   required: true
                   schema:
-                    $ref: '#/definitions/SetLogoForm'
+                    $ref: '#/definitions/ProjectsSetLogoRequestBody'
                     required:
                         - asset_id
             responses:
                 "200":
                     description: OK response.
                     schema:
-                        $ref: '#/definitions/SetLogoResult'
+                        $ref: '#/definitions/SetProjectLogoResult'
                         required:
                             - project
                 "400":
@@ -31615,6 +31615,18 @@ definitions:
             - temporary
             - timeout
             - fault
+    ProjectsSetLogoRequestBody:
+        title: ProjectsSetLogoRequestBody
+        type: object
+        properties:
+            asset_id:
+                type: string
+                description: The ID of the asset
+                example: Non illum at est sed voluptas.
+        example:
+            asset_id: Cupiditate dicta.
+        required:
+            - asset_id
     ProjectsSetLogoUnauthorizedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
@@ -32101,20 +32113,8 @@ definitions:
         required:
             - description
             - env_variables
-    SetLogoForm:
-        title: SetLogoForm
-        type: object
-        properties:
-            asset_id:
-                type: string
-                description: The ID of the asset
-                example: Non illum at est sed voluptas.
-        example:
-            asset_id: Cupiditate dicta.
-        required:
-            - asset_id
-    SetLogoResult:
-        title: SetLogoResult
+    SetProjectLogoResult:
+        title: SetProjectLogoResult
         type: object
         properties:
             project:

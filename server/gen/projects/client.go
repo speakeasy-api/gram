@@ -86,11 +86,11 @@ func (c *Client) ListProjects(ctx context.Context, p *ListProjectsPayload) (res 
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) SetLogo(ctx context.Context, p *SetLogoForm) (res *SetLogoResult, err error) {
+func (c *Client) SetLogo(ctx context.Context, p *SetLogoPayload) (res *SetProjectLogoResult, err error) {
 	var ires any
 	ires, err = c.SetLogoEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*SetLogoResult), nil
+	return ires.(*SetProjectLogoResult), nil
 }

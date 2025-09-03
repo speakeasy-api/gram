@@ -635,7 +635,7 @@ func NewCreateProjectRequestBody(p *projects.CreateProjectPayload) *CreateProjec
 
 // NewSetLogoRequestBody builds the HTTP request body from the payload of the
 // "setLogo" endpoint of the "projects" service.
-func NewSetLogoRequestBody(p *projects.SetLogoForm) *SetLogoRequestBody {
+func NewSetLogoRequestBody(p *projects.SetLogoPayload) *SetLogoRequestBody {
 	body := &SetLogoRequestBody{
 		AssetID: p.AssetID,
 	}
@@ -963,10 +963,10 @@ func NewListProjectsGatewayError(body *ListProjectsGatewayErrorResponseBody) *go
 	return v
 }
 
-// NewSetLogoResultOK builds a "projects" service "setLogo" endpoint result
-// from a HTTP "OK" response.
-func NewSetLogoResultOK(body *SetLogoResponseBody) *projects.SetLogoResult {
-	v := &projects.SetLogoResult{}
+// NewSetLogoSetProjectLogoResultOK builds a "projects" service "setLogo"
+// endpoint result from a HTTP "OK" response.
+func NewSetLogoSetProjectLogoResultOK(body *SetLogoResponseBody) *projects.SetProjectLogoResult {
+	v := &projects.SetProjectLogoResult{}
 	v.Project = unmarshalProjectResponseBodyToProjectsProject(body.Project)
 
 	return v
