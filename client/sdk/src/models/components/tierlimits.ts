@@ -14,6 +14,10 @@ export type TierLimits = {
    */
   basePrice: number;
   /**
+   * The description bullets of the tier
+   */
+  descriptionBullets: Array<string>;
+  /**
    * The number of servers included in the tier
    */
   includedServers: number;
@@ -38,6 +42,7 @@ export const TierLimits$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   base_price: z.number(),
+  description_bullets: z.array(z.string()),
   included_servers: z.number().int(),
   included_tool_calls: z.number().int(),
   price_per_additional_server: z.number(),
@@ -45,6 +50,7 @@ export const TierLimits$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "base_price": "basePrice",
+    "description_bullets": "descriptionBullets",
     "included_servers": "includedServers",
     "included_tool_calls": "includedToolCalls",
     "price_per_additional_server": "pricePerAdditionalServer",
@@ -55,6 +61,7 @@ export const TierLimits$inboundSchema: z.ZodType<
 /** @internal */
 export type TierLimits$Outbound = {
   base_price: number;
+  description_bullets: Array<string>;
   included_servers: number;
   included_tool_calls: number;
   price_per_additional_server: number;
@@ -68,6 +75,7 @@ export const TierLimits$outboundSchema: z.ZodType<
   TierLimits
 > = z.object({
   basePrice: z.number(),
+  descriptionBullets: z.array(z.string()),
   includedServers: z.number().int(),
   includedToolCalls: z.number().int(),
   pricePerAdditionalServer: z.number(),
@@ -75,6 +83,7 @@ export const TierLimits$outboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     basePrice: "base_price",
+    descriptionBullets: "description_bullets",
     includedServers: "included_servers",
     includedToolCalls: "included_tool_calls",
     pricePerAdditionalServer: "price_per_additional_server",

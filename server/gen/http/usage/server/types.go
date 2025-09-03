@@ -32,8 +32,10 @@ type GetPeriodUsageResponseBody struct {
 type GetUsageTiersResponseBody struct {
 	// The limits for the free tier
 	Free *TierLimitsResponseBody `form:"free" json:"free" xml:"free"`
-	// The limits for the business tier
-	Business *TierLimitsResponseBody `form:"business" json:"business" xml:"business"`
+	// The limits for the pro tier
+	Pro *TierLimitsResponseBody `form:"pro" json:"pro" xml:"pro"`
+	// The limits for the enterprise tier
+	Enterprise *TierLimitsResponseBody `form:"enterprise" json:"enterprise" xml:"enterprise"`
 }
 
 // GetPeriodUsageUnauthorizedResponseBody is the type of the "usage" service
@@ -778,10 +780,21 @@ type TierLimitsResponseBody struct {
 	IncludedToolCalls int `form:"included_tool_calls" json:"included_tool_calls" xml:"included_tool_calls"`
 	// The number of servers included in the tier
 	IncludedServers int `form:"included_servers" json:"included_servers" xml:"included_servers"`
+	// The number of credits included in the tier for playground and other
+	// dashboard activities
+	IncludedCredits int `form:"included_credits" json:"included_credits" xml:"included_credits"`
 	// The price per additional tool call
 	PricePerAdditionalToolCall float64 `form:"price_per_additional_tool_call" json:"price_per_additional_tool_call" xml:"price_per_additional_tool_call"`
 	// The price per additional server
 	PricePerAdditionalServer float64 `form:"price_per_additional_server" json:"price_per_additional_server" xml:"price_per_additional_server"`
+	// The price per additional credit
+	PricePerAdditionalCredit float64 `form:"price_per_additional_credit" json:"price_per_additional_credit" xml:"price_per_additional_credit"`
+	// Key feature bullets of the tier
+	FeatureBullets []string `form:"feature_bullets" json:"feature_bullets" xml:"feature_bullets"`
+	// Included items bullets of the tier
+	IncludedBullets []string `form:"included_bullets" json:"included_bullets" xml:"included_bullets"`
+	// Add-on items bullets of the tier (optional)
+	AddOnBullets []string `form:"add_on_bullets,omitempty" json:"add_on_bullets,omitempty" xml:"add_on_bullets,omitempty"`
 }
 
 // NewGetPeriodUsageResponseBody builds the HTTP response body from the result
@@ -804,8 +817,11 @@ func NewGetUsageTiersResponseBody(res *usage.UsageTiers) *GetUsageTiersResponseB
 	if res.Free != nil {
 		body.Free = marshalUsageTierLimitsToTierLimitsResponseBody(res.Free)
 	}
-	if res.Business != nil {
-		body.Business = marshalUsageTierLimitsToTierLimitsResponseBody(res.Business)
+	if res.Pro != nil {
+		body.Pro = marshalUsageTierLimitsToTierLimitsResponseBody(res.Pro)
+	}
+	if res.Enterprise != nil {
+		body.Enterprise = marshalUsageTierLimitsToTierLimitsResponseBody(res.Enterprise)
 	}
 	return body
 }

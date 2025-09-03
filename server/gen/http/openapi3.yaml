@@ -9227,10 +9227,29 @@ components:
         TierLimits:
             type: object
             properties:
+                add_on_bullets:
+                    type: array
+                    items:
+                        type: string
+                    description: Add-on items bullets of the tier (optional)
                 base_price:
                     type: number
                     description: The base price for the tier
                     format: double
+                feature_bullets:
+                    type: array
+                    items:
+                        type: string
+                    description: Key feature bullets of the tier
+                included_bullets:
+                    type: array
+                    items:
+                        type: string
+                    description: Included items bullets of the tier
+                included_credits:
+                    type: integer
+                    description: The number of credits included in the tier for playground and other dashboard activities
+                    format: int64
                 included_servers:
                     type: integer
                     description: The number of servers included in the tier
@@ -9239,6 +9258,10 @@ components:
                     type: integer
                     description: The number of tool calls included in the tier
                     format: int64
+                price_per_additional_credit:
+                    type: number
+                    description: The price per additional credit
+                    format: double
                 price_per_additional_server:
                     type: number
                     description: The price per additional server
@@ -9251,8 +9274,12 @@ components:
                 - base_price
                 - included_tool_calls
                 - included_servers
+                - included_credits
                 - price_per_additional_tool_call
                 - price_per_additional_server
+                - price_per_additional_credit
+                - feature_bullets
+                - included_bullets
         ToolVariation:
             type: object
             properties:
@@ -9797,13 +9824,16 @@ components:
         UsageTiers:
             type: object
             properties:
-                business:
+                enterprise:
                     $ref: '#/components/schemas/TierLimits'
                 free:
                     $ref: '#/components/schemas/TierLimits'
+                pro:
+                    $ref: '#/components/schemas/TierLimits'
             required:
                 - free
-                - business
+                - pro
+                - enterprise
     securitySchemes:
         apikey_header_Gram-Key:
             type: apiKey

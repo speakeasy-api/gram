@@ -90,18 +90,31 @@ type TierLimits struct {
 	IncludedToolCalls int
 	// The number of servers included in the tier
 	IncludedServers int
+	// The number of credits included in the tier for playground and other
+	// dashboard activities
+	IncludedCredits int
 	// The price per additional tool call
 	PricePerAdditionalToolCall float64
 	// The price per additional server
 	PricePerAdditionalServer float64
+	// The price per additional credit
+	PricePerAdditionalCredit float64
+	// Key feature bullets of the tier
+	FeatureBullets []string
+	// Included items bullets of the tier
+	IncludedBullets []string
+	// Add-on items bullets of the tier (optional)
+	AddOnBullets []string
 }
 
 // UsageTiers is the result type of the usage service getUsageTiers method.
 type UsageTiers struct {
 	// The limits for the free tier
 	Free *TierLimits
-	// The limits for the business tier
-	Business *TierLimits
+	// The limits for the pro tier
+	Pro *TierLimits
+	// The limits for the enterprise tier
+	Enterprise *TierLimits
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
