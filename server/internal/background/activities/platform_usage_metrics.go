@@ -2,7 +2,6 @@ package activities
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"sync"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type CollectPlatformUsageMetrics struct {
@@ -39,8 +39,7 @@ func (c *CollectPlatformUsageMetrics) Do(ctx context.Context) ([]PlatformUsageMe
 
 	rows, err := c.repo.GetPlatformUsageMetrics(ctx)
 	if err != nil {
-		c.logger.ErrorContext(ctx, "failed to get platform usage metrics", attr.SlogError(err))
-		return nil, fmt.Errorf("failed to get platform usage metrics: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get platform usage metrics").Log(ctx, c.logger)
 	}
 
 	metrics := make([]PlatformUsageMetrics, 0, len(rows))
@@ -74,6 +73,7 @@ func (f *FirePlatformUsageMetrics) Do(ctx context.Context, metrics []PlatformUsa
 	f.logger.InfoContext(ctx, "Starting platform usage metrics firing")
 
 	var wg sync.WaitGroup
+
 	for _, metric := range metrics {
 		wg.Add(1)
 		go func(m PlatformUsageMetrics) {
@@ -88,7 +88,6 @@ func (f *FirePlatformUsageMetrics) Do(ctx context.Context, metrics []PlatformUsa
 		}(metric)
 	}
 
-	// Wait for all goroutines to complete
 	wg.Wait()
 
 	f.logger.InfoContext(ctx, "Platform usage metrics firing completed successfully")

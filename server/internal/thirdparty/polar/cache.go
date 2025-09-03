@@ -5,6 +5,7 @@ import (
 	"time"
 
 	polarComponents "github.com/polarsource/polar-go/models/components"
+	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
@@ -16,17 +17,40 @@ type PolarCustomerState struct {
 var _ cache.CacheableObject[PolarCustomerState] = (*PolarCustomerState)(nil)
 
 func (p PolarCustomerState) CacheKey() string {
-	return OrgCacheKey(p.OrganizationID)
+	return CustomerStateCacheKey(p.OrganizationID)
 }
 
-func OrgCacheKey(orgID string) string {
+func CustomerStateCacheKey(orgID string) string {
 	return fmt.Sprintf("polar_customer_state:%s", orgID)
 }
 
 func (p PolarCustomerState) TTL() time.Duration {
-	return 20 * time.Minute
+	return 15 * time.Minute
 }
 
 func (p PolarCustomerState) AdditionalCacheKeys() []string {
+	return []string{}
+}
+
+type PolarPeriodUsageState struct {
+	OrganizationID string
+	gen.PeriodUsage
+}
+
+var _ cache.CacheableObject[PolarPeriodUsageState] = (*PolarPeriodUsageState)(nil)
+
+func (p PolarPeriodUsageState) CacheKey() string {
+	return PeriodUsageStateCacheKey(p.OrganizationID)
+}
+
+func PeriodUsageStateCacheKey(orgID string) string {
+	return fmt.Sprintf("polar_period_usage_state:%s", orgID)
+}
+
+func (p PolarPeriodUsageState) TTL() time.Duration {
+	return 1 * time.Hour
+}
+
+func (p PolarPeriodUsageState) AdditionalCacheKeys() []string {
 	return []string{}
 }

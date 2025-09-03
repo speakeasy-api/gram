@@ -32,6 +32,7 @@ type Activities struct {
 	collectPlatformUsageMetrics *activities.CollectPlatformUsageMetrics
 	firePlatformUsageMetrics    *activities.FirePlatformUsageMetrics
 	reportBillingUsage          *activities.ReportBillingUsage
+	getAllOrganizations         *activities.GetAllOrganizations
 }
 
 func NewActivities(
@@ -61,6 +62,7 @@ func NewActivities(
 		collectPlatformUsageMetrics: activities.NewCollectPlatformUsageMetrics(logger, db),
 		firePlatformUsageMetrics:    activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		reportBillingUsage:          activities.NewReportBillingUsage(logger, db, billingRepo, posthogClient),
+		getAllOrganizations:         activities.NewGetAllOrganizations(logger, db),
 	}
 }
 
@@ -106,4 +108,8 @@ func (a *Activities) FirePlatformUsageMetrics(ctx context.Context, metrics []act
 
 func (a *Activities) ReportBillingUsage(ctx context.Context, orgIDs []string) error {
 	return a.reportBillingUsage.Do(ctx, orgIDs)
+}
+
+func (a *Activities) GetAllOrganizations(ctx context.Context) ([]string, error) {
+	return a.getAllOrganizations.Do(ctx)
 }
