@@ -329,6 +329,7 @@ type Project struct {
 	Name           string
 	Slug           string
 	OrganizationID string
+	LogoAssetID    uuid.NullUUID
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 	DeletedAt      pgtype.Timestamptz
