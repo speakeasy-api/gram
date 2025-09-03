@@ -1,31 +1,13 @@
-import { CopyableSlug } from "@/components/name-and-slug";
 import { Page } from "@/components/page-layout";
-import {
-  ToolsetPromptsBadge,
-  ToolsetToolsBadge,
-} from "@/components/tools-badge";
-import { Badge } from "@/components/ui/badge";
+import { ServerCard } from "@/components/server-card";
 import { Button } from "@/components/ui/button";
-import { Card, Cards } from "@/components/ui/card";
-import { CopyButton } from "@/components/ui/copy-button";
 import { Dialog } from "@/components/ui/dialog";
-import { MoreActions } from "@/components/ui/more-actions";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { Type } from "@/components/ui/type";
-import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
-import { Stack } from "@speakeasy-api/moonshine";
-import { Check, Lock, Pencil } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
 import { useToolsets } from "../toolsets/Toolsets";
-import { MCPJson, useMcpUrl } from "./MCPDetails";
+import { MCPJson } from "./MCPDetails";
 import { MCPEmptyState } from "./MCPEmptyState";
 
 // Define specific type for MCP components
@@ -58,11 +40,11 @@ export function MCPOverview() {
         Access any of your Gram toolsets below as a hosted MCP server
       </Page.Section.Description>
       <Page.Section.Body>
-        <Cards>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {toolsets.map((toolset) => (
             <McpToolsetCard key={toolset.id} toolset={toolset} />
           ))}
-        </Cards>
+        </div>
       </Page.Section.Body>
     </Page.Section>
   );
@@ -70,102 +52,32 @@ export function MCPOverview() {
 
 export function McpToolsetCard({ toolset }: { toolset: ToolsetForMCP }) {
   const routes = useRoutes();
-
-  const { url: mcpUrl } = useMcpUrl(toolset);
-
   const [mcpModalOpen, setMcpModalOpen] = useState(false);
 
-  const mcpConfigDialog = (
-    <Dialog open={mcpModalOpen} onOpenChange={setMcpModalOpen}>
-      <Dialog.Content className="!max-w-3xl !p-10">
-        <Dialog.Header>
-          <Dialog.Title>MCP Config</Dialog.Title>
-        </Dialog.Header>
-        <MCPJson toolset={toolset} fullWidth />
-        <div className="flex justify-end mt-4">
-          <Button onClick={() => setMcpModalOpen(false)}>Close</Button>
-        </div>
-      </Dialog.Content>
-    </Dialog>
-  );
-
-  const badges = (
-    <Stack direction="horizontal" gap={2} align="center">
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Badge
-              size="md"
-              variant="outline"
-              className={"flex items-center gap-1"}
-            >
-              {toolset.mcpIsPublic ? (
-                <Check className={cn("w-4 h-4 stroke-3", "text-green-500")} />
-              ) : (
-                <Lock className={cn("w-4 h-4", "text-orange-500")} />
-              )}
-              {toolset.mcpIsPublic ? "Public" : "Private"}
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent>
-            {toolset.mcpIsPublic
-              ? `Your MCP server is publicly reachable at ${mcpUrl}`
-              : "Your MCP server can be used alongisde a Gram API key."}
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-      <ToolsetToolsBadge toolset={toolset} variant="outline" />
-      <ToolsetPromptsBadge toolset={toolset} variant="outline" />
-    </Stack>
-  );
-
   return (
-    <routes.mcp.details.Link
-      params={[toolset.slug]}
-      className="hover:no-underline"
-    >
-      <Card>
-        <Card.Header>
-          <Card.Title>
-            <CopyableSlug slug={toolset.slug}>{toolset.name}</CopyableSlug>
-          </Card.Title>
-          <MoreActions
-            actions={[
-              {
-                label: "View/Copy Config",
-                onClick: () => setMcpModalOpen(true),
-                icon: "braces",
-              },
-            ]}
-          />
-        </Card.Header>
-        <Card.Content>
-          <Card.Description className="mt-[-6px]">
-            <Stack direction="horizontal" className="group" align="center">
-              <Type muted mono small className="break-all text-xs">
-                {mcpUrl}
-              </Type>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                className="group-hover:opacity-100 opacity-0 transition-opacity ml-1"
-              >
-                <Pencil className="h-4 w-4" />
-              </Button>
-              <CopyButton
-                text={mcpUrl ?? ""}
-                size="icon-sm"
-                className="group-hover:opacity-100 opacity-0 transition-opacity"
-              />
-            </Stack>
-          </Card.Description>
-        </Card.Content>
-        <Card.Footer>
-          {badges}
-          <div />
-        </Card.Footer>
-        {mcpConfigDialog}
-      </Card>
-    </routes.mcp.details.Link>
+    <>
+      <ServerCard
+        toolset={toolset}
+        onCardClick={() => routes.mcp.details.goTo(toolset.slug)}
+        additionalActions={[
+          {
+            label: "View/Copy Config",
+            onClick: () => setMcpModalOpen(true),
+            icon: "braces",
+          },
+        ]}
+      />
+      <Dialog open={mcpModalOpen} onOpenChange={setMcpModalOpen}>
+        <Dialog.Content className="!max-w-3xl !p-10">
+          <Dialog.Header>
+            <Dialog.Title>MCP Config</Dialog.Title>
+          </Dialog.Header>
+          <MCPJson toolset={toolset} fullWidth />
+          <div className="flex justify-end mt-4">
+            <Button onClick={() => setMcpModalOpen(false)}>Close</Button>
+          </div>
+        </Dialog.Content>
+      </Dialog>
+    </>
   );
 }
