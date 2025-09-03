@@ -170,6 +170,13 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		altsrc.NewStringFlag(&cli.StringFlag{
+			Name:     "polar-product-id-free",
+			Aliases:  []string{"polar.product_id_basic"},
+			Usage:    "The product ID of the free tier in Polar",
+			EnvVars:  []string{"POLAR_PRODUCT_ID_FREE"},
+			Required: false,
+		}),
+		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:     "polar-product-id-pro",
 			Aliases:  []string{"polar.product_id_pro"},
 			Usage:    "The product ID of the pro tier in Polar",
