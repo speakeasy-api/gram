@@ -18,7 +18,7 @@ inputs:
   context:
     description: 'Context to docker build'
     required: true
-    default: '.'
+    default: '.fdsf'
   file:
     description: 'Path to the docker file relative to context'
     required: true
