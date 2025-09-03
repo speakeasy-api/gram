@@ -1,0 +1,4 @@
+https://localhost:8443 {
+	tls internal
+	reverse_proxy http://localhost:8080
+}

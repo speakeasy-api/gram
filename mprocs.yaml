@@ -2,6 +2,9 @@ procs:
   server:
     cmd: ["mise", "run", "start:server"]
     stop: SIGTERM
+  proxy:
+    cmd: ["mise", "run", "start:proxy"]
+    stop: SIGTERM
   worker:
     cmd: ["mise", "run", "start:worker"]
     stop: SIGTERM

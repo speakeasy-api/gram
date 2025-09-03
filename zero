@@ -64,6 +64,8 @@ mise run zero:github
 mise run zero:openrouter
 mise run zero:encryption
 
+mise run zero:proxy
+
 echo -e "\n⏳ Building internal SDK"
 mise run build:internal-sdk
 
