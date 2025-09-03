@@ -7,11 +7,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	org_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 // Necessary to properly populate account type
-func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *orgRepo.Queries, billingRepo billing.Repository, orgID string) (*orgRepo.OrganizationMetadatum, error) {
+func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org_repo.Queries, billingRepo billing.Repository, orgID string) (*org_repo.OrganizationMetadatum, error) {
 	org, err := orgRepo.GetOrganizationMetadata(ctx, orgID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata")
@@ -37,6 +37,14 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 	// Otherwise, the source of truth for account type is the Polar customer state
 	if customerTier != nil {
 		org.GramAccountType = string(*customerTier)
+		if org.GramAccountType != string(*customerTier) {
+			if err := orgRepo.SetAccountType(ctx, org_repo.SetAccountTypeParams{
+				GramAccountType: string(*customerTier),
+				ID:              orgID,
+			}); err != nil {
+				logger.ErrorContext(ctx, "error setting account type", attr.SlogError(err))
+			}
+		}
 	}
 
 	return &org, nil
