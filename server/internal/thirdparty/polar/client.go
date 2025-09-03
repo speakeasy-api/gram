@@ -434,13 +434,13 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 	freeTierLimits := extractTierLimits(p.catalog, freeTierProduct)
 	proTierLimits := extractTierLimits(p.catalog, proTierProduct)
 
-    var toolCallPrice, mcpServerPrice float64
+	var toolCallPrice, mcpServerPrice float64
 
-    // Credits are hard-coded for now; keep bullets in sync dynamically
-    freeIncludedCredits := 5
-    proIncludedCredits := 25
-    creditPrice := 1.0
-    additionalToolCallsBlock := 5000
+	// Credits are hard-coded for now; keep bullets in sync dynamically
+	freeIncludedCredits := 5
+	proIncludedCredits := 25
+	creditPrice := 1.0
+	additionalToolCallsBlock := 5000
 
 	for _, price := range proTierProduct.Prices {
 		if price.Type != polarComponents.PricesTypeProductPrice {
@@ -477,15 +477,15 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 		return fmt.Sprintf("$%.2f", v)
 	}
 
-    return &gen.UsageTiers{
-        Free: &gen.TierLimits{
-            BasePrice:                  0,
-            IncludedToolCalls:          freeTierLimits.ToolCalls,
-            IncludedServers:            freeTierLimits.Servers,
-            IncludedCredits:            freeIncludedCredits, // Hard coded for now. TODO: Move to Polar
-            PricePerAdditionalToolCall: 0,
-            PricePerAdditionalServer:   0,
-            PricePerAdditionalCredit:   creditPrice, // Hard coded for now. TODO: Move to Polar
+	return &gen.UsageTiers{
+		Free: &gen.TierLimits{
+			BasePrice:                  0,
+			IncludedToolCalls:          freeTierLimits.ToolCalls,
+			IncludedServers:            freeTierLimits.Servers,
+			IncludedCredits:            freeIncludedCredits, // Hard coded for now. TODO: Move to Polar
+			PricePerAdditionalToolCall: 0,
+			PricePerAdditionalServer:   0,
+			PricePerAdditionalCredit:   creditPrice, // Hard coded for now. TODO: Move to Polar
 			FeatureBullets: []string{
 				"Tool generation",
 				"Custom tool creation",
@@ -493,43 +493,40 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				"14 day log retention",
 				"Slack community support",
 			},
-            IncludedBullets: func() []string {
-                return []string{
-                    fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, func() string { if freeTierLimits.Servers == 1 { return "server" } else { return "servers" } }()),
-                    fmt.Sprintf("%d tool calls / month", freeTierLimits.ToolCalls),
-                    fmt.Sprintf("$%d in playground credits", freeIncludedCredits),
-                }
-            }(),
+			IncludedBullets: func() []string {
+				return []string{
+					fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, conv.Ternary(freeTierLimits.Servers == 1, "server", "servers")),
+					fmt.Sprintf("%d tool calls / month", freeTierLimits.ToolCalls),
+					fmt.Sprintf("$%d in playground credits", freeIncludedCredits),
+				}
+			}(),
 		},
-        Pro: &gen.TierLimits{
-            BasePrice:                  29, // Hard coded for now. TODO: Move to Polar
-            IncludedToolCalls:          proTierLimits.ToolCalls,
-            IncludedServers:            proTierLimits.Servers,
-            IncludedCredits:            proIncludedCredits, // Hard coded for now. TODO: Move to Polar
-            PricePerAdditionalToolCall: toolCallPrice,
-            PricePerAdditionalServer:   mcpServerPrice,
-            PricePerAdditionalCredit:   creditPrice, // Hard coded for now. TODO: Move to Polar
+		Pro: &gen.TierLimits{
+			BasePrice:                  29, // Hard coded for now. TODO: Move to Polar
+			IncludedToolCalls:          proTierLimits.ToolCalls,
+			IncludedServers:            proTierLimits.Servers,
+			IncludedCredits:            proIncludedCredits, // Hard coded for now. TODO: Move to Polar
+			PricePerAdditionalToolCall: toolCallPrice,
+			PricePerAdditionalServer:   mcpServerPrice,
+			PricePerAdditionalCredit:   creditPrice, // Hard coded for now. TODO: Move to Polar
 			FeatureBullets: []string{
 				"Custom domain",
 				"Register your own OAuth server",
 				"30 day log retention",
 				"Dedicated support channel (Slack or Teams)",
 			},
-            IncludedBullets: func() []string {
-                return []string{
-                    fmt.Sprintf("%d MCP servers (public or private)", proTierLimits.Servers),
-                    fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
-                    fmt.Sprintf("$%d in playground credits", proIncludedCredits),
-                }
-            }(),
-            AddOnBullets: []string{
-                fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
-                func() string {
-                    price := toolCallPrice * float64(additionalToolCallsBlock)
-                    return fmt.Sprintf("%s / month / additional %d monthly requests", formatPrice(price), additionalToolCallsBlock)
-                }(),
-                fmt.Sprintf("%s / month / credit", formatPrice(creditPrice)),
-            },
+			IncludedBullets: func() []string {
+				return []string{
+					fmt.Sprintf("%d MCP %s (public or private)", proTierLimits.Servers, conv.Ternary(proTierLimits.Servers == 1, "server", "servers")),
+					fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
+					fmt.Sprintf("$%d in playground credits", proIncludedCredits),
+				}
+			}(),
+			AddOnBullets: []string{
+				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
+				fmt.Sprintf("%s / month / additional %d monthly requests", formatPrice(toolCallPrice*float64(additionalToolCallsBlock)), additionalToolCallsBlock),
+				fmt.Sprintf("%s / month / credit", formatPrice(creditPrice)),
+			},
 		},
 		Enterprise: &gen.TierLimits{
 			BasePrice:                  0,
