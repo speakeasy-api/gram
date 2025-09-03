@@ -276,7 +276,6 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 
 // This is used during auth, so keep it as lightweight as possible.
 func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (*billing.Tier, error) {
-	return pointer.From(billing.TierFree), nil // TODO
 	customerState, err := p.getCustomerState(ctx, orgID)
 	if err != nil {
 		return nil, err

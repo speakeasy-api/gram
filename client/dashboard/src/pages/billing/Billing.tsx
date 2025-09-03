@@ -69,7 +69,7 @@ const BillingPage = () => {
                   </Stack>
                   <UsageProgress
                     value={periodUsage.toolCalls}
-                    included={periodUsage.maxToolCalls}
+                    included={periodUsage.maxToolCalls || 1000}
                     overageIncrement={periodUsage.maxToolCalls}
                     noMax={session.gramAccountType === "enterprise"}
                   />
@@ -85,7 +85,7 @@ const BillingPage = () => {
                   </Stack>
                   <UsageProgress
                     value={periodUsage.servers} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
-                    included={periodUsage.maxServers}
+                    included={periodUsage.maxServers || 1}
                     overageIncrement={1}
                     noMax={session.gramAccountType === "enterprise"}
                   />
