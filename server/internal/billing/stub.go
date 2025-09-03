@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/openapi/pointer"
 )
 
 type StubClient struct {
@@ -35,6 +36,10 @@ func NewStubClient(logger *slog.Logger) *StubClient {
 var _ Tracker = (*StubClient)(nil)
 var _ Repository = (*StubClient)(nil)
 
+func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (*Tier, error) {
+	return pointer.From(TierFree), nil
+}
+
 func (s *StubClient) CreateCheckout(ctx context.Context, orgID string, serverURL string) (string, error) {
 	return "", fmt.Errorf("not implemented")
 }
@@ -55,7 +60,6 @@ func (s *StubClient) GetCustomer(ctx context.Context, orgID string) (*Customer, 
 
 	return &Customer{
 		OrganizationID: orgID,
-		Tier:           TierPro,
 		PeriodUsage:    pu,
 	}, nil
 }
