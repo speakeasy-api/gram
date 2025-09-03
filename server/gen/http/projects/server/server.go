@@ -22,6 +22,7 @@ type Server struct {
 	Mounts        []*MountPoint
 	CreateProject http.Handler
 	ListProjects  http.Handler
+	SetLogo       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -53,9 +54,11 @@ func New(
 		Mounts: []*MountPoint{
 			{"CreateProject", "POST", "/rpc/projects.create"},
 			{"ListProjects", "GET", "/rpc/projects.list"},
+			{"SetLogo", "POST", "/rpc/projects.setLogo"},
 		},
 		CreateProject: NewCreateProjectHandler(e.CreateProject, mux, decoder, encoder, errhandler, formatter),
 		ListProjects:  NewListProjectsHandler(e.ListProjects, mux, decoder, encoder, errhandler, formatter),
+		SetLogo:       NewSetLogoHandler(e.SetLogo, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -66,6 +69,7 @@ func (s *Server) Service() string { return "projects" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateProject = m(s.CreateProject)
 	s.ListProjects = m(s.ListProjects)
+	s.SetLogo = m(s.SetLogo)
 }
 
 // MethodNames returns the methods served.
@@ -75,6 +79,7 @@ func (s *Server) MethodNames() []string { return projects.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateProjectHandler(mux, h.CreateProject)
 	MountListProjectsHandler(mux, h.ListProjects)
+	MountSetLogoHandler(mux, h.SetLogo)
 }
 
 // Mount configures the mux to serve the projects endpoints.
@@ -165,6 +170,59 @@ func NewListProjectsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listProjects")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "projects")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetLogoHandler configures the mux to serve the "projects" service
+// "setLogo" endpoint.
+func MountSetLogoHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/projects.setLogo", otelhttp.WithRouteTag("/rpc/projects.setLogo", f).ServeHTTP)
+}
+
+// NewSetLogoHandler creates a HTTP handler which loads the HTTP request and
+// calls the "projects" service "setLogo" endpoint.
+func NewSetLogoHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetLogoRequest(mux, decoder)
+		encodeResponse = EncodeSetLogoResponse(encoder)
+		encodeError    = EncodeSetLogoError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setLogo")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "projects")
 		payload, err := decodeRequest(r)
 		if err != nil {

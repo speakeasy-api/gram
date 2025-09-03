@@ -336,7 +336,7 @@ func newWorkerCommand() *cli.Command {
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, redisClient, c)
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}

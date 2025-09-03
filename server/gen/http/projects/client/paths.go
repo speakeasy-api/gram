@@ -16,3 +16,8 @@ func CreateProjectProjectsPath() string {
 func ListProjectsProjectsPath() string {
 	return "/rpc/projects.list"
 }
+
+// SetLogoProjectsPath returns the URL path to the projects service setLogo HTTP endpoint.
+func SetLogoProjectsPath() string {
+	return "/rpc/projects.setLogo"
+}

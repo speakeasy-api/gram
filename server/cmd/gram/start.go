@@ -375,7 +375,7 @@ func newStartCommand() *cli.Command {
 				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
-			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, redisClient, c)
+			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, c)
 			if err != nil {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
