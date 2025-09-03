@@ -85,7 +85,7 @@ func AddReportBillingUsageSchedule(ctx context.Context, temporalClient client.Cl
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{
 				{
-					Every: 1 * time.Hour,
+					Every: 1 * time.Hour, // This should run minimum hourly to maintain fresh period usage cache
 				},
 			},
 		},
