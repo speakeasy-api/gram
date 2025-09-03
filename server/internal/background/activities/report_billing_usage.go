@@ -61,6 +61,7 @@ func (r *ReportBillingUsage) Do(ctx context.Context, orgIDs []string) error {
 				return
 			}
 
+			// this serves a dual purpose of also ensuring we keep the period usage data store up to date at least hourly
 			usage, err := r.billingRepo.GetPeriodUsage(ctx, orgID)
 			if err != nil {
 				errChan <- fmt.Errorf("failed to get period usage for org %s: %w", orgID, err)
