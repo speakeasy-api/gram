@@ -149,6 +149,8 @@ type UpdateToolsetPayload struct {
 	HTTPToolNames []string
 	// List of prompt template names to include
 	PromptTemplateNames []string
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool
 	// The slug of the MCP to use for the toolset
 	McpSlug *types.Slug
 	// Whether the toolset is public in MCP

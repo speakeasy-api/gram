@@ -41,6 +41,8 @@ type UpdateToolsetRequestBody struct {
 	HTTPToolNames []string `form:"http_tool_names,omitempty" json:"http_tool_names,omitempty" xml:"http_tool_names,omitempty"`
 	// List of prompt template names to include
 	PromptTemplateNames []string `form:"prompt_template_names,omitempty" json:"prompt_template_names,omitempty" xml:"prompt_template_names,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -85,6 +87,8 @@ type CreateToolsetResponseBody struct {
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -133,6 +137,8 @@ type UpdateToolsetResponseBody struct {
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -174,6 +180,8 @@ type GetToolsetResponseBody struct {
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -215,6 +223,8 @@ type AddExternalOAuthServerResponseBody struct {
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -256,6 +266,8 @@ type RemoveOAuthServerResponseBody struct {
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// The external OAuth server details
@@ -1998,6 +2010,8 @@ type ToolsetEntryResponseBody struct {
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
 	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
 	// When the toolset was created.
@@ -2044,6 +2058,7 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 		Slug:           string(res.Slug),
 		Description:    res.Description,
 		McpIsPublic:    res.McpIsPublic,
+		McpEnabled:     res.McpEnabled,
 		CustomDomainID: res.CustomDomainID,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
@@ -2119,6 +2134,7 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 		Slug:           string(res.Slug),
 		Description:    res.Description,
 		McpIsPublic:    res.McpIsPublic,
+		McpEnabled:     res.McpEnabled,
 		CustomDomainID: res.CustomDomainID,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
@@ -2179,6 +2195,7 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		Slug:           string(res.Slug),
 		Description:    res.Description,
 		McpIsPublic:    res.McpIsPublic,
+		McpEnabled:     res.McpEnabled,
 		CustomDomainID: res.CustomDomainID,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
@@ -2239,6 +2256,7 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 		Slug:           string(res.Slug),
 		Description:    res.Description,
 		McpIsPublic:    res.McpIsPublic,
+		McpEnabled:     res.McpEnabled,
 		CustomDomainID: res.CustomDomainID,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
@@ -2299,6 +2317,7 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 		Slug:           string(res.Slug),
 		Description:    res.Description,
 		McpIsPublic:    res.McpIsPublic,
+		McpEnabled:     res.McpEnabled,
 		CustomDomainID: res.CustomDomainID,
 		CreatedAt:      res.CreatedAt,
 		UpdatedAt:      res.UpdatedAt,
@@ -3533,6 +3552,7 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 	v := &toolsets.UpdateToolsetPayload{
 		Name:           body.Name,
 		Description:    body.Description,
+		McpEnabled:     body.McpEnabled,
 		McpIsPublic:    body.McpIsPublic,
 		CustomDomainID: body.CustomDomainID,
 	}

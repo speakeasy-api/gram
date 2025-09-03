@@ -221,6 +221,7 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("default_environment_slug", shared.Slug, "The slug of the environment to use as the default for the toolset")
 	Attribute("http_tool_names", ArrayOf(String), "List of HTTP tool names to include")
 	Attribute("prompt_template_names", ArrayOf(String), "List of prompt template names to include")
+	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
 	Attribute("mcp_slug", shared.Slug, "The slug of the MCP to use for the toolset")
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")

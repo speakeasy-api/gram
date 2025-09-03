@@ -2186,6 +2186,7 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 		Slug:           types.Slug(*v.Slug),
 		Description:    v.Description,
 		McpIsPublic:    v.McpIsPublic,
+		McpEnabled:     v.McpEnabled,
 		CustomDomainID: v.CustomDomainID,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,

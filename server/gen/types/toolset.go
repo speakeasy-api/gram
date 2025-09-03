@@ -35,6 +35,8 @@ type Toolset struct {
 	McpSlug *Slug
 	// Whether the toolset is public in MCP
 	McpIsPublic *bool
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool
 	// The ID of the custom domain to use for the toolset
 	CustomDomainID *string
 	// The external OAuth server details

@@ -2091,6 +2091,7 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 		Slug:           string(v.Slug),
 		Description:    v.Description,
 		McpIsPublic:    v.McpIsPublic,
+		McpEnabled:     v.McpEnabled,
 		CustomDomainID: v.CustomDomainID,
 		CreatedAt:      v.CreatedAt,
 		UpdatedAt:      v.UpdatedAt,

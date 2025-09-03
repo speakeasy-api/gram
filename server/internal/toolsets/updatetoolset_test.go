@@ -40,6 +40,7 @@ func TestToolsetsService_UpdateToolset_Success(t *testing.T) {
 		PromptTemplateNames:    nil,
 		McpSlug:                nil,
 		McpIsPublic:            nil,
+		McpEnabled:             nil,
 		CustomDomainID:         nil,
 		ProjectSlugInput:       nil,
 	})
@@ -77,6 +78,7 @@ func TestToolsetsService_UpdateToolset_PartialUpdate(t *testing.T) {
 		HTTPToolNames:          nil,
 		PromptTemplateNames:    nil,
 		McpSlug:                nil,
+		McpEnabled:             nil,
 		McpIsPublic:            nil,
 		CustomDomainID:         nil,
 		ProjectSlugInput:       nil,
@@ -129,6 +131,7 @@ func TestToolsetsService_UpdateToolset_WithEnvironment(t *testing.T) {
 		HTTPToolNames:          nil,
 		PromptTemplateNames:    nil,
 		McpSlug:                nil,
+		McpEnabled:             nil,
 		McpIsPublic:            nil,
 		CustomDomainID:         nil,
 		ProjectSlugInput:       nil,
@@ -152,6 +155,7 @@ func TestToolsetsService_UpdateToolset_NotFound(t *testing.T) {
 		HTTPToolNames:          nil,
 		PromptTemplateNames:    nil,
 		McpSlug:                nil,
+		McpEnabled:             nil,
 		McpIsPublic:            nil,
 		CustomDomainID:         nil,
 		ProjectSlugInput:       nil,
@@ -186,6 +190,7 @@ func TestToolsetsService_UpdateToolset_InvalidEnvironment(t *testing.T) {
 		HTTPToolNames:          nil,
 		PromptTemplateNames:    nil,
 		McpSlug:                nil,
+		McpEnabled:             nil,
 		McpIsPublic:            nil,
 		CustomDomainID:         nil,
 		ProjectSlugInput:       nil,
@@ -211,6 +216,7 @@ func TestToolsetsService_UpdateToolset_Unauthorized(t *testing.T) {
 		HTTPToolNames:          nil,
 		PromptTemplateNames:    nil,
 		McpSlug:                nil,
+		McpEnabled:             nil,
 		McpIsPublic:            nil,
 		CustomDomainID:         nil,
 		ProjectSlugInput:       nil,
@@ -239,6 +245,7 @@ func TestToolsetsService_UpdateToolset_NoProjectID(t *testing.T) {
 		HTTPToolNames:          nil,
 		PromptTemplateNames:    nil,
 		McpSlug:                nil,
+		McpEnabled:             nil,
 		McpIsPublic:            nil,
 		CustomDomainID:         nil,
 		ProjectSlugInput:       nil,
@@ -273,6 +280,7 @@ func TestToolsetsService_UpdateToolset_EmptyHTTPToolNames(t *testing.T) {
 		HTTPToolNames:          []string{},
 		PromptTemplateNames:    nil,
 		McpSlug:                nil,
+		McpEnabled:             nil,
 		McpIsPublic:            nil,
 		CustomDomainID:         nil,
 		ProjectSlugInput:       nil,
@@ -280,4 +288,40 @@ func TestToolsetsService_UpdateToolset_EmptyHTTPToolNames(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Empty(t, result.HTTPTools)
+}
+
+func TestToolsetsService_UpdateToolset_McpEnabled(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	// Create a toolset first
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "MCP Toolset",
+		Description:            conv.Ptr("Toolset for MCP testing"),
+		HTTPToolNames:          []string{"listPets"},
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	// Update to enable MCP
+	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		Slug:                   created.Slug,
+		Name:                   nil,
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		HTTPToolNames:          nil,
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpIsPublic:            nil,
+		McpEnabled:             conv.Ptr(true),
+		CustomDomainID:         nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.True(t, *result.McpEnabled)
 }
