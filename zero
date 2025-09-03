@@ -63,6 +63,7 @@ echo -e "\n⏳ Setting up API keys and secrets"
 mise run zero:github
 mise run zero:openrouter
 mise run zero:encryption
+mise run zero:tls
 
 echo -e "\n⏳ Building internal SDK"
 mise run build:internal-sdk
