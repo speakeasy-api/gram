@@ -129,6 +129,10 @@ func (s *Manager) GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, e
 }
 
 func (s *Manager) PopulateLocalDevDefaultAuthSession(ctx context.Context) (string, error) {
+	if !s.unsafeLocal {
+		return "", fmt.Errorf("failed to populate local session in non-local environment")
+	}
+
 	var gramSession *Session
 
 	for userID, userInfo := range s.localEnvFile {
