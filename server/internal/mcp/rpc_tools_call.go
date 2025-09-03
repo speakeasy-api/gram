@@ -105,7 +105,7 @@ func handleToolsCall(
 		requestBytes := int64(len(params.Arguments))
 		outputBytes := int64(len(promptData))
 
-		go billingTracker.TrackToolCallUsage(context.Background(), billing.ToolCallUsageEvent{
+		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
 			OrganizationID:   toolset.OrganizationID,
 			RequestBytes:     requestBytes,
 			OutputBytes:      outputBytes,
@@ -182,7 +182,7 @@ func handleToolsCall(
 	// Track tool call usage
 	outputBytes := int64(rw.body.Len())
 
-	go billingTracker.TrackToolCallUsage(context.Background(), billing.ToolCallUsageEvent{
+	go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
 		OrganizationID:   toolset.OrganizationID,
 		RequestBytes:     requestBytes,
 		OutputBytes:      outputBytes,

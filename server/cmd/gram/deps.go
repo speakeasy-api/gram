@@ -266,7 +266,13 @@ func newLocalFeatureFlags(ctx context.Context, logger *slog.Logger, csvPath stri
 	return inmem
 }
 
-func newBillingProvider(ctx context.Context, logger *slog.Logger, redisClient *redis.Client, c *cli.Context) (billing.Repository, billing.Tracker, error) {
+func newBillingProvider(
+	ctx context.Context,
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	redisClient *redis.Client,
+	c *cli.Context,
+) (billing.Repository, billing.Tracker, error) {
 	switch {
 	case c.String("polar-api-key") != "":
 		catalog := &polar.Catalog{
@@ -279,11 +285,11 @@ func newBillingProvider(ctx context.Context, logger *slog.Logger, redisClient *r
 			return nil, nil, fmt.Errorf("invalid polar catalog configuration: %w", err)
 		}
 		polarsdk := polargo.New(polargo.WithSecurity(c.String("polar-api-key")), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
-		pclient := polar.NewClient(polarsdk, logger, redisClient, catalog)
+		pclient := polar.NewClient(polarsdk, logger, tracerProvider, redisClient, catalog)
 		return pclient, pclient, nil
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
-		stub := billing.NewStubClient(logger)
+		stub := billing.NewStubClient(logger, tracerProvider)
 		return stub, stub, nil
 	default:
 		return nil, nil, fmt.Errorf("billing provider is not configured")

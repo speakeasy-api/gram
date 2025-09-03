@@ -324,7 +324,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
 
-	go s.billing.TrackToolCallUsage(context.Background(), billing.ToolCallUsageEvent{
+	go s.billing.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
 		RequestBytes:     requestNumBytes,
 		OutputBytes:      outputNumBytes,
