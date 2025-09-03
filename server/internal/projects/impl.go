@@ -21,7 +21,6 @@ import (
 	srv "github.com/speakeasy-api/gram/server/gen/http/projects/server"
 	gen "github.com/speakeasy-api/gram/server/gen/projects"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -41,7 +40,6 @@ type Service struct {
 	envRepo  *envrepo.Queries
 	sessions *sessions.Manager
 	auth     *auth.Auth
-	assets   *assets.Service
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -124,6 +122,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 			Name:           prj.Name,
 			Slug:           types.Slug(prj.Slug),
 			OrganizationID: prj.OrganizationID,
+			LogoURL:        nil,
 			CreatedAt:      prj.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:      prj.UpdatedAt.Time.Format(time.RFC3339),
 		},
@@ -196,6 +195,7 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.UploadLogoForm) (res
 		Name:           updatedProject.Name,
 		Slug:           types.Slug(updatedProject.Slug),
 		OrganizationID: updatedProject.OrganizationID,
+		LogoURL:        nil,
 		CreatedAt:      updatedProject.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      updatedProject.UpdatedAt.Time.Format(time.RFC3339),
 	}

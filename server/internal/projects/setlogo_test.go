@@ -15,7 +15,10 @@ import (
 )
 
 func TestSetLogo(t *testing.T) {
+	t.Parallel()
+
 	t.Run("success", func(t *testing.T) {
+		t.Parallel()
 		ctx, ti := newTestProjectsService(t)
 
 		// Create a test asset ID
@@ -23,7 +26,10 @@ func TestSetLogo(t *testing.T) {
 
 		// Call SetLogo
 		payload := &projects.UploadLogoForm{
-			AssetID: assetID.String(),
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			SessionToken:     nil,
+			AssetID:          assetID.String(),
 		}
 
 		result, err := ti.service.SetLogo(ctx, payload)
@@ -58,11 +64,15 @@ func TestSetLogo(t *testing.T) {
 	})
 
 	t.Run("invalid asset ID", func(t *testing.T) {
+		t.Parallel()
 		ctx, ti := newTestProjectsService(t)
 
 		// Call SetLogo with invalid asset ID
 		payload := &projects.UploadLogoForm{
-			AssetID: "invalid-uuid",
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			SessionToken:     nil,
+			AssetID:          "invalid-uuid",
 		}
 
 		result, err := ti.service.SetLogo(ctx, payload)
@@ -72,19 +82,23 @@ func TestSetLogo(t *testing.T) {
 		assert.Nil(t, result)
 
 		// Check error type
-		oopsErr, ok := err.(*oops.ShareableError)
-		require.True(t, ok)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
 		assert.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 		assert.Contains(t, oopsErr.Error(), "error parsing asset ID")
 	})
 
 	t.Run("unauthorized - no auth context", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		_, ti := newTestProjectsService(t)
 
 		// Call SetLogo without auth context
 		payload := &projects.UploadLogoForm{
-			AssetID: uuid.New().String(),
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			SessionToken:     nil,
+			AssetID:          uuid.New().String(),
 		}
 
 		result, err := ti.service.SetLogo(ctx, payload)
@@ -94,12 +108,13 @@ func TestSetLogo(t *testing.T) {
 		assert.Nil(t, result)
 
 		// Check error type
-		oopsErr, ok := err.(*oops.ShareableError)
-		require.True(t, ok)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
 		assert.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 	})
 
 	t.Run("unauthorized - no project ID", func(t *testing.T) {
+		t.Parallel()
 		ctx := context.Background()
 		_, ti := newTestProjectsService(t)
 
@@ -109,7 +124,10 @@ func TestSetLogo(t *testing.T) {
 
 		// Call SetLogo without project ID in auth context
 		payload := &projects.UploadLogoForm{
-			AssetID: uuid.New().String(),
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			SessionToken:     nil,
+			AssetID:          uuid.New().String(),
 		}
 
 		result, err := ti.service.SetLogo(ctx, payload)
@@ -119,12 +137,13 @@ func TestSetLogo(t *testing.T) {
 		assert.Nil(t, result)
 
 		// Check error type
-		oopsErr, ok := err.(*oops.ShareableError)
-		require.True(t, ok)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
 		assert.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
 	})
 
 	t.Run("database error - project not found", func(t *testing.T) {
+		t.Parallel()
 		ctx, ti := newTestProjectsService(t)
 
 		// Create auth context with non-existent project ID
@@ -140,7 +159,10 @@ func TestSetLogo(t *testing.T) {
 
 		// Call SetLogo
 		payload := &projects.UploadLogoForm{
-			AssetID: uuid.New().String(),
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			SessionToken:     nil,
+			AssetID:          uuid.New().String(),
 		}
 
 		result, err := ti.service.SetLogo(ctx, payload)
@@ -150,18 +172,22 @@ func TestSetLogo(t *testing.T) {
 		assert.Nil(t, result)
 
 		// Check error type
-		oopsErr, ok := err.(*oops.ShareableError)
-		require.True(t, ok)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
 		assert.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 		assert.Contains(t, oopsErr.Error(), "error updating project logo")
 	})
 
 	t.Run("empty asset ID", func(t *testing.T) {
+		t.Parallel()
 		ctx, ti := newTestProjectsService(t)
 
 		// Call SetLogo with empty asset ID
 		payload := &projects.UploadLogoForm{
-			AssetID: "",
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			SessionToken:     nil,
+			AssetID:          "",
 		}
 
 		result, err := ti.service.SetLogo(ctx, payload)
@@ -171,18 +197,22 @@ func TestSetLogo(t *testing.T) {
 		assert.Nil(t, result)
 
 		// Check error type
-		oopsErr, ok := err.(*oops.ShareableError)
-		require.True(t, ok)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
 		assert.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 		assert.Contains(t, oopsErr.Error(), "error parsing asset ID")
 	})
 
 	t.Run("malformed UUID", func(t *testing.T) {
+		t.Parallel()
 		ctx, ti := newTestProjectsService(t)
 
 		// Call SetLogo with malformed UUID
 		payload := &projects.UploadLogoForm{
-			AssetID: "not-a-uuid-at-all",
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			SessionToken:     nil,
+			AssetID:          "not-a-uuid-at-all",
 		}
 
 		result, err := ti.service.SetLogo(ctx, payload)
@@ -192,13 +222,14 @@ func TestSetLogo(t *testing.T) {
 		assert.Nil(t, result)
 
 		// Check error type
-		oopsErr, ok := err.(*oops.ShareableError)
-		require.True(t, ok)
+		var oopsErr *oops.ShareableError
+		require.ErrorAs(t, err, &oopsErr)
 		assert.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 		assert.Contains(t, oopsErr.Error(), "error parsing asset ID")
 	})
 
 	t.Run("nil payload", func(t *testing.T) {
+		t.Parallel()
 		ctx, ti := newTestProjectsService(t)
 
 		// Call SetLogo with nil payload - this should panic
@@ -208,12 +239,16 @@ func TestSetLogo(t *testing.T) {
 	})
 
 	t.Run("update existing logo", func(t *testing.T) {
+		t.Parallel()
 		ctx, ti := newTestProjectsService(t)
 
 		// First, set an initial logo
 		firstAssetID := uuid.New()
 		payload1 := &projects.UploadLogoForm{
-			AssetID: firstAssetID.String(),
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			SessionToken:     nil,
+			AssetID:          firstAssetID.String(),
 		}
 
 		result1, err := ti.service.SetLogo(ctx, payload1)
@@ -223,7 +258,10 @@ func TestSetLogo(t *testing.T) {
 		// Then update to a different logo
 		secondAssetID := uuid.New()
 		payload2 := &projects.UploadLogoForm{
-			AssetID: secondAssetID.String(),
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+			SessionToken:     nil,
+			AssetID:          secondAssetID.String(),
 		}
 
 		result2, err := ti.service.SetLogo(ctx, payload2)
