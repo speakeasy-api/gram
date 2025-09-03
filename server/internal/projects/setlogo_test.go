@@ -22,7 +22,7 @@ func TestSetLogo_Success(t *testing.T) {
 	assetID := uuid.New()
 
 	// Call SetLogo
-	payload := &projects.SetLogoForm{
+	payload := &projects.SetLogoPayload{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		SessionToken:     nil,
@@ -65,7 +65,7 @@ func TestSetLogo_InvalidAssetID(t *testing.T) {
 	ctx, ti := newTestProjectsService(t)
 
 	// Call SetLogo with invalid asset ID
-	payload := &projects.SetLogoForm{
+	payload := &projects.SetLogoPayload{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		SessionToken:     nil,
@@ -91,7 +91,7 @@ func TestSetLogo_UnauthorizedNoAuthContext(t *testing.T) {
 	_, ti := newTestProjectsService(t)
 
 	// Call SetLogo without auth context
-	payload := &projects.SetLogoForm{
+	payload := &projects.SetLogoPayload{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		SessionToken:     nil,
@@ -120,7 +120,7 @@ func TestSetLogo_UnauthorizedNoProjectID(t *testing.T) {
 	require.NoError(t, err)
 
 	// Call SetLogo without project ID in auth context
-	payload := &projects.SetLogoForm{
+	payload := &projects.SetLogoPayload{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		SessionToken:     nil,
@@ -155,7 +155,7 @@ func TestSetLogo_DatabaseErrorProjectNotFound(t *testing.T) {
 	authCtx.ProjectID = &nonExistentProjectID
 
 	// Call SetLogo
-	payload := &projects.SetLogoForm{
+	payload := &projects.SetLogoPayload{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		SessionToken:     nil,
@@ -180,7 +180,7 @@ func TestSetLogo_EmptyAssetID(t *testing.T) {
 	ctx, ti := newTestProjectsService(t)
 
 	// Call SetLogo with empty asset ID
-	payload := &projects.SetLogoForm{
+	payload := &projects.SetLogoPayload{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		SessionToken:     nil,
@@ -205,7 +205,7 @@ func TestSetLogo_MalformedUUID(t *testing.T) {
 	ctx, ti := newTestProjectsService(t)
 
 	// Call SetLogo with malformed UUID
-	payload := &projects.SetLogoForm{
+	payload := &projects.SetLogoPayload{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		SessionToken:     nil,
@@ -241,7 +241,7 @@ func TestSetLogo_UpdateExistingLogo(t *testing.T) {
 
 	// First, set an initial logo
 	firstAssetID := uuid.New()
-	payload1 := &projects.SetLogoForm{
+	payload1 := &projects.SetLogoPayload{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		SessionToken:     nil,
@@ -254,7 +254,7 @@ func TestSetLogo_UpdateExistingLogo(t *testing.T) {
 
 	// Then update to a different logo
 	secondAssetID := uuid.New()
-	payload2 := &projects.SetLogoForm{
+	payload2 := &projects.SetLogoPayload{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
 		SessionToken:     nil,
