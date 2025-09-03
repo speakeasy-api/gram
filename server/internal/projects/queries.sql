@@ -37,3 +37,11 @@ FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
 WHERE p.deleted IS FALSE
   AND p.id = @id;
+
+-- name: UploadProjectLogo :one
+UPDATE projects
+SET logo_asset_id = @logo_asset_id,
+    updated_at = clock_timestamp()
+WHERE id = @project_id
+  AND deleted IS FALSE
+RETURNING *;

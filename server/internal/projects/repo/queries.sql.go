@@ -154,3 +154,34 @@ func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID
 	}
 	return items, nil
 }
+
+const uploadProjectLogo = `-- name: UploadProjectLogo :one
+UPDATE projects
+SET logo_asset_id = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND deleted IS FALSE
+RETURNING id, name, slug, organization_id, logo_asset_id, created_at, updated_at, deleted_at, deleted
+`
+
+type UploadProjectLogoParams struct {
+	LogoAssetID uuid.NullUUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) UploadProjectLogo(ctx context.Context, arg UploadProjectLogoParams) (Project, error) {
+	row := q.db.QueryRow(ctx, uploadProjectLogo, arg.LogoAssetID, arg.ProjectID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
