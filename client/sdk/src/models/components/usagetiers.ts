@@ -14,8 +14,9 @@ import {
 } from "./tierlimits.js";
 
 export type UsageTiers = {
-  business: TierLimits;
+  enterprise: TierLimits;
   free: TierLimits;
+  pro: TierLimits;
 };
 
 /** @internal */
@@ -24,14 +25,16 @@ export const UsageTiers$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  business: TierLimits$inboundSchema,
+  enterprise: TierLimits$inboundSchema,
   free: TierLimits$inboundSchema,
+  pro: TierLimits$inboundSchema,
 });
 
 /** @internal */
 export type UsageTiers$Outbound = {
-  business: TierLimits$Outbound;
+  enterprise: TierLimits$Outbound;
   free: TierLimits$Outbound;
+  pro: TierLimits$Outbound;
 };
 
 /** @internal */
@@ -40,8 +43,9 @@ export const UsageTiers$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   UsageTiers
 > = z.object({
-  business: TierLimits$outboundSchema,
+  enterprise: TierLimits$outboundSchema,
   free: TierLimits$outboundSchema,
+  pro: TierLimits$outboundSchema,
 });
 
 /**

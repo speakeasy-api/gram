@@ -32,8 +32,10 @@ type GetPeriodUsageResponseBody struct {
 type GetUsageTiersResponseBody struct {
 	// The limits for the free tier
 	Free *TierLimitsResponseBody `form:"free,omitempty" json:"free,omitempty" xml:"free,omitempty"`
-	// The limits for the business tier
-	Business *TierLimitsResponseBody `form:"business,omitempty" json:"business,omitempty" xml:"business,omitempty"`
+	// The limits for the pro tier
+	Pro *TierLimitsResponseBody `form:"pro,omitempty" json:"pro,omitempty" xml:"pro,omitempty"`
+	// The limits for the enterprise tier
+	Enterprise *TierLimitsResponseBody `form:"enterprise,omitempty" json:"enterprise,omitempty" xml:"enterprise,omitempty"`
 }
 
 // GetPeriodUsageUnauthorizedResponseBody is the type of the "usage" service
@@ -778,10 +780,21 @@ type TierLimitsResponseBody struct {
 	IncludedToolCalls *int `form:"included_tool_calls,omitempty" json:"included_tool_calls,omitempty" xml:"included_tool_calls,omitempty"`
 	// The number of servers included in the tier
 	IncludedServers *int `form:"included_servers,omitempty" json:"included_servers,omitempty" xml:"included_servers,omitempty"`
+	// The number of credits included in the tier for playground and other
+	// dashboard activities
+	IncludedCredits *int `form:"included_credits,omitempty" json:"included_credits,omitempty" xml:"included_credits,omitempty"`
 	// The price per additional tool call
 	PricePerAdditionalToolCall *float64 `form:"price_per_additional_tool_call,omitempty" json:"price_per_additional_tool_call,omitempty" xml:"price_per_additional_tool_call,omitempty"`
 	// The price per additional server
 	PricePerAdditionalServer *float64 `form:"price_per_additional_server,omitempty" json:"price_per_additional_server,omitempty" xml:"price_per_additional_server,omitempty"`
+	// The price per additional credit
+	PricePerAdditionalCredit *float64 `form:"price_per_additional_credit,omitempty" json:"price_per_additional_credit,omitempty" xml:"price_per_additional_credit,omitempty"`
+	// Key feature bullets of the tier
+	FeatureBullets []string `form:"feature_bullets,omitempty" json:"feature_bullets,omitempty" xml:"feature_bullets,omitempty"`
+	// Included items bullets of the tier
+	IncludedBullets []string `form:"included_bullets,omitempty" json:"included_bullets,omitempty" xml:"included_bullets,omitempty"`
+	// Add-on items bullets of the tier (optional)
+	AddOnBullets []string `form:"add_on_bullets,omitempty" json:"add_on_bullets,omitempty" xml:"add_on_bullets,omitempty"`
 }
 
 // NewGetPeriodUsagePeriodUsageOK builds a "usage" service "getPeriodUsage"
@@ -953,7 +966,8 @@ func NewGetPeriodUsageGatewayError(body *GetPeriodUsageGatewayErrorResponseBody)
 func NewGetUsageTiersUsageTiersOK(body *GetUsageTiersResponseBody) *usage.UsageTiers {
 	v := &usage.UsageTiers{}
 	v.Free = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Free)
-	v.Business = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Business)
+	v.Pro = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Pro)
+	v.Enterprise = unmarshalTierLimitsResponseBodyToUsageTierLimits(body.Enterprise)
 
 	return v
 }
@@ -1435,16 +1449,24 @@ func ValidateGetUsageTiersResponseBody(body *GetUsageTiersResponseBody) (err err
 	if body.Free == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("free", "body"))
 	}
-	if body.Business == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("business", "body"))
+	if body.Pro == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pro", "body"))
+	}
+	if body.Enterprise == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enterprise", "body"))
 	}
 	if body.Free != nil {
 		if err2 := ValidateTierLimitsResponseBody(body.Free); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
-	if body.Business != nil {
-		if err2 := ValidateTierLimitsResponseBody(body.Business); err2 != nil {
+	if body.Pro != nil {
+		if err2 := ValidateTierLimitsResponseBody(body.Pro); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Enterprise != nil {
+		if err2 := ValidateTierLimitsResponseBody(body.Enterprise); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -2424,11 +2446,23 @@ func ValidateTierLimitsResponseBody(body *TierLimitsResponseBody) (err error) {
 	if body.IncludedServers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("included_servers", "body"))
 	}
+	if body.IncludedCredits == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("included_credits", "body"))
+	}
 	if body.PricePerAdditionalToolCall == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("price_per_additional_tool_call", "body"))
 	}
 	if body.PricePerAdditionalServer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("price_per_additional_server", "body"))
+	}
+	if body.PricePerAdditionalCredit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("price_per_additional_credit", "body"))
+	}
+	if body.FeatureBullets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("feature_bullets", "body"))
+	}
+	if body.IncludedBullets == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("included_bullets", "body"))
 	}
 	return
 }
