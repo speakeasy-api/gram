@@ -6,11 +6,11 @@ import (
 
 	polarComponents "github.com/polarsource/polar-go/models/components"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	)
+)
 
 type PolarCustomerState struct {
-	OrganizationID string // the Speakeasy organization ID (not the Polar organization ID)
-	*polarComponents.CustomerState // nil means no state yet exists for this customer
+	OrganizationID                 string // the Speakeasy organization ID (not the Polar organization ID)
+	*polarComponents.CustomerState        // nil means no state yet exists for this customer
 }
 
 var _ cache.CacheableObject[PolarCustomerState] = (*PolarCustomerState)(nil)

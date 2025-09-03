@@ -129,7 +129,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
-	temporalWorker.RegisterActivity(activities.ReportFreeTierOverage)
+	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
+	temporalWorker.RegisterActivity(activities.ReportBillingUsage)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(SlackEventWorkflow)

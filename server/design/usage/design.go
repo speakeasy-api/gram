@@ -23,7 +23,7 @@ var TierLimits = Type("TierLimits", func() {
 	Attribute("included_servers", Int, "The number of servers included in the tier")
 	Attribute("price_per_additional_tool_call", Float64, "The price per additional tool call")
 	Attribute("price_per_additional_server", Float64, "The price per additional server")
-	
+
 	Required("base_price", "included_tool_calls", "included_servers", "price_per_additional_tool_call", "price_per_additional_server")
 })
 
@@ -80,21 +80,21 @@ var _ = Service("usage", func() {
 
 	Method("createCustomerSession", func() {
 		Description("Create a customer session for the user")
-		
+
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
 
 		Result(String)
-		
+
 		HTTP(func() {
 			POST("/rpc/usage.createCustomerSession")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
-		
+
 		Meta("openapi:operationId", "createCustomerSession")
 		Meta("openapi:extension:x-speakeasy-name-override", "createCustomerSession")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createCustomerSession"}`)

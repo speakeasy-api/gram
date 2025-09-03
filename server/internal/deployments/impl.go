@@ -30,8 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/packages/semver"
 	packagesRepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
+	"github.com/speakeasy-api/gram/server/internal/packages/semver"
 	"go.temporal.io/sdk/client"
 )
 
