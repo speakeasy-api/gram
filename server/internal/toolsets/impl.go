@@ -272,7 +272,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		}
 	}
 
-	// TODO: Will we put account tier restrictions here?
+	// TODO: Will we put account type restrictions here?
 	if payload.McpEnabled != nil {
 		updateParams.McpEnabled = *payload.McpEnabled
 	}
