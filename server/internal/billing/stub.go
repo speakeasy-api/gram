@@ -120,13 +120,35 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			IncludedServers:            3,
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
+			IncludedCredits:            25,
+			PricePerAdditionalCredit:   1,
+			FeatureBullets: []string{},
+			IncludedBullets: []string{},
+			AddOnBullets: []string{},
 		},
-		Business: &gen.TierLimits{
+		Pro: &gen.TierLimits{
 			BasePrice:                  500,
 			IncludedToolCalls:          1e8,
 			IncludedServers:            50,
 			PricePerAdditionalToolCall: 0.00001,
 			PricePerAdditionalServer:   0.5,
+			IncludedCredits:            25,
+			PricePerAdditionalCredit:   1,
+			FeatureBullets: []string{},
+			IncludedBullets: []string{},
+			AddOnBullets: []string{},
+		},
+		Enterprise: &gen.TierLimits{
+			BasePrice:                  0,
+			IncludedToolCalls:          0,
+			IncludedServers:            0,
+			PricePerAdditionalToolCall: 0,
+			PricePerAdditionalServer:   0,
+			IncludedCredits:            0,
+			PricePerAdditionalCredit:   0,
+			FeatureBullets: []string{},
+			IncludedBullets: []string{},
+			AddOnBullets: []string{},
 		},
 	}, nil
 }
@@ -205,7 +227,7 @@ func (s *StubClient) readPeriodUsage(orgID string) (*gen.PeriodUsage, error) {
 		return nil, fmt.Errorf("get or create local billing data dir: %w", err)
 	}
 
-	tier := must.Value(s.GetUsageTiers(context.Background())).Business
+	tier := must.Value(s.GetUsageTiers(context.Background())).Pro
 	zero := &gen.PeriodUsage{
 		ToolCalls:               0,
 		MaxToolCalls:            tier.IncludedToolCalls,
