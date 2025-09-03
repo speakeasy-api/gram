@@ -493,13 +493,12 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				"14 day log retention",
 				"Slack community support",
 			},
-			IncludedBullets: func() []string {
-				return []string{
-					fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, conv.Ternary(freeTierLimits.Servers == 1, "server", "servers")),
-					fmt.Sprintf("%d tool calls / month", freeTierLimits.ToolCalls),
-					fmt.Sprintf("$%d in playground credits", freeIncludedCredits),
-				}
-			}(),
+			IncludedBullets: []string{
+				fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, conv.Ternary(freeTierLimits.Servers == 1, "server", "servers")),
+				fmt.Sprintf("%d tool calls / month", freeTierLimits.ToolCalls),
+				fmt.Sprintf("$%d in playground credits", freeIncludedCredits),
+			},
+			AddOnBullets: []string{},
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  29, // Hard coded for now. TODO: Move to Polar
@@ -515,13 +514,11 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 				"30 day log retention",
 				"Dedicated support channel (Slack or Teams)",
 			},
-			IncludedBullets: func() []string {
-				return []string{
-					fmt.Sprintf("%d MCP %s (public or private)", proTierLimits.Servers, conv.Ternary(proTierLimits.Servers == 1, "server", "servers")),
-					fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
-					fmt.Sprintf("$%d in playground credits", proIncludedCredits),
-				}
-			}(),
+			IncludedBullets: []string{
+				fmt.Sprintf("%d MCP %s (public or private)", proTierLimits.Servers, conv.Ternary(proTierLimits.Servers == 1, "server", "servers")),
+				fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
+				fmt.Sprintf("$%d in playground credits", proIncludedCredits),
+			},
 			AddOnBullets: []string{
 				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
 				fmt.Sprintf("%s / month / additional %d monthly requests", formatPrice(toolCallPrice*float64(additionalToolCallsBlock)), additionalToolCallsBlock),
@@ -546,6 +543,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			IncludedBullets: []string{
 				"Custom",
 			},
+			AddOnBullets: []string{},
 		},
 	}, nil
 }

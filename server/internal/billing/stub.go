@@ -80,6 +80,11 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			IncludedServers:            3,
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
+			IncludedCredits:            25,
+			PricePerAdditionalCredit:   1,
+			FeatureBullets: []string{},
+			IncludedBullets: []string{},
+			AddOnBullets: []string{},
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  500,
@@ -87,6 +92,11 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			IncludedServers:            50,
 			PricePerAdditionalToolCall: 0.00001,
 			PricePerAdditionalServer:   0.5,
+			IncludedCredits:            25,
+			PricePerAdditionalCredit:   1,
+			FeatureBullets: []string{},
+			IncludedBullets: []string{},
+			AddOnBullets: []string{},
 		},
 		Enterprise: &gen.TierLimits{
 			BasePrice:                  0,
@@ -94,6 +104,11 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			IncludedServers:            0,
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
+			IncludedCredits:            0,
+			PricePerAdditionalCredit:   0,
+			FeatureBullets: []string{},
+			IncludedBullets: []string{},
+			AddOnBullets: []string{},
 		},
 	}, nil
 }
