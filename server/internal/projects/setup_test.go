@@ -54,6 +54,7 @@ func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 	ctx := context.Background()
 
 	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
 
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
@@ -61,7 +62,7 @@ func newTestProjectsService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	billingClient := billing.NewStubClient(logger)
+	billingClient := billing.NewStubClient(logger, tracerProvider)
 
 	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
 	require.NoError(t, err)
