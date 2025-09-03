@@ -21,7 +21,7 @@ var Project = Type("Project", func() {
 	Attribute("name", String, "The name of the project")
 	Attribute("slug", Slug, "The slug of the project")
 	Attribute("organization_id", String, "The ID of the organization that owns the project")
-	Attribute("logo_url", String, "The URL of the project logo")
+	Attribute("logo_asset_id", String, "The ID of the logo asset for the project")
 	Attribute("created_at", String, func() {
 		Description("The creation date of the project.")
 		Format(FormatDateTime)

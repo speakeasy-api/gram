@@ -113,7 +113,7 @@ func NewListProjectsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) go
 // "setLogo" of service "projects".
 func NewSetLogoEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*UploadLogoForm)
+		p := req.(*SetLogoForm)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",

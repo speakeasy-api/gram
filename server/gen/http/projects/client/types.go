@@ -26,7 +26,7 @@ type CreateProjectRequestBody struct {
 // SetLogoRequestBody is the type of the "projects" service "setLogo" endpoint
 // HTTP request body.
 type SetLogoRequestBody struct {
-	// The ID of the asset to upload
+	// The ID of the asset
 	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
 }
 
@@ -605,8 +605,8 @@ type ProjectResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The ID of the organization that owns the project
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	// The URL of the project logo
-	LogoURL *string `form:"logo_url,omitempty" json:"logo_url,omitempty" xml:"logo_url,omitempty"`
+	// The ID of the logo asset for the project
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// The creation date of the project.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the project.
@@ -635,7 +635,7 @@ func NewCreateProjectRequestBody(p *projects.CreateProjectPayload) *CreateProjec
 
 // NewSetLogoRequestBody builds the HTTP request body from the payload of the
 // "setLogo" endpoint of the "projects" service.
-func NewSetLogoRequestBody(p *projects.UploadLogoForm) *SetLogoRequestBody {
+func NewSetLogoRequestBody(p *projects.SetLogoForm) *SetLogoRequestBody {
 	body := &SetLogoRequestBody{
 		AssetID: p.AssetID,
 	}
@@ -963,10 +963,10 @@ func NewListProjectsGatewayError(body *ListProjectsGatewayErrorResponseBody) *go
 	return v
 }
 
-// NewSetLogoUploadLogoResultOK builds a "projects" service "setLogo" endpoint
-// result from a HTTP "OK" response.
-func NewSetLogoUploadLogoResultOK(body *SetLogoResponseBody) *projects.UploadLogoResult {
-	v := &projects.UploadLogoResult{}
+// NewSetLogoResultOK builds a "projects" service "setLogo" endpoint result
+// from a HTTP "OK" response.
+func NewSetLogoResultOK(body *SetLogoResponseBody) *projects.SetLogoResult {
+	v := &projects.SetLogoResult{}
 	v.Project = unmarshalProjectResponseBodyToProjectsProject(body.Project)
 
 	return v

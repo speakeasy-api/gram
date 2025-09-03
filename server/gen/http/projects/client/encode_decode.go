@@ -513,9 +513,9 @@ func (c *Client) BuildSetLogoRequest(ctx context.Context, v any) (*http.Request,
 // setLogo server.
 func EncodeSetLogoRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*projects.UploadLogoForm)
+		p, ok := v.(*projects.SetLogoForm)
 		if !ok {
-			return goahttp.ErrInvalidType("projects", "setLogo", "*projects.UploadLogoForm", v)
+			return goahttp.ErrInvalidType("projects", "setLogo", "*projects.SetLogoForm", v)
 		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
@@ -580,7 +580,7 @@ func DecodeSetLogoResponse(decoder func(*http.Response) goahttp.Decoder, restore
 			if err != nil {
 				return nil, goahttp.ErrValidationError("projects", "setLogo", err)
 			}
-			res := NewSetLogoUploadLogoResultOK(&body)
+			res := NewSetLogoResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -744,7 +744,7 @@ func unmarshalProjectResponseBodyToProjectsProject(v *ProjectResponseBody) *proj
 		Name:           *v.Name,
 		Slug:           types.Slug(*v.Slug),
 		OrganizationID: *v.OrganizationID,
-		LogoURL:        v.LogoURL,
+		LogoAssetID:    v.LogoAssetID,
 		CreatedAt:      *v.CreatedAt,
 		UpdatedAt:      *v.UpdatedAt,
 	}

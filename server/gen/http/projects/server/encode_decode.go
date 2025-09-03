@@ -460,7 +460,7 @@ func EncodeListProjectsError(encoder func(context.Context, http.ResponseWriter) 
 // projects setLogo endpoint.
 func EncodeSetLogoResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*projects.UploadLogoResult)
+		res, _ := v.(*projects.SetLogoResult)
 		enc := encoder(ctx, w)
 		body := NewSetLogoResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -470,8 +470,8 @@ func EncodeSetLogoResponse(encoder func(context.Context, http.ResponseWriter) go
 
 // DecodeSetLogoRequest returns a decoder for requests sent to the projects
 // setLogo endpoint.
-func DecodeSetLogoRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*projects.UploadLogoForm, error) {
-	return func(r *http.Request) (*projects.UploadLogoForm, error) {
+func DecodeSetLogoRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*projects.SetLogoForm, error) {
+	return func(r *http.Request) (*projects.SetLogoForm, error) {
 		var (
 			body SetLogoRequestBody
 			err  error
@@ -509,7 +509,7 @@ func DecodeSetLogoRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewSetLogoUploadLogoForm(&body, apikeyToken, sessionToken, projectSlugInput)
+		payload := NewSetLogoForm(&body, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -700,7 +700,7 @@ func marshalProjectsProjectToProjectResponseBody(v *projects.Project) *ProjectRe
 		Name:           v.Name,
 		Slug:           string(v.Slug),
 		OrganizationID: v.OrganizationID,
-		LogoURL:        v.LogoURL,
+		LogoAssetID:    v.LogoAssetID,
 		CreatedAt:      v.CreatedAt,
 		UpdatedAt:      v.UpdatedAt,
 	}

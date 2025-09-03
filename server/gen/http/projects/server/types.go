@@ -26,7 +26,7 @@ type CreateProjectRequestBody struct {
 // SetLogoRequestBody is the type of the "projects" service "setLogo" endpoint
 // HTTP request body.
 type SetLogoRequestBody struct {
-	// The ID of the asset to upload
+	// The ID of the asset
 	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
 }
 
@@ -605,8 +605,8 @@ type ProjectResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// The ID of the organization that owns the project
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// The URL of the project logo
-	LogoURL *string `form:"logo_url,omitempty" json:"logo_url,omitempty" xml:"logo_url,omitempty"`
+	// The ID of the logo asset for the project
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// The creation date of the project.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the project.
@@ -650,7 +650,7 @@ func NewListProjectsResponseBody(res *projects.ListProjectsResult) *ListProjects
 
 // NewSetLogoResponseBody builds the HTTP response body from the result of the
 // "setLogo" endpoint of the "projects" service.
-func NewSetLogoResponseBody(res *projects.UploadLogoResult) *SetLogoResponseBody {
+func NewSetLogoResponseBody(res *projects.SetLogoResult) *SetLogoResponseBody {
 	body := &SetLogoResponseBody{}
 	if res.Project != nil {
 		body.Project = marshalProjectsProjectToProjectResponseBody(res.Project)
@@ -1102,9 +1102,9 @@ func NewListProjectsPayload(organizationID string, apikeyToken *string, sessionT
 	return v
 }
 
-// NewSetLogoUploadLogoForm builds a projects service setLogo endpoint payload.
-func NewSetLogoUploadLogoForm(body *SetLogoRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *projects.UploadLogoForm {
-	v := &projects.UploadLogoForm{
+// NewSetLogoForm builds a projects service setLogo endpoint payload.
+func NewSetLogoForm(body *SetLogoRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *projects.SetLogoForm {
+	v := &projects.SetLogoForm{
 		AssetID: *body.AssetID,
 	}
 	v.ApikeyToken = apikeyToken

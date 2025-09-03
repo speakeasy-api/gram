@@ -4266,14 +4266,14 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/UploadLogoForm2'
+                            $ref: '#/components/schemas/SetLogoForm2'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/UploadLogoResult'
+                                $ref: '#/components/schemas/SetLogoResult'
                     description: OK response.
                 "400":
                     content:
@@ -8865,9 +8865,9 @@ components:
                 id:
                     type: string
                     description: The ID of the project
-                logo_url:
+                logo_asset_id:
                     type: string
-                    description: The URL of the project logo
+                    description: The ID of the logo asset for the project
                 name:
                     type: string
                     description: The name of the project
@@ -9209,6 +9209,35 @@ components:
             required:
                 - description
                 - env_variables
+        SetLogoForm:
+            type: object
+            properties:
+                apikey_token:
+                    type: string
+                asset_id:
+                    type: string
+                    description: The ID of the asset
+                project_slug_input:
+                    type: string
+                session_token:
+                    type: string
+            required:
+                - asset_id
+        SetLogoForm2:
+            type: object
+            properties:
+                asset_id:
+                    type: string
+                    description: The ID of the asset
+            required:
+                - asset_id
+        SetLogoResult:
+            type: object
+            properties:
+                project:
+                    $ref: '#/components/schemas/Project'
+            required:
+                - project
         TierLimits:
             type: object
             properties:
@@ -9713,35 +9742,6 @@ components:
                     $ref: '#/components/schemas/Asset'
             required:
                 - asset
-        UploadLogoForm:
-            type: object
-            properties:
-                apikey_token:
-                    type: string
-                asset_id:
-                    type: string
-                    description: The ID of the asset to upload
-                project_slug_input:
-                    type: string
-                session_token:
-                    type: string
-            required:
-                - asset_id
-        UploadLogoForm2:
-            type: object
-            properties:
-                asset_id:
-                    type: string
-                    description: The ID of the asset to upload
-            required:
-                - asset_id
-        UploadLogoResult:
-            type: object
-            properties:
-                project:
-                    $ref: '#/components/schemas/Project'
-            required:
-                - project
         UploadOpenAPIv3Form:
             type: object
             properties:

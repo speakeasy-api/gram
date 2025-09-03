@@ -3456,14 +3456,14 @@ paths:
                   name: SetLogoRequestBody
                   required: true
                   schema:
-                    $ref: '#/definitions/UploadLogoForm'
+                    $ref: '#/definitions/SetLogoForm'
                     required:
                         - asset_id
             responses:
                 "200":
                     description: OK response.
                     schema:
-                        $ref: '#/definitions/UploadLogoResult'
+                        $ref: '#/definitions/SetLogoResult'
                         required:
                             - project
                 "400":
@@ -12787,7 +12787,7 @@ definitions:
             project:
                 created_at: "1980-02-10T19:35:25Z"
                 id: Dolorem voluptas consectetur.
-                logo_url: Et est magni ducimus.
+                logo_asset_id: Et est magni ducimus.
                 name: Explicabo sed ea.
                 organization_id: Nobis impedit sit est velit delectus.
                 slug: "6e6"
@@ -30371,9 +30371,9 @@ definitions:
                 type: string
                 description: The ID of the project
                 example: Nihil voluptatem quibusdam et molestiae amet.
-            logo_url:
+            logo_asset_id:
                 type: string
-                description: The URL of the project logo
+                description: The ID of the logo asset for the project
                 example: Qui aut.
             name:
                 type: string
@@ -30397,7 +30397,7 @@ definitions:
         example:
             created_at: "1996-07-28T17:53:22Z"
             id: Consectetur et et.
-            logo_url: Dolores et impedit beatae eveniet.
+            logo_asset_id: Dolores et impedit beatae eveniet.
             name: Non ullam alias.
             organization_id: Et aut enim non.
             slug: k4h
@@ -32101,6 +32101,35 @@ definitions:
         required:
             - description
             - env_variables
+    SetLogoForm:
+        title: SetLogoForm
+        type: object
+        properties:
+            asset_id:
+                type: string
+                description: The ID of the asset
+                example: Non illum at est sed voluptas.
+        example:
+            asset_id: Cupiditate dicta.
+        required:
+            - asset_id
+    SetLogoResult:
+        title: SetLogoResult
+        type: object
+        properties:
+            project:
+                $ref: '#/definitions/Project'
+        example:
+            project:
+                created_at: "1980-02-10T19:35:25Z"
+                id: Dolorem voluptas consectetur.
+                logo_asset_id: Et est magni ducimus.
+                name: Explicabo sed ea.
+                organization_id: Nobis impedit sit est velit delectus.
+                slug: "6e6"
+                updated_at: "1977-04-28T01:18:23Z"
+        required:
+            - project
     SlackCallbackBadRequestResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
@@ -43279,35 +43308,6 @@ definitions:
                 updated_at: "1987-05-11T15:18:53Z"
         required:
             - asset
-    UploadLogoForm:
-        title: UploadLogoForm
-        type: object
-        properties:
-            asset_id:
-                type: string
-                description: The ID of the asset to upload
-                example: Non illum at est sed voluptas.
-        example:
-            asset_id: Cupiditate dicta.
-        required:
-            - asset_id
-    UploadLogoResult:
-        title: UploadLogoResult
-        type: object
-        properties:
-            project:
-                $ref: '#/definitions/Project'
-        example:
-            project:
-                created_at: "1980-02-10T19:35:25Z"
-                id: Dolorem voluptas consectetur.
-                logo_url: Et est magni ducimus.
-                name: Explicabo sed ea.
-                organization_id: Nobis impedit sit est velit delectus.
-                slug: "6e6"
-                updated_at: "1977-04-28T01:18:23Z"
-        required:
-            - project
     UploadOpenAPIv3Result:
         title: UploadOpenAPIv3Result
         type: object

@@ -122,7 +122,7 @@ func (s *Service) CreateProject(ctx context.Context, payload *gen.CreateProjectP
 			Name:           prj.Name,
 			Slug:           types.Slug(prj.Slug),
 			OrganizationID: prj.OrganizationID,
-			LogoURL:        nil,
+			LogoAssetID:    nil,
 			CreatedAt:      prj.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:      prj.UpdatedAt.Time.Format(time.RFC3339),
 		},
@@ -171,7 +171,7 @@ func (s *Service) ListProjects(ctx context.Context, payload *gen.ListProjectsPay
 	}, nil
 }
 
-func (s *Service) SetLogo(ctx context.Context, payload *gen.UploadLogoForm) (res *gen.UploadLogoResult, err error) {
+func (s *Service) SetLogo(ctx context.Context, payload *gen.SetLogoForm) (res *gen.SetLogoResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -195,17 +195,17 @@ func (s *Service) SetLogo(ctx context.Context, payload *gen.UploadLogoForm) (res
 		Name:           updatedProject.Name,
 		Slug:           types.Slug(updatedProject.Slug),
 		OrganizationID: updatedProject.OrganizationID,
-		LogoURL:        nil,
+		LogoAssetID:    nil,
 		CreatedAt:      updatedProject.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:      updatedProject.UpdatedAt.Time.Format(time.RFC3339),
 	}
 
 	if updatedProject.LogoAssetID.Valid {
-		logoURL := fmt.Sprintf("/rpc/assets.serveImage?id=%s", updatedProject.LogoAssetID.UUID.String())
-		projectResponse.LogoURL = &logoURL
+		logoAssetId := updatedProject.LogoAssetID.UUID.String()
+		projectResponse.LogoAssetID = &logoAssetId
 	}
 
-	return &gen.UploadLogoResult{
+	return &gen.SetLogoResult{
 		Project: projectResponse,
 	}, nil
 }
