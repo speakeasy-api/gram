@@ -30,3 +30,25 @@ func (p PolarCustomerState) TTL() time.Duration {
 func (p PolarCustomerState) AdditionalCacheKeys() []string {
 	return []string{}
 }
+
+type Product struct {
+	polarComponents.Product
+}
+
+var _ cache.CacheableObject[Product] = (*Product)(nil)
+
+func (p Product) CacheKey() string {
+	return ProductCacheKey(p.ID)
+}
+
+func ProductCacheKey(productID string) string {
+	return fmt.Sprintf("polar_product:%s", productID)
+}
+
+func (p Product) TTL() time.Duration {
+	return 12 * time.Hour
+}
+
+func (p Product) AdditionalCacheKeys() []string {
+	return []string{}
+}

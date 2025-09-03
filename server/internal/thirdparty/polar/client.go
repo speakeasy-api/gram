@@ -51,6 +51,7 @@ type Client struct {
 	polar              *polargo.Polar
 	catalog            *Catalog
 	customerStateCache cache.TypedCacheObject[PolarCustomerState]
+	productCache       cache.TypedCacheObject[Product]
 }
 
 var _ billing.Tracker = (*Client)(nil)
@@ -62,6 +63,7 @@ func NewClient(polarClient *polargo.Polar, logger *slog.Logger, redisClient *red
 		polar:              polarClient,
 		catalog:            catalog,
 		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		productCache:       cache.NewTypedObjectCache[Product](logger.With(attr.SlogCacheNamespace("polar-product")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
 }
 
@@ -285,6 +287,7 @@ func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (*billing.Ti
 }
 
 func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerState) (*billing.Tier, error) {
+	return pointer.From(billing.TierFree), nil // TODO
 	if customerState != nil {
 		for _, sub := range customerState.ActiveSubscriptions {
 			if sub.ProductID == p.catalog.ProductIDPro {
@@ -297,7 +300,7 @@ func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerStat
 }
 
 func (p *Client) GetCustomer(ctx context.Context, orgID string) (*billing.Customer, error) {
-	customerState, err := p.getCustomerState(ctx, orgID)
+	customerState, err := p.getCustomerState(ctx, "123")//TODO orgID)
 	if err != nil {
 		return nil, fmt.Errorf("get customer state: %w", err)
 	}
@@ -512,9 +515,17 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 }
 
 func (p *Client) getProductByID(ctx context.Context, id string) (*polarComponents.Product, error) {
+	if product, err := p.productCache.Get(ctx, ProductCacheKey(id)); err == nil {
+		return &product.Product, nil
+	}
+
 	res, err := p.polar.Products.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get polar product: %w", err)
+	}
+
+	if err = p.productCache.Store(ctx, Product{Product: *res.Product}); err != nil {
+		p.logger.ErrorContext(ctx, "failed to cache product", attr.SlogError(err))
 	}
 
 	return res.Product, nil
