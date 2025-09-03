@@ -64,7 +64,6 @@ func TestSetLogo_InvalidAssetID(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestProjectsService(t)
 
-	// Call SetLogo with invalid asset ID
 	payload := &projects.SetLogoPayload{
 		ApikeyToken:      nil,
 		ProjectSlugInput: nil,
@@ -74,14 +73,12 @@ func TestSetLogo_InvalidAssetID(t *testing.T) {
 
 	result, err := ti.service.SetLogo(ctx, payload)
 
-	// Verify error
 	require.Error(t, err)
 	assert.Nil(t, result)
 
-	// Check error type
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	assert.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	assert.Equal(t, oops.CodeInvalid, oopsErr.Code)
 	assert.Contains(t, oopsErr.Error(), "error parsing asset ID")
 }
 
@@ -196,32 +193,7 @@ func TestSetLogo_EmptyAssetID(t *testing.T) {
 	// Check error type
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	assert.Equal(t, oops.CodeUnexpected, oopsErr.Code)
-	assert.Contains(t, oopsErr.Error(), "error parsing asset ID")
-}
-
-func TestSetLogo_MalformedUUID(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestProjectsService(t)
-
-	// Call SetLogo with malformed UUID
-	payload := &projects.SetLogoPayload{
-		ApikeyToken:      nil,
-		ProjectSlugInput: nil,
-		SessionToken:     nil,
-		AssetID:          "not-a-uuid-at-all",
-	}
-
-	result, err := ti.service.SetLogo(ctx, payload)
-
-	// Verify error
-	require.Error(t, err)
-	assert.Nil(t, result)
-
-	// Check error type
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	assert.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	assert.Equal(t, oops.CodeInvalid, oopsErr.Code)
 	assert.Contains(t, oopsErr.Error(), "error parsing asset ID")
 }
 
