@@ -473,8 +473,11 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			PricePerAdditionalServer:   0,
 			PricePerAdditionalCredit:   1, // Hard coded for now. TODO: Move to Polar
 			DescriptionBullets: []string{
-				"Free tier",
-				"Update me",
+				"Tool generation",
+				"Custom tool creation",
+				"Hosted server deployments",
+				"14 day log retention",
+				"Slack community support",
 			},
 		},
 		Pro: &gen.TierLimits{
@@ -486,8 +489,10 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			PricePerAdditionalServer:   mcpServerPrice,
 			PricePerAdditionalCredit:   1, // Hard coded for now. TODO: Move to Polar
 			DescriptionBullets: []string{
-				"Pro tier",
-				"Update me",
+				"Custom domain",
+				"Register your own OAuth server",
+				"30 day log retention",
+				"Dedicated support channel (Slack or Teams)",
 			},
 		},
 		Enterprise: &gen.TierLimits{
@@ -499,8 +504,11 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			PricePerAdditionalServer:   0,
 			PricePerAdditionalCredit:   0,
 			DescriptionBullets: []string{
-				"Enterprise tier",
-				"Update me",
+				"Oauth 2.1 proxy support",
+				"White-glove onboarding",
+				"SSO",
+				"Audit logs",
+				"SLA-backed support",
 			},
 		},
 	}, nil
