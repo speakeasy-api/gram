@@ -9,7 +9,7 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type ListProjectsSecurity = {
-  apikeyHeaderAuthorization?: string | undefined;
+  apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
@@ -18,6 +18,10 @@ export type ListProjectsRequest = {
    * The ID of the organization to list projects for
    */
   organizationId: string;
+  /**
+   * API Key header
+   */
+  gramKey?: string | undefined;
   /**
    * Session header
    */
@@ -30,18 +34,18 @@ export const ListProjectsSecurity$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  apikey_header_Authorization: z.string().optional(),
+  "apikey_header_Gram-Key": z.string().optional(),
   "session_header_Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    "apikey_header_Authorization": "apikeyHeaderAuthorization",
+    "apikey_header_Gram-Key": "apikeyHeaderGramKey",
     "session_header_Gram-Session": "sessionHeaderGramSession",
   });
 });
 
 /** @internal */
 export type ListProjectsSecurity$Outbound = {
-  apikey_header_Authorization?: string | undefined;
+  "apikey_header_Gram-Key"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
@@ -51,11 +55,11 @@ export const ListProjectsSecurity$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListProjectsSecurity
 > = z.object({
-  apikeyHeaderAuthorization: z.string().optional(),
+  apikeyHeaderGramKey: z.string().optional(),
   sessionHeaderGramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    apikeyHeaderAuthorization: "apikey_header_Authorization",
+    apikeyHeaderGramKey: "apikey_header_Gram-Key",
     sessionHeaderGramSession: "session_header_Gram-Session",
   });
 });
@@ -98,10 +102,12 @@ export const ListProjectsRequest$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   organization_id: z.string(),
+  "Gram-Key": z.string().optional(),
   "Gram-Session": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "organization_id": "organizationId",
+    "Gram-Key": "gramKey",
     "Gram-Session": "gramSession",
   });
 });
@@ -109,6 +115,7 @@ export const ListProjectsRequest$inboundSchema: z.ZodType<
 /** @internal */
 export type ListProjectsRequest$Outbound = {
   organization_id: string;
+  "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
 
@@ -119,10 +126,12 @@ export const ListProjectsRequest$outboundSchema: z.ZodType<
   ListProjectsRequest
 > = z.object({
   organizationId: z.string(),
+  gramKey: z.string().optional(),
   gramSession: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     organizationId: "organization_id",
+    gramKey: "Gram-Key",
     gramSession: "Gram-Session",
   });
 });

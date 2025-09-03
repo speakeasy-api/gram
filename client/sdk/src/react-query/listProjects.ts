@@ -92,7 +92,11 @@ export function prefetchListProjects(
 export function setListProjectsData(
   client: QueryClient,
   queryKeyBase: [
-    parameters: { organizationId: string; gramSession?: string | undefined },
+    parameters: {
+      organizationId: string;
+      gramKey?: string | undefined;
+      gramSession?: string | undefined;
+    },
   ],
   data: ListProjectsQueryData,
 ): ListProjectsQueryData | undefined {
@@ -104,7 +108,11 @@ export function setListProjectsData(
 export function invalidateListProjects(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
-    [parameters: { organizationId: string; gramSession?: string | undefined }]
+    [parameters: {
+      organizationId: string;
+      gramKey?: string | undefined;
+      gramSession?: string | undefined;
+    }]
   >,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
@@ -136,6 +144,7 @@ export function buildListProjectsQuery(
   return {
     queryKey: queryKeyListProjects({
       organizationId: request.organizationId,
+      gramKey: request.gramKey,
       gramSession: request.gramSession,
     }),
     queryFn: async function listProjectsQueryFn(
@@ -158,7 +167,11 @@ export function buildListProjectsQuery(
 }
 
 export function queryKeyListProjects(
-  parameters: { organizationId: string; gramSession?: string | undefined },
+  parameters: {
+    organizationId: string;
+    gramKey?: string | undefined;
+    gramSession?: string | undefined;
+  },
 ): QueryKey {
   return ["@gram/client", "projects", "list", parameters];
 }
