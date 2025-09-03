@@ -17,6 +17,7 @@ Load a chat by its ID
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="creditUsage" method="get" path="/rpc/chat.creditUsage" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -112,6 +113,7 @@ List all chats for a project
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="listChats" method="get" path="/rpc/chat.list" -->
 ```typescript
 import { Gram } from "@gram/client";
 
@@ -207,6 +209,7 @@ Load a chat by its ID
 
 ### Example Usage
 
+<!-- UsageSnippet language="typescript" operationID="loadChat" method="get" path="/rpc/chat.load" -->
 ```typescript
 import { Gram } from "@gram/client";
 

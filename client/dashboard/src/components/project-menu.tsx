@@ -163,7 +163,7 @@ export function ProjectMenu() {
                 {project?.slug ?? "Select Project"}
               </Type>
               <Type variant="small" muted className="truncate max-w-[120px]">
-                {organization?.slug}
+                {organization?.name}
               </Type>
             </Stack>
           </Stack>
@@ -175,7 +175,7 @@ export function ProjectMenu() {
           {adminOverride}
           <Stack gap={1}>
             <Type variant="small" className="px-2">
-              {organization?.slug}
+              {organization?.name}
             </Type>
             <Type muted variant="small" className="px-2 truncate">
               {session.user.email}
@@ -212,7 +212,7 @@ export function ProjectMenu() {
           </SimpleTooltip>
           <NavButton
             title="Contact us"
-            href="https://calendly.com/sagar-speakeasy/gram-intro"
+            href="https://calendly.com/d/crtj-3tk-wpd/demo-with-speakeasy"
             Icon={() => <MessageCircle className="h-4 w-4" />}
             onClick={() => setOpen(false)}
           />

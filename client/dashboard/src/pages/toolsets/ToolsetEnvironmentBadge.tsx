@@ -111,7 +111,7 @@ export const ToolsetEnvironmentBadge = ({
           },
           {
             onError: (error) => {
-              console.log("error", error);
+              console.error("Failed to update environment variables:", error);
             },
           }
         );

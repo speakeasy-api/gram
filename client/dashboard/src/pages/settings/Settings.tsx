@@ -683,7 +683,7 @@ const BillingSection = () => {
                 </Stack>
                 <UsageProgress
                   value={periodUsage.toolCalls}
-                  included={periodUsage.maxToolCalls}
+                  included={periodUsage.maxToolCalls || 100} // TODO: this is just a fallback, but shouldn't really be needed
                   overageIncrement={periodUsage.maxToolCalls}
                 />
               </div>
@@ -698,7 +698,7 @@ const BillingSection = () => {
                 </Stack>
                 <UsageProgress
                   value={periodUsage.actualPublicServerCount} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
-                  included={periodUsage.maxServers}
+                  included={periodUsage.maxServers || 1} // TODO: this is just a fallback, but shouldn't really be needed
                   overageIncrement={1}
                 />
               </div>

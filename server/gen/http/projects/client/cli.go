@@ -24,7 +24,7 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 	{
 		err = json.Unmarshal([]byte(projectsCreateProjectBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"z9p\",\n      \"organization_id\": \"Fugiat nihil deserunt magni earum est dolorem.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"9vb\",\n      \"organization_id\": \"Sit et suscipit ipsum eos.\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
@@ -57,16 +57,10 @@ func BuildCreateProjectPayload(projectsCreateProjectBody string, projectsCreateP
 
 // BuildListProjectsPayload builds the payload for the projects listProjects
 // endpoint from CLI flags.
-func BuildListProjectsPayload(projectsListProjectsOrganizationID string, projectsListProjectsSessionToken string, projectsListProjectsApikeyToken string) (*projects.ListProjectsPayload, error) {
+func BuildListProjectsPayload(projectsListProjectsOrganizationID string, projectsListProjectsApikeyToken string, projectsListProjectsSessionToken string) (*projects.ListProjectsPayload, error) {
 	var organizationID string
 	{
 		organizationID = projectsListProjectsOrganizationID
-	}
-	var sessionToken *string
-	{
-		if projectsListProjectsSessionToken != "" {
-			sessionToken = &projectsListProjectsSessionToken
-		}
 	}
 	var apikeyToken *string
 	{
@@ -74,10 +68,55 @@ func BuildListProjectsPayload(projectsListProjectsOrganizationID string, project
 			apikeyToken = &projectsListProjectsApikeyToken
 		}
 	}
+	var sessionToken *string
+	{
+		if projectsListProjectsSessionToken != "" {
+			sessionToken = &projectsListProjectsSessionToken
+		}
+	}
 	v := &projects.ListProjectsPayload{}
 	v.OrganizationID = organizationID
-	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildSetLogoPayload builds the payload for the projects setLogo endpoint
+// from CLI flags.
+func BuildSetLogoPayload(projectsSetLogoBody string, projectsSetLogoApikeyToken string, projectsSetLogoSessionToken string, projectsSetLogoProjectSlugInput string) (*projects.SetLogoPayload, error) {
+	var err error
+	var body SetLogoRequestBody
+	{
+		err = json.Unmarshal([]byte(projectsSetLogoBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"asset_id\": \"Ab ut itaque.\"\n   }'")
+		}
+	}
+	var apikeyToken *string
+	{
+		if projectsSetLogoApikeyToken != "" {
+			apikeyToken = &projectsSetLogoApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if projectsSetLogoSessionToken != "" {
+			sessionToken = &projectsSetLogoSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if projectsSetLogoProjectSlugInput != "" {
+			projectSlugInput = &projectsSetLogoProjectSlugInput
+		}
+	}
+	v := &projects.SetLogoPayload{
+		AssetID: body.AssetID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil
 }

@@ -22,7 +22,7 @@ INSERT INTO projects (
   , $2
   , $3
 )
-RETURNING id, name, slug, organization_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, name, slug, organization_id, logo_asset_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateProjectParams struct {
@@ -39,6 +39,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.Name,
 		&i.Slug,
 		&i.OrganizationID,
+		&i.LogoAssetID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -48,7 +49,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT id, name, slug, organization_id, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE id = $1
   AND deleted IS FALSE
@@ -62,6 +63,7 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 		&i.Name,
 		&i.Slug,
 		&i.OrganizationID,
+		&i.LogoAssetID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -116,7 +118,7 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 }
 
 const listProjectsByOrganization = `-- name: ListProjectsByOrganization :many
-SELECT id, name, slug, organization_id, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -137,6 +139,7 @@ func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID
 			&i.Name,
 			&i.Slug,
 			&i.OrganizationID,
+			&i.LogoAssetID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -150,4 +153,35 @@ func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID
 		return nil, err
 	}
 	return items, nil
+}
+
+const uploadProjectLogo = `-- name: UploadProjectLogo :one
+UPDATE projects
+SET logo_asset_id = $1,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND deleted IS FALSE
+RETURNING id, name, slug, organization_id, logo_asset_id, created_at, updated_at, deleted_at, deleted
+`
+
+type UploadProjectLogoParams struct {
+	LogoAssetID uuid.NullUUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) UploadProjectLogo(ctx context.Context, arg UploadProjectLogoParams) (Project, error) {
+	row := q.db.QueryRow(ctx, uploadProjectLogo, arg.LogoAssetID, arg.ProjectID)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.OrganizationID,
+		&i.LogoAssetID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }

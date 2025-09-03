@@ -543,6 +543,275 @@ func BuildUploadImageStreamPayload(payload any, fpath string) (*assets.UploadIma
 	}, nil
 }
 
+// BuildUploadFunctionsRequest instantiates a HTTP request object with method
+// and path set to call the "assets" service "uploadFunctions" endpoint
+func (c *Client) BuildUploadFunctionsRequest(ctx context.Context, v any) (*http.Request, error) {
+	var (
+		body io.Reader
+	)
+	rd, ok := v.(*assets.UploadFunctionsRequestData)
+	if !ok {
+		return nil, goahttp.ErrInvalidType("assets", "uploadFunctions", "assets.UploadFunctionsRequestData", v)
+	}
+	body = rd.Body
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: UploadFunctionsAssetsPath()}
+	req, err := http.NewRequest("POST", u.String(), body)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assets", "uploadFunctions", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeUploadFunctionsRequest returns an encoder for requests sent to the
+// assets uploadFunctions server.
+func EncodeUploadFunctionsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		data, ok := v.(*assets.UploadFunctionsRequestData)
+		if !ok {
+			return goahttp.ErrInvalidType("assets", "uploadFunctions", "*assets.UploadFunctionsRequestData", v)
+		}
+		p := data.Payload
+		{
+			head := p.ContentType
+			req.Header.Set("Content-Type", head)
+		}
+		{
+			head := p.ContentLength
+			headStr := strconv.FormatInt(head, 10)
+			req.Header.Set("Content-Length", headStr)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeUploadFunctionsResponse returns a decoder for responses returned by
+// the assets uploadFunctions endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeUploadFunctionsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeUploadFunctionsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body UploadFunctionsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+			}
+			err = ValidateUploadFunctionsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+			}
+			res := NewUploadFunctionsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body UploadFunctionsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+			}
+			err = ValidateUploadFunctionsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+			}
+			return nil, NewUploadFunctionsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body UploadFunctionsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+			}
+			err = ValidateUploadFunctionsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+			}
+			return nil, NewUploadFunctionsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body UploadFunctionsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+			}
+			err = ValidateUploadFunctionsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+			}
+			return nil, NewUploadFunctionsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body UploadFunctionsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+			}
+			err = ValidateUploadFunctionsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+			}
+			return nil, NewUploadFunctionsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body UploadFunctionsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+			}
+			err = ValidateUploadFunctionsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+			}
+			return nil, NewUploadFunctionsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body UploadFunctionsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+			}
+			err = ValidateUploadFunctionsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+			}
+			return nil, NewUploadFunctionsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body UploadFunctionsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+			}
+			err = ValidateUploadFunctionsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+			}
+			return nil, NewUploadFunctionsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body UploadFunctionsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+				}
+				err = ValidateUploadFunctionsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+				}
+				return nil, NewUploadFunctionsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body UploadFunctionsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+				}
+				err = ValidateUploadFunctionsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+				}
+				return nil, NewUploadFunctionsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assets", "uploadFunctions", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body UploadFunctionsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assets", "uploadFunctions", err)
+			}
+			err = ValidateUploadFunctionsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assets", "uploadFunctions", err)
+			}
+			return nil, NewUploadFunctionsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assets", "uploadFunctions", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// // BuildUploadFunctionsStreamPayload creates a streaming endpoint request
+// payload from the method payload and the path to the file to be streamed
+func BuildUploadFunctionsStreamPayload(payload any, fpath string) (*assets.UploadFunctionsRequestData, error) {
+	f, err := os.Open(fpath)
+	if err != nil {
+		return nil, err
+	}
+	return &assets.UploadFunctionsRequestData{
+		Payload: payload.(*assets.UploadFunctionsForm),
+		Body:    f,
+	}, nil
+}
+
 // BuildUploadOpenAPIv3Request instantiates a HTTP request object with method
 // and path set to call the "assets" service "uploadOpenAPIv3" endpoint
 func (c *Client) BuildUploadOpenAPIv3Request(ctx context.Context, v any) (*http.Request, error) {

@@ -19,6 +19,7 @@ import (
 type Endpoints struct {
 	ServeImage      goa.Endpoint
 	UploadImage     goa.Endpoint
+	UploadFunctions goa.Endpoint
 	UploadOpenAPIv3 goa.Endpoint
 	ServeOpenAPIv3  goa.Endpoint
 	ListAssets      goa.Endpoint
@@ -38,6 +39,15 @@ type ServeImageResponseData struct {
 type UploadImageRequestData struct {
 	// Payload is the method payload.
 	Payload *UploadImageForm
+	// Body streams the HTTP request body.
+	Body io.ReadCloser
+}
+
+// UploadFunctionsRequestData holds both the payload and the HTTP request body
+// reader of the "uploadFunctions" method.
+type UploadFunctionsRequestData struct {
+	// Payload is the method payload.
+	Payload *UploadFunctionsForm
 	// Body streams the HTTP request body.
 	Body io.ReadCloser
 }
@@ -67,6 +77,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		ServeImage:      NewServeImageEndpoint(s, a.APIKeyAuth),
 		UploadImage:     NewUploadImageEndpoint(s, a.APIKeyAuth),
+		UploadFunctions: NewUploadFunctionsEndpoint(s, a.APIKeyAuth),
 		UploadOpenAPIv3: NewUploadOpenAPIv3Endpoint(s, a.APIKeyAuth),
 		ServeOpenAPIv3:  NewServeOpenAPIv3Endpoint(s, a.APIKeyAuth),
 		ListAssets:      NewListAssetsEndpoint(s, a.APIKeyAuth),
@@ -77,6 +88,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ServeImage = m(e.ServeImage)
 	e.UploadImage = m(e.UploadImage)
+	e.UploadFunctions = m(e.UploadFunctions)
 	e.UploadOpenAPIv3 = m(e.UploadOpenAPIv3)
 	e.ServeOpenAPIv3 = m(e.ServeOpenAPIv3)
 	e.ListAssets = m(e.ListAssets)
@@ -177,6 +189,65 @@ func NewUploadImageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 			return nil, err
 		}
 		return s.UploadImage(ctx, ep.Payload, ep.Body)
+	}
+}
+
+// NewUploadFunctionsEndpoint returns an endpoint function that calls the
+// method "uploadFunctions" of service "assets".
+func NewUploadFunctionsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		ep := req.(*UploadFunctionsRequestData)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer"},
+			RequiredScopes: []string{"producer"},
+		}
+		var key string
+		if ep.Payload.ApikeyToken != nil {
+			key = *ep.Payload.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if ep.Payload.ProjectSlugInput != nil {
+				key = *ep.Payload.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if ep.Payload.SessionToken != nil {
+				key = *ep.Payload.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if ep.Payload.ProjectSlugInput != nil {
+					key = *ep.Payload.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.UploadFunctions(ctx, ep.Payload, ep.Body)
 	}
 }
 

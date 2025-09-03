@@ -1,0 +1,8 @@
+## If you want to use a config file for local development then copy this file to
+## to config.local.toml and update the values below.
+
+# [polar]
+# product_id_basic = "..."
+# product_id_pro = "..."
+# meter_id_tool_calls = "..."
+# meter_id_servers = "..."

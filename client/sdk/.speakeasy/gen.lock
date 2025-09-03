@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: e8869a7b4ae45cd15732281cee54c7a1
+  docChecksum: 897b729394f01432a11727e136089673
   docVersion: 0.0.1
-  speakeasyVersion: 1.585.0
-  generationVersion: 2.660.0
-  releaseVersion: 0.12.54
-  configChecksum: 0b8a44f4c33ed434df00ed2225fc7027
+  speakeasyVersion: 1.606.9
+  generationVersion: 2.687.13
+  releaseVersion: 0.12.55
+  configChecksum: ff71e415e609f9bd8d8f20272d6b69a4
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.14
+    core: 3.21.20
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.0
     downloadStreams: 0.1.1
@@ -142,6 +142,7 @@ generatedFiles:
   - docs/models/components/updateprompttemplateresult.md
   - docs/models/components/updateslackconnectionrequestbody.md
   - docs/models/components/updatetoolsetrequestbody.md
+  - docs/models/components/uploadfunctionsresult.md
   - docs/models/components/uploadimageresult.md
   - docs/models/components/uploadopenapiv3result.md
   - docs/models/components/upsertglobaltoolvariationform.md
@@ -334,6 +335,10 @@ generatedFiles:
   - docs/models/operations/updatetemplatesecurityoption2.md
   - docs/models/operations/updatetoolsetrequest.md
   - docs/models/operations/updatetoolsetsecurity.md
+  - docs/models/operations/uploadfunctionsrequest.md
+  - docs/models/operations/uploadfunctionssecurity.md
+  - docs/models/operations/uploadfunctionssecurityoption1.md
+  - docs/models/operations/uploadfunctionssecurityoption2.md
   - docs/models/operations/uploadimagerequest.md
   - docs/models/operations/uploadimagesecurity.md
   - docs/models/operations/uploadimagesecurityoption1.md
@@ -375,6 +380,7 @@ generatedFiles:
   - src/funcs/assetsListAssets.ts
   - src/funcs/assetsServeImage.ts
   - src/funcs/assetsServeOpenAPIv3.ts
+  - src/funcs/assetsUploadFunctions.ts
   - src/funcs/assetsUploadImage.ts
   - src/funcs/assetsUploadOpenAPIv3.ts
   - src/funcs/authCallback.ts
@@ -558,6 +564,7 @@ generatedFiles:
   - src/models/components/updateprompttemplateresult.ts
   - src/models/components/updateslackconnectionrequestbody.ts
   - src/models/components/updatetoolsetrequestbody.ts
+  - src/models/components/uploadfunctionsresult.ts
   - src/models/components/uploadimageresult.ts
   - src/models/components/uploadopenapiv3result.ts
   - src/models/components/upsertglobaltoolvariationform.ts
@@ -636,6 +643,7 @@ generatedFiles:
   - src/models/operations/updateslackconnection.ts
   - src/models/operations/updatetemplate.ts
   - src/models/operations/updatetoolset.ts
+  - src/models/operations/uploadfunctions.ts
   - src/models/operations/uploadimage.ts
   - src/models/operations/uploadopenapiv3asset.ts
   - src/models/operations/upsertglobalvariation.ts
@@ -704,6 +712,7 @@ generatedFiles:
   - src/react-query/updateSlackConnection.ts
   - src/react-query/updateTemplate.ts
   - src/react-query/updateToolset.ts
+  - src/react-query/uploadFunctions.ts
   - src/react-query/uploadImage.ts
   - src/react-query/uploadOpenAPIv3.ts
   - src/react-query/upsertGlobalVariation.ts
@@ -1482,5 +1491,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  uploadFunctions:
+    speakeasy-default-upload-functions:
+      parameters:
+        header:
+          Content-Length: 858625
+      responses:
+        "200":
+          application/json: {"asset": {"content_length": 468625, "content_type": "<value>", "created_at": "2023-02-01T19:08:40.707Z", "id": "<id>", "kind": "openapiv3", "sha256": "<value>", "updated_at": "2024-10-26T18:17:31.757Z"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

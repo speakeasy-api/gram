@@ -23,6 +23,13 @@ type CreateProjectRequestBody struct {
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
 
+// SetLogoRequestBody is the type of the "projects" service "setLogo" endpoint
+// HTTP request body.
+type SetLogoRequestBody struct {
+	// The ID of the asset
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
+}
+
 // CreateProjectResponseBody is the type of the "projects" service
 // "createProject" endpoint HTTP response body.
 type CreateProjectResponseBody struct {
@@ -35,6 +42,13 @@ type CreateProjectResponseBody struct {
 type ListProjectsResponseBody struct {
 	// The list of projects
 	Projects []*ProjectEntryResponseBody `form:"projects" json:"projects" xml:"projects"`
+}
+
+// SetLogoResponseBody is the type of the "projects" service "setLogo" endpoint
+// HTTP response body.
+type SetLogoResponseBody struct {
+	// The updated project with the new logo
+	Project *ProjectResponseBody `form:"project" json:"project" xml:"project"`
 }
 
 // CreateProjectUnauthorizedResponseBody is the type of the "projects" service
@@ -401,6 +415,186 @@ type ListProjectsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// SetLogoUnauthorizedResponseBody is the type of the "projects" service
+// "setLogo" endpoint HTTP response body for the "unauthorized" error.
+type SetLogoUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetLogoForbiddenResponseBody is the type of the "projects" service "setLogo"
+// endpoint HTTP response body for the "forbidden" error.
+type SetLogoForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetLogoBadRequestResponseBody is the type of the "projects" service
+// "setLogo" endpoint HTTP response body for the "bad_request" error.
+type SetLogoBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetLogoNotFoundResponseBody is the type of the "projects" service "setLogo"
+// endpoint HTTP response body for the "not_found" error.
+type SetLogoNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetLogoConflictResponseBody is the type of the "projects" service "setLogo"
+// endpoint HTTP response body for the "conflict" error.
+type SetLogoConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetLogoUnsupportedMediaResponseBody is the type of the "projects" service
+// "setLogo" endpoint HTTP response body for the "unsupported_media" error.
+type SetLogoUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetLogoInvalidResponseBody is the type of the "projects" service "setLogo"
+// endpoint HTTP response body for the "invalid" error.
+type SetLogoInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetLogoInvariantViolationResponseBody is the type of the "projects" service
+// "setLogo" endpoint HTTP response body for the "invariant_violation" error.
+type SetLogoInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetLogoUnexpectedResponseBody is the type of the "projects" service
+// "setLogo" endpoint HTTP response body for the "unexpected" error.
+type SetLogoUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetLogoGatewayErrorResponseBody is the type of the "projects" service
+// "setLogo" endpoint HTTP response body for the "gateway_error" error.
+type SetLogoGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ProjectResponseBody is used to define fields on response body types.
 type ProjectResponseBody struct {
 	// The ID of the project
@@ -411,6 +605,8 @@ type ProjectResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 	// The ID of the organization that owns the project
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The ID of the logo asset for the project
+	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// The creation date of the project.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the project.
@@ -448,6 +644,16 @@ func NewListProjectsResponseBody(res *projects.ListProjectsResult) *ListProjects
 		}
 	} else {
 		body.Projects = []*ProjectEntryResponseBody{}
+	}
+	return body
+}
+
+// NewSetLogoResponseBody builds the HTTP response body from the result of the
+// "setLogo" endpoint of the "projects" service.
+func NewSetLogoResponseBody(res *projects.SetProjectLogoResult) *SetLogoResponseBody {
+	body := &SetLogoResponseBody{}
+	if res.Project != nil {
+		body.Project = marshalProjectsProjectToProjectResponseBody(res.Project)
 	}
 	return body
 }
@@ -732,6 +938,146 @@ func NewListProjectsGatewayErrorResponseBody(res *goa.ServiceError) *ListProject
 	return body
 }
 
+// NewSetLogoUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "setLogo" endpoint of the "projects" service.
+func NewSetLogoUnauthorizedResponseBody(res *goa.ServiceError) *SetLogoUnauthorizedResponseBody {
+	body := &SetLogoUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetLogoForbiddenResponseBody builds the HTTP response body from the
+// result of the "setLogo" endpoint of the "projects" service.
+func NewSetLogoForbiddenResponseBody(res *goa.ServiceError) *SetLogoForbiddenResponseBody {
+	body := &SetLogoForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetLogoBadRequestResponseBody builds the HTTP response body from the
+// result of the "setLogo" endpoint of the "projects" service.
+func NewSetLogoBadRequestResponseBody(res *goa.ServiceError) *SetLogoBadRequestResponseBody {
+	body := &SetLogoBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetLogoNotFoundResponseBody builds the HTTP response body from the result
+// of the "setLogo" endpoint of the "projects" service.
+func NewSetLogoNotFoundResponseBody(res *goa.ServiceError) *SetLogoNotFoundResponseBody {
+	body := &SetLogoNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetLogoConflictResponseBody builds the HTTP response body from the result
+// of the "setLogo" endpoint of the "projects" service.
+func NewSetLogoConflictResponseBody(res *goa.ServiceError) *SetLogoConflictResponseBody {
+	body := &SetLogoConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetLogoUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "setLogo" endpoint of the "projects" service.
+func NewSetLogoUnsupportedMediaResponseBody(res *goa.ServiceError) *SetLogoUnsupportedMediaResponseBody {
+	body := &SetLogoUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetLogoInvalidResponseBody builds the HTTP response body from the result
+// of the "setLogo" endpoint of the "projects" service.
+func NewSetLogoInvalidResponseBody(res *goa.ServiceError) *SetLogoInvalidResponseBody {
+	body := &SetLogoInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetLogoInvariantViolationResponseBody builds the HTTP response body from
+// the result of the "setLogo" endpoint of the "projects" service.
+func NewSetLogoInvariantViolationResponseBody(res *goa.ServiceError) *SetLogoInvariantViolationResponseBody {
+	body := &SetLogoInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetLogoUnexpectedResponseBody builds the HTTP response body from the
+// result of the "setLogo" endpoint of the "projects" service.
+func NewSetLogoUnexpectedResponseBody(res *goa.ServiceError) *SetLogoUnexpectedResponseBody {
+	body := &SetLogoUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetLogoGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "setLogo" endpoint of the "projects" service.
+func NewSetLogoGatewayErrorResponseBody(res *goa.ServiceError) *SetLogoGatewayErrorResponseBody {
+	body := &SetLogoGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateProjectPayload builds a projects service createProject endpoint
 // payload.
 func NewCreateProjectPayload(body *CreateProjectRequestBody, apikeyToken *string, sessionToken *string) *projects.CreateProjectPayload {
@@ -747,11 +1093,23 @@ func NewCreateProjectPayload(body *CreateProjectRequestBody, apikeyToken *string
 
 // NewListProjectsPayload builds a projects service listProjects endpoint
 // payload.
-func NewListProjectsPayload(organizationID string, sessionToken *string, apikeyToken *string) *projects.ListProjectsPayload {
+func NewListProjectsPayload(organizationID string, apikeyToken *string, sessionToken *string) *projects.ListProjectsPayload {
 	v := &projects.ListProjectsPayload{}
 	v.OrganizationID = organizationID
-	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewSetLogoPayload builds a projects service setLogo endpoint payload.
+func NewSetLogoPayload(body *SetLogoRequestBody, apikeyToken *string, sessionToken *string, projectSlugInput *string) *projects.SetLogoPayload {
+	v := &projects.SetLogoPayload{
+		AssetID: *body.AssetID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
 
 	return v
 }
@@ -769,6 +1127,14 @@ func ValidateCreateProjectRequestBody(body *CreateProjectRequestBody) (err error
 		if utf8.RuneCountInString(*body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 40, false))
 		}
+	}
+	return
+}
+
+// ValidateSetLogoRequestBody runs the validations defined on SetLogoRequestBody
+func ValidateSetLogoRequestBody(body *SetLogoRequestBody) (err error) {
+	if body.AssetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("asset_id", "body"))
 	}
 	return
 }

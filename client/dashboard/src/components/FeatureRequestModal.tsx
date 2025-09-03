@@ -78,7 +78,7 @@ export function FeatureRequestModal({
               )}
             >
               <a
-                href="https://calendly.com/sagar-speakeasy/30min"
+                href="https://calendly.com/d/crtj-3tk-wpd/demo-with-speakeasy"
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={handleAccountUpgradeClick}

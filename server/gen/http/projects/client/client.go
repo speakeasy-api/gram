@@ -25,6 +25,10 @@ type Client struct {
 	// listProjects endpoint.
 	ListProjectsDoer goahttp.Doer
 
+	// SetLogo Doer is the HTTP client used to make requests to the setLogo
+	// endpoint.
+	SetLogoDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -47,6 +51,7 @@ func NewClient(
 	return &Client{
 		CreateProjectDoer:   doer,
 		ListProjectsDoer:    doer,
+		SetLogoDoer:         doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -98,6 +103,30 @@ func (c *Client) ListProjects() goa.Endpoint {
 		resp, err := c.ListProjectsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("projects", "listProjects", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetLogo returns an endpoint that makes HTTP requests to the projects service
+// setLogo server.
+func (c *Client) SetLogo() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetLogoRequest(c.encoder)
+		decodeResponse = DecodeSetLogoResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetLogoRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetLogoDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("projects", "setLogo", err)
 		}
 		return decodeResponse(resp)
 	}

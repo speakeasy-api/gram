@@ -9,22 +9,22 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
-	"github.com/speakeasy-api/gram/server/internal/usage/types"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 )
 
 type CollectPlatformUsageMetrics struct {
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	usageClient usage_types.UsageClient
-	repo        *repo.Queries
+	logger         *slog.Logger
+	db             *pgxpool.Pool
+	billingTracker billing.Tracker
+	repo           *repo.Queries
 }
 
-func NewCollectPlatformUsageMetrics(logger *slog.Logger, db *pgxpool.Pool, usageClient usage_types.UsageClient) *CollectPlatformUsageMetrics {
+func NewCollectPlatformUsageMetrics(logger *slog.Logger, db *pgxpool.Pool, billingTracker billing.Tracker) *CollectPlatformUsageMetrics {
 	return &CollectPlatformUsageMetrics{
-		logger:      logger.With(attr.SlogComponent("collect-platform-usage-metrics")),
-		db:          db,
-		usageClient: usageClient,
-		repo:        repo.New(db),
+		logger:         logger.With(attr.SlogComponent("collect-platform-usage-metrics")),
+		db:             db,
+		billingTracker: billingTracker,
+		repo:           repo.New(db),
 	}
 }
 
@@ -52,7 +52,7 @@ func (c *CollectPlatformUsageMetrics) Do(ctx context.Context) error {
 		wg.Add(1)
 		go func(m repo.GetPlatformUsageMetricsRow) {
 			defer wg.Done()
-			c.usageClient.TrackPlatformUsage(ctx, usage_types.PlatformUsageEvent{
+			c.billingTracker.TrackPlatformUsage(ctx, billing.PlatformUsageEvent{
 				OrganizationID:    m.OrganizationID,
 				PublicMCPServers:  m.PublicMcpServers,
 				PrivateMCPServers: m.PrivateMcpServers,
