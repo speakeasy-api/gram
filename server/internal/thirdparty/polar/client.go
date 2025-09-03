@@ -262,7 +262,12 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 			return nil, fmt.Errorf("query polar customer state: %w", err)
 		}
 
-		if err = p.customerStateCache.Store(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: polarCustomerState.CustomerState}); err != nil {
+		var state *polarComponents.CustomerState
+		if polarCustomerState != nil {
+			state = polarCustomerState.CustomerState
+		}
+
+		if err = p.customerStateCache.Store(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: state}); err != nil {
 			p.logger.ErrorContext(ctx, "failed to cache customer state", attr.SlogError(err))
 		}
 	}
