@@ -805,8 +805,10 @@ func marshalUsageTierLimitsToTierLimitsResponseBody(v *usage.TierLimits) *TierLi
 		BasePrice:                  v.BasePrice,
 		IncludedToolCalls:          v.IncludedToolCalls,
 		IncludedServers:            v.IncludedServers,
+		IncludedCredits:            v.IncludedCredits,
 		PricePerAdditionalToolCall: v.PricePerAdditionalToolCall,
 		PricePerAdditionalServer:   v.PricePerAdditionalServer,
+		PricePerAdditionalCredit:   v.PricePerAdditionalCredit,
 	}
 	if v.DescriptionBullets != nil {
 		res.DescriptionBullets = make([]string, len(v.DescriptionBullets))

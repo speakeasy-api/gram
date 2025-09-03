@@ -468,9 +468,11 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			BasePrice:                  0,
 			IncludedToolCalls:          freeTierLimits.ToolCalls,
 			IncludedServers:            freeTierLimits.Servers,
+			IncludedCredits:            5, // Hard coded for now. TODO: Move to Polar
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
-			DescriptionBullets:         []string{
+			PricePerAdditionalCredit:   1, // Hard coded for now. TODO: Move to Polar
+			DescriptionBullets: []string{
 				"Free tier",
 				"Update me",
 			},
@@ -479,9 +481,11 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			BasePrice:                  0,
 			IncludedToolCalls:          proTierLimits.ToolCalls,
 			IncludedServers:            proTierLimits.Servers,
+			IncludedCredits:            25, // Hard coded for now. TODO: Move to Polar
 			PricePerAdditionalToolCall: toolCallPrice,
 			PricePerAdditionalServer:   mcpServerPrice,
-			DescriptionBullets:         []string{
+			PricePerAdditionalCredit:   1, // Hard coded for now. TODO: Move to Polar
+			DescriptionBullets: []string{
 				"Pro tier",
 				"Update me",
 			},
@@ -490,9 +494,11 @@ func (p *Client) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 			BasePrice:                  0,
 			IncludedToolCalls:          0,
 			IncludedServers:            0,
+			IncludedCredits:            0,
 			PricePerAdditionalToolCall: 0,
 			PricePerAdditionalServer:   0,
-			DescriptionBullets:         []string{
+			PricePerAdditionalCredit:   0,
+			DescriptionBullets: []string{
 				"Enterprise tier",
 				"Update me",
 			},

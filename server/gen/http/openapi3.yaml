@@ -9114,6 +9114,10 @@ components:
                     items:
                         type: string
                     description: The description bullets of the tier
+                included_credits:
+                    type: integer
+                    description: The number of credits included in the tier for playground and other dashboard activities
+                    format: int64
                 included_servers:
                     type: integer
                     description: The number of servers included in the tier
@@ -9122,6 +9126,10 @@ components:
                     type: integer
                     description: The number of tool calls included in the tier
                     format: int64
+                price_per_additional_credit:
+                    type: number
+                    description: The price per additional credit
+                    format: double
                 price_per_additional_server:
                     type: number
                     description: The price per additional server
@@ -9134,8 +9142,10 @@ components:
                 - base_price
                 - included_tool_calls
                 - included_servers
+                - included_credits
                 - price_per_additional_tool_call
                 - price_per_additional_server
+                - price_per_additional_credit
                 - description_bullets
         ToolVariation:
             type: object

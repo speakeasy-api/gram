@@ -780,10 +780,15 @@ type TierLimitsResponseBody struct {
 	IncludedToolCalls *int `form:"included_tool_calls,omitempty" json:"included_tool_calls,omitempty" xml:"included_tool_calls,omitempty"`
 	// The number of servers included in the tier
 	IncludedServers *int `form:"included_servers,omitempty" json:"included_servers,omitempty" xml:"included_servers,omitempty"`
+	// The number of credits included in the tier for playground and other
+	// dashboard activities
+	IncludedCredits *int `form:"included_credits,omitempty" json:"included_credits,omitempty" xml:"included_credits,omitempty"`
 	// The price per additional tool call
 	PricePerAdditionalToolCall *float64 `form:"price_per_additional_tool_call,omitempty" json:"price_per_additional_tool_call,omitempty" xml:"price_per_additional_tool_call,omitempty"`
 	// The price per additional server
 	PricePerAdditionalServer *float64 `form:"price_per_additional_server,omitempty" json:"price_per_additional_server,omitempty" xml:"price_per_additional_server,omitempty"`
+	// The price per additional credit
+	PricePerAdditionalCredit *float64 `form:"price_per_additional_credit,omitempty" json:"price_per_additional_credit,omitempty" xml:"price_per_additional_credit,omitempty"`
 	// The description bullets of the tier
 	DescriptionBullets []string `form:"description_bullets,omitempty" json:"description_bullets,omitempty" xml:"description_bullets,omitempty"`
 }
@@ -2437,11 +2442,17 @@ func ValidateTierLimitsResponseBody(body *TierLimitsResponseBody) (err error) {
 	if body.IncludedServers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("included_servers", "body"))
 	}
+	if body.IncludedCredits == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("included_credits", "body"))
+	}
 	if body.PricePerAdditionalToolCall == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("price_per_additional_tool_call", "body"))
 	}
 	if body.PricePerAdditionalServer == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("price_per_additional_server", "body"))
+	}
+	if body.PricePerAdditionalCredit == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("price_per_additional_credit", "body"))
 	}
 	if body.DescriptionBullets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description_bullets", "body"))
