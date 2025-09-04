@@ -255,6 +255,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
 
   // if we're logged in but the URL doesn't have a project slug, redirect to the default project
   if (session.organization && !projectSlug) {
+    console.log("redirecting to default project", session.organization, projectSlug);
     let preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
 
     if (

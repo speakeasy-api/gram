@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 7e489b13468ae52eb5105c2057655a9b
+  docChecksum: 8538243eb61472d10e03f0b6f0255ed5
   docVersion: 0.0.1
   speakeasyVersion: 1.606.9
   generationVersion: 2.687.13
-  releaseVersion: 0.12.56
-  configChecksum: 1863ccb38f698890d80fb7b3b62610b8
+  releaseVersion: 0.12.57
+  configChecksum: 229e38b66cf605fdb70209c3cb682021
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -129,6 +129,8 @@ generatedFiles:
   - docs/models/components/responsefilter.md
   - docs/models/components/securityvariable.md
   - docs/models/components/servervariable.md
+  - docs/models/components/setprojectlogoform.md
+  - docs/models/components/setprojectlogoresult.md
   - docs/models/components/tierlimits.md
   - docs/models/components/toolset.md
   - docs/models/components/toolsetentry.md
@@ -312,6 +314,10 @@ generatedFiles:
   - docs/models/operations/sessioninforequest.md
   - docs/models/operations/sessioninforesponse.md
   - docs/models/operations/sessioninfosecurity.md
+  - docs/models/operations/setprojectlogorequest.md
+  - docs/models/operations/setprojectlogosecurity.md
+  - docs/models/operations/setprojectlogosecurityoption1.md
+  - docs/models/operations/setprojectlogosecurityoption2.md
   - docs/models/operations/slackcallbackrequest.md
   - docs/models/operations/slackcallbackresponse.md
   - docs/models/operations/slackloginrequest.md
@@ -419,6 +425,7 @@ generatedFiles:
   - src/funcs/packagesUpdate.ts
   - src/funcs/projectsCreate.ts
   - src/funcs/projectsList.ts
+  - src/funcs/projectsSetLogo.ts
   - src/funcs/slackDeleteSlackConnection.ts
   - src/funcs/slackGetSlackConnection.ts
   - src/funcs/slackSlackCallback.ts
@@ -553,6 +560,8 @@ generatedFiles:
   - src/models/components/responsefilter.ts
   - src/models/components/securityvariable.ts
   - src/models/components/servervariable.ts
+  - src/models/components/setprojectlogoform.ts
+  - src/models/components/setprojectlogoresult.ts
   - src/models/components/tierlimits.ts
   - src/models/components/toolset.ts
   - src/models/components/toolsetentry.ts
@@ -635,6 +644,7 @@ generatedFiles:
   - src/models/operations/serveimage.ts
   - src/models/operations/serveopenapiv3.ts
   - src/models/operations/sessioninfo.ts
+  - src/models/operations/setprojectlogo.ts
   - src/models/operations/slackcallback.ts
   - src/models/operations/slacklogin.ts
   - src/models/operations/switchauthscopes.ts
@@ -703,6 +713,7 @@ generatedFiles:
   - src/react-query/serveImage.ts
   - src/react-query/serveOpenAPIv3.ts
   - src/react-query/sessionInfo.ts
+  - src/react-query/setProjectLogo.ts
   - src/react-query/switchScopes.ts
   - src/react-query/template.ts
   - src/react-query/templates.ts
@@ -1486,7 +1497,7 @@ examples:
     speakeasy-default-get-usage-tiers:
       responses:
         "200":
-          application/json: {"enterprise": {"base_price": 6666.51, "description_bullets": ["<value 1>", "<value 2>", "<value 3>"], "included_servers": 306325, "included_tool_calls": 30279, "price_per_additional_server": 7563.66, "price_per_additional_tool_call": 7355.72}, "free": {"base_price": 7355.72, "description_bullets": [], "included_servers": 180790, "included_tool_calls": 683591, "price_per_additional_server": 678.32, "price_per_additional_tool_call": 7255.78}, "pro": {"base_price": 6835.91, "description_bullets": [], "included_servers": 725578, "included_tool_calls": 820340, "price_per_additional_server": 2910.95, "price_per_additional_tool_call": 6893.04}}
+          application/json: {"enterprise": {"base_price": 6666.51, "feature_bullets": ["<value 1>", "<value 2>"], "included_bullets": ["<value 1>", "<value 2>", "<value 3>"], "included_credits": 306325, "included_servers": 306325, "included_tool_calls": 30279, "price_per_additional_credit": 302.79, "price_per_additional_server": 7563.66, "price_per_additional_tool_call": 7355.72}, "free": {"base_price": 7355.72, "feature_bullets": ["<value 1>", "<value 2>", "<value 3>"], "included_bullets": ["<value 1>", "<value 2>"], "included_credits": 180790, "included_servers": 180790, "included_tool_calls": 683591, "price_per_additional_credit": 6835.91, "price_per_additional_server": 678.32, "price_per_additional_tool_call": 7255.78}, "pro": {"base_price": 6835.91, "feature_bullets": [], "included_bullets": ["<value 1>", "<value 2>"], "included_credits": 820340, "included_servers": 725578, "included_tool_calls": 820340, "price_per_additional_credit": 2910.95, "price_per_additional_server": 2910.95, "price_per_additional_tool_call": 6893.04}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -1499,6 +1510,17 @@ examples:
       responses:
         "200":
           application/json: {"asset": {"content_length": 468625, "content_type": "<value>", "created_at": "2023-02-01T19:08:40.707Z", "id": "<id>", "kind": "openapiv3", "sha256": "<value>", "updated_at": "2024-10-26T18:17:31.757Z"}}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  setProjectLogo:
+    speakeasy-default-set-project-logo:
+      requestBody:
+        application/json: {"asset_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"project": {"created_at": "2024-08-05T17:33:48.749Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "slug": "<value>", "updated_at": "2024-06-08T05:10:03.506Z"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

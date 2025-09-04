@@ -1,15 +1,27 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
+import {
+  ProductTier,
+  ProductTierBadge,
+  productTierColors,
+} from "@/components/product-tier-badge";
 import { Button } from "@/components/ui/button";
+import { Card, Cards, CardSkeleton } from "@/components/ui/card";
+import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useIsAdmin, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
-import { useGetCreditUsage, useGetPeriodUsage, useGetUsageTiers } from "@gram/client/react-query";
+import { TierLimits } from "@gram/client/models/components";
+import {
+  useGetCreditUsage,
+  useGetPeriodUsage,
+  useGetUsageTiers,
+} from "@gram/client/react-query";
 import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
-import { Stack, cn } from "@speakeasy-api/moonshine";
+import { cn, Stack } from "@speakeasy-api/moonshine";
 import { Info } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -20,13 +32,14 @@ export default function Billing() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <BillingPage />
+        <UsageSection />
+        <UsageTiers />
       </Page.Body>
     </Page>
   );
 }
 
-const BillingPage = () => {
+const UsageSection = () => {
   const session = useSession();
   const [isCreditUpgradeModalOpen, setIsCreditUpgradeModalOpen] =
     useState(false);
@@ -45,13 +58,6 @@ const BillingPage = () => {
         A summary of your organization's usage this period. Please visit the
         billing portal to see complete details or manage your account.
       </Page.Section.Description>
-      <Page.Section.CTA>
-        {session.gramAccountType === "free" ? (
-          <UpgradeLink />
-        ) : (
-          <PolarPortalLink />
-        )}
-      </Page.Section.CTA>
       <Page.Section.Body>
         <div className="space-y-4">
           {/* TODO: DO NOT SHIP THIS UNTIL THE PERIOD USAGE REFLECTS THE ORG (SDK BUG SOLVED) */}
@@ -136,13 +142,135 @@ const BillingPage = () => {
 };
 
 const UsageTiers = () => {
-  const { data: usageTiers } = useGetUsageTiers();
+  const { data: usageTiers, isLoading } = useGetUsageTiers();
+  const session = useSession();
 
-  const UsageCard = ({ tier }: { tier: UsageTier }) => {
-    return <div>{tier.name}</div>;
+  if (!usageTiers) {
+    return <Cards isLoading={true} />;
+  }
+
+  const enterpriseTier = "Enterprise";
+
+  const UsageCard = ({
+    name,
+    tier,
+    active,
+    previousTier,
+  }: {
+    name: string;
+    tier: TierLimits;
+    active: boolean;
+    previousTier?: ProductTier;
+  }) => {
+    const price =
+      name === enterpriseTier
+        ? "Tailored pricing"
+        : `$${tier.basePrice.toLocaleString()}`;
+
+    const ringColor = productTierColors(name.toLowerCase() as ProductTier).ring;
+
+    return (
+      <Card className={cn("w-full p-6", active && `ring-2 ${ringColor}`)}>
+        <Card.Header>
+          <Card.Title>
+            <Stack gap={1}>
+              <ProductTierBadge tier={name.toLowerCase() as ProductTier} />
+              <Heading variant="h2">{price}</Heading>
+            </Stack>
+          </Card.Title>
+        </Card.Header>
+        <Card.Content>
+          <Stack gap={8}>
+            <Stack gap={1}>
+              <Type
+                mono
+                muted
+                small
+                variant="subheading"
+                className="font-medium uppercase"
+              >
+                {previousTier
+                  ? `Everything from ${previousTier}, plus`
+                  : "Features"}
+              </Type>
+              <ul className="list-inside space-y-1">
+                {tier.featureBullets.map((bullet) => (
+                  <li>
+                    <span className="text-muted-foreground/60">✓</span> {bullet}
+                  </li>
+                ))}
+              </ul>
+            </Stack>
+            <Stack gap={1}>
+              <Type
+                mono
+                muted
+                small
+                variant="subheading"
+                className="font-medium uppercase"
+              >
+                Included
+              </Type>
+              <ul className="list-inside space-y-1">
+                {tier.includedBullets.map((bullet) => (
+                  <li>
+                    <span className="text-muted-foreground/60">✓</span> {bullet}
+                  </li>
+                ))}
+              </ul>
+            </Stack>
+          </Stack>
+        </Card.Content>
+      </Card>
+    );
   };
 
-  return <div>{usageTiers?.map((tier) => tier.name)}</div>;
+  return (
+    <Page.Section>
+      <Page.Section.Title>Pricing</Page.Section.Title>
+      <Page.Section.Description>
+        A breakdown of our pricing tiers.
+      </Page.Section.Description>
+      <Page.Section.CTA>
+        {session.gramAccountType === "free" ? (
+          <UpgradeLink>Upgrade</UpgradeLink>
+        ) : (
+          <PolarPortalLink>Manage Billing</PolarPortalLink>
+        )}
+      </Page.Section.CTA>
+      <Page.Section.Body>
+        <Stack direction={"horizontal"} gap={4}>
+          {isLoading ? (
+            <>
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+            </>
+          ) : (
+            <>
+              <UsageCard
+                name={"Free"}
+                tier={usageTiers.free}
+                active={session.gramAccountType === "free"}
+              />
+              <UsageCard
+                name={"Pro"}
+                tier={usageTiers.pro}
+                previousTier="free"
+                active={session.gramAccountType === "pro"}
+              />
+              <UsageCard
+                name={enterpriseTier}
+                tier={usageTiers.enterprise}
+                previousTier="pro"
+                active={session.gramAccountType === "enterprise"}
+              />
+            </>
+          )}
+        </Stack>
+      </Page.Section.Body>
+    </Page.Section>
+  );
 };
 
 const UsageProgress = ({
@@ -257,7 +385,7 @@ const UsageProgress = ({
   );
 };
 
-const PolarPortalLink = () => {
+const PolarPortalLink = ({ children }: { children: React.ReactNode }) => {
   const client = useSdkClient();
   const session = useSession();
 
@@ -275,12 +403,12 @@ const PolarPortalLink = () => {
           : undefined
       }
     >
-      Manage Billing
+      {children}
     </Button>
   );
 };
 
-const UpgradeLink = () => {
+const UpgradeLink = ({ children }: { children: React.ReactNode }) => {
   const [checkoutLink, setCheckoutLink] = useState("");
   const client = useSdkClient();
 
@@ -297,7 +425,7 @@ const UpgradeLink = () => {
       data-polar-checkout
       data-polar-checkout-theme="light"
     >
-      Upgrade
+      {children}
     </a>
   );
 };

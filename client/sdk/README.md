@@ -200,6 +200,7 @@ run();
 
 * [create](docs/sdks/projects/README.md#create) - createProject projects
 * [list](docs/sdks/projects/README.md#list) - listProjects projects
+* [setLogo](docs/sdks/projects/README.md#setlogo) - setLogo projects
 
 ### [slack](docs/sdks/slack/README.md)
 
@@ -307,6 +308,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`packagesUpdate`](docs/sdks/packages/README.md#update) - updatePackage packages
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
+- [`projectsSetLogo`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`slackDeleteSlackConnection`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
 - [`slackGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 - [`slackSlackCallback`](docs/sdks/slack/README.md#slackcallback) - callback slack
@@ -414,6 +416,7 @@ To learn about this feature and how to get started, check
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
+- [`useSetProjectLogoMutation`](docs/sdks/projects/README.md#setlogo) - setLogo projects
 - [`useSwitchScopesMutation`](docs/sdks/auth/README.md#switchscopes) - switchScopes auth
 - [`useTemplate`](docs/sdks/templates/README.md#get) - getTemplate templates
 - [`useTemplates`](docs/sdks/templates/README.md#list) - listTemplates templates
