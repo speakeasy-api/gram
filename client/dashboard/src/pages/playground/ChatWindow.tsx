@@ -85,7 +85,7 @@ export function ChatWindow({
       dynamicToolset={dynamicToolset}
       initialMessages={initialMessages}
       additionalActions={additionalActions}
-      _initialPrompt={initialPrompt}
+      initialPrompt={initialPrompt}
     />
   );
 }
@@ -99,7 +99,7 @@ function ChatInner({
   dynamicToolset,
   initialMessages,
   additionalActions,
-  _initialPrompt,
+  initialPrompt,
 }: {
   model: string;
   setModel: (model: string) => void;
@@ -107,29 +107,13 @@ function ChatInner({
   dynamicToolset: boolean;
   initialMessages?: Message[];
   additionalActions?: React.ReactNode;
-  _initialPrompt?: string | null;
+  initialPrompt?: string | null;
 }) {
   const session = useSession();
   const project = useProject();
   const telemetry = useTelemetry();
   const client = useSdkClient();
 
-  // TODO: Replace with proper AIChatContainer initialInput prop when available
-  useEffect(() => {
-    if (!_initialPrompt?.trim()) return;
-    
-    const timer = setTimeout(() => {
-      const textareas = document.querySelectorAll('textarea[placeholder*="message"], textarea[placeholder*="Message"]');
-      textareas.forEach(textarea => {
-        if (textarea instanceof HTMLTextAreaElement && !textarea.value) {
-          textarea.value = _initialPrompt;
-          textarea.dispatchEvent(new Event('input', { bubbles: true }));
-        }
-      });
-    }, 500); // Wait for component to mount
-    
-    return () => clearTimeout(timer);
-  }, [_initialPrompt]);
 
   const chat = useChatContext();
   const { setMessages } = chat;
@@ -504,6 +488,7 @@ function ChatInner({
         onSendMessage={handleSend}
         className={"pb-4 w-3xl"} // Set width explicitly or else it will shrink to the size of the messages
         toolCallApproval={toolCallApproval}
+        initialInput={initialPrompt || undefined}
         components={{
           composer: {
             additionalActions,
