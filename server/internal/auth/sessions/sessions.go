@@ -69,27 +69,30 @@ func (s *Manager) IsUnsafeLocalDevelopment() bool {
 }
 
 func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool) (context.Context, error) {
+	var stubLocalAuth = func() (string, error) {
+		stubbable := canStubAuth && s.unsafeLocal
+		if !stubbable {
+			return "", oops.C(oops.CodeUnauthorized)
+		}
+
+		return s.PopulateLocalDevDefaultAuthSession(ctx)
+	}
+
 	if key == "" {
 		// This may have been set via cookie from http middleware, GOA does not support natively
 		key, _ = contextvalues.GetSessionTokenFromContext(ctx)
 	}
 
-	if key == "" {
-		// If you attempt auth with no token provided in local we will automatically populate the session from local env
-		if canStubAuth && s.unsafeLocal {
-			var err error
-			key, err = s.PopulateLocalDevDefaultAuthSession(ctx)
-			if err != nil {
-				return ctx, err
-			}
-		} else {
-			return ctx, oops.C(oops.CodeUnauthorized)
-		}
-	}
-
 	session, err := s.sessionCache.Get(ctx, SessionCacheKey(key))
 	if err != nil {
-		return ctx, oops.C(oops.CodeUnauthorized)
+		key, err = stubLocalAuth()
+		if err != nil {
+			return ctx, oops.C(oops.CodeUnauthorized)
+		}
+		session, err = s.sessionCache.Get(ctx, SessionCacheKey(key))
+		if err != nil {
+			return ctx, oops.C(oops.CodeUnauthorized)
+		}
 	}
 
 	authCtx := &contextvalues.AuthContext{

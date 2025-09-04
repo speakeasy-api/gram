@@ -28,12 +28,12 @@ var TierLimits = Type("TierLimits", func() {
 	Attribute("feature_bullets", ArrayOf(String), "Key feature bullets of the tier")
 	Attribute("included_bullets", ArrayOf(String), "Included items bullets of the tier")
 	Attribute("add_on_bullets", ArrayOf(String), "Add-on items bullets of the tier (optional)")
-	
+
 	Required("base_price", "included_tool_calls", "included_servers", "included_credits", "price_per_additional_tool_call", "price_per_additional_server", "price_per_additional_credit", "feature_bullets", "included_bullets")
 })
 
 var UsageTiers = Type("UsageTiers", func() {
-	Attribute("free", TierLimits, "The limits for the free tier")	
+	Attribute("free", TierLimits, "The limits for the free tier")
 	Attribute("pro", TierLimits, "The limits for the pro tier")
 	Attribute("enterprise", TierLimits, "The limits for the enterprise tier")
 
@@ -86,21 +86,21 @@ var _ = Service("usage", func() {
 
 	Method("createCustomerSession", func() {
 		Description("Create a customer session for the user")
-		
+
 		Payload(func() {
 			security.SessionPayload()
 			security.ProjectPayload()
 		})
 
 		Result(String)
-		
+
 		HTTP(func() {
 			POST("/rpc/usage.createCustomerSession")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
 		})
-		
+
 		Meta("openapi:operationId", "createCustomerSession")
 		Meta("openapi:extension:x-speakeasy-name-override", "createCustomerSession")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "createCustomerSession"}`)

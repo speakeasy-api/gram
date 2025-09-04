@@ -9355,6 +9355,9 @@ components:
                 id:
                     type: string
                     description: The ID of the toolset
+                mcp_enabled:
+                    type: boolean
+                    description: Whether the toolset is enabled for MCP
                 mcp_is_public:
                     type: boolean
                     description: Whether the toolset is public in MCP
@@ -9434,6 +9437,9 @@ components:
                 id:
                     type: string
                     description: The ID of the toolset
+                mcp_enabled:
+                    type: boolean
+                    description: Whether the toolset is enabled for MCP
                 mcp_is_public:
                     type: boolean
                     description: Whether the toolset is public in MCP
@@ -9647,6 +9653,9 @@ components:
                     items:
                         type: string
                     description: List of HTTP tool names to include
+                mcp_enabled:
+                    type: boolean
+                    description: Whether the toolset is enabled for MCP
                 mcp_is_public:
                     type: boolean
                     description: Whether the toolset is public in MCP
@@ -9691,6 +9700,9 @@ components:
                     items:
                         type: string
                     description: List of HTTP tool names to include
+                mcp_enabled:
+                    type: boolean
+                    description: Whether the toolset is enabled for MCP
                 mcp_is_public:
                     type: boolean
                     description: Whether the toolset is public in MCP

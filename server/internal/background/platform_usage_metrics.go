@@ -9,6 +9,13 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
+)
+
+const (
+	platformUsageMetricsBatchSize     = 25
+	platformUsageMetricsRetryInterval = 1 * time.Second
 )
 
 type PlatformUsageMetricsClient struct {
@@ -33,25 +40,36 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 60 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: 3,
+			MaximumAttempts:    3,
+			InitialInterval:    platformUsageMetricsRetryInterval,
+			BackoffCoefficient: 1.5,
+			// Temporal automatically adds some jitter to retries here
 		},
 	})
 
-	// Execute the activity to collect and record platform usage metrics
+	// Collect all platform usage metrics
 	var a *Activities
-	err := workflow.ExecuteActivity(ctx, a.CollectPlatformUsageMetrics).Get(ctx, nil)
+	var allMetrics []activities.PlatformUsageMetrics
+	err := workflow.ExecuteActivity(ctx, a.CollectPlatformUsageMetrics).Get(ctx, &allMetrics)
 	if err != nil {
-		logger.Error("failed to collect platform usage metrics", "error", err.Error())
+		logger.Error("Failed to collect platform usage metrics", "error", err)
 		return fmt.Errorf("failed to collect platform usage metrics: %w", err)
 	}
 
-	err = workflow.ExecuteActivity(ctx, a.ReportFreeTierOverage).Get(ctx, nil)
-	if err != nil {
-		logger.Error("failed to report free tier overages", "error", err.Error())
-		return fmt.Errorf("failed to report free tier overages: %w", err)
+	// Process metrics in batches
+	for i := 0; i < len(allMetrics); i += platformUsageMetricsBatchSize {
+		end := min(i+platformUsageMetricsBatchSize, len(allMetrics))
+
+		batch := allMetrics[i:end]
+
+		err := workflow.ExecuteActivity(ctx, a.FirePlatformUsageMetrics, batch).Get(ctx, nil)
+		if err != nil {
+			logger.Error("Failed to fire platform usage metrics batch", "error", err, "batch_start", i)
+			return fmt.Errorf("failed to fire platform usage metrics batch starting at %d: %w", i, err)
+		}
 	}
 
-	logger.Info("Platform usage metrics collection completed successfully")
+	logger.Info("Platform usage metrics collection and firing completed successfully")
 	return nil
 }
 
@@ -60,7 +78,7 @@ func AddPlatformUsageMetricsSchedule(ctx context.Context, temporalClient client.
 	workflowID := "v1:collect-platform-usage-metrics/scheduled"
 
 	_, err := temporalClient.ScheduleClient().Create(ctx, client.ScheduleOptions{
-		ID:   scheduleID,
+		ID: scheduleID,
 		Spec: client.ScheduleSpec{
 			Intervals: []client.ScheduleIntervalSpec{
 				{
@@ -69,14 +87,15 @@ func AddPlatformUsageMetricsSchedule(ctx context.Context, temporalClient client.
 			},
 		},
 		Action: &client.ScheduleWorkflowAction{
-			ID:        workflowID,	
-			Workflow:  CollectPlatformUsageMetricsWorkflow,
-			TaskQueue: string(TaskQueueMain),
+			ID:                 workflowID,
+			Workflow:           CollectPlatformUsageMetricsWorkflow,
+			TaskQueue:          string(TaskQueueMain),
+			WorkflowRunTimeout: 10 * time.Minute,
 		},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create platform usage metrics schedule: %w", err)
 	}
-	
+
 	return nil
 }

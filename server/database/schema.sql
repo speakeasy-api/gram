@@ -452,6 +452,7 @@ CREATE TABLE IF NOT EXISTS toolsets (
     mcp_slug IS NULL OR (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 60)
   ),
   mcp_is_public BOOLEAN NOT NULL DEFAULT FALSE,
+  mcp_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   custom_domain_id uuid,
 
   -- OAuth configuration - mutually exclusive

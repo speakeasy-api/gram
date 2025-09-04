@@ -38,6 +38,7 @@ type Toolset struct {
 	HttpToolNames          []string
 	McpSlug                pgtype.Text
 	McpIsPublic            bool
+	McpEnabled             bool
 	CustomDomainID         uuid.NullUUID
 	ExternalOauthServerID  uuid.NullUUID
 	OauthProxyServerID     uuid.NullUUID
