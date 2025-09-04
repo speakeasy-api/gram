@@ -243,6 +243,9 @@ func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformU
 		"total_enabled_servers": {
 			Integer: &event.TotalEnabledServers,
 		},
+		"total_toolsets": {
+			Integer: &event.TotalToolsets,
+		},
 		"total_tools": {
 			Integer: &event.TotalTools,
 		},

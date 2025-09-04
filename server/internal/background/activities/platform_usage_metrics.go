@@ -31,6 +31,7 @@ type PlatformUsageMetrics struct {
 	PublicMCPServers    int64
 	PrivateMCPServers   int64
 	TotalEnabledServers int64
+	TotalToolsets       int64
 	TotalTools          int64
 }
 
@@ -49,6 +50,7 @@ func (c *CollectPlatformUsageMetrics) Do(ctx context.Context) ([]PlatformUsageMe
 			PublicMCPServers:    row.PublicMcpServers,
 			PrivateMCPServers:   row.PrivateMcpServers,
 			TotalEnabledServers: row.TotalEnabledServers,
+			TotalToolsets:       row.TotalToolsets,
 			TotalTools:          row.TotalTools,
 		})
 	}
@@ -83,6 +85,7 @@ func (f *FirePlatformUsageMetrics) Do(ctx context.Context, metrics []PlatformUsa
 				PublicMCPServers:    m.PublicMCPServers,
 				PrivateMCPServers:   m.PrivateMCPServers,
 				TotalEnabledServers: m.TotalEnabledServers,
+				TotalToolsets:       m.TotalToolsets,
 				TotalTools:          m.TotalTools,
 			})
 		}(metric)

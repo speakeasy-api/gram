@@ -43,6 +43,7 @@ type PlatformUsageEvent struct {
 	PublicMCPServers    int64
 	PrivateMCPServers   int64
 	TotalEnabledServers int64
+	TotalToolsets       int64
 	TotalTools          int64
 }
 
