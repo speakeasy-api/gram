@@ -11,7 +11,7 @@ import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin, useSession } from "@/contexts/Auth";
+import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { TierLimits } from "@gram/client/models/components";
@@ -49,8 +49,6 @@ const UsageSection = () => {
     throwOnError: !getServerURL().includes("localhost"),
   });
 
-  const isAdmin = useIsAdmin();
-
   return (
     <Page.Section>
       <Page.Section.Title>Usage</Page.Section.Title>
@@ -60,51 +58,49 @@ const UsageSection = () => {
       </Page.Section.Description>
       <Page.Section.Body>
         <div className="space-y-4">
-          {/* TODO: DO NOT SHIP THIS UNTIL THE PERIOD USAGE REFLECTS THE ORG (SDK BUG SOLVED) */}
-          {isAdmin &&
-            (periodUsage ? (
-              <>
-                <div>
-                  <Stack direction="horizontal" align="center" gap={1}>
-                    <Type variant="body" className="font-medium">
-                      Tool Calls
-                    </Type>
-                    <SimpleTooltip tooltip="The number of tool calls processed this period across all your organization's MCP servers.">
-                      <Info className="w-4 h-4 text-muted-foreground" />
-                    </SimpleTooltip>
-                  </Stack>
-                  <UsageProgress
-                    value={periodUsage.toolCalls}
-                    included={periodUsage.maxToolCalls || 1000}
-                    overageIncrement={periodUsage.maxToolCalls}
-                    noMax={session.gramAccountType === "enterprise"}
-                  />
-                </div>
-                <div>
-                  <Stack direction="horizontal" align="center" gap={1}>
-                    <Type variant="body" className="font-medium">
-                      Servers
-                    </Type>
-                    <SimpleTooltip tooltip="The number of public MCP servers across your organization. Note that this value is the maximum number active at a time during the billing period, and may not reflect the current number of public servers.">
-                      <Info className="w-4 h-4 text-muted-foreground" />
-                    </SimpleTooltip>
-                  </Stack>
-                  <UsageProgress
-                    value={periodUsage.servers} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
-                    included={periodUsage.maxServers || 1}
-                    overageIncrement={1}
-                    noMax={session.gramAccountType === "enterprise"}
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <Skeleton className="h-4 w-1/3" />
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-1/3" />
-                <Skeleton className="h-4 w-full" />
-              </>
-            ))}
+          {periodUsage ? (
+            <>
+              <div>
+                <Stack direction="horizontal" align="center" gap={1}>
+                  <Type variant="body" className="font-medium">
+                    Tool Calls
+                  </Type>
+                  <SimpleTooltip tooltip="The number of tool calls processed this period across all your organization's MCP servers.">
+                    <Info className="w-4 h-4 text-muted-foreground" />
+                  </SimpleTooltip>
+                </Stack>
+                <UsageProgress
+                  value={periodUsage.toolCalls}
+                  included={periodUsage.maxToolCalls || 1000}
+                  overageIncrement={periodUsage.maxToolCalls}
+                  noMax={session.gramAccountType === "enterprise"}
+                />
+              </div>
+              <div>
+                <Stack direction="horizontal" align="center" gap={1}>
+                  <Type variant="body" className="font-medium">
+                    Servers
+                  </Type>
+                  <SimpleTooltip tooltip="The number of public MCP servers across your organization. Note that this value is the maximum number active at a time during the billing period, and may not reflect the current number of public servers.">
+                    <Info className="w-4 h-4 text-muted-foreground" />
+                  </SimpleTooltip>
+                </Stack>
+                <UsageProgress
+                  value={periodUsage.servers} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
+                  included={periodUsage.maxServers || 1}
+                  overageIncrement={1}
+                  noMax={session.gramAccountType === "enterprise"}
+                />
+              </div>
+            </>
+          ) : (
+            <>
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-1/3" />
+              <Skeleton className="h-4 w-full" />
+            </>
+          )}
           {creditUsage ? (
             <div>
               <Stack direction="horizontal" align="center" gap={1}>
