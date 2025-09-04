@@ -6,6 +6,7 @@ import {
 } from "@gram/client/models/components";
 import { SessionInfoResponse } from "@gram/client/models/operations";
 import { useSessionInfo } from "@gram/client/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
 import { useNavigate } from "react-router";
@@ -15,7 +16,6 @@ import {
   useIdentifyUserForTelemetry,
   useRegisterProjectForTelemetry,
 } from "./Telemetry";
-import { useQueryClient } from "@tanstack/react-query";
 
 type Session = Omit<InfoResponseBody, "userEmail" | "userId" | "isAdmin"> & {
   user: User;
@@ -232,11 +232,13 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   usePylonInAppChat(session?.user);
 
   // you need something like this so you don't redirect with empty session too soon
-  if (isLoading || !session) {
+  // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading  
+  // !! Very important that auth.info returns an error if there's no session
+  if (isLoading || (!session && !error)) {
     return null;
   }
 
-  if (error || !session.session) {
+  if (error || !session || !session.session) {
     return (
       <SessionContext.Provider value={emptySession}>
         {children}
