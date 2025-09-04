@@ -207,7 +207,6 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return {
       ...result,
       organization: organization ?? emptyOrganization,
-      gramAccountType: "free", // TODO: remove this
       user: {
         id: result.userId,
         email: result.userEmail,
@@ -233,11 +232,11 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   usePylonInAppChat(session?.user);
 
   // you need something like this so you don't redirect with empty session too soon
-  if (isLoading) {
+  if (isLoading || !session) {
     return null;
   }
 
-  if (error || !session || !session.session) {
+  if (error || !session.session) {
     return (
       <SessionContext.Provider value={emptySession}>
         {children}

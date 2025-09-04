@@ -285,7 +285,7 @@ const UsageProgress = ({
   noMax?: boolean;
 }) => {
   if (noMax) {
-    included = Math.max(1, value * 2);
+    included = Math.max(1, value * 1.5);
   }
 
   const anyOverage = value > included;

@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/openapi/pointer"
 )
 
 type Catalog struct {
@@ -316,7 +315,6 @@ func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.
 }
 
 func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerState) (*billing.Tier, error) {
-	return pointer.From(billing.TierFree), nil // TODO
 	if customerState != nil {
 		for _, sub := range customerState.ActiveSubscriptions {
 			if sub.ProductID == p.catalog.ProductIDPro {
@@ -341,7 +339,7 @@ func (p *Client) GetCustomer(ctx context.Context, orgID string) (c *billing.Cust
 }
 
 func (p *Client) getCustomer(ctx context.Context, orgID string) (*billing.Customer, error) {
-	customerState, err := p.getCustomerState(ctx, "123")//TODO orgID)
+	customerState, err := p.getCustomerState(ctx, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("get customer state: %w", err)
 	}
@@ -363,13 +361,13 @@ func (p *Client) getCustomer(ctx context.Context, orgID string) (*billing.Custom
 func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *polarComponents.CustomerState) (*gen.PeriodUsage, error) {
 	usage := gen.PeriodUsage{
 		// Set to -1 so we can tell if we've failed to get the usage
-		ToolCalls:               -1,
+		ToolCalls:               333,//-1,  // TODO! Revert once Polar Go SDK bug is fixed!
 		MaxToolCalls:            -1,
-		Servers:                 -1,
+		Servers:                 1,//-1,  // TODO! Revert once PolarGo SDK bug is fixed!
 		MaxServers:              -1,
 		ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
 	}
-	
+
 	if customer != nil {
 		var toolCallMeter *polarComponents.CustomerStateMeter
 		var serverMeter *polarComponents.CustomerStateMeter
@@ -380,7 +378,7 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 			}
 			if meter.MeterID == p.catalog.MeterIDServers {
 				serverMeter = &meter
-			}
+			}	
 		}
 
 		if toolCallMeter == nil || serverMeter == nil {
@@ -391,9 +389,9 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 			)
 		}
 
-		usage.ToolCalls = int(toolCallMeter.ConsumedUnits)
+		// usage.ToolCalls = int(toolCallMeter.ConsumedUnits) // TODO! Revert once PolarGo SDK bug is fixed!
 		usage.MaxToolCalls = int(toolCallMeter.CreditedUnits)
-		usage.Servers = int(serverMeter.ConsumedUnits)
+		// usage.Servers = int(serverMeter.ConsumedUnits) // TODO! Revert once PolarGo SDK bug is fixed!
 		usage.MaxServers = int(serverMeter.CreditedUnits)
 	}
 
