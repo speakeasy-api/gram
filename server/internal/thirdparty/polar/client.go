@@ -53,6 +53,7 @@ type Client struct {
 	polar              *polargo.Polar
 	catalog            *Catalog
 	customerStateCache cache.TypedCacheObject[PolarCustomerState]
+	periodUsageStorage cache.TypedCacheObject[PolarPeriodUsageState]
 }
 
 var _ billing.Tracker = (*Client)(nil)
@@ -65,6 +66,7 @@ func NewClient(polarClient *polargo.Polar, logger *slog.Logger, tracerProvider t
 		polar:              polarClient,
 		catalog:            catalog,
 		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		periodUsageStorage: cache.NewTypedObjectCache[PolarPeriodUsageState](logger.With(attr.SlogCacheNamespace("polar-period-usage-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
 }
 
@@ -269,7 +271,7 @@ func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformU
 func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComponents.CustomerState, error) {
 	var polarCustomerState *polarComponents.CustomerState
 
-	if customerState, err := p.customerStateCache.Get(ctx, OrgCacheKey(orgID)); err == nil {
+	if customerState, err := p.customerStateCache.Get(ctx, CustomerStateCacheKey(orgID)); err == nil {
 		polarCustomerState = customerState.CustomerState
 	} else {
 		polarCustomerState, err := p.polar.Customers.GetStateExternal(ctx, orgID)
@@ -450,7 +452,20 @@ func (p *Client) GetPeriodUsage(ctx context.Context, orgID string) (pu *gen.Peri
 		return nil, fmt.Errorf("get customer state: %w", err)
 	}
 
+	if err = p.periodUsageStorage.Store(ctx, PolarPeriodUsageState{OrganizationID: orgID, PeriodUsage: *customer.PeriodUsage}); err != nil {
+		p.logger.ErrorContext(ctx, "failed to cache period usage", attr.SlogError(err))
+	}
+
 	return customer.PeriodUsage, nil
+}
+
+// GetStoredPeriodUsage this enforces that we can only get usage results from a stored value, specifically for hotpath usage with no outbound API call
+func (p *Client) GetStoredPeriodUsage(ctx context.Context, orgID string) (pu *gen.PeriodUsage, err error) {
+	state, err := p.periodUsageStorage.Get(ctx, PeriodUsageStateCacheKey(orgID))
+	if err != nil {
+		return nil, fmt.Errorf("get period usage from storage: %w", err)
+	}
+	return &state.PeriodUsage, nil
 }
 
 func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL string) (u string, err error) {

@@ -109,6 +109,27 @@ func (s *StubClient) GetPeriodUsage(ctx context.Context, orgID string) (*gen.Per
 	return pu, nil
 }
 
+func (s *StubClient) GetStoredPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error) {
+	_, span := s.tracer.Start(ctx, "stub_client.get_period_usage")
+	var err error
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	s.mut.Lock()
+	defer s.mut.Unlock()
+
+	pu, err := s.readPeriodUsage(orgID)
+	if err != nil {
+		return nil, fmt.Errorf("read period usage file: %w", err)
+	}
+
+	return pu, nil
+}
+
 func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error) {
 	_, span := s.tracer.Start(ctx, "stub_client.get_usage_tiers")
 	defer span.End()
@@ -122,9 +143,9 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			PricePerAdditionalServer:   0,
 			IncludedCredits:            25,
 			PricePerAdditionalCredit:   1,
-			FeatureBullets: []string{},
-			IncludedBullets: []string{},
-			AddOnBullets: []string{},
+			FeatureBullets:             []string{},
+			IncludedBullets:            []string{},
+			AddOnBullets:               []string{},
 		},
 		Pro: &gen.TierLimits{
 			BasePrice:                  500,
@@ -134,9 +155,9 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			PricePerAdditionalServer:   0.5,
 			IncludedCredits:            25,
 			PricePerAdditionalCredit:   1,
-			FeatureBullets: []string{},
-			IncludedBullets: []string{},
-			AddOnBullets: []string{},
+			FeatureBullets:             []string{},
+			IncludedBullets:            []string{},
+			AddOnBullets:               []string{},
 		},
 		Enterprise: &gen.TierLimits{
 			BasePrice:                  0,
@@ -146,9 +167,9 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 			PricePerAdditionalServer:   0,
 			IncludedCredits:            0,
 			PricePerAdditionalCredit:   0,
-			FeatureBullets: []string{},
-			IncludedBullets: []string{},
-			AddOnBullets: []string{},
+			FeatureBullets:             []string{},
+			IncludedBullets:            []string{},
+			AddOnBullets:               []string{},
 		},
 	}, nil
 }

@@ -30,7 +30,9 @@ type Activities struct {
 	verifyCustomDomain          *activities.VerifyCustomDomain
 	customDomainIngress         *activities.CustomDomainIngress
 	collectPlatformUsageMetrics *activities.CollectPlatformUsageMetrics
-	reportFreeTierOverage       *activities.ReportFreeTierOverage
+	firePlatformUsageMetrics    *activities.FirePlatformUsageMetrics
+	reportBillingUsage          *activities.ReportBillingUsage
+	getAllOrganizations         *activities.GetAllOrganizations
 }
 
 func NewActivities(
@@ -57,8 +59,10 @@ func NewActivities(
 		refreshOpenRouterKey:        activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 		verifyCustomDomain:          activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		customDomainIngress:         activities.NewCustomDomainIngress(logger, db, k8sClient),
-		collectPlatformUsageMetrics: activities.NewCollectPlatformUsageMetrics(logger, db, billingTracker),
-		reportFreeTierOverage:       activities.NewReportFreeTierOverage(logger, db, billingRepo, posthogClient),
+		collectPlatformUsageMetrics: activities.NewCollectPlatformUsageMetrics(logger, db),
+		firePlatformUsageMetrics:    activities.NewFirePlatformUsageMetrics(logger, billingTracker),
+		reportBillingUsage:          activities.NewReportBillingUsage(logger, db, billingRepo, posthogClient),
+		getAllOrganizations:         activities.NewGetAllOrganizations(logger, db),
 	}
 }
 
@@ -94,10 +98,18 @@ func (a *Activities) CustomDomainIngress(ctx context.Context, input activities.C
 	return a.customDomainIngress.Do(ctx, input)
 }
 
-func (a *Activities) CollectPlatformUsageMetrics(ctx context.Context) error {
+func (a *Activities) CollectPlatformUsageMetrics(ctx context.Context) ([]activities.PlatformUsageMetrics, error) {
 	return a.collectPlatformUsageMetrics.Do(ctx)
 }
 
-func (a *Activities) ReportFreeTierOverage(ctx context.Context) error {
-	return a.reportFreeTierOverage.Do(ctx)
+func (a *Activities) FirePlatformUsageMetrics(ctx context.Context, metrics []activities.PlatformUsageMetrics) error {
+	return a.firePlatformUsageMetrics.Do(ctx, metrics)
+}
+
+func (a *Activities) ReportBillingUsage(ctx context.Context, orgIDs []string) error {
+	return a.reportBillingUsage.Do(ctx, orgIDs)
+}
+
+func (a *Activities) GetAllOrganizations(ctx context.Context) ([]string, error) {
+	return a.getAllOrganizations.Do(ctx)
 }

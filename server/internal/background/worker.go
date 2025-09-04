@@ -129,17 +129,26 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
-	temporalWorker.RegisterActivity(activities.ReportFreeTierOverage)
+	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
+	temporalWorker.RegisterActivity(activities.ReportBillingUsage)
+	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(SlackEventWorkflow)
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
+	temporalWorker.RegisterWorkflow(ReportBillingUsageWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
 			logger.ErrorContext(context.Background(), "failed to add platform usage metrics schedule", attr.SlogError(err))
+		}
+	}
+
+	if err := AddReportBillingUsageSchedule(context.Background(), client); err != nil {
+		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
+			logger.ErrorContext(context.Background(), "failed to add report billing usage schedule", attr.SlogError(err))
 		}
 	}
 
