@@ -87,6 +87,8 @@ export * from "./rendertemplateresult.js";
 export * from "./responsefilter.js";
 export * from "./securityvariable.js";
 export * from "./servervariable.js";
+export * from "./setprojectlogoform.js";
+export * from "./setprojectlogoresult.js";
 export * from "./tierlimits.js";
 export * from "./toolset.js";
 export * from "./toolsetentry.js";

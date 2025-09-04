@@ -20,8 +20,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover.tsx";
 import { Separator } from "./ui/separator.tsx";
 import { Skeleton } from "./ui/skeleton.tsx";
 import { ThemeToggle } from "./ui/theme-toggle.tsx";
-import { Type } from "./ui/type.tsx";
 import { SimpleTooltip } from "./ui/tooltip.tsx";
+import { Type } from "./ui/type.tsx";
 
 // Generate colors from project label
 function getProjectColors(label: string): {
@@ -159,7 +159,7 @@ export function ProjectMenu() {
           <Stack direction={"horizontal"} gap={3} align="center">
             <ProjectAvatar project={project} className="h-8 w-8 rounded-md" />
             <Stack align="start">
-              <Type className="mb-[-2px] normal-case">
+              <Type className="normal-case -mb-1">
                 {project?.slug ?? "Select Project"}
               </Type>
               <Type variant="small" muted className="truncate max-w-[120px]">

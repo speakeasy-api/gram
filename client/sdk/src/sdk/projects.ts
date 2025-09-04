@@ -4,6 +4,7 @@
 
 import { projectsCreate } from "../funcs/projectsCreate.js";
 import { projectsList } from "../funcs/projectsList.js";
+import { projectsSetLogo } from "../funcs/projectsSetLogo.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -41,6 +42,25 @@ export class Projects extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListProjectsResult> {
     return unwrapAsync(projectsList(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setLogo projects
+   *
+   * @remarks
+   * Uploads a logo for a project.
+   */
+  async setLogo(
+    request: operations.SetProjectLogoRequest,
+    security?: operations.SetProjectLogoSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.SetProjectLogoResult> {
+    return unwrapAsync(projectsSetLogo(
       this,
       request,
       security,
