@@ -24,7 +24,7 @@ export type TierLimits = {
   /**
    * Included items bullets of the tier
    */
-  includedBullets: Array<string>;
+  includedBullets?: Array<string> | undefined;
   /**
    * The number of credits included in the tier for playground and other dashboard activities
    */
@@ -56,38 +56,40 @@ export const TierLimits$inboundSchema: z.ZodType<
   TierLimits,
   z.ZodTypeDef,
   unknown
-> = z.object({
-  add_on_bullets: z.array(z.string()).optional(),
-  base_price: z.number(),
-  feature_bullets: z.array(z.string()),
-  included_bullets: z.array(z.string()),
-  included_credits: z.number().int(),
-  included_servers: z.number().int(),
-  included_tool_calls: z.number().int(),
-  price_per_additional_credit: z.number(),
-  price_per_additional_server: z.number(),
-  price_per_additional_tool_call: z.number(),
-}).transform((v) => {
-  return remap$(v, {
-    "add_on_bullets": "addOnBullets",
-    "base_price": "basePrice",
-    "feature_bullets": "featureBullets",
-    "included_bullets": "includedBullets",
-    "included_credits": "includedCredits",
-    "included_servers": "includedServers",
-    "included_tool_calls": "includedToolCalls",
-    "price_per_additional_credit": "pricePerAdditionalCredit",
-    "price_per_additional_server": "pricePerAdditionalServer",
-    "price_per_additional_tool_call": "pricePerAdditionalToolCall",
+> = z
+  .object({
+    add_on_bullets: z.array(z.string()).optional(),
+    base_price: z.number(),
+    feature_bullets: z.array(z.string()),
+    included_bullets: z.array(z.string()).optional(),
+    included_credits: z.number().int(),
+    included_servers: z.number().int(),
+    included_tool_calls: z.number().int(),
+    price_per_additional_credit: z.number(),
+    price_per_additional_server: z.number(),
+    price_per_additional_tool_call: z.number(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      add_on_bullets: "addOnBullets",
+      base_price: "basePrice",
+      feature_bullets: "featureBullets",
+      included_bullets: "includedBullets",
+      included_credits: "includedCredits",
+      included_servers: "includedServers",
+      included_tool_calls: "includedToolCalls",
+      price_per_additional_credit: "pricePerAdditionalCredit",
+      price_per_additional_server: "pricePerAdditionalServer",
+      price_per_additional_tool_call: "pricePerAdditionalToolCall",
+    });
   });
-});
 
 /** @internal */
 export type TierLimits$Outbound = {
   add_on_bullets?: Array<string> | undefined;
   base_price: number;
   feature_bullets: Array<string>;
-  included_bullets: Array<string>;
+  included_bullets?: Array<string> | undefined;
   included_credits: number;
   included_servers: number;
   included_tool_calls: number;
@@ -101,31 +103,33 @@ export const TierLimits$outboundSchema: z.ZodType<
   TierLimits$Outbound,
   z.ZodTypeDef,
   TierLimits
-> = z.object({
-  addOnBullets: z.array(z.string()).optional(),
-  basePrice: z.number(),
-  featureBullets: z.array(z.string()),
-  includedBullets: z.array(z.string()),
-  includedCredits: z.number().int(),
-  includedServers: z.number().int(),
-  includedToolCalls: z.number().int(),
-  pricePerAdditionalCredit: z.number(),
-  pricePerAdditionalServer: z.number(),
-  pricePerAdditionalToolCall: z.number(),
-}).transform((v) => {
-  return remap$(v, {
-    addOnBullets: "add_on_bullets",
-    basePrice: "base_price",
-    featureBullets: "feature_bullets",
-    includedBullets: "included_bullets",
-    includedCredits: "included_credits",
-    includedServers: "included_servers",
-    includedToolCalls: "included_tool_calls",
-    pricePerAdditionalCredit: "price_per_additional_credit",
-    pricePerAdditionalServer: "price_per_additional_server",
-    pricePerAdditionalToolCall: "price_per_additional_tool_call",
+> = z
+  .object({
+    addOnBullets: z.array(z.string()).optional(),
+    basePrice: z.number(),
+    featureBullets: z.array(z.string()),
+    includedBullets: z.array(z.string()).optional(),
+    includedCredits: z.number().int(),
+    includedServers: z.number().int(),
+    includedToolCalls: z.number().int(),
+    pricePerAdditionalCredit: z.number(),
+    pricePerAdditionalServer: z.number(),
+    pricePerAdditionalToolCall: z.number(),
+  })
+  .transform((v) => {
+    return remap$(v, {
+      addOnBullets: "add_on_bullets",
+      basePrice: "base_price",
+      featureBullets: "feature_bullets",
+      includedBullets: "included_bullets",
+      includedCredits: "included_credits",
+      includedServers: "included_servers",
+      includedToolCalls: "included_tool_calls",
+      pricePerAdditionalCredit: "price_per_additional_credit",
+      pricePerAdditionalServer: "price_per_additional_server",
+      pricePerAdditionalToolCall: "price_per_additional_tool_call",
+    });
   });
-});
 
 /**
  * @internal
@@ -145,11 +149,11 @@ export function tierLimitsToJSON(tierLimits: TierLimits): string {
 }
 
 export function tierLimitsFromJSON(
-  jsonString: string,
+  jsonString: string
 ): SafeParseResult<TierLimits, SDKValidationError> {
   return safeParse(
     jsonString,
     (x) => TierLimits$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'TierLimits' from JSON`,
+    `Failed to parse 'TierLimits' from JSON`
   );
 }
