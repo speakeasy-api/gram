@@ -75,17 +75,19 @@ func (r *ReportBillingUsage) Do(ctx context.Context, orgIDs []string) error {
 				slog.Int(logKeyServers, usage.Servers),
 			)
 
-			err = r.posthogClient.CaptureEvent(ctx, "billing_usage_report", org.ID, map[string]any{
-				"org_id":     org.ID,
-				"org_name":   org.Name,
-				"org_slug":   org.Slug,
-				"tool_calls": usage.ToolCalls,
-				"servers":    usage.Servers,
-				"is_gram":    true,
-			})
-			if err != nil {
-				errChan <- fmt.Errorf("failed to capture posthog event for org %s: %w", orgID, err)
-				return
+			if org.GramAccountType == "free" && (usage.ToolCalls > usage.MaxToolCalls || usage.Servers > usage.MaxServers) {
+				err = r.posthogClient.CaptureEvent(ctx, "billing_usage_report", org.ID, map[string]any{
+					"org_id":     org.ID,
+					"org_name":   org.Name,
+					"org_slug":   org.Slug,
+					"tool_calls": usage.ToolCalls,
+					"servers":    usage.Servers,
+					"is_gram":    true,
+				})
+				if err != nil {
+					errChan <- fmt.Errorf("failed to capture posthog event for org %s: %w", orgID, err)
+					return
+				}
 			}
 		}(orgID)
 	}
