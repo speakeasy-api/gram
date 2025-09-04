@@ -48,23 +48,21 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 	})
 
 	// Collect all platform usage metrics
-	var collectActivity *activities.CollectPlatformUsageMetrics
+	var a *Activities
 	var allMetrics []activities.PlatformUsageMetrics
-	err := workflow.ExecuteActivity(ctx, collectActivity.Do).Get(ctx, &allMetrics)
+	err := workflow.ExecuteActivity(ctx, a.CollectPlatformUsageMetrics).Get(ctx, &allMetrics)
 	if err != nil {
 		logger.Error("Failed to collect platform usage metrics", "error", err)
 		return fmt.Errorf("failed to collect platform usage metrics: %w", err)
 	}
 
 	// Process metrics in batches
-	var fireActivity *activities.FirePlatformUsageMetrics
-
 	for i := 0; i < len(allMetrics); i += platformUsageMetricsBatchSize {
 		end := min(i+platformUsageMetricsBatchSize, len(allMetrics))
 
 		batch := allMetrics[i:end]
 
-		err := workflow.ExecuteActivity(ctx, fireActivity.Do, batch).Get(ctx, nil)
+		err := workflow.ExecuteActivity(ctx, a.FirePlatformUsageMetrics, batch).Get(ctx, nil)
 		if err != nil {
 			logger.Error("Failed to fire platform usage metrics batch", "error", err, "batch_start", i)
 			return fmt.Errorf("failed to fire platform usage metrics batch starting at %d: %w", i, err)

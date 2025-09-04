@@ -9,8 +9,6 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-
-	"github.com/speakeasy-api/gram/server/internal/background/activities"
 )
 
 const (
@@ -48,9 +46,9 @@ func ReportBillingUsageWorkflow(ctx workflow.Context) error {
 	})
 
 	// Get all organizations
-	var getAllOrgsActivity *activities.GetAllOrganizations
+	var a *Activities
 	var orgIDs []string
-	err := workflow.ExecuteActivity(ctx, getAllOrgsActivity.Do).Get(ctx, &orgIDs)
+	err := workflow.ExecuteActivity(ctx, a.GetAllOrganizations).Get(ctx, &orgIDs)
 	if err != nil {
 		logger.Error("Failed to get all organizations", "error", err)
 		return fmt.Errorf("failed to get all organizations: %w", err)
@@ -59,13 +57,11 @@ func ReportBillingUsageWorkflow(ctx workflow.Context) error {
 	logger.Info("Retrieved organizations for billing usage reporting", "count", len(orgIDs))
 
 	// Process organizations in batches
-	var reportBillingActivity *activities.ReportBillingUsage
-
 	for i := 0; i < len(orgIDs); i += reportBillingUsageBatchSize {
 		end := min(i+reportBillingUsageBatchSize, len(orgIDs))
 		batch := orgIDs[i:end]
 
-		err := workflow.ExecuteActivity(ctx, reportBillingActivity.Do, batch).Get(ctx, nil)
+		err := workflow.ExecuteActivity(ctx, a.ReportBillingUsage, batch).Get(ctx, nil)
 		if err != nil {
 			logger.Error("Failed to report billing usage batch", "error", err, "batch_start", i)
 			return fmt.Errorf("failed to report billing usage batch starting at %d: %w", i, err)
