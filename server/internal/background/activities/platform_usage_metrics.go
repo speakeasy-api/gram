@@ -27,11 +27,12 @@ func NewCollectPlatformUsageMetrics(logger *slog.Logger, db *pgxpool.Pool) *Coll
 }
 
 type PlatformUsageMetrics struct {
-	OrganizationID    string
-	PublicMCPServers  int64
-	PrivateMCPServers int64
-	TotalToolsets     int64
-	TotalTools        int64
+	OrganizationID      string
+	PublicMCPServers    int64
+	PrivateMCPServers   int64
+	TotalEnabledServers int64
+	TotalToolsets       int64
+	TotalTools          int64
 }
 
 func (c *CollectPlatformUsageMetrics) Do(ctx context.Context) ([]PlatformUsageMetrics, error) {
@@ -45,11 +46,12 @@ func (c *CollectPlatformUsageMetrics) Do(ctx context.Context) ([]PlatformUsageMe
 	metrics := make([]PlatformUsageMetrics, 0, len(rows))
 	for _, row := range rows {
 		metrics = append(metrics, PlatformUsageMetrics{
-			OrganizationID:    row.OrganizationID,
-			PublicMCPServers:  row.PublicMcpServers,
-			PrivateMCPServers: row.PrivateMcpServers,
-			TotalToolsets:     row.TotalToolsets,
-			TotalTools:        row.TotalTools,
+			OrganizationID:      row.OrganizationID,
+			PublicMCPServers:    row.PublicMcpServers,
+			PrivateMCPServers:   row.PrivateMcpServers,
+			TotalEnabledServers: row.TotalEnabledServers,
+			TotalToolsets:       row.TotalToolsets,
+			TotalTools:          row.TotalTools,
 		})
 	}
 
@@ -79,11 +81,12 @@ func (f *FirePlatformUsageMetrics) Do(ctx context.Context, metrics []PlatformUsa
 		go func(m PlatformUsageMetrics) {
 			defer wg.Done()
 			f.billingTracker.TrackPlatformUsage(ctx, billing.PlatformUsageEvent{
-				OrganizationID:    m.OrganizationID,
-				PublicMCPServers:  m.PublicMCPServers,
-				PrivateMCPServers: m.PrivateMCPServers,
-				TotalToolsets:     m.TotalToolsets,
-				TotalTools:        m.TotalTools,
+				OrganizationID:      m.OrganizationID,
+				PublicMCPServers:    m.PublicMCPServers,
+				PrivateMCPServers:   m.PrivateMCPServers,
+				TotalEnabledServers: m.TotalEnabledServers,
+				TotalToolsets:       m.TotalToolsets,
+				TotalTools:          m.TotalTools,
 			})
 		}(metric)
 	}
