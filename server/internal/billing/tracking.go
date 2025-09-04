@@ -39,11 +39,11 @@ type PromptCallUsageEvent struct {
 }
 
 type PlatformUsageEvent struct {
-	OrganizationID    string
-	PublicMCPServers  int64
-	PrivateMCPServers int64
-	TotalToolsets     int64
-	TotalTools        int64
+	OrganizationID      string
+	PublicMCPServers    int64
+	PrivateMCPServers   int64
+	TotalEnabledServers int64
+	TotalTools          int64
 }
 
 type Tracker interface {

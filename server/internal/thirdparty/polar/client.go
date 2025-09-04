@@ -240,8 +240,8 @@ func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformU
 		"private_mcp_servers": {
 			Integer: &event.PrivateMCPServers,
 		},
-		"total_toolsets": {
-			Integer: &event.TotalToolsets,
+		"total_enabled_servers": {
+			Integer: &event.TotalEnabledServers,
 		},
 		"total_tools": {
 			Integer: &event.TotalTools,

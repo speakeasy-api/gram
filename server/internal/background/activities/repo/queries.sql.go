@@ -56,7 +56,7 @@ toolset_metrics AS (
     p.organization_id,
     COUNT(CASE WHEN t.mcp_is_public = true AND t.mcp_slug IS NOT NULL THEN 1 END) as public_mcp_servers,
     COUNT(CASE WHEN t.mcp_is_public = false AND t.mcp_slug IS NOT NULL THEN 1 END) as private_mcp_servers,
-    COUNT(t.id) as total_toolsets
+    COUNT(CASE WHEN t.mcp_enabled = tru THEN 1 END) as total_enabled_servers
   FROM projects p
   LEFT JOIN toolsets t ON p.id = t.project_id AND t.deleted = false
   GROUP BY p.organization_id
@@ -74,18 +74,18 @@ SELECT
   COALESCE(tm.organization_id, tlm.organization_id) as organization_id,
   COALESCE(tm.public_mcp_servers, 0) as public_mcp_servers,
   COALESCE(tm.private_mcp_servers, 0) as private_mcp_servers,
-  COALESCE(tm.total_toolsets, 0) as total_toolsets,
+  COALESCE(tm.total_enabled_servers, 0) as total_enabled_servers,
   COALESCE(tlm.total_tools, 0) as total_tools
 FROM toolset_metrics tm
 FULL OUTER JOIN tool_metrics tlm ON tm.organization_id = tlm.organization_id
 `
 
 type GetPlatformUsageMetricsRow struct {
-	OrganizationID    string
-	PublicMcpServers  int64
-	PrivateMcpServers int64
-	TotalToolsets     int64
-	TotalTools        int64
+	OrganizationID      string
+	PublicMcpServers    int64
+	PrivateMcpServers   int64
+	TotalEnabledServers int64
+	TotalTools          int64
 }
 
 // Get comprehensive platform usage metrics per organization
@@ -102,7 +102,7 @@ func (q *Queries) GetPlatformUsageMetrics(ctx context.Context) ([]GetPlatformUsa
 			&i.OrganizationID,
 			&i.PublicMcpServers,
 			&i.PrivateMcpServers,
-			&i.TotalToolsets,
+			&i.TotalEnabledServers,
 			&i.TotalTools,
 		); err != nil {
 			return nil, err
