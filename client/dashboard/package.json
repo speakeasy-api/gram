@@ -35,7 +35,7 @@
     "@radix-ui/react-toggle": "^1.1.10",
     "@radix-ui/react-toggle-group": "^1.1.11",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@speakeasy-api/moonshine": "1.15.0-alpha.1",
+    "@speakeasy-api/moonshine": "1.25.0",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.1.12",
     "@tanstack/react-query": "catalog:",
