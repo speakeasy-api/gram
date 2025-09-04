@@ -13,6 +13,7 @@ INSERT INTO toolsets (
   , http_tool_names
   , default_environment_slug
   , mcp_slug
+  , mcp_enabled
 ) VALUES (
     @organization_id
   , @project_id
@@ -22,6 +23,7 @@ INSERT INTO toolsets (
   , COALESCE(@http_tool_names::text[], '{}'::text[])
   , @default_environment_slug
   , @mcp_slug
+  , @mcp_enabled
 )
 RETURNING *;
 
@@ -42,6 +44,7 @@ SET
   , mcp_slug = COALESCE(@mcp_slug, mcp_slug)
   , mcp_is_public = COALESCE(@mcp_is_public, mcp_is_public)
   , custom_domain_id = COALESCE(@custom_domain_id, custom_domain_id)
+  , mcp_enabled = COALESCE(@mcp_enabled, mcp_enabled)
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;

@@ -97,6 +97,12 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
 
+	toolsets, err := s.repo.ListToolsetsByProject(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets").Log(ctx, s.logger)
+	}
+	isInitialToolset := len(toolsets) == 0
+
 	createToolParams := repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -106,6 +112,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
 		HttpToolNames:          payload.HTTPToolNames,
 		McpSlug:                conv.ToPGText(mcpSlug),
+		McpEnabled:             isInitialToolset, // we automatically enable the first toolset as an MCP server
 	}
 
 	if payload.DefaultEnvironmentSlug != nil {
@@ -208,6 +215,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		ProjectID:              *authCtx.ProjectID,
 		HttpToolNames:          existingToolset.HttpToolNames,
 		McpSlug:                existingToolset.McpSlug,
+		McpEnabled:             existingToolset.McpEnabled,
 		CustomDomainID:         existingToolset.CustomDomainID,
 		McpIsPublic:            existingToolset.McpIsPublic,
 	}
@@ -262,6 +270,11 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 			}
 			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
 		}
+	}
+
+	// TODO: Will we put account type restrictions here?
+	if payload.McpEnabled != nil {
+		updateParams.McpEnabled = *payload.McpEnabled
 	}
 
 	if payload.McpIsPublic != nil {
