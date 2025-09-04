@@ -189,6 +189,7 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     error,
     refetch,
     isLoading,
+    isSuccess,
   } = useSessionInfo(undefined, undefined, {
     refetchOnWindowFocus: false,
     retry: false,
@@ -232,7 +233,9 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   usePylonInAppChat(session?.user);
 
   // you need something like this so you don't redirect with empty session too soon
-  if (isLoading) {
+  // isLoading is not synchronized with the session data actually being populated, so we need to wait for the session to actually finish loading  
+  // !! Very important that auth.info returns an error if there's no session
+  if (isLoading || (!session && !error)) {
     return null;
   }
 
