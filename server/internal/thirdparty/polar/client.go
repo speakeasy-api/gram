@@ -674,9 +674,9 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 }
 
 func (p *Client) getProductByID(ctx context.Context, id string) (*polarComponents.Product, error) {
-	// if product, err := p.productCache.Get(ctx, ProductCacheKey(id)); err == nil {
-	// 	return &product.Product, nil
-	// }
+	if product, err := p.productCache.Get(ctx, ProductCacheKey(id)); err == nil {
+		return &product.Product, nil
+	}
 
 	res, err := p.polar.Products.Get(ctx, id)
 	if err != nil {
