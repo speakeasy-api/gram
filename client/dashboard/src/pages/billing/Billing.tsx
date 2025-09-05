@@ -1,10 +1,6 @@
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { Page } from "@/components/page-layout";
-import {
-  ProductTier,
-  ProductTierBadge,
-  productTierColors,
-} from "@/components/product-tier-badge";
+import { ProductTier } from "@/components/product-tier-badge";
 import { Button } from "@/components/ui/button";
 import { Card, Cards, CardSkeleton } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
@@ -57,11 +53,11 @@ const UsageSection = () => {
         billing portal to see complete details or manage your account.
       </Page.Section.Description>
       <Page.Section.Body>
-        <div className="space-y-4">
+        <div className="flex flex-col gap-6">
           {periodUsage ? (
             <>
-              <div>
-                <Stack direction="horizontal" align="center" gap={1}>
+              <div className="flex flex-col gap-3">
+                <Stack direction="horizontal" align="center" gap={2}>
                   <Type variant="body" className="font-medium">
                     Tool Calls
                   </Type>
@@ -76,8 +72,8 @@ const UsageSection = () => {
                   noMax={session.gramAccountType === "enterprise"}
                 />
               </div>
-              <div>
-                <Stack direction="horizontal" align="center" gap={1}>
+              <div className="flex flex-col gap-3">
+                <Stack direction="horizontal" align="center" gap={2}>
                   <Type variant="body" className="font-medium">
                     Servers
                   </Type>
@@ -102,8 +98,8 @@ const UsageSection = () => {
             </>
           )}
           {creditUsage ? (
-            <div>
-              <Stack direction="horizontal" align="center" gap={1}>
+            <div className="flex flex-col gap-3">
+              <Stack direction="horizontal" align="center" gap={2}>
                 <Type variant="body" className="font-medium">
                   Playground Credits
                 </Type>
@@ -163,15 +159,88 @@ const UsageTiers = () => {
         ? "Tailored pricing"
         : `$${tier.basePrice.toLocaleString()}`;
 
-    const ringColor = productTierColors(name.toLowerCase() as ProductTier).ring;
+    if (active) {
+      const gradientStyle =
+        name === "Pro" ? { background: "var(--gradient-brand-green)" } : {};
+
+      return (
+        <div
+          className={`flex-1 p-[2px] rounded-sm ${
+            name === "Pro" ? "" : "bg-gradient-primary"
+          }`}
+          style={gradientStyle}
+        >
+          <Card className="w-full h-full p-6 rounded-[5px] border-none">
+            <Card.Header>
+              <Card.Title>
+                <Stack gap={2}>
+                  <Heading variant="h4" className="capitalize">
+                    {name}
+                  </Heading>
+                  <Type variant="body" className="text-2xl">
+                    {price}
+                  </Type>
+                </Stack>
+              </Card.Title>
+            </Card.Header>
+            <Card.Content>
+              <Stack gap={8}>
+                <Stack gap={1}>
+                  <Type
+                    mono
+                    muted
+                    small
+                    variant="subheading"
+                    className="font-medium uppercase"
+                  >
+                    {previousTier
+                      ? `Everything from ${previousTier}, plus`
+                      : "Features"}
+                  </Type>
+                  <ul className="list-inside space-y-1">
+                    {(tier.featureBullets || []).map((bullet) => (
+                      <li key={bullet}>
+                        <span className="text-muted-foreground/60">✓</span>{" "}
+                        {bullet}
+                      </li>
+                    ))}
+                  </ul>
+                </Stack>
+                <Stack gap={1}>
+                  <Type
+                    mono
+                    muted
+                    small
+                    variant="subheading"
+                    className="font-medium uppercase"
+                  >
+                    Included
+                  </Type>
+                  <ul className="list-inside space-y-1">
+                    {(tier.includedBullets || []).map((bullet) => (
+                      <li key={bullet}>
+                        <span className="text-muted-foreground/60">✓</span>{" "}
+                        {bullet}
+                      </li>
+                    ))}
+                  </ul>
+                </Stack>
+              </Stack>
+            </Card.Content>
+          </Card>
+        </div>
+      );
+    }
 
     return (
-      <Card className={cn("w-full p-6", active && `ring-2 ${ringColor}`)}>
+      <Card className="flex-1 p-6 rounded-sm">
         <Card.Header>
           <Card.Title>
-            <Stack gap={1}>
-              <ProductTierBadge tier={name.toLowerCase() as ProductTier} />
-              <Heading variant="h2">{price}</Heading>
+            <Stack gap={2}>
+              <Heading variant="h4">{name}</Heading>
+              <Type variant="body" className="text-2xl">
+                {price}
+              </Type>
             </Stack>
           </Card.Title>
         </Card.Header>
@@ -190,8 +259,8 @@ const UsageTiers = () => {
                   : "Features"}
               </Type>
               <ul className="list-inside space-y-1">
-                {tier.featureBullets.map((bullet) => (
-                  <li>
+                {(tier.featureBullets || []).map((bullet) => (
+                  <li key={bullet}>
                     <span className="text-muted-foreground/60">✓</span> {bullet}
                   </li>
                 ))}
@@ -208,8 +277,8 @@ const UsageTiers = () => {
                 Included
               </Type>
               <ul className="list-inside space-y-1">
-                {tier.includedBullets.map((bullet) => (
-                  <li>
+                {(tier.includedBullets || []).map((bullet) => (
+                  <li key={bullet}>
                     <span className="text-muted-foreground/60">✓</span> {bullet}
                   </li>
                 ))}
@@ -235,7 +304,7 @@ const UsageTiers = () => {
         )}
       </Page.Section.CTA>
       <Page.Section.Body>
-        <Stack direction={"horizontal"} gap={4}>
+        <Stack direction={"horizontal"} gap={4} className="items-stretch">
           {isLoading ? (
             <>
               <CardSkeleton />
@@ -297,15 +366,16 @@ const UsageProgress = ({
   const includedProgress = (
     <div
       className={cn(
-        "h-4 bg-muted dark:bg-neutral-800 rounded-md overflow-hidden relative",
+        "h-4 bg-muted dark:bg-neutral-800 rounded-sm overflow-hidden relative",
         anyOverage && "rounded-r-none"
       )}
       style={{ width: `${includedWidth}%` }}
     >
       <div
-        className="h-full bg-gradient-to-r from-green-400 to-green-600 dark:from-green-700 dark:to-green-500 transition-all duration-300"
+        className="h-full transition-all duration-300"
         style={{
           width: `${Math.min((value / included) * 100, 100)}%`,
+          backgroundColor: "#5A8250", // TODO: use design system color when available
         }}
       />
     </div>
@@ -313,13 +383,14 @@ const UsageProgress = ({
 
   const overageProgress = anyOverage ? (
     <div
-      className="h-4 bg-muted dark:bg-neutral-800 rounded-r-md overflow-hidden relative"
+      className="h-4 bg-muted dark:bg-neutral-800 rounded-r-sm overflow-hidden relative"
       style={{ width: `${overageWidth}%` }}
     >
       <div
-        className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600 dark:from-yellow-700 dark:to-yellow-500 transition-all duration-300"
+        className="h-full transition-all duration-300"
         style={{
           width: `${Math.min(((value - included) / overageMax) * 100, 100)}%`,
+          backgroundColor: "#DB6F32", // TODO: use design system color when available
         }}
       />
     </div>
@@ -334,7 +405,7 @@ const UsageProgress = ({
       </div>
       {/* Included label underneath, always show */}
       <div
-        className="absolute top-5 text-xs text-muted-foreground whitespace-nowrap"
+        className="absolute top-6 text-xs text-muted-foreground whitespace-nowrap"
         style={{ right: `${101 - includedWidth}%` }}
       >
         {anyOverage
@@ -353,7 +424,7 @@ const UsageProgress = ({
           />
           {/* Overage label underneath */}
           <div
-            className="absolute top-5 text-xs text-muted-foreground whitespace-nowrap"
+            className="absolute top-6 text-xs text-muted-foreground whitespace-nowrap"
             style={{ left: `${includedWidth + 1}%` }}
           >
             Extra: {(value - included).toLocaleString()}
@@ -398,6 +469,7 @@ const PolarPortalLink = ({ children }: { children: React.ReactNode }) => {
           ? "Enterprise: Contact support to manage billing"
           : undefined
       }
+      caps
     >
       {children}
     </Button>
