@@ -2,9 +2,12 @@ package polar
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +16,7 @@ import (
 	polarComponents "github.com/polarsource/polar-go/models/components"
 	polarOperations "github.com/polarsource/polar-go/models/operations"
 	"github.com/redis/go-redis/v9"
+	standardwebhooks "github.com/standard-webhooks/standard-webhooks/libraries/go"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -55,12 +59,13 @@ type Client struct {
 	customerStateCache cache.TypedCacheObject[PolarCustomerState]
 	productCache       cache.TypedCacheObject[Product]
 	periodUsageStorage cache.TypedCacheObject[PolarPeriodUsageState]
+	webhookSecret      string
 }
 
 var _ billing.Tracker = (*Client)(nil)
 var _ billing.Repository = (*Client)(nil)
 
-func NewClient(polarClient *polargo.Polar, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog) *Client {
+func NewClient(polarClient *polargo.Polar, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog, webhookSecret string) *Client {
 	return &Client{
 		logger:             logger.With(attr.SlogComponent("polar-usage")),
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/polar"),
@@ -69,7 +74,46 @@ func NewClient(polarClient *polargo.Polar, logger *slog.Logger, tracerProvider t
 		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		productCache:       cache.NewTypedObjectCache[Product](logger.With(attr.SlogCacheNamespace("polar-product")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		periodUsageStorage: cache.NewTypedObjectCache[PolarPeriodUsageState](logger.With(attr.SlogCacheNamespace("polar-period-usage-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		webhookSecret:      webhookSecret,
 	}
+}
+
+func (p *Client) ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, webhookHeader http.Header) (*billing.PolarWebhookPayload, error) {
+	base64Secret := base64.StdEncoding.EncodeToString([]byte(p.webhookSecret))
+	wh, err := standardwebhooks.NewWebhook(base64Secret)
+	if err != nil {
+		return nil, fmt.Errorf("create webhook verifier: %w", err)
+	}
+
+	if err := wh.Verify(payload, webhookHeader); err != nil {
+		return nil, fmt.Errorf("verify webhook: %w", err)
+	}
+
+	var webhookPayload billing.PolarWebhookPayload
+	if err := json.Unmarshal(payload, &webhookPayload); err != nil {
+		return nil, fmt.Errorf("unmarshal webhook payload: %w", err)
+	}
+
+	return &webhookPayload, nil
+}
+
+func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID string) error {
+	err := p.customerStateCache.Delete(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: nil})
+	if err != nil {
+		return fmt.Errorf("failed to delete customer state cache: %w", err)
+	}
+
+	if err := p.periodUsageStorage.Delete(ctx, PolarPeriodUsageState{OrganizationID: orgID, PeriodUsage: gen.PeriodUsage{
+		ToolCalls:               0,
+		MaxToolCalls:            0,
+		Servers:                 0,
+		MaxServers:              0,
+		ActualPublicServerCount: 0,
+	}}); err != nil {
+		return fmt.Errorf("failed todelete period usage storage: %w", err)
+	}
+
+	return nil
 }
 
 func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {
