@@ -197,26 +197,27 @@ const UsageTiers = () => {
                 ))}
               </ul>
             </Stack>
-            <Stack gap={1}>
-              <Type
-                mono
-                muted
-                small
-                variant="subheading"
-                className="font-medium uppercase"
-              >
-                Included
-              </Type>
-              <ul className="list-inside space-y-1">
-                {tier.includedBullets &&
-                  tier.includedBullets.map((bullet) => (
+            {tier.includedBullets && (
+              <Stack gap={1}>
+                <Type
+                  mono
+                  muted
+                  small
+                  variant="subheading"
+                  className="font-medium uppercase"
+                >
+                  Included
+                </Type>
+                <ul className="list-inside space-y-1">
+                  {tier.includedBullets.map((bullet) => (
                     <li>
                       <span className="text-muted-foreground/60">✓</span>{" "}
                       {bullet}
                     </li>
                   ))}
-              </ul>
-            </Stack>
+                </ul>
+              </Stack>
+            )}
           </Stack>
         </Card.Content>
       </Card>
