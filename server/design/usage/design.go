@@ -29,7 +29,7 @@ var TierLimits = Type("TierLimits", func() {
 	Attribute("included_bullets", ArrayOf(String), "Included items bullets of the tier")
 	Attribute("add_on_bullets", ArrayOf(String), "Add-on items bullets of the tier (optional)")
 
-	Required("base_price", "included_tool_calls", "included_servers", "included_credits", "price_per_additional_tool_call", "price_per_additional_server", "price_per_additional_credit", "feature_bullets", "included_bullets")
+    Required("base_price", "included_tool_calls", "included_servers", "included_credits", "price_per_additional_tool_call", "price_per_additional_server", "price_per_additional_credit", "feature_bullets")
 })
 
 var UsageTiers = Type("UsageTiers", func() {
