@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 8538243eb61472d10e03f0b6f0255ed5
+  docChecksum: 5a48c6e73b33c26e5f757c016539751f
   docVersion: 0.0.1
   speakeasyVersion: 1.606.9
   generationVersion: 2.687.13
-  releaseVersion: 0.12.57
-  configChecksum: 229e38b66cf605fdb70209c3cb682021
+  releaseVersion: 0.12.59
+  configChecksum: bea93bec3fb5888e3ec74c3c8160b711
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -1470,7 +1470,7 @@ examples:
     speakeasy-default-get-period-usage:
       responses:
         "200":
-          application/json: {"actual_public_server_count": 754388, "max_servers": 754388, "max_tool_calls": 298053, "servers": 409506, "tool_calls": 709134}
+          application/json: {"actual_enabled_server_count": 754388, "max_servers": 754388, "max_tool_calls": 298053, "servers": 409506, "tool_calls": 709134}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

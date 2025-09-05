@@ -47,7 +47,7 @@ func ProductCacheKey(productID string) string {
 }
 
 func (p Product) TTL() time.Duration {
-	return 12 * time.Hour // 12 hours because the products in Polar are almost never changed
+	return 1 * time.Hour // 1 hour because the products in Polar are almost never changed
 }
 
 func (p Product) AdditionalCacheKeys() []string {

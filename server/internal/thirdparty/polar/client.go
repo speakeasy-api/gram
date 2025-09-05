@@ -91,23 +91,23 @@ func NewClient(polarClient *polargo.Polar, bearerToken string, logger *slog.Logg
 func (p *Client) getMeterQuantitiesRaw(ctx context.Context, meterID, externalCustomerID string, startTime, endTime time.Time) (*MeterQuantities, error) {
 	baseURL := "https://api.polar.sh/v1/meters"
 	reqURL := fmt.Sprintf("%s/%s/quantities", baseURL, meterID)
-	
+
 	params := url.Values{}
 	params.Add("start_timestamp", startTime.Format(time.RFC3339))
 	params.Add("end_timestamp", endTime.Format(time.RFC3339))
 	params.Add("interval", "day")
 	params.Add("external_customer_id", externalCustomerID)
-	
+
 	fullURL := fmt.Sprintf("%s?%s", reqURL, params.Encode())
 
 	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-	
+
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", p.bearerToken))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("make request: %w", err)
@@ -117,12 +117,12 @@ func (p *Client) getMeterQuantitiesRaw(ctx context.Context, meterID, externalCus
 			p.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(closeErr))
 		}
 	}()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response body: %w", err)
@@ -162,11 +162,11 @@ func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID stri
 	}
 
 	if err := p.periodUsageStorage.Delete(ctx, PolarPeriodUsageState{OrganizationID: orgID, PeriodUsage: gen.PeriodUsage{
-		ToolCalls:               0,
-		MaxToolCalls:            0,
-		Servers:                 0,
-		MaxServers:              0,
-		ActualPublicServerCount: 0,
+		ToolCalls:                0,
+		MaxToolCalls:             0,
+		Servers:                  0,
+		MaxServers:               0,
+		ActualEnabledServerCount: 0,
 	}}); err != nil {
 		return fmt.Errorf("failed todelete period usage storage: %w", err)
 	}
@@ -468,11 +468,11 @@ func (p *Client) getCustomer(ctx context.Context, orgID string) (*billing.Custom
 func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *polarComponents.CustomerState) (*gen.PeriodUsage, error) {
 	usage := gen.PeriodUsage{
 		// Set to -1 so we can tell if we've failed to get the usage
-		ToolCalls:               -1,
-		MaxToolCalls:            -1,
-		Servers:                 -1,
-		MaxServers:              -1,
-		ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
+		ToolCalls:                -1,
+		MaxToolCalls:             -1,
+		Servers:                  -1,
+		MaxServers:               -1,
+		ActualEnabledServerCount: 0, // Not related to polar, popualted elsewhere
 	}
 
 	if customer != nil {

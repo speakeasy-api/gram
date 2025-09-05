@@ -5,10 +5,12 @@ export const ButtonRainbow = ({
   children,
   href,
   onClick,
+  className,
 }: {
   children: React.ReactNode;
   href?: string;
   onClick?: () => Promise<void>;
+  className?: string;
 }) => {
   const Comp = href ? "a" : "button";
 
@@ -19,7 +21,8 @@ export const ButtonRainbow = ({
       className={cn(
         "inline-block rounded-md p-[1px]",
         "bg-gradient-primary",
-        inProgress && "opacity-50"
+        inProgress && "opacity-50",
+        className
       )}
     >
       <Comp

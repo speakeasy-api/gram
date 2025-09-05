@@ -9,16 +9,16 @@ import (
 	"context"
 )
 
-const getPublicServerCount = `-- name: GetPublicServerCount :one
+const getEnabledServerCount = `-- name: GetEnabledServerCount :one
 SELECT COUNT(*)
 FROM toolsets
 WHERE organization_id = $1
-  AND mcp_is_public IS TRUE
+  AND mcp_enabled IS TRUE
   AND deleted IS FALSE
 `
 
-func (q *Queries) GetPublicServerCount(ctx context.Context, organizationID string) (int64, error) {
-	row := q.db.QueryRow(ctx, getPublicServerCount, organizationID)
+func (q *Queries) GetEnabledServerCount(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, getEnabledServerCount, organizationID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

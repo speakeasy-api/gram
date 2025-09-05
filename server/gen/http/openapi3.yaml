@@ -8829,9 +8829,9 @@ components:
         PeriodUsage:
             type: object
             properties:
-                actual_public_server_count:
+                actual_enabled_server_count:
                     type: integer
-                    description: The number of servers set to public at the time of the request
+                    description: The number of servers enabled at the time of the request
                     format: int64
                 max_servers:
                     type: integer
@@ -8854,7 +8854,7 @@ components:
                 - max_tool_calls
                 - servers
                 - max_servers
-                - actual_public_server_count
+                - actual_enabled_server_count
         Project:
             type: object
             properties:

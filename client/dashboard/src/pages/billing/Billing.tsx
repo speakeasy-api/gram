@@ -104,8 +104,8 @@ const UsageSection = () => {
               />
               <UsageItem
                 label="Servers"
-                tooltip="The number of public MCP servers across your organization. Note that this value is the maximum number active at a time during the billing period, and may not reflect the current number of public servers."
-                value={periodUsage.servers}
+                tooltip="The number of public MCP servers across your organization. Note that this shows the current number of enabled servers, but you will be billed on the maximum number active simultaneously during the billing period."
+                value={periodUsage.actualEnabledServerCount}
                 included={periodUsage.maxServers || 1}
                 overageIncrement={1}
                 noMax={session.gramAccountType === "enterprise"}
@@ -244,7 +244,7 @@ const UsageTiers = () => {
                 ))}
               </ul>
             </Stack>
-            {tier.includedBullets && (
+            {tier.includedBullets && tier.includedBullets.length > 0 && (
               <Stack gap={1}>
                 <Type
                   mono

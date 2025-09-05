@@ -58,6 +58,10 @@ export type ToolsetEntry = {
    */
   id: string;
   /**
+   * Whether the toolset is enabled for MCP
+   */
+  mcpEnabled?: boolean | undefined;
+  /**
    * Whether the toolset is public in MCP
    */
   mcpIsPublic?: boolean | undefined;
@@ -111,6 +115,7 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
   description: z.string().optional(),
   http_tools: z.array(HTTPToolDefinitionEntry$inboundSchema),
   id: z.string(),
+  mcp_enabled: z.boolean().optional(),
   mcp_is_public: z.boolean().optional(),
   mcp_slug: z.string().optional(),
   name: z.string(),
@@ -127,6 +132,7 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
     "custom_domain_id": "customDomainId",
     "default_environment_slug": "defaultEnvironmentSlug",
     "http_tools": "httpTools",
+    "mcp_enabled": "mcpEnabled",
     "mcp_is_public": "mcpIsPublic",
     "mcp_slug": "mcpSlug",
     "organization_id": "organizationId",
@@ -146,6 +152,7 @@ export type ToolsetEntry$Outbound = {
   description?: string | undefined;
   http_tools: Array<HTTPToolDefinitionEntry$Outbound>;
   id: string;
+  mcp_enabled?: boolean | undefined;
   mcp_is_public?: boolean | undefined;
   mcp_slug?: string | undefined;
   name: string;
@@ -170,6 +177,7 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
   description: z.string().optional(),
   httpTools: z.array(HTTPToolDefinitionEntry$outboundSchema),
   id: z.string(),
+  mcpEnabled: z.boolean().optional(),
   mcpIsPublic: z.boolean().optional(),
   mcpSlug: z.string().optional(),
   name: z.string(),
@@ -186,6 +194,7 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
     customDomainId: "custom_domain_id",
     defaultEnvironmentSlug: "default_environment_slug",
     httpTools: "http_tools",
+    mcpEnabled: "mcp_enabled",
     mcpIsPublic: "mcp_is_public",
     mcpSlug: "mcp_slug",
     organizationId: "organization_id",
