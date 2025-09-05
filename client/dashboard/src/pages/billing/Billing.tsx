@@ -208,11 +208,13 @@ const UsageTiers = () => {
                 Included
               </Type>
               <ul className="list-inside space-y-1">
-                {tier.includedBullets.map((bullet) => (
-                  <li>
-                    <span className="text-muted-foreground/60">✓</span> {bullet}
-                  </li>
-                ))}
+                {tier.includedBullets &&
+                  tier.includedBullets.map((bullet) => (
+                    <li>
+                      <span className="text-muted-foreground/60">✓</span>{" "}
+                      {bullet}
+                    </li>
+                  ))}
               </ul>
             </Stack>
           </Stack>

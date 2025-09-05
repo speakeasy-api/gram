@@ -616,12 +616,12 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 				"Custom tool creation",
 				"Hosted server deployments",
 				"14 day log retention",
-				"Slack community support",
 			},
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", freeTierLimits.Servers, conv.Ternary(freeTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", freeTierLimits.ToolCalls),
 				fmt.Sprintf("$%d in playground credits", freeIncludedCredits),
+				"Slack community support",
 			},
 			AddOnBullets: []string{},
 		},
@@ -637,12 +637,12 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 				"Custom domain",
 				"Register your own OAuth server",
 				"30 day log retention",
-				"Dedicated support channel (Slack or Teams)",
 			},
 			IncludedBullets: []string{
 				fmt.Sprintf("%d MCP %s (public or private)", proTierLimits.Servers, conv.Ternary(proTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
 				fmt.Sprintf("$%d in playground credits", proIncludedCredits),
+				"Dedicated support channel (Slack or Teams)",
 			},
 			AddOnBullets: []string{
 				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
@@ -665,10 +665,8 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 				"Audit logs",
 				"SLA-backed support",
 			},
-			IncludedBullets: []string{
-				"Custom",
-			},
-			AddOnBullets: []string{},
+			IncludedBullets: []string{},
+			AddOnBullets:    []string{},
 		},
 	}, nil
 }
