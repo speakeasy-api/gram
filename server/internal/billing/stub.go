@@ -56,8 +56,8 @@ func (s *StubClient) ValidateAndParseWebhookEvent(ctx context.Context, payload [
 	return nil, fmt.Errorf("not implemented")
 }
 
-func (s *StubClient) InvalidateCustomerTierCache(ctx context.Context, orgID string) error {
-	_, span := s.tracer.Start(ctx, "stub_client.invalidate_customer_tier_cache")
+func (s *StubClient) InvalidateBillingCustomerCaches(ctx context.Context, orgID string) error {
+	_, span := s.tracer.Start(ctx, "stub_client.invalidate_billing_customer_caches")
 	defer span.End()
 
 	return nil

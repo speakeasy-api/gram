@@ -56,5 +56,5 @@ type Repository interface {
 	CreateCustomerSession(ctx context.Context, orgID string) (string, error)
 	GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 	ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, webhookHeader http.Header) (*PolarWebhookPayload, error)
-	InvalidateCustomerTierCache(ctx context.Context, orgID string) error
+	InvalidateBillingCustomerCaches(ctx context.Context, orgID string) error
 }

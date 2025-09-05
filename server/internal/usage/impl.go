@@ -105,13 +105,18 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	}
 
 	// we must invalidate the customer tier cache since customer tier may have changed witha subscription update
-	if err := s.billingRepo.InvalidateCustomerTierCache(ctx, webhookPayload.Data.Customer.ExternalID); err != nil {
+	if err := s.billingRepo.InvalidateBillingCustomerCaches(ctx, webhookPayload.Data.Customer.ExternalID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to invalidate customer tier cache").Log(ctx, s.logger)
 	}
 
 	// we force a refresh of the state of the organization since customer tier may have changed witha subscription update
 	if _, err = mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, webhookPayload.Data.Customer.ExternalID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").Log(ctx, s.logger)
+	}
+
+	// we force a refresh of the period usage since usage may have changed with a subscription update
+	if _, err = s.billingRepo.GetPeriodUsage(ctx, webhookPayload.Data.Customer.ExternalID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, s.logger)
 	}
 
 	return nil

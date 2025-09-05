@@ -97,11 +97,22 @@ func (p *Client) ValidateAndParseWebhookEvent(ctx context.Context, payload []byt
 	return &webhookPayload, nil
 }
 
-func (p *Client) InvalidateCustomerTierCache(ctx context.Context, orgID string) error {
+func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID string) error {
 	err := p.customerStateCache.Delete(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: nil})
 	if err != nil {
-		return fmt.Errorf("delete customer state cache: %w", err)
+		return fmt.Errorf("failed to delete customer state cache: %w", err)
 	}
+
+	if err := p.periodUsageStorage.Delete(ctx, PolarPeriodUsageState{OrganizationID: orgID, PeriodUsage: gen.PeriodUsage{
+		ToolCalls:               0,
+		MaxToolCalls:            0,
+		Servers:                 0,
+		MaxServers:              0,
+		ActualPublicServerCount: 0,
+	}}); err != nil {
+		return fmt.Errorf("failed todelete period usage storage: %w", err)
+	}
+
 	return nil
 }
 
