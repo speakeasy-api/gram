@@ -5,7 +5,6 @@ import {
   ProductTierBadge,
   productTierColors,
 } from "@/components/product-tier-badge";
-import { Button } from "@/components/ui/button";
 import { Card, Cards, CardSkeleton } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -49,6 +48,41 @@ const UsageSection = () => {
     throwOnError: !getServerURL().includes("localhost"),
   });
 
+  const UsageItem = ({
+    label,
+    tooltip,
+    value,
+    included,
+    overageIncrement,
+    noMax,
+  }: {
+    label: string;
+    tooltip: string;
+    value: number;
+    included: number;
+    overageIncrement: number;
+    noMax?: boolean;
+  }) => {
+    return (
+      <Stack gap={3} className="mb-6">
+        <Stack direction="horizontal" align="center" gap={1}>
+          <Type variant="body" className="font-medium">
+            {label}
+          </Type>
+          <SimpleTooltip tooltip={tooltip}>
+            <Info className="w-4 h-4 text-muted-foreground" />
+          </SimpleTooltip>
+        </Stack>
+        <UsageProgress
+          value={value}
+          included={included}
+          overageIncrement={overageIncrement}
+          noMax={noMax}
+        />
+      </Stack>
+    );
+  };
+
   return (
     <Page.Section>
       <Page.Section.Title>Usage</Page.Section.Title>
@@ -60,38 +94,22 @@ const UsageSection = () => {
         <div className="space-y-4">
           {periodUsage ? (
             <>
-              <div>
-                <Stack direction="horizontal" align="center" gap={1}>
-                  <Type variant="body" className="font-medium">
-                    Tool Calls
-                  </Type>
-                  <SimpleTooltip tooltip="The number of tool calls processed this period across all your organization's MCP servers.">
-                    <Info className="w-4 h-4 text-muted-foreground" />
-                  </SimpleTooltip>
-                </Stack>
-                <UsageProgress
-                  value={periodUsage.toolCalls}
-                  included={periodUsage.maxToolCalls || 1000}
-                  overageIncrement={periodUsage.maxToolCalls}
-                  noMax={session.gramAccountType === "enterprise"}
-                />
-              </div>
-              <div>
-                <Stack direction="horizontal" align="center" gap={1}>
-                  <Type variant="body" className="font-medium">
-                    Servers
-                  </Type>
-                  <SimpleTooltip tooltip="The number of public MCP servers across your organization. Note that this value is the maximum number active at a time during the billing period, and may not reflect the current number of public servers.">
-                    <Info className="w-4 h-4 text-muted-foreground" />
-                  </SimpleTooltip>
-                </Stack>
-                <UsageProgress
-                  value={periodUsage.servers} // TODO: We are using this because the value coming from Polar is not correctly scoped to the organization because of a bug in the SDK
-                  included={periodUsage.maxServers || 1}
-                  overageIncrement={1}
-                  noMax={session.gramAccountType === "enterprise"}
-                />
-              </div>
+              <UsageItem
+                label="Tool Calls"
+                tooltip="The number of tool calls processed this period across all your organization's MCP servers."
+                value={periodUsage.toolCalls}
+                included={periodUsage.maxToolCalls || 1000}
+                overageIncrement={periodUsage.maxToolCalls}
+                noMax={session.gramAccountType === "enterprise"}
+              />
+              <UsageItem
+                label="Servers"
+                tooltip="The number of public MCP servers across your organization. Note that this value is the maximum number active at a time during the billing period, and may not reflect the current number of public servers."
+                value={periodUsage.servers}
+                included={periodUsage.maxServers || 1}
+                overageIncrement={1}
+                noMax={session.gramAccountType === "enterprise"}
+              />
             </>
           ) : (
             <>
@@ -102,21 +120,13 @@ const UsageSection = () => {
             </>
           )}
           {creditUsage ? (
-            <div>
-              <Stack direction="horizontal" align="center" gap={1}>
-                <Type variant="body" className="font-medium">
-                  Playground Credits
-                </Type>
-                <SimpleTooltip tooltip="The number of credits used this month for AI-powered dashboard experiences.">
-                  <Info className="w-4 h-4 text-muted-foreground" />
-                </SimpleTooltip>
-              </Stack>
-              <UsageProgress
-                value={creditUsage.creditsUsed}
-                included={creditUsage.monthlyCredits}
-                overageIncrement={creditUsage.monthlyCredits}
-              />
-            </div>
+            <UsageItem
+              label="Playground Credits"
+              tooltip="The number of credits used this month for AI-powered dashboard experiences."
+              value={creditUsage.creditsUsed}
+              included={creditUsage.monthlyCredits}
+              overageIncrement={creditUsage.monthlyCredits}
+            />
           ) : (
             <>
               <Skeleton className="h-4 w-1/3" />
@@ -140,6 +150,43 @@ const UsageSection = () => {
 const UsageTiers = () => {
   const { data: usageTiers, isLoading } = useGetUsageTiers();
   const session = useSession();
+  const client = useSdkClient();
+  const [checkoutLink, setCheckoutLink] = useState("");
+
+  useEffect(() => {
+    PolarEmbedCheckout.init();
+    client.usage.createCheckout().then((link) => {
+      setCheckoutLink(link);
+    });
+  }, []);
+
+  const upgradeCTA = (
+    <Page.Section.CTA
+      href={checkoutLink}
+      data-polar-checkout
+      data-polar-checkout-theme="light"
+    >
+      Upgrade
+    </Page.Section.CTA>
+  );
+
+  const polarPortalCTA = (
+    <Page.Section.CTA
+      onClick={() => {
+        client.usage.createCustomerSession().then((link) => {
+          window.open(link, "_blank");
+        });
+      }}
+      disabled={session.gramAccountType === "enterprise"}
+      tooltip={
+        session.gramAccountType === "enterprise"
+          ? "Enterprise: Contact support to manage billing"
+          : undefined
+      }
+    >
+      Manage Billing
+    </Page.Section.CTA>
+  );
 
   if (!usageTiers) {
     return <Cards isLoading={true} />;
@@ -227,13 +274,7 @@ const UsageTiers = () => {
       <Page.Section.Description>
         A breakdown of our pricing tiers.
       </Page.Section.Description>
-      <Page.Section.CTA>
-        {session.gramAccountType === "free" ? (
-          <UpgradeLink>Upgrade</UpgradeLink>
-        ) : (
-          <PolarPortalLink>Manage Billing</PolarPortalLink>
-        )}
-      </Page.Section.CTA>
+      {session.gramAccountType === "free" ? upgradeCTA : polarPortalCTA}
       <Page.Section.Body>
         <Stack direction={"horizontal"} gap={4}>
           {isLoading ? (
@@ -303,7 +344,7 @@ const UsageProgress = ({
       style={{ width: `${includedWidth}%` }}
     >
       <div
-        className="h-full bg-gradient-to-r from-green-400 to-green-600 dark:from-green-700 dark:to-green-500 transition-all duration-300"
+        className="h-full bg-success-default transition-all duration-300"
         style={{
           width: `${Math.min((value / included) * 100, 100)}%`,
         }}
@@ -317,7 +358,7 @@ const UsageProgress = ({
       style={{ width: `${overageWidth}%` }}
     >
       <div
-        className="h-full bg-gradient-to-r from-yellow-400 to-yellow-600 dark:from-yellow-700 dark:to-yellow-500 transition-all duration-300"
+        className="h-full bg-warning-default transition-all duration-300"
         style={{
           width: `${Math.min(((value - included) / overageMax) * 100, 100)}%`,
         }}
@@ -334,7 +375,7 @@ const UsageProgress = ({
       </div>
       {/* Included label underneath, always show */}
       <div
-        className="absolute top-5 text-xs text-muted-foreground whitespace-nowrap"
+        className="absolute top-6 text-xs text-muted-foreground whitespace-nowrap"
         style={{ right: `${101 - includedWidth}%` }}
       >
         {anyOverage
@@ -353,7 +394,7 @@ const UsageProgress = ({
           />
           {/* Overage label underneath */}
           <div
-            className="absolute top-5 text-xs text-muted-foreground whitespace-nowrap"
+            className="absolute top-6 text-xs text-muted-foreground whitespace-nowrap"
             style={{ left: `${includedWidth + 1}%` }}
           >
             Extra: {(value - included).toLocaleString()}
@@ -378,50 +419,5 @@ const UsageProgress = ({
         </>
       )}
     </div>
-  );
-};
-
-const PolarPortalLink = ({ children }: { children: React.ReactNode }) => {
-  const client = useSdkClient();
-  const session = useSession();
-
-  return (
-    <Button
-      onClick={() => {
-        client.usage.createCustomerSession().then((link) => {
-          window.open(link, "_blank");
-        });
-      }}
-      disabled={session.gramAccountType === "enterprise"}
-      tooltip={
-        session.gramAccountType === "enterprise"
-          ? "Enterprise: Contact support to manage billing"
-          : undefined
-      }
-    >
-      {children}
-    </Button>
-  );
-};
-
-const UpgradeLink = ({ children }: { children: React.ReactNode }) => {
-  const [checkoutLink, setCheckoutLink] = useState("");
-  const client = useSdkClient();
-
-  useEffect(() => {
-    PolarEmbedCheckout.init();
-    client.usage.createCheckout().then((link) => {
-      setCheckoutLink(link);
-    });
-  }, []);
-
-  return (
-    <a
-      href={checkoutLink}
-      data-polar-checkout
-      data-polar-checkout-theme="light"
-    >
-      {children}
-    </a>
   );
 };
