@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
 var allowedPublicServers = map[string]int{
@@ -53,6 +54,7 @@ type Service struct {
 	auth            *auth.Auth
 	toolsets        *Toolsets
 	domainsRepo     *domainsRepo.Queries
+	usageRepo       *usageRepo.Queries
 	oauthRepo       *oauthRepo.Queries
 }
 
@@ -70,6 +72,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		environmentRepo: environmentsRepo.New(db),
 		toolsets:        NewToolsets(db),
 		domainsRepo:     domainsRepo.New(db),
+		usageRepo:       usageRepo.New(db),
 		oauthRepo:       oauthRepo.New(db),
 	}
 }
@@ -97,11 +100,11 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
 
-	toolsets, err := s.repo.ListToolsetsByProject(ctx, *authCtx.ProjectID)
+	enabledServerCount, err := s.usageRepo.GetEnabledServerCount(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list toolsets").Log(ctx, s.logger)
+		// don't block the user from creating a toolset
+		s.logger.ErrorContext(ctx, "error getting enabled server count", attr.SlogError(err), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
-	isInitialToolset := len(toolsets) == 0
 
 	createToolParams := repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
@@ -112,7 +115,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
 		HttpToolNames:          payload.HTTPToolNames,
 		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             isInitialToolset, // we automatically enable the first toolset as an MCP server
+		McpEnabled:             enabledServerCount == 0, // we automatically enable the first available toolset in an organization as an MCP server
 	}
 
 	if payload.DefaultEnvironmentSlug != nil {
