@@ -1,13 +1,13 @@
-import { useErrorHandler } from "@/contexts/ErrorHandler";
 import { getServerURL } from "@/lib/utils";
-import { datadogRum } from "@datadog/browser-rum";
 import { Gram } from "@gram/client";
 import { HTTPClient } from "@gram/client/lib/http.js";
 import { GramProvider } from "@gram/client/react-query/index.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useMemo, useRef } from "react";
+import { createContext, useContext, useMemo, useEffect, useRef } from "react";
 import { useLocation, useParams } from "react-router";
+import { useErrorHandler } from "@/contexts/ErrorHandler";
 import { useTelemetry } from "./Telemetry";
+import { datadogRum } from "@datadog/browser-rum";
 
 export const SdkContext = createContext<Gram>({} as Gram);
 

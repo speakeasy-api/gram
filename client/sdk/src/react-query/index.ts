@@ -58,7 +58,6 @@ export * from "./revokeAPIKey.js";
 export * from "./serveImage.js";
 export * from "./serveOpenAPIv3.js";
 export * from "./sessionInfo.js";
-export * from "./setProjectLogo.js";
 export * from "./switchScopes.js";
 export * from "./template.js";
 export * from "./templates.js";

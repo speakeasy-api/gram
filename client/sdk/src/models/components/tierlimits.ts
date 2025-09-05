@@ -10,25 +10,13 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type TierLimits = {
   /**
-   * Add-on items bullets of the tier (optional)
-   */
-  addOnBullets?: Array<string> | undefined;
-  /**
    * The base price for the tier
    */
   basePrice: number;
   /**
-   * Key feature bullets of the tier
+   * The description bullets of the tier
    */
-  featureBullets: Array<string>;
-  /**
-   * Included items bullets of the tier
-   */
-  includedBullets: Array<string>;
-  /**
-   * The number of credits included in the tier for playground and other dashboard activities
-   */
-  includedCredits: number;
+  descriptionBullets: Array<string>;
   /**
    * The number of servers included in the tier
    */
@@ -37,10 +25,6 @@ export type TierLimits = {
    * The number of tool calls included in the tier
    */
   includedToolCalls: number;
-  /**
-   * The price per additional credit
-   */
-  pricePerAdditionalCredit: number;
   /**
    * The price per additional server
    */
@@ -57,26 +41,18 @@ export const TierLimits$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  add_on_bullets: z.array(z.string()).optional(),
   base_price: z.number(),
-  feature_bullets: z.array(z.string()),
-  included_bullets: z.array(z.string()),
-  included_credits: z.number().int(),
+  description_bullets: z.array(z.string()),
   included_servers: z.number().int(),
   included_tool_calls: z.number().int(),
-  price_per_additional_credit: z.number(),
   price_per_additional_server: z.number(),
   price_per_additional_tool_call: z.number(),
 }).transform((v) => {
   return remap$(v, {
-    "add_on_bullets": "addOnBullets",
     "base_price": "basePrice",
-    "feature_bullets": "featureBullets",
-    "included_bullets": "includedBullets",
-    "included_credits": "includedCredits",
+    "description_bullets": "descriptionBullets",
     "included_servers": "includedServers",
     "included_tool_calls": "includedToolCalls",
-    "price_per_additional_credit": "pricePerAdditionalCredit",
     "price_per_additional_server": "pricePerAdditionalServer",
     "price_per_additional_tool_call": "pricePerAdditionalToolCall",
   });
@@ -84,14 +60,10 @@ export const TierLimits$inboundSchema: z.ZodType<
 
 /** @internal */
 export type TierLimits$Outbound = {
-  add_on_bullets?: Array<string> | undefined;
   base_price: number;
-  feature_bullets: Array<string>;
-  included_bullets: Array<string>;
-  included_credits: number;
+  description_bullets: Array<string>;
   included_servers: number;
   included_tool_calls: number;
-  price_per_additional_credit: number;
   price_per_additional_server: number;
   price_per_additional_tool_call: number;
 };
@@ -102,26 +74,18 @@ export const TierLimits$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   TierLimits
 > = z.object({
-  addOnBullets: z.array(z.string()).optional(),
   basePrice: z.number(),
-  featureBullets: z.array(z.string()),
-  includedBullets: z.array(z.string()),
-  includedCredits: z.number().int(),
+  descriptionBullets: z.array(z.string()),
   includedServers: z.number().int(),
   includedToolCalls: z.number().int(),
-  pricePerAdditionalCredit: z.number(),
   pricePerAdditionalServer: z.number(),
   pricePerAdditionalToolCall: z.number(),
 }).transform((v) => {
   return remap$(v, {
-    addOnBullets: "add_on_bullets",
     basePrice: "base_price",
-    featureBullets: "feature_bullets",
-    includedBullets: "included_bullets",
-    includedCredits: "included_credits",
+    descriptionBullets: "description_bullets",
     includedServers: "included_servers",
     includedToolCalls: "included_tool_calls",
-    pricePerAdditionalCredit: "price_per_additional_credit",
     pricePerAdditionalServer: "price_per_additional_server",
     pricePerAdditionalToolCall: "price_per_additional_tool_call",
   });
