@@ -17,7 +17,7 @@ function ContentErrorFallback({ error }: ContentErrorFallbackProps) {
   handleError(error, { silent: true });
 
   return (
-    <Card className="w-full max-w-lg my-8 py-8">
+    <Card className="w-full max-w-lg m-8 py-8">
       <Card.Header>
         <Card.Title>
           <Stack direction="horizontal" gap={2} align="center">

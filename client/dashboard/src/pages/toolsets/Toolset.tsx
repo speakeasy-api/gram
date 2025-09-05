@@ -85,7 +85,9 @@ export function ToolsetRoot() {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Outlet />
+      <Page.Body>
+        <Outlet />
+      </Page.Body>
     </Page>
   );
 }
@@ -250,7 +252,7 @@ export function ToolsetView({
   }
 
   return (
-    <Page.Body className={cn("flex flex-col gap-6", className)}>
+    <div className={cn("flex flex-col gap-6", className)}>
       {toolset && (
         <ToolsetAuthAlert
           toolset={toolset}
@@ -314,6 +316,6 @@ export function ToolsetView({
           onOpenChange={setAddToolsDialogOpen}
         />
       )}
-    </Page.Body>
+    </div>
   );
 }

@@ -128,7 +128,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
 const FreeTierExceededNotification = () => {
   const session = useSession();
-  const { data: usage } = useGetPeriodUsage();
+  const { data: usage } = useGetPeriodUsage(undefined, undefined, {
+    throwOnError: false,
+  });
   const routes = useRoutes();
 
   if (!usage || !session || session.gramAccountType !== "free") {

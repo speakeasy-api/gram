@@ -15,7 +15,7 @@ function PageLayout({ children }: { children: React.ReactNode }) {
   return (
     // The height calculation accounts for the page body "visual" gutter
     <div className="h-[calc(100vh-16px)] flex flex-col overflow-hidden">
-      {children}
+      <ContentErrorBoundary>{children}</ContentErrorBoundary>
     </div>
   );
 }
@@ -39,7 +39,7 @@ function PageBody({
           className
         )}
       >
-        <ContentErrorBoundary>{children}</ContentErrorBoundary>
+        {children}
       </div>
     </div>
   );
