@@ -27,7 +27,7 @@ func BuildCreateTemplatePayload(templatesCreateTemplateBody string, templatesCre
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Velit sint.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"er5\",\n      \"prompt\": \"Quasi ex qui rerum.\",\n      \"tools_hint\": [\n         \"Rem aut et explicabo ut.\",\n         \"Sequi deserunt reiciendis vero aut.\",\n         \"Occaecati et qui non qui sunt.\"\n      ]\n   }'")
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(body.Name) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 40, false))
 		}

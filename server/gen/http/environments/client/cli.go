@@ -110,7 +110,7 @@ func BuildUpdateEnvironmentPayload(environmentsUpdateEnvironmentBody string, env
 	var slug string
 	{
 		slug = environmentsUpdateEnvironmentSlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
@@ -164,7 +164,7 @@ func BuildDeleteEnvironmentPayload(environmentsDeleteEnvironmentSlug string, env
 	var slug string
 	{
 		slug = environmentsDeleteEnvironmentSlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
