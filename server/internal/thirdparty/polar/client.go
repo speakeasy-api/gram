@@ -91,23 +91,23 @@ func NewClient(polarClient *polargo.Polar, bearerToken string, logger *slog.Logg
 func (p *Client) getMeterQuantitiesRaw(ctx context.Context, meterID, externalCustomerID string, startTime, endTime time.Time) (*MeterQuantities, error) {
 	baseURL := "https://api.polar.sh/v1/meters"
 	reqURL := fmt.Sprintf("%s/%s/quantities", baseURL, meterID)
-	
+
 	params := url.Values{}
 	params.Add("start_timestamp", startTime.Format(time.RFC3339))
 	params.Add("end_timestamp", endTime.Format(time.RFC3339))
 	params.Add("interval", "day")
 	params.Add("external_customer_id", externalCustomerID)
-	
+
 	fullURL := fmt.Sprintf("%s?%s", reqURL, params.Encode())
 
 	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-	
+
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", p.bearerToken))
 	req.Header.Set("Content-Type", "application/json")
-	
+
 	resp, err := p.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("make request: %w", err)
@@ -117,12 +117,12 @@ func (p *Client) getMeterQuantitiesRaw(ctx context.Context, meterID, externalCus
 			p.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(closeErr))
 		}
 	}()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("read response body: %w", err)
@@ -700,7 +700,6 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			PricePerAdditionalServer:   0,
 			PricePerAdditionalCredit:   creditPrice, // Hard coded for now. TODO: Move to Polar
 			FeatureBullets: []string{
-				"Tool generation",
 				"Custom tool creation",
 				"Hosted server deployments",
 				"14 day log retention",
@@ -748,7 +747,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			PricePerAdditionalCredit:   0,
 			FeatureBullets: []string{
 				"Oauth 2.1 proxy support",
-				"White-glove onboarding",
+				"Concierge onboarding",
 				"SSO",
 				"Audit logs",
 				"SLA-backed support",
