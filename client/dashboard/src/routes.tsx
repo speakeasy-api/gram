@@ -32,7 +32,6 @@ import {
 import { ToolSelect } from "./pages/toolsets/ToolSelect";
 import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
-import Billing from "./pages/billing/Billing";
 
 type AppRouteBasic = {
   title: string;
@@ -254,12 +253,6 @@ const ROUTE_STRUCTURE = {
     url: "settings",
     icon: "settings",
     component: Settings,
-  },
-  billing: {
-    title: "Billing",
-    url: "billing",
-    icon: "credit-card",
-    component: Billing,
   },
   docs: {
     title: "Docs",

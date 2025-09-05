@@ -8,47 +8,38 @@ import { UsageTiers } from "@gram/client/models/components";
 let value: UsageTiers = {
   enterprise: {
     basePrice: 754.33,
-    featureBullets: [
+    descriptionBullets: [
       "<value 1>",
       "<value 2>",
     ],
-    includedBullets: [
-      "<value 1>",
-      "<value 2>",
-    ],
-    includedCredits: 282676,
-    includedServers: 855220,
-    includedToolCalls: 251129,
-    pricePerAdditionalCredit: 70.7,
-    pricePerAdditionalServer: 8066.35,
-    pricePerAdditionalToolCall: 9094.85,
+    includedServers: 589937,
+    includedToolCalls: 282676,
+    pricePerAdditionalServer: 8552.2,
+    pricePerAdditionalToolCall: 2511.29,
   },
   free: {
-    basePrice: 4293.67,
-    featureBullets: [
+    basePrice: 70.7,
+    descriptionBullets: [
       "<value 1>",
       "<value 2>",
+      "<value 3>",
     ],
-    includedBullets: [
-      "<value 1>",
-    ],
-    includedCredits: 770876,
-    includedServers: 820849,
-    includedToolCalls: 949779,
-    pricePerAdditionalCredit: 434.95,
-    pricePerAdditionalServer: 4213.91,
-    pricePerAdditionalToolCall: 9758.63,
+    includedServers: 909485,
+    includedToolCalls: 429367,
+    pricePerAdditionalServer: 5627.19,
+    pricePerAdditionalToolCall: 3039.32,
   },
   pro: {
-    basePrice: 686.88,
-    featureBullets: [],
-    includedBullets: [],
-    includedCredits: 201616,
-    includedServers: 689458,
-    includedToolCalls: 850067,
-    pricePerAdditionalCredit: 2868.59,
-    pricePerAdditionalServer: 8881.92,
-    pricePerAdditionalToolCall: 1047.78,
+    basePrice: 7708.76,
+    descriptionBullets: [
+      "<value 1>",
+      "<value 2>",
+      "<value 3>",
+    ],
+    includedServers: 949779,
+    includedToolCalls: 43495,
+    pricePerAdditionalServer: 4213.91,
+    pricePerAdditionalToolCall: 9758.63,
   },
 };
 ```

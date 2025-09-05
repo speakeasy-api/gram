@@ -59,7 +59,6 @@ export * from "./revokeapikey.js";
 export * from "./serveimage.js";
 export * from "./serveopenapiv3.js";
 export * from "./sessioninfo.js";
-export * from "./setprojectlogo.js";
 export * from "./slackcallback.js";
 export * from "./slacklogin.js";
 export * from "./switchauthscopes.js";
