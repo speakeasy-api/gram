@@ -17,7 +17,6 @@ type InputProps =
       optional?: boolean;
       disabled?: boolean;
       lines?: number;
-      maxLength?: number;
       hint?: string | ((value: string) => React.ReactNode);
     }
   | {
@@ -98,7 +97,6 @@ export function InputDialog({
                   disabled={input.disabled}
                   validate={input.validate}
                   lines={input.lines}
-                  maxLength={input.maxLength}
                 />
               )}
               {input.type === "image" && (

@@ -77,10 +77,14 @@ export default function Toolsets() {
             value: toolsetName,
             onChange: (value) => setToolsetName(value),
             onSubmit: createToolset,
-            validate: (value) => value.length > 0,
-            maxLength: 40,
+            validate: (value) => value.length > 0 && value.length <= 40,
             hint: (value) => (
-              <p className="text-right">{`${value.length}`}/40</p>
+              <div className="flex justify-between w-full">
+                <p className="text-destructive">
+                  {value.length > 40 && "Must be 40 characters or less"}
+                </p>
+                <p>{`${value.length}`}/40</p>
+              </div>
             ),
           }}
         />
