@@ -120,6 +120,13 @@ Payload(func() {
 })
 ```
 
+> [!TIP]
+>
+> All APIs should take one of:
+> - The api key header (Gram-Key) + project slug header (Gram-Project)
+> - The session cookie (Cookie) + project slug header (Gram-Project)
+> When designing new APIs, consider whether the API should be public or private, and use the appropriate security scheme in the design. This can done in the `Service` or `Method` dsl context:
+
 ## Step 3. Define types
 
 If your endpoint needs custom types (request and response), they are defined in the same design file:
