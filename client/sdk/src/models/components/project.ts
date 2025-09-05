@@ -18,6 +18,10 @@ export type Project = {
    */
   id: string;
   /**
+   * The ID of the logo asset for the project
+   */
+  logoAssetId?: string | undefined;
+  /**
    * The name of the project
    */
   name: string;
@@ -42,6 +46,7 @@ export const Project$inboundSchema: z.ZodType<Project, z.ZodTypeDef, unknown> =
       new Date(v)
     ),
     id: z.string(),
+    logo_asset_id: z.string().optional(),
     name: z.string(),
     organization_id: z.string(),
     slug: z.string(),
@@ -51,6 +56,7 @@ export const Project$inboundSchema: z.ZodType<Project, z.ZodTypeDef, unknown> =
   }).transform((v) => {
     return remap$(v, {
       "created_at": "createdAt",
+      "logo_asset_id": "logoAssetId",
       "organization_id": "organizationId",
       "updated_at": "updatedAt",
     });
@@ -60,6 +66,7 @@ export const Project$inboundSchema: z.ZodType<Project, z.ZodTypeDef, unknown> =
 export type Project$Outbound = {
   created_at: string;
   id: string;
+  logo_asset_id?: string | undefined;
   name: string;
   organization_id: string;
   slug: string;
@@ -74,6 +81,7 @@ export const Project$outboundSchema: z.ZodType<
 > = z.object({
   createdAt: z.date().transform(v => v.toISOString()),
   id: z.string(),
+  logoAssetId: z.string().optional(),
   name: z.string(),
   organizationId: z.string(),
   slug: z.string(),
@@ -81,6 +89,7 @@ export const Project$outboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     createdAt: "created_at",
+    logoAssetId: "logo_asset_id",
     organizationId: "organization_id",
     updatedAt: "updated_at",
   });

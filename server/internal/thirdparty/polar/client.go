@@ -53,6 +53,7 @@ type Client struct {
 	polar              *polargo.Polar
 	catalog            *Catalog
 	customerStateCache cache.TypedCacheObject[PolarCustomerState]
+	productCache       cache.TypedCacheObject[Product]
 	periodUsageStorage cache.TypedCacheObject[PolarPeriodUsageState]
 }
 
@@ -66,6 +67,7 @@ func NewClient(polarClient *polargo.Polar, logger *slog.Logger, tracerProvider t
 		polar:              polarClient,
 		catalog:            catalog,
 		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
+		productCache:       cache.NewTypedObjectCache[Product](logger.With(attr.SlogCacheNamespace("polar-product")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		periodUsageStorage: cache.NewTypedObjectCache[PolarPeriodUsageState](logger.With(attr.SlogCacheNamespace("polar-period-usage-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 	}
 }
@@ -329,6 +331,18 @@ func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerStat
 	return nil, nil
 }
 
+func (p *Client) GetCustomer(ctx context.Context, orgID string) (c *billing.Customer, err error) {
+	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	return p.getCustomer(ctx, orgID)
+}
+
 func (p *Client) getCustomer(ctx context.Context, orgID string) (*billing.Customer, error) {
 	customerState, err := p.getCustomerState(ctx, orgID)
 	if err != nil {
@@ -348,20 +362,17 @@ func (p *Client) getCustomer(ctx context.Context, orgID string) (*billing.Custom
 	return customer, nil
 }
 
-func (p *Client) GetCustomer(ctx context.Context, orgID string) (c *billing.Customer, err error) {
-	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer")
-	defer func() {
-		if err != nil {
-			span.SetStatus(codes.Error, err.Error())
-		}
-		span.End()
-	}()
-
-	return p.getCustomer(ctx, orgID)
-}
-
 // readPeriodUsage reads the period usage from the customer state if available, otherwise reads the usage from the meters directly.
 func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *polarComponents.CustomerState) (*gen.PeriodUsage, error) {
+	usage := gen.PeriodUsage{
+		// Set to -1 so we can tell if we've failed to get the usage
+		ToolCalls:               333, //-1,  // TODO! Revert once Polar Go SDK bug is fixed!
+		MaxToolCalls:            -1,
+		Servers:                 1, //-1,  // TODO! Revert once PolarGo SDK bug is fixed!
+		MaxServers:              -1,
+		ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
+	}
+
 	if customer != nil {
 		var toolCallMeter *polarComponents.CustomerStateMeter
 		var serverMeter *polarComponents.CustomerStateMeter
@@ -383,61 +394,70 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 			)
 		}
 
-		return &gen.PeriodUsage{
-			ToolCalls:               int(toolCallMeter.ConsumedUnits),
-			MaxToolCalls:            int(toolCallMeter.CreditedUnits),
-			Servers:                 int(serverMeter.ConsumedUnits),
-			MaxServers:              int(serverMeter.CreditedUnits),
-			ActualPublicServerCount: 0, // Not related to polar, populated elsewhere
-		}, nil
+		// usage.ToolCalls = int(toolCallMeter.ConsumedUnits) // TODO! Revert once PolarGo SDK bug is fixed!
+		usage.MaxToolCalls = int(toolCallMeter.CreditedUnits)
+		// usage.Servers = int(serverMeter.ConsumedUnits) // TODO! Revert once PolarGo SDK bug is fixed!
+		usage.MaxServers = int(serverMeter.CreditedUnits)
 	}
+
+	/**
+	 * If we failed to get the usage from the customer state for any reason, read the usage from the meters directly.
+	 * This happens always for free tier, but also in other cases where the customer state is confused
+	 */
 
 	customerFilter := polarOperations.CreateMetersQuantitiesQueryParamExternalCustomerIDFilterStr(orgID)
 
-	// For free tier, we need to read the meter directly because the user won't have a subscription
-	toolCallsRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
-		ID:                 p.catalog.MeterIDToolCalls,
-		ExternalCustomerID: &customerFilter,
-		StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
-		EndTimestamp:       time.Now(),
-		Interval:           polarComponents.TimeIntervalDay,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("get tool call usage: %w", err)
+	if usage.ToolCalls == -1 {
+		// For free tier, we need to read the meter directly because the user won't have a subscription
+		toolCallsRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
+			ID:                 p.catalog.MeterIDToolCalls,
+			ExternalCustomerID: &customerFilter,
+			StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
+			EndTimestamp:       time.Now(),
+			Interval:           polarComponents.TimeIntervalDay,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get tool call usage: %w", err)
+		}
+
+		usage.ToolCalls = int(toolCallsRes.MeterQuantities.Total)
 	}
 
-	serversRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
-		ID:                 p.catalog.MeterIDServers,
-		ExternalCustomerID: &customerFilter,
-		StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
-		EndTimestamp:       time.Now(),
-		Interval:           polarComponents.TimeIntervalDay,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("get server usage: %w", err)
+	if usage.Servers == -1 {
+		serversRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
+			ID:                 p.catalog.MeterIDServers,
+			ExternalCustomerID: &customerFilter,
+			StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
+			EndTimestamp:       time.Now(),
+			Interval:           polarComponents.TimeIntervalDay,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get server usage: %w", err)
+		}
+
+		usage.Servers = int(serversRes.MeterQuantities.Total)
 	}
 
-	freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDFree)
-	if err != nil {
-		return nil, fmt.Errorf("get free tier product: %w", err)
+	if usage.MaxToolCalls == -1 || usage.MaxServers == -1 {
+		freeTierProduct, err := p.getProductByID(ctx, p.catalog.ProductIDFree)
+		if err != nil {
+			return nil, fmt.Errorf("get free tier product: %w", err)
+		}
+
+		freeTierLimits := extractTierLimits(p.catalog, freeTierProduct)
+		if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 {
+			return nil, fmt.Errorf(
+				"get free tier limits: missing limits (tool calls = %s, servers = %s)",
+				conv.Ternary(freeTierLimits.ToolCalls == 0, "missing", "set"),
+				conv.Ternary(freeTierLimits.Servers == 0, "missing", "set"),
+			)
+		}
+
+		usage.MaxToolCalls = freeTierLimits.ToolCalls
+		usage.MaxServers = freeTierLimits.Servers
 	}
 
-	freeTierLimits := extractTierLimits(p.catalog, freeTierProduct)
-	if freeTierLimits.ToolCalls == 0 || freeTierLimits.Servers == 0 {
-		return nil, fmt.Errorf(
-			"get free tier limits: missing limits (tool calls = %s, servers = %s)",
-			conv.Ternary(freeTierLimits.ToolCalls == 0, "missing", "set"),
-			conv.Ternary(freeTierLimits.Servers == 0, "missing", "set"),
-		)
-	}
-
-	return &gen.PeriodUsage{
-		ToolCalls:               int(toolCallsRes.MeterQuantities.Total),
-		MaxToolCalls:            freeTierLimits.ToolCalls,
-		Servers:                 int(serversRes.MeterQuantities.Total),
-		MaxServers:              freeTierLimits.Servers,
-		ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
-	}, nil
+	return &usage, nil
 }
 
 // GetPeriodUsage returns the period usage for the given organization ID as well as their tier limits.
@@ -654,9 +674,17 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 }
 
 func (p *Client) getProductByID(ctx context.Context, id string) (*polarComponents.Product, error) {
+	if product, err := p.productCache.Get(ctx, ProductCacheKey(id)); err == nil {
+		return &product.Product, nil
+	}
+
 	res, err := p.polar.Products.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("get polar product: %w", err)
+	}
+
+	if err = p.productCache.Store(ctx, Product{Product: *res.Product}); err != nil {
+		p.logger.ErrorContext(ctx, "failed to cache product", attr.SlogError(err))
 	}
 
 	return res.Product, nil
