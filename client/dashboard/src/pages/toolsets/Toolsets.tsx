@@ -80,9 +80,7 @@ export default function Toolsets() {
             validate: (value) => value.length > 0,
             maxLength: 40,
             hint: (value) => (
-              <p className="text-right">
-                {value.length > 20 ? `${value.length}/40` : undefined}
-              </p>
+              <p className="text-right">{`${value.length}`}/40</p>
             ),
           }}
         />
