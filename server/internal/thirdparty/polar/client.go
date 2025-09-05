@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -51,10 +53,16 @@ func (c *Catalog) Validate() error {
 	return nil
 }
 
+type MeterQuantities struct {
+	Total float32 `json:"total"`
+}
+
 type Client struct {
 	logger             *slog.Logger
 	tracer             trace.Tracer
 	polar              *polargo.Polar
+	httpClient         *http.Client
+	bearerToken        string
 	catalog            *Catalog
 	customerStateCache cache.TypedCacheObject[PolarCustomerState]
 	productCache       cache.TypedCacheObject[Product]
@@ -65,17 +73,67 @@ type Client struct {
 var _ billing.Tracker = (*Client)(nil)
 var _ billing.Repository = (*Client)(nil)
 
-func NewClient(polarClient *polargo.Polar, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog, webhookSecret string) *Client {
+func NewClient(polarClient *polargo.Polar, bearerToken string, logger *slog.Logger, tracerProvider trace.TracerProvider, redisClient *redis.Client, catalog *Catalog, webhookSecret string) *Client {
 	return &Client{
 		logger:             logger.With(attr.SlogComponent("polar-usage")),
 		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/polar"),
 		polar:              polarClient,
+		httpClient:         &http.Client{Timeout: 30 * time.Second},
+		bearerToken:        bearerToken,
 		catalog:            catalog,
 		customerStateCache: cache.NewTypedObjectCache[PolarCustomerState](logger.With(attr.SlogCacheNamespace("polar-customer-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		productCache:       cache.NewTypedObjectCache[Product](logger.With(attr.SlogCacheNamespace("polar-product")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		periodUsageStorage: cache.NewTypedObjectCache[PolarPeriodUsageState](logger.With(attr.SlogCacheNamespace("polar-period-usage-state")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		webhookSecret:      webhookSecret,
 	}
+}
+
+func (p *Client) getMeterQuantitiesRaw(ctx context.Context, meterID, externalCustomerID string, startTime, endTime time.Time) (*MeterQuantities, error) {
+	baseURL := "https://api.polar.sh/v1/meters"
+	reqURL := fmt.Sprintf("%s/%s/quantities", baseURL, meterID)
+	
+	params := url.Values{}
+	params.Add("start_timestamp", startTime.Format(time.RFC3339))
+	params.Add("end_timestamp", endTime.Format(time.RFC3339))
+	params.Add("interval", "day")
+	params.Add("external_customer_id", externalCustomerID)
+	
+	fullURL := fmt.Sprintf("%s?%s", reqURL, params.Encode())
+
+	req, err := http.NewRequestWithContext(ctx, "GET", fullURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", p.bearerToken))
+	req.Header.Set("Content-Type", "application/json")
+	
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("make request: %w", err)
+	}
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			p.logger.ErrorContext(ctx, "failed to close response body", attr.SlogError(closeErr))
+		}
+	}()
+	
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+	
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response body: %w", err)
+	}
+
+	var response MeterQuantities
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &response, nil
 }
 
 func (p *Client) ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, webhookHeader http.Header) (*billing.PolarWebhookPayload, error) {
@@ -410,9 +468,9 @@ func (p *Client) getCustomer(ctx context.Context, orgID string) (*billing.Custom
 func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *polarComponents.CustomerState) (*gen.PeriodUsage, error) {
 	usage := gen.PeriodUsage{
 		// Set to -1 so we can tell if we've failed to get the usage
-		ToolCalls:               333, //-1,  // TODO! Revert once Polar Go SDK bug is fixed!
+		ToolCalls:               -1,
 		MaxToolCalls:            -1,
-		Servers:                 1, //-1,  // TODO! Revert once PolarGo SDK bug is fixed!
+		Servers:                 -1,
 		MaxServers:              -1,
 		ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
 	}
@@ -438,9 +496,9 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 			)
 		}
 
-		// usage.ToolCalls = int(toolCallMeter.ConsumedUnits) // TODO! Revert once PolarGo SDK bug is fixed!
+		usage.ToolCalls = int(toolCallMeter.ConsumedUnits)
 		usage.MaxToolCalls = int(toolCallMeter.CreditedUnits)
-		// usage.Servers = int(serverMeter.ConsumedUnits) // TODO! Revert once PolarGo SDK bug is fixed!
+		usage.Servers = int(serverMeter.ConsumedUnits)
 		usage.MaxServers = int(serverMeter.CreditedUnits)
 	}
 
@@ -449,37 +507,23 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 	 * This happens always for free tier, but also in other cases where the customer state is confused
 	 */
 
-	customerFilter := polarOperations.CreateMetersQuantitiesQueryParamExternalCustomerIDFilterStr(orgID)
-
 	if usage.ToolCalls == -1 {
 		// For free tier, we need to read the meter directly because the user won't have a subscription
-		toolCallsRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
-			ID:                 p.catalog.MeterIDToolCalls,
-			ExternalCustomerID: &customerFilter,
-			StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
-			EndTimestamp:       time.Now(),
-			Interval:           polarComponents.TimeIntervalDay,
-		})
+		toolCallsRes, err := p.getMeterQuantitiesRaw(ctx, p.catalog.MeterIDToolCalls, orgID, time.Now().Add(-1*time.Hour*24*30), time.Now())
 		if err != nil {
 			return nil, fmt.Errorf("get tool call usage: %w", err)
 		}
 
-		usage.ToolCalls = int(toolCallsRes.MeterQuantities.Total)
+		usage.ToolCalls = int(toolCallsRes.Total)
 	}
 
 	if usage.Servers == -1 {
-		serversRes, err := p.polar.Meters.Quantities(ctx, polarOperations.MetersQuantitiesRequest{
-			ID:                 p.catalog.MeterIDServers,
-			ExternalCustomerID: &customerFilter,
-			StartTimestamp:     time.Now().Add(-1 * time.Hour * 24 * 30),
-			EndTimestamp:       time.Now(),
-			Interval:           polarComponents.TimeIntervalDay,
-		})
+		serversRes, err := p.getMeterQuantitiesRaw(ctx, p.catalog.MeterIDServers, orgID, time.Now().Add(-1*time.Hour*24*30), time.Now())
 		if err != nil {
 			return nil, fmt.Errorf("get server usage: %w", err)
 		}
 
-		usage.Servers = int(serversRes.MeterQuantities.Total)
+		usage.Servers = int(serversRes.Total)
 	}
 
 	if usage.MaxToolCalls == -1 || usage.MaxServers == -1 {
