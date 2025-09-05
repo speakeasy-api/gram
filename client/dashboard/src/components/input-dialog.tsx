@@ -17,6 +17,7 @@ type InputProps =
       optional?: boolean;
       disabled?: boolean;
       lines?: number;
+      hint?: string | ((value: string) => React.ReactNode);
     }
   | {
       type: "image";
@@ -25,6 +26,7 @@ type InputProps =
       onChange: (assetId: string) => void;
       onSubmit?: (assetId: string) => void;
       optional?: boolean;
+      hint?: string | ((value: string) => React.ReactNode);
     };
 
 export function InputDialog({
@@ -102,6 +104,13 @@ export function InputDialog({
                   onUpload={(asset) => input.onChange(asset.id)}
                   existingAssetId={input.value}
                 />
+              )}
+              {input.hint && (
+                <div className="text-sm text-muted-foreground">
+                  {typeof input.hint === "function"
+                    ? input.hint(input.value)
+                    : input.hint}
+                </div>
               )}
             </Stack>
           ))}
