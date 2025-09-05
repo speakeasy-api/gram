@@ -162,11 +162,11 @@ func (p *Client) InvalidateBillingCustomerCaches(ctx context.Context, orgID stri
 	}
 
 	if err := p.periodUsageStorage.Delete(ctx, PolarPeriodUsageState{OrganizationID: orgID, PeriodUsage: gen.PeriodUsage{
-		ToolCalls:               0,
-		MaxToolCalls:            0,
-		Servers:                 0,
-		MaxServers:              0,
-		ActualPublicServerCount: 0,
+		ToolCalls:                0,
+		MaxToolCalls:             0,
+		Servers:                  0,
+		MaxServers:               0,
+		ActualEnabledServerCount: 0,
 	}}); err != nil {
 		return fmt.Errorf("failed todelete period usage storage: %w", err)
 	}
@@ -468,11 +468,11 @@ func (p *Client) getCustomer(ctx context.Context, orgID string) (*billing.Custom
 func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *polarComponents.CustomerState) (*gen.PeriodUsage, error) {
 	usage := gen.PeriodUsage{
 		// Set to -1 so we can tell if we've failed to get the usage
-		ToolCalls:               -1,
-		MaxToolCalls:            -1,
-		Servers:                 -1,
-		MaxServers:              -1,
-		ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
+		ToolCalls:                -1,
+		MaxToolCalls:             -1,
+		Servers:                  -1,
+		MaxServers:               -1,
+		ActualEnabledServerCount: 0, // Not related to polar, popualted elsewhere
 	}
 
 	if customer != nil {

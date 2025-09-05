@@ -1,6 +1,6 @@
--- name: GetPublicServerCount :one
+-- name: GetEnabledServerCount :one
 SELECT COUNT(*)
 FROM toolsets
 WHERE organization_id = @organization_id
-  AND mcp_is_public IS TRUE
+  AND mcp_enabled IS TRUE
   AND deleted IS FALSE;

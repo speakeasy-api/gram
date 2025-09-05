@@ -133,19 +133,19 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, s.logger)
 	}
 
-	// The actual number of public servers right this moment, which may not be updated in Polar yet.
-	actualPublicServerCount, err := s.repo.GetPublicServerCount(ctx, authCtx.ActiveOrganizationID)
+	// The actual number of enabled servers right this moment, which may not be updated in Polar yet.
+	actualEnabledServerCount, err := s.repo.GetEnabledServerCount(ctx, authCtx.ActiveOrganizationID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not get public server count").Log(ctx, s.logger)
 	}
 
 	// We don't populate the maximums using GetUsageTiers because we want to reflect the actual granted credits, not the current product limits which may have changed.
 	return &gen.PeriodUsage{
-		ToolCalls:               periodUsage.ToolCalls,
-		MaxToolCalls:            periodUsage.MaxToolCalls,
-		Servers:                 periodUsage.Servers,
-		MaxServers:              periodUsage.MaxServers,
-		ActualPublicServerCount: int(actualPublicServerCount),
+		ToolCalls:                periodUsage.ToolCalls,
+		MaxToolCalls:             periodUsage.MaxToolCalls,
+		Servers:                  periodUsage.Servers,
+		MaxServers:               periodUsage.MaxServers,
+		ActualEnabledServerCount: int(actualEnabledServerCount),
 	}, nil
 }
 

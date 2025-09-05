@@ -23,8 +23,8 @@ type GetPeriodUsageResponseBody struct {
 	Servers *int `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
 	// The maximum number of servers allowed
 	MaxServers *int `form:"max_servers,omitempty" json:"max_servers,omitempty" xml:"max_servers,omitempty"`
-	// The number of servers set to public at the time of the request
-	ActualPublicServerCount *int `form:"actual_public_server_count,omitempty" json:"actual_public_server_count,omitempty" xml:"actual_public_server_count,omitempty"`
+	// The number of servers enabled at the time of the request
+	ActualEnabledServerCount *int `form:"actual_enabled_server_count,omitempty" json:"actual_enabled_server_count,omitempty" xml:"actual_enabled_server_count,omitempty"`
 }
 
 // GetUsageTiersResponseBody is the type of the "usage" service "getUsageTiers"
@@ -801,11 +801,11 @@ type TierLimitsResponseBody struct {
 // endpoint result from a HTTP "OK" response.
 func NewGetPeriodUsagePeriodUsageOK(body *GetPeriodUsageResponseBody) *usage.PeriodUsage {
 	v := &usage.PeriodUsage{
-		ToolCalls:               *body.ToolCalls,
-		MaxToolCalls:            *body.MaxToolCalls,
-		Servers:                 *body.Servers,
-		MaxServers:              *body.MaxServers,
-		ActualPublicServerCount: *body.ActualPublicServerCount,
+		ToolCalls:                *body.ToolCalls,
+		MaxToolCalls:             *body.MaxToolCalls,
+		Servers:                  *body.Servers,
+		MaxServers:               *body.MaxServers,
+		ActualEnabledServerCount: *body.ActualEnabledServerCount,
 	}
 
 	return v
@@ -1437,8 +1437,8 @@ func ValidateGetPeriodUsageResponseBody(body *GetPeriodUsageResponseBody) (err e
 	if body.MaxServers == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("max_servers", "body"))
 	}
-	if body.ActualPublicServerCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("actual_public_server_count", "body"))
+	if body.ActualEnabledServerCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("actual_enabled_server_count", "body"))
 	}
 	return
 }
