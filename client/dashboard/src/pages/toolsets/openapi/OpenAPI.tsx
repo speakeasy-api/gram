@@ -152,16 +152,13 @@ export function APIsContent() {
     );
   }, [deployment, deploymentLogsSummary]);
 
-
   const deploymentAssets: NamedAsset[] = useMemo(() => {
     if (!deployment || !assets) {
       return [];
     }
 
     return deployment.openapiv3Assets.map((deploymentAsset) => {
-      const asset = assets.assets.find(
-        (a) => a.id === deploymentAsset.assetId
-      );
+      const asset = assets.assets.find((a) => a.id === deploymentAsset.assetId);
       if (!asset) {
         throw new Error(`Asset ${deploymentAsset.assetId} not found`);
       }
@@ -183,14 +180,21 @@ export function APIsContent() {
   }
 
   const removeDocument = async (assetId: string) => {
-    await client.deployments.evolveDeployment({
-      evolveForm: {
-        deploymentId: deployment?.id,
-        excludeOpenapiv3Assets: [assetId],
-      },
-    });
+    try {
+      await client.deployments.evolveDeployment({
+        evolveForm: {
+          deploymentId: deployment?.id,
+          excludeOpenapiv3Assets: [assetId],
+        },
+      });
 
-    refetch();
+      await Promise.all([refetch(), refetchAssets()]);
+
+      toast.success("API source deleted successfully");
+    } catch (error) {
+      console.error("Failed to delete API source:", error);
+      toast.error("Failed to delete API source. Please try again.");
+    }
   };
 
   const deploySpecUpdate = async (documentSlug: string) => {
