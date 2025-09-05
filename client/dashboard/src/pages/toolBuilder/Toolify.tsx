@@ -14,6 +14,7 @@ import { useMiniModel } from "../playground/Openrouter";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { useToolDefinitions } from "../toolsets/types";
 import { useToolset } from "@gram/client/react-query";
+import { ArrowRightIcon } from "lucide-react";
 
 const SuggestionSchema = z.object({
   name: z.string(),
@@ -177,6 +178,14 @@ export const ToolifyDialog = ({
         <Dialog.Footer>
           <Button variant="ghost" onClick={() => setOpen(false)}>
             Back
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => routes.customTools.toolBuilderNew.goTo()}
+            className="sm:ml-auto"
+          >
+            Skip
+            <ArrowRightIcon className="size-4" />
           </Button>
           <Button onClick={onSubmit} disabled={!purpose || inProgress}>
             {inProgress && <Spinner />}
