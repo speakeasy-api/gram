@@ -3,7 +3,6 @@ package usage
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -87,7 +86,9 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to read request body").Log(ctx, s.logger)
 	}
-	defer r.Body.Close()
+	defer o11y.LogDefer(ctx, s.logger, func() error {
+		return r.Body.Close()
+	})
 
 	webhookPayload, err := s.billingRepo.ValidateAndParseWebhookEvent(ctx, body, r.Header)
 	if err != nil {

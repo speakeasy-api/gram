@@ -98,7 +98,11 @@ func (p *Client) ValidateAndParseWebhookEvent(ctx context.Context, payload []byt
 }
 
 func (p *Client) InvalidateCustomerTierCache(ctx context.Context, orgID string) error {
-	return p.customerStateCache.Delete(ctx, PolarCustomerState{OrganizationID: orgID})
+	err := p.customerStateCache.Delete(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: nil})
+	if err != nil {
+		return fmt.Errorf("delete customer state cache: %w", err)
+	}
+	return nil
 }
 
 func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {
