@@ -18,6 +18,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import { Toolset, ToolsetEntry } from "@gram/client/models/components";
 import {
   invalidateAllToolset,
@@ -179,8 +180,9 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const telemetry = useTelemetry();
   const queryClient = useQueryClient();
   const session = useSession();
-  const { orgSlug, projectSlug } = useParams();
+  const { orgSlug } = useParams();
   const { domain } = useCustomDomain();
+  const routes = useRoutes();
 
   const { data: periodUsage } = useGetPeriodUsage();
 
@@ -264,7 +266,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           if (session.gramAccountType == "free") {
             setIsCustomDomainModalOpen(true);
           } else {
-            window.location.href = `/${orgSlug}/${projectSlug}/settings`;
+            routes.settings.goTo();
           }
         }}
       >
@@ -827,7 +829,10 @@ function OAuthTabModal({
       action: "mcp_oauth_integration",
       toolset_slug: toolsetSlug,
     });
-    window.open("https://calendly.com/d/crtj-3tk-wpd/demo-with-speakeasy", "_blank");
+    window.open(
+      "https://calendly.com/d/crtj-3tk-wpd/demo-with-speakeasy",
+      "_blank"
+    );
   };
 
   const addExternalOAuthMutation = useAddExternalOAuthServerMutation({

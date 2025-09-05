@@ -366,9 +366,9 @@ func (p *Client) getCustomer(ctx context.Context, orgID string) (*billing.Custom
 func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *polarComponents.CustomerState) (*gen.PeriodUsage, error) {
 	usage := gen.PeriodUsage{
 		// Set to -1 so we can tell if we've failed to get the usage
-		ToolCalls:               333,//-1,  // TODO! Revert once Polar Go SDK bug is fixed!
+		ToolCalls:               333, //-1,  // TODO! Revert once Polar Go SDK bug is fixed!
 		MaxToolCalls:            -1,
-		Servers:                 1,//-1,  // TODO! Revert once PolarGo SDK bug is fixed!
+		Servers:                 1, //-1,  // TODO! Revert once PolarGo SDK bug is fixed!
 		MaxServers:              -1,
 		ActualPublicServerCount: 0, // Not related to polar, popualted elsewhere
 	}
@@ -383,7 +383,7 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 			}
 			if meter.MeterID == p.catalog.MeterIDServers {
 				serverMeter = &meter
-			}	
+			}
 		}
 
 		if toolCallMeter == nil || serverMeter == nil {

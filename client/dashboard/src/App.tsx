@@ -9,6 +9,7 @@ import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
 import { SdkProvider } from "./contexts/Sdk.tsx";
 import { TelemetryProvider } from "./contexts/Telemetry.tsx";
 import { AppRoute, useRoutes } from "./routes";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -60,6 +61,7 @@ export default function App() {
               <ProjectProvider>
                 <RouteProvider />
               </ProjectProvider>
+              <Toaster />
             </AuthProvider>
           </SdkProvider>
         </BrowserRouter>
