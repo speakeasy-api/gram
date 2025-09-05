@@ -55,7 +55,7 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 	if localEnvPath != "" {
 		file, err := os.Open(filepath.Clean(localEnvPath))
 		if err != nil {
-			logger.ErrorContext(context.Background(), "failed to open local env file, defaulting to inlined data (localdev.go)", attr.SlogError(err))
+			logger.WarnContext(context.Background(), "failed to open local env file, defaulting to inlined data (localdev.go)", attr.SlogError(err))
 		} else if file != nil {
 			defer o11y.LogDefer(context.Background(), logger, func() error {
 				return file.Close()
