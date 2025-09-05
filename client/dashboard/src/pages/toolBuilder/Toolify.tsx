@@ -175,22 +175,22 @@ export const ToolifyDialog = ({
             />
           </Stack>
         </Stack>
-        <Dialog.Footer>
+        <Dialog.Footer className="sm:justify-between">
           <Button variant="ghost" onClick={() => setOpen(false)}>
             Back
           </Button>
-          <Button
-            variant="ghost"
-            onClick={() => routes.customTools.toolBuilderNew.goTo()}
-            className="sm:ml-auto"
-          >
-            Skip
-            <ArrowRightIcon className="size-4" />
-          </Button>
-          <Button onClick={onSubmit} disabled={!purpose || inProgress}>
-            {inProgress && <Spinner />}
-            {inProgress ? "Generating..." : "Toolify"}
-          </Button>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              variant="ghost"
+              onClick={() => routes.customTools.toolBuilderNew.goTo()}
+            >
+              Skip
+            </Button>
+            <Button onClick={onSubmit} disabled={!purpose || inProgress}>
+              {inProgress && <Spinner />}
+              {inProgress ? "Generating..." : "Toolify"}
+            </Button>
+          </div>
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
