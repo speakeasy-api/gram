@@ -285,7 +285,7 @@ func newBillingProvider(
 			return nil, nil, fmt.Errorf("invalid polar catalog configuration: %w", err)
 		}
 		polarsdk := polargo.New(polargo.WithSecurity(c.String("polar-api-key")), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
-		pclient := polar.NewClient(polarsdk, logger, tracerProvider, redisClient, catalog)
+		pclient := polar.NewClient(polarsdk, logger, tracerProvider, redisClient, catalog, c.String("polar-webhook-secret"))
 		return pclient, pclient, nil
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")

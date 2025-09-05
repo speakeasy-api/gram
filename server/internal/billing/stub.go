@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -45,6 +46,21 @@ func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (*Tier, 
 	defer span.End()
 
 	return conv.Ptr(TierFree), nil
+}
+
+func (s *StubClient) ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, webhookHeader http.Header) (*PolarWebhookPayload, error) {
+	_, span := s.tracer.Start(ctx, "stub_client.validate_and_parse_webhook_event")
+	span.SetStatus(codes.Error, "not implemented")
+	defer span.End()
+
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (s *StubClient) InvalidateCustomerTierCache(ctx context.Context, orgID string) error {
+	_, span := s.tracer.Start(ctx, "stub_client.invalidate_customer_tier_cache")
+	defer span.End()
+
+	return nil
 }
 
 func (s *StubClient) CreateCheckout(ctx context.Context, orgID string, serverURL string) (string, error) {
