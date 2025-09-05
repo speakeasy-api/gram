@@ -26,6 +26,7 @@ go.work.sum
 *.tfstate.*
 .terraform.tfstate.lock.info
 gram.code-workspace
+.local.env.json
 
 **/.claude/settings.local.json
 .vercel
