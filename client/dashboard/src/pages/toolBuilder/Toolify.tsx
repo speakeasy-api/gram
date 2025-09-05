@@ -180,7 +180,7 @@ export const ToolifyDialog = ({
             Back
           </Button>
           <Button
-            variant="outline"
+            variant="ghost"
             onClick={() => routes.customTools.toolBuilderNew.goTo()}
             className="sm:ml-auto"
           >
