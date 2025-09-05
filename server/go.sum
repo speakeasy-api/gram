@@ -442,6 +442,8 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/polarsource/polar-go v0.8.3 h1:U2DTe4GooKqh9Q5MKJQtn4QHn3brCMgt2IH6Qu7vxCE=
 github.com/polarsource/polar-go v0.8.3/go.mod h1:uuE88gTEjIpQtlJoHgPzR3lrIwEiXb8VR9T/VHsaOrI=
+github.com/polarsource/polar-go v0.8.4 h1:O0ZMHzvwYwsRT4vmy2ajiA5TajcuMBJB7fzxwn1W1FE=
+github.com/polarsource/polar-go v0.8.4/go.mod h1:uuE88gTEjIpQtlJoHgPzR3lrIwEiXb8VR9T/VHsaOrI=
 github.com/posthog/posthog-go v1.6.3 h1:cXkvbxXmfhyKWufuEbSYpKQw/TG0+ns4HCu+Yi5rw24=
 github.com/posthog/posthog-go v1.6.3/go.mod h1:2aijxPrXW9fsp+ItWx1iLM5lkoLLGzefrzGzjKYKPL4=
 github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 h1:o4JXh1EVt9k/+g42oCprj/FisM4qX9L3sZB3upGN2ZU=

@@ -284,8 +284,9 @@ func newBillingProvider(
 		if err := catalog.Validate(); err != nil {
 			return nil, nil, fmt.Errorf("invalid polar catalog configuration: %w", err)
 		}
-		polarsdk := polargo.New(polargo.WithSecurity(c.String("polar-api-key")), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
-		pclient := polar.NewClient(polarsdk, logger, tracerProvider, redisClient, catalog)
+		polarAPIKey := c.String("polar-api-key")
+		polarsdk := polargo.New(polargo.WithSecurity(polarAPIKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
+		pclient := polar.NewClient(polarsdk, polarAPIKey, logger, tracerProvider, redisClient, catalog)
 		return pclient, pclient, nil
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
