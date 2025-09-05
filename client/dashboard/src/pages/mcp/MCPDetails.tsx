@@ -184,7 +184,10 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const { domain } = useCustomDomain();
   const routes = useRoutes();
 
-  const { data: periodUsage } = useGetPeriodUsage();
+  const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
+    throwOnError: false,
+    retry: false,
+  });
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {

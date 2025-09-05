@@ -12,7 +12,6 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { getServerURL } from "@/lib/utils";
 import { TierLimits } from "@gram/client/models/components";
 import {
   useGetCreditUsage,
@@ -45,7 +44,8 @@ const UsageSection = () => {
 
   const { data: creditUsage } = useGetCreditUsage();
   const { data: periodUsage } = useGetPeriodUsage(undefined, undefined, {
-    throwOnError: !getServerURL().includes("localhost"),
+    throwOnError: false,
+    retry: false,
   });
 
   const UsageItem = ({
