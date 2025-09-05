@@ -250,6 +250,12 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"POLAR_API_KEY"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "polar-webhook-secret",
+			Usage:    "The polar webhook secret",
+			EnvVars:  []string{"POLAR_WEBHOOK_SECRET"},
+			Required: false,
+		},
 		altsrc.NewStringFlag(&cli.StringFlag{
 			Name:     "polar-product-id-free",
 			Aliases:  []string{"polar.product_id_basic"},
