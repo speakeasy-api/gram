@@ -14,7 +14,6 @@ import { useMiniModel } from "../playground/Openrouter";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { useToolDefinitions } from "../toolsets/types";
 import { useToolset } from "@gram/client/react-query";
-import { ArrowRightIcon } from "lucide-react";
 
 const SuggestionSchema = z.object({
   name: z.string(),
