@@ -197,7 +197,7 @@ const UsageTiers = () => {
                 ))}
               </ul>
             </Stack>
-            {tier?.includedBullets?.length > 0 && (
+            {tier.includedBullets && tier.includedBullets.length > 0 && (
               <Stack gap={1}>
                 <Type
                   mono

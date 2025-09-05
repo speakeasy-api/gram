@@ -664,7 +664,8 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 				"Audit logs",
 				"SLA-backed support",
 			},
-			AddOnBullets: []string{},
+			IncludedBullets: []string{},
+			AddOnBullets:    []string{},
 		},
 	}, nil
 }
