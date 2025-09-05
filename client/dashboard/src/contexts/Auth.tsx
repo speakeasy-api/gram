@@ -207,7 +207,6 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     return {
       ...result,
       organization: organization ?? emptyOrganization,
-      gramAccountType: "free", //TODO
       user: {
         id: result.userId,
         email: result.userEmail,
