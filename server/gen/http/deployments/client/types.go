@@ -4616,7 +4616,7 @@ func ValidateOpenAPIv3DeploymentAssetResponseBody(body *OpenAPIv3DeploymentAsset
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
 	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 	}
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
@@ -4694,7 +4694,7 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 // ValidateAddOpenAPIv3DeploymentAssetFormRequestBody runs the validations
 // defined on AddOpenAPIv3DeploymentAssetFormRequestBody
 func ValidateAddOpenAPIv3DeploymentAssetFormRequestBody(body *AddOpenAPIv3DeploymentAssetFormRequestBody) (err error) {
-	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 	if utf8.RuneCountInString(body.Slug) > 40 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
 	}

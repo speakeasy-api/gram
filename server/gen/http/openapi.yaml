@@ -5719,7 +5719,7 @@ definitions:
                 type: string
                 description: The slug to give the document as it will be displayed in URLs.
                 example: 7gq
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
         example:
             asset_id: Maxime enim nihil.
@@ -17705,7 +17705,7 @@ definitions:
                 type: string
                 description: The slug identifier for the environment
                 example: r5n
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             updated_at:
                 type: string
@@ -19642,7 +19642,7 @@ definitions:
                 type: string
                 description: The slug of the external OAuth server
                 example: mbt
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             updated_at:
                 type: string
@@ -19674,7 +19674,7 @@ definitions:
                 type: string
                 description: The slug of the external OAuth server
                 example: pga
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
         example:
             metadata: Qui at similique possimus dolores nihil.
@@ -25878,7 +25878,7 @@ definitions:
                 type: string
                 description: The slug of the OAuth proxy provider
                 example: ozl
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             token_endpoint:
                 type: string
@@ -26006,7 +26006,7 @@ definitions:
                 type: string
                 description: The slug of the OAuth proxy server
                 example: e10
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             updated_at:
                 type: string
@@ -26080,7 +26080,7 @@ definitions:
                 type: string
                 description: The slug to give the document as it will be displayed in URLs.
                 example: jex
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
         example:
             asset_id: Modi distinctio sed modi.
@@ -26623,7 +26623,7 @@ definitions:
                 type: string
                 description: The name of the package
                 example: 74i
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 100
             summary:
                 type: string
@@ -28676,7 +28676,7 @@ definitions:
                 type: string
                 description: The slug of the project
                 example: 5eq
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             updated_at:
                 type: string
@@ -28714,7 +28714,7 @@ definitions:
                 type: string
                 description: The slug of the project
                 example: eqn
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
         example:
             id: Pariatur suscipit fugit explicabo numquam.
@@ -30088,7 +30088,7 @@ definitions:
                 type: string
                 description: The name of the prompt template
                 example: 7ry
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             predecessor_id:
                 type: string
@@ -30152,7 +30152,7 @@ definitions:
                 type: string
                 description: The name of the prompt template
                 example: 3rv
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
         example:
             id: Et optio vel et voluptatum repudiandae cum.
@@ -32941,7 +32941,7 @@ definitions:
                 type: string
                 description: The name of the prompt template
                 example: 3fl
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             prompt:
                 type: string
@@ -36425,7 +36425,7 @@ definitions:
                 type: string
                 description: The slug of the environment to use as the default for the toolset
                 example: itl
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             description:
                 type: string
@@ -36583,7 +36583,7 @@ definitions:
                 type: string
                 description: The slug of the MCP to use for the toolset
                 example: fnh
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             name:
                 type: string
@@ -36753,7 +36753,7 @@ definitions:
                 type: string
                 description: The slug of the toolset
                 example: 4wx
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             updated_at:
                 type: string
@@ -37127,7 +37127,7 @@ definitions:
                 type: string
                 description: The slug of the environment to use as the default for the toolset
                 example: mp5
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             description:
                 type: string
@@ -37161,7 +37161,7 @@ definitions:
                 type: string
                 description: The slug of the MCP to use for the toolset
                 example: qj6
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             name:
                 type: string
@@ -37288,7 +37288,7 @@ definitions:
                 type: string
                 description: The slug of the toolset
                 example: hvr
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             updated_at:
                 type: string
@@ -38608,7 +38608,7 @@ definitions:
                 type: string
                 description: The slug of the environment to use as the default for the toolset
                 example: hmp
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             description:
                 type: string
@@ -40802,7 +40802,7 @@ definitions:
                 type: string
                 description: The slug of the environment to use as the default for the toolset
                 example: lr0
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             description:
                 type: string
@@ -40831,7 +40831,7 @@ definitions:
                 type: string
                 description: The slug of the MCP to use for the toolset
                 example: htb
-                pattern: ^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             name:
                 type: string

@@ -28,7 +28,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"okx\",\n      \"description\": \"Velit eligendi et cumque animi.\",\n      \"http_tool_names\": [\n         \"Qui praesentium numquam quisquam quisquam et.\",\n         \"Maxime voluptate hic quia eius et vel.\",\n         \"Quis repudiandae ipsam.\"\n      ],\n      \"name\": \"Quis nostrum unde reiciendis.\"\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
-			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
@@ -104,7 +104,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Et dolor.\",\n      \"default_environment_slug\": \"7q6\",\n      \"description\": \"Et quod.\",\n      \"http_tool_names\": [\n         \"Eius cumque maiores.\",\n         \"Qui quaerat tempore eos et libero animi.\"\n      ],\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"njs\",\n      \"name\": \"Dolorem molestias.\",\n      \"prompt_template_names\": [\n         \"Veniam similique corporis atque autem tempora.\",\n         \"Odit amet beatae impedit id dolores molestiae.\",\n         \"Rerum voluptatem ad ea.\",\n         \"Et eius et.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
-			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
@@ -112,7 +112,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 			}
 		}
 		if body.McpSlug != nil {
-			err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		}
 		if body.McpSlug != nil {
 			if utf8.RuneCountInString(*body.McpSlug) > 40 {
@@ -126,7 +126,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	var slug string
 	{
 		slug = toolsetsUpdateToolsetSlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
@@ -187,7 +187,7 @@ func BuildDeleteToolsetPayload(toolsetsDeleteToolsetSlug string, toolsetsDeleteT
 	var slug string
 	{
 		slug = toolsetsDeleteToolsetSlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
@@ -222,7 +222,7 @@ func BuildGetToolsetPayload(toolsetsGetToolsetSlug string, toolsetsGetToolsetSes
 	var slug string
 	{
 		slug = toolsetsGetToolsetSlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
@@ -257,7 +257,7 @@ func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug s
 	var slug string
 	{
 		slug = toolsetsCheckMCPSlugAvailabilitySlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
@@ -310,7 +310,7 @@ func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody strin
 	var slug string
 	{
 		slug = toolsetsAddExternalOAuthServerSlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
@@ -348,7 +348,7 @@ func BuildRemoveOAuthServerPayload(toolsetsRemoveOAuthServerSlug string, toolset
 	var slug string
 	{
 		slug = toolsetsRemoveOAuthServerSlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}

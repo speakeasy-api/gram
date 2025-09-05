@@ -22,7 +22,7 @@ func BuildGetInstancePayload(instancesGetInstanceToolsetSlug string, instancesGe
 	var toolsetSlug string
 	{
 		toolsetSlug = instancesGetInstanceToolsetSlug
-		err = goa.MergeErrors(err, goa.ValidatePattern("toolset_slug", toolsetSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("toolset_slug", toolsetSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 		if utf8.RuneCountInString(toolsetSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_slug", toolsetSlug, utf8.RuneCountInString(toolsetSlug), 40, false))
 		}
@@ -34,7 +34,7 @@ func BuildGetInstancePayload(instancesGetInstanceToolsetSlug string, instancesGe
 	{
 		if instancesGetInstanceEnvironmentSlug != "" {
 			environmentSlug = &instancesGetInstanceEnvironmentSlug
-			err = goa.MergeErrors(err, goa.ValidatePattern("environment_slug", *environmentSlug, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+			err = goa.MergeErrors(err, goa.ValidatePattern("environment_slug", *environmentSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 			if utf8.RuneCountInString(*environmentSlug) > 40 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("environment_slug", *environmentSlug, utf8.RuneCountInString(*environmentSlug), 40, false))
 			}

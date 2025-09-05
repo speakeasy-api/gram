@@ -2626,7 +2626,7 @@ func ValidateCreateTemplateRequestBody(body *CreateTemplateRequestBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
 	}
 	if body.Name != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
 	}
 	if body.Name != nil {
 		if utf8.RuneCountInString(*body.Name) > 40 {
