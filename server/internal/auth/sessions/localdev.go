@@ -55,15 +55,16 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 	if localEnvPath != "" {
 		file, err := os.Open(filepath.Clean(localEnvPath))
 		if err != nil {
-			return nil, fmt.Errorf("failed to open local env file: %w", err)
-		}
-		defer o11y.LogDefer(context.Background(), logger, func() error {
-			return file.Close()
-		})
+			logger.WarnContext(context.Background(), "failed to open local env file, defaulting to inlined data (localdev.go)", attr.SlogError(err))
+		} else if file != nil {
+			defer o11y.LogDefer(context.Background(), logger, func() error {
+				return file.Close()
+			})
 
-		raw, err = io.ReadAll(file)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read local env file: %w", err)
+			raw, err = io.ReadAll(file)
+			if err != nil {
+				return nil, fmt.Errorf("failed to read local env file: %w", err)
+			}
 		}
 	}
 

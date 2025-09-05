@@ -700,7 +700,6 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			PricePerAdditionalServer:   0,
 			PricePerAdditionalCredit:   creditPrice, // Hard coded for now. TODO: Move to Polar
 			FeatureBullets: []string{
-				"Tool generation",
 				"Custom tool creation",
 				"Hosted server deployments",
 				"14 day log retention",
@@ -748,7 +747,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			PricePerAdditionalCredit:   0,
 			FeatureBullets: []string{
 				"Oauth 2.1 proxy support",
-				"White-glove onboarding",
+				"Concierge onboarding",
 				"SSO",
 				"Audit logs",
 				"SLA-backed support",
