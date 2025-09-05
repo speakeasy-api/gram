@@ -26,6 +26,10 @@ export type UpdateToolsetRequestBody = {
    */
   httpToolNames?: Array<string> | undefined;
   /**
+   * Whether the toolset is enabled for MCP
+   */
+  mcpEnabled?: boolean | undefined;
+  /**
    * Whether the toolset is public in MCP
    */
   mcpIsPublic?: boolean | undefined;
@@ -53,6 +57,7 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
   default_environment_slug: z.string().optional(),
   description: z.string().optional(),
   http_tool_names: z.array(z.string()).optional(),
+  mcp_enabled: z.boolean().optional(),
   mcp_is_public: z.boolean().optional(),
   mcp_slug: z.string().optional(),
   name: z.string().optional(),
@@ -62,6 +67,7 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
     "custom_domain_id": "customDomainId",
     "default_environment_slug": "defaultEnvironmentSlug",
     "http_tool_names": "httpToolNames",
+    "mcp_enabled": "mcpEnabled",
     "mcp_is_public": "mcpIsPublic",
     "mcp_slug": "mcpSlug",
     "prompt_template_names": "promptTemplateNames",
@@ -74,6 +80,7 @@ export type UpdateToolsetRequestBody$Outbound = {
   default_environment_slug?: string | undefined;
   description?: string | undefined;
   http_tool_names?: Array<string> | undefined;
+  mcp_enabled?: boolean | undefined;
   mcp_is_public?: boolean | undefined;
   mcp_slug?: string | undefined;
   name?: string | undefined;
@@ -90,6 +97,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
   httpToolNames: z.array(z.string()).optional(),
+  mcpEnabled: z.boolean().optional(),
   mcpIsPublic: z.boolean().optional(),
   mcpSlug: z.string().optional(),
   name: z.string().optional(),
@@ -99,6 +107,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
     customDomainId: "custom_domain_id",
     defaultEnvironmentSlug: "default_environment_slug",
     httpToolNames: "http_tool_names",
+    mcpEnabled: "mcp_enabled",
     mcpIsPublic: "mcp_is_public",
     mcpSlug: "mcp_slug",
     promptTemplateNames: "prompt_template_names",

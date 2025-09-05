@@ -941,9 +941,11 @@ func unmarshalTierLimitsResponseBodyToUsageTierLimits(v *TierLimitsResponseBody)
 	for i, val := range v.FeatureBullets {
 		res.FeatureBullets[i] = val
 	}
-	res.IncludedBullets = make([]string, len(v.IncludedBullets))
-	for i, val := range v.IncludedBullets {
-		res.IncludedBullets[i] = val
+	if v.IncludedBullets != nil {
+		res.IncludedBullets = make([]string, len(v.IncludedBullets))
+		for i, val := range v.IncludedBullets {
+			res.IncludedBullets[i] = val
+		}
 	}
 	if v.AddOnBullets != nil {
 		res.AddOnBullets = make([]string, len(v.AddOnBullets))

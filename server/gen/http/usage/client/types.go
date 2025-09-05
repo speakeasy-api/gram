@@ -2461,8 +2461,5 @@ func ValidateTierLimitsResponseBody(body *TierLimitsResponseBody) (err error) {
 	if body.FeatureBullets == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("feature_bullets", "body"))
 	}
-	if body.IncludedBullets == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("included_bullets", "body"))
-	}
 	return
 }

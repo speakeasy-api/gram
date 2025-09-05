@@ -792,7 +792,7 @@ type TierLimitsResponseBody struct {
 	// Key feature bullets of the tier
 	FeatureBullets []string `form:"feature_bullets" json:"feature_bullets" xml:"feature_bullets"`
 	// Included items bullets of the tier
-	IncludedBullets []string `form:"included_bullets" json:"included_bullets" xml:"included_bullets"`
+	IncludedBullets []string `form:"included_bullets,omitempty" json:"included_bullets,omitempty" xml:"included_bullets,omitempty"`
 	// Add-on items bullets of the tier (optional)
 	AddOnBullets []string `form:"add_on_bullets,omitempty" json:"add_on_bullets,omitempty" xml:"add_on_bullets,omitempty"`
 }

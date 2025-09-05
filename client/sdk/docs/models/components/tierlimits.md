@@ -10,17 +10,12 @@ let value: TierLimits = {
   featureBullets: [
     "<value 1>",
   ],
-  includedBullets: [
-    "<value 1>",
-    "<value 2>",
-    "<value 3>",
-  ],
-  includedCredits: 739200,
-  includedServers: 816239,
-  includedToolCalls: 527546,
-  pricePerAdditionalCredit: 6766.15,
-  pricePerAdditionalServer: 2929.08,
-  pricePerAdditionalToolCall: 165.64,
+  includedCredits: 768996,
+  includedServers: 739200,
+  includedToolCalls: 816239,
+  pricePerAdditionalCredit: 5275.46,
+  pricePerAdditionalServer: 6766.15,
+  pricePerAdditionalToolCall: 2929.08,
 };
 ```
 

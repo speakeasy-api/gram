@@ -71,6 +71,10 @@ export type Toolset = {
    */
   id: string;
   /**
+   * Whether the toolset is enabled for MCP
+   */
+  mcpEnabled?: boolean | undefined;
+  /**
    * Whether the toolset is public in MCP
    */
   mcpIsPublic?: boolean | undefined;
@@ -125,6 +129,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     external_oauth_server: ExternalOAuthServer$inboundSchema.optional(),
     http_tools: z.array(HTTPToolDefinition$inboundSchema),
     id: z.string(),
+    mcp_enabled: z.boolean().optional(),
     mcp_is_public: z.boolean().optional(),
     mcp_slug: z.string().optional(),
     name: z.string(),
@@ -145,6 +150,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
       "default_environment_slug": "defaultEnvironmentSlug",
       "external_oauth_server": "externalOauthServer",
       "http_tools": "httpTools",
+      "mcp_enabled": "mcpEnabled",
       "mcp_is_public": "mcpIsPublic",
       "mcp_slug": "mcpSlug",
       "oauth_proxy_server": "oauthProxyServer",
@@ -166,6 +172,7 @@ export type Toolset$Outbound = {
   external_oauth_server?: ExternalOAuthServer$Outbound | undefined;
   http_tools: Array<HTTPToolDefinition$Outbound>;
   id: string;
+  mcp_enabled?: boolean | undefined;
   mcp_is_public?: boolean | undefined;
   mcp_slug?: string | undefined;
   name: string;
@@ -192,6 +199,7 @@ export const Toolset$outboundSchema: z.ZodType<
   externalOauthServer: ExternalOAuthServer$outboundSchema.optional(),
   httpTools: z.array(HTTPToolDefinition$outboundSchema),
   id: z.string(),
+  mcpEnabled: z.boolean().optional(),
   mcpIsPublic: z.boolean().optional(),
   mcpSlug: z.string().optional(),
   name: z.string(),
@@ -210,6 +218,7 @@ export const Toolset$outboundSchema: z.ZodType<
     defaultEnvironmentSlug: "default_environment_slug",
     externalOauthServer: "external_oauth_server",
     httpTools: "http_tools",
+    mcpEnabled: "mcp_enabled",
     mcpIsPublic: "mcp_is_public",
     mcpSlug: "mcp_slug",
     oauthProxyServer: "oauth_proxy_server",

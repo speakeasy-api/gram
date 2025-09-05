@@ -35897,7 +35897,6 @@ definitions:
             - price_per_additional_server
             - price_per_additional_credit
             - feature_bullets
-            - included_bullets
     ToolVariation:
         title: ToolVariation
         type: object

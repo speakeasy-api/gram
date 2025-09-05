@@ -823,8 +823,6 @@ func marshalUsageTierLimitsToTierLimitsResponseBody(v *usage.TierLimits) *TierLi
 		for i, val := range v.IncludedBullets {
 			res.IncludedBullets[i] = val
 		}
-	} else {
-		res.IncludedBullets = []string{}
 	}
 	if v.AddOnBullets != nil {
 		res.AddOnBullets = make([]string, len(v.AddOnBullets))
