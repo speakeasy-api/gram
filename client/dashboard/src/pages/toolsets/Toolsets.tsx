@@ -78,6 +78,12 @@ export default function Toolsets() {
             onChange: (value) => setToolsetName(value),
             onSubmit: createToolset,
             validate: (value) => value.length > 0,
+            maxLength: 40,
+            hint: (value) => (
+              <p className="text-right">
+                {value.length > 20 ? `${value.length}/40` : undefined}
+              </p>
+            ),
           }}
         />
       </Page.Body>
