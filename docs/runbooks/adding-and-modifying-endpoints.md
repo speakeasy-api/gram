@@ -5,7 +5,7 @@ shell: bash
 
 # Adding and Modifying Endpoints
 
-We use [Goa](https://github.com/goadesign/goa) to generate our API. Goa provides thin abstractions over HTTP and JSON, allowing us to define our API in Go code and generate client/server code automatically.
+We use [Goa](https://github.com/goadesign/goa) to generate our API. Goa provides thin abstractions over HTTP and JSON, allowing us to define our API in Go code and generate server code automatically. This allows us to focus on the business logic of our API, rather than the HTTP details.
 
 The overall process is:
 
