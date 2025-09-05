@@ -12,9 +12,9 @@ var PeriodUsage = Type("PeriodUsage", func() {
 	Attribute("max_tool_calls", Int, "The maximum number of tool calls allowed")
 	Attribute("servers", Int, "The number of servers used, according to the Polar meter")
 	Attribute("max_servers", Int, "The maximum number of servers allowed")
-	Attribute("actual_public_server_count", Int, "The number of servers set to public at the time of the request")
+	Attribute("actual_enabled_server_count", Int, "The number of servers enabled at the time of the request")
 
-	Required("tool_calls", "max_tool_calls", "servers", "max_servers", "actual_public_server_count")
+	Required("tool_calls", "max_tool_calls", "servers", "max_servers", "actual_enabled_server_count")
 })
 
 var TierLimits = Type("TierLimits", func() {

@@ -5340,7 +5340,7 @@ paths:
                             - max_tool_calls
                             - servers
                             - max_servers
-                            - actual_public_server_count
+                            - actual_enabled_server_count
                 "400":
                     description: Bad Request response.
                     schema:
@@ -28610,9 +28610,9 @@ definitions:
         title: PeriodUsage
         type: object
         properties:
-            actual_public_server_count:
+            actual_enabled_server_count:
                 type: integer
-                description: The number of servers set to public at the time of the request
+                description: The number of servers enabled at the time of the request
                 example: 1375029938562791904
                 format: int64
             max_servers:
@@ -28636,7 +28636,7 @@ definitions:
                 example: 7726122377758822305
                 format: int64
         example:
-            actual_public_server_count: 2728162136510947762
+            actual_enabled_server_count: 2728162136510947762
             max_servers: 3127715353503455057
             max_tool_calls: 1082953390045715735
             servers: 2772580811632805156
@@ -28646,7 +28646,7 @@ definitions:
             - max_tool_calls
             - servers
             - max_servers
-            - actual_public_server_count
+            - actual_enabled_server_count
     Project:
         title: Project
         type: object

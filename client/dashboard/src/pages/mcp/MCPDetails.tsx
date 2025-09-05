@@ -1,6 +1,8 @@
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { ServerEnableDialog } from "@/components/server-enable-dialog";
 import { Button } from "@/components/ui/button";
+import { ButtonRainbow } from "@/components/ui/button-rainbow";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -21,10 +23,10 @@ import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Toolset, ToolsetEntry } from "@gram/client/models/components";
 import {
+  invalidateAllGetPeriodUsage,
   invalidateAllToolset,
   useAddExternalOAuthServerMutation,
   useGetDomain,
-  useGetPeriodUsage,
   useListTools,
   useRemoveOAuthServerMutation,
   useToolsetSuspense,
@@ -72,46 +74,50 @@ export function MCPDetailPage() {
         className="mb-8 justify-between"
       >
         <Heading variant="h2">MCP Details</Heading>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              {!activeOAuthAuthCode || !toolset.data.mcpIsPublic ? (
-                <span className="inline-block">
-                  <Button variant="secondary" size="lg" disabled={true}>
+        <Stack direction="horizontal" gap={2}>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {!activeOAuthAuthCode || !toolset.data.mcpIsPublic ? (
+                  <span className="inline-block">
+                    <Button variant="secondary" size="lg" disabled={true}>
+                      {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
+                    </Button>
+                  </span>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    onClick={() =>
+                      isOAuthConnected
+                        ? setIsOAuthDetailsModalOpen(true)
+                        : setIsOAuthModalOpen(true)
+                    }
+                  >
                     {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
                   </Button>
-                </span>
-              ) : (
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  onClick={() =>
-                    isOAuthConnected
-                      ? setIsOAuthDetailsModalOpen(true)
-                      : setIsOAuthModalOpen(true)
-                  }
-                >
-                  {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
-                </Button>
+                )}
+              </TooltipTrigger>
+              {(!activeOAuthAuthCode || !toolset.data.mcpIsPublic) && (
+                <TooltipContent>
+                  {!activeOAuthAuthCode
+                    ? "This MCP server does not require the OAuth authorization code flow"
+                    : "This MCP Server must not be private to enable OAuth"}
+                </TooltipContent>
               )}
-            </TooltipTrigger>
-            {(!activeOAuthAuthCode || !toolset.data.mcpIsPublic) && (
-              <TooltipContent>
-                {!activeOAuthAuthCode
-                  ? "This MCP server does not require the OAuth authorization code flow"
-                  : "This MCP Server must not be private to enable OAuth"}
-              </TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
+            </Tooltip>
+          </TooltipProvider>
+          <MCPEnableButton toolset={toolset.data} />
+        </Stack>
       </Stack>
       <PageSection
         heading="Source Toolset"
         description="MCP servers expose the contents of a single toolset. To change the
           tools or prompts exposed by this MCP server, update the source toolset
           below."
+        className="max-w-2xl"
       >
-        <ToolsetCard toolset={toolset.data} className="max-w-2xl" />
+        <ToolsetCard toolset={toolset.data} />
       </PageSection>
       <MCPDetails toolset={toolset.data} />
       <ConnectOAuthModal
@@ -126,6 +132,53 @@ export function MCPDetailPage() {
         toolset={toolset.data}
       />
     </Stack>
+  );
+}
+
+export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
+  const queryClient = useQueryClient();
+  const [isServerEnableDialogOpen, setIsServerEnableDialogOpen] =
+    useState(false);
+  const updateToolsetMutation = useUpdateToolsetMutation();
+  const telemetry = useTelemetry();
+  const handleServerEnabledToggle = () => {
+    updateToolsetMutation.mutate(
+      {
+        request: {
+          slug: toolset.slug,
+          updateToolsetRequestBody: { mcpEnabled: !toolset.mcpEnabled },
+        },
+      },
+      {
+        onSuccess: () => {
+          invalidateAllToolset(queryClient);
+          invalidateAllGetPeriodUsage(queryClient);
+
+          telemetry.capture("mcp_event", {
+            action: toolset.mcpEnabled ? "mcp_disabled" : "mcp_enabled",
+            slug: toolset.slug,
+          });
+          toast.success(
+            toolset.mcpEnabled ? "MCP server disabled" : "MCP server enabled"
+          );
+        },
+      }
+    );
+  };
+
+  return (
+    <>
+      <ButtonRainbow onClick={async () => setIsServerEnableDialogOpen(true)} className="max-w-fit">
+        {toolset.mcpEnabled ? "Enabled" : "Enable"}
+      </ButtonRainbow>
+      <ServerEnableDialog
+        isOpen={isServerEnableDialogOpen}
+        onClose={() => setIsServerEnableDialogOpen(false)}
+        onConfirm={handleServerEnabledToggle}
+        isLoading={updateToolsetMutation.isPending}
+        currentlyEnabled={toolset.mcpEnabled ?? false}
+      />
+    </>
   );
 }
 
@@ -183,8 +236,6 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const { orgSlug } = useParams();
   const { domain } = useCustomDomain();
   const routes = useRoutes();
-
-  const { data: periodUsage } = useGetPeriodUsage();
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
@@ -319,14 +370,6 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       inactiveText: "text-muted-foreground! italic",
     };
 
-    // Only allow toggling if the user is not on the free tier or if they have no public servers
-    let disabled = false; // TODO: Flip this to true when we want to start gating (when an upgrade flow is in place)
-    if (session.gramAccountType !== "free") {
-      disabled = false;
-    } else if (periodUsage && periodUsage.actualPublicServerCount == 0) {
-      disabled = false;
-    }
-
     const onToggle = () => {
       setMcpIsPublic(!isPublic);
       updateToolsetMutation.mutate({
@@ -352,12 +395,6 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           icon={"globe"}
           variant="ghost"
           size="sm"
-          disabled={disabled}
-          tooltip={
-            disabled
-              ? "Only one public MCP server is allowed on the free account type. Upgrade to a paid account to enable more public MCP servers."
-              : undefined
-          }
           className={cn(
             classes.both,
             isPublic ? classes.active : classes.inactive
@@ -405,7 +442,12 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   };
 
   return (
-    <Stack className="mb-4">
+    <Stack
+      className={cn(
+        "mb-4",
+        !toolset.mcpEnabled && "blur-[2px] pointer-events-none"
+      )}
+    >
       <PageSection
         heading="Hosted URL"
         description="The URL you or your users will use to access this MCP server."

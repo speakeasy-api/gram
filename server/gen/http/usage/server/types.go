@@ -23,8 +23,8 @@ type GetPeriodUsageResponseBody struct {
 	Servers int `form:"servers" json:"servers" xml:"servers"`
 	// The maximum number of servers allowed
 	MaxServers int `form:"max_servers" json:"max_servers" xml:"max_servers"`
-	// The number of servers set to public at the time of the request
-	ActualPublicServerCount int `form:"actual_public_server_count" json:"actual_public_server_count" xml:"actual_public_server_count"`
+	// The number of servers enabled at the time of the request
+	ActualEnabledServerCount int `form:"actual_enabled_server_count" json:"actual_enabled_server_count" xml:"actual_enabled_server_count"`
 }
 
 // GetUsageTiersResponseBody is the type of the "usage" service "getUsageTiers"
@@ -801,11 +801,11 @@ type TierLimitsResponseBody struct {
 // of the "getPeriodUsage" endpoint of the "usage" service.
 func NewGetPeriodUsageResponseBody(res *usage.PeriodUsage) *GetPeriodUsageResponseBody {
 	body := &GetPeriodUsageResponseBody{
-		ToolCalls:               res.ToolCalls,
-		MaxToolCalls:            res.MaxToolCalls,
-		Servers:                 res.Servers,
-		MaxServers:              res.MaxServers,
-		ActualPublicServerCount: res.ActualPublicServerCount,
+		ToolCalls:                res.ToolCalls,
+		MaxToolCalls:             res.MaxToolCalls,
+		Servers:                  res.Servers,
+		MaxServers:               res.MaxServers,
+		ActualEnabledServerCount: res.ActualEnabledServerCount,
 	}
 	return body
 }

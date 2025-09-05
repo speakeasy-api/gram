@@ -79,8 +79,8 @@ type PeriodUsage struct {
 	Servers int
 	// The maximum number of servers allowed
 	MaxServers int
-	// The number of servers set to public at the time of the request
-	ActualPublicServerCount int
+	// The number of servers enabled at the time of the request
+	ActualEnabledServerCount int
 }
 
 type TierLimits struct {

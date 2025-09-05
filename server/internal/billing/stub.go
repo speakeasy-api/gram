@@ -205,7 +205,7 @@ func (s *StubClient) TrackPlatformUsage(ctx context.Context, event PlatformUsage
 	}
 
 	pu.Servers = int(event.PrivateMCPServers)
-	pu.ActualPublicServerCount = int(event.PublicMCPServers)
+	pu.ActualEnabledServerCount = int(event.PublicMCPServers)
 
 	if err := s.writePeriodUsage(ctx, event.OrganizationID, pu); err != nil {
 		span.SetStatus(codes.Error, err.Error())
@@ -270,7 +270,7 @@ func (s *StubClient) readPeriodUsage(orgID string) (*gen.PeriodUsage, error) {
 		MaxToolCalls:            tier.IncludedToolCalls,
 		Servers:                 0,
 		MaxServers:              tier.IncludedServers,
-		ActualPublicServerCount: 0,
+		ActualEnabledServerCount: 0,
 	}
 
 	usagefile := filepath.Join(datadir, fmt.Sprintf("billingusage-%s.local.json", orgID))

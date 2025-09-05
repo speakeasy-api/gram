@@ -1,6 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Cards } from "@/components/ui/card";
+import { Heading } from "@/components/ui/heading";
 import { MoreActions } from "@/components/ui/more-actions";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -23,16 +24,16 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
-import { MCPDetails } from "../mcp/MCPDetails";
+import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
 import { PromptsTabContent } from "./PromptsTab";
 import { ToolCard } from "./ToolCard";
 import { ToolSelectDialog } from "./ToolSelectDialog";
+import { ToolsetAuth } from "./ToolsetAuth";
+import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
+import { ToolsetEmptyState } from "./ToolsetEmptyState";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
 import { ToolDefinition, useToolDefinitions } from "./types";
-import { ToolsetEmptyState } from "./ToolsetEmptyState";
-import { ToolsetAuth } from "./ToolsetAuth";
-import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
 
 export function useDeleteToolset({
   onSuccess,
@@ -85,21 +86,25 @@ export function ToolsetRoot() {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Outlet />
+      <Page.Body>
+        <Outlet />
+      </Page.Body>
     </Page>
   );
 }
 
 export default function ToolsetPage() {
   const { toolsetSlug } = useParams();
-  const [selectedEnvironment, setSelectedEnvironment] = useState<string | undefined>(undefined);
+  const [selectedEnvironment, setSelectedEnvironment] = useState<
+    string | undefined
+  >(undefined);
 
   if (!toolsetSlug) {
     return <div>Toolset not found</div>;
   }
 
   return (
-    <ToolsetView 
+    <ToolsetView
       toolsetSlug={toolsetSlug}
       environmentSlug={selectedEnvironment}
       onEnvironmentChange={setSelectedEnvironment}
@@ -250,7 +255,7 @@ export function ToolsetView({
   }
 
   return (
-    <Page.Body className={cn("flex flex-col gap-6", className)}>
+    <div className={cn("flex flex-col gap-6", className)}>
       {toolset && (
         <ToolsetAuthAlert
           toolset={toolset}
@@ -304,7 +309,15 @@ export function ToolsetView({
           )}
         </TabsContent>
         <TabsContent value="mcp">
-          {toolset && <MCPDetails toolset={toolset} />}
+          {toolset && (
+            <Stack gap={6}>
+              <Stack direction="horizontal" align="center" justify="space-between" gap={2}>
+                <Heading variant="h2">MCP Server Settings</Heading>
+                <MCPEnableButton toolset={toolset} />
+              </Stack>
+              <MCPDetails toolset={toolset} />
+            </Stack>
+          )}
         </TabsContent>
       </Tabs>
       {addToolsStyle === "modal" && (
@@ -314,6 +327,6 @@ export function ToolsetView({
           onOpenChange={setAddToolsDialogOpen}
         />
       )}
-    </Page.Body>
+    </div>
   );
 }
