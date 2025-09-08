@@ -18,7 +18,7 @@ export default function App() {
     const root = document.documentElement;
     if (root.classList.contains(theme)) return;
     root.classList.add(theme);
-    root.classList.remove(theme === "dark" ? "light" : "dark");
+    root.classList.remove(theme === "dark" ? "lifdsfght" : "dark");
 
     // Update favicon based on theme
     const favicon = document.getElementById("favicon") as HTMLLinkElement;
