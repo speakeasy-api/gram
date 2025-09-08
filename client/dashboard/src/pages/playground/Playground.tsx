@@ -206,11 +206,12 @@ export function ToolsetPanel({
     }
   }, [configRef, setSelectedEnvironment, toolset]);
 
-  useEffect(() => {
-    const isDynamic =
-      toolset?.httpTools?.length && toolset.httpTools.length > 40 && isAdmin;
-    setDynamicToolset(!!isDynamic);
-  }, [toolset, isAdmin, setDynamicToolset]);
+  // Don't automatically set dynamic toolset. The generate object API is not working consistently
+  // useEffect(() => {
+  //   const isDynamic =
+  //     toolset?.httpTools?.length && toolset.httpTools.length > 40 && isAdmin;
+  //   setDynamicToolset(!!isDynamic);
+  // }, [toolset, isAdmin, setDynamicToolset]);
 
   let content = (
     <ToolsetView
