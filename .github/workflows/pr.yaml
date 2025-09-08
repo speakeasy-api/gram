@@ -311,7 +311,7 @@ jobs:
 
   client-build-lint:
     runs-on: ubicloud-standard-4
-    needs: [changes, client-build]
+    needs: changes
     steps:
       - name: Skip if no client changes exist
         if: ${{ needs.changes.outputs.client != 'true' }}
