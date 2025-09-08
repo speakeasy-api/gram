@@ -28,7 +28,7 @@ require (
 	github.com/pb33f/libopenapi v0.25.3
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
 	github.com/polarsource/polar-go v0.8.4
-	github.com/posthog/posthog-go v1.6.3
+	github.com/posthog/posthog-go v1.6.8
 	github.com/redis/go-redis/extra/redisotel/v9 v9.12.1
 	github.com/redis/go-redis/v9 v9.12.1
 	github.com/samber/lo v1.51.0
