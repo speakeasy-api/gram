@@ -9,26 +9,35 @@ import (
 	"context"
 )
 
-const getAllOrganizations = `-- name: GetAllOrganizations :many
-SELECT id, name, slug, gram_account_type FROM organization_metadata
+const getAllOrganizationsWithToolsets = `-- name: GetAllOrganizationsWithToolsets :many
+SELECT
+    organization_metadata.id,
+    organization_metadata.name,
+    organization_metadata.slug,
+    gram_account_type
+FROM organization_metadata
+JOIN toolsets ON organization_metadata.id = toolsets.organization_id
+WHERE toolsets.deleted = false
+GROUP BY organization_metadata.id
+HAVING COUNT(toolsets.id) > 0
 `
 
-type GetAllOrganizationsRow struct {
+type GetAllOrganizationsWithToolsetsRow struct {
 	ID              string
 	Name            string
 	Slug            string
 	GramAccountType string
 }
 
-func (q *Queries) GetAllOrganizations(ctx context.Context) ([]GetAllOrganizationsRow, error) {
-	rows, err := q.db.Query(ctx, getAllOrganizations)
+func (q *Queries) GetAllOrganizationsWithToolsets(ctx context.Context) ([]GetAllOrganizationsWithToolsetsRow, error) {
+	rows, err := q.db.Query(ctx, getAllOrganizationsWithToolsets)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetAllOrganizationsRow
+	var items []GetAllOrganizationsWithToolsetsRow
 	for rows.Next() {
-		var i GetAllOrganizationsRow
+		var i GetAllOrganizationsWithToolsetsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,

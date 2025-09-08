@@ -130,7 +130,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
 	temporalWorker.RegisterActivity(activities.CollectPlatformUsageMetrics)
 	temporalWorker.RegisterActivity(activities.FirePlatformUsageMetrics)
-	temporalWorker.RegisterActivity(activities.ReportBillingUsage)
+	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
@@ -138,7 +138,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OpenrouterKeyRefreshWorkflow)
 	temporalWorker.RegisterWorkflow(CustomDomainRegistrationWorkflow)
 	temporalWorker.RegisterWorkflow(CollectPlatformUsageMetricsWorkflow)
-	temporalWorker.RegisterWorkflow(ReportBillingUsageWorkflow)
+	temporalWorker.RegisterWorkflow(RefreshBillingUsageWorkflow)
 
 	if err := AddPlatformUsageMetricsSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
@@ -146,9 +146,9 @@ func NewTemporalWorker(
 		}
 	}
 
-	if err := AddReportBillingUsageSchedule(context.Background(), client); err != nil {
+	if err := AddRefreshBillingUsageSchedule(context.Background(), client); err != nil {
 		if !errors.Is(err, temporal.ErrScheduleAlreadyRunning) {
-			logger.ErrorContext(context.Background(), "failed to add report billing usage schedule", attr.SlogError(err))
+			logger.ErrorContext(context.Background(), "failed to add refresh billing usage schedule", attr.SlogError(err))
 		}
 	}
 

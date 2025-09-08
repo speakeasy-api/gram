@@ -70,7 +70,7 @@ func PeriodUsageStateCacheKey(orgID string) string {
 }
 
 func (p PolarPeriodUsageState) TTL() time.Duration {
-	return 1 * time.Hour
+	return 2 * time.Hour // twice our cache refresh rate
 }
 
 func (p PolarPeriodUsageState) AdditionalCacheKeys() []string {

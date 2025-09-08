@@ -35,5 +35,14 @@ SELECT
 FROM toolset_metrics tm
 FULL OUTER JOIN tool_metrics tlm ON tm.organization_id = tlm.organization_id;
 
--- name: GetAllOrganizations :many
-SELECT id, name, slug, gram_account_type FROM organization_metadata;
+-- name: GetAllOrganizationsWithToolsets :many
+SELECT
+    organization_metadata.id,
+    organization_metadata.name,
+    organization_metadata.slug,
+    gram_account_type
+FROM organization_metadata
+JOIN toolsets ON organization_metadata.id = toolsets.organization_id
+WHERE toolsets.deleted = false
+GROUP BY organization_metadata.id
+HAVING COUNT(toolsets.id) > 0;

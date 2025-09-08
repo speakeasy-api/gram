@@ -21,18 +21,19 @@ import (
 )
 
 type Activities struct {
-	processDeployment           *activities.ProcessDeployment
-	transitionDeployment        *activities.TransitionDeployment
-	getSlackProjectContext      *activities.GetSlackProjectContext
-	postSlackMessage            *activities.PostSlackMessage
-	slackChatCompletion         *activities.SlackChatCompletion
-	refreshOpenRouterKey        *activities.RefreshOpenRouterKey
-	verifyCustomDomain          *activities.VerifyCustomDomain
-	customDomainIngress         *activities.CustomDomainIngress
-	collectPlatformUsageMetrics *activities.CollectPlatformUsageMetrics
-	firePlatformUsageMetrics    *activities.FirePlatformUsageMetrics
-	reportBillingUsage          *activities.ReportBillingUsage
-	getAllOrganizations         *activities.GetAllOrganizations
+	processDeployment             *activities.ProcessDeployment
+	transitionDeployment          *activities.TransitionDeployment
+	getSlackProjectContext        *activities.GetSlackProjectContext
+	postSlackMessage              *activities.PostSlackMessage
+	slackChatCompletion           *activities.SlackChatCompletion
+	refreshOpenRouterKey          *activities.RefreshOpenRouterKey
+	verifyCustomDomain            *activities.VerifyCustomDomain
+	customDomainIngress           *activities.CustomDomainIngress
+	collectPlatformUsageMetrics   *activities.CollectPlatformUsageMetrics
+	firePlatformUsageMetrics      *activities.FirePlatformUsageMetrics
+	freeTierReportingUsageMetrics *activities.FreeTierReportingUsageMetrics
+	refreshBillingUsage           *activities.RefreshBillingUsage
+	getAllOrganizations           *activities.GetAllOrganizations
 }
 
 func NewActivities(
@@ -51,18 +52,19 @@ func NewActivities(
 	posthogClient *posthog.Posthog,
 ) *Activities {
 	return &Activities{
-		processDeployment:           activities.NewProcessDeployment(logger, meterProvider, db, features, assetStorage),
-		transitionDeployment:        activities.NewTransitionDeployment(logger, db),
-		getSlackProjectContext:      activities.NewSlackProjectContextActivity(logger, db, slackClient),
-		postSlackMessage:            activities.NewPostSlackMessageActivity(logger, slackClient),
-		slackChatCompletion:         activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
-		refreshOpenRouterKey:        activities.NewRefreshOpenRouterKey(logger, db, openrouter),
-		verifyCustomDomain:          activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
-		customDomainIngress:         activities.NewCustomDomainIngress(logger, db, k8sClient),
-		collectPlatformUsageMetrics: activities.NewCollectPlatformUsageMetrics(logger, db),
-		firePlatformUsageMetrics:    activities.NewFirePlatformUsageMetrics(logger, billingTracker),
-		reportBillingUsage:          activities.NewReportBillingUsage(logger, db, billingRepo, posthogClient),
-		getAllOrganizations:         activities.NewGetAllOrganizations(logger, db),
+		processDeployment:             activities.NewProcessDeployment(logger, meterProvider, db, features, assetStorage),
+		transitionDeployment:          activities.NewTransitionDeployment(logger, db),
+		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
+		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
+		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
+		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouter),
+		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
+		customDomainIngress:           activities.NewCustomDomainIngress(logger, db, k8sClient),
+		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
+		firePlatformUsageMetrics:      activities.NewFirePlatformUsageMetrics(logger, billingTracker),
+		freeTierReportingUsageMetrics: activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
+		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
+		getAllOrganizations:           activities.NewGetAllOrganizations(logger, db),
 	}
 }
 
@@ -106,8 +108,12 @@ func (a *Activities) FirePlatformUsageMetrics(ctx context.Context, metrics []act
 	return a.firePlatformUsageMetrics.Do(ctx, metrics)
 }
 
-func (a *Activities) ReportBillingUsage(ctx context.Context, orgIDs []string) error {
-	return a.reportBillingUsage.Do(ctx, orgIDs)
+func (a *Activities) FreeTierReportingUsageMetrics(ctx context.Context, orgIDs []string) error {
+	return a.freeTierReportingUsageMetrics.Do(ctx, orgIDs)
+}
+
+func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) error {
+	return a.refreshBillingUsage.Do(ctx, orgIDs)
 }
 
 func (a *Activities) GetAllOrganizations(ctx context.Context) ([]string, error) {
