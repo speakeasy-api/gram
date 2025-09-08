@@ -136,6 +136,7 @@ func DescribeToolsetEntry(
 		promptTemplates = append(promptTemplates, &types.PromptTemplateEntry{
 			ID:   pt.ID.String(),
 			Name: types.Slug(pt.Name),
+			Kind: &pt.Kind.String,
 		})
 	}
 
