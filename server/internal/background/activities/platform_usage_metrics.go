@@ -2,14 +2,25 @@ package activities
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
-	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sourcegraph/conc/pool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+)
+
+const (
+	logKeyOrgID     = "org_id"
+	logKeyOrgName   = "org_name"
+	logKeyToolCalls = "tool_calls"
+	logKeyServers   = "servers"
 )
 
 type CollectPlatformUsageMetrics struct {
@@ -74,25 +85,93 @@ func NewFirePlatformUsageMetrics(logger *slog.Logger, billingTracker billing.Tra
 func (f *FirePlatformUsageMetrics) Do(ctx context.Context, metrics []PlatformUsageMetrics) error {
 	f.logger.InfoContext(ctx, "Starting platform usage metrics firing")
 
-	var wg sync.WaitGroup
+	workers := pool.New().WithErrors().WithMaxGoroutines(20)
 
 	for _, metric := range metrics {
-		wg.Add(1)
-		go func(m PlatformUsageMetrics) {
-			defer wg.Done()
+		workers.Go(func() error {
 			f.billingTracker.TrackPlatformUsage(ctx, billing.PlatformUsageEvent{
-				OrganizationID:      m.OrganizationID,
-				PublicMCPServers:    m.PublicMCPServers,
-				PrivateMCPServers:   m.PrivateMCPServers,
-				TotalEnabledServers: m.TotalEnabledServers,
-				TotalToolsets:       m.TotalToolsets,
-				TotalTools:          m.TotalTools,
+				OrganizationID:      metric.OrganizationID,
+				PublicMCPServers:    metric.PublicMCPServers,
+				PrivateMCPServers:   metric.PrivateMCPServers,
+				TotalEnabledServers: metric.TotalEnabledServers,
+				TotalToolsets:       metric.TotalToolsets,
+				TotalTools:          metric.TotalTools,
 			})
-		}(metric)
+			return nil
+		})
 	}
 
-	wg.Wait()
+	if err := workers.Wait(); err != nil {
+		return err
+	}
 
 	f.logger.InfoContext(ctx, "Platform usage metrics firing completed successfully")
+	return nil
+}
+
+type FreeTierReportingUsageMetrics struct {
+	logger            *slog.Logger
+	billingRepository billing.Repository
+	orgRepo           *orgRepo.Queries
+	posthogClient     *posthog.Posthog
+}
+
+func NewFreeTierReportingMetrics(logger *slog.Logger, db *pgxpool.Pool, billingRepository billing.Repository, posthogClient *posthog.Posthog) *FreeTierReportingUsageMetrics {
+	return &FreeTierReportingUsageMetrics{
+		logger:            logger.With(attr.SlogComponent("free-tier-reporting-usage-metrics")),
+		billingRepository: billingRepository,
+		orgRepo:           orgRepo.New(db),
+		posthogClient:     posthogClient,
+	}
+}
+
+func (f *FreeTierReportingUsageMetrics) Do(ctx context.Context, orgIDs []string) error {
+	f.logger.InfoContext(ctx, "Starting free tier reporting usage metrics")
+
+	workers := pool.New().WithErrors().WithMaxGoroutines(20)
+
+	for _, orgID := range orgIDs {
+		workers.Go(func() error {
+			org, err := mv.DescribeOrganization(ctx, f.logger, f.orgRepo, f.billingRepository, orgID)
+			if err != nil {
+				return fmt.Errorf("failed to describe organization %s: %w", orgID, err)
+			}
+
+			// get latest period usage that was stored
+			usage, err := f.billingRepository.GetStoredPeriodUsage(ctx, orgID)
+			if err != nil {
+				return fmt.Errorf("failed to get period usage for org %s: %w", orgID, err)
+			}
+
+			f.logger.InfoContext(ctx, "billing usage report",
+				slog.String(logKeyOrgID, org.ID),
+				slog.String(logKeyOrgName, org.Name),
+				slog.Int(logKeyToolCalls, usage.ToolCalls),
+				slog.Int(logKeyServers, usage.Servers),
+			)
+
+			if org.GramAccountType == "free" && (usage.ToolCalls > usage.MaxToolCalls || usage.Servers > usage.MaxServers) {
+				err = f.posthogClient.CaptureEvent(ctx, "billing_usage_report", org.ID, map[string]any{
+					"org_id":     org.ID,
+					"org_name":   org.Name,
+					"org_slug":   org.Slug,
+					"tool_calls": usage.ToolCalls,
+					"servers":    usage.Servers,
+					"is_gram":    true,
+				})
+				if err != nil {
+					return fmt.Errorf("failed to capture posthog event for org %s: %w", orgID, err)
+				}
+			}
+
+			return nil
+		})
+	}
+
+	if err := workers.Wait(); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to report free tier usage").Log(ctx, f.logger)
+	}
+
+	f.logger.InfoContext(ctx, "free tier reporting usage metrics completed successfully")
 	return nil
 }

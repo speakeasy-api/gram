@@ -13,9 +13,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 )
 
+// safely wait for polar rate limits
 const (
-	platformUsageMetricsBatchSize     = 25
-	platformUsageMetricsRetryInterval = 1 * time.Second
+	platformUsageMetricsBatchSize     = 150
+	platformUsageMetricsRetryInterval = 15 * time.Second
 )
 
 type PlatformUsageMetricsClient struct {
@@ -40,7 +41,7 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 60 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    3,
+			MaximumAttempts:    2,
 			InitialInterval:    platformUsageMetricsRetryInterval,
 			BackoffCoefficient: 1.5,
 			// Temporal automatically adds some jitter to retries here
@@ -66,6 +67,23 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 		if err != nil {
 			logger.Error("Failed to fire platform usage metrics batch", "error", err, "batch_start", i)
 			return fmt.Errorf("failed to fire platform usage metrics batch starting at %d: %w", i, err)
+		}
+	}
+
+	for i := 0; i < len(allMetrics); i += platformUsageMetricsBatchSize {
+		end := min(i+platformUsageMetricsBatchSize, len(allMetrics))
+
+		batch := allMetrics[i:end]
+
+		orgIDs := make([]string, len(batch))
+		for j, metric := range batch {
+			orgIDs[j] = metric.OrganizationID
+		}
+
+		err := workflow.ExecuteActivity(ctx, a.FreeTierReportingUsageMetrics, orgIDs).Get(ctx, nil)
+		if err != nil {
+			logger.Error("Failed to compile free tier reporting usage metrics batch", "error", err, "batch_start", i)
+			return fmt.Errorf("failed to to compile free tier reporting usage metrics batct %d: %w", i, err)
 		}
 	}
 
