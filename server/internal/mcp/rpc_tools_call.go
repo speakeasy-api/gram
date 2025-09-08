@@ -106,6 +106,11 @@ func handleToolsCall(
 		requestBytes := int64(len(params.Arguments))
 		outputBytes := int64(len(promptData))
 
+		err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingTracker)
+		if err != nil {
+			return nil, err
+		}
+
 		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
 			OrganizationID:   toolset.OrganizationID,
 			RequestBytes:     requestBytes,
@@ -120,11 +125,6 @@ func handleToolsCall(
 			OrganizationSlug: nil,
 			ChatID:           nil,
 		})
-
-		err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingTracker)
-		if err != nil {
-			return nil, err
-		}
 
 		return formatHigherOrderToolResult(ctx, logger, req, promptData)
 	}
@@ -181,6 +181,11 @@ func handleToolsCall(
 	requestBytes := int64(len(requestBodyBytes))
 	var outputBytes int64
 
+	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingTracker)
+	if err != nil {
+		return nil, err
+	}
+
 	defer func() {
 		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
 			OrganizationID:   toolset.OrganizationID,
@@ -198,11 +203,6 @@ func handleToolsCall(
 		})
 
 	}()
-
-	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingTracker)
-	if err != nil {
-		return nil, err
-	}
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan.Tool)
 	if err != nil {
