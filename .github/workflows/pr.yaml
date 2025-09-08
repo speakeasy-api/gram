@@ -224,7 +224,7 @@ jobs:
         if: ${{ needs.changes.outputs.server == 'true' }}
         run: mise run test:server
 
-  client-build:
+  docker-build-client:
     runs-on: ubicloud-standard-4
     needs: changes
     env:
@@ -309,7 +309,7 @@ jobs:
         if: ${{ needs.changes.outputs.client == 'true' && success() }}
         run: pnpm store prune
 
-  client-lint-test:
+  client-build-lint:
     runs-on: ubicloud-standard-4
     needs: [changes, client-build]
     steps:
