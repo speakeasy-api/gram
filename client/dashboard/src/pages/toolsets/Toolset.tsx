@@ -34,6 +34,7 @@ import { ToolsetEmptyState } from "./ToolsetEmptyState";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
 import { ToolDefinition, useToolDefinitions } from "./types";
+import { PromptTemplateKind } from "@gram/client/models/components";
 
 export function useDeleteToolset({
   onSuccess,
@@ -247,7 +248,7 @@ export function ToolsetView({
   let toolsToDisplay: ToolDefinition[] = grouped
     .filter((group) => selectedGroups.includes(group.key))
     .flatMap((group) => group.tools)
-    .filter((tool) => tool.type !== "prompt");
+    .filter((tool) => tool.type !== PromptTemplateKind.Prompt);
 
   // If no tools are selected, show all tools
   // Mostly a failsafe for if the filtering doesn't work as expected

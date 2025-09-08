@@ -63,7 +63,7 @@ export const useGroupedTools = (tools: ToolDefinition[]): ToolGroup[] => {
           ? documentIdToSlug?.[tool.openapiv3DocumentId]
           : undefined;
         groupKey = documentSlug || "unknown";
-      } else if (tool.type === "prompt" && tool.kind === "higher_order_tool") {
+      } else {
         groupKey = "custom";
       }
 

@@ -2,6 +2,7 @@ import { isHigherOrderTool } from "@/lib/toolNames";
 import {
   HTTPToolDefinition,
   PromptTemplate,
+  PromptTemplateKind,
   Toolset,
 } from "@gram/client/models/components";
 
@@ -24,7 +25,7 @@ export type ToolDefinition =
     })
   | (PromptTemplate &
       Base & {
-        type: "prompt" | "higher_order_tool";
+        type: PromptTemplateKind;
       });
 
 /**
