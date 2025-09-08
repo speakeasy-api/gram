@@ -95,18 +95,34 @@ export const ToolifyDialog = ({
 
     const res = await generateObject({
       model,
+      mode: "json",
       prompt: `
       You are a composite tool builder. You are given a purpose for a tool and a list of available tools.
       A composite tool consists of a series of steps which invoke an underlying tool along with instructions for how to use the tool.
   
-      Given the provided purpose, suggest:
-      - A name for the tool that indicates the purpose of the tool. This should be fewer than 40 characters.
-      - A description of the tool which will be provided to future LLMs invoking this tool. It should distinguish when and how this tool should be used.
-      - A list of inputs needed to invoke the tool. Any inputs here must appear in at least one step's instructions inside {{mustaches}}. Anything in {{mustaches}} must appear in this list.
-      - A list of steps which will accomplish the purpose. Each step should invoke one tool exactly by its provided name.
+      Given the provided purpose, suggest a JSON response with the following structure:
+      {
+        "name": "Tool Name (fewer than 40 characters)",
+        "description": "Description for future LLMs about when and how to use this tool",
+        "inputs": [
+          {
+            "name": "input_name",
+            "description": "What this input is for"
+          }
+        ],
+        "steps": [
+          {
+            "tool": "exact_tool_name",
+            "instructions": "How to use the tool with {{input_name}} placeholders"
+          }
+        ]
+      }
   
-      Pay attention to the input format of the tools to see if other tools are need first to produce the inputs.
-      For example, a tool that expects an ID might first require a lookup tool to retrieve the ID given fuzzy user input.
+      Requirements:
+      - The inputs array should contain objects with name and description for each input parameter
+      - Any inputs must appear in at least one step's instructions inside {{mustaches}}
+      - Each step should invoke exactly one tool by its provided name
+      - Pay attention to tool schemas - you may need multiple steps if one tool's output feeds another's input
   
       The purpose is: ${purpose}
 
@@ -126,7 +142,7 @@ export const ToolifyDialog = ({
     set({
       toolset: selectedToolset,
       purpose,
-      suggestion: res.object,
+      suggestion: res.object as z.infer<typeof SuggestionSchema>,
     });
 
     setInProgress(false);

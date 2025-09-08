@@ -11,35 +11,36 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
+// safely wait for polar rate limits
 const (
-	reportBillingUsageBatchSize      = 25
-	reportBillingUsagesRetryInterval = 1 * time.Second
+	refreshBillingUsageBatchSize     = 25
+	refreshBillingUsagesWaitInterval = 5 * time.Second
 )
 
-type ReportBillingUsageClient struct {
+type RefreshBillingUsageClient struct {
 	Temporal client.Client
 }
 
-func (c *ReportBillingUsageClient) StartReportBillingUsage(ctx context.Context) (client.WorkflowRun, error) {
-	id := "v1:report-billing-usage"
+func (c *RefreshBillingUsageClient) StartRefreshBillingUsage(ctx context.Context) (client.WorkflowRun, error) {
+	id := "v1:refresh-billing-usage"
 	return c.Temporal.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        id,
 		TaskQueue: string(TaskQueueMain),
 		// Allow restarting if needed
 		WorkflowIDReusePolicy: enums.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY,
-	}, ReportBillingUsageWorkflow)
+	}, RefreshBillingUsageWorkflow)
 }
 
-func ReportBillingUsageWorkflow(ctx workflow.Context) error {
+func RefreshBillingUsageWorkflow(ctx workflow.Context) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Starting billing usage reporting")
+	logger.Info("Starting billing usage refreshing")
 
 	// Configure activity options with retry policy
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 60 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    3,
-			InitialInterval:    reportBillingUsagesRetryInterval,
+			InitialInterval:    refreshBillingUsagesWaitInterval,
 			BackoffCoefficient: 1.5,
 			// Temporal automatically adds some jitter to retries here
 		},
@@ -54,27 +55,31 @@ func ReportBillingUsageWorkflow(ctx workflow.Context) error {
 		return fmt.Errorf("failed to get all organizations: %w", err)
 	}
 
-	logger.Info("Retrieved organizations for billing usage reporting", "count", len(orgIDs))
+	logger.Info("Retrieved organizations for billing usage refreshing", "count", len(orgIDs))
 
 	// Process organizations in batches
-	for i := 0; i < len(orgIDs); i += reportBillingUsageBatchSize {
-		end := min(i+reportBillingUsageBatchSize, len(orgIDs))
+	for i := 0; i < len(orgIDs); i += refreshBillingUsageBatchSize {
+		end := min(i+refreshBillingUsageBatchSize, len(orgIDs))
 		batch := orgIDs[i:end]
 
-		err := workflow.ExecuteActivity(ctx, a.ReportBillingUsage, batch).Get(ctx, nil)
+		err := workflow.ExecuteActivity(ctx, a.RefreshBillingUsage, batch).Get(ctx, nil)
 		if err != nil {
-			logger.Error("Failed to report billing usage batch", "error", err, "batch_start", i)
-			return fmt.Errorf("failed to report billing usage batch starting at %d: %w", i, err)
+			logger.Error("Failed to refresh billing usage batch", "error", err, "batch_start", i)
+			return fmt.Errorf("failed to refresh billing usage batch starting at %d: %w", i, err)
+		}
+
+		if err = workflow.Sleep(ctx, refreshBillingUsagesWaitInterval); err != nil {
+			logger.Error("Failed to sleep to pause between batches", "error", err)
 		}
 	}
 
-	logger.Info("Billing usage reporting completed successfully")
+	logger.Info("Billing usage refreshing completed successfully")
 	return nil
 }
 
-func AddReportBillingUsageSchedule(ctx context.Context, temporalClient client.Client) error {
-	scheduleID := "v1:report-billing-usage-schedule"
-	workflowID := "v1:report-billing-usage-schedule/scheduled"
+func AddRefreshBillingUsageSchedule(ctx context.Context, temporalClient client.Client) error {
+	scheduleID := "v1:refresh-billing-usage-schedule"
+	workflowID := "v1:refresh-billing-usage-schedule/scheduled"
 
 	_, err := temporalClient.ScheduleClient().Create(ctx, client.ScheduleOptions{
 		ID: scheduleID,
@@ -87,13 +92,13 @@ func AddReportBillingUsageSchedule(ctx context.Context, temporalClient client.Cl
 		},
 		Action: &client.ScheduleWorkflowAction{
 			ID:                 workflowID,
-			Workflow:           ReportBillingUsageWorkflow,
+			Workflow:           RefreshBillingUsageWorkflow,
 			TaskQueue:          string(TaskQueueMain),
 			WorkflowRunTimeout: 10 * time.Minute,
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to report billing usage schedule: %w", err)
+		return fmt.Errorf("failed to refresh billing usage schedule: %w", err)
 	}
 
 	return nil
