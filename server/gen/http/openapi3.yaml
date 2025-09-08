@@ -8976,6 +8976,9 @@ components:
                 id:
                     type: string
                     description: The ID of the prompt template
+                kind:
+                    type: string
+                    description: The kind of the prompt template
                 name:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.

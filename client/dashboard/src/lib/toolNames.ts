@@ -1,5 +1,10 @@
 import { ToolDefinition, useToolDefinitions } from "@/pages/toolsets/types";
-import { HTTPToolDefinition, Toolset } from "@gram/client/models/components";
+import {
+  HTTPToolDefinition,
+  PromptTemplateEntry,
+  Toolset,
+  ToolsetEntry,
+} from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
 
@@ -58,7 +63,7 @@ export const useGroupedTools = (tools: ToolDefinition[]): ToolGroup[] => {
           ? documentIdToSlug?.[tool.openapiv3DocumentId]
           : undefined;
         groupKey = documentSlug || "unknown";
-      } else if (tool.type === "prompt") {
+      } else if (tool.type === "prompt" && tool.kind === "higher_order_tool") {
         groupKey = "custom";
       }
 
@@ -82,4 +87,30 @@ export const useGroupedTools = (tools: ToolDefinition[]): ToolGroup[] => {
   }, [deployment, tools]);
 
   return toolGroups;
+};
+
+export const isPrompt = (template: PromptTemplateEntry) => {
+  return template.kind === "prompt";
+};
+
+export const isHigherOrderTool = (template: PromptTemplateEntry) => {
+  return template.kind === "higher_order_tool";
+};
+
+export const promptNames = (
+  promptTemplates: ToolsetEntry["promptTemplates"]
+): string[] => {
+  return (
+    promptTemplates.filter(isPrompt).map((template) => template.name) || []
+  );
+};
+
+export const higherOrderToolNames = (
+  promptTemplates: ToolsetEntry["promptTemplates"]
+): string[] => {
+  return (
+    promptTemplates
+      .filter(isHigherOrderTool)
+      .map((template) => template.name) || []
+  );
 };

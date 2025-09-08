@@ -2242,6 +2242,7 @@ func unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(v *Promp
 	res := &types.PromptTemplateEntry{
 		ID:   *v.ID,
 		Name: types.Slug(*v.Name),
+		Kind: v.Kind,
 	}
 
 	return res

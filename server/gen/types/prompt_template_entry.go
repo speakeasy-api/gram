@@ -12,4 +12,6 @@ type PromptTemplateEntry struct {
 	ID string
 	// The name of the prompt template
 	Name Slug
+	// The kind of the prompt template
+	Kind *string
 }

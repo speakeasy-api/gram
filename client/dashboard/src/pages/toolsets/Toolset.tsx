@@ -246,7 +246,8 @@ export function ToolsetView({
 
   let toolsToDisplay: ToolDefinition[] = grouped
     .filter((group) => selectedGroups.includes(group.key))
-    .flatMap((group) => group.tools);
+    .flatMap((group) => group.tools)
+    .filter((tool) => tool.type !== "prompt");
 
   // If no tools are selected, show all tools
   // Mostly a failsafe for if the filtering doesn't work as expected
@@ -311,7 +312,12 @@ export function ToolsetView({
         <TabsContent value="mcp">
           {toolset && (
             <Stack gap={6}>
-              <Stack direction="horizontal" align="center" justify="space-between" gap={2}>
+              <Stack
+                direction="horizontal"
+                align="center"
+                justify="space-between"
+                gap={2}
+              >
                 <Heading variant="h2">MCP Server Settings</Heading>
                 <MCPEnableButton toolset={toolset} />
               </Stack>
