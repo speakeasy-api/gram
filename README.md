@@ -66,7 +66,9 @@ Please have a good title and description for your PR. Go nuts with streams of co
 └ [TypeScript](https://www.typescriptlang.org/) – dashboard language.  
 └ [Golang](https://go.dev/) - backend language  
 └ [Goa](https://github.com/goadesign/goa) - design-first API framework.  
-└ [Temporal](https://temporal.io/) - workflow engine.  
+└ [Temporal](https://temporal.io/) - workflow engine. 
+└ [Polar](https://polar.sh/) - usage based billing.
+└ [OpenRouter](https://openrouter.ai/) - LLM gateway.
 └ [Speakeasy](https://www.speakeasy.com/) - Generated SDKs. Spec hosted [here](http://app.getgram.ai/openapi.yaml).
 
 ## Documentation
