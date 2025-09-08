@@ -320,8 +320,6 @@ function HomeContent() {
   }
 
 
-
-
   const handleQuickTest = () => {
     if (!prompt.trim() || !selectedToolset) return;
 

@@ -588,6 +588,7 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 		span.End()
 	}()
 
+
 	res, err := p.polar.Checkouts.Create(ctx, polarComponents.CheckoutCreate{
 		ExternalCustomerID: &orgID,
 		EmbedOrigin:        &serverURL,

@@ -55,7 +55,7 @@ export function Button({
   iconAfter = false,
   asChild = false,
   ...props
-}: React.ComponentProps<"button"> &
+}: React.ComponentProps<"button"> & React.ComponentProps<"a"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean;
     tooltip?: string;
