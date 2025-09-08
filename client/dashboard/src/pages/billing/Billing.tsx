@@ -156,7 +156,7 @@ const UsageTiers = () => {
   useEffect(() => {
     client.usage.createCheckout().then((link) => {
       setCheckoutLink(link);
-      PolarEmbedCheckout.init();
+      PolarEmbedCheckout.init(); // This must go here or else the checkout link won't open in an embedded window
     });
   }, []);
 
