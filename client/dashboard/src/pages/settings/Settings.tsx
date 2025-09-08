@@ -460,6 +460,7 @@ export default function Settings() {
                 variant="secondary"
                 onClick={() => setIsAddDomainDialogOpen(true)}
                 icon={"globe"}
+                disabled={session.gramAccountType === "free"}
               >
                 Add Domain
               </Button>
