@@ -25,6 +25,9 @@ export const ToolsetHeader = ({
     { enabled: !!toolsetSlug }
   );
 
+  /** TODO(cj): remove */
+  if (toolset) debugger;
+
   const updateToolset = async (changes: Partial<Toolset>) => {
     if (!toolset) {
       return;
