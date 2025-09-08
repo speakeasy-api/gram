@@ -1,3 +1,4 @@
+import { isHigherOrderTool } from "@/lib/toolNames";
 import {
   HTTPToolDefinition,
   PromptTemplate,
@@ -42,7 +43,7 @@ export const useToolDefinitions = (
     httpTool: tool,
   }));
 
-  toolset.promptTemplates.forEach((template) => {
+  toolset.promptTemplates.filter(isHigherOrderTool).forEach((template) => {
     toolDefinitions.push({
       type: template.kind,
       ...template,

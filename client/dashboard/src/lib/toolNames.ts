@@ -1,7 +1,7 @@
 import { ToolDefinition, useToolDefinitions } from "@/pages/toolsets/types";
 import {
   HTTPToolDefinition,
-  PromptTemplateEntry,
+  PromptTemplateKind,
   Toolset,
   ToolsetEntry,
 } from "@gram/client/models/components";
@@ -89,28 +89,20 @@ export const useGroupedTools = (tools: ToolDefinition[]): ToolGroup[] => {
   return toolGroups;
 };
 
-export const isPrompt = (template: PromptTemplateEntry) => {
-  return template.kind === "prompt";
-};
+type PromptTemplate = PromptTemplates[number];
+type PromptTemplates = ToolsetEntry["promptTemplates"];
 
-export const isHigherOrderTool = (template: PromptTemplateEntry) => {
-  return template.kind === "higher_order_tool";
-};
+const templateName = (template: PromptTemplate) => template.name;
 
-export const promptNames = (
-  promptTemplates: ToolsetEntry["promptTemplates"]
-): string[] => {
-  return (
-    promptTemplates.filter(isPrompt).map((template) => template.name) || []
-  );
-};
+export const isPrompt = (template: PromptTemplate) =>
+  template.kind === PromptTemplateKind.Prompt;
+
+export const isHigherOrderTool = (template: PromptTemplate) =>
+  template.kind === PromptTemplateKind.HigherOrderTool;
+
+export const promptNames = (promptTemplates: PromptTemplates): string[] =>
+  promptTemplates.filter(isPrompt).map(templateName);
 
 export const higherOrderToolNames = (
-  promptTemplates: ToolsetEntry["promptTemplates"]
-): string[] => {
-  return (
-    promptTemplates
-      .filter(isHigherOrderTool)
-      .map((template) => template.name) || []
-  );
-};
+  promptTemplates: PromptTemplates
+): string[] => promptTemplates.filter(isHigherOrderTool).map(templateName);
