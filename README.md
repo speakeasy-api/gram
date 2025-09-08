@@ -1,5 +1,10 @@
-
-[![Gram](banner.png)](https://getgram.ai)
+<a href="https://www.speakeasy.com/product/gram" target="_blank">
+   <picture>
+       <source media="(prefers-color-scheme: light)" srcset="https://github.com/user-attachments/assets/1812f171-1650-4045-ac35-21bdd7b103a6">
+       <source media="(prefers-color-scheme: dark)" srcset="https://github.com/user-attachments/assets/3f14e446-0dec-4b8a-b36e-fd92efc25751">
+       <img src="https://github.com/user-attachments/assets/3f14e446-0dec-4b8a-b36e-fd92efc25751#gh-dark-mode-only" alt="Gram">
+   </picture>
+ </a>
 
 <h3 align="center">Gram</h3>
 
