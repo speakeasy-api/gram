@@ -13,8 +13,8 @@ import (
 
 // safely wait for polar rate limits
 const (
-	refreshBillingUsageBatchSize      = 150
-	refreshBillingUsagesRetryInterval = 15 * time.Second
+	refreshBillingUsageBatchSize      = 20
+	refreshBillingUsagesRetryInterval = 5 * time.Second
 )
 
 type RefreshBillingUsageClient struct {
@@ -39,7 +39,7 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 60 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    2,
+			MaximumAttempts:    3,
 			InitialInterval:    platformUsageMetricsRetryInterval,
 			BackoffCoefficient: 1.5,
 			// Temporal automatically adds some jitter to retries here

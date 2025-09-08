@@ -15,8 +15,8 @@ import (
 
 // safely wait for polar rate limits
 const (
-	platformUsageMetricsBatchSize     = 150
-	platformUsageMetricsRetryInterval = 15 * time.Second
+	platformUsageMetricsBatchSize     = 20
+	platformUsageMetricsRetryInterval = 5 * time.Second
 )
 
 type PlatformUsageMetricsClient struct {
@@ -41,7 +41,7 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 60 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts:    2,
+			MaximumAttempts:    3,
 			InitialInterval:    platformUsageMetricsRetryInterval,
 			BackoffCoefficient: 1.5,
 			// Temporal automatically adds some jitter to retries here
