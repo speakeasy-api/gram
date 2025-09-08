@@ -348,6 +348,12 @@ jobs:
         if: ${{ needs.changes.outputs.client == 'true' }}
         run: pnpm install --frozen-lockfile
 
+      - name: Build
+        if: ${{ needs.changes.outputs.client == 'true' }}
+        env:
+          NODE_ENV: production
+        run: mise exec --env viteprod -- pnpm build
+
       - name: Lint
         if: ${{ needs.changes.outputs.client == 'true' }}
         run: pnpm lint
