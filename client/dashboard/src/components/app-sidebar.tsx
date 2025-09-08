@@ -88,7 +88,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenuItem>
               <SidebarMenuItem>
                 <NavButton
-                  title="Evals"
+                  title="Logs"
                   Icon={TestTubeDiagonal}
                   onClick={() => setEvalsModalOpen(true)}
                 />
@@ -117,8 +117,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <FeatureRequestModal
         isOpen={evalsModalOpen}
         onClose={() => setEvalsModalOpen(false)}
-        title="Evals Coming Soon"
-        description="Evals are coming soon! We'll let you know when this feature is available."
+        title="Logs Coming Soon"
+        description="Logs are coming soon! We'll let you know when this feature is available."
         actionType="evals"
         icon={TestTubeDiagonal}
       />
