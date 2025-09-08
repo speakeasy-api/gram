@@ -80,9 +80,11 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 
 		batch := allMetrics[i:end]
 
-		orgIDs := make([]string, len(batch))
-		for j, metric := range batch {
-			orgIDs[j] = metric.OrganizationID
+		var orgIDs []string
+		for _, metric := range batch {
+			if metric.TotalToolsets > 0 {
+				orgIDs = append(orgIDs, metric.OrganizationID)
+			}
 		}
 
 		err := workflow.ExecuteActivity(ctx, a.FreeTierReportingUsageMetrics, orgIDs).Get(ctx, nil)

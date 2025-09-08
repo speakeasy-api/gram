@@ -140,7 +140,8 @@ func (f *FreeTierReportingUsageMetrics) Do(ctx context.Context, orgIDs []string)
 			// get latest period usage that was stored
 			usage, err := f.billingRepository.GetStoredPeriodUsage(ctx, orgID)
 			if err != nil {
-				return fmt.Errorf("failed to get period usage for org %s: %w", orgID, err)
+				f.logger.ErrorContext(ctx, "failed to get period usage for org", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+				return nil
 			}
 
 			f.logger.InfoContext(ctx, "billing usage report",
