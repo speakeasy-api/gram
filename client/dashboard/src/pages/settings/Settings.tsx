@@ -458,8 +458,15 @@ export default function Settings() {
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => setIsAddDomainDialogOpen(true)}
                 icon={"globe"}
+                onClick={() => {
+                  if (session.gramAccountType === "free") {
+                    setIsCustomDomainModalOpen(true);
+                  } else {
+                    setIsAddDomainDialogOpen(true);
+                  }
+                }}
+                disabled={domain?.isUpdating}
               >
                 Add Domain
               </Button>
