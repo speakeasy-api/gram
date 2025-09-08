@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -120,6 +121,11 @@ func handleToolsCall(
 			ChatID:           nil,
 		})
 
+		err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingTracker)
+		if err != nil {
+			return nil, err
+		}
+
 		return formatHigherOrderToolResult(ctx, logger, req, promptData)
 	}
 
@@ -173,6 +179,30 @@ func handleToolsCall(
 
 	requestBodyBytes := params.Arguments
 	requestBytes := int64(len(requestBodyBytes))
+	var outputBytes int64
+
+	defer func() {
+		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
+			OrganizationID:   toolset.OrganizationID,
+			RequestBytes:     requestBytes,
+			OutputBytes:      outputBytes,
+			ToolID:           *toolID,
+			ToolName:         params.Name,
+			ProjectID:        payload.projectID.String(),
+			ProjectSlug:      &executionPlan.ProjectSlug,
+			OrganizationSlug: &executionPlan.OrganizationSlug,
+			ToolsetSlug:      &payload.toolset,
+			MCPURL:           &mcpURL,
+			ChatID:           nil,
+			Type:             billing.ToolCallTypeHTTP,
+		})
+
+	}()
+
+	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingTracker)
+	if err != nil {
+		return nil, err
+	}
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan.Tool)
 	if err != nil {
@@ -180,23 +210,7 @@ func handleToolsCall(
 	}
 
 	// Track tool call usage
-	outputBytes := int64(rw.body.Len())
-
-	go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
-		OrganizationID:   toolset.OrganizationID,
-		RequestBytes:     requestBytes,
-		OutputBytes:      outputBytes,
-		ToolID:           *toolID,
-		ToolName:         params.Name,
-		ProjectID:        payload.projectID.String(),
-		ProjectSlug:      &executionPlan.ProjectSlug,
-		OrganizationSlug: &executionPlan.OrganizationSlug,
-		ToolsetSlug:      &payload.toolset,
-		MCPURL:           &mcpURL,
-		ChatID:           nil,
-		Type:             billing.ToolCallTypeHTTP,
-	})
-
+	outputBytes = int64(rw.body.Len())
 	chunk, err := formatResult(*rw)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").Log(ctx, logger)
@@ -214,6 +228,26 @@ func handleToolsCall(
 	}
 
 	return bs, nil
+}
+
+func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingTracker billing.Tracker) error {
+	if accountType != string(billing.TierFree) {
+		return nil
+	}
+
+	periodUsage, err := billingTracker.GetStoredPeriodUsage(ctx, orgID)
+	// we will not fail here right now, but this cache should always be available
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to get stored period usage", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+		return nil
+	}
+
+	// we are implementin a X2 buffer initially
+	if periodUsage.ToolCalls >= periodUsage.MaxToolCalls*2 {
+		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").Log(ctx, logger)
+	}
+
+	return nil
 }
 
 type toolCallResponseWriter struct {

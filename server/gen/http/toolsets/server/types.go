@@ -67,6 +67,8 @@ type CreateToolsetResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The organization ID this toolset belongs to
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// The name of the toolset
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the toolset
@@ -117,6 +119,8 @@ type UpdateToolsetResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The organization ID this toolset belongs to
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// The name of the toolset
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the toolset
@@ -160,6 +164,8 @@ type GetToolsetResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The organization ID this toolset belongs to
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// The name of the toolset
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the toolset
@@ -203,6 +209,8 @@ type AddExternalOAuthServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The organization ID this toolset belongs to
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// The name of the toolset
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the toolset
@@ -246,6 +254,8 @@ type RemoveOAuthServerResponseBody struct {
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The organization ID this toolset belongs to
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
 	// The name of the toolset
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug of the toolset
@@ -2054,6 +2064,7 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 		ID:             res.ID,
 		ProjectID:      res.ProjectID,
 		OrganizationID: res.OrganizationID,
+		AccountType:    res.AccountType,
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
@@ -2130,6 +2141,7 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 		ID:             res.ID,
 		ProjectID:      res.ProjectID,
 		OrganizationID: res.OrganizationID,
+		AccountType:    res.AccountType,
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
@@ -2191,6 +2203,7 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		ID:             res.ID,
 		ProjectID:      res.ProjectID,
 		OrganizationID: res.OrganizationID,
+		AccountType:    res.AccountType,
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
@@ -2252,6 +2265,7 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 		ID:             res.ID,
 		ProjectID:      res.ProjectID,
 		OrganizationID: res.OrganizationID,
+		AccountType:    res.AccountType,
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
@@ -2313,6 +2327,7 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 		ID:             res.ID,
 		ProjectID:      res.ProjectID,
 		OrganizationID: res.OrganizationID,
+		AccountType:    res.AccountType,
 		Name:           res.Name,
 		Slug:           string(res.Slug),
 		Description:    res.Description,
