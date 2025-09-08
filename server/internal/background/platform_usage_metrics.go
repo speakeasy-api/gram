@@ -15,8 +15,8 @@ import (
 
 // safely wait for polar rate limits
 const (
-	platformUsageMetricsBatchSize     = 25
-	platformUsageMetricsRetryInterval = 5 * time.Second
+	platformUsageMetricsBatchSize    = 25
+	platformUsageMetricsWaitInterval = 5 * time.Second
 )
 
 type PlatformUsageMetricsClient struct {
@@ -42,7 +42,7 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 		StartToCloseTimeout: 60 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts:    3,
-			InitialInterval:    platformUsageMetricsRetryInterval,
+			InitialInterval:    platformUsageMetricsWaitInterval,
 			BackoffCoefficient: 1.5,
 			// Temporal automatically adds some jitter to retries here
 		},
@@ -69,11 +69,12 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 			return fmt.Errorf("failed to fire platform usage metrics batch starting at %d: %w", i, err)
 		}
 
-		if err = workflow.Sleep(ctx, platformUsageMetricsRetryInterval); err != nil {
+		if err = workflow.Sleep(ctx, platformUsageMetricsWaitInterval); err != nil {
 			logger.Error("Failed to sleep to pause between batches", "error", err)
 		}
 	}
 
+	// send reporting to posthog
 	for i := 0; i < len(allMetrics); i += platformUsageMetricsBatchSize {
 		end := min(i+platformUsageMetricsBatchSize, len(allMetrics))
 
