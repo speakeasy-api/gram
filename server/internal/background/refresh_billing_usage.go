@@ -13,7 +13,7 @@ import (
 
 // safely wait for polar rate limits
 const (
-	refreshBillingUsageBatchSize      = 20
+	refreshBillingUsageBatchSize      = 25
 	refreshBillingUsagesRetryInterval = 5 * time.Second
 )
 
@@ -66,6 +66,10 @@ func RefreshBillingUsageWorkflow(ctx workflow.Context) error {
 		if err != nil {
 			logger.Error("Failed to refresh billing usage batch", "error", err, "batch_start", i)
 			return fmt.Errorf("failed to refresh billing usage batch starting at %d: %w", i, err)
+		}
+
+		if err = workflow.Sleep(ctx, refreshBillingUsagesRetryInterval); err != nil {
+			logger.Error("Failed to sleep to pause between batches", "error", err)
 		}
 	}
 

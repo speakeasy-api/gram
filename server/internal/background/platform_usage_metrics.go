@@ -15,7 +15,7 @@ import (
 
 // safely wait for polar rate limits
 const (
-	platformUsageMetricsBatchSize     = 20
+	platformUsageMetricsBatchSize     = 25
 	platformUsageMetricsRetryInterval = 5 * time.Second
 )
 
@@ -67,6 +67,10 @@ func CollectPlatformUsageMetricsWorkflow(ctx workflow.Context) error {
 		if err != nil {
 			logger.Error("Failed to fire platform usage metrics batch", "error", err, "batch_start", i)
 			return fmt.Errorf("failed to fire platform usage metrics batch starting at %d: %w", i, err)
+		}
+
+		if err = workflow.Sleep(ctx, platformUsageMetricsRetryInterval); err != nil {
+			logger.Error("Failed to sleep to pause between batches", "error", err)
 		}
 	}
 

@@ -37,7 +37,7 @@ func NewRefreshBillingUsage(logger *slog.Logger, db *pgxpool.Pool, billingRepo b
 // Send usage data to posthog for tracking purposes
 
 func (r *RefreshBillingUsage) Do(ctx context.Context, orgIDs []string) error {
-	workers := pool.New().WithErrors().WithMaxGoroutines(20)
+	workers := pool.New().WithErrors().WithMaxGoroutines(25)
 
 	for _, orgID := range orgIDs {
 		workers.Go(func() error {

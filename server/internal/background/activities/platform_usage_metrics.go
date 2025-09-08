@@ -85,7 +85,7 @@ func NewFirePlatformUsageMetrics(logger *slog.Logger, billingTracker billing.Tra
 func (f *FirePlatformUsageMetrics) Do(ctx context.Context, metrics []PlatformUsageMetrics) error {
 	f.logger.InfoContext(ctx, "Starting platform usage metrics firing")
 
-	workers := pool.New().WithErrors().WithMaxGoroutines(20)
+	workers := pool.New().WithErrors().WithMaxGoroutines(25)
 
 	for _, metric := range metrics {
 		workers.Go(func() error {
@@ -128,7 +128,7 @@ func NewFreeTierReportingMetrics(logger *slog.Logger, db *pgxpool.Pool, billingR
 func (f *FreeTierReportingUsageMetrics) Do(ctx context.Context, orgIDs []string) error {
 	f.logger.InfoContext(ctx, "Starting free tier reporting usage metrics")
 
-	workers := pool.New().WithErrors().WithMaxGoroutines(20)
+	workers := pool.New().WithErrors().WithMaxGoroutines(25)
 
 	for _, orgID := range orgIDs {
 		workers.Go(func() error {
