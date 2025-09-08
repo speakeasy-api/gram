@@ -258,6 +258,7 @@ function ChatInner({
 
     const result = await generateObject({
       model: openrouterBasic,
+      mode: "json",
       prompt: `Below is a list of tools and a description of the task I want to complete. Please return a list of tool names that you think are relevant to the task.
       Include any tools that you think might be useful for answering follow-up questions, taking into account the conversation history.
       Try to return between 5 and 25 tools.
@@ -270,10 +271,10 @@ function ChatInner({
       }),
     });
 
-    selectedTools.current = [...result.object.tools, updateToolsTool.name];
+    selectedTools.current = [...(result.object as { tools: string[] }).tools, updateToolsTool.name];
 
     appendDisplayOnlyMessage(
-      `**Updated tool list:** *${result.object.tools.join(", ")}*`
+      `**Updated tool list:** *${(result.object as { tools: string[] }).tools.join(", ")}*`
     );
   };
 
