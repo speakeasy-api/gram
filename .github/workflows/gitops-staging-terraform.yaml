@@ -1,0 +1,124 @@
+name: GitOps - Deploy to Staging (Terraform)
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "server/**"
+      - "client/dashboard/**"
+      - "client/sdk/**"
+
+permissions:
+  id-token: write
+  contents: write
+
+env:
+  REGISTRY: gcr.io/linen-analyst-344721
+  DOCKER_REPOSITORY_OWNER: ${{ github.repository_owner }}
+  GITOPS_REPO: ${{ github.repository_owner }}/gram-infra
+  GITOPS_BRANCH: main
+  ENVIRONMENT: dev
+
+jobs:
+  build-and-deploy:
+    runs-on: ubicloud-standard-4
+    outputs:
+      server-image-tag: ${{ steps.build-server.outputs.image-tag }}
+      dashboard-image-tag: ${{ steps.build-dashboard.outputs.image-tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@b7593ed2efd1c1617e1b0254da33b86225adb2a5
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
+          service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
+
+      - name: Login to GCR
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1
+        with:
+          registry: gcr.io/linen-analyst-344721
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+
+      - name: Build and Push Server Image
+        id: build-server
+        uses: ./.github/workflows/composite/build-push
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram
+          context: ./server
+          file: server/Dockerfile
+          git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+          build-args: |
+            GIT_USERNAME=speakeasybot
+
+      - name: Build and Push Dashboard Image
+        id: build-dashboard
+        uses: ./.github/workflows/composite/build-push
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-dashboard
+          context: ./client/dashboard
+          file: client/dashboard/Dockerfile
+          git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+
+  update-gitops-and-deploy:
+    runs-on: ubicloud-standard-4
+    needs: build-and-deploy
+    steps:
+      - name: Checkout GitOps Repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+        with:
+          repository: ${{ env.GITOPS_REPO }}
+          token: ${{ secrets.GITOPS_TOKEN }}
+          path: gitops-repo
+
+      - name: Update Helm Values for Staging
+        run: |
+          # Update server image tag
+          sed -i "s|tag: sha-[a-f0-9]*|tag: ${{ needs.build-and-deploy.outputs.server-image-tag }}|g" \
+            gitops-repo/infra/helm/gram/values-dev.yaml
+
+          # Update dashboard image tag (if it exists in values)
+          if grep -q "dashboard:" gitops-repo/infra/helm/gram/values-dev.yaml; then
+            sed -i "s|tag: sha-[a-f0-9]*|tag: ${{ needs.build-and-deploy.outputs.dashboard-image-tag }}|g" \
+              gitops-repo/infra/helm/gram/values-dev.yaml
+          fi
+
+      - name: Commit and Push Changes
+        run: |
+          cd gitops-repo
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add .
+          git commit -m "chore: update staging images to ${{ github.sha }}"
+          git push origin ${{ env.GITOPS_BRANCH }}
+
+      - name: Deploy to Staging using Terraform
+        run: |
+          cd gitops-repo
+
+          # Setup Mise for Terraform and Helm
+          curl https://mise.run | sh
+          export PATH="$HOME/.local/bin:$PATH"
+
+          # Install dependencies
+          mise install
+
+          # Deploy using existing mise command
+          mise run deploy:up:k8s dev
+
+      - name: Notify Deployment
+        run: |
+          echo "🚀 Staging deployment completed!"
+          echo "Server image: ${{ needs.build-and-deploy.outputs.server-image-tag }}"
+          echo "Dashboard image: ${{ needs.build-and-deploy.outputs.dashboard-image-tag }}"
+          echo "Commit: ${{ github.sha }}"
