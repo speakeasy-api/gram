@@ -190,10 +190,10 @@ export function EmptyState({
   }
 
   return (
-    <div className="w-full h-full max-h-[600px] flex items-center justify-center bg-background rounded-xl border-1">
+    <div className="w-full h-[600px] flex items-center justify-center bg-background rounded-xl border-1">
       <Stack
         gap={1}
-        className="w-full max-w-sm"
+        className="w-full max-w-sm m-8"
         align="center"
         justify="center"
       >
