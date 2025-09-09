@@ -165,7 +165,10 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	successURL := fmt.Sprintf("%s/%s/%s/billing", s.serverURL.String(), authCtx.OrganizationSlug, authCtx.ProjectSlug)
+	successURL := s.serverURL.String()
+	if authCtx.ProjectSlug != nil {
+		successURL = fmt.Sprintf("%s/%s/%s/billing", s.serverURL.String(), authCtx.OrganizationSlug, *authCtx.ProjectSlug)
+	}
 
 	checkoutURL, err := s.billingRepo.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
 	if err != nil {
