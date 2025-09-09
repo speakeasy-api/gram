@@ -45,7 +45,7 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 
 	logger := workflow.GetLogger(ctx)
 
-	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+	retryableCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -57,12 +57,12 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 
 	var pendingTransition activities.TransitionDeploymentResult
 	err := workflow.ExecuteActivity(
-		ctx,
+		retryableCtx,
 		a.TransitionDeployment,
 		params.ProjectID,
 		params.DeploymentID,
 		"pending",
-	).Get(ctx, &pendingTransition)
+	).Get(retryableCtx, &pendingTransition)
 	if err != nil {
 		return nil, fmt.Errorf("failed to transition deployment: %w", err)
 	}
@@ -82,12 +82,17 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 
 	finalStatus := "completed"
 
+	// At least for now we don't want to retry this activity to avoid duplicate tools
+	processDeploymentCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+	})
+
 	err = workflow.ExecuteActivity(
-		ctx,
+		processDeploymentCtx,
 		a.ProcessDeployment,
 		params.ProjectID,
 		params.DeploymentID,
-	).Get(ctx, nil)
+	).Get(processDeploymentCtx, nil)
 	if err != nil {
 		finalStatus = "failed"
 		logger.Error(
@@ -100,12 +105,12 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 
 	var finalTransition activities.TransitionDeploymentResult
 	err = workflow.ExecuteActivity(
-		ctx,
+		retryableCtx,
 		a.TransitionDeployment,
 		params.ProjectID,
 		params.DeploymentID,
 		finalStatus,
-	).Get(ctx, &finalTransition)
+	).Get(retryableCtx, &finalTransition)
 	if err != nil {
 		return nil, fmt.Errorf("failed to transition deployment: %w", err)
 	}
