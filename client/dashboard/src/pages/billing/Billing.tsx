@@ -160,7 +160,8 @@ const UsageTiers = () => {
     });
   }, []);
 
-  const upgradeCTA = (
+  // This must be initialized AFTER the link is set (more specifically, AFTER the PolarEmbedCheckout.init() call)
+  const upgradeCTA = checkoutLink ? (
     <Page.Section.CTA
       href={checkoutLink}
       data-polar-checkout
@@ -168,7 +169,7 @@ const UsageTiers = () => {
     >
       Upgrade
     </Page.Section.CTA>
-  );
+  ) : null;
 
   const polarPortalCTA = (
     <Page.Section.CTA
@@ -277,6 +278,7 @@ const UsageTiers = () => {
       <Page.Section.Description>
         A breakdown of our pricing tiers.
       </Page.Section.Description>
+      {upgradeCTA}
       {session.gramAccountType === "free" ? upgradeCTA : polarPortalCTA}
       <Page.Section.Body>
         <Stack direction={"horizontal"} gap={4}>
