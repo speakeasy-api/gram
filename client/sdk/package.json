@@ -1,7 +1,8 @@
 {
   "name": "@gram/client",
-  "version": "0.12.60",
+  "version": "0.12.61",
   "author": "Speakeasy",
+  "private": true,
   "type": "module",
   "main": "./esm/index.js",
   "exports": {
