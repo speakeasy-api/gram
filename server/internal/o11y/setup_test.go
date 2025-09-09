@@ -9,6 +9,8 @@ import (
 )
 
 func TestSetupOTelSDK(t *testing.T) {
+	t.Parallel()
+
 	logger := testenv.NewLogger(t)
 	shutdown, err := o11y.SetupOTelSDK(t.Context(), logger, o11y.SetupOTelSDKOptions{
 		ServiceName:    "gram-test",
