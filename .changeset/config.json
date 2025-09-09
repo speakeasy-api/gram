@@ -6,7 +6,7 @@
   "linked": [],
   "ignore": [],
   "access": "restricted",
-  "baseBranch": "main",
+  "baseBranch": "origin/main",
   "updateInternalDependencies": "patch",
   "privatePackages": {
     "version": true,
