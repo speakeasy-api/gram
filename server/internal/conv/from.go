@@ -10,10 +10,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+// Ptr returns a pointer to the given value. This function is useful because it
+// allows you to create pointers to literal values like conv.Ptr(2) or return
+// values from functions/methods.
 func Ptr[T any](v T) *T {
 	return &v
 }
 
+// PtrEmpty returns a pointer to the given value or nil if the value is equal
+// to the zero value of the same type. Example:
+//
+//	PtrEmpty(0)      // returns nil
+//	PtrEmpty("")     // returns nil
+//	PtrEmpty(false)  // returns nil
+//	PtrEmpty(2)      // returns *int with value 2
 func PtrEmpty[T comparable](v T) *T {
 	var zero T
 	if v == zero {
@@ -23,6 +33,12 @@ func PtrEmpty[T comparable](v T) *T {
 	return &v
 }
 
+// PtrValOr returns a value of a given pointer or a default if the pointer is
+// is nil. Example:
+//
+//	PtrValOr[int](nil, 5)         // returns *int with value 5
+//	PtrValOr(Ptr(""), "foo")      // returns ""
+//	PtrValOr(Ptr("jane"), "joe")  // returns *string with value "jane"
 func PtrValOr[T any](ptr *T, def T) T {
 	if ptr == nil {
 		return def
@@ -31,6 +47,12 @@ func PtrValOr[T any](ptr *T, def T) T {
 	return *ptr
 }
 
+// PtrValOrEmpty returns a value of a given pointer or a default if the pointer
+// is is nil or the zero value. Example:
+//
+//	PtrValOrEmpty[int](nil, 5)         // returns *int with value 5
+//	PtrValOrEmpty(Ptr(""), "foo")      // returns "foo"
+//	PtrValOrEmpty(Ptr("jane"), "joe")  // returns *string with value "jane"
 func PtrValOrEmpty[T comparable](ptr *T, def T) T {
 	if ptr == nil {
 		return def
@@ -39,6 +61,12 @@ func PtrValOrEmpty[T comparable](ptr *T, def T) T {
 	return Default(*ptr, def)
 }
 
+// Default returns the given value or a default if the value is equal to the
+// zero value of the same type. Example:
+//
+//	Default(0, 5)      // returns 5
+//	Default("", "foo")  // returns "foo"
+//	Default("jane", "joe") // returns "jane"
 func Default[T comparable](val T, def T) T {
 	var zero T
 	if val == zero {
@@ -48,6 +76,8 @@ func Default[T comparable](val T, def T) T {
 	return val
 }
 
+// FromNullableUUID converts a uuid.NullUUID to a *string. If the NullUUID is
+// not valid, it returns nil.
 func FromNullableUUID(u uuid.NullUUID) *string {
 	if !u.Valid {
 		return nil
@@ -57,6 +87,8 @@ func FromNullableUUID(u uuid.NullUUID) *string {
 	return &val
 }
 
+// FromPGText converts a pgtype.Text to a *string. If the Text is not valid, it
+// returns nil.
 func FromPGText[T ~string](t pgtype.Text) *T {
 	if !t.Valid {
 		return nil
@@ -66,14 +98,20 @@ func FromPGText[T ~string](t pgtype.Text) *T {
 	return &val
 }
 
+// ToPGText converts a string to a pgtype.Text with Valid set to true regardless
+// of whether the input is an empty string or not.
 func ToPGText(t string) pgtype.Text {
 	return pgtype.Text{String: t, Valid: true}
 }
 
+// ToPGTextEmpty converts a string to a pgtype.Text with Valid set to true only
+// if the input value is not an empty string.
 func ToPGTextEmpty(t string) pgtype.Text {
 	return pgtype.Text{String: t, Valid: t != ""}
 }
 
+// PtrToPGText converts a string pointer to a pgtype.Text with Valid set to true
+// regardless of whether the input is an empty string or not.
 func PtrToPGText(t *string) pgtype.Text {
 	if t == nil {
 		return pgtype.Text{Valid: false, String: ""}
@@ -82,6 +120,8 @@ func PtrToPGText(t *string) pgtype.Text {
 	return pgtype.Text{String: *t, Valid: true}
 }
 
+// ToPGTextEmpty converts a string pointer to a pgtype.Text with Valid set to
+// true only if the input value is not an empty string.
 func PtrToPGTextEmpty(t *string) pgtype.Text {
 	if t == nil {
 		return pgtype.Text{Valid: false, String: ""}
@@ -90,6 +130,8 @@ func PtrToPGTextEmpty(t *string) pgtype.Text {
 	return pgtype.Text{String: *t, Valid: *t != ""}
 }
 
+// FromPGBool converts a pgtype.Bool to a bool or subtype of bool. If Bool is
+// not valid, it returns nil.
 func FromPGBool[T ~bool](t pgtype.Bool) *T {
 	if !t.Valid {
 		return nil
@@ -99,6 +141,8 @@ func FromPGBool[T ~bool](t pgtype.Bool) *T {
 	return &val
 }
 
+// FromBytes converts a byte slice to a string pointer. If the byte slice is
+// empty, it returns nil.
 func FromBytes(b []byte) *string {
 	if len(b) == 0 {
 		return nil
@@ -110,6 +154,9 @@ func FromBytes(b []byte) *string {
 var cleanSlugRegex = regexp.MustCompile(`[^a-zA-Z0-9\s-]`) // Remove special characters leaving dashes
 var dashCollapseRegex = regexp.MustCompile(`[-\s]+`)       // collapses multiple dashes or spaces into a single dash
 
+// ToSlug converts a string to a URL-friendly "slug". It removes special
+// characters, converts to lowercase, collapses multiple dashes or spaces into
+// a single dash, and trims leading and trailing dashes.
 func ToSlug(s string) string {
 	s = cleanSlugRegex.ReplaceAllString(s, "")
 	s = strings.ToLower(s)
@@ -118,6 +165,8 @@ func ToSlug(s string) string {
 	return s
 }
 
+// GenerateRandomSlug generates a random slug of the given size using lowercase
+// letters and digits. It returns an error if it fails to generate random bytes.
 func GenerateRandomSlug(size int) (string, error) {
 	const charset = "abcdefghijklmnopqrstuvwxyz123456789"
 
@@ -134,10 +183,12 @@ func GenerateRandomSlug(size int) (string, error) {
 	return string(result), nil
 }
 
+// ToLower converts a string or subtype of string to lowercase.
 func ToLower[T ~string](s T) string {
 	return strings.ToLower(string(s))
 }
 
+// AnySlice converts a slice of any type to a slice of empty interfaces.
 func AnySlice[T any](vals []T) []any {
 	anyVals := make([]any, len(vals))
 	for i, v := range vals {
@@ -146,6 +197,7 @@ func AnySlice[T any](vals []T) []any {
 	return anyVals
 }
 
+// Ternary returns trueVal if condition is true, otherwise it returns falseVal.
 func Ternary[T any](condition bool, trueVal, falseVal T) T {
 	if condition {
 		return trueVal

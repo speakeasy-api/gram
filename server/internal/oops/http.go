@@ -11,6 +11,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
+// ErrHandle returns a middleware that wraps an http handler. It calls the
+// underlying handler and captures any returned error. The error is
+// appropriately serialized back to the client. It recognizes ShareableError and
+// goa.ServiceError types. Any other error types are treated as internal server
+// errors and a generic message is returned to the client. All errors are logged
+// with the provided logger.
 func ErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := handler(w, r)
