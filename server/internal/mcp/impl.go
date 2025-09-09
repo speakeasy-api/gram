@@ -295,6 +295,7 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 
 type jsonSnippetData struct {
 	MCPName        string
+	MCPSlug        string
 	MCPDescription string
 	Headers        []string
 	MCPURL         string
@@ -376,6 +377,7 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	configSnippetData := jsonSnippetData{
 		MCPName:        cases.Title(language.English).String(toolset.Name),
+		MCPSlug:        toolset.Slug,
 		MCPDescription: toolset.Description.String,
 		MCPURL:         MCPURL,
 		Headers:        envHeaders,

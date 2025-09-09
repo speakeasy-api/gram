@@ -9,6 +9,22 @@
     /* PAGE SETUP */
     /**************/
 
+    @font-face {
+      font-family: 'Diatype';
+      src: url('https://app.getgram.ai/fonts/diatype/ABCDiatype-Regular.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: block;
+    }
+
+    @font-face {
+      font-family: 'Diatype';
+      src: url('https://app.getgram.ai/fonts/diatype/ABCDiatype-Light.woff2') format('woff2');
+      font-weight: 300;
+      font-style: normal;
+      font-display: block;
+    }
+
     html,
     body {
       /* Font Families */
@@ -130,6 +146,8 @@
       display: flex;
       flex-direction: column;
       gap: 0.25rem;
+      width: 100%;
+      align-items: stretch;
 
       padding: 0.75rem 1rem;
       border-radius: 0.5rem;
@@ -292,6 +310,8 @@
       color: #333;
       text-decoration: none;
       font-weight: 500;
+      padding: 0;
+      margin: 0;
     }
 
     footer a:hover {
@@ -343,19 +363,15 @@
           Claude Code
         </h1>
         <pre id="json-blob"><code class="language-sh">
-claude mcp add-json "$(cat &lt;&lt;'EOF'
+claude mcp add-json "{{ .MCPSlug }}" "$(cat &lt;&lt;'EOF'
 {
-  "mcpServers": {
-    "{{ .MCPName }}": {
-      "command": "npx",
-      "args": [
-        "mcp-remote",
-        "{{ .MCPURL }}"{{- range .Headers }},
-        "--header",
-        "{{ . }}:${VALUE}"{{- end }}
-      ]
-    }
-  }
+  "command": "npx",
+  "args": [
+    "mcp-remote",
+    "{{ .MCPURL }}"{{- range .Headers }},
+    "--header",
+    "{{ . }}:${VALUE}"{{- end }}
+  ]
 }
 EOF
 )"</code></pre>
@@ -549,7 +565,6 @@ EOF
         const manifestElement = document.getElementById('manifest-json-blob');
         if (manifestElement) {
           const manifestContent = manifestElement.textContent;
-          console.log('hello');
           
           const files = {
             'manifest.json': new TextEncoder().encode(manifestContent)
