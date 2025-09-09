@@ -53,8 +53,10 @@ jobs:
       # Check out both the base and head refs so changeset status can compare
       # against the base branch
       - name: Checkout base ref
+        if: ${{ steps.check.outputs.lint == 'true' }}
         run: git fetch origin ${{ github.base_ref }} && git checkout ${{ github.base_ref }}
       - name: Checkout head ref
+        if: ${{ steps.check.outputs.lint == 'true' }}
         run: git fetch origin ${{ github.head_ref }} && git checkout ${{ github.head_ref }}
 
       - name: Setup Mise
