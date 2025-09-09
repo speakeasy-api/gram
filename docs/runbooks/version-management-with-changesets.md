@@ -3,23 +3,26 @@
 [changesets]: https://github.com/changesets/changesets
 [changesets-action]: https://github.com/changesets/action
 
+## About
+
 We use [Changesets][changesets] to manage versioning and changelogs for various packages in
 this monorepo.
 
-> [!NOTE]
->
-> If you are making a change that does not affect the product in a tangible way
-> then creating a changeset is not necessary and this guide can be skipped. The
-> PR title should have a `chore:` qualifier to pass the changeset linter that
-> would otherwise fail if a changeset is not present.
+## When to skip a changeset
 
-The typical development workflow is:
+Pull request titles that start with `chore: ` can be merged without changesets.
 
-1. Make some changes to the codebase
-2. Commit them to a branch
-3. Run `pnpm changeset` and you will be prompted to create a changeset file
-4. If it isn't auto-committed then commit the changeset file to the same branch
-5. Open a pull request
+These must contain changes with no tangible effect on the product. Otherwise, changeset is always required.
+
+Example: `chore: fix typo in code comment`.
+
+## Typical workflow
+
+1. Commit some changes to a local branch.
+2. Run `pnpm changeset`.
+3. Select packages to update with `<SPACE>`. **Never select @gram/client**.
+4. The changeset file will be auto-committed.
+5. Open a pull request.
 
 > [!IMPORTANT]
 >
