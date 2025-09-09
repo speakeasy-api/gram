@@ -86,8 +86,16 @@ jobs:
 
       - name: Lint changesets
         if: ${{ steps.check.outputs.lint == 'true' }}
+        shell: bash
         run: |
-            if ! pnpm changeset status; then
+          set -e
+
+          mkdir -p scratch
+          pnpm changeset status --output scratch/changeset-status.json
+          cat scratch/changeset-status.json
+
+          # Check if changesets array exists and has length > 0
+          if ! jq -e '.changesets | length > 0' scratch/changeset-status.json > /dev/null; then
             echo "❌ Changeset validation failed!"
             echo ""
             echo "It looks like you've made significant changes but haven't added a changeset."
@@ -98,8 +106,9 @@ jobs:
             echo ""
             echo "Then commit the generated .changeset/*.md file with your changes."
             exit 1
-            fi
-            echo "✅ Changeset validation passed!"
+          fi
+
+          echo "✅ Changeset validation passed!"
 
       - name: Prune PNPM store
         if: ${{ steps.check.outputs.lint == 'true' }}
