@@ -291,9 +291,11 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 }
 
 type jsonSnippetData struct {
-	MCPName string
-	Headers []string
-	MCPURL  string
+	MCPName        string
+	MCPDescription string
+	Headers        []string
+	MCPURL         string
+	ToolNames      []string
 }
 
 type hostedPageData struct {
@@ -337,6 +339,18 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		}
 	}
 
+	toolNames := []string{}
+
+	for _, toolDesc := range toolsetDetails.HTTPTools {
+		toolNames = append(toolNames, string(toolDesc.Name))
+	}
+
+	for _, promptTpl := range toolsetDetails.PromptTemplates {
+		if promptTpl.Kind == "higher_order_tool" {
+			toolNames = append(toolNames, string(promptTpl.Name))
+		}
+	}
+
 	baseURL := s.serverURL.String() + "/mcp"
 	if customDomainCtx != nil {
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain+"/mcp")
@@ -347,9 +361,11 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	configSnippetData := jsonSnippetData{
-		MCPName: cases.Title(language.English).String(toolset.Name),
-		MCPURL:  MCPURL,
-		Headers: envHeaders,
+		MCPName:        cases.Title(language.English).String(toolset.Name),
+		MCPDescription: toolset.Description.String,
+		MCPURL:         MCPURL,
+		Headers:        envHeaders,
+		ToolNames:      toolNames,
 	}
 
 	configSnippetTmpl, err := template.New("config_snippet").Parse(configSnippetTmplData)
