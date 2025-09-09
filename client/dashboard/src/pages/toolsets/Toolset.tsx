@@ -34,7 +34,6 @@ import { ToolsetEmptyState } from "./ToolsetEmptyState";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
 import { ToolDefinition, useToolDefinitions } from "./types";
-import { PromptTemplateKind } from "@gram/client/models/components";
 
 export function useDeleteToolset({
   onSuccess,
