@@ -44,7 +44,7 @@ type CreateTemplateParams struct {
 	Description pgtype.Text
 	Arguments   []byte
 	Engine      pgtype.Text
-	Kind        pgtype.Text
+	Kind        string
 	ToolsHint   []string
 }
 

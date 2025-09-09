@@ -378,7 +378,7 @@ func DescribeToolset(
 			Description:   conv.FromPGText[string](pt.Description),
 			Arguments:     args,
 			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
-			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
+			Kind:          pt.Kind,
 			ToolsHint:     hint,
 			CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),

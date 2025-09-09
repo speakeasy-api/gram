@@ -19,7 +19,7 @@ type PromptTemplate struct {
 	Arguments     []byte
 	Prompt        string
 	Engine        pgtype.Text
-	Kind          pgtype.Text
+	Kind          string
 	ToolsHint     []string
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz

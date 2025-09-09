@@ -687,7 +687,7 @@ CREATE TABLE IF NOT EXISTS prompt_templates (
   arguments JSONB,
   prompt TEXT NOT NULL,
   engine TEXT CHECK (engine IN ('mustache')),
-  kind TEXT CHECK (kind IN ('prompt', 'higher_order_tool')),
+  kind TEXT NOT NULL CHECK (kind IN ('prompt', 'higher_order_tool')),
 
   -- Any referenced tools in the prompt template. This can be used to suggest
   -- including them in toolsets where a prompt template is added.

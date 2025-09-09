@@ -111,7 +111,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		Description: conv.PtrToPGTextEmpty(payload.Description),
 		Arguments:   args,
 		Engine:      conv.ToPGTextEmpty(payload.Engine),
-		Kind:        conv.ToPGTextEmpty(payload.Kind),
+		Kind:        payload.Kind,
 		ToolsHint:   payload.ToolsHint,
 	})
 
@@ -336,7 +336,7 @@ func (s *Service) RenderTemplateByID(ctx context.Context, payload *gen.RenderTem
 
 	prompt := pt.Prompt
 	renderedPrompt := prompt
-	if pt.Kind.Valid && pt.Kind.String == "higher_order_tool" {
+	if pt.Kind == "higher_order_tool" {
 		renderedPrompt, err = s.RenderTemplateJSON(ctx, prompt)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
