@@ -33,7 +33,8 @@ typescript:
       '@types/react': 'catalog:'
       '@types/react-dom': 'catalog:'
     peerDependencies: {}
-  additionalPackageJSON: {}
+  additionalPackageJSON:
+    private: true
   author: Speakeasy
   baseErrorName: GramError
   clientServerStatusCodesAsErrors: true

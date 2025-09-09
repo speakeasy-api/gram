@@ -1,6 +1,7 @@
 packages:
   - client/*
   - sdks/*
+  - server
 
 catalog:
   '@ai-sdk/openai': ^1.3.4
