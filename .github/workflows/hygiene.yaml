@@ -100,3 +100,7 @@ jobs:
             exit 1
             fi
             echo "✅ Changeset validation passed!"
+
+      - name: Prune PNPM store
+        if: ${{ steps.check.outputs.lint == 'true' }}
+        run: pnpm store prune

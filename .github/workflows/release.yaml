@@ -42,7 +42,11 @@ jobs:
         id: changesets
         uses: changesets/action@e0145edc7d9d8679003495b11f87bd8ef63c0cba # v1.5.3
         with:
+          title: "chore: version packages"
           publish: pnpm run -s release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: "not-set" # intentionally not set for now
+
+      - name: Prune PNPM store
+        run: pnpm store prune
