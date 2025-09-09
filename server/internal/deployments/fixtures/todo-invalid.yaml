@@ -1,0 +1,130 @@
+openapi: 3.1.0
+info:
+  title: Todo API
+  description: A malformed API specification with intentional errors
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: https://api.example.com/v1
+    description: Production server
+
+paths:
+  /todos:
+    get:
+      summary: Get all todos
+      description: Retrieve a list of all todo items
+      operationId: getTodos
+      parameters:
+        - name: completed
+          in: query
+          description: Filter todos by completion status
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Todo'
+        '400':
+          description: Bad request
+        '500':
+          description: Internal server error
+
+    post:
+      summary: Create a new todo
+      description: Add a new todo item to the list
+      operationId: createTodo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTodoRequest'
+      responses:
+        '201':
+          description: Todo created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+        '400':
+          description: Bad request
+        '500':
+          description: Internal server error
+
+  /todos/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: The ID of the todo to retrieve
+        schema:
+          type: string
+          format: uuid
+
+    get:
+      summary: Get a todo by ID
+      description: Retrieve a specific todo item by its ID
+      operationId: getTodoById
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+        '404':
+          description: Todo not found
+        '500':
+          description: Internal server error
+
+    put:
+      summary: Update a todo
+      description: Update an existing todo item
+      operationId: updateTodo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTodoRequest'
+      responses:
+        '200':
+          description: Todo updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+        '404':
+          description: Todo not found
+        '400':
+          description: Bad request
+        '500':
+          description: Internal server error
+
+    delete:
+      summary: Delete a todo
+      description: Remove a todo item from the list
+      operationId: deleteTodo
+      responses:
+        '204':
+          description: Todo deleted successfully
+        '404':
+          description: Todo not found
+        '500':
+          description: Internal server error
+
+# Missing components section - this makes it invalid since we reference schemas that don't exist
+# The $ref references above will fail to resolve, making this an invalid OpenAPI document
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []

@@ -3,6 +3,7 @@ package deployments_test
 import (
 	"bytes"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -919,4 +920,132 @@ func TestDeploymentsService_Evolve_ComplexScenario(t *testing.T) {
 		return a.Name
 	})
 	require.ElementsMatch(t, assetNames, []string{"doc-1", "doc-2"}, "unexpected asset names")
+}
+
+func TestDeploymentsService_Evolve_NoDuplicateToolsWithMixedDocuments(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Create initial deployment with valid document
+	validDoc := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	validAsset, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(validDoc.Len()),
+	}, io.NopCloser(validDoc))
+	require.NoError(t, err, "upload valid openapi v3 asset")
+
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-evolve-initial-deployment",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: validAsset.Asset.ID,
+				Name:    "initial-doc",
+				Slug:    "initial-doc",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create initial deployment")
+	require.Equal(t, "completed", initial.Deployment.Status, "initial deployment should be completed")
+
+	// Upload another valid document and an invalid document
+	validDoc2 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	validAsset2, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(validDoc2.Len()),
+	}, io.NopCloser(validDoc2))
+	require.NoError(t, err, "upload second valid openapi v3 asset")
+
+	invalidDoc := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-invalid.yaml"))
+	invalidAsset, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(invalidDoc.Len()),
+	}, io.NopCloser(invalidDoc))
+	require.NoError(t, err, "upload invalid openapi v3 asset")
+
+	// Evolve the deployment with mixed valid and invalid documents
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		DeploymentID:     &initial.Deployment.ID,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: validAsset2.Asset.ID,
+				Name:    "valid-doc-2",
+				Slug:    "valid-doc-2",
+			},
+			{
+				AssetID: invalidAsset.Asset.ID,
+				Name:    "invalid-doc",
+				Slug:    "invalid-doc",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment with mixed documents")
+
+	require.NotEqual(t, uuid.Nil.String(), evolved.Deployment.ID, "evolved deployment ID is nil")
+	require.Equal(t, "failed", evolved.Deployment.Status, "evolved deployment should fail due to invalid document")
+
+	repo := testrepo.New(ti.conn)
+	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(evolved.Deployment.ID))
+	require.NoError(t, err, "list evolved deployment tools")
+
+	t.Run("no duplicate tools", func(t *testing.T) {
+		t.Parallel()
+
+		toolNames := lo.Map(tools, func(t testrepo.HttpToolDefinition, _ int) string {
+			return t.Name
+		})
+
+		uniqueNames := lo.Uniq(toolNames)
+		require.Len(t, toolNames, len(uniqueNames), "found duplicate tool names: %v", toolNames)
+	})
+
+	t.Run("no tools from invalid document", func(t *testing.T) {
+		t.Parallel()
+
+		for _, tool := range tools {
+			require.NotContains(t, tool.Name, "invalid_doc", "tool %s should not be from invalid document", tool.Name)
+		}
+
+		invalidDocTools := lo.Filter(tools, func(t testrepo.HttpToolDefinition, _ int) bool {
+			return strings.Contains(t.Name, "invalid_doc")
+		})
+		require.Empty(t, invalidDocTools, "should have no tools from invalid document")
+	})
+
+	t.Run("tools from valid documents only", func(t *testing.T) {
+		t.Parallel()
+
+		for _, tool := range tools {
+			hasValidPrefix := strings.Contains(tool.Name, "initial_doc") || 
+							 strings.Contains(tool.Name, "valid_doc_2")
+			if len(tool.Name) > 0 {
+				require.True(t, hasValidPrefix, "tool %s should be from valid documents only", tool.Name)
+			}
+		}
+	})
 }

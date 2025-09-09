@@ -85,6 +85,9 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 	// At least for now we don't want to retry this activity to avoid duplicate tools
 	processDeploymentCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 1,
+		},
 	})
 
 	err = workflow.ExecuteActivity(
