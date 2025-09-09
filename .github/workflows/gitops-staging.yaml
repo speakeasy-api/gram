@@ -1,7 +1,8 @@
 name: GitOps - Deploy to Staging (Terraform)
 on:
   push:
-    branches: [*]
+    branches:
+      - raymond/feat/setup-gitops
     paths:
       - "server/**"
       - "client/dashboard/**"
