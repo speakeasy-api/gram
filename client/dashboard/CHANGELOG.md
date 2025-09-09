@@ -1,5 +1,12 @@
 # @gram/dashboard
 
+## 0.9.2
+
+### Patch Changes
+
+- 72978ba: Standardize home page width
+- acf6726: Expose the kind of prompt templates, and do not count higher order tools as prompts in the dashboard.
+
 ## 0.9.1
 
 ### Patch Changes
