@@ -8,6 +8,10 @@ on:
       - "client/dashboard/**"
       - "client/sdk/**"
   workflow_dispatch:
+    inputs:
+      name:
+        description: "Manual workflow name"
+        required: true
 
 permissions:
   id-token: write
