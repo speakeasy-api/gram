@@ -7,7 +7,7 @@ on:
       - "server/**"
       - "client/dashboard/**"
       - "client/sdk/**"
-  workflow_dispatch: {}
+  workflow_dispatch:
 
 permissions:
   id-token: write
