@@ -278,7 +278,6 @@ const UsageTiers = () => {
       <Page.Section.Description>
         A breakdown of our pricing tiers.
       </Page.Section.Description>
-      {upgradeCTA}
       {session.gramAccountType === "free" ? upgradeCTA : polarPortalCTA}
       <Page.Section.Body>
         <Stack direction={"horizontal"} gap={4}>
