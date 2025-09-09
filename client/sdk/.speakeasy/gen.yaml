@@ -25,7 +25,7 @@ generation:
     generateNewTests: false
     skipResponseBodyAssertions: false
 typescript:
-  version: 0.12.61
+  version: 0.12.62
   additionalDependencies:
     dependencies: {}
     devDependencies:
@@ -66,6 +66,7 @@ typescript:
   outputModelSuffix: output
   packageName: '@gram/client'
   responseFormat: flat
+  sseFlatResponse: false
   templateVersion: v2
   usageSDKInitImports: []
   useIndexModules: true
