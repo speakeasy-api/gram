@@ -136,7 +136,7 @@ func DescribeToolsetEntry(
 		promptTemplates = append(promptTemplates, &types.PromptTemplateEntry{
 			ID:   pt.ID.String(),
 			Name: types.Slug(pt.Name),
-			Kind: &pt.Kind.String,
+			Kind: conv.Ptr(parseKind(pt)),
 		})
 	}
 
@@ -599,4 +599,13 @@ func variedToolSchema(ctx context.Context, logger *slog.Logger, tool *types.HTTP
 	}
 
 	return schema, nil
+}
+
+const defaultPromptTemplateKind = "prompt"
+
+func parseKind(pt tsr.GetPromptTemplatesForToolsetRow) string {
+	rawKind := conv.FromPGText[string](pt.Kind)
+	kind := conv.Default(*rawKind, defaultPromptTemplateKind)
+
+	return kind
 }
