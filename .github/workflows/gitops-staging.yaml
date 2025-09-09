@@ -1,12 +1,5 @@
 name: GitOps - Deploy to Staging (Terraform)
 on:
-  push:
-    branches:
-      - "raymond/feat/setup-gitops"
-    paths:
-      - "server/**"
-      - "client/dashboard/**"
-      - "client/sdk/**"
   workflow_dispatch:
     inputs:
       name:
