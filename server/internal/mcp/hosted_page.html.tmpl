@@ -11,7 +11,7 @@
 
     @font-face {
       font-family: 'Diatype';
-      src: url('https://app.getgram.ai/fonts/diatype/ABCDiatype-Regular.woff2') format('woff2');
+      src: url('/fonts/diatype/ABCDiatype-Regular.woff2') format('woff2');
       font-weight: 400;
       font-style: normal;
       font-display: block;
@@ -19,7 +19,7 @@
 
     @font-face {
       font-family: 'Diatype';
-      src: url('https://app.getgram.ai/fonts/diatype/ABCDiatype-Light.woff2') format('woff2');
+      src: url('/fonts/diatype/ABCDiatype-Light.woff2') format('woff2');
       font-weight: 300;
       font-style: normal;
       font-display: block;
@@ -519,7 +519,8 @@ EOF
     }
   }
 }</code></pre>
-          <pre id="manifest-json-blob"><code class="language-json">{
+          <script id="manifest-json-blob" type="application/json">
+            {
   "dxt_version": "0.1",
   "name": "{{ .MCPName }}",
   "version": "1.0.0",
@@ -550,7 +551,8 @@ EOF
       "required": true
     }{{- end }}
   }
-}</code></pre>
+}
+          </script>
         </div>
       </div>
     </main>
