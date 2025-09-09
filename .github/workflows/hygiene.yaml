@@ -53,8 +53,10 @@ jobs:
       # Check out both the base and head refs so changeset status can compare
       # against the base branch
       - name: Checkout base ref
+        if: ${{ steps.check.outputs.lint == 'true' }}
         run: git fetch origin ${{ github.base_ref }} && git checkout ${{ github.base_ref }}
       - name: Checkout head ref
+        if: ${{ steps.check.outputs.lint == 'true' }}
         run: git fetch origin ${{ github.head_ref }} && git checkout ${{ github.head_ref }}
 
       - name: Setup Mise
@@ -86,8 +88,18 @@ jobs:
 
       - name: Lint changesets
         if: ${{ steps.check.outputs.lint == 'true' }}
+        shell: bash
         run: |
-            if ! pnpm changeset status; then
+          set -e
+
+          mkdir -p scratch
+          pnpm changeset status --output scratch/changeset-status.json
+          cat scratch/changeset-status.json
+          echo ""
+          echo ""
+
+          # Check if changesets array exists and has length > 0
+          if ! jq -e '.changesets | length > 0' scratch/changeset-status.json > /dev/null; then
             echo "❌ Changeset validation failed!"
             echo ""
             echo "It looks like you've made significant changes but haven't added a changeset."
@@ -98,8 +110,9 @@ jobs:
             echo ""
             echo "Then commit the generated .changeset/*.md file with your changes."
             exit 1
-            fi
-            echo "✅ Changeset validation passed!"
+          fi
+
+          echo "✅ Changeset validation passed!"
 
       - name: Prune PNPM store
         if: ${{ steps.check.outputs.lint == 'true' }}
