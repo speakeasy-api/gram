@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import {
   Confirm,
   HTTPToolDefinition,
+  PromptTemplateKind,
   UpsertGlobalToolVariationForm,
 } from "@gram/client/models/components";
 import { invalidateTemplate, useDeployment } from "@gram/client/react-query";
@@ -82,7 +83,7 @@ export function ToolCard({
         onSubmit={(newValue) => updateVariation({ name: newValue })}
         label={"Tool Name"}
         description={`Update the name of tool '${tool.name}'`}
-        disabled={tool.type === "prompt"}
+        disabled={tool.type === PromptTemplateKind.HigherOrderTool}
       >
         <Stack direction="horizontal" align="center">
           {prefixTrimmed && (
