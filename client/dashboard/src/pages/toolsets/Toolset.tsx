@@ -247,8 +247,7 @@ export function ToolsetView({
 
   let toolsToDisplay: ToolDefinition[] = grouped
     .filter((group) => selectedGroups.includes(group.key))
-    .flatMap((group) => group.tools)
-    .filter((tool) => tool.type !== PromptTemplateKind.Prompt);
+    .flatMap((group) => group.tools);
 
   // If no tools are selected, show all tools
   // Mostly a failsafe for if the filtering doesn't work as expected

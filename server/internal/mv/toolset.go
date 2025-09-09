@@ -605,7 +605,7 @@ const defaultPromptTemplateKind = "prompt"
 
 func parseKind(pt tsr.GetPromptTemplatesForToolsetRow) string {
 	rawKind := conv.FromPGText[string](pt.Kind)
-	kind := conv.Default(*rawKind, defaultPromptTemplateKind)
+	kind := conv.PtrValOrEmpty(rawKind, defaultPromptTemplateKind)
 
 	return kind
 }

@@ -25,7 +25,7 @@ export type ToolDefinition =
     })
   | (PromptTemplate &
       Base & {
-        type: PromptTemplateKind;
+        type: "higher_order_tool";
       });
 
 /**
@@ -46,7 +46,7 @@ export const useToolDefinitions = (
 
   toolset.promptTemplates.filter(isHigherOrderTool).forEach((template) => {
     toolDefinitions.push({
-      type: template.kind,
+      type: PromptTemplateKind.HigherOrderTool,
       ...template,
       canonicalName: template.name,
       projectId: toolset.projectId,
