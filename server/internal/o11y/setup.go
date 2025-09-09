@@ -93,7 +93,7 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		// nil trace exporter tells clue.NewConfig to use a no-op tracer provider
 	}
 
-	cfg, err := NewClueConfig(
+	cfg, err := newClueConfig(
 		ctx,
 		options.ServiceName,
 		options.ServiceVersion,
@@ -123,7 +123,7 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 	return
 }
 
-func NewClueConfig(
+func newClueConfig(
 	ctx context.Context,
 	svcName string,
 	svcVersion string,

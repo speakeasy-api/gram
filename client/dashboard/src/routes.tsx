@@ -342,7 +342,9 @@ export const useRoutes = (): RoutesWithGoTo => {
           } else {
             const v = params.shift();
             if (!v) {
-              throw new Error(`No value provided for ${part}`);
+              // Instead of throwing an error, fallback to home page
+              console.warn(`No value provided for ${part}, falling back to home page`);
+              return `/${orgSlug}/${projectSlug}`;
             }
             finalParts.push(v);
           }
