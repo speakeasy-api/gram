@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -55,6 +56,7 @@ type Service struct {
 	db                *pgxpool.Pool
 	authRepo          *auth_repo.Queries
 	toolsetsRepo      *toolsets_repo.Queries
+	orgsRepo          *organizations_repo.Queries
 	auth              *auth.Auth
 	env               gateway.EnvironmentLoader
 	serverURL         *url.URL
@@ -113,6 +115,7 @@ func NewService(
 		db:           db,
 		authRepo:     auth_repo.New(db),
 		toolsetsRepo: toolsets_repo.New(db),
+		orgsRepo:     organizations_repo.New(db),
 		auth:         auth.New(logger, db, sessions),
 		env:          env,
 		serverURL:    serverURL,
@@ -300,7 +303,8 @@ type jsonSnippetData struct {
 
 type hostedPageData struct {
 	jsonSnippetData
-	JSONBlobURI string
+	JSONBlobURI      string
+	OrganizationName string
 }
 
 func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error {
@@ -321,6 +325,16 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	if !toolset.McpIsPublic {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	}
+
+	// Load organization information
+	organization, err := s.orgsRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
+	var organizationName string
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not load organization information", attr.SlogOrganizationID(toolset.OrganizationID), attr.SlogError(err))
+		organizationName = "Unknown Organization"
+	} else {
+		organizationName = organization.Name
 	}
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
@@ -379,8 +393,9 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	data := hostedPageData{
-		jsonSnippetData: configSnippetData,
-		JSONBlobURI:     url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
+		jsonSnippetData:  configSnippetData,
+		JSONBlobURI:      url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
+		OrganizationName: organizationName,
 	}
 
 	hostedPageTmpl, err := template.New("hosted_page").Parse(hostedPageTmplData)
