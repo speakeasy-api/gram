@@ -114,7 +114,6 @@ function ChatInner({
   const telemetry = useTelemetry();
   const client = useSdkClient();
 
-
   const chat = useChatContext();
   const { setMessages } = chat;
   const { chatHistory, isLoading: isChatHistoryLoading } = useChatHistory(
@@ -271,10 +270,15 @@ function ChatInner({
       }),
     });
 
-    selectedTools.current = [...(result.object as { tools: string[] }).tools, updateToolsTool.name];
+    selectedTools.current = [
+      ...(result.object as { tools: string[] }).tools,
+      updateToolsTool.name,
+    ];
 
     appendDisplayOnlyMessage(
-      `**Updated tool list:** *${(result.object as { tools: string[] }).tools.join(", ")}*`
+      `**Updated tool list:** *${(
+        result.object as { tools: string[] }
+      ).tools.join(", ")}*`
     );
   };
 
@@ -447,7 +451,6 @@ function ChatInner({
     [append, chatMessages, telemetry, model]
   );
 
-
   // This needs to be set so that the chat provider can append messages
   useEffect(() => {
     chat.setAppendMessage(append);
@@ -550,9 +553,9 @@ const toolCallComponents = (tools: Toolset, telemetry: Telemetry) => {
     }: {
       toolName: string;
       result?: unknown;
-      args: Record<string, unknown>;
+      args?: Record<string, unknown>;
     }) => {
-      const hasSummary = JSON.stringify(args).includes("gram-request-summary");
+      const hasSummary = JSON.stringify(args)?.includes("gram-request-summary");
       const validationError =
         typeof result === "string" &&
         result.includes("Schema validation error");
@@ -616,10 +619,10 @@ const toolCallComponents = (tools: Toolset, telemetry: Telemetry) => {
     result: (props: {
       toolName: string;
       result: string;
-      args: Record<string, unknown>;
+      args?: Record<string, unknown>;
     }) => {
       const tool = tools[props.toolName];
-      const hasSummary = JSON.stringify(props.args).includes(
+      const hasSummary = JSON.stringify(props.args)?.includes(
         "gram-request-summary"
       );
 
