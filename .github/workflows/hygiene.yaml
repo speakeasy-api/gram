@@ -94,6 +94,7 @@ jobs:
           pnpm changeset status --output scratch/changeset-status.json
           cat scratch/changeset-status.json
           echo ""
+          echo ""
 
           # Check if changesets array exists and has length > 0
           if ! jq -e '.changesets | length > 0' scratch/changeset-status.json > /dev/null; then
