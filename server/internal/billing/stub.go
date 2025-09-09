@@ -63,7 +63,7 @@ func (s *StubClient) InvalidateBillingCustomerCaches(ctx context.Context, orgID 
 	return nil
 }
 
-func (s *StubClient) CreateCheckout(ctx context.Context, orgID string, serverURL string) (string, error) {
+func (s *StubClient) CreateCheckout(ctx context.Context, orgID string, serverURL string, successURL string) (string, error) {
 	_, span := s.tracer.Start(ctx, "stub_client.create_checkout")
 	span.SetStatus(codes.Error, "not implemented")
 	defer span.End()
