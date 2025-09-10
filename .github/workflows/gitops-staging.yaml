@@ -251,10 +251,19 @@ jobs:
           git commit -m "chore: update staging images to ${{ github.sha }}"
           git push origin ${{ env.GITOPS_BRANCH }}
 
+      - name: Authenticate to Google Cloud for Terraform
+        if: ${{ env.SERVER_IMAGE_TAG != '' }}
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
+          service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
+
       - name: Deploy to Staging using Terraform
         if: ${{ env.SERVER_IMAGE_TAG != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
+          GOOGLE_APPLICATION_CREDENTIALS: ""
         run: |
           cd gitops-repo
 
