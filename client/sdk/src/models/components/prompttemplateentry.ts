@@ -13,6 +13,10 @@ export type PromptTemplateEntry = {
    */
   id: string;
   /**
+   * The kind of the prompt template
+   */
+  kind?: string | undefined;
+  /**
    * A short url-friendly label that uniquely identifies a resource.
    */
   name: string;
@@ -25,12 +29,14 @@ export const PromptTemplateEntry$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   id: z.string(),
+  kind: z.string().optional(),
   name: z.string(),
 });
 
 /** @internal */
 export type PromptTemplateEntry$Outbound = {
   id: string;
+  kind?: string | undefined;
   name: string;
 };
 
@@ -41,6 +47,7 @@ export const PromptTemplateEntry$outboundSchema: z.ZodType<
   PromptTemplateEntry
 > = z.object({
   id: z.string(),
+  kind: z.string().optional(),
   name: z.string(),
 });
 

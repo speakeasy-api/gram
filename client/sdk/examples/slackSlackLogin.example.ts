@@ -16,7 +16,7 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function main() {
-  const result = await gram.slackLogin({
+  const result = await gram.slack.slackLogin({
     projectSlug: "<value>",
   });
 

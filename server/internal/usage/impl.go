@@ -3,6 +3,7 @@ package usage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -30,28 +32,30 @@ import (
 )
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	auth        *auth.Auth
-	serverURL   *url.URL
-	repo        *repo.Queries
-	billingRepo billing.Repository
-	orgRepo     *orgRepo.Queries
+	tracer        trace.Tracer
+	logger        *slog.Logger
+	auth          *auth.Auth
+	serverURL     *url.URL
+	repo          *repo.Queries
+	billingRepo   billing.Repository
+	orgRepo       *orgRepo.Queries
+	posthogClient *posthog.Posthog
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	return &Service{
-		tracer:      otel.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
-		logger:      logger,
-		auth:        auth.New(logger, db, sessions),
-		serverURL:   serverURL,
-		repo:        repo.New(db),
-		billingRepo: billingRepo,
-		orgRepo:     orgRepo.New(db),
+		tracer:        otel.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
+		logger:        logger,
+		auth:          auth.New(logger, db, sessions),
+		serverURL:     serverURL,
+		repo:          repo.New(db),
+		billingRepo:   billingRepo,
+		orgRepo:       orgRepo.New(db),
+		posthogClient: posthogClient,
 	}
 }
 
@@ -119,6 +123,19 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, s.logger)
 	}
 
+	if err = s.posthogClient.CaptureEvent(ctx, "gram_subscription_changed", webhookPayload.Data.Customer.ExternalID, map[string]any{
+		"org_id":       webhookPayload.Data.Customer.ExternalID,
+		"org_name":     webhookPayload.Data.Customer.Name,
+		"org_slug":     webhookPayload.Data.Customer.ExternalID,
+		"is_gram":      true,
+		"product":      webhookPayload.Data.Product.Name,
+		"product_type": webhookPayload.Data.Product.Type,
+		"event":        webhookPayload.Type,
+		"email":        webhookPayload.Data.Customer.Email,
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to capture posthog event", attr.SlogError(err))
+	}
+
 	return nil
 }
 
@@ -164,7 +181,12 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 		return "", oops.C(oops.CodeUnauthorized)
 	}
 
-	checkoutURL, err := s.billingRepo.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String())
+	successURL := s.serverURL.String()
+	if authCtx.ProjectSlug != nil {
+		successURL = fmt.Sprintf("%s/%s/%s/billing", s.serverURL.String(), authCtx.OrganizationSlug, *authCtx.ProjectSlug)
+	}
+
+	checkoutURL, err := s.billingRepo.CreateCheckout(ctx, authCtx.ActiveOrganizationID, s.serverURL.String(), successURL)
 	if err != nil {
 		return "", oops.E(oops.CodeUnexpected, err, "failed to create checkout").Log(ctx, s.logger)
 	}
