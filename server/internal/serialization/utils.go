@@ -1,6 +1,7 @@
 package serialization
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -11,6 +12,10 @@ func valToString(val interface{}) string {
 	switch v := val.(type) {
 	case time.Time:
 		return v.Format(time.RFC3339Nano)
+
+	case json.Number:
+		return v.String()
+
 	default:
 		return fmt.Sprintf("%v", v)
 	}

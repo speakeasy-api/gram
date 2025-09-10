@@ -177,7 +177,11 @@ func (itp *ToolProxy) Do(
 	}
 
 	var toolCallBody ToolCallBody
-	if err := json.Unmarshal(bodyBytes, &toolCallBody); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(bodyBytes))
+	// We use json.Number for accurate decoding in path, query, and header parameters.
+	dec.UseNumber()
+
+	if err := dec.Decode(&toolCallBody); err != nil {
 		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
 	}
 
