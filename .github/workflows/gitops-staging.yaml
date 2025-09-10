@@ -44,7 +44,7 @@ jobs:
           # temp set these to true for testing
           echo "server=true" >> $GITHUB_OUTPUT
           echo "Server jobs will run."
-          
+
           echo "client=true" >> $GITHUB_OUTPUT
           echo "Client jobs will run."
 
@@ -207,8 +207,11 @@ jobs:
     steps:
       - name: Set image tag variables
         run: |
-          echo "SERVER_IMAGE_TAG=${{ needs.build-and-deploy-server.outputs.server-image-tag }}" >> $GITHUB_ENV
-          echo "Server image tag: ${{ needs.build-and-deploy-server.outputs.server-image-tag }}"
+          # Set the full image URL and extract the tag
+          echo "SERVER_IMAGE_URL=${{ needs.build-and-deploy-server.outputs.server-image-tag }}" >> $GITHUB_ENV
+          echo "SERVER_IMAGE_TAG=$(echo "${{ needs.build-and-deploy-server.outputs.server-image-tag }}" | cut -d':' -f2)" >> $GITHUB_ENV
+          echo "Server image URL: $SERVER_IMAGE_URL"
+          echo "Server image tag: $SERVER_IMAGE_TAG"
 
       - name: Checkout GitOps Repository
         if: ${{ env.SERVER_IMAGE_TAG != '' }}
@@ -250,6 +253,8 @@ jobs:
 
       - name: Deploy to Staging using Terraform
         if: ${{ env.SERVER_IMAGE_TAG != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
         run: |
           cd gitops-repo
 
