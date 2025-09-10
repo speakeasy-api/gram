@@ -406,3 +406,10 @@ FROM deployments_packages
 INNER JOIN packages ON deployments_packages.package_id = packages.id
 INNER JOIN package_versions ON deployments_packages.version_id = package_versions.id
 WHERE deployments_packages.deployment_id = @deployment_id;
+
+-- name: DangerouslyClearDeploymentTools :execrows
+DELETE FROM http_tool_definitions
+WHERE
+  project_id = @project_id
+  AND deployment_id = @deployment_id
+  AND openapiv3_document_id = @openapiv3_document_id::uuid;

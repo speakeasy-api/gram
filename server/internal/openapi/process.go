@@ -171,6 +171,21 @@ func (p *ToolExtractor) Do(
 		}
 	}()
 
+	// If we are re-processing a deployment, we need to clear out any existing
+	// tools associated with the deployment + document, so we don't end up with
+	// duplicate tools in the database.
+	deletedRows, err := tx.DangerouslyClearDeploymentTools(ctx, repo.DangerouslyClearDeploymentToolsParams{
+		ProjectID:           projectID,
+		DeploymentID:        deploymentID,
+		Openapiv3DocumentID: openapiDocID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error clearing deployment http tools").Log(ctx, p.logger)
+	}
+	if deletedRows > 0 {
+		logger.InfoContext(ctx, "cleared http tools from previous deployment attempt", attr.SlogDBDeletedRowsCount(deletedRows))
+	}
+
 	rc, err := p.assetStorage.Read(ctx, docURL)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching openapi document").Log(ctx, logger)
