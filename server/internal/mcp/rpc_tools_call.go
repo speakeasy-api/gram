@@ -236,6 +236,7 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 		return nil
 	}
 
+	// we only use cached data here, we do not want to make a call to an external system in the tool call hotpath
 	periodUsage, err := billingRepository.GetStoredPeriodUsage(ctx, orgID)
 	// we will not fail here right now, but this cache should always be available
 	if err != nil {
