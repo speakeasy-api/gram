@@ -209,9 +209,12 @@ jobs:
         run: |
           # Set the full image URL and extract the tag
           echo "SERVER_IMAGE_URL=${{ needs.build-and-deploy-server.outputs.server-image-tag }}" >> $GITHUB_ENV
-          echo "SERVER_IMAGE_TAG=$(echo "${{ needs.build-and-deploy-server.outputs.server-image-tag }}" | cut -d':' -f2)" >> $GITHUB_ENV
+          BASE_TAG=$(echo "${{ needs.build-and-deploy-server.outputs.server-image-tag }}" | cut -d':' -f2)
+          SHA_TAG="${BASE_TAG}-sha-${GITHUB_SHA:0:7}"
+          echo "SERVER_IMAGE_TAG=$SHA_TAG" >> $GITHUB_ENV
           echo "Server image URL: $SERVER_IMAGE_URL"
-          echo "Server image tag: $SERVER_IMAGE_TAG"
+          echo "Base tag: $BASE_TAG"
+          echo "Server image tag with SHA: $SHA_TAG"
 
       - name: Checkout GitOps Repository
         if: ${{ env.SERVER_IMAGE_TAG != '' }}
