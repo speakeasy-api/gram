@@ -41,19 +41,12 @@ jobs:
       - id: gates
         name: Set outputs
         run: |
-          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
-            echo "server=true" >> $GITHUB_OUTPUT
-            echo "Server jobs will run."
-          else
-            echo "Server jobs will be skipped."
-          fi
-
-          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
-            echo "client=true" >> $GITHUB_OUTPUT
-            echo "Client jobs will run."
-          else
-            echo "Client jobs will be skipped."
-          fi
+          # temp set these to true for testing
+          echo "server=true" >> $GITHUB_OUTPUT
+          echo "Server jobs will run."
+          
+          echo "client=true" >> $GITHUB_OUTPUT
+          echo "Client jobs will run."
 
   build-and-deploy-dashboard:
     name: "Build and Deploy Dashboard"
