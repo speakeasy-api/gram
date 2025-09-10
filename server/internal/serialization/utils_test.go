@@ -75,6 +75,28 @@ func TestValToString(t *testing.T) {
 			{"very small negative", json.Number("-0.0000000001"), "-0.0000000001"},
 			{"decimal with trailing zeros", json.Number("1.50000000000000"), "1.50000000000000"},
 			{"high precision decimal", json.Number("0.123456789012345"), "0.123456789012345"},
+
+			// scientific notation
+			{"scientific notation positive", json.Number("1.23e10"), "1.23e10"},
+			{"scientific notation negative", json.Number("-4.56e-7"), "-4.56e-7"},
+			{"scientific notation capital E", json.Number("2.5E+3"), "2.5E+3"},
+
+			// edge cases for precision
+			{"many decimal places", json.Number("1.123456789012345678901234567890"), "1.123456789012345678901234567890"},
+			{"integer with decimal point", json.Number("42.0"), "42.0"},
+			{"leading zeros", json.Number("007"), "007"},
+			{"leading zeros with decimal", json.Number("00.123"), "00.123"},
+
+			// boundary values
+			{"max safe integer", json.Number("9007199254740991"), "9007199254740991"},
+			{"beyond safe integer", json.Number("9007199254740992"), "9007199254740992"},
+			{"very large number", json.Number("999999999999999999999999999999"), "999999999999999999999999999999"},
+
+			// special decimal cases
+			{"decimal starting with zero", json.Number("0.123"), "0.123"},
+			{"negative decimal starting with zero", json.Number("-0.456"), "-0.456"},
+			{"only decimal point", json.Number("0.0"), "0.0"},
+			{"multiple trailing zeros", json.Number("1.000000"), "1.000000"},
 		}
 
 		for _, tt := range tests {
