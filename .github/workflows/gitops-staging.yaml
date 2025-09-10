@@ -212,15 +212,15 @@ jobs:
       - build-and-deploy-server
       - build-and-deploy-dashboard
     steps:
-      - name: Skip if no image tags are available
+      - name: Set image tag variables
         run: |
-          if [[ -z "${{ needs.build-and-deploy-server.outputs.server-image-tag }}" && -z "${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}" ]]; then
-            echo "No image tags available — skipping deployment."
-            exit 0
-          fi
-          echo "Image tags available, proceeding with deployment."
+          echo "SERVER_IMAGE_TAG=${{ needs.build-and-deploy-server.outputs.server-image-tag }}" >> $GITHUB_ENV
+          echo "DASHBOARD_IMAGE_TAG=${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}" >> $GITHUB_ENV
+          echo "Server image tag: ${{ needs.build-and-deploy-server.outputs.server-image-tag }}"
+          echo "Dashboard image tag: ${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}"
 
       - name: Checkout GitOps Repository
+        if: ${{ env.SERVER_IMAGE_TAG != '' || env.DASHBOARD_IMAGE_TAG != '' }}
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
           repository: ${{ env.GITOPS_REPO }}
@@ -229,6 +229,7 @@ jobs:
           ref: ${{ env.GITOPS_BRANCH }}
 
       - name: Setup GitOps Branch
+        if: ${{ env.SERVER_IMAGE_TAG != '' || env.DASHBOARD_IMAGE_TAG != '' }}
         run: |
           cd gitops-repo
           git config --local user.email "action@github.com"
@@ -239,24 +240,26 @@ jobs:
           git pull origin ${{ env.GITOPS_BRANCH }}
 
       - name: Update Helm Values for Staging
+        if: ${{ env.SERVER_IMAGE_TAG != '' || env.DASHBOARD_IMAGE_TAG != '' }}
         run: |
           # Update server image tag if available
-          if [[ -n "${{ needs.build-and-deploy-server.outputs.server-image-tag }}" ]]; then
-            echo "Updating server image tag to: ${{ needs.build-and-deploy-server.outputs.server-image-tag }}"
-            yq eval ".image.tag = \"${{ needs.build-and-deploy-server.outputs.server-image-tag }}\"" \
+          if [[ -n "${{ env.SERVER_IMAGE_TAG }}" ]]; then
+            echo "Updating server image tag to: ${{ env.SERVER_IMAGE_TAG }}"
+            yq eval ".image.tag = \"${{ env.SERVER_IMAGE_TAG }}\"" \
               -i gitops-repo/infra/helm/gram/values-dev.yaml
           fi
 
           # Update dashboard image tag if available
-          if [[ -n "${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}" ]]; then
-            echo "Updating dashboard image tag to: ${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}"
+          if [[ -n "${{ env.DASHBOARD_IMAGE_TAG }}" ]]; then
+            echo "Updating dashboard image tag to: ${{ env.DASHBOARD_IMAGE_TAG }}"
             if grep -q "dashboard:" gitops-repo/infra/helm/gram/values-dev.yaml; then
-              yq eval ".dashboard.tag = \"${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}\"" \
+              yq eval ".dashboard.tag = \"${{ env.DASHBOARD_IMAGE_TAG }}\"" \
                 -i gitops-repo/infra/helm/gram/values-dev.yaml
             fi
           fi
 
       - name: Commit and Push Changes
+        if: ${{ env.SERVER_IMAGE_TAG != '' || env.DASHBOARD_IMAGE_TAG != '' }}
         run: |
           cd gitops-repo
           git add .
@@ -264,6 +267,7 @@ jobs:
           git push origin ${{ env.GITOPS_BRANCH }}
 
       - name: Deploy to Staging using Terraform
+        if: ${{ env.SERVER_IMAGE_TAG != '' || env.DASHBOARD_IMAGE_TAG != '' }}
         run: |
           cd gitops-repo
 
@@ -278,8 +282,9 @@ jobs:
           mise run deploy:up:k8s dev
 
       - name: Notify Deployment
+        if: ${{ env.SERVER_IMAGE_TAG != '' || env.DASHBOARD_IMAGE_TAG != '' }}
         run: |
           echo "🚀 Staging deployment completed!"
-          echo "Server image: ${{ needs.build-and-deploy-server.outputs.server-image-tag }}"
-          echo "Dashboard image: ${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}"
+          echo "Server image: ${{ env.SERVER_IMAGE_TAG }}"
+          echo "Dashboard image: ${{ env.DASHBOARD_IMAGE_TAG }}"
           echo "Commit: ${{ github.sha }}"
