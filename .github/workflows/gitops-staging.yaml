@@ -232,14 +232,24 @@ jobs:
 
       - name: Update Helm Values for Staging
         run: |
-          # Update server image tag
-          sed -i "s|tag: sha-[a-f0-9]*|tag: ${{ needs.build-and-deploy-server.outputs.server-image-tag }}|g" \
-            gitops-repo/infra/helm/gram/values-dev.yaml
+          # Update server image tag only if it's not empty
+          if [[ -n "${{ needs.build-and-deploy-server.outputs.server-image-tag }}" ]]; then
+            echo "Updating server image tag to: ${{ needs.build-and-deploy-server.outputs.server-image-tag }}"
+            yq eval ".image.tag = \"${{ needs.build-and-deploy-server.outputs.server-image-tag }}\"" \
+              -i gitops-repo/infra/helm/gram/values-dev.yaml
+          else
+            echo "Server image tag is empty, skipping server image update"
+          fi
 
-          # Update dashboard image tag (if it exists in values)
-          if grep -q "dashboard:" gitops-repo/infra/helm/gram/values-dev.yaml; then
-            sed -i "s|tag: sha-[a-f0-9]*|tag: ${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}|g" \
-              gitops-repo/infra/helm/gram/values-dev.yaml
+          # Update dashboard image tag only if it's not empty
+          if [[ -n "${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}" ]]; then
+            echo "Updating dashboard image tag to: ${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}"
+            if grep -q "dashboard:" gitops-repo/infra/helm/gram/values-dev.yaml; then
+              yq eval ".dashboard.tag = \"${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}\"" \
+                -i gitops-repo/infra/helm/gram/values-dev.yaml
+            fi
+          else
+            echo "Dashboard image tag is empty, skipping dashboard image update"
           fi
 
       - name: Commit and Push Changes
