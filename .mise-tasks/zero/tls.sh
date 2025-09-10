@@ -8,6 +8,17 @@ ROOT_DIR="$(git rev-parse --show-toplevel)"
 CERT_PATH=${CERT_PATH:-"$ROOT_DIR"/local/ssl/certs/local.pem}
 KEY_PATH=${KEY_PATH:-"$ROOT_DIR"/local/ssl/keys/local-key.pem}
 
+extract_hostname() {
+  local url="$1"
+  # Remove protocol
+  url="${url#*://}"
+  # Remove everything after the first slash (path)
+  url="${url%%/*}"
+  # Remove port number
+  url="${url%%:*}"
+  echo "$url"
+}
+
 check_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
     echo "error: $1 not found on PATH" >&2
@@ -71,9 +82,11 @@ gen_keypair() {
   ensure_dir "$(dirname "$CERT_PATH")"
   ensure_dir "$(dirname "$KEY_PATH")"
 
-  echo "Generating cert and key..."
+  hostname=$(extract_hostname "$GRAM_SITE_URL")
+
+  echo "Generating cert and key for $hostname..."
   mkcert \
-    -cert-file "$CERT_PATH" -key-file "$KEY_PATH" localhost 127.0.0.1 ::1
+    -cert-file "$CERT_PATH" -key-file "$KEY_PATH" "$hostname"
 
   echo "  cert => $CERT_PATH"
   echo "  key  => $KEY_PATH"

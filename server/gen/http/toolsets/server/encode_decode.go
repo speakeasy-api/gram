@@ -2155,6 +2155,7 @@ func marshalTypesPromptTemplateEntryToPromptTemplateEntryResponseBody(v *types.P
 	res := &PromptTemplateEntryResponseBody{
 		ID:   v.ID,
 		Name: string(v.Name),
+		Kind: v.Kind,
 	}
 
 	return res

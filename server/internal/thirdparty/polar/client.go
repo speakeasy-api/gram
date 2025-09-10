@@ -579,7 +579,7 @@ func (p *Client) GetStoredPeriodUsage(ctx context.Context, orgID string) (pu *ge
 	return &state.PeriodUsage, nil
 }
 
-func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL string) (u string, err error) {
+func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL string, successURL string) (u string, err error) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.create_checkout")
 	defer func() {
 		if err != nil {
@@ -591,6 +591,7 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 	res, err := p.polar.Checkouts.Create(ctx, polarComponents.CheckoutCreate{
 		ExternalCustomerID: &orgID,
 		EmbedOrigin:        &serverURL,
+		SuccessURL:         &successURL,
 		Products: []string{
 			p.catalog.ProductIDPro,
 		},

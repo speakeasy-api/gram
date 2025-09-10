@@ -104,7 +104,7 @@ const UsageSection = () => {
               />
               <UsageItem
                 label="Servers"
-                tooltip="The number of public MCP servers across your organization. Note that this shows the current number of enabled servers, but you will be billed on the maximum number active simultaneously during the billing period."
+                tooltip="The number of MCP servers enabled across your organization. Note that this shows the current number of enabled servers, but you will be billed on the maximum number active simultaneously during the billing period."
                 value={periodUsage.actualEnabledServerCount}
                 included={periodUsage.maxServers || 1}
                 overageIncrement={1}
@@ -154,13 +154,14 @@ const UsageTiers = () => {
   const [checkoutLink, setCheckoutLink] = useState("");
 
   useEffect(() => {
-    PolarEmbedCheckout.init();
     client.usage.createCheckout().then((link) => {
       setCheckoutLink(link);
+      PolarEmbedCheckout.init(); // This must go here or else the checkout link won't open in an embedded window
     });
   }, []);
 
-  const upgradeCTA = (
+  // This must be initialized AFTER the link is set (more specifically, AFTER the PolarEmbedCheckout.init() call)
+  const upgradeCTA = checkoutLink ? (
     <Page.Section.CTA
       href={checkoutLink}
       data-polar-checkout
@@ -168,7 +169,7 @@ const UsageTiers = () => {
     >
       Upgrade
     </Page.Section.CTA>
-  );
+  ) : null;
 
   const polarPortalCTA = (
     <Page.Section.CTA

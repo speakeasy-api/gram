@@ -107,6 +107,7 @@ export const AgentifyProvider = ({
 
     const result = await generateObject({
       model,
+      mode: "json",
       prompt: `
 <instructions>
   You will be given a chat history, a statement of intent, and a basic skeleton of an agent. 
@@ -147,13 +148,13 @@ export const AgentifyProvider = ({
     });
 
     setInProgress(false);
-    setResult(result.object.agentCode);
+    setResult((result.object as { agentCode: string }).agentCode);
     setResultLang(lang);
     setResultFramework(framework);
     setResultPrompt(prompt);
     setResultNumMessages(messages.length);
 
-    return result.object.agentCode;
+    return (result.object as { agentCode: string }).agentCode;
   };
 
   const outdated =
@@ -227,6 +228,7 @@ export const AgentifyButton = ({
 
     generateObject({
       model: openrouter.chat("openai/gpt-4o-mini"),
+      mode: "json",
       prompt: `
           <instructions>
             You will be given a chat history. 
@@ -244,7 +246,7 @@ export const AgentifyButton = ({
         promptSuggestion: z.string(),
       }),
     }).then((result) => {
-      setPrompt(result.object.promptSuggestion);
+      setPrompt((result.object as { promptSuggestion: string }).promptSuggestion);
       setSuggestionNumMessages(messages.length);
     });
   }, [agentifyModalOpen]);

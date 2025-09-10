@@ -23,7 +23,7 @@ func NewGetAllOrganizations(logger *slog.Logger, db *pgxpool.Pool) *GetAllOrgani
 }
 
 func (g *GetAllOrganizations) Do(ctx context.Context) ([]string, error) {
-	orgs, err := g.repo.GetAllOrganizations(ctx)
+	orgs, err := g.repo.GetAllOrganizationsWithToolsets(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get all organization").Log(ctx, g.logger)
 	}

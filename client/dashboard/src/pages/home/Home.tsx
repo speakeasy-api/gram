@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { ServerCard } from "@/components/server-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -7,29 +8,28 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
-import { ToolsetEntry, Toolset } from "@gram/client/models/components";
+import { Toolset, ToolsetEntry } from "@gram/client/models/components";
 import { useListToolsets } from "@gram/client/react-query";
-import { useSdkClient } from "@/contexts/Sdk";
-import { ServerCard } from "@/components/server-card";
 import {
+  ArrowUpIcon,
   BookOpenIcon,
+  EditIcon,
   MessageCircleIcon,
   PencilRulerIcon,
-  ArrowUpIcon,
-  SearchIcon,
   PlusIcon,
+  SearchIcon,
   TrashIcon,
-  EditIcon,
 } from "lucide-react";
-import { useState, useEffect, useMemo } from "react";
 import {
-  motion,
-  useMotionValue,
   AnimatePresence,
+  motion,
   useAnimationControls,
+  useMotionValue,
 } from "motion/react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useMcpUrl } from "../mcp/MCPDetails";
 import { MCPEmptyState } from "../mcp/MCPEmptyState";
@@ -53,7 +53,7 @@ const useAllToolsets = (toolsetSlugs: string[]) => {
   const [toolsets, setToolsets] = useState<Toolset[]>([]);
   const [loading, setLoading] = useState(false);
   const client = useSdkClient();
-  
+
   useEffect(() => {
     if (toolsetSlugs.length === 0) {
       setToolsets([]);
@@ -61,21 +61,24 @@ const useAllToolsets = (toolsetSlugs: string[]) => {
     }
 
     setLoading(true);
-    
+
     const fetchAllToolsets = async () => {
       try {
-        const promises = toolsetSlugs.map(slug => 
+        const promises = toolsetSlugs.map((slug) =>
           client.toolsets.getBySlug({ slug })
         );
-        
+
         const results = await Promise.allSettled(promises);
         const successfulResults = results
-          .filter((result): result is PromiseFulfilledResult<Toolset> => result.status === 'fulfilled')
-          .map(result => result.value);
-          
+          .filter(
+            (result): result is PromiseFulfilledResult<Toolset> =>
+              result.status === "fulfilled"
+          )
+          .map((result) => result.value);
+
         setToolsets(successfulResults);
       } catch (error) {
-        console.error('Failed to fetch toolsets:', error);
+        console.error("Failed to fetch toolsets:", error);
         setToolsets([]);
       } finally {
         setLoading(false);
@@ -92,10 +95,9 @@ export default function Home() {
   return (
     <Page>
       <Page.Header>
-        {/* Custom max width is to account for the extra padding which is needed to accomodate the carousel */}
-        <Page.Header.Breadcrumbs className="max-w-[1210px]" />
+        <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body className="overflow-visible px-16">
+      <Page.Body>
         <div className="pb-8">
           <HomeContent />
         </div>
@@ -161,14 +163,14 @@ function HomeContent() {
     }
   }, [toolsets?.toolsets, selectedToolset]);
 
-  const selectedToolsetData = useMemo(() => 
-    toolsets?.toolsets?.find((t) => t.slug === selectedToolset),
+  const selectedToolsetData = useMemo(
+    () => toolsets?.toolsets?.find((t) => t.slug === selectedToolset),
     [toolsets?.toolsets, selectedToolset]
   );
   const { url: mcpUrl } = useMcpUrl(selectedToolsetData);
 
-  const toolsetSlugs = useMemo(() => 
-    toolsets?.toolsets?.map((t) => t.slug) || [],
+  const toolsetSlugs = useMemo(
+    () => toolsets?.toolsets?.map((t) => t.slug) || [],
     [toolsets?.toolsets]
   );
   const { toolsets: allFullToolsets } = useAllToolsets(toolsetSlugs);
@@ -256,7 +258,7 @@ function HomeContent() {
   const duplicatedSuggestions = useMemo(() => {
     const toolsWithIcons = allToolDefinitions
       .filter((tool): tool is NonNullable<typeof tool> => Boolean(tool))
-      .map(tool => ({
+      .map((tool) => ({
         name: tool.name,
         method: tool.method,
         IconComponent: getToolIcon(tool.method),
@@ -265,12 +267,14 @@ function HomeContent() {
     return [...toolsWithIcons, ...toolsWithIcons];
   }, [allToolDefinitions]);
 
-  const totalToolCount = useMemo(() => 
-    toolsets?.toolsets?.reduce(
-      (acc, toolset) => acc + (toolset.httpTools?.length || 0),
-      0
-    ) || 0
-  , [toolsets?.toolsets]);
+  const totalToolCount = useMemo(
+    () =>
+      toolsets?.toolsets?.reduce(
+        (acc, toolset) => acc + (toolset.httpTools?.length || 0),
+        0
+      ) || 0,
+    [toolsets?.toolsets]
+  );
 
   const shouldAnimate = !isInputHovered && !isInputFocused;
   const animationDuration = Math.max(45, totalToolCount * 3.5);
@@ -319,9 +323,6 @@ function HomeContent() {
     return <MCPEmptyState />;
   }
 
-
-
-
   const handleQuickTest = () => {
     if (!prompt.trim() || !selectedToolset) return;
 
@@ -343,9 +344,7 @@ function HomeContent() {
     <>
       {/* Quick Test Section */}
       <Page.Section>
-        <Page.Section.Title>
-          Chat with your MCP server
-        </Page.Section.Title>
+        <Page.Section.Title>Chat with your MCP server</Page.Section.Title>
         <Page.Section.Description>
           Start a conversation and watch your tools come to life
         </Page.Section.Description>
@@ -486,9 +485,7 @@ function HomeContent() {
 
       {/* Actions Section */}
       <Page.Section>
-        <Page.Section.Title>
-          Explore your tools
-        </Page.Section.Title>
+        <Page.Section.Title>Explore your tools</Page.Section.Title>
         <Page.Section.Description>
           Dive deeper into testing, building, and managing your MCP servers
         </Page.Section.Description>
@@ -568,9 +565,7 @@ function HomeContent() {
 
       {/* MCP Servers Section */}
       <Page.Section>
-        <Page.Section.Title>
-          Your servers
-        </Page.Section.Title>
+        <Page.Section.Title>Your servers</Page.Section.Title>
         <Page.Section.Description>
           Manage settings, privacy, and configurations for your MCP servers
         </Page.Section.Description>

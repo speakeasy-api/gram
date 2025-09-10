@@ -2046,6 +2046,8 @@ type PromptTemplateEntryResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The name of the prompt template
 	Name string `form:"name" json:"name" xml:"name"`
+	// The kind of the prompt template
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 }
 
 // ExternalOAuthServerFormRequestBody is used to define fields on request body

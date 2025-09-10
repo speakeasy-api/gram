@@ -4,6 +4,7 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { Badge, TwoPartBadge } from "./ui/badge";
 import { UrgentWarningIcon } from "./ui/urgent-warning-icon";
 import { cn } from "@/lib/utils";
+import { higherOrderToolNames, promptNames } from "@/lib/toolNames";
 
 // Define minimal types for badge components
 type ToolsetForBadge = Pick<
@@ -47,25 +48,36 @@ export const ToolsetPromptsBadge = ({
   size?: "sm" | "md";
   variant?: "outline" | "default";
 }) => {
-  const promptNames =
-    toolset?.promptTemplates?.map((template) => template.name) || [];
+  const names = toolset ? promptNames(toolset.promptTemplates) : [];
 
   const tooltipContent = (
     <div className="max-h-[300px] overflow-y-auto">
       <Stack gap={1}>
-        {promptNames?.map((prompt, i) => (
+        {names.map((prompt, i) => (
           <p key={i}>{prompt}</p>
         ))}
       </Stack>
     </div>
   );
 
-  return promptNames && promptNames.length > 0 ? (
+  return names && names.length > 0 ? (
     <Badge size={size} variant={variant} tooltip={tooltipContent}>
-      {promptNames.length} Prompt{promptNames.length === 1 ? "" : "s"}
+      {names.length} Prompt{names.length === 1 ? "" : "s"}
     </Badge>
   ) : null;
 };
+
+function httpToolNames(toolset: ToolsetForBadge) {
+  const { httpTools } = toolset;
+
+  return httpTools.map((tool) => tool.name);
+}
+
+function toolNames(toolset: ToolsetForBadge) {
+  const { promptTemplates } = toolset;
+
+  return httpToolNames(toolset).concat(higherOrderToolNames(promptTemplates));
+}
 
 export const ToolsetToolsBadge = ({
   toolset,
@@ -78,9 +90,10 @@ export const ToolsetToolsBadge = ({
   variant?: "outline" | "default";
   className?: string;
 }) => {
+  const names: string[] = toolset ? toolNames(toolset) : [];
   return (
     <ToolsBadge
-      toolNames={toolset?.httpTools.map((tool) => tool.name)}
+      toolNames={names}
       size={size}
       variant={variant}
       className={className}

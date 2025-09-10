@@ -18,7 +18,7 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 	"go.opentelemetry.io/otel/trace"
 	tracenoop "go.opentelemetry.io/otel/trace/noop"
 	"goa.design/clue/clue"
@@ -93,7 +93,7 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		// nil trace exporter tells clue.NewConfig to use a no-op tracer provider
 	}
 
-	cfg, err := NewClueConfig(
+	cfg, err := newClueConfig(
 		ctx,
 		options.ServiceName,
 		options.ServiceVersion,
@@ -123,7 +123,7 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 	return
 }
 
-func NewClueConfig(
+func newClueConfig(
 	ctx context.Context,
 	svcName string,
 	svcVersion string,
