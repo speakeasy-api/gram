@@ -104,7 +104,7 @@ const UsageSection = () => {
               />
               <UsageItem
                 label="Servers"
-                tooltip="The number of public MCP servers across your organization. Note that this shows the current number of enabled servers, but you will be billed on the maximum number active simultaneously during the billing period."
+                tooltip="The number of MCP servers enabled across your organization. Note that this shows the current number of enabled servers, but you will be billed on the maximum number active simultaneously during the billing period."
                 value={periodUsage.actualEnabledServerCount}
                 included={periodUsage.maxServers || 1}
                 overageIncrement={1}
