@@ -8,8 +8,7 @@
   "scripts": {
     "dev": "pnpm --filter ./client/dashboard dev",
     "lint": "tsc --noEmit && pnpm -r lint",
-    "build": "pnpm -r build",
-    "release": "echo 'Releasing is currently a no-op.'"
+    "build": "pnpm -r build"
   },
   "keywords": [],
   "author": "",
