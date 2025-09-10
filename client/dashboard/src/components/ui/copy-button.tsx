@@ -35,7 +35,7 @@ export const CopyButton = ({
   return (
     <Button
       variant={absolute ? "outline" : "ghost"}
-      size={size}
+      size={size ?? "icon"}
       onClick={handleCopy}
       tooltip={tooltip}
       className={cn(

@@ -1,8 +1,8 @@
 import { Dialog } from "@/components/ui/dialog";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { Button } from "@speakeasy-api/moonshine";
 import { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
-import { ButtonRainbow } from "./ui/button-rainbow";
 import { useRoutes } from "@/routes";
 
 interface FeatureRequestModalProps {
@@ -67,16 +67,19 @@ export function FeatureRequestModal({
         </Dialog.Header>
         <Dialog.Footer className="gap-3 sm:justify-center">
           {accountUpgrade ? (
-            <ButtonRainbow
-              href={routes.billing.href()}
-              onClick={handleAccountUpgradeClick}
+            <Button
+              variant="brand"
+              onClick={() => {
+                handleAccountUpgradeClick();
+                window.open(routes.billing.href(), '_self');
+              }}
             >
-              Upgrade
-            </ButtonRainbow>
+              UPGRADE
+            </Button>
           ) : (
-            <ButtonRainbow onClick={handleRequestFeature}>
-              Request Feature
-            </ButtonRainbow>
+            <Button variant="brand" onClick={handleRequestFeature}>
+              REQUEST FEATURE
+            </Button>
           )}
         </Dialog.Footer>
       </Dialog.Content>

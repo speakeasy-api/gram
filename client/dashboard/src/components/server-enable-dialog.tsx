@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
@@ -67,7 +67,7 @@ export function ServerEnableDialog({
         </div>
 
         <Dialog.Footer className="gap-2">
-          <Button variant="ghost" onClick={onClose}>
+          <Button variant="tertiary" onClick={onClose}>
             Cancel
           </Button>
           {!canEnable ? (
@@ -79,7 +79,7 @@ export function ServerEnableDialog({
             <Button
               onClick={handleConfirm}
               disabled={isLoading}
-              variant={currentlyEnabled ? "destructive" : "default"}
+              variant={currentlyEnabled ? "destructive-primary" : "primary"}
             >
               {isLoading
                 ? currentlyEnabled

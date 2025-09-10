@@ -8,7 +8,9 @@ import {
   useCreateToolsetMutation,
   useListToolsets,
 } from "@gram/client/react-query/index.js";
+import { Plus } from "lucide-react";
 import { useState } from "react";
+import { Button } from "@speakeasy-api/moonshine";
 import { Outlet } from "react-router";
 import { ToolsetCard } from "./ToolsetCard";
 import { ToolsetsEmptyState } from "./ToolsetsEmptyState";
@@ -122,9 +124,11 @@ function ToolsetsContent({
       </Page.Section.Description>
       <Page.Section.CTA
         onClick={() => setCreateToolsetDialogOpen(true)}
-        icon="plus"
       >
-        Add Toolset
+        <Button.LeftIcon>
+          <Plus className="w-4 h-4" />
+        </Button.LeftIcon>
+        <Button.Text>ADD TOOLSET</Button.Text>
       </Page.Section.CTA>
       <Page.Section.Body>
         <Cards isLoading={toolsets.isLoading}>
