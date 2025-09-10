@@ -194,10 +194,10 @@ jobs:
       - name: Pull and Run Image
         if: ${{ needs.changes.outputs.server == 'true' }}
         run: |
-          echo "Pulling image: ${{ steps.build.outputs.image-tag }}"
-          docker pull ${{ steps.build.outputs.image-tag }}
+          echo "Pulling image: ${{ steps.build-server.outputs.image-tag }}"
+          docker pull ${{ steps.build-server.outputs.image-tag }}
           echo "Running image..."
-          docker run --rm ${{ steps.build.outputs.image-tag }} version
+          docker run --rm ${{ steps.build-server.outputs.image-tag }} version
 
   update-gitops-and-deploy:
     runs-on: ubicloud-standard-4
