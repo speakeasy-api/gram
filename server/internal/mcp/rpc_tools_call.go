@@ -44,6 +44,7 @@ func handleToolsCall(
 	req *rawRequest,
 	toolProxy *gateway.ToolProxy,
 	billingTracker billing.Tracker,
+	billingRepository billing.Repository,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -106,7 +107,7 @@ func handleToolsCall(
 		requestBytes := int64(len(params.Arguments))
 		outputBytes := int64(len(promptData))
 
-		err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingTracker)
+		err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
 		if err != nil {
 			return nil, err
 		}
@@ -181,7 +182,7 @@ func handleToolsCall(
 	requestBytes := int64(len(requestBodyBytes))
 	var outputBytes int64
 
-	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingTracker)
+	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
 	if err != nil {
 		return nil, err
 	}
@@ -230,12 +231,12 @@ func handleToolsCall(
 	return bs, nil
 }
 
-func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingTracker billing.Tracker) error {
+func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingRepository billing.Repository) error {
 	if accountType != string(billing.TierFree) {
 		return nil
 	}
 
-	periodUsage, err := billingTracker.GetStoredPeriodUsage(ctx, orgID)
+	periodUsage, err := billingRepository.GetStoredPeriodUsage(ctx, orgID)
 	// we will not fail here right now, but this cache should always be available
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to get stored period usage", attr.SlogError(err), attr.SlogOrganizationID(orgID))

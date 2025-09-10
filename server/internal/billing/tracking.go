@@ -2,8 +2,6 @@ package billing
 
 import (
 	"context"
-
-	gen "github.com/speakeasy-api/gram/server/gen/usage"
 )
 
 type ToolCallType string
@@ -55,5 +53,4 @@ type Tracker interface {
 	TrackToolCallUsage(ctx context.Context, event ToolCallUsageEvent)
 	TrackPromptCallUsage(ctx context.Context, event PromptCallUsageEvent)
 	TrackPlatformUsage(ctx context.Context, event PlatformUsageEvent)
-	GetStoredPeriodUsage(ctx context.Context, orgID string) (*gen.PeriodUsage, error)
 }
