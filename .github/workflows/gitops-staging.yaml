@@ -212,6 +212,14 @@ jobs:
       - build-and-deploy-server
       - build-and-deploy-dashboard
     steps:
+      - name: Skip if no image tags are available
+        run: |
+          if [[ -z "${{ needs.build-and-deploy-server.outputs.server-image-tag }}" && -z "${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}" ]]; then
+            echo "No image tags available — skipping deployment."
+            exit 0
+          fi
+          echo "Image tags available, proceeding with deployment."
+
       - name: Checkout GitOps Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
         with:
@@ -232,24 +240,20 @@ jobs:
 
       - name: Update Helm Values for Staging
         run: |
-          # Update server image tag only if it's not empty
+          # Update server image tag if available
           if [[ -n "${{ needs.build-and-deploy-server.outputs.server-image-tag }}" ]]; then
             echo "Updating server image tag to: ${{ needs.build-and-deploy-server.outputs.server-image-tag }}"
             yq eval ".image.tag = \"${{ needs.build-and-deploy-server.outputs.server-image-tag }}\"" \
               -i gitops-repo/infra/helm/gram/values-dev.yaml
-          else
-            echo "Server image tag is empty, skipping server image update"
           fi
 
-          # Update dashboard image tag only if it's not empty
+          # Update dashboard image tag if available
           if [[ -n "${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}" ]]; then
             echo "Updating dashboard image tag to: ${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}"
             if grep -q "dashboard:" gitops-repo/infra/helm/gram/values-dev.yaml; then
               yq eval ".dashboard.tag = \"${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}\"" \
                 -i gitops-repo/infra/helm/gram/values-dev.yaml
             fi
-          else
-            echo "Dashboard image tag is empty, skipping dashboard image update"
           fi
 
       - name: Commit and Push Changes
