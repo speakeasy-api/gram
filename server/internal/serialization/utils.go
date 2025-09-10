@@ -1,9 +1,9 @@
 package serialization
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -13,23 +13,8 @@ func valToString(val interface{}) string {
 	case time.Time:
 		return v.Format(time.RFC3339Nano)
 
-	// Floats
-	case float32:
-		return strconv.FormatFloat(float64(v), 'f', -1, 32)
-	case float64:
-		return strconv.FormatFloat(v, 'f', -1, 64)
-
-	// Signed ints
-	case int, int8, int16, int32:
-		return strconv.FormatInt(reflect.ValueOf(v).Int(), 10)
-	case int64:
-		return strconv.FormatInt(v, 10)
-
-	// Unsigned ints
-	case uint, uint8, uint16, uint32:
-		return strconv.FormatUint(reflect.ValueOf(v).Uint(), 10)
-	case uint64:
-		return strconv.FormatUint(v, 10)
+	case json.Number:
+		return v.String()
 
 	default:
 		return fmt.Sprintf("%v", v)
