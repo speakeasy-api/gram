@@ -17,36 +17,172 @@ env:
   REGISTRY: gcr.io/linen-analyst-344721
   DOCKER_REPOSITORY_OWNER: ${{ github.repository_owner }}
   GITOPS_REPO: speakeasy-api/gram-infra
-  GITOPS_BRANCH: main
+  GITOPS_BRANCH: staging
   ENVIRONMENT: dev
 
 jobs:
-  build-and-deploy:
+  changes:
+    name: Tag branch changes
     runs-on: ubicloud-standard-4
+    permissions:
+      contents: "read"
+      pull-requests: read
     outputs:
-      server-image-tag: ${{ steps.build-server.outputs.image-tag }}
-      dashboard-image-tag: ${{ steps.build-dashboard.outputs.image-tag }}
+      server: ${{ steps.gates.outputs.server }}
+      client: ${{ steps.gates.outputs.client }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - name: Checkout source code
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
+        name: Check for changed packages
+        id: filter
+        with:
+          filters: .github/filters.yaml
+      - id: gates
+        name: Set outputs
+        run: |
+          if [[ "${{ steps.filter.outputs.server }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+            echo "server=true" >> $GITHUB_OUTPUT
+            echo "Server jobs will run."
+          else
+            echo "Server jobs will be skipped."
+          fi
 
-      - name: Authenticate to Google Cloud
-        id: auth
-        uses: google-github-actions/auth@b7593ed2efd1c1617e1b0254da33b86225adb2a5
+          if [[ "${{ steps.filter.outputs.client }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+            echo "client=true" >> $GITHUB_OUTPUT
+            echo "Client jobs will run."
+          else
+            echo "Client jobs will be skipped."
+          fi
+
+  build-and-deploy-dashboard:
+    name: "Build and Deploy Dashboard"
+    runs-on: ubicloud-standard-4
+    needs: changes
+    env:
+      GRAM_GIT_SHA: "${{ github.sha }}"
+    steps:
+      - name: Skip if no client changes exist
+        if: ${{ needs.changes.outputs.client != 'true' }}
+        run: echo "No client changes detected — skipping client-build-lint-test job."
+
+      - name: Checkout
+        if: ${{ needs.changes.outputs.client == 'true' }}
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Mise
+        if: ${{ needs.changes.outputs.client == 'true' }}
+        uses: jdx/mise-action@5ac50f778e26fac95da98d50503682459e86d566 # v3.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: ${{ needs.changes.outputs.client == 'true' }}
+        run: mise run github
+
+      - name: Cache PNPM
+        if: ${{ needs.changes.outputs.client == 'true' }}
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        if: ${{ needs.changes.outputs.client == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        if: ${{ needs.changes.outputs.client == 'true' }}
+        env:
+          NODE_ENV: production
+        run: mise exec --env viteprod -- pnpm build
+
+      - name: Upload source maps to DataDog
+        if: ${{ needs.changes.outputs.client == 'true' }}
+        env:
+          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+        run: mise run datadog:sourcemaps --git-sha "${{ github.sha }}"
+
+      - name: Lint
+        if: ${{ needs.changes.outputs.client == 'true' }}
+        run: pnpm lint
+        working-directory: client/dashboard
+
+      - name: Check for dirty files
+        if: ${{ needs.changes.outputs.client == 'true' }}
+        run: mise run git:porcelain
+
+      - id: "auth"
+        if: needs.changes.outputs.client == 'true'
+        name: "Authenticate to Google Cloud"
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
           token_format: "access_token"
           workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
 
       - name: Login to GCR
-        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1
+        if: needs.changes.outputs.client == 'true'
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
         with:
           registry: gcr.io/linen-analyst-344721
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
 
-      - name: Build and Push Server Image
-        id: build-server
+      - name: Build and Push Registry image to GCR
+        id: build
+        if: needs.changes.outputs.client == 'true'
+        uses: ./.github/workflows/composite/build-push
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-dashboard
+          context: ./client/dashboard
+          file: client/dashboard/Dockerfile
+          git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+
+      - name: Prune PNPM store
+        if: ${{ needs.changes.outputs.client == 'true' && success() }}
+        run: pnpm store prune
+  build-and-deploy-server:
+    name: "Build and Deploy Server"
+    runs-on: ubicloud-standard-4
+    needs: changes
+    env:
+      GOMAXPROCS: 4
+    steps:
+      - name: Skip if no server changes exist
+        if: ${{ needs.changes.outputs.server != 'true' }}
+        run: echo "No server changes detected — skipping server-build-lint job."
+
+      - name: Checkout
+        if: ${{ needs.changes.outputs.server == 'true' }}
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+      - id: "auth"
+        if: ${{ needs.changes.outputs.server == 'true' }}
+        name: "Authenticate to Google Cloud"
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
+          service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
+      - name: Login to GCR
+        if: ${{ needs.changes.outputs.server == 'true' }}
+        uses: docker/login-action@184bdaa0721073962dff0199f1fb9940f07167d1 # v3.5.0
+        with:
+          registry: gcr.io/linen-analyst-344721
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
+      - name: Build and Push Registry image to GCR
+        id: build
+        if: ${{ needs.changes.outputs.server == 'true' }}
         uses: ./.github/workflows/composite/build-push
         with:
           registry: ${{ env.REGISTRY }}
@@ -58,22 +194,19 @@ jobs:
           git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
           build-args: |
             GIT_USERNAME=speakeasybot
-
-      - name: Build and Push Dashboard Image
-        id: build-dashboard
-        uses: ./.github/workflows/composite/build-push
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: oauth2accesstoken
-          password: ${{ steps.auth.outputs.access_token }}
-          image: ${{ env.DOCKER_REPOSITORY_OWNER }}/gram-dashboard
-          context: ./client/dashboard
-          file: client/dashboard/Dockerfile
-          git-auth-token: ${{ secrets.BOT_REPO_TOKEN }}
+      - name: Pull and Run Image
+        if: ${{ needs.changes.outputs.server == 'true' }}
+        run: |
+          echo "Pulling image: ${{ steps.build.outputs.image-tag }}"
+          docker pull ${{ steps.build.outputs.image-tag }}
+          echo "Running image..."
+          docker run --rm ${{ steps.build.outputs.image-tag }} version
 
   update-gitops-and-deploy:
     runs-on: ubicloud-standard-4
-    needs: build-and-deploy
+    needs:
+      - build-and-deploy-server
+      - build-and-deploy-dashboard
     steps:
       - name: Checkout GitOps Repository
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
