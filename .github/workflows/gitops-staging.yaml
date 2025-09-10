@@ -218,6 +218,17 @@ jobs:
           repository: ${{ env.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_TOKEN }}
           path: gitops-repo
+          ref: ${{ env.GITOPS_BRANCH }}
+
+      - name: Setup GitOps Branch
+        run: |
+          cd gitops-repo
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+          # Ensure we're on the staging branch and it's up to date
+          git checkout ${{ env.GITOPS_BRANCH }}
+          git pull origin ${{ env.GITOPS_BRANCH }}
 
       - name: Update Helm Values for Staging
         run: |
@@ -227,15 +238,13 @@ jobs:
 
           # Update dashboard image tag (if it exists in values)
           if grep -q "dashboard:" gitops-repo/infra/helm/gram/values-dev.yaml; then
-            sed -i "s|tag: sha-[a-f0-9]*|tag: ${{ needs.build-and-deploy-dashboard.outputs.server-image-tag }}|g" \
+            sed -i "s|tag: sha-[a-f0-9]*|tag: ${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}|g" \
               gitops-repo/infra/helm/gram/values-dev.yaml
           fi
 
       - name: Commit and Push Changes
         run: |
           cd gitops-repo
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
           git add .
           git commit -m "chore: update staging images to ${{ github.sha }}"
           git push origin ${{ env.GITOPS_BRANCH }}
@@ -257,6 +266,6 @@ jobs:
       - name: Notify Deployment
         run: |
           echo "🚀 Staging deployment completed!"
-          echo "Server image: ${{ needs.build-and-deploy.outputs.server-image-tag }}"
-          echo "Dashboard image: ${{ needs.build-and-deploy.outputs.dashboard-image-tag }}"
+          echo "Server image: ${{ needs.build-and-deploy-server.outputs.server-image-tag }}"
+          echo "Dashboard image: ${{ needs.build-and-deploy-dashboard.outputs.dashboard-image-tag }}"
           echo "Commit: ${{ github.sha }}"
