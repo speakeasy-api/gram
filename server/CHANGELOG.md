@@ -1,5 +1,11 @@
 # @gram/server
 
+## 0.1.3
+
+### Patch Changes
+
+- a160361: update openrouter playground credits on account upgrade/downgrade
+
 ## 0.1.2
 
 ### Patch Changes
