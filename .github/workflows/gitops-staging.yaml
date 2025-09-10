@@ -59,6 +59,8 @@ jobs:
     name: "Build and Deploy Dashboard"
     runs-on: ubicloud-standard-4
     needs: changes
+    outputs:
+      dashboard-image-tag: ${{ steps.build-dashboard.outputs.image-tag }}
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
     steps:
@@ -136,7 +138,7 @@ jobs:
           password: ${{ steps.auth.outputs.access_token }}
 
       - name: Build and Push Registry image to GCR
-        id: build
+        id: build-dashboard
         if: needs.changes.outputs.client == 'true'
         uses: ./.github/workflows/composite/build-push
         with:
@@ -155,6 +157,8 @@ jobs:
     name: "Build and Deploy Server"
     runs-on: ubicloud-standard-4
     needs: changes
+    outputs:
+      server-image-tag: ${{ steps.build-server.outputs.image-tag }}
     env:
       GOMAXPROCS: 4
     steps:
@@ -181,7 +185,7 @@ jobs:
           username: oauth2accesstoken
           password: ${{ steps.auth.outputs.access_token }}
       - name: Build and Push Registry image to GCR
-        id: build
+        id: build-server
         if: ${{ needs.changes.outputs.server == 'true' }}
         uses: ./.github/workflows/composite/build-push
         with:
@@ -218,12 +222,12 @@ jobs:
       - name: Update Helm Values for Staging
         run: |
           # Update server image tag
-          sed -i "s|tag: sha-[a-f0-9]*|tag: ${{ needs.build-and-deploy.outputs.server-image-tag }}|g" \
+          sed -i "s|tag: sha-[a-f0-9]*|tag: ${{ needs.build-and-deploy-server.outputs.server-image-tag }}|g" \
             gitops-repo/infra/helm/gram/values-dev.yaml
 
           # Update dashboard image tag (if it exists in values)
           if grep -q "dashboard:" gitops-repo/infra/helm/gram/values-dev.yaml; then
-            sed -i "s|tag: sha-[a-f0-9]*|tag: ${{ needs.build-and-deploy.outputs.dashboard-image-tag }}|g" \
+            sed -i "s|tag: sha-[a-f0-9]*|tag: ${{ needs.build-and-deploy-dashboard.outputs.server-image-tag }}|g" \
               gitops-repo/infra/helm/gram/values-dev.yaml
           fi
 
