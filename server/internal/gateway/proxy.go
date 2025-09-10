@@ -178,6 +178,7 @@ func (itp *ToolProxy) Do(
 
 	var toolCallBody ToolCallBody
 	dec := json.NewDecoder(bytes.NewReader(bodyBytes))
+	// We use json.Number for accurate decoding in path, query, and header parameters.
 	dec.UseNumber()
 
 	if err := dec.Decode(&toolCallBody); err != nil {

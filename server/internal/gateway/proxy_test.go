@@ -45,7 +45,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 		{
 			name:          "large integer path param",
 			pathTemplate:  "/orders/{orderId}",
-			pathParam:     map[string]any{"orderId": 9007199254740991}, // will break with json.Number decoding
+			pathParam:     map[string]any{"orderId": 9007199254740991}, // will break without json.Number decoding
 			expectedPath:  "/orders/9007199254740991",
 			expectedError: false,
 		},
@@ -87,7 +87,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 		{
 			name:          "max safe integer",
 			pathTemplate:  "/data/{value}",
-			pathParam:     map[string]any{"value": 9007199254740991}, // will break with json.Number decoding
+			pathParam:     map[string]any{"value": 9007199254740991}, // will break without json.Number decoding
 			expectedPath:  "/data/9007199254740991",
 			expectedError: false,
 		},
