@@ -1,5 +1,8 @@
-name: GitOps - Deploy to Staging (Terraform)
+name: Deploy to Staging
 on:
+  push:
+    branches:
+      - "raymond/**"
   workflow_dispatch:
     inputs:
       name:
