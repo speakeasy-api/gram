@@ -262,11 +262,16 @@ jobs:
           workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
           service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
 
+      - name: Setup Google Cloud SDK
+        if: ${{ env.SERVER_IMAGE_TAG != '' }}
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          version: "latest"
+
       - name: Deploy to Staging using Terraform
         if: ${{ env.SERVER_IMAGE_TAG != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITOPS_TOKEN }}
-          GOOGLE_APPLICATION_CREDENTIALS: ""
         run: |
           cd gitops-repo
 
