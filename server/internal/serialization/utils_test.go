@@ -55,11 +55,11 @@ func TestValToString(t *testing.T) {
 			input    float32
 			expected string
 		}{
-			// {
-			// 	name:     "zero",
-			// 	input:    0,
-			// 	expected: "0",
-			// },
+			{
+				name:     "zero",
+				input:    0,
+				expected: "0",
+			},
 			{
 				name:     "positive integer",
 				input:    42.0,
@@ -120,6 +120,11 @@ func TestValToString(t *testing.T) {
 				name:     "positive integer",
 				input:    42.0,
 				expected: "42",
+			},
+			{
+				name:     "positive integer large",
+				input:    36282114,
+				expected: "36282114",
 			},
 			{
 				name:     "negative integer",
