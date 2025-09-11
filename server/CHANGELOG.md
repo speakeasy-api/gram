@@ -1,5 +1,11 @@
 # @gram/server
 
+## 0.1.4
+
+### Patch Changes
+
+- ef1eff3: fix a bug updating account type from polar
+
 ## 0.1.3
 
 ### Patch Changes
