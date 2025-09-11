@@ -406,7 +406,10 @@
         box-sizing: border-box;
       }
     </style>
-    <code id="claude-code-script">claude mcp add-json "{{ .MCPSlug }}" "$(cat &lt;&lt;'EOF'
+    <!-- we make this a code block with display: none instead of a
+    script[type="application/json"] because we must escape the user-provided
+    contents and this plays poorly with our script tag -->
+    <code style="display: none;" id="claude-code-script">claude mcp add-json "{{ .MCPSlug }}" "$(cat &lt;&lt;'EOF'
 {{ .MCPConfig }}
 EOF
 )"</code>
