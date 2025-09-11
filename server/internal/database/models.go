@@ -169,21 +169,23 @@ type ExternalOauthServerMetadatum struct {
 }
 
 type HttpSecurity struct {
-	ID           uuid.UUID
-	Key          string
-	DeploymentID uuid.UUID
-	Type         pgtype.Text
-	Name         pgtype.Text
-	InPlacement  pgtype.Text
-	Scheme       pgtype.Text
-	BearerFormat pgtype.Text
-	OauthTypes   []string
-	OauthFlows   []byte
-	EnvVariables []string
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
-	DeletedAt    pgtype.Timestamptz
-	Deleted      bool
+	ID                  uuid.UUID
+	DeploymentID        uuid.UUID
+	ProjectID           uuid.NullUUID
+	Openapiv3DocumentID uuid.NullUUID
+	Key                 string
+	Type                pgtype.Text
+	Name                pgtype.Text
+	InPlacement         pgtype.Text
+	Scheme              pgtype.Text
+	BearerFormat        pgtype.Text
+	OauthTypes          []string
+	OauthFlows          []byte
+	EnvVariables        []string
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	DeletedAt           pgtype.Timestamptz
+	Deleted             bool
 }
 
 type HttpToolDefinition struct {
