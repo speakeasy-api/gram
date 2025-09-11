@@ -229,7 +229,7 @@ INSERT INTO http_security (
   , $9
   , $10
 )
-RETURNING id, key, deployment_id, type, name, in_placement, scheme, bearer_format, oauth_types, oauth_flows, env_variables, created_at, updated_at, deleted_at, deleted
+RETURNING id, deployment_id, project_id, openapiv3_document_id, key, type, name, in_placement, scheme, bearer_format, oauth_types, oauth_flows, env_variables, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateHTTPSecurityParams struct {
@@ -261,8 +261,10 @@ func (q *Queries) CreateHTTPSecurity(ctx context.Context, arg CreateHTTPSecurity
 	var i HttpSecurity
 	err := row.Scan(
 		&i.ID,
-		&i.Key,
 		&i.DeploymentID,
+		&i.ProjectID,
+		&i.Openapiv3DocumentID,
+		&i.Key,
 		&i.Type,
 		&i.Name,
 		&i.InPlacement,
