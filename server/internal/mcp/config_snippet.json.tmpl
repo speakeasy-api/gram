@@ -2,12 +2,12 @@
   "command": "npx",
   "args": [
     "mcp-remote",
-    "{{ .MCPURL }}"{{- range .Headers }},
+    "{{ .MCPURL }}"{{- range $i, $header := .Headers }},
     "--header",
-    "{{ printf "%s:${%s}" . . }}"{{- end }}
+    "{{ $header }}:${{ "{{" }} {{ index $.EnvHeaders $i }} {{ "}}" }}"{{- end }}
   ]{{- if (gt (len .Headers) 0) }},
   "env": {
     {{- range $i, $header := .Headers }}{{- if $i }},{{ end }}
-    "{{ $header }}": "<your-value-here>"{{- end }}
+    "{{ index $.EnvHeaders $i }}": "<your-value-here>"{{- end }}
   }{{- end }}
 }

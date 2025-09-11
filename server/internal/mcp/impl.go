@@ -298,14 +298,16 @@ type jsonSnippetData struct {
 	MCPSlug        string
 	MCPDescription string
 	Headers        []string
+	EnvHeaders     []string
 	MCPURL         string
 	ToolNames      []string
 }
 
 type hostedPageData struct {
 	jsonSnippetData
-	JSONBlobURI      string
-	OrganizationName string
+	MCPConfig           string
+	MCPConfigURIEncoded string
+	OrganizationName    string
 }
 
 func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error {
@@ -375,12 +377,19 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		return oops.E(oops.CodeNotFound, err, "malformed mcp url").Log(ctx, s.logger)
 	}
 
+	// Create env-safe versions of headers (replace dashes with underscores)
+	envHeadersEnvSafe := make([]string, len(envHeaders))
+	for i, header := range envHeaders {
+		envHeadersEnvSafe[i] = strings.ReplaceAll(header, "-", "_")
+	}
+
 	configSnippetData := jsonSnippetData{
 		MCPName:        cases.Title(language.English).String(toolset.Name),
 		MCPSlug:        toolset.Slug,
 		MCPDescription: toolset.Description.String,
 		MCPURL:         MCPURL,
 		Headers:        envHeaders,
+		EnvHeaders:     envHeadersEnvSafe,
 		ToolNames:      toolNames,
 	}
 
@@ -395,9 +404,10 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	data := hostedPageData{
-		jsonSnippetData:  configSnippetData,
-		JSONBlobURI:      url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
-		OrganizationName: organizationName,
+		jsonSnippetData:     configSnippetData,
+		MCPConfig:           configSnippet.String(),
+		MCPConfigURIEncoded: url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
+		OrganizationName:    organizationName,
 	}
 
 	hostedPageTmpl, err := template.New("hosted_page").Parse(hostedPageTmplData)
