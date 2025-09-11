@@ -64,6 +64,9 @@ const (
 	CacheNamespaceKey              = attribute.Key("gram.cache.namespace")
 	ComponentKey                   = attribute.Key("gram.component")
 	DeploymentIDKey                = attribute.Key("gram.deployment.id")
+	DeploymentFunctionsIDKey       = attribute.Key("gram.deployment.functions.id")
+	DeploymentFunctionsNameKey     = attribute.Key("gram.deployment.functions.name")
+	DeploymentFunctionsSlugKey     = attribute.Key("gram.deployment.functions.slug")
 	DeploymentOpenAPIIDKey         = attribute.Key("gram.deployment.openapi.id")
 	DeploymentOpenAPINameKey       = attribute.Key("gram.deployment.openapi.name")
 	DeploymentOpenAPISlugKey       = attribute.Key("gram.deployment.openapi.slug")
@@ -271,6 +274,25 @@ func SlogComponent(v string) slog.Attr      { return slog.String(string(Componen
 func DeploymentID(v string) attribute.KeyValue { return DeploymentIDKey.String(v) }
 func SlogDeploymentID(v string) slog.Attr      { return slog.String(string(DeploymentIDKey), v) }
 
+func DeploymentFunctionsID(v string) attribute.KeyValue { return DeploymentFunctionsIDKey.String(v) }
+func SlogDeploymentFunctionsID(v string) slog.Attr {
+	return slog.String(string(DeploymentFunctionsIDKey), v)
+}
+
+func DeploymentFunctionsName(v string) attribute.KeyValue {
+	return DeploymentFunctionsNameKey.String(v)
+}
+func SlogDeploymentFunctionsName(v string) slog.Attr {
+	return slog.String(string(DeploymentFunctionsNameKey), v)
+}
+
+func DeploymentFunctionsSlug(v string) attribute.KeyValue {
+	return DeploymentFunctionsSlugKey.String(v)
+}
+func SlogDeploymentFunctionsSlug(v string) slog.Attr {
+	return slog.String(string(DeploymentFunctionsSlugKey), v)
+}
+
 func DeploymentOpenAPIID(v string) attribute.KeyValue { return DeploymentOpenAPIIDKey.String(v) }
 func SlogDeploymentOpenAPIID(v string) slog.Attr {
 	return slog.String(string(DeploymentOpenAPIIDKey), v)
@@ -383,8 +405,8 @@ func SlogOrganizationAccountType(v string) slog.Attr {
 	return slog.String(string(OrganizationAccountTypeKey), v)
 }
 
-func Outcome(v string) attribute.KeyValue { return OutcomeKey.String(v) }
-func SlogOutcome(v string) slog.Attr      { return slog.String(string(OutcomeKey), v) }
+func Outcome[V ~string](v V) attribute.KeyValue { return OutcomeKey.String(string(v)) }
+func SlogOutcome(v string) slog.Attr            { return slog.String(string(OutcomeKey), v) }
 
 func PackageName(v string) attribute.KeyValue { return PackageNameKey.String(v) }
 func SlogPackageName(v string) slog.Attr      { return slog.String(string(PackageNameKey), v) }

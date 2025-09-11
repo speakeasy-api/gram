@@ -45,7 +45,7 @@ type Deployment struct {
 	FunctionsToolCount int64
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
-	FunctionsAssets []*FunctionsDeploymentAsset
+	FunctionsAssets []*DeploymentFunctions
 	// The packages that were deployed.
 	Packages []*DeploymentPackage
 }

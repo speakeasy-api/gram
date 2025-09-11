@@ -1643,14 +1643,14 @@ func marshalTypesOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody(
 	return res
 }
 
-// marshalTypesFunctionsDeploymentAssetToFunctionsDeploymentAssetResponseBody
-// builds a value of type *FunctionsDeploymentAssetResponseBody from a value of
-// type *types.FunctionsDeploymentAsset.
-func marshalTypesFunctionsDeploymentAssetToFunctionsDeploymentAssetResponseBody(v *types.FunctionsDeploymentAsset) *FunctionsDeploymentAssetResponseBody {
+// marshalTypesDeploymentFunctionsToDeploymentFunctionsResponseBody builds a
+// value of type *DeploymentFunctionsResponseBody from a value of type
+// *types.DeploymentFunctions.
+func marshalTypesDeploymentFunctionsToDeploymentFunctionsResponseBody(v *types.DeploymentFunctions) *DeploymentFunctionsResponseBody {
 	if v == nil {
 		return nil
 	}
-	res := &FunctionsDeploymentAssetResponseBody{
+	res := &DeploymentFunctionsResponseBody{
 		ID:      v.ID,
 		AssetID: v.AssetID,
 		Name:    v.Name,
@@ -1706,9 +1706,9 @@ func marshalTypesDeploymentToDeploymentResponseBody(v *types.Deployment) *Deploy
 		res.Openapiv3Assets = []*OpenAPIv3DeploymentAssetResponseBody{}
 	}
 	if v.FunctionsAssets != nil {
-		res.FunctionsAssets = make([]*FunctionsDeploymentAssetResponseBody, len(v.FunctionsAssets))
+		res.FunctionsAssets = make([]*DeploymentFunctionsResponseBody, len(v.FunctionsAssets))
 		for i, val := range v.FunctionsAssets {
-			res.FunctionsAssets[i] = marshalTypesFunctionsDeploymentAssetToFunctionsDeploymentAssetResponseBody(val)
+			res.FunctionsAssets[i] = marshalTypesDeploymentFunctionsToDeploymentFunctionsResponseBody(val)
 		}
 	}
 	if v.Packages != nil {

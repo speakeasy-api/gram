@@ -33,7 +33,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 	openapiToolCount := rows[0].OpenapiToolCount
 	functionsToolCount := rows[0].FunctionsToolCount
 	attachedOpenAPIAssets := make([]*types.OpenAPIv3DeploymentAsset, 0, len(rows))
-	attachedFunctionsAssets := make([]*types.FunctionsDeploymentAsset, 0, len(rows))
+	attachedFunctionsAssets := make([]*types.DeploymentFunctions, 0, len(rows))
 	attachedPackages := make([]*types.DeploymentPackage, 0, len(rows))
 	var seenOpenAPIAssets = make(map[uuid.UUID]bool)
 	var seenFunctionsAssets = make(map[uuid.UUID]bool)
@@ -72,7 +72,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment functions asset").Log(ctx, logger)
 			}
 
-			attachedFunctionsAssets = append(attachedFunctionsAssets, &types.FunctionsDeploymentAsset{
+			attachedFunctionsAssets = append(attachedFunctionsAssets, &types.DeploymentFunctions{
 				ID:      functionsAssetID.String(),
 				AssetID: r.DeploymentsFunctionsAssetID.UUID.String(),
 				Name:    r.DeploymentsFunctionsAssetName.String,

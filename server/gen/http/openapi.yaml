@@ -12928,7 +12928,7 @@ definitions:
             functions_assets:
                 type: array
                 items:
-                    $ref: '#/definitions/FunctionsDeploymentAsset'
+                    $ref: '#/definitions/DeploymentFunctions'
                 description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
                 example:
                     - asset_id: Delectus in rerum ratione harum porro est.
@@ -13078,6 +13078,44 @@ definitions:
             - packages
             - openapi_tool_count
             - functions_tool_count
+    DeploymentFunctions:
+        title: DeploymentFunctions
+        type: object
+        properties:
+            asset_id:
+                type: string
+                description: The ID of the uploaded asset.
+                example: Delectus consequuntur.
+            id:
+                type: string
+                description: The ID of the deployment asset.
+                example: Rem quas qui.
+            name:
+                type: string
+                description: The name to give the document as it will be displayed in UIs.
+                example: Corrupti quas.
+            runtime:
+                type: string
+                description: The runtime used to execute functions.
+                example: Dolores vitae officia ea nobis id animi.
+            slug:
+                type: string
+                description: The slug to give the document as it will be displayed in URLs.
+                example: 4rt
+                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                maxLength: 40
+        example:
+            asset_id: Est ut error.
+            id: Neque molestiae aliquam officiis quo.
+            name: Recusandae quam beatae.
+            runtime: Velit cupiditate sed vel dolore non.
+            slug: vse
+        required:
+            - id
+            - asset_id
+            - name
+            - slug
+            - runtime
     DeploymentLogEvent:
         title: DeploymentLogEvent
         type: object
@@ -19773,44 +19811,6 @@ definitions:
         required:
             - slug
             - metadata
-    FunctionsDeploymentAsset:
-        title: FunctionsDeploymentAsset
-        type: object
-        properties:
-            asset_id:
-                type: string
-                description: The ID of the uploaded asset.
-                example: Delectus consequuntur.
-            id:
-                type: string
-                description: The ID of the deployment asset.
-                example: Rem quas qui.
-            name:
-                type: string
-                description: The name to give the document as it will be displayed in UIs.
-                example: Corrupti quas.
-            runtime:
-                type: string
-                description: The runtime used to execute functions.
-                example: Dolores vitae officia ea nobis id animi.
-            slug:
-                type: string
-                description: The slug to give the document as it will be displayed in URLs.
-                example: 4rt
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
-                maxLength: 40
-        example:
-            asset_id: Est ut error.
-            id: Neque molestiae aliquam officiis quo.
-            name: Recusandae quam beatae.
-            runtime: Velit cupiditate sed vel dolore non.
-            slug: vse
-        required:
-            - id
-            - asset_id
-            - name
-            - slug
-            - runtime
     GetDeploymentLogsResult:
         title: GetDeploymentLogsResult
         type: object
@@ -19888,7 +19888,7 @@ definitions:
             functions_assets:
                 type: array
                 items:
-                    $ref: '#/definitions/FunctionsDeploymentAsset'
+                    $ref: '#/definitions/DeploymentFunctions'
                 description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
                 example:
                     - asset_id: Delectus in rerum ratione harum porro est.

@@ -7663,7 +7663,7 @@ components:
                 functions_assets:
                     type: array
                     items:
-                        $ref: '#/components/schemas/FunctionsDeploymentAsset'
+                        $ref: '#/components/schemas/DeploymentFunctions'
                     description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
                 functions_tool_count:
                     type: integer
@@ -7726,6 +7726,32 @@ components:
                 - packages
                 - openapi_tool_count
                 - functions_tool_count
+        DeploymentFunctions:
+            type: object
+            properties:
+                asset_id:
+                    type: string
+                    description: The ID of the uploaded asset.
+                id:
+                    type: string
+                    description: The ID of the deployment asset.
+                name:
+                    type: string
+                    description: The name to give the document as it will be displayed in UIs.
+                runtime:
+                    type: string
+                    description: The runtime used to execute functions.
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+            required:
+                - id
+                - asset_id
+                - name
+                - slug
+                - runtime
         DeploymentLogEvent:
             type: object
             properties:
@@ -8003,32 +8029,6 @@ components:
             required:
                 - slug
                 - metadata
-        FunctionsDeploymentAsset:
-            type: object
-            properties:
-                asset_id:
-                    type: string
-                    description: The ID of the uploaded asset.
-                id:
-                    type: string
-                    description: The ID of the deployment asset.
-                name:
-                    type: string
-                    description: The name to give the document as it will be displayed in UIs.
-                runtime:
-                    type: string
-                    description: The runtime used to execute functions.
-                slug:
-                    type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
-                    maxLength: 40
-            required:
-                - id
-                - asset_id
-                - name
-                - slug
-                - runtime
         GetDeploymentForm:
             type: object
             properties:
@@ -8086,7 +8086,7 @@ components:
                 functions_assets:
                     type: array
                     items:
-                        $ref: '#/components/schemas/FunctionsDeploymentAsset'
+                        $ref: '#/components/schemas/DeploymentFunctions'
                     description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
                 functions_tool_count:
                     type: integer

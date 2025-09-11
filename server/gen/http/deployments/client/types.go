@@ -105,7 +105,7 @@ type GetDeploymentResponseBody struct {
 	FunctionsToolCount *int64 `form:"functions_tool_count,omitempty" json:"functions_tool_count,omitempty" xml:"functions_tool_count,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
-	FunctionsAssets []*FunctionsDeploymentAssetResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
+	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
 }
@@ -1474,9 +1474,9 @@ type OpenAPIv3DeploymentAssetResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 }
 
-// FunctionsDeploymentAssetResponseBody is used to define fields on response
-// body types.
-type FunctionsDeploymentAssetResponseBody struct {
+// DeploymentFunctionsResponseBody is used to define fields on response body
+// types.
+type DeploymentFunctionsResponseBody struct {
 	// The ID of the deployment asset.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the uploaded asset.
@@ -1539,7 +1539,7 @@ type DeploymentResponseBody struct {
 	FunctionsToolCount *int64 `form:"functions_tool_count,omitempty" json:"functions_tool_count,omitempty" xml:"functions_tool_count,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
-	FunctionsAssets []*FunctionsDeploymentAssetResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
+	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
 }
@@ -1731,9 +1731,9 @@ func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetD
 		v.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetResponseBodyToTypesOpenAPIv3DeploymentAsset(val)
 	}
 	if body.FunctionsAssets != nil {
-		v.FunctionsAssets = make([]*types.FunctionsDeploymentAsset, len(body.FunctionsAssets))
+		v.FunctionsAssets = make([]*types.DeploymentFunctions, len(body.FunctionsAssets))
 		for i, val := range body.FunctionsAssets {
-			v.FunctionsAssets[i] = unmarshalFunctionsDeploymentAssetResponseBodyToTypesFunctionsDeploymentAsset(val)
+			v.FunctionsAssets[i] = unmarshalDeploymentFunctionsResponseBodyToTypesDeploymentFunctions(val)
 		}
 	}
 	v.Packages = make([]*types.DeploymentPackage, len(body.Packages))
@@ -2911,7 +2911,7 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	}
 	for _, e := range body.FunctionsAssets {
 		if e != nil {
-			if err2 := ValidateFunctionsDeploymentAssetResponseBody(e); err2 != nil {
+			if err2 := ValidateDeploymentFunctionsResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -4710,9 +4710,9 @@ func ValidateOpenAPIv3DeploymentAssetResponseBody(body *OpenAPIv3DeploymentAsset
 	return
 }
 
-// ValidateFunctionsDeploymentAssetResponseBody runs the validations defined on
-// FunctionsDeploymentAssetResponseBody
-func ValidateFunctionsDeploymentAssetResponseBody(body *FunctionsDeploymentAssetResponseBody) (err error) {
+// ValidateDeploymentFunctionsResponseBody runs the validations defined on
+// DeploymentFunctionsResponseBody
+func ValidateDeploymentFunctionsResponseBody(body *DeploymentFunctionsResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -4799,7 +4799,7 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 	}
 	for _, e := range body.FunctionsAssets {
 		if e != nil {
-			if err2 := ValidateFunctionsDeploymentAssetResponseBody(e); err2 != nil {
+			if err2 := ValidateDeploymentFunctionsResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}

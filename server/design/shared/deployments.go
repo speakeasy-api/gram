@@ -65,7 +65,7 @@ var Deployment = Type("Deployment", func() {
 	Attribute("functions_tool_count", Int64, func() {
 		Description("The number of tools in the deployment generated from OpenAPI documents.")
 	})
-	Attribute("functions_assets", ArrayOf(FunctionsDeploymentAsset), func() {
+	Attribute("functions_assets", ArrayOf(DeploymentFunctions), func() {
 		Description("The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.")
 	})
 
@@ -95,7 +95,7 @@ var OpenAPIv3DeploymentAsset = Type("OpenAPIv3DeploymentAsset", func() {
 	Meta("struct:pkg:path", "types")
 })
 
-var FunctionsDeploymentAsset = Type("FunctionsDeploymentAsset", func() {
+var DeploymentFunctions = Type("DeploymentFunctions", func() {
 	Required("id", "asset_id", "name", "slug", "runtime")
 
 	Attribute("id", String, func() {

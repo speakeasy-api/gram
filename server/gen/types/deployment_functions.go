@@ -7,7 +7,7 @@
 
 package types
 
-type FunctionsDeploymentAsset struct {
+type DeploymentFunctions struct {
 	// The ID of the deployment asset.
 	ID string
 	// The ID of the uploaded asset.

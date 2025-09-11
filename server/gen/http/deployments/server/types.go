@@ -104,7 +104,7 @@ type GetDeploymentResponseBody struct {
 	FunctionsToolCount int64 `form:"functions_tool_count" json:"functions_tool_count" xml:"functions_tool_count"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
-	FunctionsAssets []*FunctionsDeploymentAssetResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
+	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages" json:"packages" xml:"packages"`
 }
@@ -1473,9 +1473,9 @@ type OpenAPIv3DeploymentAssetResponseBody struct {
 	Slug string `form:"slug" json:"slug" xml:"slug"`
 }
 
-// FunctionsDeploymentAssetResponseBody is used to define fields on response
-// body types.
-type FunctionsDeploymentAssetResponseBody struct {
+// DeploymentFunctionsResponseBody is used to define fields on response body
+// types.
+type DeploymentFunctionsResponseBody struct {
 	// The ID of the deployment asset.
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the uploaded asset.
@@ -1538,7 +1538,7 @@ type DeploymentResponseBody struct {
 	FunctionsToolCount int64 `form:"functions_tool_count" json:"functions_tool_count" xml:"functions_tool_count"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
-	FunctionsAssets []*FunctionsDeploymentAssetResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
+	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages" json:"packages" xml:"packages"`
 }
@@ -1649,9 +1649,9 @@ func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDepl
 		body.Openapiv3Assets = []*OpenAPIv3DeploymentAssetResponseBody{}
 	}
 	if res.FunctionsAssets != nil {
-		body.FunctionsAssets = make([]*FunctionsDeploymentAssetResponseBody, len(res.FunctionsAssets))
+		body.FunctionsAssets = make([]*DeploymentFunctionsResponseBody, len(res.FunctionsAssets))
 		for i, val := range res.FunctionsAssets {
-			body.FunctionsAssets[i] = marshalTypesFunctionsDeploymentAssetToFunctionsDeploymentAssetResponseBody(val)
+			body.FunctionsAssets[i] = marshalTypesDeploymentFunctionsToDeploymentFunctionsResponseBody(val)
 		}
 	}
 	if res.Packages != nil {
