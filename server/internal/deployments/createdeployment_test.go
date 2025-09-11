@@ -48,6 +48,7 @@ func TestDeploymentsService_CreateDeployment(t *testing.T) {
 				Slug:    "test-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -143,7 +144,8 @@ func TestDeploymentsService_CreateDeployment_Idempotency(t *testing.T) {
 						Slug:    "test-doc",
 					},
 				},
-				Packages: []*gen.AddDeploymentPackageForm{},
+				Functions: []*gen.AddFunctionsForm{},
+				Packages:  []*gen.AddDeploymentPackageForm{},
 			})
 			if err != nil {
 				return fmt.Errorf("create deployment: %w", err)
@@ -198,6 +200,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 		_, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 			IdempotencyKey:   "test-key",
 			Openapiv3Assets:  []*gen.AddOpenAPIv3DeploymentAssetForm{},
+			Functions:        []*gen.AddFunctionsForm{},
 			Packages:         []*gen.AddDeploymentPackageForm{},
 			ApikeyToken:      nil,
 			SessionToken:     nil,
@@ -210,7 +213,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 		})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "at least one asset or package is required")
+		require.Contains(t, err.Error(), "at least one openapi document, functions file or package is required")
 	})
 
 	t.Run("invalid asset ID", func(t *testing.T) {
@@ -225,6 +228,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 					Slug:    "test-doc",
 				},
 			},
+			Functions:        []*gen.AddFunctionsForm{},
 			Packages:         []*gen.AddDeploymentPackageForm{},
 			ApikeyToken:      nil,
 			SessionToken:     nil,
@@ -237,7 +241,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 		})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "error parsing asset id")
+		require.Contains(t, err.Error(), "error parsing openapi asset id")
 	})
 
 	t.Run("invalid package version", func(t *testing.T) {
@@ -246,6 +250,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 		_, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 			IdempotencyKey:  "test-key",
 			Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+			Functions:       []*gen.AddFunctionsForm{},
 			Packages: []*gen.AddDeploymentPackageForm{
 				{
 					Name:    "test-package",
@@ -288,6 +293,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 					Slug:    "test-doc",
 				},
 			},
+			Functions:        []*gen.AddFunctionsForm{},
 			Packages:         []*gen.AddDeploymentPackageForm{},
 			ApikeyToken:      nil,
 			SessionToken:     nil,
@@ -331,6 +337,7 @@ func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 		dep, err = ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 			IdempotencyKey:  "test-random-idempotency-key",
 			Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+			Functions:       []*gen.AddFunctionsForm{},
 			Packages: []*gen.AddDeploymentPackageForm{
 				{
 					Name:    "test-package",

@@ -25,12 +25,15 @@ SELECT
   d.user_id,
   d.created_at,
   COALESCE(ls.status, 'unknown') as status,
-  COUNT(DISTINCT doa.id) as asset_count,
-  COUNT(DISTINCT htd.id) as tool_count
+  COUNT(DISTINCT doa.id) as openapi_asset_count,
+  COUNT(DISTINCT htd.id) as openapi_tool_count,
+  COUNT(DISTINCT tf.functions_id) as functions_tool_asset_count,
+  COUNT(DISTINCT tf.id) as functions_tool_count
 FROM deployments d
 LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
 LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
 LEFT JOIN http_tool_definitions htd ON d.id = htd.deployment_id AND htd.deleted IS FALSE
+LEFT JOIN tool_functions tf ON d.id = tf.deployment_id AND tf.deleted IS FALSE
 WHERE
   d.project_id = @project_id
   AND d.id <= CASE 
@@ -78,11 +81,19 @@ WITH latest_status as (
     ORDER BY seq DESC
     LIMIT 1
 ),
-tool_counts as (
+openapi_tool_counts as (
     SELECT 
         deployment_id,
         COUNT(DISTINCT id) as tool_count
     FROM http_tool_definitions 
+    WHERE deployment_id = @id AND deleted IS FALSE
+    GROUP BY deployment_id
+),
+functions_tool_counts as (
+    SELECT 
+        deployment_id,
+        COUNT(DISTINCT id) as tool_count
+    FROM tool_functions 
     WHERE deployment_id = @id AND deleted IS FALSE
     GROUP BY deployment_id
 )
@@ -93,6 +104,11 @@ SELECT
   deployments_openapiv3_assets.asset_id as deployments_openapiv3_asset_store_id,
   deployments_openapiv3_assets.name as deployments_openapiv3_asset_name,
   deployments_openapiv3_assets.slug as deployments_openapiv3_asset_slug,
+  deployments_functions.id as deployments_functions_asset_id,
+  deployments_functions.asset_id as deployments_functions_asset_store_id,
+  deployments_functions.name as deployments_functions_asset_name,
+  deployments_functions.slug as deployments_functions_asset_slug,
+  deployments_functions.runtime as deployments_functions_asset_runtime,
   deployments_packages.package_id as deployment_package_id,
   packages.name as package_name,
   package_versions.major as package_version_major,
@@ -100,14 +116,17 @@ SELECT
   package_versions.patch as package_version_patch,
   package_versions.prerelease as package_version_prerelease,
   package_versions.build as package_version_build,
-  COALESCE(tool_counts.tool_count, 0) as tool_count
+  COALESCE(openapi_tool_counts.tool_count, 0) as openapi_tool_count,
+  COALESCE(functions_tool_counts.tool_count, 0) as functions_tool_count
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
+LEFT JOIN deployments_functions ON deployments.id = deployments_functions.deployment_id
 LEFT JOIN deployments_packages ON deployments.id = deployments_packages.deployment_id
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
-LEFT JOIN tool_counts ON deployments.id = tool_counts.deployment_id
+LEFT JOIN openapi_tool_counts ON deployments.id = openapi_tool_counts.deployment_id
+LEFT JOIN functions_tool_counts ON deployments.id = functions_tool_counts.deployment_id
 WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
 -- name: GetLatestDeploymentID :one
@@ -221,6 +240,48 @@ WHERE current.deployment_id = @original_deployment_id
   AND current.asset_id <> ALL (@excluded_ids::uuid[])
 RETURNING id;
 
+-- name: CloneDeploymentFunctionsAssets :many
+INSERT INTO deployments_functions (
+  deployment_id
+  , asset_id
+  , name
+  , slug
+  , runtime
+)
+SELECT 
+  @clone_deployment_id
+  , current.asset_id
+  , current.name
+  , current.slug
+  , current.runtime
+FROM deployments_functions as current
+WHERE current.deployment_id = @original_deployment_id
+  AND current.asset_id <> ALL (@excluded_ids::uuid[])
+RETURNING id;
+
+-- name: CloneDeploymentToolFunctions :many
+INSERT INTO tool_functions (
+  deployment_id
+  , functions_id
+  , name
+  , description
+  , runtime
+  , variables
+  , input_schema
+)
+SELECT 
+  @clone_deployment_id
+  , current.functions_id
+  , current.name
+  , current.description
+  , current.runtime
+  , current.variables
+  , current.input_schema
+FROM tool_functions as current
+WHERE current.deployment_id = @original_deployment_id
+  AND current.name <> ALL (@excluded_names::text[])
+RETURNING id;
+
 -- name: TransitionDeployment :one
 WITH current_status AS (
   SELECT 0 as state, id, deployment_id, status
@@ -290,6 +351,27 @@ ON CONFLICT (deployment_id, slug) DO UPDATE
 SET
   asset_id = EXCLUDED.asset_id,
   name = EXCLUDED.name
+RETURNING id, asset_id, name, slug;
+
+-- name: UpsertDeploymentFunctionsAsset :one
+INSERT INTO deployments_functions (
+  deployment_id
+  , asset_id
+  , name
+  , slug
+  , runtime
+) VALUES (
+  @deployment_id
+  , @asset_id
+  , @name
+  , @slug
+  , @runtime
+)
+ON CONFLICT (deployment_id, slug) DO UPDATE
+SET
+  asset_id = EXCLUDED.asset_id
+  , name = EXCLUDED.name
+  , runtime = EXCLUDED.runtime
 RETURNING id, asset_id, name, slug;
 
 -- name: UpsertDeploymentPackage :one

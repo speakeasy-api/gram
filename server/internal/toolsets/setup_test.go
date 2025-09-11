@@ -140,6 +140,7 @@ func createPetstoreDeployment(t *testing.T, ctx context.Context, ti *testInstanc
 				Slug:    "petstore-doc",
 			},
 		},
+		Functions:        []*dgen.AddFunctionsForm{},
 		Packages:         []*dgen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,

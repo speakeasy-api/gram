@@ -86,11 +86,18 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 	{
 		err = json.Unmarshal([]byte(deploymentsCreateDeploymentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Dolorem quibusdam animi.\",\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Molestiae nulla aut.\",\n            \"name\": \"Laboriosam iusto ea est et.\",\n            \"slug\": \"15w\"\n         },\n         {\n            \"asset_id\": \"Molestiae nulla aut.\",\n            \"name\": \"Laboriosam iusto ea est et.\",\n            \"slug\": \"15w\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"Qui nisi aut.\",\n            \"version\": \"Totam adipisci id ratione ut ex.\"\n         },\n         {\n            \"name\": \"Qui nisi aut.\",\n            \"version\": \"Totam adipisci id ratione ut ex.\"\n         },\n         {\n            \"name\": \"Qui nisi aut.\",\n            \"version\": \"Totam adipisci id ratione ut ex.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Tempora qui et.\",\n      \"functions\": [\n         {\n            \"asset_id\": \"Molestiae laboriosam accusamus quisquam quia.\",\n            \"name\": \"Et sit laborum officiis consectetur velit ipsa.\",\n            \"runtime\": \"Expedita aut qui in suscipit quibusdam.\",\n            \"slug\": \"dvs\"\n         },\n         {\n            \"asset_id\": \"Molestiae laboriosam accusamus quisquam quia.\",\n            \"name\": \"Et sit laborum officiis consectetur velit ipsa.\",\n            \"runtime\": \"Expedita aut qui in suscipit quibusdam.\",\n            \"slug\": \"dvs\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Ipsam asperiores.\",\n            \"name\": \"Impedit inventore voluptatem laboriosam neque.\",\n            \"slug\": \"hcu\"\n         },\n         {\n            \"asset_id\": \"Ipsam asperiores.\",\n            \"name\": \"Impedit inventore voluptatem laboriosam neque.\",\n            \"slug\": \"hcu\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"Tempora molestiae rerum error.\",\n            \"version\": \"Aspernatur occaecati ea illum et.\"\n         },\n         {\n            \"name\": \"Tempora molestiae rerum error.\",\n            \"version\": \"Aspernatur occaecati ea illum et.\"\n         }\n      ]\n   }'")
 		}
 		for _, e := range body.Openapiv3Assets {
 			if e != nil {
 				if err2 := ValidateAddOpenAPIv3DeploymentAssetFormRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		for _, e := range body.Functions {
+			if e != nil {
+				if err2 := ValidateAddFunctionsFormRequestBody(e); err2 != nil {
 					err = goa.MergeErrors(err, err2)
 				}
 			}
@@ -134,6 +141,12 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 			v.Openapiv3Assets[i] = marshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3DeploymentAssetForm(val)
 		}
 	}
+	if body.Functions != nil {
+		v.Functions = make([]*deployments.AddFunctionsForm, len(body.Functions))
+		for i, val := range body.Functions {
+			v.Functions[i] = marshalAddFunctionsFormRequestBodyToDeploymentsAddFunctionsForm(val)
+		}
+	}
 	if body.Packages != nil {
 		v.Packages = make([]*deployments.AddDeploymentPackageForm, len(body.Packages))
 		for i, val := range body.Packages {
@@ -156,7 +169,7 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveApikeyTok
 	{
 		err = json.Unmarshal([]byte(deploymentsEvolveBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Et tempora.\",\n      \"exclude_openapiv3_assets\": [\n         \"Fugiat sed aut dolor ad ut.\",\n         \"Magnam rerum.\"\n      ],\n      \"exclude_packages\": [\n         \"Est molestiae.\",\n         \"Possimus modi ipsa iusto corrupti officia asperiores.\",\n         \"Beatae vel autem voluptatem aliquid reiciendis.\"\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"Molestiae nulla aut.\",\n            \"name\": \"Laboriosam iusto ea est et.\",\n            \"slug\": \"15w\"\n         },\n         {\n            \"asset_id\": \"Molestiae nulla aut.\",\n            \"name\": \"Laboriosam iusto ea est et.\",\n            \"slug\": \"15w\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"Velit aspernatur occaecati ea illum et eum.\",\n            \"version\": \"Blanditiis officia corporis.\"\n         },\n         {\n            \"name\": \"Velit aspernatur occaecati ea illum et eum.\",\n            \"version\": \"Blanditiis officia corporis.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Qui dolore qui et aut corporis eligendi.\",\n      \"exclude_functions\": [\n         \"Velit minima voluptatem aliquam harum beatae quia.\",\n         \"Dolor non veritatis esse.\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"Nihil et ipsa tempore.\",\n         \"Ipsam occaecati accusamus harum qui.\",\n         \"Sapiente qui cumque eius voluptatem qui dolorem.\"\n      ],\n      \"exclude_packages\": [\n         \"Quo ea.\",\n         \"Necessitatibus ea porro reprehenderit est perspiciatis voluptates.\",\n         \"Ea accusantium similique aut.\",\n         \"Aut inventore totam in unde.\"\n      ],\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"Molestiae laboriosam accusamus quisquam quia.\",\n            \"name\": \"Et sit laborum officiis consectetur velit ipsa.\",\n            \"runtime\": \"Expedita aut qui in suscipit quibusdam.\",\n            \"slug\": \"dvs\"\n         },\n         {\n            \"asset_id\": \"Molestiae laboriosam accusamus quisquam quia.\",\n            \"name\": \"Et sit laborum officiis consectetur velit ipsa.\",\n            \"runtime\": \"Expedita aut qui in suscipit quibusdam.\",\n            \"slug\": \"dvs\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"Ipsam asperiores.\",\n            \"name\": \"Impedit inventore voluptatem laboriosam neque.\",\n            \"slug\": \"hcu\"\n         },\n         {\n            \"asset_id\": \"Ipsam asperiores.\",\n            \"name\": \"Impedit inventore voluptatem laboriosam neque.\",\n            \"slug\": \"hcu\"\n         },\n         {\n            \"asset_id\": \"Ipsam asperiores.\",\n            \"name\": \"Impedit inventore voluptatem laboriosam neque.\",\n            \"slug\": \"hcu\"\n         },\n         {\n            \"asset_id\": \"Ipsam asperiores.\",\n            \"name\": \"Impedit inventore voluptatem laboriosam neque.\",\n            \"slug\": \"hcu\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"Voluptate qui nihil.\",\n            \"version\": \"Fugit animi libero nam placeat quis.\"\n         },\n         {\n            \"name\": \"Voluptate qui nihil.\",\n            \"version\": \"Fugit animi libero nam placeat quis.\"\n         },\n         {\n            \"name\": \"Voluptate qui nihil.\",\n            \"version\": \"Fugit animi libero nam placeat quis.\"\n         }\n      ]\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -192,6 +205,12 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveApikeyTok
 			v.UpsertPackages[i] = marshalAddPackageFormRequestBodyToDeploymentsAddPackageForm(val)
 		}
 	}
+	if body.UpsertFunctions != nil {
+		v.UpsertFunctions = make([]*deployments.AddFunctionsForm, len(body.UpsertFunctions))
+		for i, val := range body.UpsertFunctions {
+			v.UpsertFunctions[i] = marshalAddFunctionsFormRequestBodyToDeploymentsAddFunctionsForm(val)
+		}
+	}
 	if body.ExcludeOpenapiv3Assets != nil {
 		v.ExcludeOpenapiv3Assets = make([]string, len(body.ExcludeOpenapiv3Assets))
 		for i, val := range body.ExcludeOpenapiv3Assets {
@@ -202,6 +221,12 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveApikeyTok
 		v.ExcludePackages = make([]string, len(body.ExcludePackages))
 		for i, val := range body.ExcludePackages {
 			v.ExcludePackages[i] = val
+		}
+	}
+	if body.ExcludeFunctions != nil {
+		v.ExcludeFunctions = make([]string, len(body.ExcludeFunctions))
+		for i, val := range body.ExcludeFunctions {
+			v.ExcludeFunctions[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -219,7 +244,7 @@ func BuildRedeployPayload(deploymentsRedeployBody string, deploymentsRedeployApi
 	{
 		err = json.Unmarshal([]byte(deploymentsRedeployBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Et ipsa.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Dolorem quibusdam corrupti.\"\n   }'")
 		}
 	}
 	var apikeyToken *string

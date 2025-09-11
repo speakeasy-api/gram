@@ -121,6 +121,15 @@ type DeploymentStatus struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
+type DeploymentsFunction struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	AssetID      uuid.UUID
+	Name         string
+	Slug         string
+	Runtime      string
+}
+
 type DeploymentsOpenapiv3Asset struct {
 	ID           uuid.UUID
 	DeploymentID uuid.UUID
@@ -371,6 +380,21 @@ type SlackAppConnection struct {
 	DefaultToolsetSlug pgtype.Text
 	CreatedAt          pgtype.Timestamptz
 	UpdatedAt          pgtype.Timestamptz
+}
+
+type ToolFunction struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionsID  uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+	InputSchema  []byte
+	Variables    []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
 }
 
 type ToolVariation struct {
