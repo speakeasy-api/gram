@@ -197,6 +197,7 @@
       background: var(--bg-surface-primary-default);
       border: solid 1px var(--border-neutral-softest);
       align-items: center;
+      cursor: pointer;
     }
 
     .install-target .label {
@@ -406,6 +407,27 @@
       </div>
       <div class="modal-backdrop"></div>
     </template>
+    <template class="install-target" data-install-target="cursor">
+      <div class="modal-content">
+        <h1>
+          Cursor MCP Guide
+        </h1>
+        <h2>Step 1: Click the Deep Link</h2>
+        <p>Click the "Open in Cursor" button to automatically configure the MCP server in Cursor.</p>
+        <h2>Step 2: Set Environment Variables</h2>
+        <p>After installation, you'll need to set the following environment variables in the cursor UI:</p>
+        {{- if .Headers }}
+        <ul>
+          {{- range .Headers }}
+          <li><code>{{ . }}</code>
+            - Get this value from your gram environment</li>
+          {{- end }}
+        </ul>
+        {{- else }}
+        <p>No environment variables needed for this MCP server.</p>
+        {{- end }}
+      </div>
+    </template>
     <template class="install-target" data-install-target="claude">
       <div class="modal-content">
         <h1>
@@ -497,17 +519,17 @@ EOF
             Select a method below to install the server.
           </span>
           <div class="install-targets">
-            <div tabindex="0" class="install-target" data-install-target="cursor">
+            <div tabindex="0" class="install-target" data-install-method="modal" data-install-target="cursor">
               <div class="label">
                 <img src="https://cursor.com/assets/images/logo.svg">
                 Cursor
               </div>
-              <div
+              <a
                 class="install-target-action quick"
                 href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .JSONBlobURI }}"
               >
                 Open in Cursor
-              </div>
+              </a>
               <div class="install-target-action open-guide">
                 Guide
               </div>
@@ -749,6 +771,9 @@ EOF
 
       document.querySelector('.toggle-tool-visibility').
         addEventListener('click', toggleToolVisibility)
+
+      document.querySelector('a.install-target-action').
+        addEventListener('click', (e) => e.stopPropagation())
     }
 
     document.addEventListener('DOMContentLoaded', () => {
