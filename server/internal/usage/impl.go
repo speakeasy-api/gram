@@ -132,14 +132,14 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 
 	// we must manually handle a downgrade from pro to free right now since there is no specific product subscription for free
 	if previousAccountType == "pro" && webhookPayload.Type == "subscription.revoked" {
+		updatedAccountType = "free"
 		err := s.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
-			GramAccountType: "free",
+			GramAccountType: updatedAccountType,
 			ID:              refreshedOrg.ID,
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to set account type").Log(ctx, s.logger)
 		}
-		updatedAccountType = "free"
 	}
 
 	if previousAccountType != updatedAccountType {
