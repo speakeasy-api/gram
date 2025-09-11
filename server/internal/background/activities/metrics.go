@@ -198,11 +198,11 @@ func (m *metrics) RecordFunctionsProcessed(
 	outcome o11y.Outcome,
 	manifestVersion string,
 	numTools int,
-	toolRuntime string,
+	runtime string,
 ) {
 	if counter := m.functionsToolsCounter; counter != nil {
 		counter.Add(ctx, int64(numTools), metric.WithAttributes(
-			attr.FunctionsToolRuntime(toolRuntime),
+			attr.FunctionsRuntime(runtime),
 		))
 	}
 
@@ -210,7 +210,7 @@ func (m *metrics) RecordFunctionsProcessed(
 		histogram.Record(ctx, duration.Seconds(), metric.WithAttributes(
 			attr.Outcome(outcome),
 			attr.FunctionsManifestVersion(manifestVersion),
-			attr.FunctionsToolRuntime(toolRuntime),
+			attr.FunctionsRuntime(runtime),
 		))
 	}
 }

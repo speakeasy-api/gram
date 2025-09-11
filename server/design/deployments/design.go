@@ -198,7 +198,7 @@ var _ = Service("deployments", func() {
 })
 
 var DeploymentSummary = Type("DeploymentSummary", func() {
-	Required("id", "created_at", "user_id", "status", "openapiv3_asset_count", "openapiv3_tool_count")
+	Required("id", "created_at", "user_id", "status", "openapiv3_asset_count", "openapiv3_tool_count", "functions_asset_count", "functions_tool_count")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
@@ -219,6 +219,12 @@ var DeploymentSummary = Type("DeploymentSummary", func() {
 	})
 	Attribute("openapiv3_tool_count", Int64, func() {
 		Description("The number of tools in the deployment generated from OpenAPI documents.")
+	})
+	Attribute("functions_asset_count", Int64, func() {
+		Description("The number of Functions assets.")
+	})
+	Attribute("functions_tool_count", Int64, func() {
+		Description("The number of tools in the deployment generated from Functions.")
 	})
 })
 
@@ -250,6 +256,7 @@ var CreateDeploymentForm = Type("CreateDeploymentForm", func() {
 	})
 
 	Attribute("openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm))
+	Attribute("functions", ArrayOf(AddFunctionsForm))
 	Attribute("packages", ArrayOf(AddDeploymentPackageForm))
 })
 
@@ -264,6 +271,23 @@ var AddOpenAPIv3DeploymentAssetForm = Type("AddOpenAPIv3DeploymentAssetForm", fu
 	})
 	Attribute("slug", shared.Slug, func() {
 		Description("The slug to give the document as it will be displayed in URLs.")
+	})
+})
+
+var AddFunctionsForm = Type("AddFunctionsForm", func() {
+	Required("asset_id", "name", "slug", "runtime")
+
+	Attribute("asset_id", String, func() {
+		Description("The ID of the functions file from the assets service.")
+	})
+	Attribute("name", String, func() {
+		Description("The functions file display name.")
+	})
+	Attribute("slug", shared.Slug, func() {
+		Description("A URL-friendly string that identifies the functions file. Usually derived from the name.")
+	})
+	Attribute("runtime", String, func() {
+		Description("The runtime to use when executing functions. Allowed values are: nodejs:22, python:3.12.")
 	})
 })
 
@@ -340,8 +364,10 @@ var EvolveForm = Type("EvolveForm", func() {
 	Attribute("deployment_id", String, "The ID of the deployment to evolve. If omitted, the latest deployment will be used.")
 	Attribute("upsert_openapiv3_assets", ArrayOf(AddOpenAPIv3DeploymentAssetForm), "The OpenAPI 3.x documents to upsert in the new deployment.")
 	Attribute("upsert_packages", ArrayOf(AddPackageForm), "The packages to upsert in the new deployment.")
-	Attribute("exclude_openapiv3_assets", ArrayOf(String), "The OpenAPI 3.x documents to exclude from the new deployment when cloning a previous deployment.")
+	Attribute("upsert_functions", ArrayOf(AddFunctionsForm), "The tool functions to upsert in the new deployment.")
+	Attribute("exclude_openapiv3_assets", ArrayOf(String), "The OpenAPI 3.x documents, identified by slug, to exclude from the new deployment when cloning a previous deployment.")
 	Attribute("exclude_packages", ArrayOf(String), "The packages to exclude from the new deployment when cloning a previous deployment.")
+	Attribute("exclude_functions", ArrayOf(String), "The functions, identified by slug, to exclude from the new deployment when cloning a previous deployment.")
 })
 
 var EvolveResult = Type("EvolveResult", func() {

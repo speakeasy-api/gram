@@ -114,9 +114,11 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 		GithubPr:           dep.GithubPr,
 		GithubSha:          dep.GithubSha,
 		ClonedFrom:         dep.ClonedFrom,
-		Openapiv3Assets:    dep.Openapiv3Assets,
 		Packages:           dep.Packages,
+		Openapiv3Assets:    dep.Openapiv3Assets,
 		Openapiv3ToolCount: dep.Openapiv3ToolCount,
+		FunctionsToolCount: dep.FunctionsToolCount,
+		FunctionsAssets:    dep.FunctionsAssets,
 	}, nil
 }
 
@@ -260,6 +262,8 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 			CreatedAt:           r.CreatedAt.Time.Format(time.RFC3339),
 			Openapiv3AssetCount: r.Openapiv3AssetCount,
 			Openapiv3ToolCount:  r.Openapiv3ToolCount,
+			FunctionsAssetCount: r.FunctionsAssetCount,
+			FunctionsToolCount:  r.FunctionsToolCount,
 		})
 	}
 
@@ -303,17 +307,32 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	tx := s.repo.WithTx(dbtx)
 
-	newAssets := make([]upsertOpenAPIv3, 0, len(form.Openapiv3Assets))
+	newOpenAPIAssets := make([]upsertOpenAPIv3, 0, len(form.Openapiv3Assets))
 	for _, add := range form.Openapiv3Assets {
 		assetID, err := uuid.Parse(add.AssetID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing asset id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing openapi asset id").Log(ctx, s.logger)
 		}
 
-		newAssets = append(newAssets, upsertOpenAPIv3{
+		newOpenAPIAssets = append(newOpenAPIAssets, upsertOpenAPIv3{
 			assetID: assetID,
 			name:    add.Name,
 			slug:    string(add.Slug),
+		})
+	}
+
+	newFunctions := make([]upsertFunctions, 0, len(form.Functions))
+	for _, add := range form.Functions {
+		assetID, err := uuid.Parse(add.AssetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing functions asset id").Log(ctx, s.logger)
+		}
+
+		newFunctions = append(newFunctions, upsertFunctions{
+			assetID: assetID,
+			name:    add.Name,
+			slug:    string(add.Slug),
+			runtime: add.Runtime,
 		})
 	}
 
@@ -339,8 +358,8 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		})
 	}
 
-	if len(newPackages) == 0 && len(newAssets) == 0 {
-		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset or package is required").Log(ctx, logger)
+	if len(newPackages) == 0 && len(newOpenAPIAssets) == 0 && len(newFunctions) == 0 {
+		return nil, oops.E(oops.CodeInvalid, nil, "at least one openapi document, functions file or package is required").Log(ctx, logger)
 	}
 
 	newID, err := createDeployment(
@@ -356,7 +375,9 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 			githubPr:       conv.PtrValOr(form.GithubPr, ""),
 			githubSha:      conv.PtrValOr(form.GithubSha, ""),
 		},
-		newAssets, newPackages,
+		newOpenAPIAssets,
+		newFunctions,
+		newPackages,
 	)
 	if err != nil {
 		return nil, err
@@ -423,18 +444,51 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 	tx := s.repo.WithTx(dbtx)
 	pkgTx := s.packages.WithTx(dbtx)
 
-	assetsToUpsert := make([]upsertOpenAPIv3, 0, len(form.UpsertOpenapiv3Assets))
+	openapiv3ToUpsert := make([]upsertOpenAPIv3, 0, len(form.UpsertOpenapiv3Assets))
 	for _, add := range form.UpsertOpenapiv3Assets {
 		assetID, err := uuid.Parse(add.AssetID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing asset id").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing openapiv3 asset id to upsert").Log(ctx, s.logger)
 		}
 
-		assetsToUpsert = append(assetsToUpsert, upsertOpenAPIv3{
+		openapiv3ToUpsert = append(openapiv3ToUpsert, upsertOpenAPIv3{
 			assetID: assetID,
 			name:    add.Name,
 			slug:    string(add.Slug),
 		})
+	}
+
+	openapiv3ToExclude := make([]uuid.UUID, 0, len(form.ExcludeOpenapiv3Assets))
+	for _, assetID := range form.ExcludeOpenapiv3Assets {
+		id, err := uuid.Parse(assetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing openapiv3 asset id to exclude").Log(ctx, s.logger)
+		}
+		openapiv3ToExclude = append(openapiv3ToExclude, id)
+	}
+
+	functionsToUpsert := make([]upsertFunctions, 0, len(form.UpsertFunctions))
+	for _, add := range form.UpsertFunctions {
+		assetID, err := uuid.Parse(add.AssetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing functions asset id to upsert").Log(ctx, s.logger)
+		}
+
+		functionsToUpsert = append(functionsToUpsert, upsertFunctions{
+			assetID: assetID,
+			name:    add.Name,
+			slug:    string(add.Slug),
+			runtime: add.Runtime,
+		})
+	}
+
+	functionsToExclude := make([]uuid.UUID, 0, len(form.ExcludeFunctions))
+	for _, assetID := range form.ExcludeFunctions {
+		id, err := uuid.Parse(assetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing functions asset id to exclude").Log(ctx, s.logger)
+		}
+		functionsToExclude = append(functionsToExclude, id)
 	}
 
 	pkgInputs := make([][2]string, 0, len(form.UpsertPackages))
@@ -459,25 +513,20 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		})
 	}
 
-	excludeOpenapiv3Assets := make([]uuid.UUID, 0, len(form.ExcludeOpenapiv3Assets))
-	for _, assetID := range form.ExcludeOpenapiv3Assets {
-		id, err := uuid.Parse(assetID)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing deployment asset id to exclude").Log(ctx, s.logger)
-		}
-		excludeOpenapiv3Assets = append(excludeOpenapiv3Assets, id)
-	}
-
-	excludePackages := make([]uuid.UUID, 0, len(form.ExcludePackages))
+	packagesToExclude := make([]uuid.UUID, 0, len(form.ExcludePackages))
 	for _, pkgID := range form.ExcludePackages {
 		id, err := uuid.Parse(pkgID)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "error parsing deployment package id to exclude").Log(ctx, s.logger)
+			return nil, oops.E(oops.CodeBadRequest, err, "error parsing package id to exclude").Log(ctx, s.logger)
 		}
-		excludePackages = append(excludePackages, id)
+		packagesToExclude = append(packagesToExclude, id)
 	}
 
-	if len(packagesToUpsert) == 0 && len(assetsToUpsert) == 0 && len(excludeOpenapiv3Assets) == 0 && len(excludePackages) == 0 {
+	packagesChanged := len(packagesToUpsert) > 0 || len(packagesToExclude) > 0
+	openapiChanged := len(openapiv3ToUpsert) > 0 || len(openapiv3ToExclude) > 0
+	functionsChanged := len(functionsToUpsert) > 0 || len(functionsToExclude) > 0
+
+	if !packagesChanged && !openapiChanged && !functionsChanged {
 		return nil, oops.E(oops.CodeInvalid, nil, "at least one asset or package to upsert or exclude is required").Log(ctx, logger)
 	}
 
@@ -500,7 +549,8 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 				githubPr:       "",
 				githubSha:      "",
 			},
-			assetsToUpsert,
+			openapiv3ToUpsert,
+			functionsToUpsert,
 			packagesToUpsert,
 		)
 		if err != nil {
@@ -524,10 +574,12 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		newID, err := cloneDeployment(
 			ctx, s.tracer, logger, tx,
 			ProjectID(projectID), DeploymentID(latestDeploymentID),
-			assetsToUpsert,
+			openapiv3ToUpsert,
+			functionsToUpsert,
 			packagesToUpsert,
-			excludeOpenapiv3Assets,
-			excludePackages,
+			openapiv3ToExclude,
+			functionsToExclude,
+			packagesToExclude,
 		)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment").Log(ctx, logger)
@@ -585,7 +637,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 	}
 
 	if payload.DeploymentID == "" {
-		return nil, oops.E(oops.CodeBadRequest, nil, "deployment id is required").Log(ctx, s.logger)
+		return nil, oops.E(oops.CodeInvalid, nil, "deployment id is required").Log(ctx, s.logger)
 	}
 
 	projectID := *authCtx.ProjectID
@@ -605,14 +657,16 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 	deploymentID, err := uuid.Parse(payload.DeploymentID)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid deployment id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeInvalid, err, "invalid deployment id").Log(ctx, logger)
 	}
 
 	newID, err := cloneDeployment(
 		ctx, s.tracer, logger, tx,
 		ProjectID(projectID), DeploymentID(deploymentID),
 		[]upsertOpenAPIv3{},
+		[]upsertFunctions{},
 		[]upsertPackage{},
+		[]uuid.UUID{},
 		[]uuid.UUID{},
 		[]uuid.UUID{},
 	)
