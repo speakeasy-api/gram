@@ -413,3 +413,10 @@ WHERE
   project_id = @project_id
   AND deployment_id = @deployment_id
   AND openapiv3_document_id = @openapiv3_document_id::uuid;
+
+-- name: DangerouslyClearDeploymentHTTPSecurity :execrows
+DELETE FROM http_security
+WHERE
+  project_id = @project_id
+  AND (deployment_id = @deployment_id AND deployment_id IS NOT NULL)
+  AND (openapiv3_document_id = @openapiv3_document_id AND openapiv3_document_id IS NOT NULL);
