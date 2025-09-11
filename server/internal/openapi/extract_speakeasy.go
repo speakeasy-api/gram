@@ -310,12 +310,14 @@ func extractSecuritySchemesSpeakeasy(ctx context.Context, logger *slog.Logger, d
 		}
 
 		res[key] = &repo.CreateHTTPSecurityParams{
-			Key:          key,
-			DeploymentID: task.DeploymentID,
-			Type:         conv.ToPGText(sec.GetType().String()),
-			Name:         conv.ToPGTextEmpty(sec.GetName()),
-			InPlacement:  conv.ToPGTextEmpty(sec.GetIn().String()),
-			Scheme:       conv.ToPGTextEmpty(sec.GetScheme()),
+			Key:                 key,
+			DeploymentID:        task.DeploymentID,
+			ProjectID:           uuid.NullUUID{UUID: task.ProjectID, Valid: task.ProjectID != uuid.Nil},
+			Openapiv3DocumentID: uuid.NullUUID{UUID: task.DocumentID, Valid: task.DocumentID != uuid.Nil},
+			Type:                conv.ToPGText(sec.GetType().String()),
+			Name:                conv.ToPGTextEmpty(sec.GetName()),
+			InPlacement:         conv.ToPGTextEmpty(sec.GetIn().String()),
+			Scheme:              conv.ToPGTextEmpty(sec.GetScheme()),
 			// No real reason to store this since it's purely for documentation
 			// purposes and we should eventually drop the DB column. Setting it
 			// to NULL.
