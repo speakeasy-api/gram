@@ -128,8 +128,21 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").Log(ctx, s.logger)
 	}
+	updatedAccountType := refreshedOrg.GramAccountType
 
-	if previousAccountType != refreshedOrg.GramAccountType {
+	// we must manually handle a downgrade from pro to free right now since there is no specific product subscription for free
+	if previousAccountType == "pro" && webhookPayload.Type == "subscription.revoked" {
+		err := s.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+			GramAccountType: "free",
+			ID:              refreshedOrg.ID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to set account type").Log(ctx, s.logger)
+		}
+		updatedAccountType = "free"
+	}
+
+	if previousAccountType != updatedAccountType {
 		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").Log(ctx, s.logger)
 		}
