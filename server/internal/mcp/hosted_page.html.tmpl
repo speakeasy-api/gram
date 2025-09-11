@@ -414,6 +414,13 @@
         </h1>
         <h2>Step 1: Click the Deep Link</h2>
         <p>Click the "Open in Cursor" button to automatically configure the MCP server in Cursor.</p>
+        <a href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .JSONBlobURI }}">
+          <img
+            src="https://cursor.com/deeplink/mcp-install-dark.svg"
+            alt="Add {{ .MCPName }} MCP server to Cursor"
+            height="32"
+          >
+        </a>
         <h2>Step 2: Set Environment Variables</h2>
         <p>After installation, you'll need to set the following environment variables in the cursor UI:</p>
         {{- if .Headers }}
