@@ -356,6 +356,9 @@ func (p *Client) TrackPlatformUsage(ctx context.Context, events []billing.Platfo
 			"total_tools": {
 				Integer: &event.TotalTools,
 			},
+			"is_legacy_org": {
+				Boolean: &event.IsLegacyOrg,
+			},
 		}
 
 		polarEvents = append(polarEvents, polarComponents.Events{

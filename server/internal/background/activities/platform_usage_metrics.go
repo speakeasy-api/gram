@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sourcegraph/conc/pool"
@@ -44,6 +45,7 @@ type PlatformUsageMetrics struct {
 	TotalEnabledServers int64
 	TotalToolsets       int64
 	TotalTools          int64
+	IsLegacyOrg         bool
 }
 
 func (c *CollectPlatformUsageMetrics) Do(ctx context.Context) ([]PlatformUsageMetrics, error) {
@@ -63,6 +65,7 @@ func (c *CollectPlatformUsageMetrics) Do(ctx context.Context) ([]PlatformUsageMe
 			TotalEnabledServers: row.TotalEnabledServers,
 			TotalToolsets:       row.TotalToolsets,
 			TotalTools:          row.TotalTools,
+			IsLegacyOrg:         row.OrgCreatedAt.Time.Before(time.Date(2025, 9, 5, 0, 0, 0, 0, time.UTC)), // This is when free tier limit enforcement started
 		})
 	}
 
@@ -85,25 +88,21 @@ func NewFirePlatformUsageMetrics(logger *slog.Logger, billingTracker billing.Tra
 func (f *FirePlatformUsageMetrics) Do(ctx context.Context, metrics []PlatformUsageMetrics) error {
 	f.logger.InfoContext(ctx, "Starting platform usage metrics firing")
 
-	workers := pool.New().WithErrors().WithMaxGoroutines(25)
+	events := make([]billing.PlatformUsageEvent, 0, len(metrics))
 
 	for _, metric := range metrics {
-		workers.Go(func() error {
-			f.billingTracker.TrackPlatformUsage(ctx, billing.PlatformUsageEvent{
-				OrganizationID:      metric.OrganizationID,
-				PublicMCPServers:    metric.PublicMCPServers,
-				PrivateMCPServers:   metric.PrivateMCPServers,
-				TotalEnabledServers: metric.TotalEnabledServers,
-				TotalToolsets:       metric.TotalToolsets,
-				TotalTools:          metric.TotalTools,
-			})
-			return nil
+		events = append(events, billing.PlatformUsageEvent{
+			OrganizationID:      metric.OrganizationID,
+			PublicMCPServers:    metric.PublicMCPServers,
+			PrivateMCPServers:   metric.PrivateMCPServers,
+			TotalEnabledServers: metric.TotalEnabledServers,
+			TotalToolsets:       metric.TotalToolsets,
+			TotalTools:          metric.TotalTools,
+			IsLegacyOrg:         metric.IsLegacyOrg,
 		})
 	}
 
-	if err := workers.Wait(); err != nil {
-		return err
-	}
+	f.billingTracker.TrackPlatformUsage(ctx, events)
 
 	f.logger.InfoContext(ctx, "Platform usage metrics firing completed successfully")
 	return nil
