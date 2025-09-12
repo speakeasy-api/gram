@@ -7036,19 +7036,19 @@ components:
                 name:
                     type: string
                     description: The functions file display name.
-                runtime:
-                    type: string
-                    description: 'The runtime to use when executing functions. Allowed values are: nodejs22, python3.12.'
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                     maxLength: 40
+                tool_runtime:
+                    type: string
+                    description: 'The runtime to use when executing tools. Allowed values are: nodejs22, python3.12.'
             required:
                 - asset_id
                 - name
                 - slug
-                - runtime
+                - tool_runtime
         AddOpenAPIv3DeploymentAssetForm:
             type: object
             properties:
@@ -7738,20 +7738,20 @@ components:
                 name:
                     type: string
                     description: The name to give the document as it will be displayed in UIs.
-                runtime:
-                    type: string
-                    description: The runtime used to execute functions.
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                     maxLength: 40
+                tool_runtime:
+                    type: string
+                    description: The runtime to use when executing tools.
             required:
                 - id
                 - asset_id
                 - name
                 - slug
-                - runtime
+                - tool_runtime
         DeploymentLogEvent:
             type: object
             properties:

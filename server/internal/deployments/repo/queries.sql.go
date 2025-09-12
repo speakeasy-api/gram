@@ -68,14 +68,14 @@ INSERT INTO deployments_functions (
   , asset_id
   , name
   , slug
-  , runtime
+  , tool_runtime
 )
 SELECT 
   $1
   , current.asset_id
   , current.name
   , current.slug
-  , current.runtime
+  , current.tool_runtime
 FROM deployments_functions as current
 WHERE current.deployment_id = $2
   AND current.asset_id <> ALL ($3::uuid[])
@@ -1201,7 +1201,7 @@ ON CONFLICT (deployment_id, slug) DO UPDATE
 SET
   asset_id = EXCLUDED.asset_id
   , name = EXCLUDED.name
-  , runtime = EXCLUDED.runtime
+  , tool_runtime = EXCLUDED.tool_runtime
 RETURNING id, asset_id, name, slug
 `
 

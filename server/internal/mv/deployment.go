@@ -73,11 +73,11 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 			}
 
 			attachedFunctionsAssets = append(attachedFunctionsAssets, &types.DeploymentFunctions{
-				ID:      functionsID.String(),
-				AssetID: r.DeploymentsFunctionsAssetID.UUID.String(),
-				Name:    r.DeploymentsFunctionsName.String,
-				Slug:    types.Slug(r.DeploymentsFunctionsSlug.String),
-				Runtime: r.DeploymentsFunctionsToolRuntime.String,
+				ID:          functionsID.String(),
+				AssetID:     r.DeploymentsFunctionsAssetID.UUID.String(),
+				Name:        r.DeploymentsFunctionsName.String,
+				Slug:        types.Slug(r.DeploymentsFunctionsSlug.String),
+				ToolRuntime: r.DeploymentsFunctionsToolRuntime.String,
 			})
 			seenFunctions[functionsID] = true
 		}

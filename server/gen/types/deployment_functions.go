@@ -16,6 +16,6 @@ type DeploymentFunctions struct {
 	Name string
 	// The slug to give the document as it will be displayed in URLs.
 	Slug Slug
-	// The runtime used to execute functions.
-	Runtime string
+	// The runtime to use when executing tools.
+	ToolRuntime string
 }

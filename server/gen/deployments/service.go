@@ -70,9 +70,9 @@ type AddFunctionsForm struct {
 	// A URL-friendly string that identifies the functions file. Usually derived
 	// from the name.
 	Slug types.Slug
-	// The runtime to use when executing functions. Allowed values are: nodejs22,
+	// The runtime to use when executing tools. Allowed values are: nodejs22,
 	// python3.12.
-	Runtime string
+	ToolRuntime string
 }
 
 type AddOpenAPIv3DeploymentAssetForm struct {

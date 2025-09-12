@@ -1484,8 +1484,8 @@ type DeploymentFunctionsResponseBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug to give the document as it will be displayed in URLs.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// The runtime used to execute functions.
-	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
+	// The runtime to use when executing tools.
+	ToolRuntime string `form:"tool_runtime" json:"tool_runtime" xml:"tool_runtime"`
 }
 
 // DeploymentPackageResponseBody is used to define fields on response body
@@ -1597,9 +1597,9 @@ type AddFunctionsFormRequestBody struct {
 	// A URL-friendly string that identifies the functions file. Usually derived
 	// from the name.
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
-	// The runtime to use when executing functions. Allowed values are: nodejs22,
+	// The runtime to use when executing tools. Allowed values are: nodejs22,
 	// python3.12.
-	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
+	ToolRuntime *string `form:"tool_runtime,omitempty" json:"tool_runtime,omitempty" xml:"tool_runtime,omitempty"`
 }
 
 // AddDeploymentPackageFormRequestBody is used to define fields on request body
@@ -2985,8 +2985,8 @@ func ValidateAddFunctionsFormRequestBody(body *AddFunctionsFormRequestBody) (err
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
-	if body.Runtime == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	if body.ToolRuntime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_runtime", "body"))
 	}
 	if body.Slug != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))

@@ -18,7 +18,7 @@ type ManifestV0 struct {
 type ManifestToolV0 struct {
 	Name        string                                  `json:"name"`
 	Description string                                  `json:"description"`
-	InputSchema json.RawMessage                         `json:"input_schema"`
+	InputSchema json.RawMessage                         `json:"inputSchema"`
 	Variables   map[string]*ManifestVariableAttributeV0 `json:"variables"`
 }
 

@@ -326,7 +326,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 			assetID: assetID,
 			name:    add.Name,
 			slug:    string(add.Slug),
-			runtime: add.Runtime,
+			runtime: add.ToolRuntime,
 		})
 	}
 
@@ -472,7 +472,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			assetID: assetID,
 			name:    add.Name,
 			slug:    string(add.Slug),
-			runtime: add.Runtime,
+			runtime: add.ToolRuntime,
 		})
 	}
 

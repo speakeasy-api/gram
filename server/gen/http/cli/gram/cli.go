@@ -1606,14 +1606,14 @@ Example:
          {
             "asset_id": "Molestiae laboriosam accusamus quisquam quia.",
             "name": "Et sit laborum officiis consectetur velit ipsa.",
-            "runtime": "Expedita aut qui in suscipit quibusdam.",
-            "slug": "dvs"
+            "slug": "dvs",
+            "tool_runtime": "Expedita aut qui in suscipit quibusdam."
          },
          {
             "asset_id": "Molestiae laboriosam accusamus quisquam quia.",
             "name": "Et sit laborum officiis consectetur velit ipsa.",
-            "runtime": "Expedita aut qui in suscipit quibusdam.",
-            "slug": "dvs"
+            "slug": "dvs",
+            "tool_runtime": "Expedita aut qui in suscipit quibusdam."
          }
       ],
       "github_pr": "1234",
@@ -1676,14 +1676,14 @@ Example:
          {
             "asset_id": "Molestiae laboriosam accusamus quisquam quia.",
             "name": "Et sit laborum officiis consectetur velit ipsa.",
-            "runtime": "Expedita aut qui in suscipit quibusdam.",
-            "slug": "dvs"
+            "slug": "dvs",
+            "tool_runtime": "Expedita aut qui in suscipit quibusdam."
          },
          {
             "asset_id": "Molestiae laboriosam accusamus quisquam quia.",
             "name": "Et sit laborum officiis consectetur velit ipsa.",
-            "runtime": "Expedita aut qui in suscipit quibusdam.",
-            "slug": "dvs"
+            "slug": "dvs",
+            "tool_runtime": "Expedita aut qui in suscipit quibusdam."
          }
       ],
       "upsert_openapiv3_assets": [

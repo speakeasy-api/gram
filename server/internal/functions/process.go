@@ -161,9 +161,9 @@ func (p *ToolExtractor) Do(
 
 	var validEntrypoint map[string]struct{}
 	switch {
-	case strings.HasPrefix(attachement.Runtime, "nodejs"):
+	case strings.HasPrefix(attachement.ToolRuntime, "nodejs"):
 		validEntrypoint = nodeEntrypoints
-	case strings.HasPrefix(attachement.Runtime, "python"):
+	case strings.HasPrefix(attachement.ToolRuntime, "python"):
 		validEntrypoint = pythonEntrypoints
 	default:
 		return nil, oops.E(oops.CodeBadRequest, nil, "%s: unsupported functions runtime", slug).Log(ctx, logger)
@@ -226,7 +226,7 @@ func (p *ToolExtractor) Do(
 			tool,
 			deploymentID,
 			attachementID,
-			attachement.Runtime,
+			attachement.ToolRuntime,
 		)
 		if err != nil {
 			msg := fmt.Sprintf("%s: skipping tool %d (%q): %v", slug, idx, tool.Name, err)
@@ -267,7 +267,7 @@ func processManifestToolV0(
 	inputSchema := tool.InputSchema
 	variables := tool.Variables
 
-	if inputSchema == nil {
+	if len(inputSchema) == 0 {
 		inputSchema = json.RawMessage(`{}`)
 	}
 	if variables == nil {

@@ -5716,26 +5716,26 @@ definitions:
                 type: string
                 description: The functions file display name.
                 example: Ea et eaque sint praesentium nesciunt.
-            runtime:
-                type: string
-                description: 'The runtime to use when executing functions. Allowed values are: nodejs22, python3.12.'
-                example: Enim tempora facilis rerum.
             slug:
                 type: string
                 description: A URL-friendly string that identifies the functions file. Usually derived from the name.
                 example: dwn
                 pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
+            tool_runtime:
+                type: string
+                description: 'The runtime to use when executing tools. Allowed values are: nodejs22, python3.12.'
+                example: Enim tempora facilis rerum.
         example:
             asset_id: Et voluptas vero ad saepe.
             name: Sit maiores et ea ut.
-            runtime: Dolorum omnis sequi voluptas ab id.
             slug: 00a
+            tool_runtime: Dolorum omnis sequi voluptas ab id.
         required:
             - asset_id
             - name
             - slug
-            - runtime
+            - tool_runtime
     AddOpenAPIv3DeploymentAssetForm:
         title: AddOpenAPIv3DeploymentAssetForm
         type: object
@@ -12934,13 +12934,13 @@ definitions:
                     - asset_id: Delectus in rerum ratione harum porro est.
                       id: Minima iusto ducimus occaecati accusantium quas ratione.
                       name: Architecto quaerat.
-                      runtime: Quis impedit qui est repudiandae sint placeat.
                       slug: 5o8
+                      tool_runtime: Quis impedit qui est repudiandae sint placeat.
                     - asset_id: Delectus in rerum ratione harum porro est.
                       id: Minima iusto ducimus occaecati accusantium quas ratione.
                       name: Architecto quaerat.
-                      runtime: Quis impedit qui est repudiandae sint placeat.
                       slug: 5o8
+                      tool_runtime: Quis impedit qui est repudiandae sint placeat.
             functions_tool_count:
                 type: integer
                 description: The number of tools in the deployment generated from OpenAPI documents.
@@ -13025,18 +13025,18 @@ definitions:
                 - asset_id: Delectus in rerum ratione harum porro est.
                   id: Minima iusto ducimus occaecati accusantium quas ratione.
                   name: Architecto quaerat.
-                  runtime: Quis impedit qui est repudiandae sint placeat.
                   slug: 5o8
+                  tool_runtime: Quis impedit qui est repudiandae sint placeat.
                 - asset_id: Delectus in rerum ratione harum porro est.
                   id: Minima iusto ducimus occaecati accusantium quas ratione.
                   name: Architecto quaerat.
-                  runtime: Quis impedit qui est repudiandae sint placeat.
                   slug: 5o8
+                  tool_runtime: Quis impedit qui est repudiandae sint placeat.
                 - asset_id: Delectus in rerum ratione harum porro est.
                   id: Minima iusto ducimus occaecati accusantium quas ratione.
                   name: Architecto quaerat.
-                  runtime: Quis impedit qui est repudiandae sint placeat.
                   slug: 5o8
+                  tool_runtime: Quis impedit qui est repudiandae sint placeat.
             functions_tool_count: 922517040508140033
             github_pr: "1234"
             github_repo: speakeasyapi/gram
@@ -13094,28 +13094,28 @@ definitions:
                 type: string
                 description: The name to give the document as it will be displayed in UIs.
                 example: Corrupti quas.
-            runtime:
-                type: string
-                description: The runtime used to execute functions.
-                example: Dolores vitae officia ea nobis id animi.
             slug:
                 type: string
                 description: The slug to give the document as it will be displayed in URLs.
                 example: 4rt
                 pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
+            tool_runtime:
+                type: string
+                description: The runtime to use when executing tools.
+                example: Dolores vitae officia ea nobis id animi.
         example:
             asset_id: Est ut error.
             id: Neque molestiae aliquam officiis quo.
             name: Recusandae quam beatae.
-            runtime: Velit cupiditate sed vel dolore non.
             slug: vse
+            tool_runtime: Velit cupiditate sed vel dolore non.
         required:
             - id
             - asset_id
             - name
             - slug
-            - runtime
+            - tool_runtime
     DeploymentLogEvent:
         title: DeploymentLogEvent
         type: object
@@ -13549,16 +13549,16 @@ definitions:
                 example:
                     - asset_id: Molestiae laboriosam accusamus quisquam quia.
                       name: Et sit laborum officiis consectetur velit ipsa.
-                      runtime: Expedita aut qui in suscipit quibusdam.
                       slug: dvs
+                      tool_runtime: Expedita aut qui in suscipit quibusdam.
                     - asset_id: Molestiae laboriosam accusamus quisquam quia.
                       name: Et sit laborum officiis consectetur velit ipsa.
-                      runtime: Expedita aut qui in suscipit quibusdam.
                       slug: dvs
+                      tool_runtime: Expedita aut qui in suscipit quibusdam.
                     - asset_id: Molestiae laboriosam accusamus quisquam quia.
                       name: Et sit laborum officiis consectetur velit ipsa.
-                      runtime: Expedita aut qui in suscipit quibusdam.
                       slug: dvs
+                      tool_runtime: Expedita aut qui in suscipit quibusdam.
             github_pr:
                 type: string
                 description: The github pull request that resulted in the deployment.
@@ -13597,20 +13597,20 @@ definitions:
             functions:
                 - asset_id: Molestiae laboriosam accusamus quisquam quia.
                   name: Et sit laborum officiis consectetur velit ipsa.
-                  runtime: Expedita aut qui in suscipit quibusdam.
                   slug: dvs
+                  tool_runtime: Expedita aut qui in suscipit quibusdam.
                 - asset_id: Molestiae laboriosam accusamus quisquam quia.
                   name: Et sit laborum officiis consectetur velit ipsa.
-                  runtime: Expedita aut qui in suscipit quibusdam.
                   slug: dvs
+                  tool_runtime: Expedita aut qui in suscipit quibusdam.
                 - asset_id: Molestiae laboriosam accusamus quisquam quia.
                   name: Et sit laborum officiis consectetur velit ipsa.
-                  runtime: Expedita aut qui in suscipit quibusdam.
                   slug: dvs
+                  tool_runtime: Expedita aut qui in suscipit quibusdam.
                 - asset_id: Molestiae laboriosam accusamus quisquam quia.
                   name: Et sit laborum officiis consectetur velit ipsa.
-                  runtime: Expedita aut qui in suscipit quibusdam.
                   slug: dvs
+                  tool_runtime: Expedita aut qui in suscipit quibusdam.
             github_pr: "1234"
             github_repo: speakeasyapi/gram
             github_sha: f33e693e9e12552043bc0ec5c37f1b8a9e076161
@@ -14104,16 +14104,16 @@ definitions:
                 example:
                     - asset_id: Molestiae laboriosam accusamus quisquam quia.
                       name: Et sit laborum officiis consectetur velit ipsa.
-                      runtime: Expedita aut qui in suscipit quibusdam.
                       slug: dvs
+                      tool_runtime: Expedita aut qui in suscipit quibusdam.
                     - asset_id: Molestiae laboriosam accusamus quisquam quia.
                       name: Et sit laborum officiis consectetur velit ipsa.
-                      runtime: Expedita aut qui in suscipit quibusdam.
                       slug: dvs
+                      tool_runtime: Expedita aut qui in suscipit quibusdam.
                     - asset_id: Molestiae laboriosam accusamus quisquam quia.
                       name: Et sit laborum officiis consectetur velit ipsa.
-                      runtime: Expedita aut qui in suscipit quibusdam.
                       slug: dvs
+                      tool_runtime: Expedita aut qui in suscipit quibusdam.
             upsert_openapiv3_assets:
                 type: array
                 items:
@@ -14159,20 +14159,20 @@ definitions:
             upsert_functions:
                 - asset_id: Molestiae laboriosam accusamus quisquam quia.
                   name: Et sit laborum officiis consectetur velit ipsa.
-                  runtime: Expedita aut qui in suscipit quibusdam.
                   slug: dvs
+                  tool_runtime: Expedita aut qui in suscipit quibusdam.
                 - asset_id: Molestiae laboriosam accusamus quisquam quia.
                   name: Et sit laborum officiis consectetur velit ipsa.
-                  runtime: Expedita aut qui in suscipit quibusdam.
                   slug: dvs
+                  tool_runtime: Expedita aut qui in suscipit quibusdam.
                 - asset_id: Molestiae laboriosam accusamus quisquam quia.
                   name: Et sit laborum officiis consectetur velit ipsa.
-                  runtime: Expedita aut qui in suscipit quibusdam.
                   slug: dvs
+                  tool_runtime: Expedita aut qui in suscipit quibusdam.
                 - asset_id: Molestiae laboriosam accusamus quisquam quia.
                   name: Et sit laborum officiis consectetur velit ipsa.
-                  runtime: Expedita aut qui in suscipit quibusdam.
                   slug: dvs
+                  tool_runtime: Expedita aut qui in suscipit quibusdam.
             upsert_openapiv3_assets:
                 - asset_id: Ipsam asperiores.
                   name: Impedit inventore voluptatem laboriosam neque.
@@ -19894,13 +19894,13 @@ definitions:
                     - asset_id: Delectus in rerum ratione harum porro est.
                       id: Minima iusto ducimus occaecati accusantium quas ratione.
                       name: Architecto quaerat.
-                      runtime: Quis impedit qui est repudiandae sint placeat.
                       slug: 5o8
+                      tool_runtime: Quis impedit qui est repudiandae sint placeat.
                     - asset_id: Delectus in rerum ratione harum porro est.
                       id: Minima iusto ducimus occaecati accusantium quas ratione.
                       name: Architecto quaerat.
-                      runtime: Quis impedit qui est repudiandae sint placeat.
                       slug: 5o8
+                      tool_runtime: Quis impedit qui est repudiandae sint placeat.
             functions_tool_count:
                 type: integer
                 description: The number of tools in the deployment generated from OpenAPI documents.
@@ -19989,18 +19989,18 @@ definitions:
                 - asset_id: Delectus in rerum ratione harum porro est.
                   id: Minima iusto ducimus occaecati accusantium quas ratione.
                   name: Architecto quaerat.
-                  runtime: Quis impedit qui est repudiandae sint placeat.
                   slug: 5o8
+                  tool_runtime: Quis impedit qui est repudiandae sint placeat.
                 - asset_id: Delectus in rerum ratione harum porro est.
                   id: Minima iusto ducimus occaecati accusantium quas ratione.
                   name: Architecto quaerat.
-                  runtime: Quis impedit qui est repudiandae sint placeat.
                   slug: 5o8
+                  tool_runtime: Quis impedit qui est repudiandae sint placeat.
                 - asset_id: Delectus in rerum ratione harum porro est.
                   id: Minima iusto ducimus occaecati accusantium quas ratione.
                   name: Architecto quaerat.
-                  runtime: Quis impedit qui est repudiandae sint placeat.
                   slug: 5o8
+                  tool_runtime: Quis impedit qui est repudiandae sint placeat.
             functions_tool_count: 4062365166686265646
             github_pr: "1234"
             github_repo: speakeasyapi/gram
