@@ -244,9 +244,9 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 		return nil
 	}
 
-	hardToolCallsLimit := 2*periodUsage.MaxToolCalls
+	hardToolCallsLimit := 2 * periodUsage.MaxToolCalls
 	if hardToolCallsLimit == 0 {
-		hardToolCallsLimit = 2000 // Just in case 
+		hardToolCallsLimit = 2000 // Just in case
 	}
 
 	if periodUsage.ToolCalls >= hardToolCallsLimit {
