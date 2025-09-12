@@ -45,7 +45,6 @@ type PlatformUsageEvent struct {
 	TotalEnabledServers int64
 	TotalToolsets       int64
 	TotalTools          int64
-	IsLegacyOrg         bool
 }
 
 type Tracker interface {
