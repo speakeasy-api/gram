@@ -1,0 +1,79 @@
+{
+  "version": "0.0.0",
+  "tools": [
+    {
+      "name": "list_all_todos",
+      "description": "List all todo items"
+    },
+    {
+      "name": "get_todo",
+      "description": "Get a todo by ID",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The ID of the todo item"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "create_todo",
+      "description": "Create a todo item",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "The title of the todo item"
+          },
+          "completed": {
+            "type": "boolean",
+            "description": "Whether the todo item is completed"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The due date of the todo item"
+          }
+        },
+        "required": [
+          "title"
+        ]
+      },
+      "variables": {
+        "EMAIL_API_KEY": {
+          "description": "API key for the email service"
+        },
+        "SLACK_API_KEY": {
+          "description": "API key for slack"
+        }
+      }
+    },
+    {
+      "name": "share_todos",
+      "description": "Share todos with another user",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "description": "The email of the user to share todos with"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "variables": {
+        "TODO_API_KEY": {
+          "description": "API key for todo service"
+        }
+      }
+    }
+  ]
+}

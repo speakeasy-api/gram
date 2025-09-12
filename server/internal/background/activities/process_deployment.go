@@ -110,7 +110,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 	}
 
 	// If there were documents to process in this deployment but no tools were created then we consider this a failure.
-	expectsTools := len(deployment.Openapiv3Assets) > 0
+	expectsTools := len(deployment.Openapiv3Assets) > 0 || len(deployment.FunctionsAssets) > 0
 	if expectsTools && len(tools) == 0 {
 		err = oops.E(oops.CodeUnexpected, err, "no tools were created for deployment").Log(ctx, p.logger)
 		return temporal.NewApplicationErrorWithOptions("empty deployment was not expected", "deployment_error", temporal.ApplicationErrorOptions{
