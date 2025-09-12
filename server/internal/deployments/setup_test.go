@@ -1,9 +1,14 @@
 package deployments_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"log"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -100,4 +106,51 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 		temporal:       temporal,
 		sessionManager: sessionManager,
 	}
+}
+
+func zipManifest(t *testing.T, path string, runtime string) (rdr io.Reader, err error) {
+	buf := &bytes.Buffer{}
+	rdr = buf
+
+	manifest := testenv.ReadFixture(t, path)
+	zipWriter := zip.NewWriter(buf)
+	defer o11y.LogDefer(t.Context(), testenv.NewLogger(t), func() error {
+		return zipWriter.Close()
+	})
+
+	writer, err := zipWriter.Create("manifest.json")
+	if err != nil {
+		return nil, fmt.Errorf("create manifest in zip: %w", err)
+	}
+
+	_, err = writer.Write(manifest)
+	if err != nil {
+		return nil, fmt.Errorf("write manifest to zip: %w", err)
+	}
+
+	var funcwriter io.Writer
+	var comment string
+	switch {
+	case strings.HasPrefix(runtime, "nodejs"):
+		comment = "// JavaScript functions"
+		if funcwriter, err = zipWriter.Create("functions.js"); err != nil {
+			return nil, fmt.Errorf("create functions.js in zip: %w", err)
+		}
+	case strings.HasPrefix(runtime, "python"):
+		comment = "# Python functions"
+		if funcwriter, err = zipWriter.Create("functions.py"); err != nil {
+			return nil, fmt.Errorf("create functions.py in zip: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported runtime: %s", runtime)
+	}
+
+	// Create an empty functions file with a comment so the file exists. It does
+	// not need to have any actual code when testing deployments.
+	_, err = funcwriter.Write([]byte(comment + "\n"))
+	if err != nil {
+		return nil, fmt.Errorf("write functions to zip: %w", err)
+	}
+
+	return buf, nil
 }

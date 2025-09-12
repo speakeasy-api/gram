@@ -30,17 +30,20 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 
 	deployment := rows[0].Deployment
 	stat := rows[0].Status
-	toolCount := rows[0].ToolCount
-	attachedAssets := make([]*types.OpenAPIv3DeploymentAsset, 0, len(rows))
+	openapiToolCount := rows[0].OpenapiToolCount
+	functionsToolCount := rows[0].FunctionsToolCount
+	attachedOpenAPIAssets := make([]*types.OpenAPIv3DeploymentAsset, 0, len(rows))
+	attachedFunctionsAssets := make([]*types.DeploymentFunctions, 0, len(rows))
 	attachedPackages := make([]*types.DeploymentPackage, 0, len(rows))
-	var seenAssets = make(map[uuid.UUID]bool)
+	var seenOpenAPIAssets = make(map[uuid.UUID]bool)
+	var seenFunctions = make(map[uuid.UUID]bool)
 	var seenPackages = make(map[uuid.UUID]bool)
 
 	for _, r := range rows {
 		depAssetID := r.DeploymentsOpenapiv3AssetID.UUID
-		if depAssetID != uuid.Nil && !seenAssets[depAssetID] {
+		if depAssetID != uuid.Nil && !seenOpenAPIAssets[depAssetID] {
 			if err := inv.Check(
-				"describe deployment asset",
+				"describe deployment openapiv3 asset",
 				"valid asset store id", r.DeploymentsOpenapiv3AssetStoreID.Valid && r.DeploymentsOpenapiv3AssetStoreID.UUID != uuid.Nil,
 				"valid asset name", r.DeploymentsOpenapiv3AssetName.Valid && r.DeploymentsOpenapiv3AssetName.String != "",
 				"valid asset slug", r.DeploymentsOpenapiv3AssetSlug.Valid && r.DeploymentsOpenapiv3AssetSlug.String != "",
@@ -48,13 +51,35 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment openapiv3 asset").Log(ctx, logger)
 			}
 
-			attachedAssets = append(attachedAssets, &types.OpenAPIv3DeploymentAsset{
+			attachedOpenAPIAssets = append(attachedOpenAPIAssets, &types.OpenAPIv3DeploymentAsset{
 				ID:      depAssetID.String(),
 				AssetID: r.DeploymentsOpenapiv3AssetStoreID.UUID.String(),
 				Name:    r.DeploymentsOpenapiv3AssetName.String,
 				Slug:    types.Slug(r.DeploymentsOpenapiv3AssetSlug.String),
 			})
-			seenAssets[depAssetID] = true
+			seenOpenAPIAssets[depAssetID] = true
+		}
+
+		functionsID := r.DeploymentsFunctionsID.UUID
+		if functionsID != uuid.Nil && !seenFunctions[functionsID] {
+			if err := inv.Check(
+				"describe deployment functions asset",
+				"valid asset id", r.DeploymentsFunctionsAssetID.Valid && r.DeploymentsFunctionsAssetID.UUID != uuid.Nil,
+				"valid asset name", r.DeploymentsFunctionsName.Valid && r.DeploymentsFunctionsName.String != "",
+				"valid asset slug", r.DeploymentsFunctionsSlug.Valid && r.DeploymentsFunctionsSlug.String != "",
+				"valid functions runtime", r.DeploymentsFunctionsToolRuntime.Valid && r.DeploymentsFunctionsToolRuntime.String != "",
+			); err != nil {
+				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment functions").Log(ctx, logger)
+			}
+
+			attachedFunctionsAssets = append(attachedFunctionsAssets, &types.DeploymentFunctions{
+				ID:          functionsID.String(),
+				AssetID:     r.DeploymentsFunctionsAssetID.UUID.String(),
+				Name:        r.DeploymentsFunctionsName.String,
+				Slug:        types.Slug(r.DeploymentsFunctionsSlug.String),
+				ToolRuntime: r.DeploymentsFunctionsToolRuntime.String,
+			})
+			seenFunctions[functionsID] = true
 		}
 
 		pkgID := r.DeploymentPackageID.UUID
@@ -77,21 +102,23 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 	}
 
 	return &types.Deployment{
-		ID:              deployment.ID.String(),
-		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
-		OrganizationID:  deployment.OrganizationID,
-		ProjectID:       deployment.ProjectID.String(),
-		UserID:          deployment.UserID,
-		Status:          stat,
-		ExternalID:      conv.FromPGText[string](deployment.ExternalID),
-		ExternalURL:     conv.FromPGText[string](deployment.ExternalUrl),
-		GithubSha:       conv.FromPGText[string](deployment.GithubSha),
-		GithubPr:        conv.FromPGText[string](deployment.GithubPr),
-		GithubRepo:      conv.FromPGText[string](deployment.GithubRepo),
-		IdempotencyKey:  conv.Ptr(deployment.IdempotencyKey),
-		ClonedFrom:      conv.FromNullableUUID(deployment.ClonedFrom),
-		Openapiv3Assets: attachedAssets,
-		Packages:        attachedPackages,
-		ToolCount:       toolCount,
+		ID:                 deployment.ID.String(),
+		CreatedAt:          deployment.CreatedAt.Time.Format(time.RFC3339),
+		OrganizationID:     deployment.OrganizationID,
+		ProjectID:          deployment.ProjectID.String(),
+		UserID:             deployment.UserID,
+		Status:             stat,
+		ExternalID:         conv.FromPGText[string](deployment.ExternalID),
+		ExternalURL:        conv.FromPGText[string](deployment.ExternalUrl),
+		GithubSha:          conv.FromPGText[string](deployment.GithubSha),
+		GithubPr:           conv.FromPGText[string](deployment.GithubPr),
+		GithubRepo:         conv.FromPGText[string](deployment.GithubRepo),
+		IdempotencyKey:     conv.Ptr(deployment.IdempotencyKey),
+		ClonedFrom:         conv.FromNullableUUID(deployment.ClonedFrom),
+		Packages:           attachedPackages,
+		Openapiv3Assets:    attachedOpenAPIAssets,
+		OpenapiToolCount:   openapiToolCount,
+		FunctionsToolCount: functionsToolCount,
+		FunctionsAssets:    attachedFunctionsAssets,
 	}, nil
 }

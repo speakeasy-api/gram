@@ -1643,6 +1643,24 @@ func marshalTypesOpenAPIv3DeploymentAssetToOpenAPIv3DeploymentAssetResponseBody(
 	return res
 }
 
+// marshalTypesDeploymentFunctionsToDeploymentFunctionsResponseBody builds a
+// value of type *DeploymentFunctionsResponseBody from a value of type
+// *types.DeploymentFunctions.
+func marshalTypesDeploymentFunctionsToDeploymentFunctionsResponseBody(v *types.DeploymentFunctions) *DeploymentFunctionsResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &DeploymentFunctionsResponseBody{
+		ID:          v.ID,
+		AssetID:     v.AssetID,
+		Name:        v.Name,
+		Slug:        string(v.Slug),
+		ToolRuntime: v.ToolRuntime,
+	}
+
+	return res
+}
+
 // marshalTypesDeploymentPackageToDeploymentPackageResponseBody builds a value
 // of type *DeploymentPackageResponseBody from a value of type
 // *types.DeploymentPackage.
@@ -1663,20 +1681,21 @@ func marshalTypesDeploymentToDeploymentResponseBody(v *types.Deployment) *Deploy
 		return nil
 	}
 	res := &DeploymentResponseBody{
-		ID:             v.ID,
-		OrganizationID: v.OrganizationID,
-		ProjectID:      v.ProjectID,
-		UserID:         v.UserID,
-		CreatedAt:      v.CreatedAt,
-		Status:         v.Status,
-		IdempotencyKey: v.IdempotencyKey,
-		GithubRepo:     v.GithubRepo,
-		GithubPr:       v.GithubPr,
-		GithubSha:      v.GithubSha,
-		ExternalID:     v.ExternalID,
-		ExternalURL:    v.ExternalURL,
-		ClonedFrom:     v.ClonedFrom,
-		ToolCount:      v.ToolCount,
+		ID:                 v.ID,
+		OrganizationID:     v.OrganizationID,
+		ProjectID:          v.ProjectID,
+		UserID:             v.UserID,
+		CreatedAt:          v.CreatedAt,
+		Status:             v.Status,
+		IdempotencyKey:     v.IdempotencyKey,
+		GithubRepo:         v.GithubRepo,
+		GithubPr:           v.GithubPr,
+		GithubSha:          v.GithubSha,
+		ExternalID:         v.ExternalID,
+		ExternalURL:        v.ExternalURL,
+		ClonedFrom:         v.ClonedFrom,
+		OpenapiToolCount:   v.OpenapiToolCount,
+		FunctionsToolCount: v.FunctionsToolCount,
 	}
 	if v.Openapiv3Assets != nil {
 		res.Openapiv3Assets = make([]*OpenAPIv3DeploymentAssetResponseBody, len(v.Openapiv3Assets))
@@ -1685,6 +1704,12 @@ func marshalTypesDeploymentToDeploymentResponseBody(v *types.Deployment) *Deploy
 		}
 	} else {
 		res.Openapiv3Assets = []*OpenAPIv3DeploymentAssetResponseBody{}
+	}
+	if v.FunctionsAssets != nil {
+		res.FunctionsAssets = make([]*DeploymentFunctionsResponseBody, len(v.FunctionsAssets))
+		for i, val := range v.FunctionsAssets {
+			res.FunctionsAssets[i] = marshalTypesDeploymentFunctionsToDeploymentFunctionsResponseBody(val)
+		}
 	}
 	if v.Packages != nil {
 		res.Packages = make([]*DeploymentPackageResponseBody, len(v.Packages))
@@ -1709,6 +1734,23 @@ func unmarshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv
 		AssetID: *v.AssetID,
 		Name:    *v.Name,
 		Slug:    types.Slug(*v.Slug),
+	}
+
+	return res
+}
+
+// unmarshalAddFunctionsFormRequestBodyToDeploymentsAddFunctionsForm builds a
+// value of type *deployments.AddFunctionsForm from a value of type
+// *AddFunctionsFormRequestBody.
+func unmarshalAddFunctionsFormRequestBodyToDeploymentsAddFunctionsForm(v *AddFunctionsFormRequestBody) *deployments.AddFunctionsForm {
+	if v == nil {
+		return nil
+	}
+	res := &deployments.AddFunctionsForm{
+		AssetID:     *v.AssetID,
+		Name:        *v.Name,
+		Slug:        types.Slug(*v.Slug),
+		ToolRuntime: *v.ToolRuntime,
 	}
 
 	return res
@@ -1749,12 +1791,14 @@ func unmarshalAddPackageFormRequestBodyToDeploymentsAddPackageForm(v *AddPackage
 // *deployments.DeploymentSummary.
 func marshalDeploymentsDeploymentSummaryToDeploymentSummaryResponseBody(v *deployments.DeploymentSummary) *DeploymentSummaryResponseBody {
 	res := &DeploymentSummaryResponseBody{
-		ID:         v.ID,
-		UserID:     v.UserID,
-		Status:     v.Status,
-		CreatedAt:  v.CreatedAt,
-		AssetCount: v.AssetCount,
-		ToolCount:  v.ToolCount,
+		ID:                  v.ID,
+		UserID:              v.UserID,
+		Status:              v.Status,
+		CreatedAt:           v.CreatedAt,
+		OpenapiAssetCount:   v.OpenapiAssetCount,
+		OpenapiToolCount:    v.OpenapiToolCount,
+		FunctionsAssetCount: v.FunctionsAssetCount,
+		FunctionsToolCount:  v.FunctionsToolCount,
 	}
 
 	return res

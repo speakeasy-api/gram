@@ -35,6 +35,21 @@ type DeploymentsOpenapiv3Asset struct {
 	Slug         string
 }
 
+type FunctionsTool struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionsID  uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+	InputSchema  []byte
+	Variables    []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
 type HttpSecurity struct {
 	ID                  uuid.UUID
 	DeploymentID        uuid.UUID

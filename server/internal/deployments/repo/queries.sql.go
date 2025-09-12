@@ -62,6 +62,52 @@ func (q *Queries) CloneDeployment(ctx context.Context, arg CloneDeploymentParams
 	return id, err
 }
 
+const cloneDeploymentFunctionsAssets = `-- name: CloneDeploymentFunctionsAssets :many
+INSERT INTO deployments_functions (
+  deployment_id
+  , asset_id
+  , name
+  , slug
+  , tool_runtime
+)
+SELECT 
+  $1
+  , current.asset_id
+  , current.name
+  , current.slug
+  , current.tool_runtime
+FROM deployments_functions as current
+WHERE current.deployment_id = $2
+  AND current.asset_id <> ALL ($3::uuid[])
+RETURNING id
+`
+
+type CloneDeploymentFunctionsAssetsParams struct {
+	CloneDeploymentID    uuid.UUID
+	OriginalDeploymentID uuid.UUID
+	ExcludedIds          []uuid.UUID
+}
+
+func (q *Queries) CloneDeploymentFunctionsAssets(ctx context.Context, arg CloneDeploymentFunctionsAssetsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, cloneDeploymentFunctionsAssets, arg.CloneDeploymentID, arg.OriginalDeploymentID, arg.ExcludedIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const cloneDeploymentOpenAPIv3Assets = `-- name: CloneDeploymentOpenAPIv3Assets :many
 INSERT INTO deployments_openapiv3_assets (
   deployment_id
@@ -154,6 +200,56 @@ func (q *Queries) CloneDeploymentPackages(ctx context.Context, arg CloneDeployme
 	return items, nil
 }
 
+const cloneDeploymentToolFunctions = `-- name: CloneDeploymentToolFunctions :many
+INSERT INTO functions_tool (
+  deployment_id
+  , functions_id
+  , name
+  , description
+  , runtime
+  , variables
+  , input_schema
+)
+SELECT 
+  $1
+  , current.functions_id
+  , current.name
+  , current.description
+  , current.runtime
+  , current.variables
+  , current.input_schema
+FROM functions_tool as current
+WHERE current.deployment_id = $2
+  AND current.name <> ALL ($3::text[])
+RETURNING id
+`
+
+type CloneDeploymentToolFunctionsParams struct {
+	CloneDeploymentID    uuid.UUID
+	OriginalDeploymentID uuid.UUID
+	ExcludedNames        []string
+}
+
+func (q *Queries) CloneDeploymentToolFunctions(ctx context.Context, arg CloneDeploymentToolFunctionsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, cloneDeploymentToolFunctions, arg.CloneDeploymentID, arg.OriginalDeploymentID, arg.ExcludedNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createDeployment = `-- name: CreateDeployment :execresult
 INSERT INTO deployments (
   idempotency_key
@@ -203,6 +299,65 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		arg.ExternalID,
 		arg.ExternalUrl,
 	)
+}
+
+const createFunctionsTool = `-- name: CreateFunctionsTool :one
+INSERT INTO functions_tool (
+    deployment_id
+  , functions_id
+  , runtime
+  , name
+  , description
+  , input_schema
+  , variables
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+)
+RETURNING id, deployment_id, functions_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateFunctionsToolParams struct {
+	DeploymentID uuid.UUID
+	FunctionsID  uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+	InputSchema  []byte
+	Variables    []byte
+}
+
+func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsToolParams) (FunctionsTool, error) {
+	row := q.db.QueryRow(ctx, createFunctionsTool,
+		arg.DeploymentID,
+		arg.FunctionsID,
+		arg.Runtime,
+		arg.Name,
+		arg.Description,
+		arg.InputSchema,
+		arg.Variables,
+	)
+	var i FunctionsTool
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentID,
+		&i.FunctionsID,
+		&i.Runtime,
+		&i.Name,
+		&i.Description,
+		&i.InputSchema,
+		&i.Variables,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const createHTTPSecurity = `-- name: CreateHTTPSecurity :one
@@ -708,11 +863,19 @@ WITH latest_status as (
     ORDER BY seq DESC
     LIMIT 1
 ),
-tool_counts as (
+openapi_tool_counts as (
     SELECT 
         deployment_id,
         COUNT(DISTINCT id) as tool_count
     FROM http_tool_definitions 
+    WHERE deployment_id = $1 AND deleted IS FALSE
+    GROUP BY deployment_id
+),
+functions_tool_counts as (
+    SELECT 
+        deployment_id,
+        COUNT(DISTINCT id) as tool_count
+    FROM functions_tool 
     WHERE deployment_id = $1 AND deleted IS FALSE
     GROUP BY deployment_id
 )
@@ -723,6 +886,11 @@ SELECT
   deployments_openapiv3_assets.asset_id as deployments_openapiv3_asset_store_id,
   deployments_openapiv3_assets.name as deployments_openapiv3_asset_name,
   deployments_openapiv3_assets.slug as deployments_openapiv3_asset_slug,
+  deployments_functions.id as deployments_functions_id,
+  deployments_functions.asset_id as deployments_functions_asset_id,
+  deployments_functions.name as deployments_functions_name,
+  deployments_functions.slug as deployments_functions_slug,
+  deployments_functions.tool_runtime as deployments_functions_tool_runtime,
   deployments_packages.package_id as deployment_package_id,
   packages.name as package_name,
   package_versions.major as package_version_major,
@@ -730,14 +898,17 @@ SELECT
   package_versions.patch as package_version_patch,
   package_versions.prerelease as package_version_prerelease,
   package_versions.build as package_version_build,
-  COALESCE(tool_counts.tool_count, 0) as tool_count
+  COALESCE(openapi_tool_counts.tool_count, 0) as openapi_tool_count,
+  COALESCE(functions_tool_counts.tool_count, 0) as functions_tool_count
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
+LEFT JOIN deployments_functions ON deployments.id = deployments_functions.deployment_id
 LEFT JOIN deployments_packages ON deployments.id = deployments_packages.deployment_id
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
-LEFT JOIN tool_counts ON deployments.id = tool_counts.deployment_id
+LEFT JOIN openapi_tool_counts ON deployments.id = openapi_tool_counts.deployment_id
+LEFT JOIN functions_tool_counts ON deployments.id = functions_tool_counts.deployment_id
 WHERE deployments.id = $1 AND deployments.project_id = $2
 `
 
@@ -753,6 +924,11 @@ type GetDeploymentWithAssetsRow struct {
 	DeploymentsOpenapiv3AssetStoreID uuid.NullUUID
 	DeploymentsOpenapiv3AssetName    pgtype.Text
 	DeploymentsOpenapiv3AssetSlug    pgtype.Text
+	DeploymentsFunctionsID           uuid.NullUUID
+	DeploymentsFunctionsAssetID      uuid.NullUUID
+	DeploymentsFunctionsName         pgtype.Text
+	DeploymentsFunctionsSlug         pgtype.Text
+	DeploymentsFunctionsToolRuntime  pgtype.Text
 	DeploymentPackageID              uuid.NullUUID
 	PackageName                      pgtype.Text
 	PackageVersionMajor              pgtype.Int8
@@ -760,7 +936,8 @@ type GetDeploymentWithAssetsRow struct {
 	PackageVersionPatch              pgtype.Int8
 	PackageVersionPrerelease         pgtype.Text
 	PackageVersionBuild              pgtype.Text
-	ToolCount                        int64
+	OpenapiToolCount                 int64
+	FunctionsToolCount               int64
 }
 
 func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeploymentWithAssetsParams) ([]GetDeploymentWithAssetsRow, error) {
@@ -792,6 +969,11 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.DeploymentsOpenapiv3AssetStoreID,
 			&i.DeploymentsOpenapiv3AssetName,
 			&i.DeploymentsOpenapiv3AssetSlug,
+			&i.DeploymentsFunctionsID,
+			&i.DeploymentsFunctionsAssetID,
+			&i.DeploymentsFunctionsName,
+			&i.DeploymentsFunctionsSlug,
+			&i.DeploymentsFunctionsToolRuntime,
 			&i.DeploymentPackageID,
 			&i.PackageName,
 			&i.PackageVersionMajor,
@@ -799,7 +981,8 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.PackageVersionPatch,
 			&i.PackageVersionPrerelease,
 			&i.PackageVersionBuild,
-			&i.ToolCount,
+			&i.OpenapiToolCount,
+			&i.FunctionsToolCount,
 		); err != nil {
 			return nil, err
 		}
@@ -840,12 +1023,15 @@ SELECT
   d.user_id,
   d.created_at,
   COALESCE(ls.status, 'unknown') as status,
-  COUNT(DISTINCT doa.id) as asset_count,
-  COUNT(DISTINCT htd.id) as tool_count
+  COUNT(DISTINCT doa.id) as openapi_asset_count,
+  COUNT(DISTINCT htd.id) as openapi_tool_count,
+  COUNT(DISTINCT tf.functions_id) as functions_tool_asset_count,
+  COUNT(DISTINCT tf.id) as functions_tool_count
 FROM deployments d
 LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
 LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
 LEFT JOIN http_tool_definitions htd ON d.id = htd.deployment_id AND htd.deleted IS FALSE
+LEFT JOIN functions_tool tf ON d.id = tf.deployment_id AND tf.deleted IS FALSE
 WHERE
   d.project_id = $1
   AND d.id <= CASE 
@@ -863,12 +1049,14 @@ type ListDeploymentsParams struct {
 }
 
 type ListDeploymentsRow struct {
-	ID         uuid.UUID
-	UserID     string
-	CreatedAt  pgtype.Timestamptz
-	Status     string
-	AssetCount int64
-	ToolCount  int64
+	ID                      uuid.UUID
+	UserID                  string
+	CreatedAt               pgtype.Timestamptz
+	Status                  string
+	OpenapiAssetCount       int64
+	OpenapiToolCount        int64
+	FunctionsToolAssetCount int64
+	FunctionsToolCount      int64
 }
 
 func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams) ([]ListDeploymentsRow, error) {
@@ -885,8 +1073,10 @@ func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams
 			&i.UserID,
 			&i.CreatedAt,
 			&i.Status,
-			&i.AssetCount,
-			&i.ToolCount,
+			&i.OpenapiAssetCount,
+			&i.OpenapiToolCount,
+			&i.FunctionsToolAssetCount,
+			&i.FunctionsToolCount,
 		); err != nil {
 			return nil, err
 		}
@@ -990,6 +1180,61 @@ func (q *Queries) TransitionDeployment(ctx context.Context, arg TransitionDeploy
 	)
 	var i TransitionDeploymentRow
 	err := row.Scan(&i.StatusID, &i.Status, &i.Moved)
+	return i, err
+}
+
+const upsertDeploymentFunctionsAsset = `-- name: UpsertDeploymentFunctionsAsset :one
+INSERT INTO deployments_functions (
+  deployment_id
+  , asset_id
+  , name
+  , slug
+  , tool_runtime
+) VALUES (
+  $1
+  , $2
+  , $3
+  , $4
+  , $5
+)
+ON CONFLICT (deployment_id, slug) DO UPDATE
+SET
+  asset_id = EXCLUDED.asset_id
+  , name = EXCLUDED.name
+  , tool_runtime = EXCLUDED.tool_runtime
+RETURNING id, asset_id, name, slug
+`
+
+type UpsertDeploymentFunctionsAssetParams struct {
+	DeploymentID uuid.UUID
+	AssetID      uuid.UUID
+	Name         string
+	Slug         string
+	ToolRuntime  string
+}
+
+type UpsertDeploymentFunctionsAssetRow struct {
+	ID      uuid.UUID
+	AssetID uuid.UUID
+	Name    string
+	Slug    string
+}
+
+func (q *Queries) UpsertDeploymentFunctionsAsset(ctx context.Context, arg UpsertDeploymentFunctionsAssetParams) (UpsertDeploymentFunctionsAssetRow, error) {
+	row := q.db.QueryRow(ctx, upsertDeploymentFunctionsAsset,
+		arg.DeploymentID,
+		arg.AssetID,
+		arg.Name,
+		arg.Slug,
+		arg.ToolRuntime,
+	)
+	var i UpsertDeploymentFunctionsAssetRow
+	err := row.Scan(
+		&i.ID,
+		&i.AssetID,
+		&i.Name,
+		&i.Slug,
+	)
 	return i, err
 }
 

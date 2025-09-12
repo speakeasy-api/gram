@@ -42,6 +42,7 @@ func TestDeploymentsService_GetDeployment_Success(t *testing.T) {
 				Slug:    "test-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -111,6 +112,7 @@ func TestDeploymentsService_GetDeployment_WithPackages(t *testing.T) {
 				Slug:    "package-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -153,6 +155,7 @@ func TestDeploymentsService_GetDeployment_WithPackages(t *testing.T) {
 	created, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
 		IdempotencyKey:  "test-get-deployment-with-package",
 		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions:       []*gen.AddFunctionsForm{},
 		Packages: []*gen.AddDeploymentPackageForm{
 			{
 				Name:    "test-package",
@@ -275,6 +278,7 @@ func TestDeploymentsService_GetDeployment_WithExternalFields(t *testing.T) {
 				Slug:    "test-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -331,6 +335,7 @@ func TestDeploymentsService_GetDeployment_WithClonedFrom(t *testing.T) {
 				Slug:    "initial-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -368,7 +373,9 @@ func TestDeploymentsService_GetDeployment_WithClonedFrom(t *testing.T) {
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
 		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{},
 	})
 	require.NoError(t, err, "evolve deployment")

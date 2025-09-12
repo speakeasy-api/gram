@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
 var _ = Service("packages", func() {
@@ -186,7 +187,7 @@ var CreatePackageForm = Type("CreatePackageForm", func() {
 	Attribute("name", String, func() {
 		Description("The name of the package")
 		MaxLength(100)
-		Pattern(shared.SlugPattern)
+		Pattern(constants.SlugPattern)
 	})
 	Attribute("title", String, "The title of the package", func() {
 		MaxLength(100)
