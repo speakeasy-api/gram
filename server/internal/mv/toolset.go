@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	org "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	tr "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/tools/security"
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -169,6 +170,7 @@ func DescribeToolset(
 	toolsetSlug ToolsetSlug,
 ) (*types.Toolset, error) {
 	toolsetRepo := tsr.New(tx)
+	orgRepo := org.New(tx)
 	toolsRepo := tr.New(tx)
 	variationsRepo := vr.New(tx)
 	pid := uuid.UUID(projectID)
@@ -457,9 +459,15 @@ func DescribeToolset(
 		}
 	}
 
+	orgMetadata, err := orgRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
+	}
+
 	return &types.Toolset{
 		ID:                     toolset.ID.String(),
 		OrganizationID:         toolset.OrganizationID,
+		AccountType:            orgMetadata.GramAccountType,
 		ProjectID:              toolset.ProjectID.String(),
 		Name:                   toolset.Name,
 		Slug:                   types.Slug(toolset.Slug),

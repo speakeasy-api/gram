@@ -2509,7 +2509,7 @@ List all toolsets for a project
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets list-toolsets --session-token "Iste rerum repellat quia." --project-slug-input "Odio dicta minima quis atque similique ullam."
+    %[1]s toolsets list-toolsets --session-token "Minima quis." --project-slug-input "Similique ullam sit rerum quas."
 `, os.Args[0])
 }
 
@@ -2555,7 +2555,7 @@ Delete a toolset by its ID
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets delete-toolset --slug "fe5" --session-token "Consequatur adipisci temporibus est." --project-slug-input "Aut autem exercitationem doloribus cupiditate enim dolorem."
+    %[1]s toolsets delete-toolset --slug "0lc" --session-token "Enim dolorem voluptatem facilis asperiores magnam." --project-slug-input "Facere illum."
 `, os.Args[0])
 }
 
@@ -2568,7 +2568,7 @@ Get detailed information about a toolset including full HTTP tool definitions
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets get-toolset --slug "z2h" --session-token "Et modi." --project-slug-input "Qui ea."
+    %[1]s toolsets get-toolset --slug "8hd" --session-token "Libero omnis voluptatum nihil vel labore officiis." --project-slug-input "Facilis alias pariatur voluptas dolores suscipit rem."
 `, os.Args[0])
 }
 
@@ -2581,7 +2581,7 @@ Check if a MCP slug is available
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets check-mcp-slug-availability --slug "k78" --session-token "Dolor consequuntur est sapiente delectus repellat." --project-slug-input "Et error non mollitia et non qui."
+    %[1]s toolsets check-mcp-slug-availability --slug "cep" --session-token "Dolorem corporis asperiores omnis." --project-slug-input "Corrupti beatae dolore dignissimos officiis assumenda."
 `, os.Args[0])
 }
 
@@ -2597,10 +2597,10 @@ Associate an external OAuth server with a toolset
 Example:
     %[1]s toolsets add-externaloauth-server --body '{
       "external_oauth_server": {
-         "metadata": "Nobis delectus quas libero.",
-         "slug": "5sz"
+         "metadata": "Deserunt eaque nostrum impedit ut et ut.",
+         "slug": "q1j"
       }
-   }' --slug "req" --session-token "Aut labore deserunt eaque nostrum." --project-slug-input "Ut et ut accusantium est cum earum."
+   }' --slug "hjz" --session-token "Amet quasi sit et ut animi dolores." --project-slug-input "Eum sequi qui sint."
 `, os.Args[0])
 }
 
@@ -2613,7 +2613,7 @@ Remove OAuth server association from a toolset
     -project-slug-input STRING: 
 
 Example:
-    %[1]s toolsets removeoauth-server --slug "rbf" --session-token "Dolor ullam odit eveniet qui." --project-slug-input "Recusandae dolore ipsa."
+    %[1]s toolsets removeoauth-server --slug "14o" --session-token "Architecto quaerat eaque et consequatur pariatur aut." --project-slug-input "Atque sed fugiat."
 `, os.Args[0])
 }
 
@@ -2641,7 +2641,7 @@ Get the usage for a project for a given period
     -project-slug-input STRING: 
 
 Example:
-    %[1]s usage get-period-usage --session-token "Est similique rerum ut vel non nemo." --project-slug-input "Sed quos minus ea minus cupiditate."
+    %[1]s usage get-period-usage --session-token "Tempora harum." --project-slug-input "Aspernatur asperiores enim repellendus."
 `, os.Args[0])
 }
 
@@ -2663,7 +2663,7 @@ Create a customer session for the user
     -project-slug-input STRING: 
 
 Example:
-    %[1]s usage create-customer-session --session-token "Sint at dolores." --project-slug-input "Voluptas tenetur voluptatem vel rem porro."
+    %[1]s usage create-customer-session --session-token "Officia sed." --project-slug-input "Illo voluptatem aliquid expedita debitis et occaecati."
 `, os.Args[0])
 }
 
@@ -2675,7 +2675,7 @@ Create a checkout link for upgrading to the business plan
     -project-slug-input STRING: 
 
 Example:
-    %[1]s usage create-checkout --session-token "Expedita debitis." --project-slug-input "Occaecati ut officiis quia ratione."
+    %[1]s usage create-checkout --session-token "Accusantium blanditiis reprehenderit." --project-slug-input "Rerum temporibus et officiis nihil aut voluptate."
 `, os.Args[0])
 }
 
@@ -2706,20 +2706,18 @@ Create or update a globally defined tool variation.
 
 Example:
     %[1]s variations upsert-global --body '{
-      "confirm": "session",
-      "confirm_prompt": "Qui rem iste.",
-      "description": "Expedita tenetur.",
-      "name": "Quisquam quis asperiores praesentium aut voluptate.",
-      "src_tool_name": "Rerum temporibus et officiis nihil aut voluptate.",
-      "summarizer": "Sunt aut consectetur dolorem.",
-      "summary": "Dolorem aliquam quaerat quis id.",
+      "confirm": "never",
+      "confirm_prompt": "Consectetur dolorem.",
+      "description": "Aperiam dolores.",
+      "name": "Excepturi voluptatem quis unde.",
+      "src_tool_name": "Tempore at.",
+      "summarizer": "Sequi minus molestiae ad reprehenderit sint.",
+      "summary": "Sint error ea saepe.",
       "tags": [
-         "Enim ut quia dolores.",
-         "Architecto consectetur.",
-         "Et aspernatur quidem doloremque suscipit.",
-         "Ut consequatur illo expedita dicta molestias tempore."
+         "Consequatur quis reprehenderit commodi.",
+         "Sunt quasi ut fugiat aperiam qui maxime."
       ]
-   }' --session-token "Excepturi voluptatem quis unde." --apikey-token "Sint error ea saepe." --project-slug-input "Aperiam dolores."
+   }' --session-token "Aut earum qui odit illum blanditiis ea." --apikey-token "Voluptatum aliquid similique." --project-slug-input "Voluptas ex aperiam ut."
 `, os.Args[0])
 }
 
@@ -2733,7 +2731,7 @@ Create or update a globally defined tool variation.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s variations delete-global --variation-id "Aliquid similique necessitatibus voluptas ex aperiam." --session-token "Pariatur animi laudantium voluptatem dolor dicta sit." --apikey-token "Cum aut non recusandae aut id." --project-slug-input "Facilis voluptate est distinctio."
+    %[1]s variations delete-global --variation-id "Ut ea illum qui." --session-token "Eius nobis dicta ratione et." --apikey-token "Nam illum impedit." --project-slug-input "Et magnam consectetur saepe sed libero."
 `, os.Args[0])
 }
 
@@ -2746,6 +2744,6 @@ List globally defined tool variations.
     -project-slug-input STRING: 
 
 Example:
-    %[1]s variations list-global --session-token "Enim qui hic rerum tempore illo." --apikey-token "Quasi animi expedita deleniti vero perspiciatis." --project-slug-input "Doloribus eligendi."
+    %[1]s variations list-global --session-token "Dolores at." --apikey-token "Cumque dolor molestiae aliquid." --project-slug-input "Magni et laborum consequatur omnis."
 `, os.Args[0])
 }

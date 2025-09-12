@@ -9333,6 +9333,9 @@ components:
         Toolset:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: The account type of the organization
                 created_at:
                     type: string
                     description: When the toolset was created.
@@ -9408,6 +9411,7 @@ components:
                 - id
                 - project_id
                 - organization_id
+                - account_type
                 - name
                 - slug
                 - http_tools

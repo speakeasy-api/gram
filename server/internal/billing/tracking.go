@@ -1,6 +1,8 @@
 package billing
 
-import "context"
+import (
+	"context"
+)
 
 type ToolCallType string
 
