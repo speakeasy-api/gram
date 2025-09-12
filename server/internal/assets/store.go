@@ -271,7 +271,7 @@ func (gbs *GCSBlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser
 		logger:     gbs.logger,
 		bucket:     gbs.bucket,
 		objectPath: subpath,
-		context:    ctx,
+		context:    func() context.Context { return ctx },
 	}, attrs.Size, nil
 }
 
@@ -291,15 +291,16 @@ type gcsChunkReader struct {
 	logger     *slog.Logger
 	bucket     *storage.BucketHandle
 	objectPath string
-	context    context.Context
+	context    func() context.Context
 }
 
 func (g *gcsChunkReader) ReadAt(p []byte, offset int64) (int, error) {
-	rdr, err := g.bucket.Object(g.objectPath).NewRangeReader(g.context, offset, int64(len(p)))
+	ctx := g.context()
+	rdr, err := g.bucket.Object(g.objectPath).NewRangeReader(ctx, offset, int64(len(p)))
 	if err != nil {
 		return 0, fmt.Errorf("create range reader: %w", err)
 	}
-	defer o11y.LogDefer(g.context, g.logger, func() error {
+	defer o11y.LogDefer(ctx, g.logger, func() error {
 		return rdr.Close()
 	})
 
