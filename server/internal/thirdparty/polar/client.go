@@ -501,9 +501,16 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 		}
 
 		usage.ToolCalls = int(toolCallMeter.ConsumedUnits)
-		usage.MaxToolCalls = int(toolCallMeter.CreditedUnits)
 		usage.Servers = int(serverMeter.ConsumedUnits)
-		usage.MaxServers = int(serverMeter.CreditedUnits)
+
+		// Don't set these if they are 0. This can happen for orgs that subscribed but then cancelled.
+		// For those, we want to fall back to the free tier limits which will be pulled below if the maxes are still unset.
+		if toolCallMeter.CreditedUnits > 0 {
+			usage.MaxToolCalls = int(toolCallMeter.CreditedUnits)
+		}
+		if serverMeter.CreditedUnits > 0 {
+			usage.MaxServers = int(serverMeter.CreditedUnits)
+		}
 	}
 
 	/**

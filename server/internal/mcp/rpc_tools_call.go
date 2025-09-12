@@ -244,8 +244,12 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 		return nil
 	}
 
-	// we implement a hardcoded limit on max tool calls can be trusted for free tier
-	if periodUsage.ToolCalls >= 2000 {
+	hardToolCallsLimit := 2*periodUsage.MaxToolCalls
+	if hardToolCallsLimit == 0 {
+		hardToolCallsLimit = 2000 // Just in case 
+	}
+
+	if periodUsage.ToolCalls >= hardToolCallsLimit {
 		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").Log(ctx, logger)
 	}
 
