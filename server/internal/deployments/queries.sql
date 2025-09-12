@@ -371,6 +371,8 @@ RETURNING *;
 INSERT INTO http_security (
     key
   , deployment_id
+  , project_id
+  , openapiv3_document_id
   , type
   , name
   , in_placement
@@ -382,6 +384,8 @@ INSERT INTO http_security (
 ) VALUES (
     @key
   , @deployment_id
+  , @project_id
+  , @openapiv3_document_id
   , @type
   , @name
   , @in_placement
@@ -402,4 +406,3 @@ FROM deployments_packages
 INNER JOIN packages ON deployments_packages.package_id = packages.id
 INNER JOIN package_versions ON deployments_packages.version_id = package_versions.id
 WHERE deployments_packages.deployment_id = @deployment_id;
-

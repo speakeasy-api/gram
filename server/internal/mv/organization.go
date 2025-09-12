@@ -16,6 +16,7 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata")
 	}
+	previousAccountType := org.GramAccountType
 
 	// An org is enterprise if it's explicitly set to enterprise in the database
 	if org.GramAccountType == "enterprise" {
@@ -36,8 +37,7 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 
 	// Otherwise, the source of truth for account type is the Polar customer state
 	if customerTier != nil {
-		org.GramAccountType = string(*customerTier)
-		if org.GramAccountType != string(*customerTier) {
+		if previousAccountType != string(*customerTier) {
 			if err := orgRepo.SetAccountType(ctx, org_repo.SetAccountTypeParams{
 				GramAccountType: string(*customerTier),
 				ID:              orgID,
@@ -45,6 +45,7 @@ func DescribeOrganization(ctx context.Context, logger *slog.Logger, orgRepo *org
 				logger.ErrorContext(ctx, "error setting account type", attr.SlogError(err))
 			}
 		}
+		org.GramAccountType = string(*customerTier)
 	}
 
 	return &org, nil

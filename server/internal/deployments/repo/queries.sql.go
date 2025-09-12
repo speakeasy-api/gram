@@ -209,6 +209,8 @@ const createHTTPSecurity = `-- name: CreateHTTPSecurity :one
 INSERT INTO http_security (
     key
   , deployment_id
+  , project_id
+  , openapiv3_document_id
   , type
   , name
   , in_placement
@@ -228,27 +230,33 @@ INSERT INTO http_security (
   , $8
   , $9
   , $10
+  , $11
+  , $12
 )
-RETURNING id, key, deployment_id, type, name, in_placement, scheme, bearer_format, oauth_types, oauth_flows, env_variables, created_at, updated_at, deleted_at, deleted
+RETURNING id, deployment_id, project_id, openapiv3_document_id, key, type, name, in_placement, scheme, bearer_format, oauth_types, oauth_flows, env_variables, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateHTTPSecurityParams struct {
-	Key          string
-	DeploymentID uuid.UUID
-	Type         pgtype.Text
-	Name         pgtype.Text
-	InPlacement  pgtype.Text
-	Scheme       pgtype.Text
-	BearerFormat pgtype.Text
-	EnvVariables []string
-	OauthTypes   []string
-	OauthFlows   []byte
+	Key                 string
+	DeploymentID        uuid.UUID
+	ProjectID           uuid.NullUUID
+	Openapiv3DocumentID uuid.NullUUID
+	Type                pgtype.Text
+	Name                pgtype.Text
+	InPlacement         pgtype.Text
+	Scheme              pgtype.Text
+	BearerFormat        pgtype.Text
+	EnvVariables        []string
+	OauthTypes          []string
+	OauthFlows          []byte
 }
 
 func (q *Queries) CreateHTTPSecurity(ctx context.Context, arg CreateHTTPSecurityParams) (HttpSecurity, error) {
 	row := q.db.QueryRow(ctx, createHTTPSecurity,
 		arg.Key,
 		arg.DeploymentID,
+		arg.ProjectID,
+		arg.Openapiv3DocumentID,
 		arg.Type,
 		arg.Name,
 		arg.InPlacement,
@@ -261,8 +269,10 @@ func (q *Queries) CreateHTTPSecurity(ctx context.Context, arg CreateHTTPSecurity
 	var i HttpSecurity
 	err := row.Scan(
 		&i.ID,
-		&i.Key,
 		&i.DeploymentID,
+		&i.ProjectID,
+		&i.Openapiv3DocumentID,
+		&i.Key,
 		&i.Type,
 		&i.Name,
 		&i.InPlacement,

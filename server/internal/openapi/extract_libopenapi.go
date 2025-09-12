@@ -298,12 +298,14 @@ func extractSecuritySchemesLibOpenAPI(doc v3.Document, task ToolExtractorTask) (
 		}
 
 		res[key] = &repo.CreateHTTPSecurityParams{
-			Key:          key,
-			DeploymentID: task.DeploymentID,
-			Type:         conv.ToPGText(sec.Type),
-			Name:         conv.ToPGTextEmpty(sec.Name),
-			InPlacement:  conv.ToPGTextEmpty(sec.In),
-			Scheme:       conv.ToPGTextEmpty(sec.Scheme),
+			Key:                 key,
+			DeploymentID:        task.DeploymentID,
+			ProjectID:           uuid.NullUUID{UUID: task.ProjectID, Valid: task.ProjectID != uuid.Nil},
+			Openapiv3DocumentID: uuid.NullUUID{UUID: task.DocumentID, Valid: task.DocumentID != uuid.Nil},
+			Type:                conv.ToPGText(sec.Type),
+			Name:                conv.ToPGTextEmpty(sec.Name),
+			InPlacement:         conv.ToPGTextEmpty(sec.In),
+			Scheme:              conv.ToPGTextEmpty(sec.Scheme),
 			// No real reason to store this since it's purely for documentation
 			// purposes and we should eventually drop the DB column. Setting it
 			// to NULL.

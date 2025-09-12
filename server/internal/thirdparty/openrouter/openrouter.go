@@ -27,7 +27,7 @@ const OpenRouterBaseURL = "https://openrouter.ai/api"
 
 var creditsAccountTypeMap = map[string]int{
 	"free":       5,
-	"pro":        50,
+	"pro":        25,
 	"enterprise": 50,
 	"":           5, // safety default
 }

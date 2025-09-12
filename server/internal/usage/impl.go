@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 	"go.opentelemetry.io/otel"
@@ -40,11 +41,12 @@ type Service struct {
 	billingRepo   billing.Repository
 	orgRepo       *orgRepo.Queries
 	posthogClient *posthog.Posthog
+	openRouter    openrouter.Provisioner
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	return &Service{
@@ -56,6 +58,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		billingRepo:   billingRepo,
 		orgRepo:       orgRepo.New(db),
 		posthogClient: posthogClient,
+		openRouter:    openRouter,
 	}
 }
 
@@ -108,14 +111,28 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		return oops.E(oops.CodeUnexpected, errors.New("missing customer external id in webhook payload"), "missing customer external id in webhook payload").Log(ctx, s.logger)
 	}
 
+	existingOrgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, webhookPayload.Data.Customer.ExternalID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, s.logger)
+	}
+
+	previousAccountType := existingOrgMetadata.GramAccountType
+
 	// we must invalidate the customer tier cache since customer tier may have changed witha subscription update
 	if err := s.billingRepo.InvalidateBillingCustomerCaches(ctx, webhookPayload.Data.Customer.ExternalID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to invalidate customer tier cache").Log(ctx, s.logger)
 	}
 
 	// we force a refresh of the state of the organization since customer tier may have changed witha subscription update
-	if _, err = mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, webhookPayload.Data.Customer.ExternalID); err != nil {
+	refreshedOrg, err := mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, webhookPayload.Data.Customer.ExternalID)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").Log(ctx, s.logger)
+	}
+
+	if previousAccountType != refreshedOrg.GramAccountType {
+		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").Log(ctx, s.logger)
+		}
 	}
 
 	// we force a refresh of the period usage since usage may have changed with a subscription update

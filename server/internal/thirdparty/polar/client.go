@@ -735,7 +735,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			AddOnBullets: []string{
 				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
 				fmt.Sprintf("%s / month / additional %d monthly requests", formatPrice(toolCallPrice*float64(additionalToolCallsBlock)), additionalToolCallsBlock),
-				fmt.Sprintf("%s / month / credit", formatPrice(creditPrice)),
+				fmt.Sprintf("%s / month / 1 playground credit", formatPrice(creditPrice)),
 			},
 		},
 		Enterprise: &gen.TierLimits{

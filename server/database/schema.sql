@@ -487,8 +487,11 @@ WHERE mcp_slug IS NOT NULL AND custom_domain_id IS NULL AND deleted IS FALSE;
 CREATE TABLE IF NOT EXISTS http_security (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   
-  key TEXT NOT NULL CHECK (key <> '' AND CHAR_LENGTH(key) <= 60),
   deployment_id uuid NOT NULL,
+  project_id uuid,
+  openapiv3_document_id uuid,
+
+  key TEXT NOT NULL CHECK (key <> '' AND CHAR_LENGTH(key) <= 60),
   type TEXT CHECK (type <> '' AND CHAR_LENGTH(type) <= 20),
   name TEXT CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   in_placement TEXT CHECK (in_placement <> '' AND CHAR_LENGTH(in_placement) <= 10), -- header, query, path
@@ -505,7 +508,9 @@ CREATE TABLE IF NOT EXISTS http_security (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
   
   CONSTRAINT http_security_pkey PRIMARY KEY (id),
-  CONSTRAINT http_security_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE
+  CONSTRAINT http_security_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
+  CONSTRAINT http_security_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE,
+  CONSTRAINT http_security_openapiv3_document_id_fkey FOREIGN key (openapiv3_document_id) REFERENCES deployments_openapiv3_assets (id) ON DELETE RESTRICT
 );
 
 CREATE INDEX IF NOT EXISTS http_security_deleted_idx 

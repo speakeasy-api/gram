@@ -1,5 +1,11 @@
 # @gram/dashboard
 
+## 0.9.3
+
+### Patch Changes
+
+- a1b3aaa: Revert to zod v3
+
 ## 0.9.2
 
 ### Patch Changes
