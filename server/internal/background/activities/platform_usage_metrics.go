@@ -64,7 +64,6 @@ func (c *CollectPlatformUsageMetrics) Do(ctx context.Context) ([]PlatformUsageMe
 			TotalEnabledServers: row.TotalEnabledServers,
 			TotalToolsets:       row.TotalToolsets,
 			TotalTools:          row.TotalTools,
-			IsLegacyOrg:         row.OrgCreatedAt.Time.Before(time.Date(2025, 9, 5, 0, 0, 0, 0, time.UTC)), // This is when free tier limit enforcement started
 		})
 	}
 

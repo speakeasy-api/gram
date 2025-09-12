@@ -7,8 +7,6 @@ package repo
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getAllOrganizationsWithToolsets = `-- name: GetAllOrganizationsWithToolsets :many
@@ -84,7 +82,6 @@ tool_metrics AS (
 )
 SELECT 
   COALESCE(tm.organization_id, tlm.organization_id) as organization_id,
-  om.created_at as org_created_at,
   COALESCE(tm.public_mcp_servers, 0) as public_mcp_servers,
   COALESCE(tm.private_mcp_servers, 0) as private_mcp_servers,
   COALESCE(tm.total_enabled_servers, 0) as total_enabled_servers,
@@ -92,12 +89,10 @@ SELECT
   COALESCE(tlm.total_tools, 0) as total_tools
 FROM toolset_metrics tm
 FULL OUTER JOIN tool_metrics tlm ON tm.organization_id = tlm.organization_id
-LEFT JOIN organization_metadata om ON COALESCE(tm.organization_id, tlm.organization_id) = om.id
 `
 
 type GetPlatformUsageMetricsRow struct {
 	OrganizationID      string
-	OrgCreatedAt        pgtype.Timestamptz
 	PublicMcpServers    int64
 	PrivateMcpServers   int64
 	TotalEnabledServers int64
@@ -117,7 +112,6 @@ func (q *Queries) GetPlatformUsageMetrics(ctx context.Context) ([]GetPlatformUsa
 		var i GetPlatformUsageMetricsRow
 		if err := rows.Scan(
 			&i.OrganizationID,
-			&i.OrgCreatedAt,
 			&i.PublicMcpServers,
 			&i.PrivateMcpServers,
 			&i.TotalEnabledServers,
