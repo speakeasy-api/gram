@@ -89,14 +89,16 @@ func (f *FirePlatformUsageMetrics) Do(ctx context.Context, metrics []PlatformUsa
 
 	for _, metric := range metrics {
 		workers.Go(func() error {
-			f.billingTracker.TrackPlatformUsage(ctx, billing.PlatformUsageEvent{
+			if err := f.billingTracker.TrackPlatformUsage(ctx, billing.PlatformUsageEvent{
 				OrganizationID:      metric.OrganizationID,
 				PublicMCPServers:    metric.PublicMCPServers,
 				PrivateMCPServers:   metric.PrivateMCPServers,
 				TotalEnabledServers: metric.TotalEnabledServers,
 				TotalToolsets:       metric.TotalToolsets,
 				TotalTools:          metric.TotalTools,
-			})
+			}); err != nil {
+				return fmt.Errorf("failed to track platform usage for org %s: %w", metric.OrganizationID, err)
+			}
 			return nil
 		})
 	}
