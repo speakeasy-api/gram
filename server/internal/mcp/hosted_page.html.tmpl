@@ -406,13 +406,6 @@
         box-sizing: border-box;
       }
     </style>
-    <!-- we make this a code block with display: none instead of a
-    script[type="application/json"] because we must escape the user-provided
-    contents and this plays poorly with our script tag -->
-    <code style="display: none;" id="claude-code-script">claude mcp add-json "{{ .MCPSlug }}" "$(cat &lt;&lt;'EOF'
-{{ .MCPConfig }}
-EOF
-)"</code>
     <template id="modal-template">
       <div class="modal">
         <div class="content-slot">
@@ -679,6 +672,13 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code></pre>
       Powered by
       <a href="https://getgram.ai" target="_blank" rel="noopener noreferrer">Gram</a>
     </footer>
+    <!-- we make this a code block with display: none instead of a
+    script[type="application/json"] because we must escape the user-provided
+    contents and this plays poorly with our script tag -->
+    <code style="display: none;" id="claude-code-script">claude mcp add-json "{{ .MCPSlug }}" "$(cat &lt;&lt;'EOF'
+{{ .MCPConfig }}
+EOF
+)"</code>
     <script type="module">
       import { zip } from 'https://cdn.skypack.dev/fflate@0.8.2?min';
 
