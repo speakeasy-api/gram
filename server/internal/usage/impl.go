@@ -82,7 +82,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) error {
 	acceptedEvents := []string{
 		"subscription.created",
-		"subscription.updated",
+		"subscription.active",
 		"subscription.canceled",
 		"subscription.uncanceled",
 		"subscription.revoked",
@@ -128,8 +128,21 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").Log(ctx, s.logger)
 	}
+	updatedAccountType := refreshedOrg.GramAccountType
 
-	if previousAccountType != refreshedOrg.GramAccountType {
+	// we must manually handle a downgrade from pro to free right now since there is no specific product subscription for free
+	if previousAccountType == "pro" && webhookPayload.Type == "subscription.revoked" {
+		updatedAccountType = "free"
+		err := s.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+			GramAccountType: updatedAccountType,
+			ID:              refreshedOrg.ID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to set account type").Log(ctx, s.logger)
+		}
+	}
+
+	if previousAccountType != updatedAccountType {
 		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").Log(ctx, s.logger)
 		}
