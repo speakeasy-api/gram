@@ -337,7 +337,7 @@ func (p *Client) TrackPlatformUsage(ctx context.Context, events []billing.Platfo
 	ctx, span := p.tracer.Start(ctx, "polar_client.track_platform_usage")
 	defer span.End()
 
-	var polarEvents []polarComponents.Events = make([]polarComponents.Events, 0, len(events))
+	var polarEvents = make([]polarComponents.Events, 0, len(events))
 	for _, event := range events {
 
 		metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{

@@ -60,7 +60,7 @@ func NewActivities(
 		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 		customDomainIngress:           activities.NewCustomDomainIngress(logger, db, k8sClient),
-		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db, billingTracker),
+		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
 		firePlatformUsageMetrics:      activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		freeTierReportingUsageMetrics: activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
 		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
