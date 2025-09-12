@@ -333,39 +333,43 @@ func (p *Client) TrackPromptCallUsage(ctx context.Context, event billing.PromptC
 	}
 }
 
-func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformUsageEvent) {
+func (p *Client) TrackPlatformUsage(ctx context.Context, events []billing.PlatformUsageEvent) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.track_platform_usage")
 	defer span.End()
 
-	metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
-		"public_mcp_servers": {
-			Integer: &event.PublicMCPServers,
-		},
-		"private_mcp_servers": {
-			Integer: &event.PrivateMCPServers,
-		},
-		"total_enabled_servers": {
-			Integer: &event.TotalEnabledServers,
-		},
-		"total_toolsets": {
-			Integer: &event.TotalToolsets,
-		},
-		"total_tools": {
-			Integer: &event.TotalTools,
-		},
+	var polarEvents []polarComponents.Events = make([]polarComponents.Events, 0, len(events))
+	for _, event := range events {
+
+		metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
+			"public_mcp_servers": {
+				Integer: &event.PublicMCPServers,
+			},
+			"private_mcp_servers": {
+				Integer: &event.PrivateMCPServers,
+			},
+			"total_enabled_servers": {
+				Integer: &event.TotalEnabledServers,
+			},
+			"total_toolsets": {
+				Integer: &event.TotalToolsets,
+			},
+			"total_tools": {
+				Integer: &event.TotalTools,
+			},
+		}
+
+		polarEvents = append(polarEvents, polarComponents.Events{
+			Type: polarComponents.EventsTypeEventCreateExternalCustomer,
+			EventCreateExternalCustomer: &polarComponents.EventCreateExternalCustomer{
+				ExternalCustomerID: event.OrganizationID,
+				Name:               "platform-usage",
+				Metadata:           metadata,
+			},
+		})
 	}
 
 	_, err := p.polar.Events.Ingest(ctx, polarComponents.EventsIngest{
-		Events: []polarComponents.Events{
-			{
-				Type: polarComponents.EventsTypeEventCreateExternalCustomer,
-				EventCreateExternalCustomer: &polarComponents.EventCreateExternalCustomer{
-					ExternalCustomerID: event.OrganizationID,
-					Name:               "platform-usage",
-					Metadata:           metadata,
-				},
-			},
-		},
+		Events: polarEvents,
 	})
 
 	if err != nil {

@@ -190,27 +190,28 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 	}, nil
 }
 
-func (s *StubClient) TrackPlatformUsage(ctx context.Context, event PlatformUsageEvent) {
-	var err error
+func (s *StubClient) TrackPlatformUsage(ctx context.Context, events []PlatformUsageEvent) {
 	ctx, span := s.tracer.Start(ctx, "stub_client.track_platform_usage")
 	defer span.End()
 
 	s.mut.Lock()
 	defer s.mut.Unlock()
 
-	pu, err := s.readPeriodUsage(event.OrganizationID)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to read period usage file", attr.SlogError(err))
-		return
-	}
+	for _, event := range events {
+		pu, err := s.readPeriodUsage(event.OrganizationID)
+		if err != nil {
+			s.logger.ErrorContext(ctx, "failed to read period usage file", attr.SlogError(err))
+			return
+		}
 
-	pu.Servers = int(event.PrivateMCPServers)
-	pu.ActualEnabledServerCount = int(event.PublicMCPServers)
+		pu.Servers = int(event.PrivateMCPServers)
+		pu.ActualEnabledServerCount = int(event.PublicMCPServers)
 
-	if err := s.writePeriodUsage(ctx, event.OrganizationID, pu); err != nil {
-		span.SetStatus(codes.Error, err.Error())
-		s.logger.ErrorContext(ctx, "failed to write period usage file", attr.SlogError(err))
-		return
+		if err := s.writePeriodUsage(ctx, event.OrganizationID, pu); err != nil {
+			span.SetStatus(codes.Error, err.Error())
+			s.logger.ErrorContext(ctx, "failed to write period usage file", attr.SlogError(err))
+			return
+		}
 	}
 }
 
