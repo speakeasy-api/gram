@@ -49,20 +49,21 @@ import (
 )
 
 type Service struct {
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	metrics      *metrics
-	db           *pgxpool.Pool
-	authRepo     *auth_repo.Queries
-	toolsetsRepo *toolsets_repo.Queries
-	auth         *auth.Auth
-	env          gateway.EnvironmentLoader
-	serverURL    *url.URL
-	posthog      *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	toolProxy    *gateway.ToolProxy
-	oauthService *oauth.Service
-	oauthRepo    *oauth_repo.Queries
-	billing      billing.Tracker
+	logger            *slog.Logger
+	tracer            trace.Tracer
+	metrics           *metrics
+	db                *pgxpool.Pool
+	authRepo          *auth_repo.Queries
+	toolsetsRepo      *toolsets_repo.Queries
+	auth              *auth.Auth
+	env               gateway.EnvironmentLoader
+	serverURL         *url.URL
+	posthog           *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	toolProxy         *gateway.ToolProxy
+	oauthService      *oauth.Service
+	oauthRepo         *oauth_repo.Queries
+	billingTracker    billing.Tracker
+	billingRepository billing.Repository
 }
 
 type oauthTokenInputs struct {
@@ -98,7 +99,8 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	oauthService *oauth.Service,
-	billing billing.Tracker,
+	billingTracker billing.Tracker,
+	billingRepository billing.Repository,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -123,9 +125,10 @@ func NewService(
 			cacheImpl,
 			guardianPolicy,
 		),
-		oauthService: oauthService,
-		oauthRepo:    oauth_repo.New(db),
-		billing:      billing,
+		oauthService:      oauthService,
+		oauthRepo:         oauth_repo.New(db),
+		billingTracker:    billingTracker,
+		billingRepository: billingRepository,
 	}
 }
 
@@ -718,7 +721,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billing)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req)
 	case "prompts/get":

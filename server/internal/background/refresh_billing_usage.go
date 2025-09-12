@@ -14,7 +14,7 @@ import (
 // safely wait for polar rate limits
 const (
 	refreshBillingUsageBatchSize     = 25
-	refreshBillingUsagesWaitInterval = 5 * time.Second
+	refreshBillingUsagesWaitInterval = 10 * time.Second
 )
 
 type RefreshBillingUsageClient struct {
@@ -94,7 +94,7 @@ func AddRefreshBillingUsageSchedule(ctx context.Context, temporalClient client.C
 			ID:                 workflowID,
 			Workflow:           RefreshBillingUsageWorkflow,
 			TaskQueue:          string(TaskQueueMain),
-			WorkflowRunTimeout: 10 * time.Minute,
+			WorkflowRunTimeout: 15 * time.Minute,
 		},
 	})
 	if err != nil {

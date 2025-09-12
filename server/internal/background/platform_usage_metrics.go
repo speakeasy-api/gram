@@ -16,7 +16,7 @@ import (
 // safely wait for polar rate limits
 const (
 	platformUsageMetricsBatchSize    = 25
-	platformUsageMetricsWaitInterval = 5 * time.Second
+	platformUsageMetricsWaitInterval = 30 * time.Second
 )
 
 type PlatformUsageMetricsClient struct {
@@ -115,7 +115,7 @@ func AddPlatformUsageMetricsSchedule(ctx context.Context, temporalClient client.
 			ID:                 workflowID,
 			Workflow:           CollectPlatformUsageMetricsWorkflow,
 			TaskQueue:          string(TaskQueueMain),
-			WorkflowRunTimeout: 10 * time.Minute,
+			WorkflowRunTimeout: 30 * time.Minute,
 		},
 	})
 	if err != nil {

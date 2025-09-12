@@ -15,6 +15,8 @@ type Toolset struct {
 	ProjectID string
 	// The organization ID this toolset belongs to
 	OrganizationID string
+	// The account type of the organization
+	AccountType string
 	// The name of the toolset
 	Name string
 	// The slug of the toolset
