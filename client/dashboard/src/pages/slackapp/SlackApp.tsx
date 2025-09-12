@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { useGetSlackConnection } from "@gram/client/react-query";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -107,8 +107,8 @@ export default function SlackApp() {
                   window.location.href
                 )}`;
               }}
-              variant="default"
-              size="default"
+              variant="secondary"
+              size="md"
               className="px-6 py-2 rounded-lg"
             >
               Connect Slack
@@ -153,8 +153,7 @@ export default function SlackApp() {
               </Stack>
             </Card.Header>
             <Card.Footer>
-              <Button
-                variant="outline"
+              <Button variant="secondary"
                 onClick={() => {
                   setToolset(data.defaultToolsetSlug || "");
                   setModalOpen(true);
@@ -163,13 +162,11 @@ export default function SlackApp() {
                 Change Default Toolset
               </Button>
               <Button
-                variant="destructiveGhost"
+                variant="destructive-secondary"
                 onClick={() => deleteMutation.mutate()}
-                tooltip="Remove Slack Connection"
-                icon="trash"
                 disabled={deleteMutation.isPending}
               >
-                Delete
+                DELETE
               </Button>
             </Card.Footer>
             <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -193,7 +190,7 @@ export default function SlackApp() {
                     ))}
                   </select>
                   <div className="flex gap-2 justify-end">
-                    <Button variant="ghost" onClick={() => setModalOpen(false)}>
+                    <Button variant="tertiary" onClick={() => setModalOpen(false)}>
                       Cancel
                     </Button>
                     <Button

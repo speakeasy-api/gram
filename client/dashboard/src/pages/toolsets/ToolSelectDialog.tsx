@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { ToolSelector } from "./ToolSelect";
 

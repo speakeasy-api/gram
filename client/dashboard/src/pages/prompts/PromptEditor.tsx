@@ -1,6 +1,6 @@
 import { InputField } from "@/components/moon/input-field";
 import { Textarea } from "@/components/moon/textarea";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Label } from "@/components/ui/label";
 import { MUSTACHE_VAR_REGEX, PROMPT_NAME_PATTERN } from "@/lib/constants";
 import { assert, cn } from "@/lib/utils";
@@ -178,10 +178,9 @@ export function PromptEditor({
                   onKeyUp={handleKeyUp}
                 />
                 {fullScreenEditor ? (
-                  <Button
-                    className="absolute top-4 right-4"
+                  <Button className="absolute top-4 right-4"
                     type="button"
-                    variant="ghost"
+                    variant="tertiary"
                     onClick={() => setFullScreenEditor(false)}
                   >
                     <span className="sr-only">Exit full screen</span>
@@ -189,10 +188,9 @@ export function PromptEditor({
                   </Button>
                 ) : null}
                 {!fullScreenEditor ? (
-                  <Button
-                    className="absolute bottom-4 right-4"
+                  <Button className="absolute bottom-4 right-4"
                     type="button"
-                    variant="ghost"
+                    variant="tertiary"
                     onClick={() => {
                       setFullScreenEditor(true);
                       document.querySelector("textarea")?.focus();
@@ -245,7 +243,7 @@ export function PromptEditor({
               <p className="text-red-700 text-sm">{error.message}</p>
             </div>
           ) : null}
-          <Button type="submit" disabled={isPending} size="lg">
+          <Button type="submit" disabled={isPending} size="md">
             {isPending ? (
               <Loader2 className="w-4 h-4 mr-2 animate-spin" />
             ) : null}

@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Type } from "@/components/ui/type";
@@ -44,9 +44,8 @@ function SaveActionBar({
         </div>
       )}
       <div className="flex items-center gap-3 ml-auto">
-        <Button
-          type="button"
-          variant="ghost"
+        <Button type="button"
+          variant="tertiary"
           size="sm"
           onClick={onCancel}
           disabled={isSaving}
@@ -54,8 +53,7 @@ function SaveActionBar({
         >
           Cancel
         </Button>
-        <Button
-          type="button"
+        <Button type="button"
           size="sm"
           onClick={onSave}
           disabled={isSaving}
@@ -147,7 +145,7 @@ function ToolsetDialog({ open, onOpenChange, onSubmit }: ToolsetDialogProps) {
           </div>
         </div>
         <Dialog.Footer>
-          <Button variant="ghost" onClick={handleClose}>
+          <Button variant="tertiary" onClick={handleClose}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={!selectedToolset}>
@@ -475,9 +473,8 @@ export default function EnvironmentPage() {
                             disabled={isSaving}
                           />
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
+                        <Button variant="tertiary"
+                          size="sm"
                           className="h-8 w-8 flex-shrink-0 self-start mt-[1px]"
                           onClick={() => handleRemoveVariable(entry.name)}
                           disabled={isSaving}
@@ -516,9 +513,8 @@ export default function EnvironmentPage() {
                             disabled={isSaving}
                           />
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
+                        <Button variant="tertiary"
+                          size="sm"
                           className="h-8 w-8 flex-shrink-0 self-start mt-[1px]"
                           onClick={handleCancelNewEntry}
                           disabled={isSaving}
@@ -555,15 +551,12 @@ export default function EnvironmentPage() {
                   <div className="mt-4 flex flex-col gap-2 items-center">
                     <Button
                       onClick={handleAddNewEntry}
-                      caps
                     >
                       <Plus className="h-4 w-4 mr-2" />
                       ADD YOUR FIRST VARIABLE
                     </Button>
-                    <Button
-                      variant="outline"
+                    <Button variant="secondary"
                       onClick={() => setToolsetDialogOpen(true)}
-                      caps
                     >
                       FILL FOR TOOLSET
                     </Button>
@@ -591,14 +584,12 @@ export default function EnvironmentPage() {
                   </Dialog.Description>
                 </Dialog.Header>
                 <Dialog.Footer>
-                  <Button 
-                    variant="ghost" 
+                  <Button variant="tertiary" 
                     onClick={() => setDeleteConfirmDialog({ open: false, varName: "" })}
                   >
                     Cancel
                   </Button>
-                  <Button 
-                    variant="destructive"
+                  <Button variant="destructive-primary"
                     onClick={() => confirmDelete(deleteConfirmDialog.varName)}
                   >
                     Delete

@@ -3,7 +3,7 @@ import {
   ToolsetPromptsBadge,
   ToolsetToolsBadge,
 } from "@/components/tools-badge";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Card } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { useRoutes } from "@/routes";
@@ -80,12 +80,10 @@ export function ToolsetPlaygroundLink({
       queryParams={{ ...(toolset ? { toolset: toolset.slug } : {}) }}
     >
       <Button
-        variant="outline"
+        variant="secondary"
         className="group"
-        tooltip="Open in chat playground"
-        caps
       >
-        Playground
+        PLAYGROUND
         <routes.playground.Icon className="text-muted-foreground group-hover:text-foreground trans" />
       </Button>
     </routes.playground.Link>

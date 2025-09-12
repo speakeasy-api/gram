@@ -6,7 +6,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
@@ -291,7 +291,7 @@ export function OnboardingContent({
       displayComplete: (
         <Stack direction={"horizontal"} gap={2} align={"center"}>
           <Type>✓ Uploaded {file?.name}</Type>
-          <Button variant={"outline"} onClick={undoSpecUpload}>
+          <Button variant={"secondary"} onClick={undoSpecUpload}>
             Change
           </Button>
         </Stack>
@@ -303,17 +303,18 @@ export function OnboardingContent({
       description: "The tools generated will be scoped under this name.",
       display: (
         <Stack gap={2}>
-          <Stack direction={"horizontal"} gap={2} className="max-w-sm">
+          <Stack direction={"horizontal"} gap={2} className="max-w-sm relative z-10">
             <Input
               value={apiName}
               onChange={setApiName}
               placeholder="My API"
             />
             <Button
+              variant="brand"
               onClick={() => createDeployment()}
               disabled={!!apiNameError}
             >
-              Continue
+              CONTINUE
             </Button>
           </Stack>
           {!!apiNameError && (

@@ -4,7 +4,7 @@ import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
 import { ToolsBadge } from "@/components/tools-badge";
-import { Button } from "@/components/ui/button";
+import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Card, Cards } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
@@ -51,7 +51,6 @@ export default function Integrations() {
           <div className="flex justify-end mb-4">
             <AddButton
               onClick={() => setCreateIntegrationDialogOpen(true)}
-              tooltip="New Integration"
             />
           </div>
         )}
@@ -293,15 +292,16 @@ export function IntegrationCard({
           </Stack>
         </Card.Title>
         {firstParty ? (
-          <Button
-            variant="outline"
-            icon="copy-plus"
+          <Button variant="secondary"
             onClick={newVersionCallback}
           >
-            New Version
+            <Button.LeftIcon>
+              <Icon name="copy-plus" className="h-4 w-4" />
+            </Button.LeftIcon>
+            <Button.Text>New Version</Button.Text>
           </Button>
         ) : (
-          <Button variant="outline" onClick={toggleEnabled}>
+          <Button variant="secondary" onClick={toggleEnabled}>
             {isEnabled ? (
               <>
                 <CheckIcon className="w-4 h-4" />
@@ -368,7 +368,7 @@ function RequestIntegrationDialog({
           />
         </Stack>
         <Dialog.Footer>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="tertiary" onClick={() => onOpenChange(false)}>
             Back
           </Button>
           <Button

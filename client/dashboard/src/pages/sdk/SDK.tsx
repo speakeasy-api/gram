@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
+import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Combobox } from "@/components/ui/combobox";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { TextArea } from "@/components/ui/textarea";
@@ -123,12 +123,14 @@ export const SdkContent = ({
           <Stack gap={2}>
             {langFrameworkDropdowns}
             <Button
-              icon="wand-sparkles"
               onClick={() => agentify(toolset, environment)}
-              variant={outdated || inProgress ? "default" : "secondary"}
+              variant={outdated || inProgress ? "primary" : "secondary"}
               disabled={inProgress}
             >
-              Regenerate
+              <Button.LeftIcon>
+                <Icon name="wand-sparkles" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Regenerate</Button.Text>
             </Button>
           </Stack>
         </Stack>

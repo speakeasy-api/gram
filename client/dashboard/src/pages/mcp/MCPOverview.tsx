@@ -1,6 +1,6 @@
 import { Page } from "@/components/page-layout";
 import { ServerCard } from "@/components/server-card";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";

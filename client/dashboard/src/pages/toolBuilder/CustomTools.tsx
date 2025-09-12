@@ -1,4 +1,6 @@
 import { Page } from "@/components/page-layout";
+import { Button } from "@speakeasy-api/moonshine";
+import { Plus } from "lucide-react";
 import { ToolsBadge } from "@/components/tools-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, Cards } from "@/components/ui/card";
@@ -54,8 +56,11 @@ export default function CustomTools() {
       <Page.Section.Description>
         Create higher-order tools by sequencing together tools and instructions
       </Page.Section.Description>
-      <Page.Section.CTA onClick={onNewCustomTool} icon="plus">
-        New Custom Tool
+      <Page.Section.CTA onClick={onNewCustomTool}>
+        <Button.LeftIcon>
+          <Plus className="w-4 h-4" />
+        </Button.LeftIcon>
+        <Button.Text>NEW CUSTOM TOOL</Button.Text>
       </Page.Section.CTA>
       <Page.Section.Body>
         <Cards isLoading={isLoading}>

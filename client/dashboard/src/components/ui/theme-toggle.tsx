@@ -1,14 +1,13 @@
 import { Moon, Sun } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { useMoonshineConfig } from "@speakeasy-api/moonshine";
 
 export function ThemeToggle() {
   const { setTheme, theme } = useMoonshineConfig();
 
   return (
-    <Button
-      variant="ghost"
-      size="icon"
+    <Button variant="tertiary"
+      size="sm"
       onClick={() => setTheme(theme === "light" ? "dark" : "light")}
     >
       <Sun className="h-[1.5rem] w-[1.3rem] dark:hidden" />

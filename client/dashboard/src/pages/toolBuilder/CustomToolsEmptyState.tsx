@@ -1,5 +1,5 @@
 import { EmptyState } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { ToolsetsGraphic } from "../toolsets/ToolsetsEmptyState";
 
 export function CustomToolsEmptyState({
@@ -8,8 +8,8 @@ export function CustomToolsEmptyState({
   onCreateCustomTool: () => void;
 }) {
   const cta = (
-    <Button size="sm" onClick={onCreateCustomTool} caps>
-      Create a custom tool
+    <Button size="sm" onClick={onCreateCustomTool}>
+      CREATE A CUSTOM TOOL
     </Button>
   );
 

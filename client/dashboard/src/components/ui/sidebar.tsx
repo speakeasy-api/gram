@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
 import { Separator } from "@/components/ui/separator";
@@ -259,11 +259,10 @@ function SidebarTrigger({
   const { toggleSidebar } = useSidebar();
 
   return (
-    <Button
-      data-sidebar="trigger"
+    <Button data-sidebar="trigger"
       data-slot="sidebar-trigger"
-      variant="ghost"
-      size="icon"
+      variant="tertiary"
+      size="sm"
       className={cn(
         "size-7 cursor-pointer text-muted-foreground hover:text-foreground transition",
         className
