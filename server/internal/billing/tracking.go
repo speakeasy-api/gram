@@ -50,5 +50,5 @@ type PlatformUsageEvent struct {
 type Tracker interface {
 	TrackToolCallUsage(ctx context.Context, event ToolCallUsageEvent)
 	TrackPromptCallUsage(ctx context.Context, event PromptCallUsageEvent)
-	TrackPlatformUsage(ctx context.Context, event PlatformUsageEvent)
+	TrackPlatformUsage(ctx context.Context, events []PlatformUsageEvent)
 }
