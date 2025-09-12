@@ -190,7 +190,7 @@ func (s *StubClient) GetUsageTiers(ctx context.Context) (*gen.UsageTiers, error)
 	}, nil
 }
 
-func (s *StubClient) TrackPlatformUsage(ctx context.Context, event PlatformUsageEvent) {
+func (s *StubClient) TrackPlatformUsage(ctx context.Context, event PlatformUsageEvent) error {
 	var err error
 	ctx, span := s.tracer.Start(ctx, "stub_client.track_platform_usage")
 	defer span.End()
@@ -201,7 +201,7 @@ func (s *StubClient) TrackPlatformUsage(ctx context.Context, event PlatformUsage
 	pu, err := s.readPeriodUsage(event.OrganizationID)
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to read period usage file", attr.SlogError(err))
-		return
+		return nil
 	}
 
 	pu.Servers = int(event.PrivateMCPServers)
@@ -210,8 +210,10 @@ func (s *StubClient) TrackPlatformUsage(ctx context.Context, event PlatformUsage
 	if err := s.writePeriodUsage(ctx, event.OrganizationID, pu); err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		s.logger.ErrorContext(ctx, "failed to write period usage file", attr.SlogError(err))
-		return
+		return nil
 	}
+
+	return nil
 }
 
 func (s *StubClient) TrackPromptCallUsage(ctx context.Context, event PromptCallUsageEvent) {

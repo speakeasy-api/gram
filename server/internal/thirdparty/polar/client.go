@@ -333,7 +333,7 @@ func (p *Client) TrackPromptCallUsage(ctx context.Context, event billing.PromptC
 	}
 }
 
-func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformUsageEvent) {
+func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformUsageEvent) error {
 	ctx, span := p.tracer.Start(ctx, "polar_client.track_platform_usage")
 	defer span.End()
 
@@ -370,8 +370,10 @@ func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformU
 
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		p.logger.ErrorContext(ctx, "failed to ingest platform usage event to Polar", attr.SlogError(err))
+		return fmt.Errorf("failed to ingest platform usage event to Polar: %w", err)
 	}
+
+	return nil
 }
 
 // getCustomerState gets the customer state from the cache or Polar, and stores the result in the cache.
