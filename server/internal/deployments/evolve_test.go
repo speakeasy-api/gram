@@ -86,7 +86,7 @@ func TestDeploymentsService_Evolve_UpsertAssets(t *testing.T) {
 	require.NoError(t, err, "upload first openapi v3 asset")
 
 	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
-		IdempotencyKey: "test-initial-deployment",
+		IdempotencyKey: "test-initial-deployment-upsert-assets",
 		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
 			{
 				AssetID: ares1.Asset.ID,
@@ -138,7 +138,91 @@ func TestDeploymentsService_Evolve_UpsertAssets(t *testing.T) {
 	require.NoError(t, err, "evolve deployment")
 
 	require.NotEqual(t, initial.Deployment.ID, evolved.Deployment.ID, "evolved deployment should have different ID")
-	require.Equal(t, "completed", evolved.Deployment.Status, "evovled deployment status is not completed")
+	require.Equal(t, "completed", evolved.Deployment.Status, "evolved deployment status is not completed")
+	require.Len(t, evolved.Deployment.Openapiv3Assets, 2, "expected 2 openapi assets")
+
+	// Verify both assets are present
+	assetNames := lo.Map(evolved.Deployment.Openapiv3Assets, func(a *types.OpenAPIv3DeploymentAsset, _ int) string {
+		return a.Name
+	})
+	require.ElementsMatch(t, assetNames, []string{"initial-doc", "second-doc"}, "unexpected asset names")
+}
+
+func TestDeploymentsService_Evolve_UpsertBadAssets(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Create initial deployment
+	bs1 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares1, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs1.Len()),
+	}, io.NopCloser(bs1))
+	require.NoError(t, err, "upload first openapi v3 asset")
+
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-initial-deployment-upsert-bad-assets",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares1.Asset.ID,
+				Name:    "initial-doc",
+				Slug:    "initial-doc",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create initial deployment")
+	require.Equal(t, "completed", initial.Deployment.Status, "initial deployment status is not completed")
+
+	expectedToolCount := initial.Deployment.ToolCount
+	require.NotZero(t, expectedToolCount, "initial deployment has incorrect tool count")
+
+	// Upload second OpenAPI asset
+	bs2 := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/invalid.yaml"))
+	ares2, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs2.Len()),
+	}, io.NopCloser(bs2))
+	require.NoError(t, err, "upload second openapi v3 asset")
+
+	// Evolve deployment to add second asset
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		DeploymentID:     nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares2.Asset.ID,
+				Name:    "second-doc",
+				Slug:    "second-doc",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment")
+
+	require.NotEqual(t, initial.Deployment.ID, evolved.Deployment.ID, "evolved deployment should have different ID")
+	require.Equal(t, "failed", evolved.Deployment.Status, "evolved deployment status is not completed")
+	require.Equal(t, expectedToolCount, evolved.Deployment.ToolCount, "evolved deployment has incorrect tool count")
 	require.Len(t, evolved.Deployment.Openapiv3Assets, 2, "expected 2 openapi assets")
 
 	// Verify both assets are present
@@ -177,7 +261,7 @@ func TestDeploymentsService_Evolve_ExcludeAssets(t *testing.T) {
 
 	// Create initial deployment with both assets
 	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
-		IdempotencyKey: "test-initial-deployment",
+		IdempotencyKey: "test-initial-deployment-exclude-assets",
 		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
 			{
 				AssetID: ares1.Asset.ID,
@@ -328,7 +412,7 @@ func TestDeploymentsService_Evolve_UpsertPackages(t *testing.T) {
 
 	// Create deployment for package
 	packageDep, err := ti.service.CreateDeployment(otherCtx, &gen.CreateDeploymentPayload{
-		IdempotencyKey: "test-package-deployment",
+		IdempotencyKey: "test-package-deployment-upsert-package",
 		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
 			{
 				AssetID: packageAsset.Asset.ID,
@@ -701,7 +785,7 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 
 		// Create initial deployment
 		dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
-			IdempotencyKey: "test-deployment-for-package",
+			IdempotencyKey: "test-deployment-for-package-circular",
 			Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
 				{
 					AssetID: ares.Asset.ID,
@@ -789,7 +873,7 @@ func TestDeploymentsService_Evolve_ComplexScenario(t *testing.T) {
 	require.NoError(t, err, "upload package asset")
 
 	packageDep, err := ti.service.CreateDeployment(otherCtx, &gen.CreateDeploymentPayload{
-		IdempotencyKey: "test-package-deployment",
+		IdempotencyKey: "test-package-deployment-complex",
 		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
 			{
 				AssetID: packageAsset.Asset.ID,

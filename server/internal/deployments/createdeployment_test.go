@@ -186,6 +186,188 @@ func TestDeploymentsService_CreateDeployment_Idempotency(t *testing.T) {
 	}, "mismatched tool names")
 }
 
+func TestDeploymentsService_CreateDeployment_MultipleDocuments(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload petstore document
+	petstoreBS := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/petstore-valid.yaml"))
+	petstoreRes, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(petstoreBS.Len()),
+	}, io.NopCloser(petstoreBS))
+	require.NoError(t, err, "upload petstore openapi v3 asset")
+
+	// Upload todo document
+	todoBS := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	todoRes, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(todoBS.Len()),
+	}, io.NopCloser(todoBS))
+	require.NoError(t, err, "upload todo openapi v3 asset")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-multiple-docs",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: petstoreRes.Asset.ID,
+				Name:    "petstore-api",
+				Slug:    "petstore-api",
+			},
+			{
+				AssetID: todoRes.Asset.ID,
+				Name:    "todo-api",
+				Slug:    "todo-api",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment")
+
+	require.NotEqual(t, uuid.Nil.String(), dep.Deployment.ID, "deployment ID is nil")
+	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
+
+	repo := testrepo.New(ti.conn)
+	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment tools")
+	require.Len(t, tools, 9, "expected 9 tools (4 from petstore + 5 from todo)")
+
+	t.Run("tool names from both documents", func(t *testing.T) {
+		t.Parallel()
+
+		names := lo.Map(tools, func(t testrepo.HttpToolDefinition, _ int) string {
+			return t.Name
+		})
+		require.ElementsMatch(t, names, []string{
+			// Petstore tools
+			"petstore_api_list_pets",
+			"petstore_api_create_pets",
+			"petstore_api_show_pet_by_id",
+			"petstore_api_delete_pet",
+			// Todo tools
+			"todo_api_get_todos",
+			"todo_api_create_todo",
+			"todo_api_get_todo_by_id",
+			"todo_api_update_todo",
+			"todo_api_delete_todo",
+		}, "mismatched tool names")
+	})
+
+	t.Run("verify petstore tool attributes", func(t *testing.T) {
+		t.Parallel()
+
+		name := "petstore_api_show_pet_by_id"
+
+		tool, ok := lo.Find(tools, func(t testrepo.HttpToolDefinition) bool {
+			return t.Name == name
+		})
+
+		require.True(t, ok, "tool %s not found", name)
+		require.Equal(t, "Info for a specific pet", tool.Summary)
+		require.Equal(t, "showPetById", tool.Openapiv3Operation.String)
+		require.Equal(t, "GET", tool.HttpMethod)
+		require.Equal(t, "/pets/{petId}", tool.Path)
+	})
+
+	t.Run("verify todo tool attributes", func(t *testing.T) {
+		t.Parallel()
+
+		name := "todo_api_get_todo_by_id"
+
+		tool, ok := lo.Find(tools, func(t testrepo.HttpToolDefinition) bool {
+			return t.Name == name
+		})
+
+		require.True(t, ok, "tool %s not found", name)
+		require.Equal(t, "Get a todo by ID", tool.Summary)
+		require.Equal(t, "Retrieve a specific todo item by its ID", tool.Description)
+		require.Equal(t, "getTodoById", tool.Openapiv3Operation.String)
+		require.Equal(t, "GET", tool.HttpMethod)
+		require.Equal(t, "/todos/{id}", tool.Path)
+	})
+}
+
+func TestDeploymentsService_CreateDeployment_InvalidDocument(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload petstore document
+	petstoreBS := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/petstore-valid.yaml"))
+	petstoreRes, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(petstoreBS.Len()),
+	}, io.NopCloser(petstoreBS))
+	require.NoError(t, err, "upload petstore openapi v3 asset")
+
+	// Upload invalid document
+	invalidBS := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/invalid.yaml"))
+	invalidRes, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(invalidBS.Len()),
+	}, io.NopCloser(invalidBS))
+	require.NoError(t, err, "upload todo openapi v3 asset")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-multiple-docs-one-invalid",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: petstoreRes.Asset.ID,
+				Name:    "petstore-api",
+				Slug:    "petstore-api",
+			},
+			{
+				AssetID: invalidRes.Asset.ID,
+				Name:    "invalid-api",
+				Slug:    "invalid-api",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment")
+
+	require.NotEqual(t, uuid.Nil.String(), dep.Deployment.ID, "deployment ID is nil")
+	require.Equal(t, "failed", dep.Deployment.Status, "deployment status is not failed")
+
+	repo := testrepo.New(ti.conn)
+	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment tools failed")
+	require.Len(t, tools, 4, "expected 4 tools (4 from petstore + 0 from invalid)")
+}
+
 func TestCreateDeployment_CreateDeployment_Validation(t *testing.T) {
 	t.Parallel()
 
