@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
 type ManifestV0 struct {
@@ -41,7 +42,7 @@ func (m *Manifest) UnmarshalJSON(data []byte) error {
 	m.Version = base.Version
 
 	switch base.Version {
-	case "0":
+	case "0.0.0":
 		var v0 ManifestV0
 		if err := json.Unmarshal(data, &v0); err != nil {
 			return fmt.Errorf("unmarshal manifest v0: %w", err)
@@ -57,7 +58,10 @@ func (m *Manifest) UnmarshalJSON(data []byte) error {
 func validateManifestToolV0(tool ManifestToolV0) (err error) {
 	if tool.Name == "" {
 		err = errors.Join(err, errors.New("tool name is required"))
+	} else if !constants.SlugPatternRE.MatchString(tool.Name) {
+		err = errors.Join(err, fmt.Errorf("tool name does not match regular expression: %s", constants.SlugPattern))
 	}
+
 	if tool.Description == "" {
 		err = errors.Join(err, errors.New("tool description is required"))
 	}
