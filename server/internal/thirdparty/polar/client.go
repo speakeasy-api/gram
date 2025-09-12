@@ -385,23 +385,18 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 	if customerState, err := p.customerStateCache.Get(ctx, CustomerStateCacheKey(orgID)); err == nil {
 		polarCustomerState = customerState.CustomerState
 	} else {
-		polarCustomerState, err := p.polar.Customers.GetStateExternal(ctx, orgID)
+		externalCustomerState, err := p.polar.Customers.GetStateExternal(ctx, orgID)
 		if err != nil && !strings.Contains(err.Error(), "ResourceNotFound") {
 			return nil, fmt.Errorf("query polar customer state: %w", err)
 		}
 
-		var state *polarComponents.CustomerState
-		if polarCustomerState != nil {
-			state = polarCustomerState.CustomerState
+		if externalCustomerState != nil {
+			polarCustomerState = externalCustomerState.CustomerState
 		}
 
-		if err = p.customerStateCache.Store(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: state}); err != nil {
+		if err = p.customerStateCache.Store(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: polarCustomerState}); err != nil {
 			p.logger.ErrorContext(ctx, "failed to cache customer state", attr.SlogError(err))
 		}
-	}
-
-	if polarCustomerState == nil {
-		return nil, nil
 	}
 
 	return polarCustomerState, nil
