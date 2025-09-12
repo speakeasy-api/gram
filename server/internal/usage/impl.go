@@ -82,7 +82,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) error {
 	acceptedEvents := []string{
 		"subscription.created",
-		"subscription.updated",
+		"subscription.active",
 		"subscription.canceled",
 		"subscription.uncanceled",
 		"subscription.revoked",
