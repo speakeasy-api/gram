@@ -311,7 +311,7 @@ CREATE TABLE IF NOT EXISTS deployments_functions (
   asset_id uuid NOT NULL,
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
-  runtime TEXT NOT NULL,
+  tool_runtime TEXT NOT NULL,
 
   CONSTRAINT deployments_functions_pkey PRIMARY KEY (id),
   CONSTRAINT deployments_functions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,

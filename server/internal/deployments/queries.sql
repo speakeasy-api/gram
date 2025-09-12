@@ -104,11 +104,11 @@ SELECT
   deployments_openapiv3_assets.asset_id as deployments_openapiv3_asset_store_id,
   deployments_openapiv3_assets.name as deployments_openapiv3_asset_name,
   deployments_openapiv3_assets.slug as deployments_openapiv3_asset_slug,
-  deployments_functions.id as deployments_functions_asset_id,
-  deployments_functions.asset_id as deployments_functions_asset_store_id,
-  deployments_functions.name as deployments_functions_asset_name,
-  deployments_functions.slug as deployments_functions_asset_slug,
-  deployments_functions.runtime as deployments_functions_asset_runtime,
+  deployments_functions.id as deployments_functions_id,
+  deployments_functions.asset_id as deployments_functions_asset_id,
+  deployments_functions.name as deployments_functions_name,
+  deployments_functions.slug as deployments_functions_slug,
+  deployments_functions.tool_runtime as deployments_functions_tool_runtime,
   deployments_packages.package_id as deployment_package_id,
   packages.name as package_name,
   package_versions.major as package_version_major,
@@ -359,13 +359,13 @@ INSERT INTO deployments_functions (
   , asset_id
   , name
   , slug
-  , runtime
+  , tool_runtime
 ) VALUES (
   @deployment_id
   , @asset_id
   , @name
   , @slug
-  , @runtime
+  , @tool_runtime
 )
 ON CONFLICT (deployment_id, slug) DO UPDATE
 SET

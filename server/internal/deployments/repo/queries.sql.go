@@ -827,11 +827,11 @@ SELECT
   deployments_openapiv3_assets.asset_id as deployments_openapiv3_asset_store_id,
   deployments_openapiv3_assets.name as deployments_openapiv3_asset_name,
   deployments_openapiv3_assets.slug as deployments_openapiv3_asset_slug,
-  deployments_functions.id as deployments_functions_asset_id,
-  deployments_functions.asset_id as deployments_functions_asset_store_id,
-  deployments_functions.name as deployments_functions_asset_name,
-  deployments_functions.slug as deployments_functions_asset_slug,
-  deployments_functions.runtime as deployments_functions_asset_runtime,
+  deployments_functions.id as deployments_functions_id,
+  deployments_functions.asset_id as deployments_functions_asset_id,
+  deployments_functions.name as deployments_functions_name,
+  deployments_functions.slug as deployments_functions_slug,
+  deployments_functions.tool_runtime as deployments_functions_tool_runtime,
   deployments_packages.package_id as deployment_package_id,
   packages.name as package_name,
   package_versions.major as package_version_major,
@@ -865,11 +865,11 @@ type GetDeploymentWithAssetsRow struct {
 	DeploymentsOpenapiv3AssetStoreID uuid.NullUUID
 	DeploymentsOpenapiv3AssetName    pgtype.Text
 	DeploymentsOpenapiv3AssetSlug    pgtype.Text
+	DeploymentsFunctionsID           uuid.NullUUID
 	DeploymentsFunctionsAssetID      uuid.NullUUID
-	DeploymentsFunctionsAssetStoreID uuid.NullUUID
-	DeploymentsFunctionsAssetName    pgtype.Text
-	DeploymentsFunctionsAssetSlug    pgtype.Text
-	DeploymentsFunctionsAssetRuntime pgtype.Text
+	DeploymentsFunctionsName         pgtype.Text
+	DeploymentsFunctionsSlug         pgtype.Text
+	DeploymentsFunctionsToolRuntime  pgtype.Text
 	DeploymentPackageID              uuid.NullUUID
 	PackageName                      pgtype.Text
 	PackageVersionMajor              pgtype.Int8
@@ -910,11 +910,11 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.DeploymentsOpenapiv3AssetStoreID,
 			&i.DeploymentsOpenapiv3AssetName,
 			&i.DeploymentsOpenapiv3AssetSlug,
+			&i.DeploymentsFunctionsID,
 			&i.DeploymentsFunctionsAssetID,
-			&i.DeploymentsFunctionsAssetStoreID,
-			&i.DeploymentsFunctionsAssetName,
-			&i.DeploymentsFunctionsAssetSlug,
-			&i.DeploymentsFunctionsAssetRuntime,
+			&i.DeploymentsFunctionsName,
+			&i.DeploymentsFunctionsSlug,
+			&i.DeploymentsFunctionsToolRuntime,
 			&i.DeploymentPackageID,
 			&i.PackageName,
 			&i.PackageVersionMajor,
@@ -1130,7 +1130,7 @@ INSERT INTO deployments_functions (
   , asset_id
   , name
   , slug
-  , runtime
+  , tool_runtime
 ) VALUES (
   $1
   , $2
@@ -1151,7 +1151,7 @@ type UpsertDeploymentFunctionsAssetParams struct {
 	AssetID      uuid.UUID
 	Name         string
 	Slug         string
-	Runtime      string
+	ToolRuntime  string
 }
 
 type UpsertDeploymentFunctionsAssetRow struct {
@@ -1167,7 +1167,7 @@ func (q *Queries) UpsertDeploymentFunctionsAsset(ctx context.Context, arg Upsert
 		arg.AssetID,
 		arg.Name,
 		arg.Slug,
-		arg.Runtime,
+		arg.ToolRuntime,
 	)
 	var i UpsertDeploymentFunctionsAssetRow
 	err := row.Scan(

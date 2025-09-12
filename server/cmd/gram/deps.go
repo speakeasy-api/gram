@@ -90,7 +90,7 @@ type assetStorageOptions struct {
 	assetsURI     string
 }
 
-func newAssetStorage(ctx context.Context, opts assetStorageOptions) (assets.BlobStore, func(context.Context) error, error) {
+func newAssetStorage(ctx context.Context, logger *slog.Logger, opts assetStorageOptions) (assets.BlobStore, func(context.Context) error, error) {
 	shutdown := func(ctx context.Context) error { return nil }
 	switch opts.assetsBackend {
 	case "fs":
@@ -110,7 +110,7 @@ func newAssetStorage(ctx context.Context, opts assetStorageOptions) (assets.Blob
 
 		return &assets.FSBlobStore{Root: root}, shutdown, nil
 	case "gcs":
-		gcsStore, err := assets.NewGCSBlobStore(ctx, opts.assetsURI)
+		gcsStore, err := assets.NewGCSBlobStore(ctx, logger, opts.assetsURI)
 		if err != nil {
 			return nil, nil, fmt.Errorf("create gcs blob store: %w", err)
 		}

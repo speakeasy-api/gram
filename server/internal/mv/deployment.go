@@ -36,7 +36,7 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 	attachedFunctionsAssets := make([]*types.DeploymentFunctions, 0, len(rows))
 	attachedPackages := make([]*types.DeploymentPackage, 0, len(rows))
 	var seenOpenAPIAssets = make(map[uuid.UUID]bool)
-	var seenFunctionsAssets = make(map[uuid.UUID]bool)
+	var seenFunctions = make(map[uuid.UUID]bool)
 	var seenPackages = make(map[uuid.UUID]bool)
 
 	for _, r := range rows {
@@ -60,26 +60,26 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 			seenOpenAPIAssets[depAssetID] = true
 		}
 
-		functionsAssetID := r.DeploymentsFunctionsAssetID.UUID
-		if functionsAssetID != uuid.Nil && !seenFunctionsAssets[functionsAssetID] {
+		functionsID := r.DeploymentsFunctionsID.UUID
+		if functionsID != uuid.Nil && !seenFunctions[functionsID] {
 			if err := inv.Check(
 				"describe deployment functions asset",
-				"valid asset store id", r.DeploymentsFunctionsAssetStoreID.Valid && r.DeploymentsFunctionsAssetStoreID.UUID != uuid.Nil,
-				"valid asset name", r.DeploymentsFunctionsAssetName.Valid && r.DeploymentsFunctionsAssetName.String != "",
-				"valid asset slug", r.DeploymentsFunctionsAssetSlug.Valid && r.DeploymentsFunctionsAssetSlug.String != "",
-				"valid functions runtime", r.DeploymentsFunctionsAssetRuntime.Valid && r.DeploymentsFunctionsAssetRuntime.String != "",
+				"valid asset id", r.DeploymentsFunctionsAssetID.Valid && r.DeploymentsFunctionsAssetID.UUID != uuid.Nil,
+				"valid asset name", r.DeploymentsFunctionsName.Valid && r.DeploymentsFunctionsName.String != "",
+				"valid asset slug", r.DeploymentsFunctionsSlug.Valid && r.DeploymentsFunctionsSlug.String != "",
+				"valid functions runtime", r.DeploymentsFunctionsToolRuntime.Valid && r.DeploymentsFunctionsToolRuntime.String != "",
 			); err != nil {
-				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment functions asset").Log(ctx, logger)
+				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment functions").Log(ctx, logger)
 			}
 
 			attachedFunctionsAssets = append(attachedFunctionsAssets, &types.DeploymentFunctions{
-				ID:      functionsAssetID.String(),
+				ID:      functionsID.String(),
 				AssetID: r.DeploymentsFunctionsAssetID.UUID.String(),
-				Name:    r.DeploymentsFunctionsAssetName.String,
-				Slug:    types.Slug(r.DeploymentsFunctionsAssetSlug.String),
-				Runtime: r.DeploymentsFunctionsAssetRuntime.String,
+				Name:    r.DeploymentsFunctionsName.String,
+				Slug:    types.Slug(r.DeploymentsFunctionsSlug.String),
+				Runtime: r.DeploymentsFunctionsToolRuntime.String,
 			})
-			seenFunctionsAssets[functionsAssetID] = true
+			seenFunctions[functionsID] = true
 		}
 
 		pkgID := r.DeploymentPackageID.UUID

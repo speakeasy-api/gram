@@ -228,7 +228,7 @@ func amendDeployment(
 			AssetID:      a.assetID,
 			Name:         a.name,
 			Slug:         a.slug,
-			Runtime:      a.runtime,
+			ToolRuntime:  a.runtime,
 		})
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, err, "error adding deployment functions asset").Log(ctx, logger)
