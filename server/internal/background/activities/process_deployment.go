@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -73,6 +74,10 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 	}
 
 	workers := pool.New().WithErrors().WithMaxGoroutines(max(2, runtime.GOMAXPROCS(0)))
+
+	if err := p.doFunctions(ctx, workers, projectID, deploymentID, orgData.Slug, orgData.ProjectSlug, deployment); err != nil {
+		return err
+	}
 
 	if err := p.doOpenAPIv3(ctx, workers, projectID, deploymentID, orgData.Slug, orgData.ProjectSlug, deployment); err != nil {
 		return err
@@ -197,6 +202,86 @@ func (p *ProcessDeployment) doOpenAPIv3(
 			if res != nil && res.DocumentUpgrade != nil {
 				p.metrics.RecordOpenAPIUpgrade(ctx, *res.DocumentUpgrade, res.DocumentUpgradeDuration, docVersion)
 			}
+
+			return processErr
+		})
+	}
+
+	return nil
+}
+
+func (p *ProcessDeployment) doFunctions(
+	ctx context.Context,
+	pool *pool.ErrorPool,
+	projectID uuid.UUID,
+	deploymentID uuid.UUID,
+	orgSlug string,
+	projectSlug string,
+	deployment *types.Deployment,
+) error {
+	for _, attachement := range deployment.FunctionsAssets {
+		logger := p.logger.With(
+			attr.SlogDeploymentID(deployment.ID),
+			attr.SlogProjectID(deployment.ProjectID),
+			attr.SlogDeploymentOpenAPIID(attachement.ID),
+			attr.SlogAssetID(attachement.AssetID),
+			attr.SlogOrganizationSlug(orgSlug),
+			attr.SlogProjectSlug(projectSlug),
+		)
+
+		attachmentID, err := uuid.Parse(attachement.ID)
+		if err != nil {
+			return oops.E(oops.CodeInvariantViolation, err, "error parsing openapi document id").Log(ctx, logger)
+		}
+
+		assetID, err := uuid.Parse(attachement.AssetID)
+		if err != nil {
+			return oops.E(oops.CodeInvariantViolation, err, "error parsing asset id").Log(ctx, logger)
+		}
+
+		asset, err := p.assets.GetProjectAsset(ctx, assetsRepo.GetProjectAssetParams{
+			ID:        assetID,
+			ProjectID: projectID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "error getting asset").Log(ctx, logger)
+		}
+
+		u, err := url.Parse(asset.Url)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "error parsing asset URL").Log(ctx, logger)
+		}
+
+		pool.Go(func() error {
+			start := time.Now()
+
+			processor := functions.NewToolExtractor(p.logger, p.db, p.assetStorage)
+
+			res, processErr := processor.Do(ctx, functions.ToolExtractorTask{
+				ProjectID:    projectID,
+				DeploymentID: deploymentID,
+				AttachmentID: attachmentID,
+				Attachment:   attachement,
+				AssetURL:     u,
+				ProjectSlug:  projectSlug,
+				OrgSlug:      orgSlug,
+				OnToolSkipped: func(err error) {
+					var perr *functions.ProcessError
+					switch {
+					case errors.As(err, &perr):
+						p.metrics.RecordFunctionsToolSkipped(ctx, perr.Reason())
+					default:
+						p.metrics.RecordFunctionsToolSkipped(ctx, "unexpected")
+					}
+				},
+			})
+
+			outcome := o11y.OutcomeFromError(processErr)
+			if processErr == nil {
+				trace.SpanFromContext(ctx).AddEvent("openapiv3_processed", trace.WithAttributes(attr.Outcome(outcome)))
+			}
+
+			p.metrics.RecordFunctionsProcessed(ctx, time.Since(start), outcome, res.ManifestVersion, res.NumTools, attachement.Runtime)
 
 			return processErr
 		})

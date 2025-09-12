@@ -1,8 +1,12 @@
 package functions
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 type ManifestV0 struct {
@@ -22,7 +26,8 @@ type ManifestVariableAttributeV0 struct {
 }
 
 type Manifest struct {
-	V0 *ManifestV0
+	Version string
+	V0      *ManifestV0
 }
 
 func (m *Manifest) UnmarshalJSON(data []byte) error {
@@ -32,6 +37,8 @@ func (m *Manifest) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &base); err != nil {
 		return fmt.Errorf("unmarshal manifest version: %w", err)
 	}
+
+	m.Version = base.Version
 
 	switch base.Version {
 	case "0":
@@ -44,5 +51,36 @@ func (m *Manifest) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("unknown manifest version: %s", base.Version)
 	}
 
+	return nil
+}
+
+func validateManifestToolV0(tool ManifestToolV0) (err error) {
+	if tool.Name == "" {
+		err = errors.Join(err, errors.New("tool name is required"))
+	}
+	if tool.Description == "" {
+		err = errors.Join(err, errors.New("tool description is required"))
+	}
+	if len(tool.InputSchema) > 0 {
+		if jerr := isValidJSONSchema(tool.InputSchema); jerr != nil {
+			err = errors.Join(err, fmt.Errorf("invalid tool input schema: %w", jerr))
+		}
+	}
+
+	return
+}
+
+func isValidJSONSchema(bs []byte) error {
+	compiler := jsonschema.NewCompiler()
+	rawSchema, err := jsonschema.UnmarshalJSON(bytes.NewReader(bs))
+	if err != nil {
+		return fmt.Errorf("parse json schema bytes: %w", err)
+	}
+	if err := compiler.AddResource("file:///schema.json", rawSchema); err != nil {
+		return fmt.Errorf("add json schema resource: %w", err)
+	}
+	if _, err := compiler.Compile("file:///schema.json"); err != nil {
+		return fmt.Errorf("compile json schema: %w", err)
+	}
 	return nil
 }

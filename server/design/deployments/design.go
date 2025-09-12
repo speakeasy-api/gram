@@ -275,7 +275,7 @@ var AddOpenAPIv3DeploymentAssetForm = Type("AddOpenAPIv3DeploymentAssetForm", fu
 })
 
 var AddFunctionsForm = Type("AddFunctionsForm", func() {
-	Required("asset_id", "name", "slug", "runtime")
+	Required("asset_id", "name", "slug", "tool_runtime")
 
 	Attribute("asset_id", String, func() {
 		Description("The ID of the functions file from the assets service.")
@@ -286,8 +286,8 @@ var AddFunctionsForm = Type("AddFunctionsForm", func() {
 	Attribute("slug", shared.Slug, func() {
 		Description("A URL-friendly string that identifies the functions file. Usually derived from the name.")
 	})
-	Attribute("runtime", String, func() {
-		Description("The runtime to use when executing functions. Allowed values are: nodejs22, python3.12.")
+	Attribute("tool_runtime", String, func() {
+		Description("The runtime to use when executing tools. Allowed values are: nodejs22, python3.12.")
 	})
 })
 

@@ -201,7 +201,7 @@ func (q *Queries) CloneDeploymentPackages(ctx context.Context, arg CloneDeployme
 }
 
 const cloneDeploymentToolFunctions = `-- name: CloneDeploymentToolFunctions :many
-INSERT INTO tool_functions (
+INSERT INTO functions_tool (
   deployment_id
   , functions_id
   , name
@@ -218,7 +218,7 @@ SELECT
   , current.runtime
   , current.variables
   , current.input_schema
-FROM tool_functions as current
+FROM functions_tool as current
 WHERE current.deployment_id = $2
   AND current.name <> ALL ($3::text[])
 RETURNING id
@@ -299,6 +299,65 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 		arg.ExternalID,
 		arg.ExternalUrl,
 	)
+}
+
+const createFunctionsTool = `-- name: CreateFunctionsTool :one
+INSERT INTO functions_tool (
+    deployment_id
+  , functions_id
+  , runtime
+  , name
+  , description
+  , input_schema
+  , variables
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+)
+RETURNING id, deployment_id, functions_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateFunctionsToolParams struct {
+	DeploymentID uuid.UUID
+	FunctionsID  uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+	InputSchema  []byte
+	Variables    []byte
+}
+
+func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsToolParams) (FunctionsTool, error) {
+	row := q.db.QueryRow(ctx, createFunctionsTool,
+		arg.DeploymentID,
+		arg.FunctionsID,
+		arg.Runtime,
+		arg.Name,
+		arg.Description,
+		arg.InputSchema,
+		arg.Variables,
+	)
+	var i FunctionsTool
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentID,
+		&i.FunctionsID,
+		&i.Runtime,
+		&i.Name,
+		&i.Description,
+		&i.InputSchema,
+		&i.Variables,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const createHTTPSecurity = `-- name: CreateHTTPSecurity :one
@@ -816,7 +875,7 @@ functions_tool_counts as (
     SELECT 
         deployment_id,
         COUNT(DISTINCT id) as tool_count
-    FROM tool_functions 
+    FROM functions_tool 
     WHERE deployment_id = $1 AND deleted IS FALSE
     GROUP BY deployment_id
 )
@@ -972,7 +1031,7 @@ FROM deployments d
 LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
 LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
 LEFT JOIN http_tool_definitions htd ON d.id = htd.deployment_id AND htd.deleted IS FALSE
-LEFT JOIN tool_functions tf ON d.id = tf.deployment_id AND tf.deleted IS FALSE
+LEFT JOIN functions_tool tf ON d.id = tf.deployment_id AND tf.deleted IS FALSE
 WHERE
   d.project_id = $1
   AND d.id <= CASE 

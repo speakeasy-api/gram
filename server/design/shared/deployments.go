@@ -96,7 +96,7 @@ var OpenAPIv3DeploymentAsset = Type("OpenAPIv3DeploymentAsset", func() {
 })
 
 var DeploymentFunctions = Type("DeploymentFunctions", func() {
-	Required("id", "asset_id", "name", "slug", "runtime")
+	Required("id", "asset_id", "name", "slug", "tool_runtime")
 
 	Attribute("id", String, func() {
 		Description("The ID of the deployment asset.")
@@ -110,8 +110,8 @@ var DeploymentFunctions = Type("DeploymentFunctions", func() {
 	Attribute("slug", Slug, func() {
 		Description("The slug to give the document as it will be displayed in URLs.")
 	})
-	Attribute("runtime", String, func() {
-		Description("The runtime used to execute functions.")
+	Attribute("tool_runtime", String, func() {
+		Description("The runtime to use when executing tools.")
 	})
 
 	Meta("struct:pkg:path", "types")

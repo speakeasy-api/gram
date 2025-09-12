@@ -108,7 +108,7 @@ func newAssetStorage(ctx context.Context, logger *slog.Logger, opts assetStorage
 			return root.Close()
 		}
 
-		return &assets.FSBlobStore{Root: root}, shutdown, nil
+		return assets.NewFSBlobStore(logger, root), shutdown, nil
 	case "gcs":
 		gcsStore, err := assets.NewGCSBlobStore(ctx, logger, opts.assetsURI)
 		if err != nil {

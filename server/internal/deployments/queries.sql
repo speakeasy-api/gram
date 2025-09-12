@@ -33,7 +33,7 @@ FROM deployments d
 LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
 LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
 LEFT JOIN http_tool_definitions htd ON d.id = htd.deployment_id AND htd.deleted IS FALSE
-LEFT JOIN tool_functions tf ON d.id = tf.deployment_id AND tf.deleted IS FALSE
+LEFT JOIN functions_tool tf ON d.id = tf.deployment_id AND tf.deleted IS FALSE
 WHERE
   d.project_id = @project_id
   AND d.id <= CASE 
@@ -93,7 +93,7 @@ functions_tool_counts as (
     SELECT 
         deployment_id,
         COUNT(DISTINCT id) as tool_count
-    FROM tool_functions 
+    FROM functions_tool 
     WHERE deployment_id = @id AND deleted IS FALSE
     GROUP BY deployment_id
 )
@@ -260,7 +260,7 @@ WHERE current.deployment_id = @original_deployment_id
 RETURNING id;
 
 -- name: CloneDeploymentToolFunctions :many
-INSERT INTO tool_functions (
+INSERT INTO functions_tool (
   deployment_id
   , functions_id
   , name
@@ -277,7 +277,7 @@ SELECT
   , current.runtime
   , current.variables
   , current.input_schema
-FROM tool_functions as current
+FROM functions_tool as current
 WHERE current.deployment_id = @original_deployment_id
   AND current.name <> ALL (@excluded_names::text[])
 RETURNING id;
@@ -476,6 +476,26 @@ INSERT INTO http_security (
   , @env_variables
   , @oauth_types
   , @oauth_flows
+)
+RETURNING *;
+
+-- name: CreateFunctionsTool :one
+INSERT INTO functions_tool (
+    deployment_id
+  , functions_id
+  , runtime
+  , name
+  , description
+  , input_schema
+  , variables
+) VALUES (
+    @deployment_id
+  , @functions_id
+  , @runtime
+  , @name
+  , @description
+  , @input_schema
+  , @variables
 )
 RETURNING *;
 

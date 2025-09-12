@@ -76,6 +76,8 @@ const (
 	EnvVarNameKey                  = attribute.Key("gram.envvar.name")
 	ErrorIDKey                     = attribute.Key("gram.error.id")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
+	FunctionsManifestVersionKey    = attribute.Key("gram.functions.manifest_version")
+	FunctionsToolRuntimeKey        = attribute.Key("gram.functions.tool_runtime")
 	HTTPEncodingStyleKey           = attribute.Key("gram.http.encoding.style")
 	HTTPParamNameKey               = attribute.Key("gram.http.param.name")
 	HTTPParamValueKey              = attribute.Key("gram.http.param.value")
@@ -325,6 +327,18 @@ func SlogErrorID(v string) slog.Attr      { return slog.String(string(ErrorIDKey
 
 func FilterExpression(v string) attribute.KeyValue { return FilterExpressionKey.String(v) }
 func SlogFilterExpression(v string) slog.Attr      { return slog.String(string(FilterExpressionKey), v) }
+
+func FunctionsManifestVersion(v string) attribute.KeyValue {
+	return FunctionsManifestVersionKey.String(v)
+}
+func SlogFunctionsManifestVersion(v string) slog.Attr {
+	return slog.String(string(FunctionsManifestVersionKey), v)
+}
+
+func FunctionsToolRuntime(v string) attribute.KeyValue { return FunctionsToolRuntimeKey.String(v) }
+func SlogFunctionsToolRuntime(v string) slog.Attr {
+	return slog.String(string(FunctionsToolRuntimeKey), v)
+}
 
 func HTTPEncodingStyle(v string) attribute.KeyValue { return HTTPEncodingStyleKey.String(v) }
 func SlogHTTPEncodingStyle(v string) slog.Attr      { return slog.String(string(HTTPEncodingStyleKey), v) }
