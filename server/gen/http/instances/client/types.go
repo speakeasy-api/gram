@@ -219,6 +219,7 @@ type GetInstanceGatewayErrorResponseBody struct {
 // HTTPToolDefinitionResponseBody is used to define fields on response body
 // types.
 type HTTPToolDefinitionResponseBody struct {
+	ToolType *string `form:"tool_type,omitempty" json:"tool_type,omitempty" xml:"tool_type,omitempty"`
 	// The ID of the HTTP tool
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the project
@@ -896,6 +897,9 @@ func ValidateGetInstanceGatewayErrorResponseBody(body *GetInstanceGatewayErrorRe
 // ValidateHTTPToolDefinitionResponseBody runs the validations defined on
 // HTTPToolDefinitionResponseBody
 func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody) (err error) {
+	if body.ToolType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_type", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -937,6 +941,11 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ToolType != nil {
+		if !(*body.ToolType == "http") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tool_type", *body.ToolType, []any{"http"}))
+		}
 	}
 	if body.ResponseFilter != nil {
 		if err2 := ValidateResponseFilterResponseBody(body.ResponseFilter); err2 != nil {

@@ -18,6 +18,10 @@ type (
 	PromptTemplateName *string
 )
 
+const (
+	ToolTypeHTTP = "http"
+)
+
 type Confirm string
 
 const (

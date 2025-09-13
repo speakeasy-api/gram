@@ -104,8 +104,9 @@ func DescribeToolsetEntry(
 			name := conv.Default(nameVariations[def.Name], def.Name)
 
 			tool := &types.HTTPToolDefinitionEntry{
-				ID:   def.ID.String(),
-				Name: name,
+				ToolType: ToolTypeHTTP,
+				ID:       def.ID.String(),
+				Name:     name,
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
@@ -299,6 +300,7 @@ func DescribeToolset(
 			}
 
 			tool := &types.HTTPToolDefinition{
+				ToolType:            ToolTypeHTTP,
 				ID:                  def.HttpToolDefinition.ID.String(),
 				ProjectID:           def.HttpToolDefinition.Description,
 				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),

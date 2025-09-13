@@ -8,6 +8,7 @@
 package types
 
 type HTTPToolDefinition struct {
+	ToolType string
 	// The ID of the HTTP tool
 	ID string
 	// The ID of the project

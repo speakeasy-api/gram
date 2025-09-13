@@ -8331,6 +8331,10 @@ components:
                     items:
                         type: string
                     description: The tags list for this http tool
+                tool_type:
+                    type: string
+                    enum:
+                        - http
                 updated_at:
                     type: string
                     description: The last update date of the tool.
@@ -8338,6 +8342,7 @@ components:
                 variation:
                     $ref: '#/components/schemas/ToolVariation'
             required:
+                - tool_type
                 - id
                 - project_id
                 - deployment_id
@@ -8361,7 +8366,12 @@ components:
                 name:
                     type: string
                     description: The name of the tool
+                tool_type:
+                    type: string
+                    enum:
+                        - http
             required:
+                - tool_type
                 - id
                 - name
         InfoResponseBody:

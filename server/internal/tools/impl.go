@@ -195,6 +195,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		}
 
 		result.Tools[i] = &types.HTTPToolDefinition{
+			ToolType:            mv.ToolTypeHTTP,
 			ID:                  tool.ID.String(),
 			DeploymentID:        tool.DeploymentID.String(),
 			ProjectID:           authCtx.ProjectID.String(),

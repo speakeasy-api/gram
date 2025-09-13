@@ -268,6 +268,7 @@ func EncodeGetInstanceError(encoder func(context.Context, http.ResponseWriter) g
 // *types.HTTPToolDefinition.
 func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
 	res := &HTTPToolDefinitionResponseBody{
+		ToolType:            v.ToolType,
 		ID:                  v.ID,
 		ProjectID:           v.ProjectID,
 		DeploymentID:        v.DeploymentID,

@@ -2573,9 +2573,10 @@ Update a toolset's properties including name, description, and HTTP tools
 Example:
     %[1]s toolsets update-toolset --body '{
       "custom_domain_id": "Delectus est quia.",
-      "default_environment_slug": "ehe",
-      "description": "Voluptatem ad.",
+      "default_environment_slug": "31l",
+      "description": "Molestiae in.",
       "http_tool_names": [
+         "Eius et.",
          "Nesciunt quam.",
          "Illo sint nostrum.",
          "Dolor et illum sunt dolores."
@@ -2583,7 +2584,7 @@ Example:
       "mcp_enabled": false,
       "mcp_is_public": true,
       "mcp_slug": "uii",
-      "name": "Id dolores molestiae in.",
+      "name": "Beatae impedit id.",
       "prompt_template_names": [
          "Et quisquam nihil voluptatem unde.",
          "Dolorem minima.",

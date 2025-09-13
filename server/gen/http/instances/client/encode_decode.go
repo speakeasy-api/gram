@@ -268,6 +268,7 @@ func DecodeGetInstanceResponse(decoder func(*http.Response) goahttp.Decoder, res
 // *HTTPToolDefinitionResponseBody.
 func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToolDefinitionResponseBody) *types.HTTPToolDefinition {
 	res := &types.HTTPToolDefinition{
+		ToolType:            *v.ToolType,
 		ID:                  *v.ID,
 		ProjectID:           *v.ProjectID,
 		DeploymentID:        *v.DeploymentID,

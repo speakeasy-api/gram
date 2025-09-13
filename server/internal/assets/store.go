@@ -309,7 +309,7 @@ func (g *gcsChunkReader) ReadAt(p []byte, offset int64) (int, error) {
 		return n, fmt.Errorf("read from range reader: %w", err)
 	}
 
-	return n, err
+	return n, nil
 }
 
 func (g *gcsChunkReader) Close() error {

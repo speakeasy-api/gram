@@ -11189,54 +11189,54 @@ definitions:
             confirm:
                 type: string
                 description: Confirmation mode for the tool
-                example: Quia molestiae.
+                example: Temporibus exercitationem deleniti.
             confirm_prompt:
                 type: string
                 description: Prompt for the confirmation
-                example: Exercitationem deleniti aliquid.
+                example: Omnis labore necessitatibus libero incidunt.
             description:
                 type: string
                 description: Description of the tool
-                example: Est earum sit ut omnis.
+                example: Omnis cumque quia.
             name:
                 type: string
                 description: The name of the tool
-                example: Reprehenderit facere voluptate tempore est ipsum nemo.
+                example: Dignissimos veritatis reprehenderit ut non.
             summarizer:
                 type: string
                 description: Summarizer for the tool
-                example: Labore necessitatibus libero incidunt est.
+                example: Quibusdam illo quidem molestias facere.
             summary:
                 type: string
                 description: Summary of the tool
-                example: Delectus dignissimos veritatis reprehenderit ut non eum.
+                example: Alias est earum sit.
             tags:
                 type: array
                 items:
                     type: string
-                    example: Illo quidem.
+                    example: Quaerat quis delectus.
                 description: The tags list for this http tool
                 example:
-                    - Amet quaerat quis.
-                    - Officiis consequatur.
+                    - Pariatur alias ipsa.
+                    - Laborum rem iusto eligendi.
+                    - Repellat sit rerum voluptas molestiae adipisci.
+                    - Et voluptas velit at minima recusandae.
             variation_id:
                 type: string
                 description: The ID of the variation that was applied to the tool
-                example: Illum debitis.
+                example: Est ipsum nemo autem.
         description: The original details of a tool
         example:
-            confirm: Numquam doloribus atque dolore illum officia doloremque.
-            confirm_prompt: Unde ab praesentium.
-            description: Recusandae at esse autem qui.
-            name: Rem iusto eligendi unde repellat sit rerum.
-            summarizer: Temporibus et ratione dolores temporibus autem occaecati.
-            summary: Molestiae adipisci nemo et voluptas velit at.
+            confirm: Nostrum quaerat odit praesentium aspernatur nemo expedita.
+            confirm_prompt: Vel eum qui.
+            description: Autem occaecati nam accusamus soluta doloribus.
+            name: Illum officia doloremque ut unde ab.
+            summarizer: Numquam deleniti totam neque blanditiis.
+            summary: Totam temporibus et ratione dolores.
             tags:
-                - Soluta doloribus aut nostrum quaerat.
-                - Praesentium aspernatur nemo expedita voluptates vel eum.
-                - Nulla numquam.
-                - Totam neque blanditiis recusandae animi dolore fugit.
-            variation_id: Alias ipsa optio.
+                - Dolore fugit vel minima perspiciatis totam consequatur.
+                - Rerum rem ullam similique iure eaque.
+            variation_id: Esse autem qui consectetur numquam doloribus atque.
         required:
             - variation_id
             - name
@@ -20242,12 +20242,80 @@ definitions:
                         - Eum rerum tempore et.
                       scheme: Quas hic ab quos possimus.
                       type: Et nihil molestias excepturi est voluptas facere.
+                    - bearer_format: Et impedit reprehenderit.
+                      env_variables:
+                        - Nobis et.
+                        - Omnis et distinctio.
+                        - Et eos.
+                        - Debitis doloribus.
+                      in_placement: Aspernatur exercitationem laborum.
+                      name: Est similique magnam ducimus dolorem voluptatem molestias.
+                      oauth_flows:
+                        - 69
+                        - 97
+                        - 113
+                        - 117
+                        - 101
+                        - 32
+                        - 105
+                        - 117
+                        - 115
+                        - 116
+                        - 111
+                        - 32
+                        - 101
+                        - 116
+                        - 32
+                        - 102
+                        - 97
+                        - 99
+                        - 101
+                        - 114
+                        - 101
+                        - 32
+                        - 113
+                        - 117
+                        - 105
+                        - 32
+                        - 100
+                        - 105
+                        - 103
+                        - 110
+                        - 105
+                        - 115
+                        - 115
+                        - 105
+                        - 109
+                        - 111
+                        - 115
+                        - 32
+                        - 118
+                        - 111
+                        - 108
+                        - 117
+                        - 112
+                        - 116
+                        - 97
+                        - 116
+                        - 101
+                        - 46
+                      oauth_types:
+                        - Tempore aut repellat.
+                        - Saepe nulla dolorem ab rerum modi.
+                        - Itaque id nihil quaerat voluptatem molestiae dicta.
+                        - Eum rerum tempore et.
+                      scheme: Quas hic ab quos possimus.
+                      type: Et nihil molestias excepturi est voluptas facere.
             server_variables:
                 type: array
                 items:
                     $ref: '#/definitions/ServerVariable'
                 description: The server variables that are relevant to the toolset
                 example:
+                    - description: Eligendi facere et fuga esse.
+                      env_variables:
+                        - Atque dolores tenetur vel sed distinctio voluptates.
+                        - Sequi veniam officia.
                     - description: Eligendi facere et fuga esse.
                       env_variables:
                         - Atque dolores tenetur vel sed distinctio voluptates.
@@ -20285,7 +20353,7 @@ definitions:
                       deployment_id: Laudantium eos.
                       description: Itaque velit sint perferendis dolor ipsum vel.
                       http_method: Nemo cumque reprehenderit.
-                      id: Ratione reprehenderit et.
+                      id: Reprehenderit et.
                       name: Recusandae ratione est non repellendus quis tempore.
                       openapiv3_document_id: Aut est consequatur quo.
                       openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -20312,6 +20380,7 @@ definitions:
                         - In a voluptates eligendi occaecati voluptatem.
                         - Suscipit quibusdam rerum soluta et rerum.
                         - Rerum quidem aspernatur repellendus.
+                      tool_type: http
                       updated_at: "1998-05-18T04:17:44Z"
                       variation:
                         confirm: Et voluptatem quam beatae dolorem.
@@ -20347,7 +20416,7 @@ definitions:
                       deployment_id: Laudantium eos.
                       description: Itaque velit sint perferendis dolor ipsum vel.
                       http_method: Nemo cumque reprehenderit.
-                      id: Ratione reprehenderit et.
+                      id: Reprehenderit et.
                       name: Recusandae ratione est non repellendus quis tempore.
                       openapiv3_document_id: Aut est consequatur quo.
                       openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -20374,6 +20443,7 @@ definitions:
                         - In a voluptates eligendi occaecati voluptatem.
                         - Suscipit quibusdam rerum soluta et rerum.
                         - Rerum quidem aspernatur repellendus.
+                      tool_type: http
                       updated_at: "1998-05-18T04:17:44Z"
                       variation:
                         confirm: Et voluptatem quam beatae dolorem.
@@ -20409,7 +20479,7 @@ definitions:
                       deployment_id: Laudantium eos.
                       description: Itaque velit sint perferendis dolor ipsum vel.
                       http_method: Nemo cumque reprehenderit.
-                      id: Ratione reprehenderit et.
+                      id: Reprehenderit et.
                       name: Recusandae ratione est non repellendus quis tempore.
                       openapiv3_document_id: Aut est consequatur quo.
                       openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -20436,6 +20506,7 @@ definitions:
                         - In a voluptates eligendi occaecati voluptatem.
                         - Suscipit quibusdam rerum soluta et rerum.
                         - Rerum quidem aspernatur repellendus.
+                      tool_type: http
                       updated_at: "1998-05-18T04:17:44Z"
                       variation:
                         confirm: Et voluptatem quam beatae dolorem.
@@ -20471,7 +20542,7 @@ definitions:
                       deployment_id: Laudantium eos.
                       description: Itaque velit sint perferendis dolor ipsum vel.
                       http_method: Nemo cumque reprehenderit.
-                      id: Ratione reprehenderit et.
+                      id: Reprehenderit et.
                       name: Recusandae ratione est non repellendus quis tempore.
                       openapiv3_document_id: Aut est consequatur quo.
                       openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -20498,6 +20569,7 @@ definitions:
                         - In a voluptates eligendi occaecati voluptatem.
                         - Suscipit quibusdam rerum soluta et rerum.
                         - Rerum quidem aspernatur repellendus.
+                      tool_type: http
                       updated_at: "1998-05-18T04:17:44Z"
                       variation:
                         confirm: Et voluptatem quam beatae dolorem.
@@ -20515,7 +20587,7 @@ definitions:
                             - Ullam dolorem placeat quod.
                         updated_at: Deserunt ducimus tenetur.
         example:
-            description: Dolore aperiam maiores rerum perspiciatis.
+            description: Ipsum doloribus.
             environment:
                 created_at: "2015-04-17T07:14:29Z"
                 description: Repellendus autem consectetur.
@@ -20538,8 +20610,23 @@ definitions:
                 project_id: Placeat molestiae qui voluptatem.
                 slug: gpy
                 updated_at: "1984-04-17T15:58:17Z"
-            name: Ea hic error nobis.
+            name: Nihil omnis ullam.
             prompt_templates:
+                - arguments: '{"name":"example","email":"mail@example.com"}'
+                  created_at: "1996-04-06T16:49:42Z"
+                  description: Consequatur libero soluta commodi id aperiam.
+                  engine: mustache
+                  history_id: Voluptatum natus sit cum sed.
+                  id: Consequatur consequatur consequuntur.
+                  kind: prompt
+                  name: c7s
+                  predecessor_id: Minima deleniti optio.
+                  prompt: Id voluptatem.
+                  tools_hint:
+                    - Qui consequatur corporis a.
+                    - Nobis beatae quis repudiandae ea quis labore.
+                    - Iure vel ipsum.
+                  updated_at: "1972-01-05T08:54:14Z"
                 - arguments: '{"name":"example","email":"mail@example.com"}'
                   created_at: "1996-04-06T16:49:42Z"
                   description: Consequatur libero soluta commodi id aperiam.
@@ -20699,15 +20786,71 @@ definitions:
                     - Eum rerum tempore et.
                   scheme: Quas hic ab quos possimus.
                   type: Et nihil molestias excepturi est voluptas facere.
+                - bearer_format: Et impedit reprehenderit.
+                  env_variables:
+                    - Nobis et.
+                    - Omnis et distinctio.
+                    - Et eos.
+                    - Debitis doloribus.
+                  in_placement: Aspernatur exercitationem laborum.
+                  name: Est similique magnam ducimus dolorem voluptatem molestias.
+                  oauth_flows:
+                    - 69
+                    - 97
+                    - 113
+                    - 117
+                    - 101
+                    - 32
+                    - 105
+                    - 117
+                    - 115
+                    - 116
+                    - 111
+                    - 32
+                    - 101
+                    - 116
+                    - 32
+                    - 102
+                    - 97
+                    - 99
+                    - 101
+                    - 114
+                    - 101
+                    - 32
+                    - 113
+                    - 117
+                    - 105
+                    - 32
+                    - 100
+                    - 105
+                    - 103
+                    - 110
+                    - 105
+                    - 115
+                    - 115
+                    - 105
+                    - 109
+                    - 111
+                    - 115
+                    - 32
+                    - 118
+                    - 111
+                    - 108
+                    - 117
+                    - 112
+                    - 116
+                    - 97
+                    - 116
+                    - 101
+                    - 46
+                  oauth_types:
+                    - Tempore aut repellat.
+                    - Saepe nulla dolorem ab rerum modi.
+                    - Itaque id nihil quaerat voluptatem molestiae dicta.
+                    - Eum rerum tempore et.
+                  scheme: Quas hic ab quos possimus.
+                  type: Et nihil molestias excepturi est voluptas facere.
             server_variables:
-                - description: Eligendi facere et fuga esse.
-                  env_variables:
-                    - Atque dolores tenetur vel sed distinctio voluptates.
-                    - Sequi veniam officia.
-                - description: Eligendi facere et fuga esse.
-                  env_variables:
-                    - Atque dolores tenetur vel sed distinctio voluptates.
-                    - Sequi veniam officia.
                 - description: Eligendi facere et fuga esse.
                   env_variables:
                     - Atque dolores tenetur vel sed distinctio voluptates.
@@ -20736,7 +20879,7 @@ definitions:
                   deployment_id: Laudantium eos.
                   description: Itaque velit sint perferendis dolor ipsum vel.
                   http_method: Nemo cumque reprehenderit.
-                  id: Ratione reprehenderit et.
+                  id: Reprehenderit et.
                   name: Recusandae ratione est non repellendus quis tempore.
                   openapiv3_document_id: Aut est consequatur quo.
                   openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -20763,6 +20906,7 @@ definitions:
                     - In a voluptates eligendi occaecati voluptatem.
                     - Suscipit quibusdam rerum soluta et rerum.
                     - Rerum quidem aspernatur repellendus.
+                  tool_type: http
                   updated_at: "1998-05-18T04:17:44Z"
                   variation:
                     confirm: Et voluptatem quam beatae dolorem.
@@ -20798,7 +20942,7 @@ definitions:
                   deployment_id: Laudantium eos.
                   description: Itaque velit sint perferendis dolor ipsum vel.
                   http_method: Nemo cumque reprehenderit.
-                  id: Ratione reprehenderit et.
+                  id: Reprehenderit et.
                   name: Recusandae ratione est non repellendus quis tempore.
                   openapiv3_document_id: Aut est consequatur quo.
                   openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -20825,68 +20969,7 @@ definitions:
                     - In a voluptates eligendi occaecati voluptatem.
                     - Suscipit quibusdam rerum soluta et rerum.
                     - Rerum quidem aspernatur repellendus.
-                  updated_at: "1998-05-18T04:17:44Z"
-                  variation:
-                    confirm: Et voluptatem quam beatae dolorem.
-                    confirm_prompt: Cupiditate ut.
-                    created_at: Aliquam commodi.
-                    description: Quo voluptas quod cumque perferendis quos rerum.
-                    group_id: Id quibusdam.
-                    id: Earum et dolor.
-                    name: Debitis omnis velit quia distinctio pariatur.
-                    src_tool_name: Eum nisi at rerum illum.
-                    summarizer: Eaque temporibus eligendi molestiae.
-                    summary: Aut minus doloremque magni numquam esse earum.
-                    tags:
-                        - Accusantium est eligendi qui deleniti ut blanditiis.
-                        - Ullam dolorem placeat quod.
-                    updated_at: Deserunt ducimus tenetur.
-                - canonical:
-                    confirm: Ut sed neque.
-                    confirm_prompt: Officia quis incidunt.
-                    description: Voluptatem blanditiis iste qui assumenda.
-                    name: Quo ex.
-                    summarizer: Sint quod nostrum similique doloribus dolores harum.
-                    summary: Velit est nihil.
-                    tags:
-                        - Minima at reiciendis in earum.
-                        - Est et corrupti reprehenderit cupiditate aliquid.
-                    variation_id: Consequatur itaque iure qui at.
-                  canonical_name: Enim consequatur aut voluptatibus minima et quasi.
-                  confirm: Itaque debitis pariatur qui et sed.
-                  confirm_prompt: Sit necessitatibus sed cumque iste impedit.
-                  created_at: "2012-01-01T19:01:18Z"
-                  default_server_url: Deserunt ipsa ab dolorem voluptate nihil.
-                  deployment_id: Laudantium eos.
-                  description: Itaque velit sint perferendis dolor ipsum vel.
-                  http_method: Nemo cumque reprehenderit.
-                  id: Ratione reprehenderit et.
-                  name: Recusandae ratione est non repellendus quis tempore.
-                  openapiv3_document_id: Aut est consequatur quo.
-                  openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
-                  package_name: Sit voluptate sunt aut accusantium ut.
-                  path: Ut sint.
-                  project_id: Consequatur nostrum.
-                  response_filter:
-                    content_types:
-                        - Minima autem unde et quaerat minima sit.
-                        - Velit hic molestiae.
-                        - Reprehenderit qui.
-                    status_codes:
-                        - Rerum tempora neque.
-                        - Nemo quaerat perferendis.
-                        - Debitis repellendus.
-                        - Accusantium delectus magni voluptas molestias.
-                    type: Corrupti fugiat deleniti dolorem numquam.
-                  schema: Ut explicabo sit.
-                  schema_version: Vero vitae est.
-                  security: Eius nihil reiciendis sit.
-                  summarizer: Et esse dicta rerum tempora.
-                  summary: Alias velit perspiciatis mollitia debitis occaecati id.
-                  tags:
-                    - In a voluptates eligendi occaecati voluptatem.
-                    - Suscipit quibusdam rerum soluta et rerum.
-                    - Rerum quidem aspernatur repellendus.
+                  tool_type: http
                   updated_at: "1998-05-18T04:17:44Z"
                   variation:
                     confirm: Et voluptatem quam beatae dolorem.
@@ -21016,99 +21099,106 @@ definitions:
             canonical_name:
                 type: string
                 description: The canonical name of the tool. Will be the same as the name if there is no variation.
-                example: Veritatis amet quidem et ipsam.
+                example: Officiis vitae aut veritatis amet quidem et.
             confirm:
                 type: string
                 description: Confirmation mode for the tool
-                example: In pariatur non nam.
+                example: Reprehenderit est rem ab.
             confirm_prompt:
                 type: string
                 description: Prompt for the confirmation
-                example: Quibusdam aut maiores velit.
+                example: In pariatur non nam.
             created_at:
                 type: string
                 description: The creation date of the tool.
-                example: "2001-12-13T18:35:55Z"
+                example: "2013-05-25T20:46:14Z"
                 format: date-time
             default_server_url:
                 type: string
                 description: The default server URL for the tool
-                example: Id recusandae.
+                example: Earum qui voluptatibus ut at repellendus.
             deployment_id:
                 type: string
                 description: The ID of the deployment
-                example: Optio quae modi et.
+                example: Voluptas voluptatum neque minus optio quae.
             description:
                 type: string
                 description: Description of the tool
-                example: Earum hic distinctio reprehenderit est rem ab.
+                example: Qui qui modi quia tempora earum hic.
             http_method:
                 type: string
                 description: HTTP method for the request
-                example: Voluptatem pariatur.
+                example: Aut autem tenetur blanditiis illum neque.
             id:
                 type: string
                 description: The ID of the HTTP tool
-                example: Porro doloribus neque est est voluptatem aliquam.
+                example: Doloribus neque est.
             name:
                 type: string
                 description: The name of the tool
-                example: Eius non officiis vitae.
+                example: Et distinctio eius.
             openapiv3_document_id:
                 type: string
                 description: The ID of the OpenAPI v3 document
-                example: Voluptates aut enim ducimus et est dolor.
+                example: Ducimus et est.
             openapiv3_operation:
                 type: string
                 description: OpenAPI v3 operation
-                example: Placeat aliquid voluptas ducimus qui ullam voluptates.
+                example: Est placeat aliquid voluptas.
             package_name:
                 type: string
                 description: The name of the source package
-                example: Asperiores eligendi animi neque.
+                example: Ullam ut veritatis quae.
             path:
                 type: string
                 description: Path for the request
-                example: Earum qui voluptatibus ut at repellendus.
+                example: Ut et iste eos esse.
             project_id:
                 type: string
                 description: The ID of the project
-                example: Non dolorem dolorem voluptas voluptatum neque.
+                example: Voluptatem aliquam ut non dolorem.
             response_filter:
                 $ref: '#/definitions/ResponseFilter'
             schema:
                 type: string
                 description: JSON schema for the request
-                example: Ut et iste eos esse.
+                example: Porro officiis.
             schema_version:
                 type: string
                 description: Version of the schema
-                example: Aut autem tenetur blanditiis illum neque.
+                example: Asperiores eligendi animi neque.
             security:
                 type: string
                 description: Security requirements for the underlying HTTP endpoint
-                example: Vitae facere.
+                example: Adipisci voluptatem pariatur.
             summarizer:
                 type: string
                 description: Summarizer for the tool
-                example: Tempore non totam totam.
+                example: Quibusdam aut maiores velit.
             summary:
                 type: string
                 description: Summary of the tool
-                example: Omnis in qui qui modi quia.
+                example: Amet omnis.
             tags:
                 type: array
                 items:
                     type: string
-                    example: Incidunt ea accusamus et.
+                    example: Qui ullam voluptates vitae incidunt.
                 description: The tags list for this http tool
                 example:
-                    - Nam qui reiciendis animi.
-                    - Iste ad commodi deserunt.
+                    - Et ratione quos nam qui.
+                    - Animi numquam.
+                    - Ad commodi.
+                    - Id vitae facere vero id.
+            tool_type:
+                type: string
+                example: http
+                enum:
+                    - http
             updated_at:
                 type: string
                 description: The last update date of the tool.
-                example: "1981-04-16T20:43:02Z"
+                example: "2005-01-22T07:09:39Z"
                 format: date-time
             variation:
                 $ref: '#/definitions/ToolVariation'
@@ -21124,21 +21214,21 @@ definitions:
                     - Minima at reiciendis in earum.
                     - Est et corrupti reprehenderit cupiditate aliquid.
                 variation_id: Consequatur itaque iure qui at.
-            canonical_name: Soluta quia id quia optio quasi.
-            confirm: Architecto consequatur.
-            confirm_prompt: Voluptatem aperiam nostrum libero at.
-            created_at: "1975-06-04T08:33:17Z"
-            default_server_url: Et enim maiores officiis.
-            deployment_id: Ea qui quia.
-            description: Totam eum dolorum necessitatibus fugit dolore sed.
-            http_method: Quod et enim accusantium qui veritatis beatae.
-            id: Quia mollitia incidunt.
-            name: Itaque voluptas.
-            openapiv3_document_id: Veniam numquam cupiditate odit est praesentium incidunt.
-            openapiv3_operation: Sunt vero magnam voluptas velit.
-            package_name: Dolorum officiis qui minus consequatur.
-            path: Porro eius est ea.
-            project_id: Non aut porro dolorem perferendis.
+            canonical_name: Totam eum dolorum necessitatibus fugit dolore sed.
+            confirm: Debitis pariatur quae qui dolorum.
+            confirm_prompt: Veniam numquam cupiditate odit est praesentium incidunt.
+            created_at: "1983-09-16T11:09:08Z"
+            default_server_url: Hic itaque adipisci blanditiis voluptas eum.
+            deployment_id: Quia optio quasi consectetur consequatur.
+            description: Voluptatem aperiam nostrum libero at.
+            http_method: Quam architecto natus et.
+            id: Qui quia id itaque.
+            name: Et in.
+            openapiv3_document_id: Omnis blanditiis ipsa.
+            openapiv3_operation: Hic nostrum aut vero veritatis sit ut.
+            package_name: Voluptates veritatis suscipit nesciunt ab autem.
+            path: Dolorum officiis qui minus consequatur.
+            project_id: Et soluta quia.
             response_filter:
                 content_types:
                     - Minima autem unde et quaerat minima sit.
@@ -21150,16 +21240,18 @@ definitions:
                     - Debitis repellendus.
                     - Accusantium delectus magni voluptas molestias.
                 type: Corrupti fugiat deleniti dolorem numquam.
-            schema: Quam architecto natus et.
-            schema_version: Hic itaque adipisci blanditiis voluptas eum.
-            security: Maxime excepturi fugit laboriosam earum sit ex.
-            summarizer: Debitis pariatur quae qui dolorum.
-            summary: Consequatur cumque et in.
+            schema: Fuga repudiandae assumenda eligendi itaque ut quisquam.
+            schema_version: Quia et voluptas.
+            security: Porro eius est ea.
+            summarizer: Sunt vero magnam voluptas velit.
+            summary: Architecto consequatur.
             tags:
-                - Blanditiis ipsa sint hic nostrum aut vero.
-                - Sit ut.
-                - A dolores molestiae aperiam molestias eos.
-            updated_at: "2004-06-25T07:47:50Z"
+                - Dolores molestiae aperiam molestias eos quia.
+                - Excepturi fugit laboriosam earum.
+                - Ex maxime et enim maiores officiis.
+                - Quod et enim accusantium qui veritatis beatae.
+            tool_type: http
+            updated_at: "1976-12-23T23:08:31Z"
             variation:
                 confirm: Et voluptatem quam beatae dolorem.
                 confirm_prompt: Cupiditate ut.
@@ -21176,6 +21268,7 @@ definitions:
                     - Ullam dolorem placeat quod.
                 updated_at: Deserunt ducimus tenetur.
         required:
+            - tool_type
             - id
             - project_id
             - deployment_id
@@ -21197,15 +21290,22 @@ definitions:
             id:
                 type: string
                 description: The ID of the HTTP tool
-                example: Consequatur dolor veritatis non.
+                example: Dolor veritatis non et laudantium.
             name:
                 type: string
                 description: The name of the tool
-                example: Laudantium architecto quisquam corrupti et quisquam.
+                example: Quisquam corrupti et quisquam laborum.
+            tool_type:
+                type: string
+                example: http
+                enum:
+                    - http
         example:
-            id: Ullam amet consequatur excepturi qui nobis numquam.
-            name: Voluptatem aliquid vero.
+            id: Consequatur excepturi qui.
+            name: Numquam et voluptatem aliquid vero dolorem iusto.
+            tool_type: http
         required:
+            - tool_type
             - id
             - name
     InstancesGetInstanceBadRequestResponseBody:
@@ -21235,7 +21335,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: request is invalid (default view)
         example:
             fault: false
@@ -21278,15 +21378,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource already exists (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: true
+            temporary: false
+            timeout: false
         required:
             - name
             - id
@@ -21301,7 +21401,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -21317,18 +21417,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: permission denied (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -21360,7 +21460,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -21371,8 +21471,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -21387,7 +21487,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -21407,15 +21507,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request contains one or more invalidation fields (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -21430,7 +21530,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -21446,18 +21546,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: true
         required:
             - name
@@ -21473,7 +21573,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -21493,7 +21593,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource not found (default view)
         example:
             fault: false
@@ -21501,7 +21601,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -21539,11 +21639,11 @@ definitions:
                 example: false
         description: unauthorized access (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -21575,19 +21675,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -21602,7 +21702,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -21618,19 +21718,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: unsupported media type (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: false
+            temporary: false
+            timeout: true
         required:
             - name
             - id
@@ -21644,54 +21744,51 @@ definitions:
         properties:
             package_description:
                 type: string
-                example: Facilis et alias accusamus.
+                example: Culpa sed cumque magnam sint.
             package_description_raw:
                 type: string
-                example: Molestiae ut quasi.
+                example: Voluptatem blanditiis voluptatibus qui fugit pariatur sint.
             package_id:
                 type: string
-                example: Et ipsum sequi hic.
+                example: Et alias accusamus asperiores molestiae ut.
             package_image_asset_id:
                 type: string
-                example: Sint sequi ratione.
+                example: Iusto et praesentium.
             package_keywords:
                 type: array
                 items:
                     type: string
-                    example: Totam dolor voluptas.
+                    example: Sint enim voluptatum ad.
                 example:
-                    - Eveniet explicabo.
-                    - Fugit omnis ut consequatur quia.
-                    - Sed cumque.
-                    - Sint debitis voluptatem blanditiis voluptatibus qui fugit.
+                    - Doloribus consequatur sunt eligendi odit.
+                    - Qui quis repudiandae dolorem.
             package_name:
                 type: string
-                example: Minima molestiae voluptatum adipisci.
+                example: Et nihil recusandae animi modi totam dolor.
             package_summary:
                 type: string
-                example: Non et.
+                example: Omnis ut consequatur.
             package_title:
                 type: string
-                example: Totam sit ad accusantium perferendis veniam molestiae.
+                example: Commodi saepe eveniet explicabo cumque.
             package_url:
                 type: string
-                example: Nihil recusandae animi.
+                example: Ratione aut veritatis facilis.
             tool_names:
                 type: array
                 items:
                     type: string
-                    example: Et eum vel vel corporis dolorem.
+                    example: Fugiat inventore quisquam aut.
                 example:
-                    - Expedita voluptatem quaerat cupiditate numquam illum.
-                    - Molestiae nihil aperiam fugiat inventore.
-                    - Aut aut facilis fugit excepturi id doloremque.
+                    - Fugit excepturi id doloremque temporibus similique.
+                    - Minima at sequi nemo possimus excepturi rem.
             version:
                 type: string
                 description: The latest version of the integration
-                example: Veritatis facilis voluptas sint enim voluptatum ad.
+                example: Esse in.
             version_created_at:
                 type: string
-                example: "2014-11-27T06:37:29Z"
+                example: "2011-01-28T22:49:54Z"
                 format: date-time
             versions:
                 type: array
@@ -21704,28 +21801,29 @@ definitions:
                       version: Exercitationem nesciunt magnam libero quo assumenda.
                     - created_at: "1982-01-28T10:48:54Z"
                       version: Exercitationem nesciunt magnam libero quo assumenda.
+                    - created_at: "1982-01-28T10:48:54Z"
+                      version: Exercitationem nesciunt magnam libero quo assumenda.
         example:
-            package_description: Eum eos est non voluptas.
-            package_description_raw: Nulla atque sed corporis officiis.
-            package_id: Est cumque adipisci eum qui.
-            package_image_asset_id: Repellendus voluptatem sint.
+            package_description: Nulla atque sed corporis officiis.
+            package_description_raw: Quis facilis quia harum.
+            package_id: Dolorem alias facere aut sapiente aut libero.
+            package_image_asset_id: Esse nisi aut et.
             package_keywords:
-                - Facilis commodi officia minima ut.
                 - Ipsam cumque ipsum vero assumenda eius.
-            package_name: Quas dolorem alias facere aut sapiente aut.
-            package_summary: Molestiae minus.
-            package_title: Suscipit mollitia debitis dolores et eaque.
-            package_url: Quis facilis quia harum.
+                - Repellendus voluptatem sint.
+                - Quisquam voluptatem expedita itaque.
+            package_name: Mollitia debitis dolores et.
+            package_summary: Est non voluptas.
+            package_title: Non molestiae minus nulla eum.
+            package_url: Omnis facilis commodi officia minima.
             tool_names:
-                - Repellat et officia ullam error.
-                - Fugit rerum aliquam ratione.
                 - Voluptatum eos ut explicabo et aut maiores.
                 - Occaecati doloremque reprehenderit est.
-            version: Quisquam voluptatem expedita itaque.
-            version_created_at: "2014-07-29T01:58:38Z"
+                - Ducimus ipsum.
+                - Assumenda et.
+            version: Quo et est blanditiis.
+            version_created_at: "1984-02-16T07:04:56Z"
             versions:
-                - created_at: "1982-01-28T10:48:54Z"
-                  version: Exercitationem nesciunt magnam libero quo assumenda.
                 - created_at: "1982-01-28T10:48:54Z"
                   version: Exercitationem nesciunt magnam libero quo assumenda.
                 - created_at: "1982-01-28T10:48:54Z"
@@ -21746,45 +21844,44 @@ definitions:
         properties:
             package_id:
                 type: string
-                example: Exercitationem corporis.
+                example: Velit eius vel et id asperiores.
             package_image_asset_id:
                 type: string
-                example: Itaque quos dicta veniam maiores.
+                example: Consequatur quo deserunt ab eveniet commodi.
             package_keywords:
                 type: array
                 items:
                     type: string
-                    example: Suscipit dolore commodi ut ducimus nobis eaque.
+                    example: Fugit non soluta dolores rem eos at.
                 example:
-                    - Accusantium ex dolorem repellendus voluptate fugit non.
-                    - Dolores rem eos at id esse.
-                    - Quaerat vitae.
+                    - Est quaerat vitae dolores itaque quos.
+                    - Veniam maiores.
             package_name:
                 type: string
-                example: Maiores magni eligendi velit.
+                example: Maxime est illum.
             package_summary:
                 type: string
-                example: Asperiores et maxime est illum.
+                example: Suscipit dolore commodi ut ducimus nobis eaque.
             package_title:
                 type: string
-                example: Vel et.
+                example: Temporibus vel recusandae laudantium consequuntur voluptas.
             package_url:
                 type: string
-                example: Temporibus vel recusandae laudantium consequuntur voluptas.
+                example: Ut accusantium ex dolorem repellendus.
             tool_names:
                 type: array
                 items:
                     type: string
-                    example: Facilis facilis voluptate voluptatem vero.
+                    example: Voluptatem vero maiores inventore a atque et.
                 example:
-                    - A atque et quam voluptatem nesciunt omnis.
-                    - Quo enim vero facere incidunt.
+                    - Nesciunt omnis aliquam quo.
+                    - Vero facere incidunt.
             version:
                 type: string
-                example: Consequatur quo deserunt ab eveniet commodi.
+                example: Doloremque ipsum.
             version_created_at:
                 type: string
-                example: "2012-08-01T04:05:58Z"
+                example: "1987-09-21T05:11:14Z"
                 format: date-time
         example:
             package_id: Veritatis dolorem quod iusto pariatur totam.
@@ -21814,14 +21911,14 @@ definitions:
         properties:
             created_at:
                 type: string
-                example: "1972-09-20T04:53:08Z"
+                example: "2000-02-03T04:46:05Z"
                 format: date-time
             version:
                 type: string
-                example: Similique tempore minima at sequi nemo.
+                example: Illum enim molestias sint beatae.
         example:
-            created_at: "1995-11-18T15:32:57Z"
-            version: Et et consequatur rerum ut est magni.
+            created_at: "1994-06-26T21:35:51Z"
+            version: Porro est ratione possimus.
         required:
             - version
             - created_at
@@ -21848,18 +21945,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request is invalid (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: false
         required:
             - name
@@ -21898,12 +21995,12 @@ definitions:
                 example: false
         description: resource already exists (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: true
+            temporary: false
+            timeout: false
         required:
             - name
             - id
@@ -21934,14 +22031,14 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
         description: permission denied (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -21961,7 +22058,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -21984,7 +22081,7 @@ definitions:
                 example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
@@ -22004,7 +22101,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -22020,18 +22117,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: request contains one or more invalidation fields (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: true
         required:
             - name
@@ -22047,49 +22144,6 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
-            id:
-                type: string
-                description: ID is a unique identifier for this particular occurrence of the problem.
-                example: 123abc
-            message:
-                type: string
-                description: Message is a human-readable explanation specific to this occurrence of the problem.
-                example: parameter 'p' must be an integer
-            name:
-                type: string
-                description: Name is the name of this class of errors.
-                example: bad_request
-            temporary:
-                type: boolean
-                description: Is the error temporary?
-                example: false
-            timeout:
-                type: boolean
-                description: Is the error a timeout?
-                example: false
-        description: an unexpected error occurred (default view)
-        example:
-            fault: true
-            id: 123abc
-            message: parameter 'p' must be an integer
-            name: bad_request
-            temporary: true
-            timeout: true
-        required:
-            - name
-            - id
-            - message
-            - temporary
-            - timeout
-            - fault
-    IntegrationsGetNotFoundResponseBody:
-        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
-        type: object
-        properties:
-            fault:
-                type: boolean
-                description: Is the error a server-side fault?
                 example: true
             id:
                 type: string
@@ -22110,6 +22164,49 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
+                example: true
+        description: an unexpected error occurred (default view)
+        example:
+            fault: false
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: false
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    IntegrationsGetNotFoundResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: false
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: true
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
                 example: false
         description: resource not found (default view)
         example:
@@ -22117,8 +22214,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -22149,19 +22246,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: unauthorized access (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -22219,7 +22316,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -22242,12 +22339,12 @@ definitions:
                 example: false
         description: unsupported media type (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -24881,7 +24978,7 @@ definitions:
                       deployment_id: Laudantium eos.
                       description: Itaque velit sint perferendis dolor ipsum vel.
                       http_method: Nemo cumque reprehenderit.
-                      id: Ratione reprehenderit et.
+                      id: Reprehenderit et.
                       name: Recusandae ratione est non repellendus quis tempore.
                       openapiv3_document_id: Aut est consequatur quo.
                       openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -24908,6 +25005,7 @@ definitions:
                         - In a voluptates eligendi occaecati voluptatem.
                         - Suscipit quibusdam rerum soluta et rerum.
                         - Rerum quidem aspernatur repellendus.
+                      tool_type: http
                       updated_at: "1998-05-18T04:17:44Z"
                       variation:
                         confirm: Et voluptatem quam beatae dolorem.
@@ -24943,7 +25041,7 @@ definitions:
                       deployment_id: Laudantium eos.
                       description: Itaque velit sint perferendis dolor ipsum vel.
                       http_method: Nemo cumque reprehenderit.
-                      id: Ratione reprehenderit et.
+                      id: Reprehenderit et.
                       name: Recusandae ratione est non repellendus quis tempore.
                       openapiv3_document_id: Aut est consequatur quo.
                       openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -24970,6 +25068,7 @@ definitions:
                         - In a voluptates eligendi occaecati voluptatem.
                         - Suscipit quibusdam rerum soluta et rerum.
                         - Rerum quidem aspernatur repellendus.
+                      tool_type: http
                       updated_at: "1998-05-18T04:17:44Z"
                       variation:
                         confirm: Et voluptatem quam beatae dolorem.
@@ -25005,7 +25104,7 @@ definitions:
                       deployment_id: Laudantium eos.
                       description: Itaque velit sint perferendis dolor ipsum vel.
                       http_method: Nemo cumque reprehenderit.
-                      id: Ratione reprehenderit et.
+                      id: Reprehenderit et.
                       name: Recusandae ratione est non repellendus quis tempore.
                       openapiv3_document_id: Aut est consequatur quo.
                       openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -25032,6 +25131,7 @@ definitions:
                         - In a voluptates eligendi occaecati voluptatem.
                         - Suscipit quibusdam rerum soluta et rerum.
                         - Rerum quidem aspernatur repellendus.
+                      tool_type: http
                       updated_at: "1998-05-18T04:17:44Z"
                       variation:
                         confirm: Et voluptatem quam beatae dolorem.
@@ -25067,7 +25167,7 @@ definitions:
                       deployment_id: Laudantium eos.
                       description: Itaque velit sint perferendis dolor ipsum vel.
                       http_method: Nemo cumque reprehenderit.
-                      id: Ratione reprehenderit et.
+                      id: Reprehenderit et.
                       name: Recusandae ratione est non repellendus quis tempore.
                       openapiv3_document_id: Aut est consequatur quo.
                       openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -25094,6 +25194,7 @@ definitions:
                         - In a voluptates eligendi occaecati voluptatem.
                         - Suscipit quibusdam rerum soluta et rerum.
                         - Rerum quidem aspernatur repellendus.
+                      tool_type: http
                       updated_at: "1998-05-18T04:17:44Z"
                       variation:
                         confirm: Et voluptatem quam beatae dolorem.
@@ -25132,7 +25233,7 @@ definitions:
                   deployment_id: Laudantium eos.
                   description: Itaque velit sint perferendis dolor ipsum vel.
                   http_method: Nemo cumque reprehenderit.
-                  id: Ratione reprehenderit et.
+                  id: Reprehenderit et.
                   name: Recusandae ratione est non repellendus quis tempore.
                   openapiv3_document_id: Aut est consequatur quo.
                   openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -25159,6 +25260,7 @@ definitions:
                     - In a voluptates eligendi occaecati voluptatem.
                     - Suscipit quibusdam rerum soluta et rerum.
                     - Rerum quidem aspernatur repellendus.
+                  tool_type: http
                   updated_at: "1998-05-18T04:17:44Z"
                   variation:
                     confirm: Et voluptatem quam beatae dolorem.
@@ -25194,7 +25296,7 @@ definitions:
                   deployment_id: Laudantium eos.
                   description: Itaque velit sint perferendis dolor ipsum vel.
                   http_method: Nemo cumque reprehenderit.
-                  id: Ratione reprehenderit et.
+                  id: Reprehenderit et.
                   name: Recusandae ratione est non repellendus quis tempore.
                   openapiv3_document_id: Aut est consequatur quo.
                   openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -25221,6 +25323,7 @@ definitions:
                     - In a voluptates eligendi occaecati voluptatem.
                     - Suscipit quibusdam rerum soluta et rerum.
                     - Rerum quidem aspernatur repellendus.
+                  tool_type: http
                   updated_at: "1998-05-18T04:17:44Z"
                   variation:
                     confirm: Et voluptatem quam beatae dolorem.
@@ -25256,7 +25359,7 @@ definitions:
                   deployment_id: Laudantium eos.
                   description: Itaque velit sint perferendis dolor ipsum vel.
                   http_method: Nemo cumque reprehenderit.
-                  id: Ratione reprehenderit et.
+                  id: Reprehenderit et.
                   name: Recusandae ratione est non repellendus quis tempore.
                   openapiv3_document_id: Aut est consequatur quo.
                   openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -25283,6 +25386,7 @@ definitions:
                     - In a voluptates eligendi occaecati voluptatem.
                     - Suscipit quibusdam rerum soluta et rerum.
                     - Rerum quidem aspernatur repellendus.
+                  tool_type: http
                   updated_at: "1998-05-18T04:17:44Z"
                   variation:
                     confirm: Et voluptatem quam beatae dolorem.
@@ -25311,35 +25415,31 @@ definitions:
                     $ref: '#/definitions/ToolsetEntry'
                 description: The list of toolsets
                 example:
-                    - created_at: "1973-01-29T04:45:14Z"
-                      custom_domain_id: Voluptatem quia quia architecto quia ut.
+                    - created_at: "1990-11-19T02:53:46Z"
+                      custom_domain_id: Voluptas asperiores voluptatem quia quia.
                       default_environment_slug: n90
                       description: At commodi maiores.
                       http_tools:
-                        - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                          name: Magni quia alias deserunt aperiam distinctio.
-                        - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                          name: Magni quia alias deserunt aperiam distinctio.
+                        - id: Omnis molestiae.
+                          name: Temporibus possimus voluptatem quo magni quia alias.
+                          tool_type: http
+                        - id: Omnis molestiae.
+                          name: Temporibus possimus voluptatem quo magni quia alias.
+                          tool_type: http
                       id: Consequatur velit rerum dicta qui.
                       mcp_enabled: true
                       mcp_is_public: false
-                      mcp_slug: q3q
+                      mcp_slug: 8rq
                       name: Repellendus iste.
                       organization_id: Aut similique.
                       project_id: Ab quis neque ab.
                       prompt_templates:
-                        - id: Similique enim quis accusamus distinctio modi nobis.
-                          kind: Est dolorem corporis qui provident.
-                          name: 1c6
-                        - id: Similique enim quis accusamus distinctio modi nobis.
-                          kind: Est dolorem corporis qui provident.
-                          name: 1c6
-                        - id: Similique enim quis accusamus distinctio modi nobis.
-                          kind: Est dolorem corporis qui provident.
-                          name: 1c6
-                        - id: Similique enim quis accusamus distinctio modi nobis.
-                          kind: Est dolorem corporis qui provident.
-                          name: 1c6
+                        - id: Distinctio laborum tempora similique enim quis accusamus.
+                          kind: Beatae veniam laboriosam est dolorem corporis.
+                          name: hdl
+                        - id: Distinctio laborum tempora similique enim quis accusamus.
+                          kind: Beatae veniam laboriosam est dolorem corporis.
+                          name: hdl
                       security_variables:
                         - bearer_format: Et impedit reprehenderit.
                           env_variables:
@@ -25607,36 +25707,32 @@ definitions:
                             - Atque dolores tenetur vel sed distinctio voluptates.
                             - Sequi veniam officia.
                       slug: t4v
-                      updated_at: "2015-04-25T03:10:25Z"
-                    - created_at: "1973-01-29T04:45:14Z"
-                      custom_domain_id: Voluptatem quia quia architecto quia ut.
+                      updated_at: "2002-08-22T08:24:07Z"
+                    - created_at: "1990-11-19T02:53:46Z"
+                      custom_domain_id: Voluptas asperiores voluptatem quia quia.
                       default_environment_slug: n90
                       description: At commodi maiores.
                       http_tools:
-                        - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                          name: Magni quia alias deserunt aperiam distinctio.
-                        - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                          name: Magni quia alias deserunt aperiam distinctio.
+                        - id: Omnis molestiae.
+                          name: Temporibus possimus voluptatem quo magni quia alias.
+                          tool_type: http
+                        - id: Omnis molestiae.
+                          name: Temporibus possimus voluptatem quo magni quia alias.
+                          tool_type: http
                       id: Consequatur velit rerum dicta qui.
                       mcp_enabled: true
                       mcp_is_public: false
-                      mcp_slug: q3q
+                      mcp_slug: 8rq
                       name: Repellendus iste.
                       organization_id: Aut similique.
                       project_id: Ab quis neque ab.
                       prompt_templates:
-                        - id: Similique enim quis accusamus distinctio modi nobis.
-                          kind: Est dolorem corporis qui provident.
-                          name: 1c6
-                        - id: Similique enim quis accusamus distinctio modi nobis.
-                          kind: Est dolorem corporis qui provident.
-                          name: 1c6
-                        - id: Similique enim quis accusamus distinctio modi nobis.
-                          kind: Est dolorem corporis qui provident.
-                          name: 1c6
-                        - id: Similique enim quis accusamus distinctio modi nobis.
-                          kind: Est dolorem corporis qui provident.
-                          name: 1c6
+                        - id: Distinctio laborum tempora similique enim quis accusamus.
+                          kind: Beatae veniam laboriosam est dolorem corporis.
+                          name: hdl
+                        - id: Distinctio laborum tempora similique enim quis accusamus.
+                          kind: Beatae veniam laboriosam est dolorem corporis.
+                          name: hdl
                       security_variables:
                         - bearer_format: Et impedit reprehenderit.
                           env_variables:
@@ -25904,38 +26000,34 @@ definitions:
                             - Atque dolores tenetur vel sed distinctio voluptates.
                             - Sequi veniam officia.
                       slug: t4v
-                      updated_at: "2015-04-25T03:10:25Z"
+                      updated_at: "2002-08-22T08:24:07Z"
         example:
             toolsets:
-                - created_at: "1973-01-29T04:45:14Z"
-                  custom_domain_id: Voluptatem quia quia architecto quia ut.
+                - created_at: "1990-11-19T02:53:46Z"
+                  custom_domain_id: Voluptas asperiores voluptatem quia quia.
                   default_environment_slug: n90
                   description: At commodi maiores.
                   http_tools:
-                    - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                      name: Magni quia alias deserunt aperiam distinctio.
-                    - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                      name: Magni quia alias deserunt aperiam distinctio.
+                    - id: Omnis molestiae.
+                      name: Temporibus possimus voluptatem quo magni quia alias.
+                      tool_type: http
+                    - id: Omnis molestiae.
+                      name: Temporibus possimus voluptatem quo magni quia alias.
+                      tool_type: http
                   id: Consequatur velit rerum dicta qui.
                   mcp_enabled: true
                   mcp_is_public: false
-                  mcp_slug: q3q
+                  mcp_slug: 8rq
                   name: Repellendus iste.
                   organization_id: Aut similique.
                   project_id: Ab quis neque ab.
                   prompt_templates:
-                    - id: Similique enim quis accusamus distinctio modi nobis.
-                      kind: Est dolorem corporis qui provident.
-                      name: 1c6
-                    - id: Similique enim quis accusamus distinctio modi nobis.
-                      kind: Est dolorem corporis qui provident.
-                      name: 1c6
-                    - id: Similique enim quis accusamus distinctio modi nobis.
-                      kind: Est dolorem corporis qui provident.
-                      name: 1c6
-                    - id: Similique enim quis accusamus distinctio modi nobis.
-                      kind: Est dolorem corporis qui provident.
-                      name: 1c6
+                    - id: Distinctio laborum tempora similique enim quis accusamus.
+                      kind: Beatae veniam laboriosam est dolorem corporis.
+                      name: hdl
+                    - id: Distinctio laborum tempora similique enim quis accusamus.
+                      kind: Beatae veniam laboriosam est dolorem corporis.
+                      name: hdl
                   security_variables:
                     - bearer_format: Et impedit reprehenderit.
                       env_variables:
@@ -26203,36 +26295,32 @@ definitions:
                         - Atque dolores tenetur vel sed distinctio voluptates.
                         - Sequi veniam officia.
                   slug: t4v
-                  updated_at: "2015-04-25T03:10:25Z"
-                - created_at: "1973-01-29T04:45:14Z"
-                  custom_domain_id: Voluptatem quia quia architecto quia ut.
+                  updated_at: "2002-08-22T08:24:07Z"
+                - created_at: "1990-11-19T02:53:46Z"
+                  custom_domain_id: Voluptas asperiores voluptatem quia quia.
                   default_environment_slug: n90
                   description: At commodi maiores.
                   http_tools:
-                    - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                      name: Magni quia alias deserunt aperiam distinctio.
-                    - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                      name: Magni quia alias deserunt aperiam distinctio.
+                    - id: Omnis molestiae.
+                      name: Temporibus possimus voluptatem quo magni quia alias.
+                      tool_type: http
+                    - id: Omnis molestiae.
+                      name: Temporibus possimus voluptatem quo magni quia alias.
+                      tool_type: http
                   id: Consequatur velit rerum dicta qui.
                   mcp_enabled: true
                   mcp_is_public: false
-                  mcp_slug: q3q
+                  mcp_slug: 8rq
                   name: Repellendus iste.
                   organization_id: Aut similique.
                   project_id: Ab quis neque ab.
                   prompt_templates:
-                    - id: Similique enim quis accusamus distinctio modi nobis.
-                      kind: Est dolorem corporis qui provident.
-                      name: 1c6
-                    - id: Similique enim quis accusamus distinctio modi nobis.
-                      kind: Est dolorem corporis qui provident.
-                      name: 1c6
-                    - id: Similique enim quis accusamus distinctio modi nobis.
-                      kind: Est dolorem corporis qui provident.
-                      name: 1c6
-                    - id: Similique enim quis accusamus distinctio modi nobis.
-                      kind: Est dolorem corporis qui provident.
-                      name: 1c6
+                    - id: Distinctio laborum tempora similique enim quis accusamus.
+                      kind: Beatae veniam laboriosam est dolorem corporis.
+                      name: hdl
+                    - id: Distinctio laborum tempora similique enim quis accusamus.
+                      kind: Beatae veniam laboriosam est dolorem corporis.
+                      name: hdl
                   security_variables:
                     - bearer_format: Et impedit reprehenderit.
                       env_variables:
@@ -26500,7 +26588,7 @@ definitions:
                         - Atque dolores tenetur vel sed distinctio voluptates.
                         - Sequi veniam officia.
                   slug: t4v
-                  updated_at: "2015-04-25T03:10:25Z"
+                  updated_at: "2002-08-22T08:24:07Z"
         required:
             - toolsets
     ListVariationsResult:
@@ -30907,12 +30995,12 @@ definitions:
             created_at:
                 type: string
                 description: The creation date of the prompt template.
-                example: "1995-07-14T01:41:08Z"
+                example: "1990-05-09T04:31:01Z"
                 format: date-time
             description:
                 type: string
                 description: The description of the prompt template
-                example: Similique quia dolorum natus quam excepturi.
+                example: Non at quis inventore assumenda quia.
             engine:
                 type: string
                 description: The template engine
@@ -30922,64 +31010,64 @@ definitions:
             history_id:
                 type: string
                 description: The revision tree ID for the prompt template
-                example: Aut omnis et praesentium.
+                example: Dolorum natus quam.
             id:
                 type: string
                 description: The ID of the prompt template
-                example: Quam ipsa consectetur autem.
+                example: Consequatur molestiae est ut molestiae quaerat similique.
             kind:
                 type: string
                 description: The kind of prompt the template is used for
-                example: prompt
+                example: higher_order_tool
                 enum:
                     - prompt
                     - higher_order_tool
             name:
                 type: string
                 description: The name of the prompt template
-                example: ewd
+                example: se1
                 pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
             predecessor_id:
                 type: string
                 description: The previous version of the prompt template to use as predecessor
-                example: Possimus aliquid.
+                example: Consequatur dolores est perspiciatis doloribus nihil.
             prompt:
                 type: string
                 description: The template content
-                example: Vitae enim consequatur molestiae est ut molestiae.
+                example: Assumenda eaque.
             tools_hint:
                 type: array
                 items:
                     type: string
-                    example: Ea dignissimos.
+                    example: Atque enim consequatur eum quaerat dolore.
                 description: The suggested tool names associated with the prompt template
                 example:
-                    - Quasi aliquid hic.
-                    - Ut beatae.
-                    - Dolorem in sequi in vel.
+                    - Aperiam repellendus est.
+                    - Non quae dolores delectus consectetur doloremque et.
+                    - Error ut minus dolor.
                 maxItems: 20
             updated_at:
                 type: string
                 description: The last update date of the prompt template.
-                example: "2004-04-29T06:13:00Z"
+                example: "1986-01-03T06:26:35Z"
                 format: date-time
         example:
             arguments: '{"name":"example","email":"mail@example.com"}'
-            created_at: "1979-07-08T20:54:34Z"
-            description: Quidem aut velit cum ratione ad.
+            created_at: "2000-07-13T22:31:41Z"
+            description: Eum nihil ducimus eos laborum qui sed.
             engine: mustache
-            history_id: Et illum quaerat unde officiis.
-            id: Alias ut dignissimos quasi.
+            history_id: Pariatur deleniti nihil et.
+            id: Voluptatum quidem aut velit cum ratione.
             kind: higher_order_tool
-            name: wqp
-            predecessor_id: Et eius voluptates officiis nostrum.
-            prompt: Libero molestias odio non soluta accusantium nemo.
+            name: 97t
+            predecessor_id: Aut ullam non.
+            prompt: Et voluptates voluptatem repudiandae nemo aut dolorum.
             tools_hint:
-                - Doloribus in animi excepturi quia itaque.
-                - Labore in harum.
-                - Nesciunt amet.
-            updated_at: "1970-04-29T04:58:38Z"
+                - Sint vero dolorum rem consequatur omnis.
+                - Optio doloribus.
+                - Sunt id facilis dicta.
+            updated_at: "1973-04-21T04:51:52Z"
         required:
             - id
             - history_id
@@ -30997,19 +31085,19 @@ definitions:
             id:
                 type: string
                 description: The ID of the prompt template
-                example: Dicta deserunt.
+                example: Id qui omnis consequatur ipsa.
             kind:
                 type: string
                 description: The kind of the prompt template
-                example: Est possimus sunt suscipit minima iusto.
+                example: Iusto voluptas voluptas eos quam.
             name:
                 type: string
                 description: The name of the prompt template
-                example: uxs
+                example: aiw
                 pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
                 maxLength: 40
         example:
-            id: Voluptas eos quam porro sed quod officia.
+            id: Sed quod officia.
             kind: Modi ut tenetur quia est perspiciatis.
             name: ntk
         required:
@@ -31081,37 +31169,39 @@ definitions:
                 type: array
                 items:
                     type: string
-                    example: Culpa est non quia dolore modi autem.
+                    example: Dolorum accusamus.
                 description: Content types to filter for
                 example:
-                    - Tempore at.
-                    - Est dolorum accusamus totam et perferendis debitis.
+                    - Perferendis debitis aut.
+                    - Sit et nihil harum sequi non quisquam.
+                    - Rem voluptatem illum.
             status_codes:
                 type: array
                 items:
                     type: string
-                    example: Aut molestiae repellendus et.
+                    example: Doloribus pariatur et omnis.
                 description: Status codes to filter for
                 example:
-                    - Natus iure dolorum molestiae rerum ipsa.
-                    - Aspernatur libero.
+                    - Molestiae repellendus et consequatur ut natus iure.
+                    - Molestiae rerum ipsa qui aspernatur libero.
+                    - Culpa est non quia dolore modi autem.
+                    - Ab tempore at sed.
             type:
                 type: string
                 description: Response filter type for the tool
-                example: Doloribus pariatur et omnis.
+                example: Tempore non totam totam.
         description: Response filter metadata for the tool
         example:
             content_types:
+                - Minus modi.
+                - Voluptas qui nesciunt aspernatur.
+                - Sit facilis officiis eum voluptates aut.
+            status_codes:
+                - Enim dolores laudantium.
+                - Esse consequatur et.
                 - Quisquam facere.
                 - Voluptatibus magnam sint occaecati quo aut.
-                - Cumque minus modi repellat voluptas.
-                - Nesciunt aspernatur qui sit facilis officiis.
-            status_codes:
-                - Non quisquam corrupti rem voluptatem illum numquam.
-                - Rem molestiae.
-                - Temporibus deleniti voluptatem.
-                - Beatae enim dolores laudantium pariatur esse consequatur.
-            type: Quia sit et nihil.
+            type: Autem rem molestiae rerum temporibus deleniti voluptatem.
         required:
             - type
             - status_codes
@@ -31123,98 +31213,91 @@ definitions:
             bearer_format:
                 type: string
                 description: The bearer format
-                example: Iusto dolorem dolorum.
+                example: Dolor nam eum.
             env_variables:
                 type: array
                 items:
                     type: string
-                    example: Mollitia non praesentium eos hic sapiente accusamus.
+                    example: Sed optio quidem rem aut assumenda earum.
                 description: The environment variables
                 example:
-                    - Provident tempora.
-                    - Et adipisci sed ratione.
+                    - Ea consequatur adipisci molestiae voluptatem.
+                    - Sed quia et sint corporis velit.
+                    - Ipsum architecto sed necessitatibus sit eligendi.
+                    - Sint rerum maiores autem.
             in_placement:
                 type: string
                 description: Where the security token is placed
-                example: Exercitationem voluptas consequatur nisi quia amet voluptates.
+                example: Ut fuga.
             name:
                 type: string
                 description: The name of the security scheme
-                example: Praesentium aspernatur veritatis qui.
+                example: Sint sint animi quisquam quia.
             oauth_flows:
                 type: string
                 description: The OAuth flows
                 example:
-                    - 68
-                    - 111
-                    - 108
-                    - 111
-                    - 114
-                    - 32
-                    - 110
-                    - 97
-                    - 109
+                    - 81
+                    - 117
+                    - 105
                     - 32
                     - 101
-                    - 117
-                    - 109
+                    - 108
+                    - 105
+                    - 103
+                    - 101
+                    - 110
+                    - 100
+                    - 105
                     - 46
                 format: byte
             oauth_types:
                 type: array
                 items:
                     type: string
-                    example: Fugit commodi aspernatur.
+                    example: Mollitia non praesentium eos hic sapiente accusamus.
                 description: The OAuth types
                 example:
-                    - Sint animi.
-                    - Quia aspernatur ut fuga.
-                    - Et earum sed neque.
+                    - Provident tempora.
+                    - Et adipisci sed ratione.
             scheme:
                 type: string
                 description: The security scheme
-                example: Quos molestiae maxime sed qui quis.
+                example: Et earum sed neque.
             type:
                 type: string
                 description: The type of security
-                example: Porro quo perferendis et molestiae.
+                example: Fugit commodi aspernatur.
         example:
-            bearer_format: Sed quia et sint corporis velit.
+            bearer_format: Dolorem voluptatem eaque.
             env_variables:
-                - Pariatur ipsa dolorem.
-                - Eaque consectetur eligendi aspernatur ratione eos.
-            in_placement: Culpa ea consequatur.
-            name: Sed optio quidem rem aut assumenda earum.
+                - Consequatur officiis magnam blanditiis sed libero sint.
+                - Voluptatibus voluptate commodi unde quis est.
+                - Soluta dicta autem.
+            in_placement: Dolorem laboriosam et.
+            name: Ab eligendi voluptas possimus.
             oauth_flows:
-                - 68
-                - 111
-                - 108
-                - 111
-                - 114
-                - 101
-                - 109
-                - 32
-                - 108
+                - 76
                 - 97
                 - 98
                 - 111
                 - 114
-                - 105
-                - 111
-                - 115
-                - 97
+                - 117
                 - 109
                 - 32
-                - 101
-                - 116
+                - 97
+                - 108
+                - 105
+                - 113
+                - 117
+                - 105
+                - 100
                 - 46
             oauth_types:
-                - Architecto sed necessitatibus sit eligendi.
-                - Sint rerum maiores autem.
-                - Quam maxime et velit voluptatem.
-                - Ab eligendi voluptas possimus.
-            scheme: Molestiae voluptatem.
-            type: Qui eligendi.
+                - Aspernatur ratione eos aut sit excepturi.
+                - Voluptas vero asperiores ea beatae.
+            scheme: Ipsa pariatur.
+            type: Quam maxime et velit voluptatem.
         required:
             - name
             - in_placement
@@ -31227,24 +31310,23 @@ definitions:
             description:
                 type: string
                 description: Description of the server variable
-                example: Excepturi est voluptas vero asperiores.
+                example: Est vel quidem voluptate minima nulla.
             env_variables:
                 type: array
                 items:
                     type: string
-                    example: Beatae earum laborum.
+                    example: Eveniet inventore.
                 description: The environment variables
                 example:
-                    - Itaque consequatur officiis.
-                    - Blanditiis sed libero sint est voluptatibus voluptate.
-                    - Unde quis est dolore soluta.
+                    - Harum iste.
+                    - Officiis voluptas quod.
+                    - Explicabo modi assumenda modi voluptas fugit quo.
+                    - Dolor ea hic error nobis molestias dolore.
         example:
-            description: Autem repellat voluptatibus est vel.
+            description: Maiores rerum perspiciatis dolorum.
             env_variables:
-                - Minima nulla et eveniet.
-                - Voluptatem velit harum iste.
-                - Officiis voluptas quod.
-                - Explicabo modi assumenda modi voluptas fugit quo.
+                - Voluptatem occaecati vel nulla aut vero vitae.
+                - Aspernatur corporis consequatur.
         required:
             - description
             - env_variables
@@ -36716,72 +36798,74 @@ definitions:
             confirm:
                 type: string
                 description: The confirmation mode for the tool variation
-                example: Voluptatem sit blanditiis aut vel laborum alias.
+                example: Quo et.
             confirm_prompt:
                 type: string
                 description: The confirmation prompt for the tool variation
-                example: Et ipsam rerum.
+                example: Rerum fugiat dolor dolore sint.
             created_at:
                 type: string
                 description: The creation date of the tool variation
-                example: Et qui ut omnis consequuntur dolor.
+                example: Quod labore velit neque qui.
             description:
                 type: string
                 description: The description of the tool variation
-                example: Et in officiis ab.
+                example: Vero possimus quia nihil harum.
             group_id:
                 type: string
                 description: The ID of the tool variation group
-                example: Ullam similique iure eaque consequatur.
+                example: Totam voluptatem sit blanditiis.
             id:
                 type: string
                 description: The ID of the tool variation
-                example: Minima perspiciatis totam consequatur doloremque rerum.
+                example: Est consequatur quis sed numquam.
             name:
                 type: string
                 description: The name of the tool variation
-                example: Dolor dolore.
+                example: Qui vel maiores voluptatem et.
             src_tool_name:
                 type: string
                 description: The name of the source tool
-                example: Consequatur quis sed numquam aperiam.
+                example: Vel laborum.
             summarizer:
                 type: string
                 description: The summarizer of the tool variation
-                example: Eum id et est tempore.
+                example: Veritatis laudantium sequi accusamus est aliquam aut.
             summary:
                 type: string
                 description: The summary of the tool variation
-                example: Ipsam qui vel maiores.
+                example: Officiis ab aut nostrum iusto.
             tags:
                 type: array
                 items:
                     type: string
-                    example: Nostrum iusto similique vero possimus quia.
+                    example: Est dolorem non.
                 description: The tags of the tool variation
                 example:
-                    - Unde est dolorem non et ab.
-                    - Illo et.
+                    - Sint illo et reiciendis eum.
+                    - Et est tempore beatae et.
+                    - Ut omnis consequuntur dolor et consequatur id.
+                    - Temporibus qui.
             updated_at:
                 type: string
                 description: The last update date of the tool variation
-                example: Consequatur id perferendis temporibus qui.
+                example: Qui eaque necessitatibus pariatur nisi dolorem perspiciatis.
         example:
-            confirm: Animi et quaerat.
-            confirm_prompt: Nam et et sunt nemo est.
-            created_at: Esse eum.
-            description: Ea sunt et quae.
-            group_id: Quod labore velit neque qui.
-            id: Veritatis laudantium sequi accusamus est aliquam aut.
-            name: Provident asperiores.
-            src_tool_name: Qui eaque necessitatibus pariatur nisi dolorem perspiciatis.
-            summarizer: Natus nisi voluptatem quo impedit magnam.
-            summary: Magnam autem omnis.
+            confirm: Magnam autem omnis.
+            confirm_prompt: Ea sunt et quae.
+            created_at: Quia mollitia incidunt.
+            description: Enim consectetur.
+            group_id: Nam et et sunt nemo est.
+            id: Animi et quaerat.
+            name: Iusto neque.
+            src_tool_name: Provident asperiores.
+            summarizer: Provident necessitatibus ut est magni.
+            summary: Qui perferendis.
             tags:
-                - Neque quia.
-                - Perferendis dolores enim.
-                - Consequatur cum qui labore.
-            updated_at: Provident necessitatibus ut est magni.
+                - Qui labore.
+                - Natus nisi voluptatem quo impedit magnam.
+                - Esse eum.
+            updated_at: Non aut porro dolorem perferendis.
         required:
             - id
             - group_id
@@ -37268,7 +37352,7 @@ definitions:
                       deployment_id: Laudantium eos.
                       description: Itaque velit sint perferendis dolor ipsum vel.
                       http_method: Nemo cumque reprehenderit.
-                      id: Ratione reprehenderit et.
+                      id: Reprehenderit et.
                       name: Recusandae ratione est non repellendus quis tempore.
                       openapiv3_document_id: Aut est consequatur quo.
                       openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -37295,6 +37379,7 @@ definitions:
                         - In a voluptates eligendi occaecati voluptatem.
                         - Suscipit quibusdam rerum soluta et rerum.
                         - Rerum quidem aspernatur repellendus.
+                      tool_type: http
                       updated_at: "1998-05-18T04:17:44Z"
                       variation:
                         confirm: Et voluptatem quam beatae dolorem.
@@ -37330,7 +37415,7 @@ definitions:
                       deployment_id: Laudantium eos.
                       description: Itaque velit sint perferendis dolor ipsum vel.
                       http_method: Nemo cumque reprehenderit.
-                      id: Ratione reprehenderit et.
+                      id: Reprehenderit et.
                       name: Recusandae ratione est non repellendus quis tempore.
                       openapiv3_document_id: Aut est consequatur quo.
                       openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -37357,6 +37442,7 @@ definitions:
                         - In a voluptates eligendi occaecati voluptatem.
                         - Suscipit quibusdam rerum soluta et rerum.
                         - Rerum quidem aspernatur repellendus.
+                      tool_type: http
                       updated_at: "1998-05-18T04:17:44Z"
                       variation:
                         confirm: Et voluptatem quam beatae dolorem.
@@ -37392,7 +37478,7 @@ definitions:
                       deployment_id: Laudantium eos.
                       description: Itaque velit sint perferendis dolor ipsum vel.
                       http_method: Nemo cumque reprehenderit.
-                      id: Ratione reprehenderit et.
+                      id: Reprehenderit et.
                       name: Recusandae ratione est non repellendus quis tempore.
                       openapiv3_document_id: Aut est consequatur quo.
                       openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -37419,6 +37505,7 @@ definitions:
                         - In a voluptates eligendi occaecati voluptatem.
                         - Suscipit quibusdam rerum soluta et rerum.
                         - Rerum quidem aspernatur repellendus.
+                      tool_type: http
                       updated_at: "1998-05-18T04:17:44Z"
                       variation:
                         confirm: Et voluptatem quam beatae dolorem.
@@ -37698,7 +37785,7 @@ definitions:
                   deployment_id: Laudantium eos.
                   description: Itaque velit sint perferendis dolor ipsum vel.
                   http_method: Nemo cumque reprehenderit.
-                  id: Ratione reprehenderit et.
+                  id: Reprehenderit et.
                   name: Recusandae ratione est non repellendus quis tempore.
                   openapiv3_document_id: Aut est consequatur quo.
                   openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -37725,6 +37812,7 @@ definitions:
                     - In a voluptates eligendi occaecati voluptatem.
                     - Suscipit quibusdam rerum soluta et rerum.
                     - Rerum quidem aspernatur repellendus.
+                  tool_type: http
                   updated_at: "1998-05-18T04:17:44Z"
                   variation:
                     confirm: Et voluptatem quam beatae dolorem.
@@ -37760,7 +37848,7 @@ definitions:
                   deployment_id: Laudantium eos.
                   description: Itaque velit sint perferendis dolor ipsum vel.
                   http_method: Nemo cumque reprehenderit.
-                  id: Ratione reprehenderit et.
+                  id: Reprehenderit et.
                   name: Recusandae ratione est non repellendus quis tempore.
                   openapiv3_document_id: Aut est consequatur quo.
                   openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -37787,6 +37875,7 @@ definitions:
                     - In a voluptates eligendi occaecati voluptatem.
                     - Suscipit quibusdam rerum soluta et rerum.
                     - Rerum quidem aspernatur repellendus.
+                  tool_type: http
                   updated_at: "1998-05-18T04:17:44Z"
                   variation:
                     confirm: Et voluptatem quam beatae dolorem.
@@ -37822,7 +37911,7 @@ definitions:
                   deployment_id: Laudantium eos.
                   description: Itaque velit sint perferendis dolor ipsum vel.
                   http_method: Nemo cumque reprehenderit.
-                  id: Ratione reprehenderit et.
+                  id: Reprehenderit et.
                   name: Recusandae ratione est non repellendus quis tempore.
                   openapiv3_document_id: Aut est consequatur quo.
                   openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -37849,6 +37938,7 @@ definitions:
                     - In a voluptates eligendi occaecati voluptatem.
                     - Suscipit quibusdam rerum soluta et rerum.
                     - Rerum quidem aspernatur repellendus.
+                  tool_type: http
                   updated_at: "1998-05-18T04:17:44Z"
                   variation:
                     confirm: Et voluptatem quam beatae dolorem.
@@ -37884,7 +37974,7 @@ definitions:
                   deployment_id: Laudantium eos.
                   description: Itaque velit sint perferendis dolor ipsum vel.
                   http_method: Nemo cumque reprehenderit.
-                  id: Ratione reprehenderit et.
+                  id: Reprehenderit et.
                   name: Recusandae ratione est non repellendus quis tempore.
                   openapiv3_document_id: Aut est consequatur quo.
                   openapiv3_operation: Dolor voluptas et earum ad debitis mollitia.
@@ -37911,6 +38001,7 @@ definitions:
                     - In a voluptates eligendi occaecati voluptatem.
                     - Suscipit quibusdam rerum soluta et rerum.
                     - Rerum quidem aspernatur repellendus.
+                  tool_type: http
                   updated_at: "1998-05-18T04:17:44Z"
                   variation:
                     confirm: Et voluptatem quam beatae dolorem.
@@ -38227,14 +38318,12 @@ definitions:
                     $ref: '#/definitions/HTTPToolDefinitionEntry'
                 description: The HTTP tools in this toolset
                 example:
-                    - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                      name: Magni quia alias deserunt aperiam distinctio.
-                    - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                      name: Magni quia alias deserunt aperiam distinctio.
-                    - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                      name: Magni quia alias deserunt aperiam distinctio.
-                    - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                      name: Magni quia alias deserunt aperiam distinctio.
+                    - id: Omnis molestiae.
+                      name: Temporibus possimus voluptatem quo magni quia alias.
+                      tool_type: http
+                    - id: Omnis molestiae.
+                      name: Temporibus possimus voluptatem quo magni quia alias.
+                      tool_type: http
             id:
                 type: string
                 description: The ID of the toolset
@@ -38271,12 +38360,12 @@ definitions:
                     $ref: '#/definitions/PromptTemplateEntry'
                 description: The prompt templates in this toolset
                 example:
-                    - id: Similique enim quis accusamus distinctio modi nobis.
-                      kind: Est dolorem corporis qui provident.
-                      name: 1c6
-                    - id: Similique enim quis accusamus distinctio modi nobis.
-                      kind: Est dolorem corporis qui provident.
-                      name: 1c6
+                    - id: Distinctio laborum tempora similique enim quis accusamus.
+                      kind: Beatae veniam laboriosam est dolorem corporis.
+                      name: hdl
+                    - id: Distinctio laborum tempora similique enim quis accusamus.
+                      kind: Beatae veniam laboriosam est dolorem corporis.
+                      name: hdl
             security_variables:
                 type: array
                 items:
@@ -38450,12 +38539,15 @@ definitions:
             default_environment_slug: ven
             description: Et rem nostrum accusamus in impedit in.
             http_tools:
-                - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                  name: Magni quia alias deserunt aperiam distinctio.
-                - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                  name: Magni quia alias deserunt aperiam distinctio.
-                - id: Sit omnis molestiae dolor temporibus possimus voluptatem.
-                  name: Magni quia alias deserunt aperiam distinctio.
+                - id: Omnis molestiae.
+                  name: Temporibus possimus voluptatem quo magni quia alias.
+                  tool_type: http
+                - id: Omnis molestiae.
+                  name: Temporibus possimus voluptatem quo magni quia alias.
+                  tool_type: http
+                - id: Omnis molestiae.
+                  name: Temporibus possimus voluptatem quo magni quia alias.
+                  tool_type: http
             id: Sequi beatae sit adipisci sint.
             mcp_enabled: false
             mcp_is_public: true
@@ -38464,12 +38556,12 @@ definitions:
             organization_id: Debitis rerum mollitia tempora necessitatibus.
             project_id: Sapiente et aperiam voluptates reiciendis quia pariatur.
             prompt_templates:
-                - id: Similique enim quis accusamus distinctio modi nobis.
-                  kind: Est dolorem corporis qui provident.
-                  name: 1c6
-                - id: Similique enim quis accusamus distinctio modi nobis.
-                  kind: Est dolorem corporis qui provident.
-                  name: 1c6
+                - id: Distinctio laborum tempora similique enim quis accusamus.
+                  kind: Beatae veniam laboriosam est dolorem corporis.
+                  name: hdl
+                - id: Distinctio laborum tempora similique enim quis accusamus.
+                  kind: Beatae veniam laboriosam est dolorem corporis.
+                  name: hdl
             security_variables:
                 - bearer_format: Et impedit reprehenderit.
                   env_variables:
