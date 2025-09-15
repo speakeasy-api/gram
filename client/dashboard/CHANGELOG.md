@@ -1,5 +1,11 @@
 # @gram/dashboard
 
+## 0.10.0
+
+### Minor Changes
+
+- 25b5d18: Migrate buttons from shadcn to design system component
+
 ## 0.9.3
 
 ### Patch Changes
