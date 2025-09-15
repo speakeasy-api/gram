@@ -205,7 +205,7 @@ export function ToolsetView({
         <Button.LeftIcon>
           <Icon name="plus" className="h-4 w-4" />
         </Button.LeftIcon>
-        <Button.Text>ADD/REMOVE TOOLS</Button.Text>
+        <Button.Text>Add/Remove Tools</Button.Text>
       </Button>
       <MoreActions
         actions={[

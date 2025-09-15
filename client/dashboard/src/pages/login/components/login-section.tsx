@@ -133,7 +133,7 @@ export function LoginSection() {
       )}
 
       <div className="relative z-10">
-        <Button variant="brand" onClick={handleLogin}>LOGIN</Button>
+        <Button variant="brand" onClick={handleLogin}>Login</Button>
       </div>
     </AuthLayout>
   );
@@ -256,7 +256,7 @@ export function RegisterSection() {
             disabled={registerMutation.isPending || !companyName.trim()}
             className="w-full"
           >
-            CREATE ORGANIZATION
+            Create Organization
           </Button>
         </div>
       </form>

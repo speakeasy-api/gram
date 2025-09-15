@@ -128,7 +128,7 @@ function ToolsetsContent({
         <Button.LeftIcon>
           <Plus className="w-4 h-4" />
         </Button.LeftIcon>
-        <Button.Text>ADD TOOLSET</Button.Text>
+        <Button.Text>Add Toolset</Button.Text>
       </Page.Section.CTA>
       <Page.Section.Body>
         <Cards isLoading={toolsets.isLoading}>

@@ -134,11 +134,7 @@ function PageSectionCTA({
   children,
   ...props
 }: { children: React.ReactNode } & React.ComponentProps<typeof Button>) {
-  return (
-    <Button {...props}>
-      {typeof children === 'string' ? children.toUpperCase() : children}
-    </Button>
-  );
+  return <Button {...props}>{children}</Button>;
 }
 
 const PageSection = Object.assign(PageSectionComponent, {
@@ -173,9 +169,7 @@ export function EmptyState({
 
   let CTA: React.ReactNode = (
     <routes.onboarding.Link>
-      <Button size="sm">
-        GET STARTED
-      </Button>
+      <Button size="sm">Get Started</Button>
     </routes.onboarding.Link>
   );
 
