@@ -171,6 +171,33 @@ func (p *ToolExtractor) Do(
 		}
 	}()
 
+	// If we are re-processing a deployment, we need to clear out any existing
+	// tools and security associated with the deployment + document, so we don't
+	// end up with duplicates in the database.
+	deletedTools, err := tx.DangerouslyClearDeploymentTools(ctx, repo.DangerouslyClearDeploymentToolsParams{
+		DeploymentID:        deploymentID,
+		ProjectID:           projectID,
+		Openapiv3DocumentID: openapiDocID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error clearing deployment http tools").Log(ctx, p.logger)
+	}
+	if deletedTools > 0 {
+		logger.InfoContext(ctx, "cleared http tools from previous deployment attempt", attr.SlogDBDeletedRowsCount(deletedTools))
+	}
+
+	deletedSecurity, err := tx.DangerouslyClearDeploymentHTTPSecurity(ctx, repo.DangerouslyClearDeploymentHTTPSecurityParams{
+		DeploymentID:        deploymentID,
+		ProjectID:           uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
+		Openapiv3DocumentID: uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error clearing deployment http tools").Log(ctx, p.logger)
+	}
+	if deletedSecurity > 0 {
+		logger.InfoContext(ctx, "cleared http security from previous deployment attempt", attr.SlogDBDeletedRowsCount(deletedSecurity))
+	}
+
 	rc, err := p.assetStorage.Read(ctx, docURL)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error fetching openapi document").Log(ctx, logger)

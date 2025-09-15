@@ -449,6 +449,50 @@ func (q *Queries) CreateOpenAPIv3ToolDefinition(ctx context.Context, arg CreateO
 	return i, err
 }
 
+const dangerouslyClearDeploymentHTTPSecurity = `-- name: DangerouslyClearDeploymentHTTPSecurity :execrows
+DELETE FROM http_security
+WHERE
+  project_id = $1
+  AND (deployment_id = $2 AND deployment_id IS NOT NULL)
+  AND (openapiv3_document_id = $3 AND openapiv3_document_id IS NOT NULL)
+`
+
+type DangerouslyClearDeploymentHTTPSecurityParams struct {
+	ProjectID           uuid.NullUUID
+	DeploymentID        uuid.UUID
+	Openapiv3DocumentID uuid.NullUUID
+}
+
+func (q *Queries) DangerouslyClearDeploymentHTTPSecurity(ctx context.Context, arg DangerouslyClearDeploymentHTTPSecurityParams) (int64, error) {
+	result, err := q.db.Exec(ctx, dangerouslyClearDeploymentHTTPSecurity, arg.ProjectID, arg.DeploymentID, arg.Openapiv3DocumentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const dangerouslyClearDeploymentTools = `-- name: DangerouslyClearDeploymentTools :execrows
+DELETE FROM http_tool_definitions
+WHERE
+  project_id = $1
+  AND deployment_id = $2
+  AND openapiv3_document_id = $3::uuid
+`
+
+type DangerouslyClearDeploymentToolsParams struct {
+	ProjectID           uuid.UUID
+	DeploymentID        uuid.UUID
+	Openapiv3DocumentID uuid.UUID
+}
+
+func (q *Queries) DangerouslyClearDeploymentTools(ctx context.Context, arg DangerouslyClearDeploymentToolsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, dangerouslyClearDeploymentTools, arg.ProjectID, arg.DeploymentID, arg.Openapiv3DocumentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const describeDeploymentPackages = `-- name: DescribeDeploymentPackages :many
 SELECT 
   deployments_packages.id as deployment_package_id
