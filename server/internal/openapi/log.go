@@ -23,6 +23,7 @@ type LogHandler struct {
 	mut              *sync.Mutex
 	attrDeploymentID uuid.UUID
 	attrProjectID    uuid.UUID
+	attrAssetID      uuid.UUID
 	attrEvent        string
 	buffer           *logBuffer
 	level            slog.Leveler
@@ -37,6 +38,7 @@ func NewLogHandler() *LogHandler {
 		level:            slog.LevelInfo,
 		attrDeploymentID: uuid.Nil,
 		attrProjectID:    uuid.Nil,
+		attrAssetID:      uuid.Nil,
 		attrEvent:        "",
 		buffer:           &logBuffer{msgs: []repo.BatchLogEventsParams{}},
 	}
@@ -53,6 +55,7 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 	event := l.attrEvent
 	projectID := l.attrProjectID
 	deploymentID := l.attrDeploymentID
+	assetID := l.attrAssetID
 
 	record.Attrs(func(a slog.Attr) bool {
 		switch {
@@ -65,6 +68,10 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 		case a.Key == string(attr.DeploymentIDKey) && a.Value.Kind() == slog.KindString:
 			if id, err := uuid.Parse(a.Value.String()); err == nil {
 				deploymentID = id
+			}
+		case a.Key == string(attr.DeploymentOpenAPIIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
+				assetID = id
 			}
 		}
 
@@ -85,6 +92,7 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 		ProjectID:    projectID,
 		Event:        event,
 		Message:      record.Message,
+		AssetID:      uuid.NullUUID{UUID: assetID, Valid: assetID != uuid.Nil},
 	})
 	l.mut.Unlock()
 
@@ -125,6 +133,10 @@ func (l *LogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 		case a.Key == string(attr.DeploymentIDKey) && a.Value.Kind() == slog.KindString:
 			if id, err := uuid.Parse(a.Value.String()); err == nil {
 				clone.attrDeploymentID = id
+			}
+		case a.Key == string(attr.DeploymentOpenAPIIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
+				clone.attrAssetID = id
 			}
 		}
 	}

@@ -1534,6 +1534,8 @@ type DeploymentSummaryResponseBody struct {
 type DeploymentLogEventResponseBody struct {
 	// The ID of the log event
 	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the asset tied to the log event
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
 	// The creation date of the log event
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The type of event that occurred

@@ -1891,6 +1891,7 @@ func unmarshalDeploymentSummaryResponseBodyToDeploymentsDeploymentSummary(v *Dep
 func unmarshalDeploymentLogEventResponseBodyToDeploymentsDeploymentLogEvent(v *DeploymentLogEventResponseBody) *deployments.DeploymentLogEvent {
 	res := &deployments.DeploymentLogEvent{
 		ID:        *v.ID,
+		AssetID:   v.AssetID,
 		CreatedAt: *v.CreatedAt,
 		Event:     *v.Event,
 		Message:   *v.Message,

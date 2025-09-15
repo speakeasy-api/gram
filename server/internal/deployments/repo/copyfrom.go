@@ -33,6 +33,7 @@ func (r iteratorForBatchLogEvents) Values() ([]interface{}, error) {
 		r.rows[0].ProjectID,
 		r.rows[0].Event,
 		r.rows[0].Message,
+		r.rows[0].AssetID,
 	}, nil
 }
 
@@ -41,5 +42,5 @@ func (r iteratorForBatchLogEvents) Err() error {
 }
 
 func (q *Queries) BatchLogEvents(ctx context.Context, arg []BatchLogEventsParams) (int64, error) {
-	return q.db.CopyFrom(ctx, []string{"deployment_logs"}, []string{"deployment_id", "project_id", "event", "message"}, &iteratorForBatchLogEvents{rows: arg})
+	return q.db.CopyFrom(ctx, []string{"deployment_logs"}, []string{"deployment_id", "project_id", "event", "message", "asset_id"}, &iteratorForBatchLogEvents{rows: arg})
 }

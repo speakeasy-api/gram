@@ -108,6 +108,7 @@ type DeploymentLog struct {
 	Message      string
 	DeploymentID uuid.UUID
 	ProjectID    uuid.UUID
+	AssetID      uuid.NullUUID
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 }

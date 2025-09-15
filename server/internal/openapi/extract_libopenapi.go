@@ -383,6 +383,7 @@ func extractToolDefLibOpenAPI(ctx context.Context, logger *slog.Logger, tx *repo
 			ProjectID:    projectID,
 			Event:        "deployment:warning",
 			Message:      fmt.Sprintf("%s: %s: only one request body content type processed for operation", docInfo.Name, opID),
+			AssetID:      uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
 		}); err != nil {
 			logger.ErrorContext(ctx, "failed to log deployment event", attr.SlogError(err))
 		}

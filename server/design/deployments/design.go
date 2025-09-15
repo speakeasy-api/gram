@@ -375,6 +375,7 @@ var DeploymentLogEvent = Type("DeploymentLogEvent", func() {
 	Required("id", "created_at", "event", "message")
 
 	Attribute("id", String, "The ID of the log event")
+	Attribute("asset_id", String, "The ID of the asset tied to the log event")
 	Attribute("created_at", String, "The creation date of the log event")
 	Attribute("event", String, "The type of event that occurred")
 	Attribute("message", String, "The message of the log event")

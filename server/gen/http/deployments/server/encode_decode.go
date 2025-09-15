@@ -1766,6 +1766,7 @@ func marshalDeploymentsDeploymentSummaryToDeploymentSummaryResponseBody(v *deplo
 func marshalDeploymentsDeploymentLogEventToDeploymentLogEventResponseBody(v *deployments.DeploymentLogEvent) *DeploymentLogEventResponseBody {
 	res := &DeploymentLogEventResponseBody{
 		ID:        v.ID,
+		AssetID:   v.AssetID,
 		CreatedAt: v.CreatedAt,
 		Event:     v.Event,
 		Message:   v.Message,

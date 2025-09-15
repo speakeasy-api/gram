@@ -157,10 +157,15 @@ func (s *Service) GetDeploymentLogs(ctx context.Context, form *gen.GetDeployment
 
 	items := make([]*gen.DeploymentLogEvent, 0, len(rows))
 	for _, r := range rows {
+		var assetID *string
+		if r.AssetID.Valid {
+			assetID = conv.Ptr(r.AssetID.UUID.String())
+		}
 		items = append(items, &gen.DeploymentLogEvent{
 			ID:        r.ID.String(),
 			Event:     r.Event,
 			Message:   r.Message,
+			AssetID:   assetID,
 			CreatedAt: r.CreatedAt.Time.Format(time.RFC3339),
 		})
 	}
