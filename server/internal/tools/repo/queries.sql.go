@@ -19,7 +19,7 @@ WITH deployment AS (
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
     WHERE d.project_id = $2
-      AND ds.status = 'completed'
+      AND ($3::uuid IS NOT NULL OR ds.status = 'completed')
       AND (
         $3::uuid IS NULL
         OR d.id = $3::uuid
@@ -89,7 +89,7 @@ WITH deployment AS (
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
     WHERE d.project_id = $1
-      AND ds.status = 'completed'
+      AND ($3::uuid IS NOT NULL OR ds.status = 'completed')
       AND (
         $3::uuid IS NULL
         OR d.id = $3::uuid
@@ -266,7 +266,7 @@ WITH deployment AS (
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
     WHERE d.project_id = $1
-      AND ds.status = 'completed'
+      AND ($3::uuid IS NOT NULL OR ds.status = 'completed')
       AND (
         $3::uuid IS NULL
         OR d.id = $3::uuid
@@ -387,7 +387,7 @@ WITH deployment AS (
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
     WHERE d.project_id = $2
-      AND ds.status = 'completed'
+      AND ($4::uuid IS NOT NULL OR ds.status = 'completed')
       AND (
         $4::uuid IS NULL
         OR d.id = $4::uuid
