@@ -279,7 +279,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			"toolset":              toolset.Name,
 			"toolset_slug":         toolset.Slug,
 			"toolset_id":           toolset.ID,
-			"mcp_enabled":          toolset.McpEnabled,
 			"disable_notification": true,
 			"project_id":           authCtx.ProjectID.String(),
 			"project_slug":         authCtx.ProjectSlug,
