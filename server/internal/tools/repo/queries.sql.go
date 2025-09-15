@@ -24,7 +24,7 @@ WITH deployment AS (
         $3::uuid IS NULL
         OR d.id = $3::uuid
       )
-    ORDER BY d.id DESC
+    ORDER BY d.seq DESC
     LIMIT 1
 ),
 external_deployments AS (
@@ -94,7 +94,7 @@ WITH deployment AS (
         $3::uuid IS NULL
         OR d.id = $3::uuid
       )
-    ORDER BY d.id DESC
+    ORDER BY d.seq DESC
     LIMIT 1
 ),
 external_deployments AS (
@@ -271,7 +271,7 @@ WITH deployment AS (
         $3::uuid IS NULL
         OR d.id = $3::uuid
       )
-    ORDER BY d.id DESC
+    ORDER BY d.seq DESC
     LIMIT 1
 )
 SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted, deployment.id
@@ -392,7 +392,7 @@ WITH deployment AS (
         $4::uuid IS NULL
         OR d.id = $4::uuid
       )
-    ORDER BY d.id DESC
+    ORDER BY d.seq DESC
     LIMIT 1
 ),
 all_deployment_ids AS (

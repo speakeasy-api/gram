@@ -9,7 +9,7 @@ WITH deployment AS (
         sqlc.narg(deployment_id)::uuid IS NULL
         OR d.id = sqlc.narg(deployment_id)::uuid
       )
-    ORDER BY d.id DESC
+    ORDER BY d.seq DESC
     LIMIT 1
 )
 SELECT *
@@ -31,7 +31,7 @@ WITH deployment AS (
         sqlc.narg(deployment_id)::uuid IS NULL
         OR d.id = sqlc.narg(deployment_id)::uuid
       )
-    ORDER BY d.id DESC
+    ORDER BY d.seq DESC
     LIMIT 1
 ),
 all_deployment_ids AS (
@@ -88,7 +88,7 @@ WITH deployment AS (
         sqlc.narg(deployment_id)::uuid IS NULL
         OR d.id = sqlc.narg(deployment_id)::uuid
       )
-    ORDER BY d.id DESC
+    ORDER BY d.seq DESC
     LIMIT 1
 ),
 external_deployments AS (
@@ -124,7 +124,7 @@ WITH deployment AS (
         sqlc.narg(deployment_id)::uuid IS NULL
         OR d.id = sqlc.narg(deployment_id)::uuid
       )
-    ORDER BY d.id DESC
+    ORDER BY d.seq DESC
     LIMIT 1
 ),
 external_deployments AS (
