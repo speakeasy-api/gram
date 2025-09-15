@@ -306,6 +306,12 @@ func (g *gcsChunkReader) ReadAt(p []byte, offset int64) (int, error) {
 
 	n, err := io.ReadFull(rdr, p)
 	if err != nil {
+		// Handle io.ReaderAt semantics: if we get ErrUnexpectedEOF, it means
+		// we read some data but hit EOF before filling the buffer. According to
+		// io.ReaderAt contract, we should return the partial data with io.EOF.
+		if err == io.ErrUnexpectedEOF {
+			return n, io.EOF
+		}
 		return n, fmt.Errorf("read from range reader: %w", err)
 	}
 
