@@ -11,21 +11,27 @@ jobs:
     runs-on: ubicloud-standard-4
     steps:
       - name: Validate PR title format
+        shell: bash
         run: |
           if [[ "${{ github.ref }}" ==  "refs/heads/main" ]]; then
             echo "Skipping PR title validation on main."
             exit 0
           fi
 
-          if [[ "${{ github.event.pull_request.title }}" =~ ^(chore:|fix!?:|feat!?:|mig!?:)\ [a-z] ]]; then
+          if [[ "${{ github.event.pull_request.title }}" =~ ^(chore|fix|feat|mig)(\([a-zA-Z0-9_-]+\))?!?:\ [a-z] ]]; then
             echo "PR title format is valid."
           else
             echo "PR title must:"
-            echo '- Start with one of: "chore:", "fix:", "feat:", "mig:", "fix!:", "feat!:", "mig!:"'
+            echo '- Start with one of: "chore", "fix", "feat", "mig"'
+            echo "- ... optionally followed by a scope in parentheses - alphanumeric, dashes, and underscores only"
+            echo "- ... optionally followed by an exclamation mark (!) to indicate a breaking change"
+            echo "- ... followed by a colon and a space"
             echo "- ... followed by a space"
             echo "- ... followed by a short description of the change _starting with a lowercase letter_"
             echo
             echo 'Example: "feat: added user avatars to the dashboard"'
+            echo 'Example: "chore(deps): updated dependency xyz to v2"'
+            echo 'Example: "fix(auth)!: changed password hashing algorithm"'
             echo
             echo "Got: '${{ github.event.pull_request.title }}'"
             exit 1
@@ -39,7 +45,7 @@ jobs:
             exit 0
           fi
 
-          if [[ "${{ github.event.pull_request.title }}" =~ ^chore: ]]; then
+          if [[ "${{ github.event.pull_request.title }}" =~ ^chore(\([a-zA-Z0-9_-]+\))?: ]]; then
             echo "Skipping changesets-lint job for chore PR."
             exit 0
           fi
