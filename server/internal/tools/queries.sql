@@ -1,13 +1,15 @@
 -- name: ListFirstPartyHTTPTools :many
 WITH deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = @project_id
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = @project_id
+      AND ds.status = 'completed'
       AND (
         sqlc.narg(deployment_id)::uuid IS NULL
-        OR id = sqlc.narg(deployment_id)::uuid
+        OR d.id = sqlc.narg(deployment_id)::uuid
       )
-    ORDER BY seq DESC
+    ORDER BY d.id DESC
     LIMIT 1
 )
 SELECT *
@@ -20,14 +22,16 @@ ORDER BY http_tool_definitions.id DESC;
 
 -- name: ListTools :many
 WITH deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = @project_id
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = @project_id
+      AND ds.status = 'completed'
       AND (
         sqlc.narg(deployment_id)::uuid IS NULL
-        OR id = sqlc.narg(deployment_id)::uuid
+        OR d.id = sqlc.narg(deployment_id)::uuid
       )
-    ORDER BY seq DESC
+    ORDER BY d.id DESC
     LIMIT 1
 ),
 all_deployment_ids AS (
@@ -75,14 +79,16 @@ LIMIT $1;
 
 -- name: FindToolsByName :many
 WITH deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = @project_id
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = @project_id
+      AND ds.status = 'completed'
       AND (
         sqlc.narg(deployment_id)::uuid IS NULL
-        OR id = sqlc.narg(deployment_id)::uuid
+        OR d.id = sqlc.narg(deployment_id)::uuid
       )
-    ORDER BY seq DESC
+    ORDER BY d.id DESC
     LIMIT 1
 ),
 external_deployments AS (
@@ -109,14 +115,16 @@ ORDER BY http_tool_definitions.id DESC;
 
 -- name: FindToolEntriesByName :many
 WITH deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = @project_id
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = @project_id
+      AND ds.status = 'completed'
       AND (
         sqlc.narg(deployment_id)::uuid IS NULL
-        OR id = sqlc.narg(deployment_id)::uuid
+        OR d.id = sqlc.narg(deployment_id)::uuid
       )
-    ORDER BY seq DESC
+    ORDER BY d.id DESC
     LIMIT 1
 ),
 external_deployments AS (

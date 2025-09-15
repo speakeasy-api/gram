@@ -15,14 +15,16 @@ import (
 
 const findToolEntriesByName = `-- name: FindToolEntriesByName :many
 WITH deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = $2
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = $2
+      AND ds.status = 'completed'
       AND (
         $3::uuid IS NULL
-        OR id = $3::uuid
+        OR d.id = $3::uuid
       )
-    ORDER BY seq DESC
+    ORDER BY d.id DESC
     LIMIT 1
 ),
 external_deployments AS (
@@ -83,14 +85,16 @@ func (q *Queries) FindToolEntriesByName(ctx context.Context, arg FindToolEntries
 
 const findToolsByName = `-- name: FindToolsByName :many
 WITH deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = $1
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = $1
+      AND ds.status = 'completed'
       AND (
         $3::uuid IS NULL
-        OR id = $3::uuid
+        OR d.id = $3::uuid
       )
-    ORDER BY seq DESC
+    ORDER BY d.id DESC
     LIMIT 1
 ),
 external_deployments AS (
@@ -258,14 +262,16 @@ func (q *Queries) GetHTTPToolDefinitionByID(ctx context.Context, arg GetHTTPTool
 
 const listFirstPartyHTTPTools = `-- name: ListFirstPartyHTTPTools :many
 WITH deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = $1
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = $1
+      AND ds.status = 'completed'
       AND (
         $3::uuid IS NULL
-        OR id = $3::uuid
+        OR d.id = $3::uuid
       )
-    ORDER BY seq DESC
+    ORDER BY d.id DESC
     LIMIT 1
 )
 SELECT http_tool_definitions.id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted, deployment.id
@@ -377,14 +383,16 @@ func (q *Queries) ListFirstPartyHTTPTools(ctx context.Context, arg ListFirstPart
 
 const listTools = `-- name: ListTools :many
 WITH deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = $2
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = $2
+      AND ds.status = 'completed'
       AND (
         $4::uuid IS NULL
-        OR id = $4::uuid
+        OR d.id = $4::uuid
       )
-    ORDER BY seq DESC
+    ORDER BY d.id DESC
     LIMIT 1
 ),
 all_deployment_ids AS (

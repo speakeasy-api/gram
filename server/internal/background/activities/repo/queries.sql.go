@@ -56,9 +56,11 @@ func (q *Queries) GetAllOrganizationsWithToolsets(ctx context.Context) ([]GetAll
 
 const getPlatformUsageMetrics = `-- name: GetPlatformUsageMetrics :many
 WITH latest_deployments AS (
-  SELECT DISTINCT ON (project_id) project_id, id as deployment_id
-  FROM deployments 
-  ORDER BY project_id, created_at DESC
+  SELECT DISTINCT ON (project_id) project_id, d.id as deployment_id
+  FROM deployments d
+  JOIN deployment_statuses ds ON d.id = ds.deployment_id
+  WHERE ds.status = 'completed'
+  ORDER BY project_id, d.created_at DESC
 ),
 toolset_metrics AS (
   SELECT 
