@@ -1,5 +1,5 @@
 import { EmptyState } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
 import { useState } from "react";
@@ -10,8 +10,8 @@ export function ToolsetsEmptyState({
   onCreateToolset: () => void;
 }) {
   const cta = (
-    <Button size="sm" onClick={onCreateToolset} caps>
-      Create a toolset
+    <Button size="sm" onClick={onCreateToolset}>
+      CREATE A TOOLSET
     </Button>
   );
 

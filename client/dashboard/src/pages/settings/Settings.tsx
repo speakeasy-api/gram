@@ -2,7 +2,7 @@ import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
+import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -233,9 +233,8 @@ export default function Settings() {
       header: "",
       width: "80px",
       render: (key: Key) => (
-        <Button
-          variant="ghost"
-          size="icon"
+        <Button variant="tertiary"
+          size="sm"
           onClick={() => setKeyToRevoke(key)}
           className="hover:text-destructive"
         >
@@ -279,13 +278,14 @@ export default function Settings() {
               justify="center"
             >
               <Type variant="body">No API keys yet</Type>
-              <Button
-                size="sm"
+              <Button size="sm"
                 variant="secondary"
                 onClick={() => setIsCreateDialogOpen(true)}
-                icon={"key-round"}
               >
-                Create Key
+                <Button.LeftIcon>
+                  <Icon name="key-round" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Create Key</Button.Text>
               </Button>
             </Stack>
           }
@@ -311,9 +311,8 @@ export default function Settings() {
                   <code className="flex-1 break-all">
                     {newlyCreatedKey.key}
                   </code>
-                  <Button
-                    variant="ghost"
-                    size="icon"
+                  <Button variant="tertiary"
+                    size="sm"
                     onClick={handleCopyToken}
                     className="shrink-0"
                   >
@@ -366,8 +365,7 @@ export default function Settings() {
                   }}
                 />
                 <div className="flex justify-end space-x-2">
-                  <Button
-                    type="button"
+                  <Button type="button"
                     variant="secondary"
                     onClick={handleCloseCreateDialog}
                   >
@@ -397,14 +395,12 @@ export default function Settings() {
                 This action cannot be undone.
               </Type>
               <div className="flex justify-end space-x-2">
-                <Button
-                  variant="secondary"
+                <Button variant="secondary"
                   onClick={() => setKeyToRevoke(null)}
                 >
                   Cancel
                 </Button>
-                <Button
-                  variant="destructive"
+                <Button variant="destructive-primary"
                   onClick={handleRevokeKey}
                   disabled={revokeKeyMutation.isPending}
                 >
@@ -455,10 +451,8 @@ export default function Settings() {
               justify="center"
             >
               <Type variant="body">No custom domains yet</Type>
-              <Button
-                size="sm"
+              <Button size="sm"
                 variant="secondary"
-                icon={"globe"}
                 onClick={() => {
                   if (session.gramAccountType === "free") {
                     setIsCustomDomainModalOpen(true);
@@ -468,7 +462,10 @@ export default function Settings() {
                 }}
                 disabled={domain?.isUpdating}
               >
-                Add Domain
+                <Button.LeftIcon>
+                  <Icon name="globe" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add Domain</Button.Text>
               </Button>
             </Stack>
           }
@@ -537,9 +534,8 @@ export default function Settings() {
                 </Type>
                 <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
                   <code className="flex-1 break-all">{CNAME_VALUE}</code>
-                  <Button
-                    variant="ghost"
-                    size="icon"
+                  <Button variant="tertiary"
+                    size="sm"
                     onClick={handleCopyCname}
                     className="shrink-0"
                   >
@@ -565,9 +561,8 @@ export default function Settings() {
                 </Type>
                 <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
                   <code className="flex-1 break-all">{txtValue}</code>
-                  <Button
-                    variant="ghost"
-                    size="icon"
+                  <Button variant="tertiary"
+                    size="sm"
                     onClick={handleCopyTxt}
                     className="shrink-0"
                   >

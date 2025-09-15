@@ -162,13 +162,16 @@ const UsageTiers = () => {
 
   // This must be initialized AFTER the link is set (more specifically, AFTER the PolarEmbedCheckout.init() call)
   const upgradeCTA = checkoutLink ? (
-    <Page.Section.CTA
+    <a
       href={checkoutLink}
       data-polar-checkout
       data-polar-checkout-theme="light"
+      className="inline-flex"
     >
-      Upgrade
-    </Page.Section.CTA>
+      <Page.Section.CTA>
+        UPGRADE
+      </Page.Section.CTA>
+    </a>
   ) : null;
 
   const polarPortalCTA = (
@@ -179,13 +182,8 @@ const UsageTiers = () => {
         });
       }}
       disabled={session.gramAccountType === "enterprise"}
-      tooltip={
-        session.gramAccountType === "enterprise"
-          ? "Enterprise: Contact support to manage billing"
-          : undefined
-      }
     >
-      Manage Billing
+      MANAGE BILLING
     </Page.Section.CTA>
   );
 

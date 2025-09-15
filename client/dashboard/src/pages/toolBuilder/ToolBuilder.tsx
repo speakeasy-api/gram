@@ -3,7 +3,7 @@ import { EditableText } from "@/components/editable-text";
 import { Page } from "@/components/page-layout";
 import { ToolBadge } from "@/components/tool-badge";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, Icon } from "@speakeasy-api/moonshine";
 import {
   Command,
   CommandEmpty,
@@ -39,7 +39,7 @@ import {
   useToolset,
   useUpdateTemplateMutation,
 } from "@gram/client/react-query";
-import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
+import { ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -298,16 +298,17 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
           setOpen(false);
         }}
       >
-        <Button
-          variant="secondary"
-          icon="plus"
+        <Button variant="secondary"
           size="sm"
           className={
             "bg-card dark:bg-background border-stone-300 dark:border-stone-700 border-1"
           }
           disabled={steps.length >= 10}
         >
-          Add Step
+          <Button.LeftIcon>
+            <Icon name="plus" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Add Step</Button.Text>
         </Button>
       </ToolSelectPopover>
     );
@@ -330,8 +331,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     );
 
   const revertButton = anyChanges && (
-    <Button
-      variant="ghost"
+    <Button variant="tertiary"
       size="sm"
       onClick={() => {
         setName(initial.name);
@@ -356,7 +356,6 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
 
   const saveButton = (
     <Button
-      icon="save"
       disabled={!!initial.id && !anyChanges}
       onClick={async () => {
         try {
@@ -437,7 +436,10 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
         }
       }}
     >
-      Save
+      <Button.LeftIcon>
+        <Icon name="save" className="h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>Save</Button.Text>
     </Button>
   );
 
@@ -731,24 +733,28 @@ const StepCard = ({
             className="mr-[-8px] mt-[-8px] group-hover/heading:opacity-100 opacity-0 trans"
           >
             {moveUp && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                tooltip="Move up"
+              <Button variant="tertiary"
+                size="xs"
                 onClick={moveUp}
-                icon="arrow-up"
                 className="mr-[-4px]"
-              />
+                aria-label="Move up"
+              >
+                <Button.Icon>
+                  <Icon name="arrow-up" className="h-3 w-3" />
+                </Button.Icon>
+              </Button>
             )}
             {moveDown && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                tooltip="Move down"
+              <Button variant="tertiary"
+                size="xs"
                 onClick={moveDown}
-                icon="arrow-down"
                 className="mr-[-4px]"
-              />
+                aria-label="Move down"
+              >
+                <Button.Icon>
+                  <Icon name="arrow-down" className="h-3 w-3" />
+                </Button.Icon>
+              </Button>
             )}
             <DeleteButton size="sm" tooltip="Delete step" onClick={remove} />
           </Stack>
@@ -1012,7 +1018,6 @@ function ChatPanel(props: {
 
   const tryNowButton = (
     <Button
-      icon="play"
       size="sm"
       className="h-7"
       onClick={async () => {
@@ -1049,7 +1054,10 @@ function ChatPanel(props: {
         });
       }}
     >
-      Try Now
+      <Button.LeftIcon>
+        <Icon name="play" className="h-4 w-4" />
+      </Button.LeftIcon>
+      <Button.Text>Try Now</Button.Text>
     </Button>
   );
 

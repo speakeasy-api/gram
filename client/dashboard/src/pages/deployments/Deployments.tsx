@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -101,7 +101,7 @@ function DeploymentActionsDropdown({
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+        <Button variant="tertiary" size="sm" className="h-8 w-8 p-0">
           <Icon name="ellipsis" className="size-4" />
           <span className="sr-only">Open menu</span>
         </Button>

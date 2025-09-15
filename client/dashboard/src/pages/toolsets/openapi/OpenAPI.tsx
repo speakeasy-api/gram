@@ -1,6 +1,7 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
+import { Plus } from "lucide-react";
 import { MiniCard, MiniCards } from "@/components/ui/card-mini";
 import { Dialog } from "@/components/ui/dialog";
 import { SkeletonCode } from "@/components/ui/skeleton";
@@ -104,8 +105,7 @@ export function APIsContent() {
         </Dialog.Header>
         <OnboardingContent onOnboardingComplete={finishUpload} />
         <Dialog.Footer>
-          <Button
-            variant="ghost"
+          <Button variant="tertiary"
             onClick={() => setNewDocumentDialogOpen(false)}
           >
             Back
@@ -121,7 +121,6 @@ export function APIsContent() {
     }
 
     const hasErrors = deploymentLogsSummary.errors > 0;
-    const hasSkipped = deploymentLogsSummary.skipped > 0;
 
     const icon = hasErrors ? (
       <Icon name="triangle-alert" className="text-yellow-500" />
@@ -129,26 +128,19 @@ export function APIsContent() {
       <Icon name="history" className="text-muted-foreground" />
     );
 
-    let tooltip = undefined;
-    if (hasSkipped) {
-      tooltip = "Some operations were skipped";
-    } else if (hasErrors) {
-      tooltip = "Deployment completed with errors";
-    }
-
     return (
-      <Page.Section.CTA
-        variant="ghost"
-        href={routes.deployments.deployment.href(deployment.id)}
-        tooltip={tooltip}
-        className={cn(
-          hasErrors &&
-            "text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/20!"
-        )}
-      >
-        {icon}
-        History
-      </Page.Section.CTA>
+      <a href={routes.deployments.deployment.href(deployment.id)}>
+        <Page.Section.CTA
+          variant="tertiary"
+          className={cn(
+            hasErrors &&
+              "text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/20!"
+          )}
+        >
+          {icon}
+          HISTORY
+        </Page.Section.CTA>
+      </a>
     );
   }, [deployment, deploymentLogsSummary]);
 
@@ -214,10 +206,12 @@ export function APIsContent() {
       {logsCta}
       <Page.Section.CTA
         onClick={() => setNewDocumentDialogOpen(true)}
-        icon="plus"
         variant="secondary"
       >
-        Add API
+        <Button.LeftIcon>
+          <Plus className="w-4 h-4" />
+        </Button.LeftIcon>
+        <Button.Text>ADD API</Button.Text>
       </Page.Section.CTA>
       <Page.Section.Body>
         <MiniCards isLoading={isLoading}>
@@ -261,8 +255,7 @@ export function APIsContent() {
               />
             )}
             <Dialog.Footer>
-              <Button
-                variant="ghost"
+              <Button variant="tertiary"
                 onClick={() => {
                   setChangeDocumentTargetSlug(null);
                   undoSpecUpload(); // Reset the file state when dialog closes

@@ -1,4 +1,6 @@
 import { Page } from "@/components/page-layout";
+import { Button } from "@speakeasy-api/moonshine";
+import { Plus } from "lucide-react";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { UpdatedAt } from "@/components/updated-at";
@@ -49,9 +51,11 @@ export default function Prompts() {
       </Page.Section.Description>
       <Page.Section.CTA
         onClick={() => routes.prompts.newPrompt.goTo()}
-        icon="plus"
       >
-        New Prompt
+        <Button.LeftIcon>
+          <Plus className="w-4 h-4" />
+        </Button.LeftIcon>
+        <Button.Text>NEW PROMPT</Button.Text>
       </Page.Section.CTA>
       <Page.Section.Body>
         <Cards isLoading={isLoading}>

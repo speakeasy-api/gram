@@ -1,21 +1,20 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { PlusIcon } from "lucide-react";
 
 export const AddButton = ({
   onClick,
-  tooltip,
 }: {
   onClick?: () => void;
-  tooltip: string;
 }) => {
   return (
     <Button
-      variant="ghost"
+      variant="tertiary"
       className="text-muted-foreground hover:text-foreground"
       onClick={onClick}
-      tooltip={tooltip}
     >
-      <PlusIcon className="w-4 h-4" />
+      <Button.Icon>
+        <PlusIcon className="w-4 h-4" />
+      </Button.Icon>
     </Button>
   );
 };
