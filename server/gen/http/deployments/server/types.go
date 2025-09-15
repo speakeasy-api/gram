@@ -1535,7 +1535,9 @@ type DeploymentLogEventResponseBody struct {
 	// The ID of the log event
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the asset tied to the log event
-	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
+	AttachmentID *string `form:"attachment_id,omitempty" json:"attachment_id,omitempty" xml:"attachment_id,omitempty"`
+	// The type of the asset tied to the log event
+	AttachmentType *string `form:"attachment_type,omitempty" json:"attachment_type,omitempty" xml:"attachment_type,omitempty"`
 	// The creation date of the log event
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The type of event that occurred

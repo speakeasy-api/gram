@@ -1975,7 +1975,7 @@ func domainsGetDomainUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `domains get-domain --session-token "Quas veritatis rerum." --project-slug-input "Qui sunt distinctio."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `domains get-domain --session-token "Odit officia velit occaecati autem est itaque." --project-slug-input "Veniam explicabo et est aut cumque alias."`)
 }
 
 func domainsCreateDomainUsage() {
@@ -1999,8 +1999,8 @@ func domainsCreateDomainUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `domains create-domain --body '{
-      "domain": "Eos inventore aliquam libero libero sed ad."
-   }' --session-token "Nisi quam deleniti." --project-slug-input "Magni autem."`)
+      "domain": "Quam deleniti occaecati."
+   }' --session-token "Autem non dolor minima." --project-slug-input "Enim aliquam quia debitis odio ex."`)
 }
 
 func domainsDeleteDomainUsage() {
@@ -2021,7 +2021,7 @@ func domainsDeleteDomainUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `domains delete-domain --session-token "Voluptatum in qui culpa." --project-slug-input "Quae dolorem reiciendis pariatur autem aut."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `domains delete-domain --session-token "Aut animi ut nulla." --project-slug-input "Ut aut."`)
 }
 
 // environmentsUsage displays the usage of the environments command and its
@@ -2059,28 +2059,24 @@ func environmentsCreateEnvironmentUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `environments create-environment --body '{
-      "description": "Enim accusantium nisi est enim.",
+      "description": "Quidem sint illum ut blanditiis.",
       "entries": [
          {
-            "name": "Sint illum ut blanditiis.",
-            "value": "Itaque facilis."
+            "name": "Facilis dolor vitae exercitationem.",
+            "value": "Aut suscipit."
          },
          {
-            "name": "Sint illum ut blanditiis.",
-            "value": "Itaque facilis."
+            "name": "Facilis dolor vitae exercitationem.",
+            "value": "Aut suscipit."
          },
          {
-            "name": "Sint illum ut blanditiis.",
-            "value": "Itaque facilis."
-         },
-         {
-            "name": "Sint illum ut blanditiis.",
-            "value": "Itaque facilis."
+            "name": "Facilis dolor vitae exercitationem.",
+            "value": "Aut suscipit."
          }
       ],
-      "name": "Sed doloremque et perspiciatis rerum aliquam id.",
-      "organization_id": "Sunt velit sunt iusto est."
-   }' --session-token "Vitae exercitationem non aut." --project-slug-input "Quis numquam exercitationem earum vel eveniet culpa."`)
+      "name": "Enim accusantium nisi est enim.",
+      "organization_id": "Sed doloremque et perspiciatis rerum aliquam id."
+   }' --session-token "Numquam exercitationem earum vel." --project-slug-input "Culpa beatae cupiditate."`)
 }
 
 func environmentsListEnvironmentsUsage() {
@@ -2101,7 +2097,7 @@ func environmentsListEnvironmentsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `environments list-environments --session-token "Est et sit officiis ut." --project-slug-input "Quo aut."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `environments list-environments --session-token "Aut qui reprehenderit." --project-slug-input "Sed in ea."`)
 }
 
 func environmentsUpdateEnvironmentUsage() {
@@ -2127,24 +2123,25 @@ func environmentsUpdateEnvironmentUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `environments update-environment --body '{
-      "description": "Alias labore.",
+      "description": "Accusamus illum aut quo voluptas.",
       "entries_to_remove": [
-         "Illum aut.",
-         "Voluptas aut culpa nobis fuga quibusdam.",
-         "Eum natus omnis deserunt."
+         "Commodi sint.",
+         "Et ea qui.",
+         "Praesentium est amet doloremque iste temporibus omnis.",
+         "Voluptas quam aut qui."
       ],
       "entries_to_update": [
          {
-            "name": "Sint illum ut blanditiis.",
-            "value": "Itaque facilis."
+            "name": "Facilis dolor vitae exercitationem.",
+            "value": "Aut suscipit."
          },
          {
-            "name": "Sint illum ut blanditiis.",
-            "value": "Itaque facilis."
+            "name": "Facilis dolor vitae exercitationem.",
+            "value": "Aut suscipit."
          }
       ],
-      "name": "Cumque molestiae saepe et."
-   }' --slug "fas" --session-token "Ea qui necessitatibus praesentium est." --project-slug-input "Doloremque iste temporibus omnis sequi voluptas."`)
+      "name": "Culpa nobis fuga quibusdam maxime eum natus."
+   }' --slug "qpx" --session-token "Sed voluptatum aspernatur voluptatem alias laudantium ut." --project-slug-input "Est et."`)
 }
 
 func environmentsDeleteEnvironmentUsage() {
@@ -2167,7 +2164,7 @@ func environmentsDeleteEnvironmentUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `environments delete-environment --slug "lz1" --session-token "Doloribus iste recusandae occaecati minima et quam." --project-slug-input "Quod a."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `environments delete-environment --slug "evo" --session-token "Ad vitae ut." --project-slug-input "Molestiae repellat aperiam sed dolorem."`)
 }
 
 // instancesUsage displays the usage of the instances command and its
@@ -2205,7 +2202,7 @@ func instancesGetInstanceUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `instances get-instance --toolset-slug "ief" --environment-slug "mii" --session-token "Recusandae qui itaque nihil sunt." --project-slug-input "Molestiae sunt nihil." --apikey-token "Reiciendis enim atque vel tenetur."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `instances get-instance --toolset-slug "03x" --environment-slug "ai5" --session-token "Ipsum qui." --project-slug-input "Quisquam nam dolorum." --apikey-token "Dolorem incidunt voluptatibus sunt."`)
 }
 
 // integrationsUsage displays the usage of the integrations command and its

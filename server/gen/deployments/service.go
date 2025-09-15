@@ -114,7 +114,9 @@ type DeploymentLogEvent struct {
 	// The ID of the log event
 	ID string
 	// The ID of the asset tied to the log event
-	AssetID *string
+	AttachmentID *string
+	// The type of the asset tied to the log event
+	AttachmentType *string
 	// The creation date of the log event
 	CreatedAt string
 	// The type of event that occurred

@@ -54,7 +54,8 @@ SELECT
   log.id,
   log.event,
   log.message,
-  log.asset_id,
+  log.attachment_id,
+  log.attachment_type,
   log.created_at
 FROM deployment_logs log
 WHERE
@@ -268,12 +269,12 @@ ORDER BY all_statuses.state DESC
 LIMIT 1;
 
 -- name: LogDeploymentEvent :exec
-INSERT INTO deployment_logs (deployment_id, project_id, event, message, asset_id)
-VALUES (@deployment_id, @project_id, @event, @message, sqlc.narg(asset_id));
+INSERT INTO deployment_logs (deployment_id, project_id, event, message, attachment_id, attachment_type)
+VALUES (@deployment_id, @project_id, @event, @message, sqlc.narg(attachment_id), sqlc.narg(attachment_type));
 
 -- name: BatchLogEvents :copyfrom
-INSERT INTO deployment_logs (deployment_id, project_id, event, message, asset_id)
-VALUES (@deployment_id, @project_id, @event, @message, sqlc.narg(asset_id));
+INSERT INTO deployment_logs (deployment_id, project_id, event, message, attachment_id, attachment_type)
+VALUES (@deployment_id, @project_id, @event, @message, sqlc.narg(attachment_id), sqlc.narg(attachment_type));
 
 -- name: UpsertDeploymentOpenAPIv3Asset :one
 INSERT INTO deployments_openapiv3_assets (
