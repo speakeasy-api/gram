@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -13,17 +14,34 @@ import (
 	"sync"
 
 	"cloud.google.com/go/storage"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
+
+type ReaderAtCloser interface {
+	io.ReaderAt
+	io.Closer
+}
 
 type BlobStore interface {
 	Exists(ctx context.Context, objectURL *url.URL) (bool, error)
-	Read(ctx context.Context, objectURL *url.URL) (io.ReadCloser, error)
+	Read(ctx context.Context, objectURL *url.URL) (rdr io.ReadCloser, err error)
+	ReadAt(ctx context.Context, objectURL *url.URL) (rdr ReaderAtCloser, size int64, err error)
 	Write(ctx context.Context, urlpath string, src io.Reader, contentType string) (io.WriteCloser, *url.URL, error)
 }
 
 type FSBlobStore struct {
-	mut  sync.Mutex
-	Root *os.Root
+	mut    sync.Mutex
+	Root   *os.Root
+	Logger *slog.Logger
+}
+
+func NewFSBlobStore(logger *slog.Logger, root *os.Root) *FSBlobStore {
+	return &FSBlobStore{
+		mut:    sync.Mutex{},
+		Root:   root,
+		Logger: logger.With(attr.SlogComponent("blob-store-fs")),
+	}
 }
 
 var _ BlobStore = (*FSBlobStore)(nil)
@@ -71,6 +89,31 @@ func (fbs *FSBlobStore) Read(ctx context.Context, u *url.URL) (io.ReadCloser, er
 	}
 
 	return f, nil
+}
+
+func (fbs *FSBlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser, int64, error) {
+	filepath, err := fbs.getPath(u)
+	if err != nil {
+		return nil, 0, fmt.Errorf("generate asset path: %w", err)
+	}
+
+	fbs.mut.Lock()
+	defer fbs.mut.Unlock()
+
+	f, err := fbs.Root.Open(filepath)
+	if err != nil {
+		return nil, 0, fmt.Errorf("open file for reading: %w", err)
+	}
+
+	stat, err := f.Stat()
+	if err != nil {
+		defer o11y.LogDefer(ctx, fbs.Logger, func() error {
+			return f.Close()
+		})
+		return nil, 0, fmt.Errorf("stat file: %w", err)
+	}
+
+	return f, stat.Size(), nil
 }
 
 func (fbs *FSBlobStore) Write(ctx context.Context, pathname string, src io.Reader, contentType string) (io.WriteCloser, *url.URL, error) {
@@ -122,6 +165,7 @@ func (fbs *FSBlobStore) mkdirAll(filename string) error {
 }
 
 type GCSBlobStore struct {
+	logger    *slog.Logger
 	client    *storage.Client
 	bucket    *storage.BucketHandle
 	bucketURI *url.URL
@@ -129,8 +173,8 @@ type GCSBlobStore struct {
 
 var _ BlobStore = (*GCSBlobStore)(nil)
 
-func NewGCSBlobStore(ctx context.Context, bucketURI string) (*GCSBlobStore, error) {
-	client, err := storage.NewClient(ctx)
+func NewGCSBlobStore(ctx context.Context, logger *slog.Logger, bucketURI string) (*GCSBlobStore, error) {
+	client, err := storage.NewClient(ctx, storage.WithJSONReads())
 	if err != nil {
 		return nil, fmt.Errorf("create gcs client: %w", err)
 	}
@@ -142,7 +186,12 @@ func NewGCSBlobStore(ctx context.Context, bucketURI string) (*GCSBlobStore, erro
 
 	bucket := client.Bucket(uri.Hostname())
 
-	return &GCSBlobStore{client: client, bucket: bucket, bucketURI: uri}, nil
+	return &GCSBlobStore{
+		logger:    logger.With(attr.SlogComponent("blob-store-gcs")),
+		client:    client,
+		bucket:    bucket,
+		bucketURI: uri,
+	}, nil
 }
 
 func (gbs *GCSBlobStore) getPath(u *url.URL) (string, error) {
@@ -206,6 +255,26 @@ func (gbs *GCSBlobStore) Read(ctx context.Context, u *url.URL) (io.ReadCloser, e
 	return rdr, nil
 }
 
+func (gbs *GCSBlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser, int64, error) {
+	subpath, err := gbs.getPath(u)
+	if err != nil {
+		return nil, 0, fmt.Errorf("generate asset path: %w", err)
+	}
+
+	obj := gbs.bucket.Object(subpath)
+	attrs, err := obj.Attrs(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("get object attrs: %w", err)
+	}
+
+	return &gcsChunkReader{
+		logger:     gbs.logger,
+		bucket:     gbs.bucket,
+		objectPath: subpath,
+		context:    func() context.Context { return ctx },
+	}, attrs.Size, nil
+}
+
 func (gbs *GCSBlobStore) Write(ctx context.Context, subpath string, src io.Reader, contentType string) (io.WriteCloser, *url.URL, error) {
 	uri, err := gbs.getBucketURI(subpath)
 	if err != nil {
@@ -216,4 +285,39 @@ func (gbs *GCSBlobStore) Write(ctx context.Context, subpath string, src io.Reade
 	w.ContentType = contentType
 
 	return w, uri, nil
+}
+
+type gcsChunkReader struct {
+	logger     *slog.Logger
+	bucket     *storage.BucketHandle
+	objectPath string
+	context    func() context.Context
+}
+
+func (g *gcsChunkReader) ReadAt(p []byte, offset int64) (int, error) {
+	ctx := g.context()
+	rdr, err := g.bucket.Object(g.objectPath).NewRangeReader(ctx, offset, int64(len(p)))
+	if err != nil {
+		return 0, fmt.Errorf("create range reader: %w", err)
+	}
+	defer o11y.LogDefer(ctx, g.logger, func() error {
+		return rdr.Close()
+	})
+
+	n, err := io.ReadFull(rdr, p)
+	if err != nil {
+		// Handle io.ReaderAt semantics: if we get ErrUnexpectedEOF, it means
+		// we read some data but hit EOF before filling the buffer. According to
+		// io.ReaderAt contract, we should return the partial data with io.EOF.
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			return n, io.EOF
+		}
+		return n, fmt.Errorf("read from range reader: %w", err)
+	}
+
+	return n, nil
+}
+
+func (g *gcsChunkReader) Close() error {
+	return nil
 }
