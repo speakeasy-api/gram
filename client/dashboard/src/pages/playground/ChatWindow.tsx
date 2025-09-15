@@ -43,6 +43,7 @@ const availableModels = [
   defaultModel,
   { label: "GPT-4o", value: "openai/gpt-4o" },
   { label: "GPT-4o-mini", value: "openai/gpt-4o-mini" },
+  { label: "GPT-5", value: "openai/gpt-5" },
   { label: "GPT-4.1", value: "openai/gpt-4.1" },
   { label: "Claude 3.7 Sonnet", value: "anthropic/claude-3.7-sonnet" },
   { label: "Claude 4 Opus (Expensive)", value: "anthropic/claude-opus-4" },
