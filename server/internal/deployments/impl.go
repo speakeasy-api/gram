@@ -284,7 +284,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		attr.OrganizationID(authCtx.ActiveOrganizationID),
 		attr.ProjectID(projectID.String()),
 		attr.UserID(authCtx.UserID),
-		attr.SessionID(*authCtx.SessionID),
+		attr.SessionID(conv.PtrValOr(authCtx.SessionID, "")),
 	)
 
 	dbtx, err := s.db.Begin(ctx)
