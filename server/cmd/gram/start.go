@@ -353,7 +353,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create observers: %w", err)
 			}
 
-			assetStorage, shutdown, err := newAssetStorage(ctx, assetStorageOptions{
+			assetStorage, shutdown, err := newAssetStorage(ctx, logger, assetStorageOptions{
 				assetsBackend: c.String("assets-backend"),
 				assetsURI:     c.String("assets-uri"),
 			})
