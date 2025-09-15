@@ -55,7 +55,7 @@ export default function Prompts() {
         <Button.LeftIcon>
           <Plus className="w-4 h-4" />
         </Button.LeftIcon>
-        <Button.Text>NEW PROMPT</Button.Text>
+        <Button.Text>New Prompt</Button.Text>
       </Page.Section.CTA>
       <Page.Section.Body>
         <Cards isLoading={isLoading}>

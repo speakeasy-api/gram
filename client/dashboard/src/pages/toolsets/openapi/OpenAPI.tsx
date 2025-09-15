@@ -211,7 +211,7 @@ export function APIsContent() {
         <Button.LeftIcon>
           <Plus className="w-4 h-4" />
         </Button.LeftIcon>
-        <Button.Text>ADD API</Button.Text>
+        <Button.Text>Add API</Button.Text>
       </Page.Section.CTA>
       <Page.Section.Body>
         <MiniCards isLoading={isLoading}>

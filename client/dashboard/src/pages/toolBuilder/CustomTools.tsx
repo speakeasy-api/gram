@@ -60,7 +60,7 @@ export default function CustomTools() {
         <Button.LeftIcon>
           <Plus className="w-4 h-4" />
         </Button.LeftIcon>
-        <Button.Text>NEW CUSTOM TOOL</Button.Text>
+        <Button.Text>New Custom Tool</Button.Text>
       </Page.Section.CTA>
       <Page.Section.Body>
         <Cards isLoading={isLoading}>

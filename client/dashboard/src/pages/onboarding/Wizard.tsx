@@ -615,7 +615,7 @@ const ContinueButton = ({
       className="w-full"
     >
       {isLoading && <Spinner />}
-      {isLoading && inProgressText ? inProgressText : "CONTINUE"}
+      {isLoading && inProgressText ? inProgressText : "Continue"}
     </Button>
   );
 };

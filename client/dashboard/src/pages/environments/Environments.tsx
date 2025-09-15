@@ -89,7 +89,7 @@ export default function Environments() {
             <Button.LeftIcon>
               <Plus className="w-4 h-4" />
             </Button.LeftIcon>
-            <Button.Text>NEW ENVIRONMENT</Button.Text>
+            <Button.Text>New Environment</Button.Text>
           </Page.Section.CTA>
           <Page.Section.Body>
             <Cards>

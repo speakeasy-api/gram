@@ -535,7 +535,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
                 className="px-4"
                 disabled={!toolset.mcpIsPublic}
               >
-                <Button.Text>VIEW</Button.Text>
+                <Button.Text>View</Button.Text>
                 <Button.RightIcon>
                   <ExternalLink className="w-4 h-4" />
                 </Button.RightIcon>

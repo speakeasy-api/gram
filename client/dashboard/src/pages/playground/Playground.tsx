@@ -255,7 +255,7 @@ export function ToolsetPanel({
                   <MoonshineButton.LeftIcon>
                     <Icon name={dynamicToolset ? "sparkles" : "lock"} className="h-4 w-4" />
                   </MoonshineButton.LeftIcon>
-                  <MoonshineButton.Text>{dynamicToolset ? "DYNAMIC" : "STATIC"}</MoonshineButton.Text>
+                  <MoonshineButton.Text>{dynamicToolset ? "Dynamic" : "Static"}</MoonshineButton.Text>
                 </MoonshineButton>
               </Stack>
             )}

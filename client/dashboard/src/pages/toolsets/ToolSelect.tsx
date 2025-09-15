@@ -110,7 +110,7 @@ const groupColumnsToggleable: Column<ToggleableToolGroup>[] = [
           <Button.LeftIcon>
             {allEnabled ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
           </Button.LeftIcon>
-          <Button.Text>{allEnabled ? "DISABLE ALL" : "ENABLE ALL"}</Button.Text>
+          <Button.Text>{allEnabled ? "Disable All" : "Enable All"}</Button.Text>
         </Button>
       );
     },
