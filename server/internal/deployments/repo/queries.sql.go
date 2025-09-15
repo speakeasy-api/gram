@@ -15,10 +15,12 @@ import (
 )
 
 type BatchLogEventsParams struct {
-	DeploymentID uuid.UUID
-	ProjectID    uuid.UUID
-	Event        string
-	Message      string
+	DeploymentID   uuid.UUID
+	ProjectID      uuid.UUID
+	Event          string
+	Message        string
+	AttachmentID   uuid.NullUUID
+	AttachmentType pgtype.Text
 }
 
 const cloneDeployment = `-- name: CloneDeployment :one
@@ -655,6 +657,8 @@ SELECT
   log.id,
   log.event,
   log.message,
+  log.attachment_id,
+  log.attachment_type,
   log.created_at
 FROM deployment_logs log
 WHERE
@@ -679,11 +683,13 @@ type GetDeploymentLogsParams struct {
 }
 
 type GetDeploymentLogsRow struct {
-	Status    string
-	ID        uuid.UUID
-	Event     string
-	Message   string
-	CreatedAt pgtype.Timestamptz
+	Status         string
+	ID             uuid.UUID
+	Event          string
+	Message        string
+	AttachmentID   uuid.NullUUID
+	AttachmentType pgtype.Text
+	CreatedAt      pgtype.Timestamptz
 }
 
 func (q *Queries) GetDeploymentLogs(ctx context.Context, arg GetDeploymentLogsParams) ([]GetDeploymentLogsRow, error) {
@@ -700,6 +706,8 @@ func (q *Queries) GetDeploymentLogs(ctx context.Context, arg GetDeploymentLogsPa
 			&i.ID,
 			&i.Event,
 			&i.Message,
+			&i.AttachmentID,
+			&i.AttachmentType,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -943,15 +951,17 @@ func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams
 }
 
 const logDeploymentEvent = `-- name: LogDeploymentEvent :exec
-INSERT INTO deployment_logs (deployment_id, project_id, event, message)
-VALUES ($1, $2, $3, $4)
+INSERT INTO deployment_logs (deployment_id, project_id, event, message, attachment_id, attachment_type)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type LogDeploymentEventParams struct {
-	DeploymentID uuid.UUID
-	ProjectID    uuid.UUID
-	Event        string
-	Message      string
+	DeploymentID   uuid.UUID
+	ProjectID      uuid.UUID
+	Event          string
+	Message        string
+	AttachmentID   uuid.NullUUID
+	AttachmentType pgtype.Text
 }
 
 func (q *Queries) LogDeploymentEvent(ctx context.Context, arg LogDeploymentEventParams) error {
@@ -960,6 +970,8 @@ func (q *Queries) LogDeploymentEvent(ctx context.Context, arg LogDeploymentEvent
 		arg.ProjectID,
 		arg.Event,
 		arg.Message,
+		arg.AttachmentID,
+		arg.AttachmentType,
 	)
 	return err
 }

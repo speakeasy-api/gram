@@ -107,6 +107,8 @@ CREATE TABLE IF NOT EXISTS deployment_logs (
   message text NOT NULL,
   deployment_id uuid NOT NULL,
   project_id uuid NOT NULL,
+  attachment_id uuid,
+  attachment_type TEXT,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

@@ -407,10 +407,12 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 		requestBody := op.GetRequestBody().GetObject()
 		if requestBody.GetContent().Len() > 1 {
 			if err := tx.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
-				DeploymentID: deploymentID,
-				ProjectID:    projectID,
-				Event:        "deployment:warning",
-				Message:      fmt.Sprintf("%s: %s: only one request body content type processed for operation", docInfo.Name, opID),
+				DeploymentID:   deploymentID,
+				ProjectID:      projectID,
+				Event:          "deployment:warning",
+				Message:        fmt.Sprintf("%s: %s: only one request body content type processed for operation", docInfo.Name, opID),
+				AttachmentID:   uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
+				AttachmentType: conv.ToPGText("openapi"),
 			}); err != nil {
 				logger.ErrorContext(ctx, "failed to log deployment event", attr.SlogError(err))
 			}

@@ -7689,6 +7689,12 @@ components:
         DeploymentLogEvent:
             type: object
             properties:
+                attachment_id:
+                    type: string
+                    description: The ID of the asset tied to the log event
+                attachment_type:
+                    type: string
+                    description: The type of the asset tied to the log event
                 created_at:
                     type: string
                     description: The creation date of the log event
