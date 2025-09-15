@@ -19,11 +19,7 @@ WITH deployment AS (
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
     WHERE d.project_id = $2
-      AND ($3::uuid IS NOT NULL OR ds.status = 'completed')
-      AND (
-        $3::uuid IS NULL
-        OR d.id = $3::uuid
-      )
+    AND ds.status = 'completed'
     ORDER BY d.seq DESC
     LIMIT 1
 ),
@@ -44,9 +40,8 @@ ORDER BY htd.id DESC
 `
 
 type FindToolEntriesByNameParams struct {
-	Names        []string
-	ProjectID    uuid.UUID
-	DeploymentID uuid.NullUUID
+	Names     []string
+	ProjectID uuid.UUID
 }
 
 type FindToolEntriesByNameRow struct {
@@ -58,7 +53,7 @@ type FindToolEntriesByNameRow struct {
 }
 
 func (q *Queries) FindToolEntriesByName(ctx context.Context, arg FindToolEntriesByNameParams) ([]FindToolEntriesByNameRow, error) {
-	rows, err := q.db.Query(ctx, findToolEntriesByName, arg.Names, arg.ProjectID, arg.DeploymentID)
+	rows, err := q.db.Query(ctx, findToolEntriesByName, arg.Names, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -89,11 +84,7 @@ WITH deployment AS (
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
     WHERE d.project_id = $1
-      AND ($3::uuid IS NOT NULL OR ds.status = 'completed')
-      AND (
-        $3::uuid IS NULL
-        OR d.id = $3::uuid
-      )
+    AND ds.status = 'completed'
     ORDER BY d.seq DESC
     LIMIT 1
 ),
@@ -121,9 +112,8 @@ ORDER BY http_tool_definitions.id DESC
 `
 
 type FindToolsByNameParams struct {
-	ProjectID    uuid.UUID
-	Names        []string
-	DeploymentID uuid.NullUUID
+	ProjectID uuid.UUID
+	Names     []string
 }
 
 type FindToolsByNameRow struct {
@@ -133,7 +123,7 @@ type FindToolsByNameRow struct {
 }
 
 func (q *Queries) FindToolsByName(ctx context.Context, arg FindToolsByNameParams) ([]FindToolsByNameRow, error) {
-	rows, err := q.db.Query(ctx, findToolsByName, arg.ProjectID, arg.Names, arg.DeploymentID)
+	rows, err := q.db.Query(ctx, findToolsByName, arg.ProjectID, arg.Names)
 	if err != nil {
 		return nil, err
 	}

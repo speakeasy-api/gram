@@ -61,11 +61,7 @@ WITH deployment AS (
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
     WHERE d.project_id = @project_id
-      AND (sqlc.narg(deployment_id)::uuid IS NOT NULL OR ds.status = 'completed')
-      AND (
-        sqlc.narg(deployment_id)::uuid IS NULL
-        OR d.id = sqlc.narg(deployment_id)::uuid
-      )
+    AND ds.status = 'completed'
     ORDER BY d.seq DESC
     LIMIT 1
 ),
@@ -97,11 +93,7 @@ WITH deployment AS (
     FROM deployments d
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
     WHERE d.project_id = @project_id
-      AND (sqlc.narg(deployment_id)::uuid IS NOT NULL OR ds.status = 'completed')
-      AND (
-        sqlc.narg(deployment_id)::uuid IS NULL
-        OR d.id = sqlc.narg(deployment_id)::uuid
-      )
+    AND ds.status = 'completed'
     ORDER BY d.seq DESC
     LIMIT 1
 ),
