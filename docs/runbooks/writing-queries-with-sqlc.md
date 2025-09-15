@@ -111,7 +111,7 @@ WITH latest_deployment AS (
     JOIN deployment_statuses ds ON d.id = ds.deployment_id
     WHERE d.project_id = @project_id
       AND ds.status = 'completed'
-    ORDER BY sec DESC
+    ORDER BY seq DESC
     LIMIT 1
 )
 SELECT
