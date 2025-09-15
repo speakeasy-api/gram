@@ -15,6 +15,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -44,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -55,6 +57,7 @@ type Service struct {
 	db                *pgxpool.Pool
 	authRepo          *auth_repo.Queries
 	toolsetsRepo      *toolsets_repo.Queries
+	orgsRepo          *organizations_repo.Queries
 	auth              *auth.Auth
 	env               gateway.EnvironmentLoader
 	serverURL         *url.URL
@@ -113,6 +116,7 @@ func NewService(
 		db:           db,
 		authRepo:     auth_repo.New(db),
 		toolsetsRepo: toolsets_repo.New(db),
+		orgsRepo:     organizations_repo.New(db),
 		auth:         auth.New(logger, db, sessions),
 		env:          env,
 		serverURL:    serverURL,
@@ -291,14 +295,21 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 }
 
 type jsonSnippetData struct {
-	MCPName string
-	Headers []string
-	MCPURL  string
+	MCPName        string
+	MCPSlug        string
+	MCPDescription string
+	Headers        []string
+	EnvHeaders     []string
+	MCPURL         string
+	ToolNames      []string
 }
 
 type hostedPageData struct {
 	jsonSnippetData
-	JSONBlobURI string
+	MCPConfig           string
+	MCPConfigURIEncoded string
+	OrganizationName    string
+	SiteURL             string
 }
 
 func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error {
@@ -321,6 +332,16 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
 
+	// Load organization information
+	organization, err := s.orgsRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
+	var organizationName string
+	if err != nil {
+		s.logger.WarnContext(ctx, "could not load organization information", attr.SlogOrganizationID(toolset.OrganizationID), attr.SlogError(err))
+		organizationName = "Unknown Organization"
+	} else {
+		organizationName = organization.Name
+	}
+
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to describe toolset").Log(ctx, s.logger)
@@ -337,6 +358,18 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		}
 	}
 
+	toolNames := []string{}
+
+	for _, toolDesc := range toolsetDetails.HTTPTools {
+		toolNames = append(toolNames, toolDesc.Name)
+	}
+
+	for _, promptTpl := range toolsetDetails.PromptTemplates {
+		if promptTpl.Kind == "higher_order_tool" {
+			toolNames = append(toolNames, string(promptTpl.Name))
+		}
+	}
+
 	baseURL := s.serverURL.String() + "/mcp"
 	if customDomainCtx != nil {
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain+"/mcp")
@@ -346,10 +379,20 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		return oops.E(oops.CodeNotFound, err, "malformed mcp url").Log(ctx, s.logger)
 	}
 
+	// Create env-safe versions of headers (replace dashes with underscores)
+	envHeadersEnvSafe := make([]string, len(envHeaders))
+	for i, header := range envHeaders {
+		envHeadersEnvSafe[i] = strings.ReplaceAll(header, "-", "_")
+	}
+
 	configSnippetData := jsonSnippetData{
-		MCPName: cases.Title(language.English).String(toolset.Name),
-		MCPURL:  MCPURL,
-		Headers: envHeaders,
+		MCPName:        cases.Title(language.English).String(toolset.Name),
+		MCPSlug:        toolset.Slug,
+		MCPDescription: toolset.Description.String,
+		MCPURL:         MCPURL,
+		Headers:        envHeaders,
+		EnvHeaders:     envHeadersEnvSafe,
+		ToolNames:      toolNames,
 	}
 
 	configSnippetTmpl, err := template.New("config_snippet").Parse(configSnippetTmplData)
@@ -363,8 +406,11 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	data := hostedPageData{
-		jsonSnippetData: configSnippetData,
-		JSONBlobURI:     url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
+		jsonSnippetData:     configSnippetData,
+		MCPConfig:           configSnippet.String(),
+		MCPConfigURIEncoded: url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
+		OrganizationName:    organizationName,
+		SiteURL:             os.Getenv("GRAM_SITE_URL"),
 	}
 
 	hostedPageTmpl, err := template.New("hosted_page").Parse(hostedPageTmplData)
