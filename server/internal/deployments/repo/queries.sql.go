@@ -856,12 +856,10 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 }
 
 const getLatestDeploymentID = `-- name: GetLatestDeploymentID :one
-SELECT deployments.id
+SELECT id
 FROM deployments
-JOIN deployment_statuses ON deployments.id = deployment_statuses.deployment_id
-WHERE deployments.project_id = $1
-  AND deployment_statuses.status = 'completed'
-ORDER BY deployments.id DESC
+WHERE project_id = $1
+ORDER BY id DESC
 LIMIT 1
 `
 

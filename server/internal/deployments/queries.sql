@@ -111,12 +111,10 @@ LEFT JOIN tool_counts ON deployments.id = tool_counts.deployment_id
 WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
 -- name: GetLatestDeploymentID :one
-SELECT deployments.id
+SELECT id
 FROM deployments
-JOIN deployment_statuses ON deployments.id = deployment_statuses.deployment_id
-WHERE deployments.project_id = @project_id
-  AND deployment_statuses.status = 'completed'
-ORDER BY deployments.id DESC
+WHERE project_id = @project_id
+ORDER BY id DESC
 LIMIT 1;
 
 -- name: GetDeploymentByIdempotencyKey :one
