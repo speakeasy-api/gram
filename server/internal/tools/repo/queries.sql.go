@@ -339,6 +339,9 @@ type ListToolsRow struct {
 	PackageName         string
 }
 
+// Two use cases:
+// 1. List all tools from the latest successful deployment (when deployment_id is NULL)
+// 2. List all tools for a specific deployment by ID (when deployment_id is provided)
 func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToolsRow, error) {
 	rows, err := q.db.Query(ctx, listTools,
 		arg.Limit,

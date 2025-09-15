@@ -1,4 +1,7 @@
 -- name: ListTools :many
+-- Two use cases:
+-- 1. List all tools from the latest successful deployment (when deployment_id is NULL)
+-- 2. List all tools for a specific deployment by ID (when deployment_id is provided)
 WITH deployment AS (
     SELECT d.id
     FROM deployments d
