@@ -304,7 +304,7 @@ func (g *gcsChunkReader) ReadAt(p []byte, offset int64) (int, error) {
 		return rdr.Close()
 	})
 
-	n, err := rdr.Read(p)
+	n, err := io.ReadFull(rdr, p)
 	if err != nil {
 		return n, fmt.Errorf("read from range reader: %w", err)
 	}
