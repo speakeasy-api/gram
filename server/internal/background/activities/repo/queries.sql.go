@@ -127,3 +127,44 @@ func (q *Queries) GetPlatformUsageMetrics(ctx context.Context) ([]GetPlatformUsa
 	}
 	return items, nil
 }
+
+const getUserEmailsByOrgIDs = `-- name: GetUserEmailsByOrgIDs :many
+SELECT DISTINCT
+    d.organization_id,
+    u.email
+FROM deployments d
+JOIN users u ON d.user_id = u.id
+WHERE d.organization_id = ANY($1::text[])
+  AND d.id IN (
+    SELECT DISTINCT ON (organization_id) id
+    FROM deployments 
+    WHERE organization_id = ANY($1::text[])
+    ORDER BY organization_id, created_at DESC
+  )
+`
+
+type GetUserEmailsByOrgIDsRow struct {
+	OrganizationID string
+	Email          string
+}
+
+// Get user emails for organization IDs by looking up the latest deployment for each org
+func (q *Queries) GetUserEmailsByOrgIDs(ctx context.Context, dollar_1 []string) ([]GetUserEmailsByOrgIDsRow, error) {
+	rows, err := q.db.Query(ctx, getUserEmailsByOrgIDs, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserEmailsByOrgIDsRow
+	for rows.Next() {
+		var i GetUserEmailsByOrgIDsRow
+		if err := rows.Scan(&i.OrganizationID, &i.Email); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
