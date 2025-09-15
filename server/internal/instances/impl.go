@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	domains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -47,7 +49,9 @@ type Service struct {
 	tracer           trace.Tracer
 	db               *pgxpool.Pool
 	auth             *auth.Auth
+	serverURL        *url.URL
 	toolset          *toolsets.Toolsets
+	domainsRepo      *domains_repo.Queries
 	environmentsRepo *environments_repo.Queries
 	env              *environments.EnvironmentEntries
 	toolProxy        *gateway.ToolProxy
@@ -68,6 +72,7 @@ func NewService(
 	guardianPolicy *guardian.Policy,
 	posthog *posthog.Posthog,
 	billing billing.Tracker,
+	serverURL *url.URL,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
@@ -78,7 +83,9 @@ func NewService(
 		tracer:           tracer,
 		db:               db,
 		auth:             auth.New(logger, db, sessions),
+		serverURL:        serverURL,
 		toolset:          toolsets.NewToolsets(db),
+		domainsRepo:      domains_repo.New(db),
 		environmentsRepo: envRepo,
 		env:              env,
 		posthog:          posthog,
@@ -270,17 +277,38 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, executionInfo.OrganizationSlug, executionInfo.ProjectSlug)
 
 	if chatID != "" && toolsetSlug != "" {
+		toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolsetSlug))
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
+		}
+
+		mcpBaseURL := s.serverURL.String()
+		if toolset.CustomDomainID != nil {
+			if customDomain, err := s.domainsRepo.GetCustomDomainByID(ctx, uuid.MustParse(*toolset.CustomDomainID)); err == nil {
+				mcpBaseURL = fmt.Sprintf("https://%s", customDomain.Domain)
+			}
+		}
+		mcpFullURL := ""
+		if toolset.McpSlug != nil {
+			mcpFullURL = mcpBaseURL + "/" + string(*toolset.McpSlug)
+		}
+
 		if err := s.posthog.CaptureEvent(ctx, "direct_tool_execution", authCtx.ProjectID.String(), map[string]interface{}{
-			"project_id":          authCtx.ProjectID.String(),
-			"project_slug":        authCtx.ProjectSlug,
-			"organization_id":     executionInfo.Tool.OrganizationID,
-			"organization_slug":   executionInfo.OrganizationSlug,
-			"authenticated":       true,
-			"toolset_slug":        toolsetSlug,
-			"chat_session_id":     chatID,
-			"tool_name":           executionInfo.Tool.Name,
-			"tool_id":             executionInfo.Tool.ID,
-			"disable_noification": true,
+			"toolset":              toolset.Name,
+			"toolset_slug":         toolset.Slug,
+			"toolset_id":           toolset.ID,
+			"mcp_domain":           mcpBaseURL,
+			"mcp_url":              mcpFullURL,
+			"mcp_enabled":          toolset.McpEnabled,
+			"disable_notification": true,
+			"project_id":           authCtx.ProjectID.String(),
+			"project_slug":         authCtx.ProjectSlug,
+			"organization_id":      executionInfo.Tool.OrganizationID,
+			"organization_slug":    executionInfo.OrganizationSlug,
+			"authenticated":        true,
+			"chat_session_id":      chatID,
+			"tool_name":            executionInfo.Tool.Name,
+			"tool_id":              executionInfo.Tool.ID,
 		}); err != nil {
 			logger.ErrorContext(ctx, "failed to capture direct_tool_execution event", attr.SlogError(err))
 		}
