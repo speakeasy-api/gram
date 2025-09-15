@@ -1,1 +1,13 @@
-{"command":"npx mcp-remote {{ .MCPURL }}{{- range .Headers }} --header {{ . }}:${VALUE}{{- end }}"}
+{
+  "command": "npx",
+  "args": [
+    "mcp-remote",
+    "{{ .MCPURL }}"{{- range $i, $header := .Headers }},
+    "--header",
+    "{{ $header }}:${{ "{" }}{{ index $.EnvHeaders $i }}{{ "}" }}"{{- end }}
+  ]{{- if (gt (len .Headers) 0) }},
+  "env": {
+    {{- range $i, $header := .Headers }}{{- if $i }},{{ end }}
+    "{{ index $.EnvHeaders $i }}": "<your-value-here>"{{- end }}
+  }{{- end }}
+}
