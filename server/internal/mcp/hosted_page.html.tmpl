@@ -9,22 +9,6 @@
     /* PAGE SETUP */
     /**************/
 
-    @font-face {
-      font-family: 'Diatype';
-      src: url('/fonts/diatype/ABCDiatype-Regular.woff2') format('woff2');
-      font-weight: 400;
-      font-style: normal;
-      font-display: block;
-    }
-
-    @font-face {
-      font-family: 'Diatype';
-      src: url('/fonts/diatype/ABCDiatype-Light.woff2') format('woff2');
-      font-weight: 300;
-      font-style: normal;
-      font-display: block;
-    }
-
     html,
     body {
       /* Font Families */
@@ -32,8 +16,6 @@
         Roboto, Helvetica, Arial, sans-serif;
       --font-diatype-mono: 'Diatype Mono', SFMono-Regular, Menlo, Monaco, Consolas,
         'Liberation Mono', 'Courier New', monospace;
-      --font-tobias: 'Tobias', 'Cormorant', Georgia, Cambria, 'Times New Roman',
-        Times, serif;
 
       /* Color Values */
 
@@ -80,13 +62,20 @@
       font-weight: 300;
     }
 
-    main {
+    .main {
       padding: 6rem 13rem;
     }
 
+
     @media (max-width: 768px) {
-      main {
+      .main {
         padding: 6rem 1rem;
+      }
+    }
+
+    @media (max-width: 1080px) {
+      .main {
+        padding: 6rem 6rem;
       }
     }
 
@@ -512,7 +501,7 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code></pre>
     </template>
   </head>
   <body>
-    <main>
+    <main class="main">
       <div class="content-container">
         <div class="header container">
           <div class="mcp-meta">
@@ -581,7 +570,7 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code></pre>
                 <span>Claude Code</span>
               </div>
               <button class="quick-action">
-                Copy install script
+                Copy script
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy-icon lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
               </button>
             </div>
@@ -593,7 +582,7 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code></pre>
                 <span>Claude Desktop</span>
               </div>
               <button class="quick-action">
-                Download configuration
+                Download config
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download-icon lucide-download"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
               </button>
             </div>
@@ -679,152 +668,9 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code></pre>
 {{ .MCPConfig }}
 EOF
 )"</code>
-    <script type="module">
-      import { zip } from 'https://cdn.skypack.dev/fflate@0.8.2?min';
-
-      window.downloadDxtHandler = (event) => {
-        const manifestElement = document.getElementById('manifest-json-blob');
-        if (manifestElement) {
-          const manifestContent = manifestElement.textContent;
-          
-          const files = {
-            'manifest.json': new TextEncoder().encode(manifestContent)
-          };
-
-          zip(files, (err, data) => {
-            if (err) {
-              console.error('Error creating zip:', err);
-              return;
-            }
-
-            const blob = new Blob([data], { type: 'application/zip' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'manifest.dxt';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          });
-        }
-      };
-    </script>
-    <script>
-      function copyToClipboard(elementId, button) {
-      const element = document.getElementById(elementId);
-      const text = element.textContent;
-
-      navigator.clipboard.writeText(text).then(function () {
-        const originalText = button.textContent;
-        button.textContent = 'Copied!';
-        button.classList.add('copied');
-
-        setTimeout(function () {
-          button.textContent = originalText;
-          button.classList.remove('copied');
-        }, 2000);
-      }).catch(function (err) {
-        console.error('Failed to copy text: ', err);
-      });
-    }
-
-    function togglePopover(e) {
-      const popoverRoot = e.currentTarget.parentElement
-      const menu = popoverRoot.querySelector('.popover-menu')
-      if (menu.classList.contains('hidden')) {
-        e.stopPropagation();
-        menu.classList.replace('hidden', 'active');
-        const popoverListener = window.addEventListener('click', (event) => {
-          if (menu.contains(event.target) || event.target === menu) {
-            return
-          }
-          menu.classList.replace('active', 'hidden');
-          window.removeEventListener('click', popoverListener);
-        })
-      }
-    }
-
-    function openModal(childContent) {
-      const template = document.querySelector('#modal-template')
-      const modalElement = template.content.cloneNode(true)
-      modalElement.querySelector('.content-slot').appendChild(childContent)
-      document.body.appendChild(modalElement);
-      const backdrop = document.querySelector('.modal-backdrop');
-      backdrop.addEventListener('scroll', (e) => e.stopPropagation());
-      backdrop.addEventListener('click', () => {
-        const modal = document.querySelector('.modal');
-        modal.remove();
-        backdrop.remove();
-      })
-    }
-
-    function openInstallTargetModal(e) {
-      const installTargetId = e.currentTarget.getAttribute('data-install-target')
-      const modalContent = document.
-        querySelector(`.install-target[data-install-target="${installTargetId}"]`).
-        content.
-        cloneNode(true)
-      openModal(modalContent)
-
-    }
-
-
-    function toggleToolVisibility() {
-      const hiddenTools = document.querySelectorAll('.tool-name.hidden')
-      if (hiddenTools.length > 0) {
-        hiddenTools.forEach(el => el.classList.remove('hidden'))
-      } else {
-        document.querySelectorAll('.tool-name:nth-child(n + 11)').
-          forEach(el => el.classList.add('hidden'))
-      }
-    }
-
-    function initializeHandlers() {
-      document.querySelector('.action-button').
-        addEventListener('click', togglePopover);
-
-      document.querySelectorAll('[data-install-method="modal"]').forEach((el) => {
-        el.addEventListener('click', openInstallTargetModal)
-      })
-
-      document.querySelector('.install-target[data-install-target="claude-code"] .quick-action').
-        addEventListener('click', (e) => {
-          e.stopPropagation();
-
-          const installElement = document.getElementById('claude-code-script');
-          if (installElement) {
-            const text = installElement.textContent;
-            navigator.clipboard.writeText(text).then(() => {
-              const button = e.target.classList.contains('quick-action') ? e.target : e.target.closest('.quick-action');
-              const originalText = button.textContent;
-              button.textContent = 'Copied!';
-              setTimeout(() => {
-                button.textContent = originalText;
-              }, 2000);
-            }).catch((err) => {
-              console.error('Failed to copy text: ', err);
-            });
-          }
-        })
-
-
-      document.querySelector('.install-target[data-install-target="claude-desktop"] .quick-action').
-        addEventListener('click', (e) => {
-          e.stopPropagation();
-          window.downloadDxtHandler(e);
-        })
-
-      document.querySelector('.toggle-tool-visibility').
-        addEventListener('click', toggleToolVisibility)
-
-      document.querySelector('a.quick-action').
-        addEventListener('click', (e) => e.stopPropagation())
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-      initializeHandlers()
-    })
-    </script>
+    <script
+      type="module"
+      src="http://localhost:5173/external/hosted-install-page.js"
+    ></script>
   </body>
 </html>

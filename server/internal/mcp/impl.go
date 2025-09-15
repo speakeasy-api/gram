@@ -15,6 +15,7 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -308,6 +309,7 @@ type hostedPageData struct {
 	MCPConfig           string
 	MCPConfigURIEncoded string
 	OrganizationName    string
+	SiteURL             string
 }
 
 func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error {
@@ -359,7 +361,7 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	toolNames := []string{}
 
 	for _, toolDesc := range toolsetDetails.HTTPTools {
-		toolNames = append(toolNames, string(toolDesc.Name))
+		toolNames = append(toolNames, toolDesc.Name)
 	}
 
 	for _, promptTpl := range toolsetDetails.PromptTemplates {
@@ -408,6 +410,7 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		MCPConfig:           configSnippet.String(),
 		MCPConfigURIEncoded: url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
 		OrganizationName:    organizationName,
+		SiteURL:             os.Getenv("GRAM_SITE_URL"),
 	}
 
 	hostedPageTmpl, err := template.New("hosted_page").Parse(hostedPageTmplData)
