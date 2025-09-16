@@ -50,7 +50,7 @@ func (p *ToolExtractor) doLibOpenAPI(
 		IgnoreArrayCircularReferences:       true,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error opening openapi document").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document").Log(ctx, logger)
 	}
 
 	v3Model, errs := document.BuildV3Model()
@@ -61,7 +61,7 @@ func (p *ToolExtractor) doLibOpenAPI(
 
 		return nil, oops.E(
 			oops.CodeBadRequest,
-			oops.Perm(errors.Join(errs...)),
+			oops.Permanent(errors.Join(errs...)),
 			"openapi v3 document '%s' had %d errors", docInfo.Name, len(errs),
 		).Log(ctx, logger, attr.SlogEvent("openapi:error"))
 	}
@@ -95,7 +95,7 @@ func (p *ToolExtractor) doLibOpenAPI(
 
 	globalSecurity, err := serializeSecurityLibOpenAPI(v3Model.Model.Security)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error serializing global security").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error serializing global security").Log(ctx, logger)
 	}
 
 	securitySchemesParams, errs := extractSecuritySchemesLibOpenAPI(v3Model.Model, task)
@@ -111,7 +111,7 @@ func (p *ToolExtractor) doLibOpenAPI(
 	for key, scheme := range securitySchemesParams {
 		sec, err := tx.CreateHTTPSecurity(ctx, *scheme)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
 		}
 
 		securitySchemes[key] = sec
@@ -189,7 +189,7 @@ func (p *ToolExtractor) doLibOpenAPI(
 	}
 
 	if writeErrCount > 0 {
-		err := oops.Perm(fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr))
+		err := oops.Permanent(fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr))
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to save %d tool definitions", writeErrCount).Log(ctx, logger)
 	}
 

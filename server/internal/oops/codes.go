@@ -50,3 +50,12 @@ func (c Code) UserMessage() string {
 		return "an unexpected error occurred"
 	}
 }
+
+func (c Code) IsTemporary() bool {
+	switch c {
+	case CodeUnexpected, CodeGatewayError:
+		return true
+	default:
+		return false
+	}
+}
