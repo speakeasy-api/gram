@@ -1,6 +1,5 @@
 import { HttpRoute } from "@/components/http-route";
 import { Badge } from "@/components/ui/badge";
-import { Dot } from "@/components/ui/dot";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchBar } from "@/components/ui/search-bar";
 import { SkeletonTable } from "@/components/ui/skeleton";
@@ -61,12 +60,8 @@ const columns: Column<Tool>[] = [
     key: "description",
     render: (row) => (
       <Type muted className="line-clamp-2 overflow-auto self-start">
-        <span className="text-foreground">
-          {row.summary}
-          {row.summary && <Dot className="mx-2" />}
-        </span>
         {row.description}
-        {!row.summary && !row.description && (
+        {!row.description && (
           <span className="text-muted-foreground italic">No description.</span>
         )}
       </Type>

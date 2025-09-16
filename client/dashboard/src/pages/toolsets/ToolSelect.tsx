@@ -1,17 +1,15 @@
 import { HttpRoute } from "@/components/http-route";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@speakeasy-api/moonshine";
-import { Check, X } from "lucide-react";
 import { Card, Cards } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dot } from "@/components/ui/dot";
 import { Heading } from "@/components/ui/heading";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchBar } from "@/components/ui/search-bar";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
+import { UpdatedAt } from "@/components/updated-at";
 import {
   useRegisterToolsetTelemetry,
   useTelemetry,
@@ -24,15 +22,14 @@ import {
 } from "@gram/client/models/components";
 import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
-import { Column, Stack, Table } from "@speakeasy-api/moonshine";
-import { AlertTriangleIcon, CheckCircleIcon } from "lucide-react";
+import { Button, Column, Stack, Table } from "@speakeasy-api/moonshine";
+import { AlertTriangleIcon, Check, CheckCircleIcon, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
+import { onboardingStepStorageKeys } from "../home/Home";
 import { useCustomTools } from "../toolBuilder/CustomTools";
 import { MustacheHighlight } from "../toolBuilder/ToolBuilder";
 import { ToolsetHeader } from "./ToolsetHeader";
-import { UpdatedAt } from "@/components/updated-at";
-import { onboardingStepStorageKeys } from "../home/Home";
 
 type Tool = HTTPToolDefinition & { displayName: string };
 
@@ -108,7 +105,11 @@ const groupColumnsToggleable: Column<ToggleableToolGroup>[] = [
           }}
         >
           <Button.LeftIcon>
-            {allEnabled ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+            {allEnabled ? (
+              <X className="w-4 h-4" />
+            ) : (
+              <Check className="w-4 h-4" />
+            )}
           </Button.LeftIcon>
           <Button.Text>{allEnabled ? "Disable All" : "Enable All"}</Button.Text>
         </Button>
@@ -136,12 +137,8 @@ const columns: Column<Tool>[] = [
     key: "description",
     render: (row) => (
       <Type muted className="line-clamp-2 overflow-auto self-start">
-        <span className="text-foreground">
-          {row.summary}
-          {row.summary && <Dot className="mx-2" />}
-        </span>
         {row.description}
-        {!row.summary && !row.description && (
+        {!row.description && (
           <span className="text-muted-foreground italic">No description.</span>
         )}
       </Type>
@@ -450,7 +447,8 @@ function CustomToolCard({
   const allToolsAvailable = template.toolsHint.every(isToolInToolset);
 
   const addButton = (
-    <Button variant="secondary"
+    <Button
+      variant="secondary"
       disabled={!templateIsInToolset && !allToolsAvailable}
       onClick={toggleEnabled}
     >

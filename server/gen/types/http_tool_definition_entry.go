@@ -8,6 +8,7 @@
 package types
 
 type HTTPToolDefinitionEntry struct {
+	ToolType string
 	// The ID of the HTTP tool
 	ID string
 	// The name of the tool

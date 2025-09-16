@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deployments/events"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/inv"
@@ -152,7 +153,7 @@ func (p *ToolExtractor) Do(
 		attr.SlogOrganizationSlug(task.OrgSlug),
 	}
 
-	eventsHandler := NewLogHandler()
+	eventsHandler := events.NewLogHandler()
 	logger := slog.New(slogmulti.Fanout(
 		p.logger.Handler(),
 		eventsHandler,

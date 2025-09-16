@@ -1796,6 +1796,7 @@ type ServerVariableResponseBody struct {
 // HTTPToolDefinitionResponseBody is used to define fields on response body
 // types.
 type HTTPToolDefinitionResponseBody struct {
+	ToolType string `form:"tool_type" json:"tool_type" xml:"tool_type"`
 	// The ID of the HTTP tool
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the project
@@ -2033,6 +2034,7 @@ type ToolsetEntryResponseBody struct {
 // HTTPToolDefinitionEntryResponseBody is used to define fields on response
 // body types.
 type HTTPToolDefinitionEntryResponseBody struct {
+	ToolType string `form:"tool_type" json:"tool_type" xml:"tool_type"`
 	// The ID of the HTTP tool
 	ID string `form:"id" json:"id" xml:"id"`
 	// The name of the tool

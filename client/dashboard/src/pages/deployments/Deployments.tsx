@@ -17,6 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
+import { toast } from "sonner";
 
 export default function DeploymentsPage() {
   return (
@@ -45,6 +46,20 @@ type DeploymentSummary = {
   openapiv3ToolCount: number;
 };
 
+const RedeploySuccessToast = ({ href }: { href: string | undefined }) => {
+  if (!href) return <p>Successfully redeployed!</p>;
+
+  return (
+    <p>
+      Successfully redeployed!{" "}
+      <a href={href} className="underline">
+        View deployment
+      </a>
+      .
+    </p>
+  );
+};
+
 function DeploymentActionsDropdown({
   deploymentId,
   deployments,
@@ -54,17 +69,30 @@ function DeploymentActionsDropdown({
 }) {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
+  const routes = useRoutes();
 
   const redeployMutation = useRedeployDeploymentMutation({
-    onSuccess: () => {
+    onMutate: ({ request }) => {
+      toast.loading("Redeploying...", {
+        id: request.redeployRequestBody.deploymentId,
+      });
+    },
+    onSuccess: ({ deployment }) => {
       // Invalidate and refetch deployments list
       queryClient.invalidateQueries({
         queryKey: ["@gram/client", "deployments", "list"],
       });
-      setIsOpen(false);
+      const href = deployment?.id
+        ? routes.deployments.deployment.href(deployment.id)
+        : undefined;
+      toast.success(() => <RedeploySuccessToast href={href} />);
     },
     onError: (error) => {
       console.error("Failed to redeploy:", error);
+      toast.error(`Failed to redeploy. Please try again.`);
+    },
+    onSettled: (_, __, { request }) => {
+      toast.dismiss(request.redeployRequestBody.deploymentId);
       setIsOpen(false);
     },
   });

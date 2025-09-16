@@ -41,6 +41,7 @@ let value: GetInstanceResult = {
       tags: [
         "<value 1>",
       ],
+      toolType: "http",
       updatedAt: new Date("2025-03-13T06:28:48.216Z"),
     },
   ],

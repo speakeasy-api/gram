@@ -5,6 +5,7 @@
 import * as z from "zod";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -25,6 +26,11 @@ import {
   ToolVariation$Outbound,
   ToolVariation$outboundSchema,
 } from "./toolvariation.js";
+
+export const ToolType = {
+  Http: "http",
+} as const;
+export type ToolType = ClosedEnum<typeof ToolType>;
 
 export type HTTPToolDefinition = {
   /**
@@ -119,12 +125,32 @@ export type HTTPToolDefinition = {
    * The tags list for this http tool
    */
   tags: Array<string>;
+  toolType: ToolType;
   /**
    * The last update date of the tool.
    */
   updatedAt: Date;
   variation?: ToolVariation | undefined;
 };
+
+/** @internal */
+export const ToolType$inboundSchema: z.ZodNativeEnum<typeof ToolType> = z
+  .nativeEnum(ToolType);
+
+/** @internal */
+export const ToolType$outboundSchema: z.ZodNativeEnum<typeof ToolType> =
+  ToolType$inboundSchema;
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ToolType$ {
+  /** @deprecated use `ToolType$inboundSchema` instead. */
+  export const inboundSchema = ToolType$inboundSchema;
+  /** @deprecated use `ToolType$outboundSchema` instead. */
+  export const outboundSchema = ToolType$outboundSchema;
+}
 
 /** @internal */
 export const HTTPToolDefinition$inboundSchema: z.ZodType<
@@ -155,6 +181,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   summarizer: z.string().optional(),
   summary: z.string(),
   tags: z.array(z.string()),
+  tool_type: ToolType$inboundSchema,
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   variation: ToolVariation$inboundSchema.optional(),
 }).transform((v) => {
@@ -171,6 +198,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
     "project_id": "projectId",
     "response_filter": "responseFilter",
     "schema_version": "schemaVersion",
+    "tool_type": "toolType",
     "updated_at": "updatedAt",
   });
 });
@@ -200,6 +228,7 @@ export type HTTPToolDefinition$Outbound = {
   summarizer?: string | undefined;
   summary: string;
   tags: Array<string>;
+  tool_type: string;
   updated_at: string;
   variation?: ToolVariation$Outbound | undefined;
 };
@@ -233,6 +262,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   summarizer: z.string().optional(),
   summary: z.string(),
   tags: z.array(z.string()),
+  toolType: ToolType$outboundSchema,
   updatedAt: z.date().transform(v => v.toISOString()),
   variation: ToolVariation$outboundSchema.optional(),
 }).transform((v) => {
@@ -249,6 +279,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
     projectId: "project_id",
     responseFilter: "response_filter",
     schemaVersion: "schema_version",
+    toolType: "tool_type",
     updatedAt: "updated_at",
   });
 });

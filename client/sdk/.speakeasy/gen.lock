@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 52d4b33ccd5a610d621345f223ab0479
+  docChecksum: bc3cc53afb4ba4de1bd55315d1d86cb6
   docVersion: 0.0.1
-  speakeasyVersion: 1.616.0
-  generationVersion: 2.700.3
-  releaseVersion: 0.12.63
-  configChecksum: a723c2c794dcdfbf9e2bd1b9a9f7d80a
+  speakeasyVersion: 1.617.1
+  generationVersion: 2.701.8
+  releaseVersion: 0.12.64
+  configChecksum: 33176e09135108331acfec6b6857bde6
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -84,6 +84,7 @@ generatedFiles:
   - docs/models/components/getslackconnectionresult.md
   - docs/models/components/httptooldefinition.md
   - docs/models/components/httptooldefinitionentry.md
+  - docs/models/components/httptooldefinitionentrytooltype.md
   - docs/models/components/inforesponsebody.md
   - docs/models/components/integration.md
   - docs/models/components/integrationentry.md
@@ -134,6 +135,7 @@ generatedFiles:
   - docs/models/components/tierlimits.md
   - docs/models/components/toolset.md
   - docs/models/components/toolsetentry.md
+  - docs/models/components/tooltype.md
   - docs/models/components/toolvariation.md
   - docs/models/components/updateenvironmentrequestbody.md
   - docs/models/components/updatepackageform.md
@@ -1280,7 +1282,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2025-12-20T03:22:44.412Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "tool_type": "http", "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2025-12-20T03:22:44.412Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
