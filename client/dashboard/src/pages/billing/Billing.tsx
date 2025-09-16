@@ -21,7 +21,7 @@ import {
   useGetUsageTiers,
 } from "@gram/client/react-query";
 import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
-import { cn, Stack, Button } from "@speakeasy-api/moonshine";
+import { Button, cn, Stack } from "@speakeasy-api/moonshine";
 import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -175,7 +175,10 @@ const UsageTiers = () => {
       } catch (error) {
         console.error("Error creating checkout link:", error);
         telemetry.capture("checkout_link_error", {
-          error: error instanceof Error ? error.message : "Failed to create checkout link",
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to create checkout link",
           accountType: session.gramAccountType,
         });
         setCheckoutError(true);
@@ -183,7 +186,7 @@ const UsageTiers = () => {
         setIsLoadingCheckout(false);
       }
     };
-    
+
     fetchCheckoutLink();
   }, [client, telemetry, session.gramAccountType]);
 
@@ -209,19 +212,19 @@ const UsageTiers = () => {
         </Page.Section.CTA>
       );
     }
-    
+
     return (
       <Page.Section.CTA>
-        <a
-          href={checkoutLink}
-          data-polar-checkout
-          data-polar-checkout-theme="light"
-          className="inline-flex"
-        >
-          <Button disabled={isLoadingCheckout}>
+        <Button disabled={isLoadingCheckout} asChild>
+          <a
+            href={checkoutLink}
+            data-polar-checkout
+            data-polar-checkout-theme="light"
+            className="inline-flex"
+          >
             UPGRADE
-          </Button>
-        </a>
+          </a>
+        </Button>
       </Page.Section.CTA>
     );
   }, [checkoutLink, checkoutError, isLoadingCheckout, handleFallbackClick]);
@@ -233,7 +236,9 @@ const UsageTiers = () => {
           try {
             const link = await client.usage.createCustomerSession();
             if (!link) {
-              console.error("Failed to create customer session: received empty link");
+              console.error(
+                "Failed to create customer session: received empty link"
+              );
               telemetry.capture("customer_session_error", {
                 error: "Received empty customer session link",
                 accountType: session.gramAccountType,
@@ -244,7 +249,10 @@ const UsageTiers = () => {
           } catch (error) {
             console.error("Error creating customer session:", error);
             telemetry.capture("customer_session_error", {
-              error: error instanceof Error ? error.message : "Failed to create customer session",
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to create customer session",
               accountType: session.gramAccountType,
             });
           }

@@ -1,7 +1,5 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
-import { Button } from "@speakeasy-api/moonshine";
-import { Plus } from "lucide-react";
 import { MiniCard, MiniCards } from "@/components/ui/card-mini";
 import { Dialog } from "@/components/ui/dialog";
 import { SkeletonCode } from "@/components/ui/skeleton";
@@ -19,7 +17,8 @@ import {
   useLatestDeployment,
   useListAssets,
 } from "@gram/client/react-query/index.js";
-import { Icon } from "@speakeasy-api/moonshine";
+import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Plus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
@@ -105,7 +104,8 @@ export function APIsContent() {
         </Dialog.Header>
         <OnboardingContent onOnboardingComplete={finishUpload} />
         <Dialog.Footer>
-          <Button variant="tertiary"
+          <Button
+            variant="tertiary"
             onClick={() => setNewDocumentDialogOpen(false)}
           >
             Back
@@ -259,7 +259,8 @@ export function APIsContent() {
               />
             )}
             <Dialog.Footer>
-              <Button variant="tertiary"
+              <Button
+                variant="tertiary"
                 onClick={() => {
                   setChangeDocumentTargetSlug(null);
                   undoSpecUpload(); // Reset the file state when dialog closes
