@@ -49,13 +49,15 @@ export default function Prompts() {
       <Page.Section.Description>
         Provide your users with MCP-native prompt templates
       </Page.Section.Description>
-      <Page.Section.CTA
-        onClick={() => routes.prompts.newPrompt.goTo()}
-      >
-        <Button.LeftIcon>
-          <Plus className="w-4 h-4" />
-        </Button.LeftIcon>
-        <Button.Text>New Prompt</Button.Text>
+      <Page.Section.CTA>
+        <Button
+          onClick={() => routes.prompts.newPrompt.goTo()}
+        >
+          <Button.LeftIcon>
+            <Plus className="w-4 h-4" />
+          </Button.LeftIcon>
+          <Button.Text>New Prompt</Button.Text>
+        </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
         <Cards isLoading={isLoading}>

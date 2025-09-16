@@ -90,8 +90,8 @@ type GetDeploymentResponseBody struct {
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	// The ID of the deployment that this deployment was cloned from.
 	ClonedFrom *string `form:"cloned_from,omitempty" json:"cloned_from,omitempty" xml:"cloned_from,omitempty"`
-	// The number of tools in the deployment.
-	ToolCount *int64 `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// The number of tools in the deployment generated from OpenAPI documents.
+	Openapiv3ToolCount *int64 `form:"openapiv3_tool_count,omitempty" json:"openapiv3_tool_count,omitempty" xml:"openapiv3_tool_count,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
@@ -1504,8 +1504,8 @@ type DeploymentResponseBody struct {
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	// The ID of the deployment that this deployment was cloned from.
 	ClonedFrom *string `form:"cloned_from,omitempty" json:"cloned_from,omitempty" xml:"cloned_from,omitempty"`
-	// The number of tools in the deployment.
-	ToolCount *int64 `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// The number of tools in the deployment generated from OpenAPI documents.
+	Openapiv3ToolCount *int64 `form:"openapiv3_tool_count,omitempty" json:"openapiv3_tool_count,omitempty" xml:"openapiv3_tool_count,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
@@ -1553,10 +1553,10 @@ type DeploymentSummaryResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// The creation date of the deployment.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// The number of upstream assets.
-	AssetCount *int64 `form:"asset_count,omitempty" json:"asset_count,omitempty" xml:"asset_count,omitempty"`
-	// The number of tools in the deployment.
-	ToolCount *int64 `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// The number of upstream OpenAPI assets.
+	Openapiv3AssetCount *int64 `form:"openapiv3_asset_count,omitempty" json:"openapiv3_asset_count,omitempty" xml:"openapiv3_asset_count,omitempty"`
+	// The number of tools in the deployment generated from OpenAPI documents.
+	Openapiv3ToolCount *int64 `form:"openapiv3_tool_count,omitempty" json:"openapiv3_tool_count,omitempty" xml:"openapiv3_tool_count,omitempty"`
 }
 
 // DeploymentLogEventResponseBody is used to define fields on response body
@@ -1564,6 +1564,10 @@ type DeploymentSummaryResponseBody struct {
 type DeploymentLogEventResponseBody struct {
 	// The ID of the log event
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the asset tied to the log event
+	AttachmentID *string `form:"attachment_id,omitempty" json:"attachment_id,omitempty" xml:"attachment_id,omitempty"`
+	// The type of the asset tied to the log event
+	AttachmentType *string `form:"attachment_type,omitempty" json:"attachment_type,omitempty" xml:"attachment_type,omitempty"`
 	// The creation date of the log event
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The type of event that occurred
@@ -1643,20 +1647,20 @@ func NewRedeployRequestBody(p *deployments.RedeployPayload) *RedeployRequestBody
 // endpoint result from a HTTP "OK" response.
 func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetDeploymentResult {
 	v := &deployments.GetDeploymentResult{
-		ID:             *body.ID,
-		OrganizationID: *body.OrganizationID,
-		ProjectID:      *body.ProjectID,
-		UserID:         *body.UserID,
-		CreatedAt:      *body.CreatedAt,
-		Status:         *body.Status,
-		IdempotencyKey: body.IdempotencyKey,
-		GithubRepo:     body.GithubRepo,
-		GithubPr:       body.GithubPr,
-		GithubSha:      body.GithubSha,
-		ExternalID:     body.ExternalID,
-		ExternalURL:    body.ExternalURL,
-		ClonedFrom:     body.ClonedFrom,
-		ToolCount:      *body.ToolCount,
+		ID:                 *body.ID,
+		OrganizationID:     *body.OrganizationID,
+		ProjectID:          *body.ProjectID,
+		UserID:             *body.UserID,
+		CreatedAt:          *body.CreatedAt,
+		Status:             *body.Status,
+		IdempotencyKey:     body.IdempotencyKey,
+		GithubRepo:         body.GithubRepo,
+		GithubPr:           body.GithubPr,
+		GithubSha:          body.GithubSha,
+		ExternalID:         body.ExternalID,
+		ExternalURL:        body.ExternalURL,
+		ClonedFrom:         body.ClonedFrom,
+		Openapiv3ToolCount: *body.Openapiv3ToolCount,
 	}
 	v.Openapiv3Assets = make([]*types.OpenAPIv3DeploymentAsset, len(body.Openapiv3Assets))
 	for i, val := range body.Openapiv3Assets {
@@ -2819,8 +2823,8 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	if body.Packages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("packages", "body"))
 	}
-	if body.ToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	if body.Openapiv3ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3_tool_count", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -4668,8 +4672,8 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 	if body.Packages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("packages", "body"))
 	}
-	if body.ToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	if body.Openapiv3ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3_tool_count", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -4716,11 +4720,11 @@ func ValidateDeploymentSummaryResponseBody(body *DeploymentSummaryResponseBody) 
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
-	if body.AssetCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("asset_count", "body"))
+	if body.Openapiv3AssetCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3_asset_count", "body"))
 	}
-	if body.ToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	if body.Openapiv3ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3_tool_count", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

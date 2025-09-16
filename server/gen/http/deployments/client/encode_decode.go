@@ -1750,20 +1750,20 @@ func unmarshalDeploymentResponseBodyToTypesDeployment(v *DeploymentResponseBody)
 		return nil
 	}
 	res := &types.Deployment{
-		ID:             *v.ID,
-		OrganizationID: *v.OrganizationID,
-		ProjectID:      *v.ProjectID,
-		UserID:         *v.UserID,
-		CreatedAt:      *v.CreatedAt,
-		Status:         *v.Status,
-		IdempotencyKey: v.IdempotencyKey,
-		GithubRepo:     v.GithubRepo,
-		GithubPr:       v.GithubPr,
-		GithubSha:      v.GithubSha,
-		ExternalID:     v.ExternalID,
-		ExternalURL:    v.ExternalURL,
-		ClonedFrom:     v.ClonedFrom,
-		ToolCount:      *v.ToolCount,
+		ID:                 *v.ID,
+		OrganizationID:     *v.OrganizationID,
+		ProjectID:          *v.ProjectID,
+		UserID:             *v.UserID,
+		CreatedAt:          *v.CreatedAt,
+		Status:             *v.Status,
+		IdempotencyKey:     v.IdempotencyKey,
+		GithubRepo:         v.GithubRepo,
+		GithubPr:           v.GithubPr,
+		GithubSha:          v.GithubSha,
+		ExternalID:         v.ExternalID,
+		ExternalURL:        v.ExternalURL,
+		ClonedFrom:         v.ClonedFrom,
+		Openapiv3ToolCount: *v.Openapiv3ToolCount,
 	}
 	res.Openapiv3Assets = make([]*types.OpenAPIv3DeploymentAsset, len(v.Openapiv3Assets))
 	for i, val := range v.Openapiv3Assets {
@@ -1874,12 +1874,12 @@ func marshalAddPackageFormRequestBodyToDeploymentsAddPackageForm(v *AddPackageFo
 // *DeploymentSummaryResponseBody.
 func unmarshalDeploymentSummaryResponseBodyToDeploymentsDeploymentSummary(v *DeploymentSummaryResponseBody) *deployments.DeploymentSummary {
 	res := &deployments.DeploymentSummary{
-		ID:         *v.ID,
-		UserID:     *v.UserID,
-		Status:     *v.Status,
-		CreatedAt:  *v.CreatedAt,
-		AssetCount: *v.AssetCount,
-		ToolCount:  *v.ToolCount,
+		ID:                  *v.ID,
+		UserID:              *v.UserID,
+		Status:              *v.Status,
+		CreatedAt:           *v.CreatedAt,
+		Openapiv3AssetCount: *v.Openapiv3AssetCount,
+		Openapiv3ToolCount:  *v.Openapiv3ToolCount,
 	}
 
 	return res
@@ -1890,10 +1890,12 @@ func unmarshalDeploymentSummaryResponseBodyToDeploymentsDeploymentSummary(v *Dep
 // *DeploymentLogEventResponseBody.
 func unmarshalDeploymentLogEventResponseBodyToDeploymentsDeploymentLogEvent(v *DeploymentLogEventResponseBody) *deployments.DeploymentLogEvent {
 	res := &deployments.DeploymentLogEvent{
-		ID:        *v.ID,
-		CreatedAt: *v.CreatedAt,
-		Event:     *v.Event,
-		Message:   *v.Message,
+		ID:             *v.ID,
+		AttachmentID:   v.AttachmentID,
+		AttachmentType: v.AttachmentType,
+		CreatedAt:      *v.CreatedAt,
+		Event:          *v.Event,
+		Message:        *v.Message,
 	}
 
 	return res

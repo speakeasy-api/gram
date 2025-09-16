@@ -342,7 +342,10 @@ const UploadStep = ({
     setToolsetName(slugify(apiName || "my-toolset"));
     const deployment = await createDeployment(undefined, true);
 
-    if (deployment?.toolCount === 0 || deployment?.status === "failed") {
+    if (
+      deployment?.openapiv3ToolCount === 0 ||
+      deployment?.status === "failed"
+    ) {
       setDeploymentToShowLogsFor(deployment?.id);
       toast.error("Unable to create tools from your OpenAPI spec");
       return;

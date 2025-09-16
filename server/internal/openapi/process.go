@@ -129,7 +129,7 @@ func (p *ToolExtractor) Do(
 		"openapi doc id set", openapiDocID != uuid.Nil,
 		"doc info set", docInfo != nil && docInfo.Name != "" && docInfo.Slug != "",
 	); err != nil {
-		return nil, oops.E(oops.CodeInvariantViolation, oops.Perm(err), "unable to process openapi document").Log(ctx, p.logger)
+		return nil, oops.E(oops.CodeInvariantViolation, oops.Permanent(err), "unable to process openapi document").Log(ctx, p.logger)
 	}
 
 	dbtx, err := p.db.Begin(ctx)
@@ -230,7 +230,7 @@ func (p *ToolExtractor) Do(
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error saving processed deployment").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error saving processed deployment").Log(ctx, logger)
 	}
 
 	return res, nil

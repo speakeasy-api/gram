@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 )
 
@@ -20,12 +21,13 @@ type logBuffer struct {
 }
 
 type LogHandler struct {
-	mut              *sync.Mutex
-	attrDeploymentID uuid.UUID
-	attrProjectID    uuid.UUID
-	attrEvent        string
-	buffer           *logBuffer
-	level            slog.Leveler
+	mut                *sync.Mutex
+	attrDeploymentID   uuid.UUID
+	attrProjectID      uuid.UUID
+	attrOpenAPIAssetID uuid.UUID
+	attrEvent          string
+	buffer             *logBuffer
+	level              slog.Leveler
 }
 
 func NewLogHandler() *LogHandler {
@@ -33,12 +35,13 @@ func NewLogHandler() *LogHandler {
 	ptr.Store(&[]repo.BatchLogEventsParams{})
 
 	return &LogHandler{
-		mut:              &sync.Mutex{},
-		level:            slog.LevelInfo,
-		attrDeploymentID: uuid.Nil,
-		attrProjectID:    uuid.Nil,
-		attrEvent:        "",
-		buffer:           &logBuffer{msgs: []repo.BatchLogEventsParams{}},
+		mut:                &sync.Mutex{},
+		level:              slog.LevelInfo,
+		attrDeploymentID:   uuid.Nil,
+		attrProjectID:      uuid.Nil,
+		attrOpenAPIAssetID: uuid.Nil,
+		attrEvent:          "",
+		buffer:             &logBuffer{msgs: []repo.BatchLogEventsParams{}},
 	}
 
 }
@@ -53,6 +56,7 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 	event := l.attrEvent
 	projectID := l.attrProjectID
 	deploymentID := l.attrDeploymentID
+	openAPIAssetID := l.attrOpenAPIAssetID
 
 	record.Attrs(func(a slog.Attr) bool {
 		switch {
@@ -65,6 +69,10 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 		case a.Key == string(attr.DeploymentIDKey) && a.Value.Kind() == slog.KindString:
 			if id, err := uuid.Parse(a.Value.String()); err == nil {
 				deploymentID = id
+			}
+		case a.Key == string(attr.DeploymentOpenAPIIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
+				openAPIAssetID = id
 			}
 		}
 
@@ -80,12 +88,19 @@ func (l *LogHandler) Handle(ctx context.Context, record slog.Record) error {
 	}
 
 	l.mut.Lock()
-	l.buffer.msgs = append(l.buffer.msgs, repo.BatchLogEventsParams{
-		DeploymentID: deploymentID,
-		ProjectID:    projectID,
-		Event:        event,
-		Message:      record.Message,
-	})
+	msg := repo.BatchLogEventsParams{
+		DeploymentID:   deploymentID,
+		ProjectID:      projectID,
+		Event:          event,
+		Message:        record.Message,
+		AttachmentID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		AttachmentType: conv.ToPGTextEmpty(""),
+	}
+	if openAPIAssetID != uuid.Nil {
+		msg.AttachmentID = uuid.NullUUID{UUID: openAPIAssetID, Valid: true}
+		msg.AttachmentType = conv.ToPGText("openapi")
+	}
+	l.buffer.msgs = append(l.buffer.msgs, msg)
 	l.mut.Unlock()
 
 	return nil
@@ -125,6 +140,10 @@ func (l *LogHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
 		case a.Key == string(attr.DeploymentIDKey) && a.Value.Kind() == slog.KindString:
 			if id, err := uuid.Parse(a.Value.String()); err == nil {
 				clone.attrDeploymentID = id
+			}
+		case a.Key == string(attr.DeploymentOpenAPIIDKey) && a.Value.Kind() == slog.KindString:
+			if id, err := uuid.Parse(a.Value.String()); err == nil {
+				clone.attrOpenAPIAssetID = id
 			}
 		}
 	}

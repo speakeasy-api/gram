@@ -23,17 +23,11 @@ let value: CreateDeploymentResult = {
         slug: "<value>",
       },
     ],
+    openapiv3ToolCount: 630732,
     organizationId: "<id>",
-    packages: [
-      {
-        id: "<id>",
-        name: "<value>",
-        version: "<value>",
-      },
-    ],
+    packages: [],
     projectId: "<id>",
     status: "<value>",
-    toolCount: 325382,
     userId: "<id>",
   },
 };

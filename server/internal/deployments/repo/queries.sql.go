@@ -15,10 +15,12 @@ import (
 )
 
 type BatchLogEventsParams struct {
-	DeploymentID uuid.UUID
-	ProjectID    uuid.UUID
-	Event        string
-	Message      string
+	DeploymentID   uuid.UUID
+	ProjectID      uuid.UUID
+	Event          string
+	Message        string
+	AttachmentID   uuid.NullUUID
+	AttachmentType pgtype.Text
 }
 
 const cloneDeployment = `-- name: CloneDeployment :one
@@ -655,6 +657,8 @@ SELECT
   log.id,
   log.event,
   log.message,
+  log.attachment_id,
+  log.attachment_type,
   log.created_at
 FROM deployment_logs log
 WHERE
@@ -679,11 +683,13 @@ type GetDeploymentLogsParams struct {
 }
 
 type GetDeploymentLogsRow struct {
-	Status    string
-	ID        uuid.UUID
-	Event     string
-	Message   string
-	CreatedAt pgtype.Timestamptz
+	Status         string
+	ID             uuid.UUID
+	Event          string
+	Message        string
+	AttachmentID   uuid.NullUUID
+	AttachmentType pgtype.Text
+	CreatedAt      pgtype.Timestamptz
 }
 
 func (q *Queries) GetDeploymentLogs(ctx context.Context, arg GetDeploymentLogsParams) ([]GetDeploymentLogsRow, error) {
@@ -700,6 +706,8 @@ func (q *Queries) GetDeploymentLogs(ctx context.Context, arg GetDeploymentLogsPa
 			&i.ID,
 			&i.Event,
 			&i.Message,
+			&i.AttachmentID,
+			&i.AttachmentType,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -752,7 +760,7 @@ WITH latest_status as (
     ORDER BY seq DESC
     LIMIT 1
 ),
-tool_counts as (
+openapiv3_tool_counts as (
     SELECT 
         deployment_id,
         COUNT(DISTINCT id) as tool_count
@@ -774,14 +782,14 @@ SELECT
   package_versions.patch as package_version_patch,
   package_versions.prerelease as package_version_prerelease,
   package_versions.build as package_version_build,
-  COALESCE(tool_counts.tool_count, 0) as tool_count
+  COALESCE(openapiv3_tool_counts.tool_count, 0) as openapiv3_tool_count
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 LEFT JOIN deployments_packages ON deployments.id = deployments_packages.deployment_id
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
-LEFT JOIN tool_counts ON deployments.id = tool_counts.deployment_id
+LEFT JOIN openapiv3_tool_counts ON deployments.id = openapiv3_tool_counts.deployment_id
 WHERE deployments.id = $1 AND deployments.project_id = $2
 `
 
@@ -804,7 +812,7 @@ type GetDeploymentWithAssetsRow struct {
 	PackageVersionPatch              pgtype.Int8
 	PackageVersionPrerelease         pgtype.Text
 	PackageVersionBuild              pgtype.Text
-	ToolCount                        int64
+	Openapiv3ToolCount               int64
 }
 
 func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeploymentWithAssetsParams) ([]GetDeploymentWithAssetsRow, error) {
@@ -843,7 +851,7 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.PackageVersionPatch,
 			&i.PackageVersionPrerelease,
 			&i.PackageVersionBuild,
-			&i.ToolCount,
+			&i.Openapiv3ToolCount,
 		); err != nil {
 			return nil, err
 		}
@@ -884,8 +892,8 @@ SELECT
   d.user_id,
   d.created_at,
   COALESCE(ls.status, 'unknown') as status,
-  COUNT(DISTINCT doa.id) as asset_count,
-  COUNT(DISTINCT htd.id) as tool_count
+  COUNT(DISTINCT doa.id) as openapiv3_asset_count,
+  COUNT(DISTINCT htd.id) as openapiv3_tool_count
 FROM deployments d
 LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
 LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
@@ -907,12 +915,12 @@ type ListDeploymentsParams struct {
 }
 
 type ListDeploymentsRow struct {
-	ID         uuid.UUID
-	UserID     string
-	CreatedAt  pgtype.Timestamptz
-	Status     string
-	AssetCount int64
-	ToolCount  int64
+	ID                  uuid.UUID
+	UserID              string
+	CreatedAt           pgtype.Timestamptz
+	Status              string
+	Openapiv3AssetCount int64
+	Openapiv3ToolCount  int64
 }
 
 func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams) ([]ListDeploymentsRow, error) {
@@ -929,8 +937,8 @@ func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams
 			&i.UserID,
 			&i.CreatedAt,
 			&i.Status,
-			&i.AssetCount,
-			&i.ToolCount,
+			&i.Openapiv3AssetCount,
+			&i.Openapiv3ToolCount,
 		); err != nil {
 			return nil, err
 		}
@@ -943,15 +951,17 @@ func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams
 }
 
 const logDeploymentEvent = `-- name: LogDeploymentEvent :exec
-INSERT INTO deployment_logs (deployment_id, project_id, event, message)
-VALUES ($1, $2, $3, $4)
+INSERT INTO deployment_logs (deployment_id, project_id, event, message, attachment_id, attachment_type)
+VALUES ($1, $2, $3, $4, $5, $6)
 `
 
 type LogDeploymentEventParams struct {
-	DeploymentID uuid.UUID
-	ProjectID    uuid.UUID
-	Event        string
-	Message      string
+	DeploymentID   uuid.UUID
+	ProjectID      uuid.UUID
+	Event          string
+	Message        string
+	AttachmentID   uuid.NullUUID
+	AttachmentType pgtype.Text
 }
 
 func (q *Queries) LogDeploymentEvent(ctx context.Context, arg LogDeploymentEventParams) error {
@@ -960,6 +970,8 @@ func (q *Queries) LogDeploymentEvent(ctx context.Context, arg LogDeploymentEvent
 		arg.ProjectID,
 		arg.Event,
 		arg.Message,
+		arg.AttachmentID,
+		arg.AttachmentType,
 	)
 	return err
 }

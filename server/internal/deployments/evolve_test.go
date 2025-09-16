@@ -63,7 +63,7 @@ func TestDeploymentsService_Evolve_InitialDeployment(t *testing.T) {
 
 	// Verify tools were generated
 	repo := testrepo.New(ti.conn)
-	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(result.Deployment.ID))
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(result.Deployment.ID))
 	require.NoError(t, err, "list deployment tools")
 	require.Len(t, tools, 5, "expected 5 tools")
 }
@@ -187,7 +187,7 @@ func TestDeploymentsService_Evolve_UpsertBadAssets(t *testing.T) {
 	require.NoError(t, err, "create initial deployment")
 	require.Equal(t, "completed", initial.Deployment.Status, "initial deployment status is not completed")
 
-	expectedToolCount := initial.Deployment.ToolCount
+	expectedToolCount := initial.Deployment.Openapiv3ToolCount
 	require.NotZero(t, expectedToolCount, "initial deployment has incorrect tool count")
 
 	// Upload second OpenAPI asset
@@ -222,7 +222,7 @@ func TestDeploymentsService_Evolve_UpsertBadAssets(t *testing.T) {
 
 	require.NotEqual(t, initial.Deployment.ID, evolved.Deployment.ID, "evolved deployment should have different ID")
 	require.Equal(t, "failed", evolved.Deployment.Status, "evolved deployment status is not completed")
-	require.Equal(t, expectedToolCount, evolved.Deployment.ToolCount, "evolved deployment has incorrect tool count")
+	require.Equal(t, expectedToolCount, evolved.Deployment.Openapiv3ToolCount, "evolved deployment has incorrect openapi tool count")
 	require.Len(t, evolved.Deployment.Openapiv3Assets, 2, "expected 2 openapi assets")
 
 	// Verify both assets are present
@@ -363,7 +363,7 @@ func TestDeploymentsService_Evolve_ExcludeAllAssets(t *testing.T) {
 
 	// Verify initial deployment has tools
 	repo := testrepo.New(ti.conn)
-	initialTools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(initial.Deployment.ID))
+	initialTools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(initial.Deployment.ID))
 	require.NoError(t, err, "list initial deployment tools")
 	require.NotEmpty(t, initialTools, "expected tools in initial deployment")
 
@@ -385,7 +385,7 @@ func TestDeploymentsService_Evolve_ExcludeAllAssets(t *testing.T) {
 	require.Empty(t, evolved.Deployment.Openapiv3Assets, "expected 0 openapi assets after excluding all")
 
 	// Verify no tools remain in the deployment
-	evolvedTools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(evolved.Deployment.ID))
+	evolvedTools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(evolved.Deployment.ID))
 	require.NoError(t, err, "list evolved deployment tools")
 	require.Empty(t, evolvedTools, "expected no tools after excluding all assets")
 }

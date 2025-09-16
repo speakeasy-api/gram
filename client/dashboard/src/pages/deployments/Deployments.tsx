@@ -41,8 +41,8 @@ type DeploymentSummary = {
   id: string;
   status: string;
   createdAt: Date;
-  assetCount: number;
-  toolCount: number;
+  openapiv3AssetCount: number;
+  openapiv3ToolCount: number;
 };
 
 function DeploymentActionsDropdown({
@@ -165,13 +165,13 @@ const columns: TableProps<DeploymentSummary>["columns"] = [
   {
     key: "assetCount",
     header: "Assets",
-    render: (row) => row.assetCount,
+    render: (row) => row.openapiv3AssetCount,
     width: "150px",
   },
   {
     key: "toolCount",
     header: "Tools",
-    render: (row) => row.toolCount,
+    render: (row) => row.openapiv3ToolCount,
     width: "0.5fr",
   },
   {

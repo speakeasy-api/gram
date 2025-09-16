@@ -405,11 +405,13 @@ export default function EnvironmentPage() {
       <Page.Body>
         <Page.Section>
           <Page.Section.Title>{environment.name}</Page.Section.Title>
-          <Page.Section.CTA
-            onClick={handleAddNewEntry}
-            disabled={isSaving || isAddingNew}
-          >
-            Add Variable
+          <Page.Section.CTA>
+            <Button
+              onClick={handleAddNewEntry}
+              disabled={isSaving || isAddingNew}
+            >
+              Add Variable
+            </Button>
           </Page.Section.CTA>
           <MoreActions
             actions={[
