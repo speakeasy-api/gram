@@ -129,18 +129,20 @@ export function APIsContent() {
     );
 
     return (
-      <a href={routes.deployments.deployment.href(deployment.id)}>
-        <Page.Section.CTA
-          variant="tertiary"
-          className={cn(
-            hasErrors &&
-              "text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/20!"
-          )}
-        >
-          {icon}
-          HISTORY
-        </Page.Section.CTA>
-      </a>
+      <Page.Section.CTA>
+        <a href={routes.deployments.deployment.href(deployment.id)}>
+          <Button
+            variant="tertiary"
+            className={cn(
+              hasErrors &&
+                "text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/20!"
+            )}
+          >
+            {icon}
+            HISTORY
+          </Button>
+        </a>
+      </Page.Section.CTA>
     );
   }, [deployment, deploymentLogsSummary]);
 
@@ -204,14 +206,16 @@ export function APIsContent() {
         OpenAPI documents providing tools for your toolsets
       </Page.Section.Description>
       {logsCta}
-      <Page.Section.CTA
-        onClick={() => setNewDocumentDialogOpen(true)}
-        variant="secondary"
-      >
-        <Button.LeftIcon>
-          <Plus className="w-4 h-4" />
-        </Button.LeftIcon>
-        <Button.Text>Add API</Button.Text>
+      <Page.Section.CTA>
+        <Button
+          onClick={() => setNewDocumentDialogOpen(true)}
+          variant="secondary"
+        >
+          <Button.LeftIcon>
+            <Plus className="w-4 h-4" />
+          </Button.LeftIcon>
+          <Button.Text>Add API</Button.Text>
+        </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
         <MiniCards isLoading={isLoading}>

@@ -21,7 +21,7 @@ import {
   useGetUsageTiers,
 } from "@gram/client/react-query";
 import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
-import { cn, Stack } from "@speakeasy-api/moonshine";
+import { cn, Stack, Button } from "@speakeasy-api/moonshine";
 import { Info } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -194,71 +194,65 @@ const UsageTiers = () => {
   }, [telemetry, session.gramAccountType]);
 
   const UpgradeCTA = useMemo(() => {
-    if (checkoutLink) {
+    if (checkoutError) {
       return (
+        <Page.Section.CTA>
+          <Button asChild>
+            <a
+              href="mailto:gram@speakeasyapi.dev?subject=Upgrade%20Account"
+              className="inline-flex"
+              onClick={handleFallbackClick}
+            >
+              UPGRADE
+            </a>
+          </Button>
+        </Page.Section.CTA>
+      );
+    }
+    
+    return (
+      <Page.Section.CTA>
         <a
           href={checkoutLink}
           data-polar-checkout
           data-polar-checkout-theme="light"
           className="inline-flex"
         >
-          <Page.Section.CTA>
+          <Button disabled={isLoadingCheckout}>
             UPGRADE
-          </Page.Section.CTA>
+          </Button>
         </a>
-      );
-    }
-    
-    if (checkoutError) {
-      return (
-        <a
-          href="mailto:gram@speakeasyapi.dev?subject=Upgrade%20Account"
-          className="inline-flex"
-          onClick={handleFallbackClick}
-        >
-          <Page.Section.CTA>
-            UPGRADE
-          </Page.Section.CTA>
-        </a>
-      );
-    }
-    
-    if (isLoadingCheckout) {
-      return (
-        <Page.Section.CTA disabled>
-          UPGRADE
-        </Page.Section.CTA>
-      );
-    }
-    
-    return null;
+      </Page.Section.CTA>
+    );
   }, [checkoutLink, checkoutError, isLoadingCheckout, handleFallbackClick]);
 
   const polarPortalCTA = (
-    <Page.Section.CTA
-      onClick={async () => {
-        try {
-          const link = await client.usage.createCustomerSession();
-          if (!link) {
-            console.error("Failed to create customer session: received empty link");
+    <Page.Section.CTA>
+      <Button
+        onClick={async () => {
+          try {
+            const link = await client.usage.createCustomerSession();
+            if (!link) {
+              console.error("Failed to create customer session: received empty link");
+              telemetry.capture("customer_session_error", {
+                error: "Received empty customer session link",
+                accountType: session.gramAccountType,
+              });
+              return;
+            }
+            window.open(link, "_blank");
+          } catch (error) {
+            console.error("Error creating customer session:", error);
             telemetry.capture("customer_session_error", {
-              error: "Received empty customer session link",
+              error: error instanceof Error ? error.message : "Failed to create customer session",
               accountType: session.gramAccountType,
             });
-            return;
           }
-          window.open(link, "_blank");
-        } catch (error) {
-          console.error("Error creating customer session:", error);
-          telemetry.capture("customer_session_error", {
-            error: error instanceof Error ? error.message : "Failed to create customer session",
-            accountType: session.gramAccountType,
-          });
-        }
-      }}
-      disabled={session.gramAccountType === "enterprise"}
-    >
-      MANAGE BILLING
+        }}
+        disabled={session.gramAccountType === "enterprise"}
+      >
+        MANAGE BILLING
+      </Button>
     </Page.Section.CTA>
   );
 
