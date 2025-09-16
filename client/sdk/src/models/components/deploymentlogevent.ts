@@ -10,6 +10,14 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type DeploymentLogEvent = {
   /**
+   * The ID of the asset tied to the log event
+   */
+  attachmentId?: string | undefined;
+  /**
+   * The type of the asset tied to the log event
+   */
+  attachmentType?: string | undefined;
+  /**
    * The creation date of the log event
    */
   createdAt: string;
@@ -33,18 +41,24 @@ export const DeploymentLogEvent$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  attachment_id: z.string().optional(),
+  attachment_type: z.string().optional(),
   created_at: z.string(),
   event: z.string(),
   id: z.string(),
   message: z.string(),
 }).transform((v) => {
   return remap$(v, {
+    "attachment_id": "attachmentId",
+    "attachment_type": "attachmentType",
     "created_at": "createdAt",
   });
 });
 
 /** @internal */
 export type DeploymentLogEvent$Outbound = {
+  attachment_id?: string | undefined;
+  attachment_type?: string | undefined;
   created_at: string;
   event: string;
   id: string;
@@ -57,12 +71,16 @@ export const DeploymentLogEvent$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   DeploymentLogEvent
 > = z.object({
+  attachmentId: z.string().optional(),
+  attachmentType: z.string().optional(),
   createdAt: z.string(),
   event: z.string(),
   id: z.string(),
   message: z.string(),
 }).transform((v) => {
   return remap$(v, {
+    attachmentId: "attachment_id",
+    attachmentType: "attachment_type",
     createdAt: "created_at",
   });
 });

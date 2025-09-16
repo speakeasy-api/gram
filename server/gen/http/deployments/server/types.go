@@ -89,8 +89,8 @@ type GetDeploymentResponseBody struct {
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	// The ID of the deployment that this deployment was cloned from.
 	ClonedFrom *string `form:"cloned_from,omitempty" json:"cloned_from,omitempty" xml:"cloned_from,omitempty"`
-	// The number of tools in the deployment.
-	ToolCount int64 `form:"tool_count" json:"tool_count" xml:"tool_count"`
+	// The number of tools in the deployment generated from OpenAPI documents.
+	Openapiv3ToolCount int64 `form:"openapiv3_tool_count" json:"openapiv3_tool_count" xml:"openapiv3_tool_count"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
@@ -1503,8 +1503,8 @@ type DeploymentResponseBody struct {
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	// The ID of the deployment that this deployment was cloned from.
 	ClonedFrom *string `form:"cloned_from,omitempty" json:"cloned_from,omitempty" xml:"cloned_from,omitempty"`
-	// The number of tools in the deployment.
-	ToolCount int64 `form:"tool_count" json:"tool_count" xml:"tool_count"`
+	// The number of tools in the deployment generated from OpenAPI documents.
+	Openapiv3ToolCount int64 `form:"openapiv3_tool_count" json:"openapiv3_tool_count" xml:"openapiv3_tool_count"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets" json:"openapiv3_assets" xml:"openapiv3_assets"`
@@ -1523,10 +1523,10 @@ type DeploymentSummaryResponseBody struct {
 	Status string `form:"status" json:"status" xml:"status"`
 	// The creation date of the deployment.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// The number of upstream assets.
-	AssetCount int64 `form:"asset_count" json:"asset_count" xml:"asset_count"`
-	// The number of tools in the deployment.
-	ToolCount int64 `form:"tool_count" json:"tool_count" xml:"tool_count"`
+	// The number of upstream OpenAPI assets.
+	Openapiv3AssetCount int64 `form:"openapiv3_asset_count" json:"openapiv3_asset_count" xml:"openapiv3_asset_count"`
+	// The number of tools in the deployment generated from OpenAPI documents.
+	Openapiv3ToolCount int64 `form:"openapiv3_tool_count" json:"openapiv3_tool_count" xml:"openapiv3_tool_count"`
 }
 
 // DeploymentLogEventResponseBody is used to define fields on response body
@@ -1579,20 +1579,20 @@ type AddPackageFormRequestBody struct {
 // of the "getDeployment" endpoint of the "deployments" service.
 func NewGetDeploymentResponseBody(res *deployments.GetDeploymentResult) *GetDeploymentResponseBody {
 	body := &GetDeploymentResponseBody{
-		ID:             res.ID,
-		OrganizationID: res.OrganizationID,
-		ProjectID:      res.ProjectID,
-		UserID:         res.UserID,
-		CreatedAt:      res.CreatedAt,
-		Status:         res.Status,
-		IdempotencyKey: res.IdempotencyKey,
-		GithubRepo:     res.GithubRepo,
-		GithubPr:       res.GithubPr,
-		GithubSha:      res.GithubSha,
-		ExternalID:     res.ExternalID,
-		ExternalURL:    res.ExternalURL,
-		ClonedFrom:     res.ClonedFrom,
-		ToolCount:      res.ToolCount,
+		ID:                 res.ID,
+		OrganizationID:     res.OrganizationID,
+		ProjectID:          res.ProjectID,
+		UserID:             res.UserID,
+		CreatedAt:          res.CreatedAt,
+		Status:             res.Status,
+		IdempotencyKey:     res.IdempotencyKey,
+		GithubRepo:         res.GithubRepo,
+		GithubPr:           res.GithubPr,
+		GithubSha:          res.GithubSha,
+		ExternalID:         res.ExternalID,
+		ExternalURL:        res.ExternalURL,
+		ClonedFrom:         res.ClonedFrom,
+		Openapiv3ToolCount: res.Openapiv3ToolCount,
 	}
 	if res.Openapiv3Assets != nil {
 		body.Openapiv3Assets = make([]*OpenAPIv3DeploymentAssetResponseBody, len(res.Openapiv3Assets))

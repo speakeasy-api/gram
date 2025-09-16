@@ -134,10 +134,10 @@ type DeploymentSummary struct {
 	Status string
 	// The creation date of the deployment.
 	CreatedAt string
-	// The number of upstream assets.
-	AssetCount int64
-	// The number of tools in the deployment.
-	ToolCount int64
+	// The number of upstream OpenAPI assets.
+	Openapiv3AssetCount int64
+	// The number of tools in the deployment generated from OpenAPI documents.
+	Openapiv3ToolCount int64
 }
 
 // EvolvePayload is the payload type of the deployments service evolve method.
@@ -230,8 +230,8 @@ type GetDeploymentResult struct {
 	ExternalURL *string
 	// The ID of the deployment that this deployment was cloned from.
 	ClonedFrom *string
-	// The number of tools in the deployment.
-	ToolCount int64
+	// The number of tools in the deployment generated from OpenAPI documents.
+	Openapiv3ToolCount int64
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*types.OpenAPIv3DeploymentAsset

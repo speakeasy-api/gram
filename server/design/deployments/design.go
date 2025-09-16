@@ -198,7 +198,7 @@ var _ = Service("deployments", func() {
 })
 
 var DeploymentSummary = Type("DeploymentSummary", func() {
-	Required("id", "created_at", "user_id", "status", "asset_count", "tool_count")
+	Required("id", "created_at", "user_id", "status", "openapiv3_asset_count", "openapiv3_tool_count")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
@@ -214,11 +214,11 @@ var DeploymentSummary = Type("DeploymentSummary", func() {
 		Description("The creation date of the deployment.")
 		Format(FormatDateTime)
 	})
-	Attribute("asset_count", Int64, func() {
-		Description("The number of upstream assets.")
+	Attribute("openapiv3_asset_count", Int64, func() {
+		Description("The number of upstream OpenAPI assets.")
 	})
-	Attribute("tool_count", Int64, func() {
-		Description("The number of tools in the deployment.")
+	Attribute("openapiv3_tool_count", Int64, func() {
+		Description("The number of tools in the deployment generated from OpenAPI documents.")
 	})
 })
 

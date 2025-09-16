@@ -1435,7 +1435,7 @@ paths:
                             - openapiv3_assets
                             - status
                             - packages
-                            - tool_count
+                            - openapiv3_tool_count
                 "400":
                     description: Bad Request response.
                     schema:
@@ -12939,6 +12939,11 @@ definitions:
                       id: Illo quod distinctio.
                       name: Dolores non et excepturi omnis rem.
                       slug: xir
+            openapiv3_tool_count:
+                type: integer
+                description: The number of tools in the deployment generated from OpenAPI documents.
+                example: 5977616136327635403
+                format: int64
             organization_id:
                 type: string
                 description: The ID of the organization that the deployment belongs to.
@@ -12963,11 +12968,6 @@ definitions:
                 type: string
                 description: The status of the deployment.
                 example: Aliquam dolores in error sunt ducimus dignissimos.
-            tool_count:
-                type: integer
-                description: The number of tools in the deployment.
-                example: 5977616136327635403
-                format: int64
             user_id:
                 type: string
                 description: The ID of the user that created the deployment.
@@ -12995,6 +12995,7 @@ definitions:
                   id: Illo quod distinctio.
                   name: Dolores non et excepturi omnis rem.
                   slug: xir
+            openapiv3_tool_count: 8935797967116927967
             organization_id: Quam accusamus provident dolorem reiciendis ea.
             packages:
                 - id: Minima iusto ducimus occaecati accusantium quas ratione.
@@ -13008,7 +13009,6 @@ definitions:
                   version: Architecto quaerat.
             project_id: Facere quaerat aut doloribus necessitatibus nihil.
             status: Commodi harum omnis sed eaque.
-            tool_count: 8935797967116927967
             user_id: Sit eos aut ut molestiae itaque quia.
         required:
             - id
@@ -13019,7 +13019,7 @@ definitions:
             - openapiv3_assets
             - status
             - packages
-            - tool_count
+            - openapiv3_tool_count
     DeploymentLogEvent:
         title: DeploymentLogEvent
         type: object
@@ -13088,11 +13088,6 @@ definitions:
         title: DeploymentSummary
         type: object
         properties:
-            asset_count:
-                type: integer
-                description: The number of upstream assets.
-                example: 9035066541017651519
-                format: int64
             created_at:
                 type: string
                 description: The creation date of the deployment.
@@ -13102,33 +13097,38 @@ definitions:
                 type: string
                 description: The ID to of the deployment.
                 example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+            openapiv3_asset_count:
+                type: integer
+                description: The number of upstream OpenAPI assets.
+                example: 9035066541017651519
+                format: int64
+            openapiv3_tool_count:
+                type: integer
+                description: The number of tools in the deployment generated from OpenAPI documents.
+                example: 1818400044537128739
+                format: int64
             status:
                 type: string
                 description: The status of the deployment.
                 example: Esse velit.
-            tool_count:
-                type: integer
-                description: The number of tools in the deployment.
-                example: 1818400044537128739
-                format: int64
             user_id:
                 type: string
                 description: The ID of the user that created the deployment.
                 example: Est magni et eum.
         example:
-            asset_count: 4631779754005523670
             created_at: "1995-10-24T12:09:48Z"
             id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+            openapiv3_asset_count: 4631779754005523670
+            openapiv3_tool_count: 5873451413492448172
             status: Voluptatem consequuntur quisquam.
-            tool_count: 5873451413492448172
             user_id: Omnis libero aliquid praesentium voluptatibus laudantium.
         required:
             - id
             - created_at
             - user_id
             - status
-            - asset_count
-            - tool_count
+            - openapiv3_asset_count
+            - openapiv3_tool_count
     DeploymentsCreateDeploymentBadRequestResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
@@ -19749,6 +19749,11 @@ definitions:
                       id: Illo quod distinctio.
                       name: Dolores non et excepturi omnis rem.
                       slug: xir
+            openapiv3_tool_count:
+                type: integer
+                description: The number of tools in the deployment generated from OpenAPI documents.
+                example: 3624208618600157658
+                format: int64
             organization_id:
                 type: string
                 description: The ID of the organization that the deployment belongs to.
@@ -19779,11 +19784,6 @@ definitions:
                 type: string
                 description: The status of the deployment.
                 example: Aut minus quo.
-            tool_count:
-                type: integer
-                description: The number of tools in the deployment.
-                example: 3624208618600157658
-                format: int64
             user_id:
                 type: string
                 description: The ID of the user that created the deployment.
@@ -19807,6 +19807,7 @@ definitions:
                   id: Illo quod distinctio.
                   name: Dolores non et excepturi omnis rem.
                   slug: xir
+            openapiv3_tool_count: 8215145787790927861
             organization_id: Quam beatae quasi sit aut non.
             packages:
                 - id: Minima iusto ducimus occaecati accusantium quas ratione.
@@ -19820,7 +19821,6 @@ definitions:
                   version: Architecto quaerat.
             project_id: Velit cupiditate sed vel dolore non.
             status: Cumque temporibus quibusdam quasi.
-            tool_count: 8215145787790927861
             user_id: Laboriosam labore velit dolorem enim est possimus.
         required:
             - id
@@ -19831,7 +19831,7 @@ definitions:
             - openapiv3_assets
             - status
             - packages
-            - tool_count
+            - openapiv3_tool_count
     GetInstanceResult:
         title: GetInstanceResult
         type: object
@@ -23791,29 +23791,29 @@ definitions:
                     $ref: '#/definitions/DeploymentSummary'
                 description: A list of deployments
                 example:
-                    - asset_count: 924621649724453530
-                      created_at: "2000-04-08T17:30:32Z"
+                    - created_at: "2000-04-08T17:30:32Z"
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      openapiv3_asset_count: 924621649724453530
+                      openapiv3_tool_count: 5482876912140129581
                       status: Corporis numquam est nisi natus.
-                      tool_count: 5482876912140129581
                       user_id: Deleniti sed laudantium saepe dolorem fugit.
-                    - asset_count: 924621649724453530
-                      created_at: "2000-04-08T17:30:32Z"
+                    - created_at: "2000-04-08T17:30:32Z"
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      openapiv3_asset_count: 924621649724453530
+                      openapiv3_tool_count: 5482876912140129581
                       status: Corporis numquam est nisi natus.
-                      tool_count: 5482876912140129581
                       user_id: Deleniti sed laudantium saepe dolorem fugit.
-                    - asset_count: 924621649724453530
-                      created_at: "2000-04-08T17:30:32Z"
+                    - created_at: "2000-04-08T17:30:32Z"
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      openapiv3_asset_count: 924621649724453530
+                      openapiv3_tool_count: 5482876912140129581
                       status: Corporis numquam est nisi natus.
-                      tool_count: 5482876912140129581
                       user_id: Deleniti sed laudantium saepe dolorem fugit.
-                    - asset_count: 924621649724453530
-                      created_at: "2000-04-08T17:30:32Z"
+                    - created_at: "2000-04-08T17:30:32Z"
                       id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                      openapiv3_asset_count: 924621649724453530
+                      openapiv3_tool_count: 5482876912140129581
                       status: Corporis numquam est nisi natus.
-                      tool_count: 5482876912140129581
                       user_id: Deleniti sed laudantium saepe dolorem fugit.
             next_cursor:
                 type: string
@@ -23821,29 +23821,29 @@ definitions:
                 example: 01jp3f054qc02gbcmpp0qmyzed
         example:
             items:
-                - asset_count: 924621649724453530
-                  created_at: "2000-04-08T17:30:32Z"
+                - created_at: "2000-04-08T17:30:32Z"
                   id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                  openapiv3_asset_count: 924621649724453530
+                  openapiv3_tool_count: 5482876912140129581
                   status: Corporis numquam est nisi natus.
-                  tool_count: 5482876912140129581
                   user_id: Deleniti sed laudantium saepe dolorem fugit.
-                - asset_count: 924621649724453530
-                  created_at: "2000-04-08T17:30:32Z"
+                - created_at: "2000-04-08T17:30:32Z"
                   id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                  openapiv3_asset_count: 924621649724453530
+                  openapiv3_tool_count: 5482876912140129581
                   status: Corporis numquam est nisi natus.
-                  tool_count: 5482876912140129581
                   user_id: Deleniti sed laudantium saepe dolorem fugit.
-                - asset_count: 924621649724453530
-                  created_at: "2000-04-08T17:30:32Z"
+                - created_at: "2000-04-08T17:30:32Z"
                   id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                  openapiv3_asset_count: 924621649724453530
+                  openapiv3_tool_count: 5482876912140129581
                   status: Corporis numquam est nisi natus.
-                  tool_count: 5482876912140129581
                   user_id: Deleniti sed laudantium saepe dolorem fugit.
-                - asset_count: 924621649724453530
-                  created_at: "2000-04-08T17:30:32Z"
+                - created_at: "2000-04-08T17:30:32Z"
                   id: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                  openapiv3_asset_count: 924621649724453530
+                  openapiv3_tool_count: 5482876912140129581
                   status: Corporis numquam est nisi natus.
-                  tool_count: 5482876912140129581
                   user_id: Deleniti sed laudantium saepe dolorem fugit.
             next_cursor: 01jp3f054qc02gbcmpp0qmyzed
         required:

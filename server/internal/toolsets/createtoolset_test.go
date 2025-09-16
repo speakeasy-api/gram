@@ -25,7 +25,7 @@ func TestToolsetsService_CreateToolset_Success(t *testing.T) {
 
 	// Get the tools from the deployment
 	repo := testrepo.New(ti.conn)
-	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
 	require.NoError(t, err, "list deployment tools")
 	require.Len(t, tools, 4, "expected 4 tools from petstore")
 
@@ -75,7 +75,7 @@ func TestToolsetsService_CreateToolset_WithDefaultEnvironment(t *testing.T) {
 
 	// Get a tool from the deployment
 	repo := testrepo.New(ti.conn)
-	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
 	require.NoError(t, err, "list deployment tools")
 	require.NotEmpty(t, tools, "expected tools from petstore")
 
@@ -122,7 +122,7 @@ func TestToolsetsService_CreateToolset_DuplicateSlug(t *testing.T) {
 
 	// Get tools from the deployment
 	repo := testrepo.New(ti.conn)
-	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
 	require.NoError(t, err, "list deployment tools")
 	require.GreaterOrEqual(t, len(tools), 2, "expected at least 2 tools from petstore")
 
