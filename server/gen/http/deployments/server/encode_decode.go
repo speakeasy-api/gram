@@ -1663,20 +1663,20 @@ func marshalTypesDeploymentToDeploymentResponseBody(v *types.Deployment) *Deploy
 		return nil
 	}
 	res := &DeploymentResponseBody{
-		ID:             v.ID,
-		OrganizationID: v.OrganizationID,
-		ProjectID:      v.ProjectID,
-		UserID:         v.UserID,
-		CreatedAt:      v.CreatedAt,
-		Status:         v.Status,
-		IdempotencyKey: v.IdempotencyKey,
-		GithubRepo:     v.GithubRepo,
-		GithubPr:       v.GithubPr,
-		GithubSha:      v.GithubSha,
-		ExternalID:     v.ExternalID,
-		ExternalURL:    v.ExternalURL,
-		ClonedFrom:     v.ClonedFrom,
-		ToolCount:      v.ToolCount,
+		ID:                 v.ID,
+		OrganizationID:     v.OrganizationID,
+		ProjectID:          v.ProjectID,
+		UserID:             v.UserID,
+		CreatedAt:          v.CreatedAt,
+		Status:             v.Status,
+		IdempotencyKey:     v.IdempotencyKey,
+		GithubRepo:         v.GithubRepo,
+		GithubPr:           v.GithubPr,
+		GithubSha:          v.GithubSha,
+		ExternalID:         v.ExternalID,
+		ExternalURL:        v.ExternalURL,
+		ClonedFrom:         v.ClonedFrom,
+		Openapiv3ToolCount: v.Openapiv3ToolCount,
 	}
 	if v.Openapiv3Assets != nil {
 		res.Openapiv3Assets = make([]*OpenAPIv3DeploymentAssetResponseBody, len(v.Openapiv3Assets))
@@ -1749,12 +1749,12 @@ func unmarshalAddPackageFormRequestBodyToDeploymentsAddPackageForm(v *AddPackage
 // *deployments.DeploymentSummary.
 func marshalDeploymentsDeploymentSummaryToDeploymentSummaryResponseBody(v *deployments.DeploymentSummary) *DeploymentSummaryResponseBody {
 	res := &DeploymentSummaryResponseBody{
-		ID:         v.ID,
-		UserID:     v.UserID,
-		Status:     v.Status,
-		CreatedAt:  v.CreatedAt,
-		AssetCount: v.AssetCount,
-		ToolCount:  v.ToolCount,
+		ID:                  v.ID,
+		UserID:              v.UserID,
+		Status:              v.Status,
+		CreatedAt:           v.CreatedAt,
+		Openapiv3AssetCount: v.Openapiv3AssetCount,
+		Openapiv3ToolCount:  v.Openapiv3ToolCount,
 	}
 
 	return res

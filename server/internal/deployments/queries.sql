@@ -25,8 +25,8 @@ SELECT
   d.user_id,
   d.created_at,
   COALESCE(ls.status, 'unknown') as status,
-  COUNT(DISTINCT doa.id) as asset_count,
-  COUNT(DISTINCT htd.id) as tool_count
+  COUNT(DISTINCT doa.id) as openapiv3_asset_count,
+  COUNT(DISTINCT htd.id) as openapiv3_tool_count
 FROM deployments d
 LEFT JOIN latest_statuses ls ON d.id = ls.deployment_id
 LEFT JOIN deployments_openapiv3_assets doa ON d.id = doa.deployment_id
@@ -80,7 +80,7 @@ WITH latest_status as (
     ORDER BY seq DESC
     LIMIT 1
 ),
-tool_counts as (
+openapiv3_tool_counts as (
     SELECT 
         deployment_id,
         COUNT(DISTINCT id) as tool_count
@@ -102,14 +102,14 @@ SELECT
   package_versions.patch as package_version_patch,
   package_versions.prerelease as package_version_prerelease,
   package_versions.build as package_version_build,
-  COALESCE(tool_counts.tool_count, 0) as tool_count
+  COALESCE(openapiv3_tool_counts.tool_count, 0) as openapiv3_tool_count
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 LEFT JOIN deployments_packages ON deployments.id = deployments_packages.deployment_id
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
-LEFT JOIN tool_counts ON deployments.id = tool_counts.deployment_id
+LEFT JOIN openapiv3_tool_counts ON deployments.id = tool_counts.deployment_id
 WHERE deployments.id = @id AND deployments.project_id = @project_id;
 
 -- name: GetLatestDeploymentID :one

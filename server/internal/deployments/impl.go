@@ -101,22 +101,22 @@ func (s *Service) GetDeployment(ctx context.Context, form *gen.GetDeploymentPayl
 	}
 
 	return &gen.GetDeploymentResult{
-		ID:              dep.ID,
-		CreatedAt:       dep.CreatedAt,
-		OrganizationID:  dep.OrganizationID,
-		ProjectID:       dep.ProjectID,
-		UserID:          dep.UserID,
-		IdempotencyKey:  dep.IdempotencyKey,
-		Status:          dep.Status,
-		ExternalID:      dep.ExternalID,
-		ExternalURL:     dep.ExternalURL,
-		GithubRepo:      dep.GithubRepo,
-		GithubPr:        dep.GithubPr,
-		GithubSha:       dep.GithubSha,
-		ClonedFrom:      dep.ClonedFrom,
-		Openapiv3Assets: dep.Openapiv3Assets,
-		Packages:        dep.Packages,
-		ToolCount:       dep.ToolCount,
+		ID:                 dep.ID,
+		CreatedAt:          dep.CreatedAt,
+		OrganizationID:     dep.OrganizationID,
+		ProjectID:          dep.ProjectID,
+		UserID:             dep.UserID,
+		IdempotencyKey:     dep.IdempotencyKey,
+		Status:             dep.Status,
+		ExternalID:         dep.ExternalID,
+		ExternalURL:        dep.ExternalURL,
+		GithubRepo:         dep.GithubRepo,
+		GithubPr:           dep.GithubPr,
+		GithubSha:          dep.GithubSha,
+		ClonedFrom:         dep.ClonedFrom,
+		Openapiv3Assets:    dep.Openapiv3Assets,
+		Packages:           dep.Packages,
+		Openapiv3ToolCount: dep.Openapiv3ToolCount,
 	}, nil
 }
 
@@ -254,12 +254,12 @@ func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeployments
 	items := make([]*gen.DeploymentSummary, 0, len(rows))
 	for _, r := range rows {
 		items = append(items, &gen.DeploymentSummary{
-			ID:         r.ID.String(),
-			UserID:     r.UserID,
-			Status:     r.Status,
-			CreatedAt:  r.CreatedAt.Time.Format(time.RFC3339),
-			AssetCount: r.AssetCount,
-			ToolCount:  r.ToolCount,
+			ID:                  r.ID.String(),
+			UserID:              r.UserID,
+			Status:              r.Status,
+			CreatedAt:           r.CreatedAt.Time.Format(time.RFC3339),
+			Openapiv3AssetCount: r.Openapiv3AssetCount,
+			Openapiv3ToolCount:  r.Openapiv3ToolCount,
 		})
 	}
 

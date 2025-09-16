@@ -64,7 +64,7 @@ func TestDeploymentsService_CreateDeployment(t *testing.T) {
 	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
 
 	repo := testrepo.New(ti.conn)
-	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
 	require.NoError(t, err, "list deployment tools")
 	require.Len(t, tools, 5, "expected 5 tools")
 
@@ -171,7 +171,7 @@ func TestDeploymentsService_CreateDeployment_Idempotency(t *testing.T) {
 	require.Len(t, createdIDs, 1, "expected 1 deployment")
 
 	repo := testrepo.New(ti.conn)
-	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(createdIDs[0]))
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(createdIDs[0]))
 	require.NoError(t, err, "list deployment tools")
 	require.Len(t, tools, 5, "expected 5 tools")
 	names := lo.Map(tools, func(t testrepo.HttpToolDefinition, _ int) string {
@@ -245,7 +245,7 @@ func TestDeploymentsService_CreateDeployment_MultipleDocuments(t *testing.T) {
 	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
 
 	repo := testrepo.New(ti.conn)
-	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
 	require.NoError(t, err, "list deployment tools")
 	require.Len(t, tools, 9, "expected 9 tools (4 from petstore + 5 from todo)")
 
@@ -363,7 +363,7 @@ func TestDeploymentsService_CreateDeployment_InvalidDocument(t *testing.T) {
 	require.Equal(t, "failed", dep.Deployment.Status, "deployment status is not failed")
 
 	repo := testrepo.New(ti.conn)
-	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
 	require.NoError(t, err, "list deployment tools failed")
 	require.Len(t, tools, 4, "expected 4 tools (4 from petstore + 0 from invalid)")
 }
