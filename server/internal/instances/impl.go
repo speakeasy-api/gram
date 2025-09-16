@@ -270,19 +270,25 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, executionInfo.OrganizationSlug, executionInfo.ProjectSlug)
 
 	if chatID != "" && toolsetSlug != "" {
-		if err := s.posthog.CaptureEvent(ctx, "direct_tool_execution", authCtx.ProjectID.String(), map[string]interface{}{
-			"project_id":          authCtx.ProjectID.String(),
-			"project_slug":        authCtx.ProjectSlug,
-			"organization_id":     executionInfo.Tool.OrganizationID,
-			"organization_slug":   executionInfo.OrganizationSlug,
-			"authenticated":       true,
-			"toolset_slug":        toolsetSlug,
-			"chat_session_id":     chatID,
-			"tool_name":           executionInfo.Tool.Name,
-			"tool_id":             executionInfo.Tool.ID,
-			"disable_noification": true,
-		}); err != nil {
-			logger.ErrorContext(ctx, "failed to capture direct_tool_execution event", attr.SlogError(err))
+		if toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolsetSlug)); err != nil {
+			logger.ErrorContext(ctx, "failed to load toolset", attr.SlogError(err))
+		} else {
+			if err := s.posthog.CaptureEvent(ctx, "direct_tool_execution", authCtx.ProjectID.String(), map[string]interface{}{
+				"toolset":              toolset.Name,
+				"toolset_slug":         toolset.Slug,
+				"toolset_id":           toolset.ID,
+				"disable_notification": true,
+				"project_id":           authCtx.ProjectID.String(),
+				"project_slug":         authCtx.ProjectSlug,
+				"organization_id":      executionInfo.Tool.OrganizationID,
+				"organization_slug":    executionInfo.OrganizationSlug,
+				"authenticated":        true,
+				"chat_session_id":      chatID,
+				"tool_name":            executionInfo.Tool.Name,
+				"tool_id":              executionInfo.Tool.ID,
+			}); err != nil {
+				logger.ErrorContext(ctx, "failed to capture direct_tool_execution event", attr.SlogError(err))
+			}
 		}
 	}
 
