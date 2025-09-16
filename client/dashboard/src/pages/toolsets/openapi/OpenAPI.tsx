@@ -377,7 +377,7 @@ const RemoveAPISourceDialog = forwardRef<
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Delete Toolset</Dialog.Title>
+          <Dialog.Title>Delete API Source</Dialog.Title>
           <Dialog.Description>
             This will permanently delete the API source and related resources
             such as tools within toolsets.
