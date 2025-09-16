@@ -321,6 +321,13 @@ const RemoveAPISourceDialog = forwardRef<
   const [inputMatches, setInputMatches] = useState(false);
 
   const apiSourceSlug = slugify(asset.name);
+
+  const resetState = () => {
+    setAsset({} as NamedAsset);
+    setInputMatches(false);
+    setPending(false);
+  };
+
   useImperativeHandle(ref, () => ({
     open: (assetToDelete: NamedAsset) => {
       setAsset(assetToDelete);
@@ -329,16 +336,14 @@ const RemoveAPISourceDialog = forwardRef<
       setPending(false);
     },
     close: () => {
-      setOpen(false);
-      setInputMatches(false);
-      setPending(false);
+      resetState();
     },
   }));
 
   const handleOpenChange = (newOpen: boolean) => {
     setOpen(newOpen);
     if (!newOpen) {
-      setInputMatches(false);
+      resetState();
     }
   };
 
@@ -397,7 +402,11 @@ const RemoveAPISourceDialog = forwardRef<
           <div>Deleting {asset.name} cannot be undone.</div>
         </div>
         <Dialog.Footer>
-          <Button hidden={pending} variant="ghost">
+          <Button
+            onClick={() => handleOpenChange(false)}
+            hidden={pending}
+            variant="ghost"
+          >
             Cancel
           </Button>
           <DeleteButton />
