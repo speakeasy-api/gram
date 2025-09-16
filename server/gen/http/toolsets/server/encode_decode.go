@@ -1845,6 +1845,7 @@ func marshalTypesServerVariableToServerVariableResponseBody(v *types.ServerVaria
 // *types.HTTPToolDefinition.
 func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
 	res := &HTTPToolDefinitionResponseBody{
+		ToolType:            v.ToolType,
 		ID:                  v.ID,
 		ProjectID:           v.ProjectID,
 		DeploymentID:        v.DeploymentID,
@@ -2141,8 +2142,9 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 // type *types.HTTPToolDefinitionEntry.
 func marshalTypesHTTPToolDefinitionEntryToHTTPToolDefinitionEntryResponseBody(v *types.HTTPToolDefinitionEntry) *HTTPToolDefinitionEntryResponseBody {
 	res := &HTTPToolDefinitionEntryResponseBody{
-		ID:   v.ID,
-		Name: v.Name,
+		ToolType: v.ToolType,
+		ID:       v.ID,
+		Name:     v.Name,
 	}
 
 	return res

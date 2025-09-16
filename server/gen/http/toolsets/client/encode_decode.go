@@ -1956,6 +1956,7 @@ func unmarshalServerVariableResponseBodyToTypesServerVariable(v *ServerVariableR
 // *HTTPToolDefinitionResponseBody.
 func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToolDefinitionResponseBody) *types.HTTPToolDefinition {
 	res := &types.HTTPToolDefinition{
+		ToolType:            *v.ToolType,
 		ID:                  *v.ID,
 		ProjectID:           *v.ProjectID,
 		DeploymentID:        *v.DeploymentID,
@@ -2228,8 +2229,9 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 // *HTTPToolDefinitionEntryResponseBody.
 func unmarshalHTTPToolDefinitionEntryResponseBodyToTypesHTTPToolDefinitionEntry(v *HTTPToolDefinitionEntryResponseBody) *types.HTTPToolDefinitionEntry {
 	res := &types.HTTPToolDefinitionEntry{
-		ID:   *v.ID,
-		Name: *v.Name,
+		ToolType: *v.ToolType,
+		ID:       *v.ID,
+		Name:     *v.Name,
 	}
 
 	return res
