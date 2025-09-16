@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -195,6 +196,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		}
 
 		result.Tools[i] = &types.HTTPToolDefinition{
+			ToolType:            constants.ToolTypeHTTP,
 			ID:                  tool.ID.String(),
 			DeploymentID:        tool.DeploymentID.String(),
 			ProjectID:           authCtx.ProjectID.String(),

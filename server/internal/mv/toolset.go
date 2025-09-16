@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -104,8 +105,9 @@ func DescribeToolsetEntry(
 			name := conv.Default(nameVariations[def.Name], def.Name)
 
 			tool := &types.HTTPToolDefinitionEntry{
-				ID:   def.ID.String(),
-				Name: name,
+				ToolType: constants.ToolTypeHTTP,
+				ID:       def.ID.String(),
+				Name:     name,
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
@@ -299,6 +301,7 @@ func DescribeToolset(
 			}
 
 			tool := &types.HTTPToolDefinition{
+				ToolType:            constants.ToolTypeHTTP,
 				ID:                  def.HttpToolDefinition.ID.String(),
 				ProjectID:           def.HttpToolDefinition.Description,
 				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),

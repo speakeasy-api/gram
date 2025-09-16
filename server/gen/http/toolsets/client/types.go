@@ -1796,6 +1796,7 @@ type ServerVariableResponseBody struct {
 // HTTPToolDefinitionResponseBody is used to define fields on response body
 // types.
 type HTTPToolDefinitionResponseBody struct {
+	ToolType *string `form:"tool_type,omitempty" json:"tool_type,omitempty" xml:"tool_type,omitempty"`
 	// The ID of the HTTP tool
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the project
@@ -2033,6 +2034,7 @@ type ToolsetEntryResponseBody struct {
 // HTTPToolDefinitionEntryResponseBody is used to define fields on response
 // body types.
 type HTTPToolDefinitionEntryResponseBody struct {
+	ToolType *string `form:"tool_type,omitempty" json:"tool_type,omitempty" xml:"tool_type,omitempty"`
 	// The ID of the HTTP tool
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The name of the tool
@@ -6101,6 +6103,9 @@ func ValidateServerVariableResponseBody(body *ServerVariableResponseBody) (err e
 // ValidateHTTPToolDefinitionResponseBody runs the validations defined on
 // HTTPToolDefinitionResponseBody
 func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody) (err error) {
+	if body.ToolType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_type", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -6142,6 +6147,11 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.ToolType != nil {
+		if !(*body.ToolType == "http") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tool_type", *body.ToolType, []any{"http"}))
+		}
 	}
 	if body.ResponseFilter != nil {
 		if err2 := ValidateResponseFilterResponseBody(body.ResponseFilter); err2 != nil {
@@ -6490,11 +6500,19 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 // ValidateHTTPToolDefinitionEntryResponseBody runs the validations defined on
 // HTTPToolDefinitionEntryResponseBody
 func ValidateHTTPToolDefinitionEntryResponseBody(body *HTTPToolDefinitionEntryResponseBody) (err error) {
+	if body.ToolType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_type", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ToolType != nil {
+		if !(*body.ToolType == "http") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tool_type", *body.ToolType, []any{"http"}))
+		}
 	}
 	return
 }
