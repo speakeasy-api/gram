@@ -12,6 +12,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { getServerURL } from "@/lib/utils";
 import { TierLimits } from "@gram/client/models/components";
 import {
@@ -22,7 +23,7 @@ import {
 import { PolarEmbedCheckout } from "@polar-sh/checkout/embed";
 import { cn, Stack } from "@speakeasy-api/moonshine";
 import { Info } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 export default function Billing() {
   return (
@@ -151,35 +152,109 @@ const UsageTiers = () => {
   const { data: usageTiers, isLoading } = useGetUsageTiers();
   const session = useSession();
   const client = useSdkClient();
+  const telemetry = useTelemetry();
   const [checkoutLink, setCheckoutLink] = useState("");
+  const [checkoutError, setCheckoutError] = useState(false);
+  const [isLoadingCheckout, setIsLoadingCheckout] = useState(true);
 
   useEffect(() => {
-    client.usage.createCheckout().then((link) => {
-      setCheckoutLink(link);
-      PolarEmbedCheckout.init(); // This must go here or else the checkout link won't open in an embedded window
-    });
-  }, []);
+    const fetchCheckoutLink = async () => {
+      try {
+        const link = await client.usage.createCheckout();
+        if (!link) {
+          console.error("Failed to create checkout link: received empty link");
+          telemetry.capture("checkout_link_error", {
+            error: "Received empty checkout link",
+            accountType: session.gramAccountType,
+          });
+          setCheckoutError(true);
+          return;
+        }
+        setCheckoutLink(link);
+        PolarEmbedCheckout.init();
+      } catch (error) {
+        console.error("Error creating checkout link:", error);
+        telemetry.capture("checkout_link_error", {
+          error: error instanceof Error ? error.message : "Failed to create checkout link",
+          accountType: session.gramAccountType,
+        });
+        setCheckoutError(true);
+      } finally {
+        setIsLoadingCheckout(false);
+      }
+    };
+    
+    fetchCheckoutLink();
+  }, [client, telemetry, session.gramAccountType]);
 
-  // This must be initialized AFTER the link is set (more specifically, AFTER the PolarEmbedCheckout.init() call)
-  const upgradeCTA = checkoutLink ? (
-    <a
-      href={checkoutLink}
-      data-polar-checkout
-      data-polar-checkout-theme="light"
-      className="inline-flex"
-    >
-      <Page.Section.CTA>
-        UPGRADE
-      </Page.Section.CTA>
-    </a>
-  ) : null;
+  const handleFallbackClick = useCallback(() => {
+    telemetry.capture("checkout_fallback_clicked", {
+      accountType: session.gramAccountType,
+    });
+  }, [telemetry, session.gramAccountType]);
+
+  const UpgradeCTA = useMemo(() => {
+    if (checkoutLink) {
+      return (
+        <a
+          href={checkoutLink}
+          data-polar-checkout
+          data-polar-checkout-theme="light"
+          className="inline-flex"
+        >
+          <Page.Section.CTA>
+            UPGRADE
+          </Page.Section.CTA>
+        </a>
+      );
+    }
+    
+    if (checkoutError) {
+      return (
+        <a
+          href="mailto:gram@speakeasyapi.dev?subject=Upgrade%20Account"
+          className="inline-flex"
+          onClick={handleFallbackClick}
+        >
+          <Page.Section.CTA>
+            UPGRADE
+          </Page.Section.CTA>
+        </a>
+      );
+    }
+    
+    if (isLoadingCheckout) {
+      return (
+        <Page.Section.CTA disabled>
+          UPGRADE
+        </Page.Section.CTA>
+      );
+    }
+    
+    return null;
+  }, [checkoutLink, checkoutError, isLoadingCheckout, handleFallbackClick]);
 
   const polarPortalCTA = (
     <Page.Section.CTA
-      onClick={() => {
-        client.usage.createCustomerSession().then((link) => {
+      onClick={async () => {
+        try {
+          const link = await client.usage.createCustomerSession();
+          if (!link) {
+            console.error("Failed to create customer session: received empty link");
+            telemetry.capture("customer_session_error", {
+              error: "Received empty customer session link",
+              accountType: session.gramAccountType,
+            });
+            return;
+          }
           window.open(link, "_blank");
-        });
+        } catch (error) {
+          console.error("Error creating customer session:", error);
+          telemetry.capture("customer_session_error", {
+            error: error instanceof Error ? error.message : "Failed to create customer session",
+            accountType: session.gramAccountType,
+          });
+        }
       }}
       disabled={session.gramAccountType === "enterprise"}
     >
@@ -276,7 +351,7 @@ const UsageTiers = () => {
       <Page.Section.Description>
         A breakdown of our pricing tiers.
       </Page.Section.Description>
-      {session.gramAccountType === "free" ? upgradeCTA : polarPortalCTA}
+      {session.gramAccountType === "free" ? UpgradeCTA : polarPortalCTA}
       <Page.Section.Body>
         <Stack direction={"horizontal"} gap={4}>
           {isLoading ? (
