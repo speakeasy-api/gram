@@ -1,6 +1,6 @@
 
 import { EmptyState } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { ToolsetsGraphic } from "../toolsets/ToolsetsEmptyState";
 
 export function PromptsEmptyState({
@@ -9,8 +9,8 @@ export function PromptsEmptyState({
   onCreatePrompt: () => void;
 }) {
   const cta = (
-    <Button size="sm" onClick={onCreatePrompt} caps>
-      Create a prompt
+    <Button size="sm" onClick={onCreatePrompt}>
+      CREATE A PROMPT
     </Button>
   );
 

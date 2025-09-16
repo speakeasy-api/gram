@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Plus } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
@@ -44,9 +44,8 @@ function SaveActionBar({
         </div>
       )}
       <div className="flex items-center gap-3 ml-auto">
-        <Button
-          type="button"
-          variant="ghost"
+        <Button type="button"
+          variant="tertiary"
           size="sm"
           onClick={onCancel}
           disabled={isSaving}
@@ -54,8 +53,7 @@ function SaveActionBar({
         >
           Cancel
         </Button>
-        <Button
-          type="button"
+        <Button type="button"
           size="sm"
           onClick={onSave}
           disabled={isSaving}
@@ -282,9 +280,8 @@ export function ToolsetAuth({
             }}
             className="h-8"
           />
-          <Button
-            type="button"
-            variant="outline"
+          <Button type="button"
+            variant="secondary"
             size="sm"
             onClick={() => routes.environments.goTo()}
             aria-label="Add new environment"

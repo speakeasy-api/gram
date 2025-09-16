@@ -333,39 +333,43 @@ func (p *Client) TrackPromptCallUsage(ctx context.Context, event billing.PromptC
 	}
 }
 
-func (p *Client) TrackPlatformUsage(ctx context.Context, event billing.PlatformUsageEvent) {
+func (p *Client) TrackPlatformUsage(ctx context.Context, events []billing.PlatformUsageEvent) {
 	ctx, span := p.tracer.Start(ctx, "polar_client.track_platform_usage")
 	defer span.End()
 
-	metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
-		"public_mcp_servers": {
-			Integer: &event.PublicMCPServers,
-		},
-		"private_mcp_servers": {
-			Integer: &event.PrivateMCPServers,
-		},
-		"total_enabled_servers": {
-			Integer: &event.TotalEnabledServers,
-		},
-		"total_toolsets": {
-			Integer: &event.TotalToolsets,
-		},
-		"total_tools": {
-			Integer: &event.TotalTools,
-		},
+	var polarEvents = make([]polarComponents.Events, 0, len(events))
+	for _, event := range events {
+
+		metadata := map[string]polarComponents.EventCreateExternalCustomerMetadata{
+			"public_mcp_servers": {
+				Integer: &event.PublicMCPServers,
+			},
+			"private_mcp_servers": {
+				Integer: &event.PrivateMCPServers,
+			},
+			"total_enabled_servers": {
+				Integer: &event.TotalEnabledServers,
+			},
+			"total_toolsets": {
+				Integer: &event.TotalToolsets,
+			},
+			"total_tools": {
+				Integer: &event.TotalTools,
+			},
+		}
+
+		polarEvents = append(polarEvents, polarComponents.Events{
+			Type: polarComponents.EventsTypeEventCreateExternalCustomer,
+			EventCreateExternalCustomer: &polarComponents.EventCreateExternalCustomer{
+				ExternalCustomerID: event.OrganizationID,
+				Name:               "platform-usage",
+				Metadata:           metadata,
+			},
+		})
 	}
 
 	_, err := p.polar.Events.Ingest(ctx, polarComponents.EventsIngest{
-		Events: []polarComponents.Events{
-			{
-				Type: polarComponents.EventsTypeEventCreateExternalCustomer,
-				EventCreateExternalCustomer: &polarComponents.EventCreateExternalCustomer{
-					ExternalCustomerID: event.OrganizationID,
-					Name:               "platform-usage",
-					Metadata:           metadata,
-				},
-			},
-		},
+		Events: polarEvents,
 	})
 
 	if err != nil {
@@ -381,23 +385,18 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 	if customerState, err := p.customerStateCache.Get(ctx, CustomerStateCacheKey(orgID)); err == nil {
 		polarCustomerState = customerState.CustomerState
 	} else {
-		polarCustomerState, err := p.polar.Customers.GetStateExternal(ctx, orgID)
+		externalCustomerState, err := p.polar.Customers.GetStateExternal(ctx, orgID)
 		if err != nil && !strings.Contains(err.Error(), "ResourceNotFound") {
 			return nil, fmt.Errorf("query polar customer state: %w", err)
 		}
 
-		var state *polarComponents.CustomerState
-		if polarCustomerState != nil {
-			state = polarCustomerState.CustomerState
+		if externalCustomerState != nil {
+			polarCustomerState = externalCustomerState.CustomerState
 		}
 
-		if err = p.customerStateCache.Store(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: state}); err != nil {
+		if err = p.customerStateCache.Store(ctx, PolarCustomerState{OrganizationID: orgID, CustomerState: polarCustomerState}); err != nil {
 			p.logger.ErrorContext(ctx, "failed to cache customer state", attr.SlogError(err))
 		}
-	}
-
-	if polarCustomerState == nil {
-		return nil, nil
 	}
 
 	return polarCustomerState, nil
@@ -405,7 +404,7 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 
 // This is used during auth, so keep it as lightweight as possible.
 func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.Tier, err error) {
-	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer_tier")
+	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer_tier", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
@@ -434,7 +433,7 @@ func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerStat
 }
 
 func (p *Client) GetCustomer(ctx context.Context, orgID string) (c *billing.Customer, err error) {
-	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer")
+	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
@@ -497,9 +496,16 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 		}
 
 		usage.ToolCalls = int(toolCallMeter.ConsumedUnits)
-		usage.MaxToolCalls = int(toolCallMeter.CreditedUnits)
 		usage.Servers = int(serverMeter.ConsumedUnits)
-		usage.MaxServers = int(serverMeter.CreditedUnits)
+
+		// Don't set these if they are 0. This can happen for orgs that subscribed but then cancelled.
+		// For those, we want to fall back to the free tier limits which will be pulled below if the maxes are still unset.
+		if toolCallMeter.CreditedUnits > 0 {
+			usage.MaxToolCalls = int(toolCallMeter.CreditedUnits)
+		}
+		if serverMeter.CreditedUnits > 0 {
+			usage.MaxServers = int(serverMeter.CreditedUnits)
+		}
 	}
 
 	/**
@@ -580,13 +586,17 @@ func (p *Client) GetStoredPeriodUsage(ctx context.Context, orgID string) (pu *ge
 }
 
 func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL string, successURL string) (u string, err error) {
-	ctx, span := p.tracer.Start(ctx, "polar_client.create_checkout")
+	ctx, span := p.tracer.Start(ctx, "polar_client.create_checkout", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
 		}
 		span.End()
 	}()
+
+	if orgID == "" {
+		return "", errors.New("organization ID is required")
+	}
 
 	res, err := p.polar.Checkouts.Create(ctx, polarComponents.CheckoutCreate{
 		ExternalCustomerID: &orgID,
@@ -605,7 +615,7 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 }
 
 func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (cpu string, err error) {
-	ctx, span := p.tracer.Start(ctx, "polar_client.create_customer_session")
+	ctx, span := p.tracer.Start(ctx, "polar_client.create_customer_session", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
@@ -735,7 +745,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 			AddOnBullets: []string{
 				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
 				fmt.Sprintf("%s / month / additional %d monthly requests", formatPrice(toolCallPrice*float64(additionalToolCallsBlock)), additionalToolCallsBlock),
-				fmt.Sprintf("%s / month / credit", formatPrice(creditPrice)),
+				fmt.Sprintf("%s / month / 1 playground credit", formatPrice(creditPrice)),
 			},
 		},
 		Enterprise: &gen.TierLimits{

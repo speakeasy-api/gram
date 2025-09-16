@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
@@ -261,17 +261,12 @@ export const AgentifyButton = ({
     messages.filter((m) => m.role === "user").length > 0;
   const agentifyButton = (
     <Button
-      variant={"secondary"}
-      size={"sm"}
-      icon="wand-sparkles"
-      tooltip={
-        "Turn this chat into a reusable agent" +
-        (agentifyAvailable ? "" : " (start chatting first)")
-      }
+      variant="secondary"
+      size="sm"
       disabled={!agentifyAvailable}
       onClick={() => setAgentifyModalOpen(true)}
     >
-      Agentify
+      AGENTIFY
     </Button>
   );
 
@@ -324,7 +319,7 @@ export const AgentifyButton = ({
             </Stack>
           </Stack>
           <Dialog.Footer>
-            <Button variant="ghost" onClick={() => setAgentifyModalOpen(false)}>
+            <Button variant="tertiary" onClick={() => setAgentifyModalOpen(false)}>
               Back
             </Button>
             <Button onClick={agentifyFn} disabled={!prompt || inProgress}>

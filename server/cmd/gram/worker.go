@@ -283,7 +283,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create k8s client: %w", err)
 			}
 
-			assetStorage, shutdown, err := newAssetStorage(ctx, assetStorageOptions{
+			assetStorage, shutdown, err := newAssetStorage(ctx, logger, assetStorageOptions{
 				assetsBackend: c.String("assets-backend"),
 				assetsURI:     c.String("assets-uri"),
 			})

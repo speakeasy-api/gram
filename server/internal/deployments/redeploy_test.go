@@ -87,7 +87,7 @@ func TestDeploymentsService_Redeploy_BasicCloning(t *testing.T) {
 
 	// Verify tools were generated for redeployed deployment
 	repo := testrepo.New(ti.conn)
-	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(redeployed.Deployment.ID))
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(redeployed.Deployment.ID))
 	require.NoError(t, err, "list deployment tools")
 	require.Len(t, tools, 5, "expected 5 tools")
 }

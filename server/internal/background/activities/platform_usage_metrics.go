@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sourcegraph/conc/pool"
@@ -85,25 +86,20 @@ func NewFirePlatformUsageMetrics(logger *slog.Logger, billingTracker billing.Tra
 func (f *FirePlatformUsageMetrics) Do(ctx context.Context, metrics []PlatformUsageMetrics) error {
 	f.logger.InfoContext(ctx, "Starting platform usage metrics firing")
 
-	workers := pool.New().WithErrors().WithMaxGoroutines(25)
+	events := make([]billing.PlatformUsageEvent, 0, len(metrics))
 
 	for _, metric := range metrics {
-		workers.Go(func() error {
-			f.billingTracker.TrackPlatformUsage(ctx, billing.PlatformUsageEvent{
-				OrganizationID:      metric.OrganizationID,
-				PublicMCPServers:    metric.PublicMCPServers,
-				PrivateMCPServers:   metric.PrivateMCPServers,
-				TotalEnabledServers: metric.TotalEnabledServers,
-				TotalToolsets:       metric.TotalToolsets,
-				TotalTools:          metric.TotalTools,
-			})
-			return nil
+		events = append(events, billing.PlatformUsageEvent{
+			OrganizationID:      metric.OrganizationID,
+			PublicMCPServers:    metric.PublicMCPServers,
+			PrivateMCPServers:   metric.PrivateMCPServers,
+			TotalEnabledServers: metric.TotalEnabledServers,
+			TotalToolsets:       metric.TotalToolsets,
+			TotalTools:          metric.TotalTools,
 		})
 	}
 
-	if err := workers.Wait(); err != nil {
-		return err
-	}
+	f.billingTracker.TrackPlatformUsage(ctx, events)
 
 	f.logger.InfoContext(ctx, "Platform usage metrics firing completed successfully")
 	return nil
@@ -113,6 +109,7 @@ type FreeTierReportingUsageMetrics struct {
 	logger            *slog.Logger
 	billingRepository billing.Repository
 	orgRepo           *orgRepo.Queries
+	repo              *repo.Queries
 	posthogClient     *posthog.Posthog
 }
 
@@ -121,12 +118,26 @@ func NewFreeTierReportingMetrics(logger *slog.Logger, db *pgxpool.Pool, billingR
 		logger:            logger.With(attr.SlogComponent("free-tier-reporting-usage-metrics")),
 		billingRepository: billingRepository,
 		orgRepo:           orgRepo.New(db),
+		repo:              repo.New(db),
 		posthogClient:     posthogClient,
 	}
 }
 
 func (f *FreeTierReportingUsageMetrics) Do(ctx context.Context, orgIDs []string) error {
 	f.logger.InfoContext(ctx, "Starting free tier reporting usage metrics")
+
+	// Get user emails for all org IDs
+	userEmails, err := f.repo.GetUserEmailsByOrgIDs(ctx, orgIDs)
+	if err != nil {
+		f.logger.ErrorContext(ctx, "failed to get user emails for orgs", attr.SlogError(err))
+		return fmt.Errorf("failed to get user emails: %w", err)
+	}
+
+	// Create a map for quick lookup of email by org ID
+	emailByOrgID := make(map[string]string)
+	for _, userEmail := range userEmails {
+		emailByOrgID[userEmail.OrganizationID] = userEmail.Email
+	}
 
 	workers := pool.New().WithErrors().WithMaxGoroutines(25)
 
@@ -152,14 +163,22 @@ func (f *FreeTierReportingUsageMetrics) Do(ctx context.Context, orgIDs []string)
 			)
 
 			if org.GramAccountType == "free" && (usage.ToolCalls > usage.MaxToolCalls || usage.Servers > usage.MaxServers) {
-				err = f.posthogClient.CaptureEvent(ctx, "billing_usage_report", org.ID, map[string]any{
-					"org_id":     org.ID,
-					"org_name":   org.Name,
-					"org_slug":   org.Slug,
-					"tool_calls": usage.ToolCalls,
-					"servers":    usage.Servers,
-					"is_gram":    true,
-				})
+				eventData := map[string]any{
+					"org_id":        org.ID,
+					"org_name":      org.Name,
+					"org_slug":      org.Slug,
+					"tool_calls":    usage.ToolCalls,
+					"servers":       usage.Servers,
+					"is_gram":       true,
+					"is_legacy_org": org.CreatedAt.Time.Before(time.Date(2025, 9, 5, 0, 0, 0, 0, time.UTC)), // This is when free tier limit enforcement started
+				}
+
+				// Add email if available
+				if email, ok := emailByOrgID[orgID]; ok {
+					eventData["email"] = email
+				}
+
+				err = f.posthogClient.CaptureEvent(ctx, "billing_usage_report", org.ID, eventData)
 				if err != nil {
 					return fmt.Errorf("failed to capture posthog event for org %s: %w", orgID, err)
 				}

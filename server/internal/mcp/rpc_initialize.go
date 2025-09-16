@@ -24,12 +24,12 @@ type serverInfo struct {
 func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest, payload *mcpInputs, productMetrics *posthog.Posthog) (json.RawMessage, error) {
 	if requestContext, _ := contextvalues.GetRequestContext(ctx); requestContext != nil {
 		if err := productMetrics.CaptureEvent(ctx, "mcp_initialized", payload.sessionID, map[string]interface{}{
-			"project_id":          payload.projectID.String(),
-			"authenticated":       payload.authenticated,
-			"mcp_domain":          requestContext.Host,
-			"mcp_url":             requestContext.Host + requestContext.ReqURL,
-			"disable_noification": true,
-			"mcp_session_id":      payload.sessionID,
+			"project_id":           payload.projectID.String(),
+			"authenticated":        payload.authenticated,
+			"mcp_domain":           requestContext.Host,
+			"mcp_url":              requestContext.Host + requestContext.ReqURL,
+			"disable_notification": true,
+			"mcp_session_id":       payload.sessionID,
 		}); err != nil {
 			logger.ErrorContext(ctx, "failed to capture mcp_initialized event", attr.SlogError(err))
 		}

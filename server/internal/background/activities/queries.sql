@@ -1,9 +1,11 @@
 -- name: GetPlatformUsageMetrics :many
 -- Get comprehensive platform usage metrics per organization
 WITH latest_deployments AS (
-  SELECT DISTINCT ON (project_id) project_id, id as deployment_id
-  FROM deployments 
-  ORDER BY project_id, created_at DESC
+  SELECT DISTINCT ON (project_id) project_id, d.id as deployment_id
+  FROM deployments d
+  JOIN deployment_statuses ds ON d.id = ds.deployment_id
+  WHERE ds.status = 'completed'
+  ORDER BY project_id, d.created_at DESC
 ),
 toolset_metrics AS (
   SELECT 
@@ -46,3 +48,18 @@ JOIN toolsets ON organization_metadata.id = toolsets.organization_id
 WHERE toolsets.deleted = false
 GROUP BY organization_metadata.id
 HAVING COUNT(toolsets.id) > 0;
+
+-- name: GetUserEmailsByOrgIDs :many
+-- Get user emails for organization IDs by looking up the latest deployment for each org
+SELECT DISTINCT
+    d.organization_id,
+    u.email
+FROM deployments d
+JOIN users u ON d.user_id = u.id
+WHERE d.organization_id = ANY($1::text[])
+  AND d.id IN (
+    SELECT DISTINCT ON (organization_id) id
+    FROM deployments 
+    WHERE organization_id = ANY($1::text[])
+    ORDER BY organization_id, created_at DESC
+  );

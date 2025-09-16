@@ -46,6 +46,10 @@ import {
 
 export type Toolset = {
   /**
+   * The account type of the organization
+   */
+  accountType: string;
+  /**
    * When the toolset was created.
    */
   createdAt: Date;
@@ -120,6 +124,7 @@ export type Toolset = {
 /** @internal */
 export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
   z.object({
+    account_type: z.string(),
     created_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
     ),
@@ -145,6 +150,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     ),
   }).transform((v) => {
     return remap$(v, {
+      "account_type": "accountType",
       "created_at": "createdAt",
       "custom_domain_id": "customDomainId",
       "default_environment_slug": "defaultEnvironmentSlug",
@@ -165,6 +171,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
 
 /** @internal */
 export type Toolset$Outbound = {
+  account_type: string;
   created_at: string;
   custom_domain_id?: string | undefined;
   default_environment_slug?: string | undefined;
@@ -192,6 +199,7 @@ export const Toolset$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   Toolset
 > = z.object({
+  accountType: z.string(),
   createdAt: z.date().transform(v => v.toISOString()),
   customDomainId: z.string().optional(),
   defaultEnvironmentSlug: z.string().optional(),
@@ -213,6 +221,7 @@ export const Toolset$outboundSchema: z.ZodType<
   updatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
   return remap$(v, {
+    accountType: "account_type",
     createdAt: "created_at",
     customDomainId: "custom_domain_id",
     defaultEnvironmentSlug: "default_environment_slug",

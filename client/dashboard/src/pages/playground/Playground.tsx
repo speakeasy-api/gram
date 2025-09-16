@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { Button as MoonshineButton, Icon } from "@speakeasy-api/moonshine";
 import { Button } from "@/components/ui/button";
 import { Combobox, DropdownItem } from "@/components/ui/combobox";
 import { Type } from "@/components/ui/type";
@@ -15,7 +16,7 @@ import {
   useListChats,
   useListToolsets,
 } from "@gram/client/react-query/index.js";
-import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
+import { ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -113,8 +114,8 @@ function PlaygroundInner() {
   const shareChatButton = (
     <Button
       size="sm"
+      variant="ghost"
       icon="link"
-      variant={"ghost"}
       onClick={() => {
         telemetry.capture("chat_event", {
           action: "chat_shared",
@@ -247,18 +248,15 @@ export function ToolsetPanel({
             />
             {isAdmin && (
               <Stack direction="horizontal" align="center">
-                <Button
-                  variant="ghost"
-                  icon={dynamicToolset ? "sparkles" : "lock"}
+                <MoonshineButton
+                  variant="tertiary"
                   onClick={() => setDynamicToolset(!dynamicToolset)}
-                  tooltip={
-                    dynamicToolset
-                      ? "Make the toolset static (use every tool in the toolset)"
-                      : "Make the toolset dynamic (use only relevant tools)"
-                  }
                 >
-                  {dynamicToolset ? "Dynamic" : "Static"}
-                </Button>
+                  <MoonshineButton.LeftIcon>
+                    <Icon name={dynamicToolset ? "sparkles" : "lock"} className="h-4 w-4" />
+                  </MoonshineButton.LeftIcon>
+                  <MoonshineButton.Text>{dynamicToolset ? "Dynamic" : "Static"}</MoonshineButton.Text>
+                </MoonshineButton>
               </Stack>
             )}
           </Stack>

@@ -23,6 +23,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -31,28 +33,32 @@ import (
 )
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	auth        *auth.Auth
-	serverURL   *url.URL
-	repo        *repo.Queries
-	billingRepo billing.Repository
-	orgRepo     *orgRepo.Queries
+	tracer        trace.Tracer
+	logger        *slog.Logger
+	auth          *auth.Auth
+	serverURL     *url.URL
+	repo          *repo.Queries
+	billingRepo   billing.Repository
+	orgRepo       *orgRepo.Queries
+	posthogClient *posthog.Posthog
+	openRouter    openrouter.Provisioner
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	return &Service{
-		tracer:      otel.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
-		logger:      logger,
-		auth:        auth.New(logger, db, sessions),
-		serverURL:   serverURL,
-		repo:        repo.New(db),
-		billingRepo: billingRepo,
-		orgRepo:     orgRepo.New(db),
+		tracer:        otel.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
+		logger:        logger,
+		auth:          auth.New(logger, db, sessions),
+		serverURL:     serverURL,
+		repo:          repo.New(db),
+		billingRepo:   billingRepo,
+		orgRepo:       orgRepo.New(db),
+		posthogClient: posthogClient,
+		openRouter:    openRouter,
 	}
 }
 
@@ -76,7 +82,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) error {
 	acceptedEvents := []string{
 		"subscription.created",
-		"subscription.updated",
+		"subscription.active",
 		"subscription.canceled",
 		"subscription.uncanceled",
 		"subscription.revoked",
@@ -105,19 +111,59 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		return oops.E(oops.CodeUnexpected, errors.New("missing customer external id in webhook payload"), "missing customer external id in webhook payload").Log(ctx, s.logger)
 	}
 
+	existingOrgMetadata, err := s.orgRepo.GetOrganizationMetadata(ctx, webhookPayload.Data.Customer.ExternalID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, s.logger)
+	}
+
+	previousAccountType := existingOrgMetadata.GramAccountType
+
 	// we must invalidate the customer tier cache since customer tier may have changed witha subscription update
 	if err := s.billingRepo.InvalidateBillingCustomerCaches(ctx, webhookPayload.Data.Customer.ExternalID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to invalidate customer tier cache").Log(ctx, s.logger)
 	}
 
 	// we force a refresh of the state of the organization since customer tier may have changed witha subscription update
-	if _, err = mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, webhookPayload.Data.Customer.ExternalID); err != nil {
+	refreshedOrg, err := mv.DescribeOrganization(ctx, s.logger, s.orgRepo, s.billingRepo, webhookPayload.Data.Customer.ExternalID)
+	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to update organization metadata").Log(ctx, s.logger)
+	}
+	updatedAccountType := refreshedOrg.GramAccountType
+
+	// we must manually handle a downgrade from pro to free right now since there is no specific product subscription for free
+	if previousAccountType == "pro" && webhookPayload.Type == "subscription.revoked" {
+		updatedAccountType = "free"
+		err := s.orgRepo.SetAccountType(ctx, orgRepo.SetAccountTypeParams{
+			GramAccountType: updatedAccountType,
+			ID:              refreshedOrg.ID,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to set account type").Log(ctx, s.logger)
+		}
+	}
+
+	if previousAccountType != updatedAccountType {
+		if _, err := s.openRouter.RefreshAPIKeyLimit(ctx, refreshedOrg.ID); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to refresh openrouter key limit").Log(ctx, s.logger)
+		}
 	}
 
 	// we force a refresh of the period usage since usage may have changed with a subscription update
 	if _, err = s.billingRepo.GetPeriodUsage(ctx, webhookPayload.Data.Customer.ExternalID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to get period usage").Log(ctx, s.logger)
+	}
+
+	if err = s.posthogClient.CaptureEvent(ctx, "gram_subscription_changed", webhookPayload.Data.Customer.ExternalID, map[string]any{
+		"org_id":       webhookPayload.Data.Customer.ExternalID,
+		"org_name":     webhookPayload.Data.Customer.Name,
+		"org_slug":     webhookPayload.Data.Customer.ExternalID,
+		"is_gram":      true,
+		"product":      webhookPayload.Data.Product.Name,
+		"product_type": webhookPayload.Data.Product.Type,
+		"event":        webhookPayload.Type,
+		"email":        webhookPayload.Data.Customer.Email,
+	}); err != nil {
+		s.logger.ErrorContext(ctx, "failed to capture posthog event", attr.SlogError(err))
 	}
 
 	return nil

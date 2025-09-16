@@ -6,7 +6,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
@@ -48,9 +48,7 @@ export default function Onboarding() {
   );
 }
 
-export function useOnboardingSteps(
-  checkDocumentSlugUnique = true
-) {
+export function useOnboardingSteps(checkDocumentSlugUnique = true) {
   const project = useProject();
   const session = useSession();
   const client = useSdkClient();
@@ -141,7 +139,9 @@ export function useOnboardingSteps(
 
     setCreatingDeployment(true);
 
-    const shouldCreateNew = !latestDeployment || (forceNew && latestDeployment.deployment?.toolCount === 0);
+    const shouldCreateNew =
+      !latestDeployment ||
+      (forceNew && latestDeployment.deployment?.openapiv3ToolCount === 0);
 
     let deployment: Deployment | undefined;
     if (shouldCreateNew) {
@@ -200,11 +200,11 @@ export function useOnboardingSteps(
     } else {
       telemetry.capture("onboarding_event", {
         action: "deployment_created",
-        num_tools: deployment?.toolCount,
+        num_tools: deployment?.openapiv3ToolCount,
       });
     }
 
-    if (deployment?.toolCount === 0) {
+    if (deployment?.openapiv3ToolCount === 0) {
       telemetry.capture("onboarding_event", {
         action: "no_tools_found",
         error: "no_tools_found",
@@ -291,7 +291,7 @@ export function OnboardingContent({
       displayComplete: (
         <Stack direction={"horizontal"} gap={2} align={"center"}>
           <Type>✓ Uploaded {file?.name}</Type>
-          <Button variant={"outline"} onClick={undoSpecUpload}>
+          <Button variant={"secondary"} onClick={undoSpecUpload}>
             Change
           </Button>
         </Stack>
@@ -303,17 +303,18 @@ export function OnboardingContent({
       description: "The tools generated will be scoped under this name.",
       display: (
         <Stack gap={2}>
-          <Stack direction={"horizontal"} gap={2} className="max-w-sm">
-            <Input
-              value={apiName}
-              onChange={setApiName}
-              placeholder="My API"
-            />
+          <Stack
+            direction={"horizontal"}
+            gap={2}
+            className="max-w-sm relative z-10"
+          >
+            <Input value={apiName} onChange={setApiName} placeholder="My API" />
             <Button
+              variant="brand"
               onClick={() => createDeployment()}
               disabled={!!apiNameError}
             >
-              Continue
+              CONTINUE
             </Button>
           </Stack>
           {!!apiNameError && (

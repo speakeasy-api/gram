@@ -1,148 +1,676 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+  <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ .MCPName }}</title>
     <style>
-        body { 
-            font-family: 'Inter', Arial, sans-serif; 
-            margin: 0; 
-            padding: 0; 
-            background: #fff; 
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-        header { display: flex; justify-content: space-between; align-items: center; padding: 24px 40px; border-bottom: 1px solid #e5e5e5; }
-        .company-logo { font-weight: bold; font-size: 2rem; letter-spacing: 2px; }
-        .company-logo span { font-family: monospace; }
-        .company-name { font-size: 1.5rem; font-weight: bold; }
-        main { 
-            max-width: 800px; 
-            margin: 40px auto; 
-            padding: 0 24px; 
-            flex: 1;
-        }
-        h1 { font-size: 2.5rem; margin-bottom: 0.5em; }
-        .desc { font-size: 1.1rem; margin-bottom: 1.5em; }
-        .card { background: #faf9f6; border: 1px solid #e5e5e5; border-radius: 8px; padding: 24px; margin-top: 32px; }
-        .code-container { position: relative; }
-        .code-container:hover .copy-button { opacity: 1; }
-        .copy-button { 
-            position: absolute; 
-            top: 12px; 
-            right: 12px; 
-            background: #333; 
-            color: white; 
-            border: none; 
-            border-radius: 4px; 
-            padding: 6px 12px; 
-            font-size: 12px; 
-            cursor: pointer; 
-            opacity: 0; 
-            transition: opacity 0.2s ease, background-color 0.2s ease;
-            z-index: 10;
-        }
-        .copy-button:hover { background: #555; }
-        .copy-button.copied { opacity: 1; }
-        pre { background: #f6f3ef; padding: 16px; border-radius: 6px; font-size: 1rem; overflow-x: auto; margin: 0; }
-        .section-title { font-weight: 600; margin-bottom: 0.5em; }
-        .logo-container { display: flex; align-items: center; gap: 16px; margin-bottom: 0.5em; align-self: flex-end; justify-content: space-between; }
-        .logo-container .section-title { margin-bottom: 0; }
-        .client-logos { display: flex; align-items: center; gap: 12px; }
-        .client-logo { height: 24px; width: auto; }
-        footer { 
-            text-align: right; 
-            padding: 24px; 
-            border-top: 1px solid #e5e5e5; 
-            color: #666; 
-            font-size: 0.9rem; 
-            margin-top: auto;
-        }
-        footer a { 
-            color: #333; 
-            text-decoration: none; 
-            font-weight: 500; 
-        }
-        footer a:hover { 
-            text-decoration: underline; 
-        }
+      /**************/
+    /* PAGE SETUP */
+    /**************/
+
+    html,
+    body {
+      /* Font Families */
+      --font-diatype: 'Diatype', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+        Roboto, Helvetica, Arial, sans-serif;
+      --font-diatype-mono: 'Diatype Mono', SFMono-Regular, Menlo, Monaco, Consolas,
+        'Liberation Mono', 'Courier New', monospace;
+
+      /* Color Values */
+
+      --color-base-white: hsl(0 0% 100%);
+      --color-base-black: hsl(0 0% 0%);
+
+      --color-neutral-100: hsl(0, 0%, 98%);
+      --color-neutral-200: hsl(0, 0%, 92%);
+      --color-neutral-300: hsl(0, 0%, 86%);
+      --color-neutral-400: hsl(0, 0%, 73%);
+      --color-neutral-500: hsl(0, 0%, 59%);
+      --color-neutral-600: hsl(0, 0%, 46%);
+      --color-neutral-700: hsl(0, 0%, 33%);
+      --color-neutral-800: hsl(0, 0%, 20%);
+      --color-neutral-900: hsl(0, 0%, 7%);
+
+      /* Color Tokens */
+
+      --bg-surface-primary-default: var(--color-base-white);
+      --bg-surface-secondary-default: var(--color-neutral-100);
+      --bg-surface-primary-inverse: var(--color-base-black);
+
+      --bg-surface-primary-fixed-dark: var(--color-base-black);
+
+
+      --border-neutral-softest: var(--color-neutral-200);
+
+      --text-default: var(--color-neutral-700);
+      --text-default-inverse: var(--color-neutral-100);
+
+      --z-index-modal: 200;
+
+
+
+      font-family: var(--font-diatype);
+      color: var(--text-default);
+      background: var(--bg-surface-secondary-default);
+
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      font-weight: 300;
+    }
+
+    .main {
+      padding: 6rem 13rem;
+    }
+
+
+    @media (max-width: 768px) {
+      .main {
+        padding: 6rem 1rem;
+      }
+    }
+
+    @media (max-width: 1080px) {
+      .main {
+        padding: 6rem 6rem;
+      }
+    }
+
+    /**************/
+    /* PAGE TITLE */
+    /**************/
+
+    .content-container {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+
+    .header.container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .mcp-meta {
+      display: flex;
+      gap: 1.5rem;
+    }
+
+    .header-content {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .mcp-logo {
+      width: 5rem;
+      height: 5rem;
+      border-radius: 0.5rem;
+      padding: 0.625rem;
+      border: solid 1px var(--border-neutral-softest);
+    }
+
+    .mcp-name {
+      font-size: 2rem;
+      line-height: 150%;
+      text-wrap-style: balance;
+    }
+
+    .mcp-description {
+      font-size: 1rem;
+      line-height: 175%;
+      text-wrap-style: balance;
+    }
+
+    .popover {
+      position: relative;
+    }
+
+    .action-button {
+      text-transform: uppercase;
+      background: var(--bg-surface-primary-inverse);
+      color: var(--text-default-inverse);
+      display: flex;
+      align-items: center;
+      border-radius: 0.5rem;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+    }
+
+    .popover-menu {
+      position: absolute;
+      top: calc(100% + 0.25rem);
+      left: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      width: 100%;
+      align-items: stretch;
+
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      background: var(--bg-surface-primary-inverse);
+      color: var(--text-default-inverse);
+      box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25);
+    }
+
+    .popover-menu.hidden {
+      display: none;
+    }
+
+    .popover-button {
+      padding: 0.5rem;
+    }
+
+    /***********/
+    /* INSTALL */
+    /***********/
+
+    .install.container {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    .install-targets {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+    }
+
+    @media (max-width: 768px) {
+      .install-targets {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .install-target {
+      display: grid;
+      grid-template-areas:
+        "target"
+        "quick-action";
+      border-radius: 0.5rem;
+      background: var(--bg-surface-primary-default);
+      border: solid 1px var(--border-neutral-softest);
+      cursor: pointer;
+      padding: 1rem;
+      gap: 1rem;
+    }
+
+    .install-target .target {
+      grid-area: target;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+
+    .install-target .quick-action {
+      grid-area: quick-action;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: smaller;
+      padding: 0.75rem;
+      border-radius: 0.25rem;
+      gap: 1rem;
+      border: solid 1px var(--border-neutral-softest);
+    }
+
+    .install-target svg,
+    .install-target img {
+      width: 1.5rem;
+      height: 1.5rem;
+    }
+
+    /******************
+    * AVAILABLE TOOLS *
+    *******************/
+    .tool-names {
+      display: flex;
+      gap: 0.75rem;
+      row-gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .tool-name {
+      display: inline-block;
+      border-radius: 0.125rem;
+      background: var(--bg-surface-primary-default);
+      border: solid 1px var(--border-neutral-softest);
+      padding: 0.125rem 0.25rem;
+      text-transform: UPPERCASE;
+    }
+
+    .tool-name.hidden {
+      display: none;
+    }
+
+
+    .code-container {
+      position: relative;
+    }
+
+    .code-container:hover .copy-button {
+      opacity: 1;
+    }
+
+    .copy-button {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: #333;
+      color: white;
+      border: none;
+        border-radius: 4px;
+        padding: 6px 12px;
+        font-size: 12px;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.2s ease, background-color 0.2s ease;
+        z-index: 10;
+      }
+
+      .copy-button:hover {
+        background: #555;
+      }
+
+      .copy-button.copied {
+        opacity: 1;
+      }
+
+      pre {
+        background: #f6f3ef;
+        padding: 16px;
+        border-radius: 6px;
+        font-size: 1rem;
+        overflow-x: auto;
+        margin: 0;
+      }
+
+      /********
+      * MODAL *
+      ********/
+
+      .modal {
+        position: fixed;
+        left: 50%;
+        top: 8rem;
+        transform: translateX(-50%);
+        background-color: var(--bg-surface-primary-default);
+        /* width: calc(100% - 16rem); */
+        max-height: calc(100% - 16rem);
+        overflow: auto;
+        z-index: var(--z-index-modal);
+
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--border-neutral-softest);
+      }
+
+      .modal-backdrop {
+        width: 100%;
+        height: 100%;
+        position: fixed;
+        z-index: calc(var(--z-index-modal) - 1);
+
+        opacity: 0.5;
+        background: var(--bg-surface-primary-fixed-dark);
+      }
+
+      .section-title {
+        font-weight: 600;
+        margin-bottom: 0.5em;
+      }
+
+      h1 {
+        font-weight: 300;
+      }
+
+      h2: {
+        font-weight: 300;
+      }
+
+      footer {
+        text-align: right;
+        padding: 24px;
+        border-top: 1px solid #e5e5e5;
+        color: #666;
+        font-size: 0.9rem;
+        margin-top: auto;
+      }
+
+      footer a {
+        color: #333;
+        text-decoration: none;
+        font-weight: 500;
+        padding: 0;
+        margin: 0;
+      }
+
+      footer a:hover {
+        text-decoration: underline;
+      }
+
+      /********
+      * RESET *
+      *********/
+
+      button {
+        border: none;
+        margin: 0;
+        padding: 0;
+        width: auto;
+        overflow: visible;
+        cursor: pointer;
+        text-align: inherit;
+
+        background: transparent;
+
+        color: inherit;
+        font: inherit;
+
+        -webkit-font-smoothing: inherit;
+        -moz-osx-font-smoothing: inherit;
+
+        -webkit-appearance: none;
+      }
+
+      a {
+        text-decoration: unset;
+        color: unset;
+      }
+
+      a:visited {
+        color: unset;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
     </style>
-</head>
-<body>
-    <main>
-        <h1>{{ .MCPName }} MCP</h1>
-        <div class="desc">
-            Welcome! This is the MCP server for interacting with the {{ .MCPName }} API. Use it with Claude, Cursor, or any other tool that supports MCP.
+    <template id="modal-template">
+      <div class="modal">
+        <div class="content-slot">
         </div>
-        <a href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .JSONBlobURI }}">
-            <img
-                src="https://cursor.com/deeplink/mcp-install-dark.svg"
-                alt="Add {{ .MCPName }} MCP server to Cursor"
-                height="32" />
+      </div>
+      <div class="modal-backdrop"></div>
+    </template>
+    <template class="install-target" data-install-target="cursor">
+      <div class="modal-content">
+        <h1>
+          Cursor MCP Guide
+        </h1>
+        <h2>Step 1: Click the Deep Link</h2>
+        <p>Click the "Open in Cursor" button to automatically configure the MCP server in Cursor.</p>
+        <a href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}">
+          <img
+            src="https://cursor.com/deeplink/mcp-install-dark.svg"
+            alt="Add {{ .MCPName }} MCP server to Cursor"
+            height="32"
+          >
         </a>
-        <div class="card">
-            <div class="section-title">MCP URL</div>
-            <div class="code-container">
-                <button class="copy-button" onclick="copyToClipboard('mcp-url', this)">Copy</button>
-                <pre id="mcp-url">{{ .MCPURL }}</pre>
-            </div>
+        <h2>Step 2: Set Environment Variables</h2>
+        <p>After installation, you'll need to set the following environment variables in the cursor UI:</p>
+        {{- if .Headers }}
+        <ul>
+          {{- range .Headers }}
+          <li><code>{{ . }}</code>
+            - Get this value from your gram environment</li>
+          {{- end }}
+        </ul>
+        {{- else }}
+        <p>No environment variables needed for this MCP server.</p>
+        {{- end }}
+      </div>
+    </template>
+    <template class="install-target" data-install-target="claude-code">
+      <div class="modal-content">
+        <h1>Claude Code</h1>
+        <p>Install this MCP server using the Claude Code CLI:</p>
+        <div class="code-container">
+          <button class="copy-button" onclick="copyToClipboard('claude-code-install', this)">Copy</button>
+          <pre id="claude-code-install"><code class="language-sh">claude mcp add-json "{{ .MCPSlug }}" "$(cat &lt;&lt;'EOF'
+{{ .MCPConfig }}
+EOF
+)"</code></pre>
         </div>
-        <div class="card">
-            <div class="logo-container">
-                <div class="section-title">MCP Configuration</div>
-                <div class="client-logos">
-                    <img src="https://claude.ai/favicon.ico" alt="Claude Desktop" class="client-logo" title="Claude Desktop" onclick="window.open('https://modelcontextprotocol.io/quickstart/user#2-add-the-filesystem-mcp-server', '_blank')" style="cursor: pointer;">
-                    <img src="https://windsurf.ai/favicon.ico" alt="Windsurf" class="client-logo" title="Windsurf" onclick="window.open('https://docs.windsurf.com/windsurf/cascade/mcp#mcp-config-json', '_blank')" style="cursor: pointer;">
-                    <img src="https://cursor.com/favicon.ico" alt="Cursor" class="client-logo" title="Cursor" onclick="window.open('https://docs.cursor.com/context/model-context-protocol#manual-configuration', '_blank')" style="cursor: pointer;">
-                </div>
-            </div>
-            <div class="code-container">
-                <button class="copy-button" onclick="copyToClipboard('json-blob', this)">Copy</button>
-                <pre id="json-blob">
-{
+        {{- if .Headers }}
+        <h2>Environment Variables</h2>
+        <p>After installation, set these environment variables in your shell:</p>
+        <div class="code-container">
+          <button class="copy-button" onclick="copyToClipboard('claude-code-env', this)">Copy</button>
+          <pre id="claude-code-env"><code class="language-sh">{{- range .Headers }}
+export {{ . }}="your-{{ . }}-value"{{- end }}</code></pre>
+        </div>
+        <p>The MCP configuration supports environment variable expansion using
+          <code>${VAR}</code>
+          syntax. You can also provide default values using
+          <code>${VAR:-default}</code>
+          format.</p>
+        {{- else }}
+        <p>No additional environment variables needed for this MCP server.</p>
+        {{- end }}
+      </div>
+    </template>
+    <template class="install-target" data-install-target="claude-desktop">
+      <div class="modal-content">
+        <h1>Claude Desktop</h1>
+        <p>Add this configuration to your
+          <code>.mcp.json</code>
+          file:</p>
+        <div class="code-container">
+          <button class="copy-button" onclick="copyToClipboard('claude-desktop-config', this)">Copy</button>
+          <pre id="claude-desktop-config"><code class="language-json">{
   "mcpServers": {
     "{{ .MCPName }}": {
       "command": "npx",
       "args": [
         "mcp-remote",
-        "{{ .MCPURL }}",
-    {{- range .Headers }}
+        "{{ .MCPURL }}"{{- range .Headers }},
         "--header",
-        "{{ . }}:${VALUE}"
-    {{- end }}
+        "{{ . }}:${ {{- . -}} }"{{- end }}
       ]
     }
   }
-}
-        </pre>
-            </div>
+}</code></pre>
         </div>
+        {{- if .Headers }}
+        <h2>Environment Variables</h2>
+        <p>Make sure to set the required environment variables in your system before starting Claude Desktop:</p>
+        <div class="code-container">
+          <button class="copy-button" onclick="copyToClipboard('claude-desktop-env', this)">Copy</button>
+          <pre id="claude-desktop-env"><code class="language-sh">{{- range .Headers }}
+export {{ . }}="your-{{ . }}-value"{{- end }}</code></pre>
+        </div>
+        <p>The MCP configuration supports environment variable expansion using
+          <code>${VAR}</code>
+          syntax. You can also provide default values using
+          <code>${VAR:-default}</code>
+          format.</p>
+        {{- else }}
+        <p>No additional environment variables needed for this MCP server.</p>
+        {{- end }}
+      </div>
+    </template>
+  </head>
+  <body>
+    <main class="main">
+      <div class="content-container">
+        <div class="header container">
+          <div class="mcp-meta">
+            <svg class="mcp-logo" width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <g clip-path="url(#clip0_2142_1883)">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M31.3759 4.68693C30.4096 3.74646 29.1144 3.22023 27.7659 3.22023C26.4175 3.22023 25.1223 3.74646 24.1559 4.68693L4.90394 23.5669C4.58178 23.8801 4.15021 24.0552 3.70094 24.0552C3.25167 24.0552 2.82011 23.8801 2.49794 23.5669C2.34022 23.4135 2.21484 23.2301 2.12923 23.0274C2.04362 22.8247 1.99951 22.607 1.99951 22.3869C1.99951 22.1669 2.04362 21.9491 2.12923 21.7465C2.21484 21.5438 2.34022 21.3603 2.49794 21.2069L21.7499 2.32693C23.3604 0.75972 25.5188 -0.117187 27.7659 -0.117188C30.0131 -0.117187 32.1715 0.75972 33.7819 2.32693C34.7138 3.23314 35.4178 4.34713 35.8363 5.57771C36.2548 6.8083 36.376 8.12051 36.1899 9.40693C37.4934 9.22154 38.8221 9.33791 40.0735 9.74708C41.325 10.1562 42.4657 10.8473 43.4079 11.7669L43.5079 11.8669C44.2966 12.6339 44.9234 13.5512 45.3515 14.5646C45.7795 15.5779 46.0001 16.6669 46.0001 17.7669C46.0001 18.867 45.7795 19.9559 45.3515 20.9693C44.9234 21.9827 44.2966 22.9 43.5079 23.6669L26.0959 40.7409C26.0434 40.792 26.0016 40.8531 25.9731 40.9206C25.9446 40.9881 25.9299 41.0606 25.9299 41.1339C25.9299 41.2072 25.9446 41.2798 25.9731 41.3473C26.0016 41.4148 26.0434 41.4759 26.0959 41.5269L29.6719 45.0349C29.8297 45.1883 29.955 45.3718 30.0407 45.5745C30.1263 45.7771 30.1704 45.9949 30.1704 46.2149C30.1704 46.435 30.1263 46.6527 30.0407 46.8554C29.955 47.0581 29.8297 47.2415 29.6719 47.3949C29.3498 47.7081 28.9182 47.8832 28.4689 47.8832C28.0197 47.8832 27.5881 47.7081 27.2659 47.3949L23.6899 43.8889C23.3216 43.531 23.0288 43.1029 22.8289 42.6299C22.629 42.1568 22.526 41.6485 22.526 41.1349C22.526 40.6214 22.629 40.113 22.8289 39.64C23.0288 39.167 23.3216 38.7388 23.6899 38.3809L41.1019 21.3049C41.5749 20.8446 41.9508 20.2942 42.2075 19.6862C42.4641 19.0782 42.5964 18.4249 42.5964 17.7649C42.5964 17.105 42.4641 16.4517 42.2075 15.8437C41.9508 15.2357 41.5749 14.6853 41.1019 14.2249L41.0019 14.1269C40.0367 13.1874 38.7432 12.6613 37.3962 12.6601C36.0492 12.659 34.7548 13.1831 33.7879 14.1209L19.4439 28.1889L19.4399 28.1929L19.2439 28.3869C18.9217 28.7007 18.4897 28.8762 18.0399 28.8762C17.5902 28.8762 17.1582 28.7007 16.8359 28.3869C16.6782 28.2335 16.5528 28.0501 16.4672 27.8474C16.3816 27.6447 16.3375 27.427 16.3375 27.2069C16.3375 26.9869 16.3816 26.7691 16.4672 26.5665C16.5528 26.3638 16.6782 26.1803 16.8359 26.0269L31.3819 11.7609C31.8536 11.3003 32.2282 10.7499 32.4838 10.1423C32.7395 9.5346 32.8708 8.88191 32.8703 8.22267C32.8697 7.56343 32.7372 6.91096 32.4806 6.30372C32.2239 5.69649 31.8483 5.14676 31.3759 4.68693Z" fill="black"/>
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M28.9699 9.40593C29.1277 9.25254 29.253 9.06908 29.3386 8.8664C29.4243 8.66373 29.4684 8.44594 29.4684 8.22593C29.4684 8.00591 29.4243 7.78813 29.3386 7.58545C29.253 7.38278 29.1277 7.19932 28.9699 7.04593C28.6477 6.73219 28.2157 6.55664 27.7659 6.55664C27.3162 6.55664 26.8842 6.73219 26.5619 7.04593L12.3239 21.0099C11.5353 21.7769 10.9084 22.6942 10.4804 23.7076C10.0523 24.7209 9.83179 25.8098 9.83179 26.9099C9.83179 28.01 10.0523 29.0989 10.4804 30.1123C10.9084 31.1257 11.5353 32.043 12.3239 32.8099C13.9346 34.3767 16.093 35.2533 18.3399 35.2533C20.5869 35.2533 22.7453 34.3767 24.3559 32.8099L38.5959 18.8459C38.7537 18.6925 38.879 18.5091 38.9646 18.3064C39.0503 18.1037 39.0944 17.8859 39.0944 17.6659C39.0944 17.4459 39.0503 17.2281 38.9646 17.0255C38.879 16.8228 38.7537 16.6393 38.5959 16.4859C38.2737 16.1722 37.8417 15.9966 37.3919 15.9966C36.9422 15.9966 36.5102 16.1722 36.1879 16.4859L21.9499 30.4499C20.9836 31.3904 19.6884 31.9166 18.3399 31.9166C16.9915 31.9166 15.6963 31.3904 14.7299 30.4499C14.257 29.9896 13.8811 29.4392 13.6244 28.8312C13.3678 28.2232 13.2355 27.5699 13.2355 26.9099C13.2355 26.25 13.3678 25.5967 13.6244 24.9887C13.8811 24.3807 14.257 23.8302 14.7299 23.3699L28.9699 9.40593Z" fill="black"/>
+              </g>
+              <defs>
+                <clipPath id="clip0_2142_1883">
+                  <rect width="48" height="48" fill="white"/>
+                </clipPath>
+              </defs>
+            </svg>
+            <div class="header-content">
+              <div class="mcp-name">{{ .MCPName }}</div>
+              <div class="mcp-description">{{ .MCPDescription }}</div>
+            </div>
+          </div>
+          <div class="popover">
+            <button class="action-button" id="action-button">
+              Add to Client
+              <svg class="chevron-down" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M4.00049 6L8.00049 10L12.0005 6" stroke="currentColor" stroke-width="1.3334" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <div class="popover-menu hidden">
+              <a class="popover-button" href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}" data-install-target="cursor">
+                Cursor
+              </a>
+              <button class="popover-button" data-install-method="modal" data-install-target="claude-code">
+                Claude Code
+              </button>
+              <button class="popover-button" data-install-method="modal" data-install-target="claude-desktop">
+                Claude Desktop
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="install container">
+          <div class="section-title">
+            Install
+          </div>
+          <span class="section-description">
+            Select a method below to install the server.
+          </span>
+          <div class="install-targets">
+            <div tabindex="0" class="install-target" data-install-method="modal" data-install-target="cursor">
+              <div class="target">
+                <img src="https://cursor.com/assets/images/logo.svg">
+                Cursor
+              </div>
+              <a
+                class="quick-action"
+                href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}"
+              >
+                Open in Cursor
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-square-arrow-out-up-right-icon lucide-square-arrow-out-up-right"><path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h6"/><path d="m21 3-9 9"/><path d="M15 3h6v6"/></svg>
+              </a>
+            </div>
+            <div tabindex="0" class="install-target" data-install-method="modal" data-install-target="claude-code">
+              <div class="target">
+                <svg width="250" height="251" viewBox="0 0 250 251" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M49.0541 166.749L98.2432 139.166L99.0541 136.75L98.2432 135.405H95.8108L87.5676 134.903L59.4595 134.151L35.1351 133.148L11.4865 131.894L5.54054 130.64L0 123.243L0.540541 119.607L5.54054 116.222L12.7027 116.849L28.5135 117.977L52.2973 119.607L69.4595 120.61L95 123.243H99.0541L99.5946 121.613L98.2432 120.61L97.1622 119.607L72.5676 102.932L45.9459 85.3796L32.027 75.2242L24.5946 70.0837L20.8108 65.3195L19.1892 54.7879L25.9459 47.2653L35.1351 47.8922L37.4324 48.5191L46.7568 55.6655L66.6216 71.0868L92.5676 90.1439L96.3514 93.2783L97.875 92.25L98.1081 91.5231L96.3514 88.6394L82.2973 63.1881L67.2973 37.2352L60.5405 26.4529L58.7838 20.0587C58.1033 17.3753 57.7027 15.1553 57.7027 12.4107L65.4054 1.87914L69.7297 0.5L80.1351 1.87914L84.4595 5.64042L90.9459 20.4348L101.351 43.6294L117.568 75.2242L122.297 84.6274L124.865 93.2783L125.811 95.9112H127.432V94.4067L128.784 76.6033L131.216 54.7879L133.649 26.7036L134.459 18.8049L138.378 9.27633L146.216 4.13591L152.297 7.01956L157.297 14.166L156.622 18.8049L153.649 38.1128L147.838 68.3285L144.054 88.6394H146.216L148.784 86.0065L159.054 72.4659L176.216 50.9012L183.784 42.3756L192.703 32.9724L198.378 28.4589H209.189L217.027 40.2442L213.514 52.4057L202.432 66.4478L193.243 78.3586L180.068 96.011L171.892 110.204L172.625 111.375L174.595 111.207L204.324 104.813L220.405 101.929L239.595 98.6695L248.243 102.682L249.189 106.819L245.811 115.219L225.27 120.234L201.216 125.124L165.397 133.556L165 133.875L165.468 134.569L181.622 136.032L188.514 136.408H205.405L236.892 138.79L245.135 144.181L250 150.826L249.189 155.966L236.486 162.361L219.459 158.349L179.595 148.82L165.946 145.435H164.054V146.563L175.405 157.722L196.351 176.528L222.432 200.851L223.784 206.869L220.405 211.633L216.892 211.132L193.919 193.83L185 186.057L165 169.131H163.649V170.886L168.243 177.656L192.703 214.392L193.919 225.676L192.162 229.311L185.811 231.568L178.919 230.314L164.459 210.129L149.73 187.561L137.838 167.25L136.402 168.157L129.324 243.73L126.081 247.616L118.514 250.5L112.162 245.736L108.784 237.962L112.162 222.541L116.216 202.481L119.459 186.558L122.432 166.749L124.248 160.131L124.088 159.688L122.637 159.932L107.703 180.415L85 211.132L67.027 230.314L62.7027 232.07L55.2703 228.183L55.9459 221.287L60.1351 215.144L85 183.549L100 163.865L109.668 152.566L109.573 150.932L109.04 150.886L42.973 193.955L31.2162 195.46L26.0811 190.696L26.7568 182.922L29.1892 180.415L49.0541 166.749Z" fill="#D97757"/>
+                </svg>
+                <span>Claude Code</span>
+              </div>
+              <button class="quick-action">
+                Copy script
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy-icon lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+              </button>
+            </div>
+            <div tabindex="0" class="install-target" data-install-method="modal" data-install-target="claude-desktop">
+              <div class="target">
+                <svg width="250" height="251" viewBox="0 0 250 251" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M49.0541 166.749L98.2432 139.166L99.0541 136.75L98.2432 135.405H95.8108L87.5676 134.903L59.4595 134.151L35.1351 133.148L11.4865 131.894L5.54054 130.64L0 123.243L0.540541 119.607L5.54054 116.222L12.7027 116.849L28.5135 117.977L52.2973 119.607L69.4595 120.61L95 123.243H99.0541L99.5946 121.613L98.2432 120.61L97.1622 119.607L72.5676 102.932L45.9459 85.3796L32.027 75.2242L24.5946 70.0837L20.8108 65.3195L19.1892 54.7879L25.9459 47.2653L35.1351 47.8922L37.4324 48.5191L46.7568 55.6655L66.6216 71.0868L92.5676 90.1439L96.3514 93.2783L97.875 92.25L98.1081 91.5231L96.3514 88.6394L82.2973 63.1881L67.2973 37.2352L60.5405 26.4529L58.7838 20.0587C58.1033 17.3753 57.7027 15.1553 57.7027 12.4107L65.4054 1.87914L69.7297 0.5L80.1351 1.87914L84.4595 5.64042L90.9459 20.4348L101.351 43.6294L117.568 75.2242L122.297 84.6274L124.865 93.2783L125.811 95.9112H127.432V94.4067L128.784 76.6033L131.216 54.7879L133.649 26.7036L134.459 18.8049L138.378 9.27633L146.216 4.13591L152.297 7.01956L157.297 14.166L156.622 18.8049L153.649 38.1128L147.838 68.3285L144.054 88.6394H146.216L148.784 86.0065L159.054 72.4659L176.216 50.9012L183.784 42.3756L192.703 32.9724L198.378 28.4589H209.189L217.027 40.2442L213.514 52.4057L202.432 66.4478L193.243 78.3586L180.068 96.011L171.892 110.204L172.625 111.375L174.595 111.207L204.324 104.813L220.405 101.929L239.595 98.6695L248.243 102.682L249.189 106.819L245.811 115.219L225.27 120.234L201.216 125.124L165.397 133.556L165 133.875L165.468 134.569L181.622 136.032L188.514 136.408H205.405L236.892 138.79L245.135 144.181L250 150.826L249.189 155.966L236.486 162.361L219.459 158.349L179.595 148.82L165.946 145.435H164.054V146.563L175.405 157.722L196.351 176.528L222.432 200.851L223.784 206.869L220.405 211.633L216.892 211.132L193.919 193.83L185 186.057L165 169.131H163.649V170.886L168.243 177.656L192.703 214.392L193.919 225.676L192.162 229.311L185.811 231.568L178.919 230.314L164.459 210.129L149.73 187.561L137.838 167.25L136.402 168.157L129.324 243.73L126.081 247.616L118.514 250.5L112.162 245.736L108.784 237.962L112.162 222.541L116.216 202.481L119.459 186.558L122.432 166.749L124.248 160.131L124.088 159.688L122.637 159.932L107.703 180.415L85 211.132L67.027 230.314L62.7027 232.07L55.2703 228.183L55.9459 221.287L60.1351 215.144L85 183.549L100 163.865L109.668 152.566L109.573 150.932L109.04 150.886L42.973 193.955L31.2162 195.46L26.0811 190.696L26.7568 182.922L29.1892 180.415L49.0541 166.749Z" fill="#D97757"/>
+                </svg>
+                <span>Claude Desktop</span>
+              </div>
+              <button class="quick-action">
+                Download config
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-download-icon lucide-download"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div class="available-tools container">
+          <div class="section-title">Available Tools</div>
+          <span class="tool-names container">
+            {{- range $i, $toolName := .ToolNames }}
+          {{- if lt $i 10 }}
+            <span class="tool-name">
+              {{ else }}
+              <span class="tool-name hidden">
+                {{- end }}
+              {{ $toolName }}
+              </span>
+              {{- end }}
+
+            {{- if gt (len .ToolNames) 10 }}
+              <button class="toggle-tool-visibility">
+                See more
+              </button>
+              {{- end }}
+            </span>
+          </span>
+        </div>
+        <div class="mcp-url container">
+          <div class="section-title">Server URL</div>
+          <div class="code-container">
+            <button class="copy-button" onclick="copyToClipboard('mcp-url', this)">Copy</button>
+            <pre id="mcp-url">{{ .MCPURL }}</pre>
+          </div>
+        </div>
+        <div class="raw-configuration container">
+          <div class="section-title">Raw Configuration</div>
+          <button class="copy-button" onclick="copyToClipboard('json-blob', this)">Copy</button>
+          <pre id="json-blob"><code class="language-json">{{ .MCPConfig }}</code></pre>
+          <script id="manifest-json-blob" type="application/json">
+            {
+  "dxt_version": "0.1",
+  "name": "{{ .MCPName }}",
+  "version": "1.0.0",
+  "description": "{{ .MCPDescription }}",
+  "author": {
+     "name": "{{ .OrganizationName }} with Gram"
+  },
+  "server": {
+    "type": "node",
+    "entry_point": "npx",
+    "mcp_config": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "{{ .MCPURL }}"{{- range .Headers }},
+        "--header",
+        "{{ . }}:${VALUE}"{{- end }}
+      ]
+    }
+  },
+  "user_config": {
+    {{- range $i, $header := .Headers }}{{- if $i }},{{ end }}
+    "{{ $header }}": {
+      "type": "string",
+      "title": "{{ $header }}",
+      "description": "Get this value from your gram env",
+      "sensitive": true,
+      "required": true
+    }{{- end }}
+  }
+}
+          </script>
+        </div>
+      </div>
     </main>
-
     <footer>
-        Powered by <a href="https://getgram.ai" target="_blank" rel="noopener noreferrer">Gram</a>
+      Powered by
+      <a href="https://getgram.ai" target="_blank" rel="noopener noreferrer">Gram</a>
     </footer>
-
-    <script>
-        function copyToClipboard(elementId, button) {
-            const element = document.getElementById(elementId);
-            const text = element.textContent;
-            
-            navigator.clipboard.writeText(text).then(function() {
-                const originalText = button.textContent;
-                button.textContent = 'Copied!';
-                button.classList.add('copied');
-                
-                setTimeout(function() {
-                    button.textContent = originalText;
-                    button.classList.remove('copied');
-                }, 2000);
-            }).catch(function(err) {
-                console.error('Failed to copy text: ', err);
-            });
-        }
-    </script>
-</body>
+    <!-- we make this a code block with display: none instead of a
+    script[type="application/json"] because we must escape the user-provided
+    contents and this plays poorly with our script tag -->
+    <code style="display: none;" id="claude-code-script">claude mcp add-json "{{ .MCPSlug }}" "$(cat &lt;&lt;'EOF'
+{{ .MCPConfig }}
+EOF
+)"</code>
+    <script
+      type="module"
+      src="{{ .SiteURL }}/external/hosted-install-page.js"
+    ></script>
+  </body>
 </html>

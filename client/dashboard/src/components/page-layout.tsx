@@ -5,7 +5,7 @@ import { Stack } from "@speakeasy-api/moonshine";
 import React from "react"; // Added missing import for React
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
-import { Button } from "./ui/button.tsx";
+import { Button } from "@speakeasy-api/moonshine";
 import { Heading } from "./ui/heading.tsx";
 import { MoreActions } from "./ui/more-actions.tsx";
 import { Type } from "./ui/type.tsx";
@@ -130,15 +130,8 @@ function PageSectionBody({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function PageSectionCTA({
-  children,
-  ...props
-}: { children: React.ReactNode } & React.ComponentProps<typeof Button>) {
-  return (
-    <Button caps {...props}>
-      {children}
-    </Button>
-  );
+function PageSectionCTA({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }
 
 const PageSection = Object.assign(PageSectionComponent, {
@@ -173,16 +166,14 @@ export function EmptyState({
 
   let CTA: React.ReactNode = (
     <routes.onboarding.Link>
-      <Button size="sm" caps>
-        Get Started
-      </Button>
+      <Button size="sm">Get Started</Button>
     </routes.onboarding.Link>
   );
 
   if (isLoading) {
     CTA = (
-      <Button disabled size="sm" caps>
-        Checking project...
+      <Button disabled size="sm">
+        CHECKING PROJECT...
       </Button>
     );
   } else if (!isEmpty && nonEmptyProjectCTA) {

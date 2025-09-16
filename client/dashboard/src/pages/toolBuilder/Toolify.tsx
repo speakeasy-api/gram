@@ -1,5 +1,5 @@
 import { ToolsetToolsBadge } from "@/components/tools-badge";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Spinner } from "@/components/ui/spinner";
@@ -191,12 +191,11 @@ export const ToolifyDialog = ({
           </Stack>
         </Stack>
         <Dialog.Footer className="sm:justify-between">
-          <Button variant="ghost" onClick={() => setOpen(false)}>
+          <Button variant="tertiary" onClick={() => setOpen(false)}>
             Back
           </Button>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button
-              variant="ghost"
+            <Button variant="tertiary"
               onClick={() => routes.customTools.toolBuilderNew.goTo()}
             >
               Skip

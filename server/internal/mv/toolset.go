@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	org "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	tr "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/tools/security"
 	tsr "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -61,9 +62,8 @@ func DescribeToolsetEntry(
 	var serverVars []*types.ServerVariable
 	if len(toolset.HttpToolNames) > 0 {
 		definitions, err := toolsRepo.FindToolEntriesByName(ctx, tr.FindToolEntriesByNameParams{
-			ProjectID:    pid,
-			Names:        toolset.HttpToolNames,
-			DeploymentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ProjectID: pid,
+			Names:     toolset.HttpToolNames,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
@@ -136,6 +136,7 @@ func DescribeToolsetEntry(
 		promptTemplates = append(promptTemplates, &types.PromptTemplateEntry{
 			ID:   pt.ID.String(),
 			Name: types.Slug(pt.Name),
+			Kind: conv.Ptr(parseKind(pt)),
 		})
 	}
 
@@ -168,6 +169,7 @@ func DescribeToolset(
 	toolsetSlug ToolsetSlug,
 ) (*types.Toolset, error) {
 	toolsetRepo := tsr.New(tx)
+	orgRepo := org.New(tx)
 	toolsRepo := tr.New(tx)
 	variationsRepo := vr.New(tx)
 	pid := uuid.UUID(projectID)
@@ -197,9 +199,8 @@ func DescribeToolset(
 	var serverVars []*types.ServerVariable
 	if len(toolset.HttpToolNames) > 0 {
 		definitions, err := toolsRepo.FindToolsByName(ctx, tr.FindToolsByNameParams{
-			ProjectID:    pid,
-			Names:        toolset.HttpToolNames,
-			DeploymentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ProjectID: pid,
+			Names:     toolset.HttpToolNames,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
@@ -456,9 +457,15 @@ func DescribeToolset(
 		}
 	}
 
+	orgMetadata, err := orgRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
+	}
+
 	return &types.Toolset{
 		ID:                     toolset.ID.String(),
 		OrganizationID:         toolset.OrganizationID,
+		AccountType:            orgMetadata.GramAccountType,
 		ProjectID:              toolset.ProjectID.String(),
 		Name:                   toolset.Name,
 		Slug:                   types.Slug(toolset.Slug),
@@ -598,4 +605,13 @@ func variedToolSchema(ctx context.Context, logger *slog.Logger, tool *types.HTTP
 	}
 
 	return schema, nil
+}
+
+const defaultPromptTemplateKind = "prompt"
+
+func parseKind(pt tsr.GetPromptTemplatesForToolsetRow) string {
+	rawKind := conv.FromPGText[string](pt.Kind)
+	kind := conv.PtrValOrEmpty(rawKind, defaultPromptTemplateKind)
+
+	return kind
 }

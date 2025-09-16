@@ -1,33 +1,18 @@
--- name: ListFirstPartyHTTPTools :many
-WITH deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = @project_id
-      AND (
-        sqlc.narg(deployment_id)::uuid IS NULL
-        OR id = sqlc.narg(deployment_id)::uuid
-      )
-    ORDER BY seq DESC
-    LIMIT 1
-)
-SELECT *
-FROM http_tool_definitions
-INNER JOIN deployment ON http_tool_definitions.deployment_id = deployment.id
-WHERE http_tool_definitions.project_id = @project_id 
-  AND http_tool_definitions.deleted IS FALSE
-  AND (sqlc.narg(cursor)::uuid IS NULL OR http_tool_definitions.id < sqlc.narg(cursor))
-ORDER BY http_tool_definitions.id DESC;
-
 -- name: ListTools :many
+-- Two use cases:
+-- 1. List all tools from the latest successful deployment (when deployment_id is NULL)
+-- 2. List all tools for a specific deployment by ID (when deployment_id is provided)
 WITH deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = @project_id
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = @project_id
+      AND (sqlc.narg(deployment_id)::uuid IS NOT NULL OR ds.status = 'completed')
       AND (
         sqlc.narg(deployment_id)::uuid IS NULL
-        OR id = sqlc.narg(deployment_id)::uuid
+        OR d.id = sqlc.narg(deployment_id)::uuid
       )
-    ORDER BY seq DESC
+    ORDER BY d.seq DESC
     LIMIT 1
 ),
 all_deployment_ids AS (
@@ -75,14 +60,12 @@ LIMIT $1;
 
 -- name: FindToolsByName :many
 WITH deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = @project_id
-      AND (
-        sqlc.narg(deployment_id)::uuid IS NULL
-        OR id = sqlc.narg(deployment_id)::uuid
-      )
-    ORDER BY seq DESC
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = @project_id
+    AND ds.status = 'completed'
+    ORDER BY d.seq DESC
     LIMIT 1
 ),
 external_deployments AS (
@@ -109,14 +92,12 @@ ORDER BY http_tool_definitions.id DESC;
 
 -- name: FindToolEntriesByName :many
 WITH deployment AS (
-    SELECT id
-    FROM deployments
-    WHERE deployments.project_id = @project_id
-      AND (
-        sqlc.narg(deployment_id)::uuid IS NULL
-        OR id = sqlc.narg(deployment_id)::uuid
-      )
-    ORDER BY seq DESC
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = @project_id
+    AND ds.status = 'completed'
+    ORDER BY d.seq DESC
     LIMIT 1
 ),
 external_deployments AS (

@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Card } from "@/components/ui/card";
 import { CopyButton } from "@/components/ui/copy-button";
 import { Action, MoreActions } from "@/components/ui/more-actions";
@@ -316,16 +316,15 @@ export function ServerCard({
 
                     <div className="pt-2">
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
                         onClick={(e) => {
                           e.preventDefault();
                           routes.mcp.details.goTo(toolset.slug);
                         }}
                         className="w-full"
-                        caps
                       >
-                        Advanced Settings
+                        ADVANCED SETTINGS
                       </Button>
                     </div>
                   </>

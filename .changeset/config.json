@@ -13,7 +13,6 @@
   "access": "restricted",
   "baseBranch": "origin/main",
   "updateInternalDependencies": "patch",
-  "skipCI": false,
   "privatePackages": {
     "version": true,
     "tag": true

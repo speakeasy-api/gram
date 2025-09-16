@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "../components/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { getServerURL } from "@/lib/utils";
 import { useSearchParams } from "react-router";
 import { useState } from "react";
@@ -132,7 +132,9 @@ export function LoginSection() {
         </p>
       )}
 
-      <Button onClick={handleLogin}>Login</Button>
+      <div className="relative z-10">
+        <Button variant="brand" onClick={handleLogin}>Login</Button>
+      </div>
     </AuthLayout>
   );
 }
@@ -247,13 +249,16 @@ export function RegisterSection() {
           </p>
         )}
 
-        <Button
-          type="submit"
-          disabled={registerMutation.isPending || !companyName.trim()}
-          className="w-full"
-        >
-          Create Organization
-        </Button>
+        <div className="relative z-10">
+          <Button
+            variant="brand"
+            type="submit"
+            disabled={registerMutation.isPending || !companyName.trim()}
+            className="w-full"
+          >
+            Create Organization
+          </Button>
+        </div>
       </form>
     </AuthLayout>
   );

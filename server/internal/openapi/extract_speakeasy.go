@@ -45,7 +45,7 @@ func (p *ToolExtractor) doSpeakeasy(
 
 	doc, _, err := openapi.Unmarshal(ctx, bytes.NewReader(data), openapi.WithSkipValidation())
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error opening openapi document").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document").Log(ctx, logger)
 	}
 
 	upgradeStart := time.Now()
@@ -77,7 +77,7 @@ func (p *ToolExtractor) doSpeakeasy(
 
 	globalSecurity, err := serializeSecuritySpeakeasy(doc.GetSecurity())
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error serializing global security").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error serializing global security").Log(ctx, logger)
 	}
 
 	securitySchemesParams, errs := extractSecuritySchemesSpeakeasy(ctx, logger, docInfo, doc, task)
@@ -93,7 +93,7 @@ func (p *ToolExtractor) doSpeakeasy(
 	for key, scheme := range securitySchemesParams {
 		sec, err := tx.CreateHTTPSecurity(ctx, *scheme)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
 		}
 
 		securitySchemes[key] = sec
@@ -184,7 +184,7 @@ func (p *ToolExtractor) doSpeakeasy(
 	}
 
 	if writeErrCount > 0 {
-		err := oops.Perm(fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr))
+		err := oops.Permanent(fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr))
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to save %d tool definitions", writeErrCount).Log(ctx, logger)
 	}
 
@@ -270,15 +270,14 @@ func extractSecuritySchemesSpeakeasy(ctx context.Context, logger *slog.Logger, d
 		case openapi.SecuritySchemeTypeOAuth2:
 			if sec.GetFlows() != nil {
 				if sec.GetFlows().AuthorizationCode != nil || sec.GetFlows().ClientCredentials != nil || sec.GetFlows().Implicit != nil {
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_ACCESS_TOKEN"))
 				}
 
 				if sec.GetFlows().ClientCredentials != nil {
 					oauthTypes = append(oauthTypes, "client_credentials")
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_SECRET"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_ID"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_TOKEN_URL"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_CLIENT_SECRET"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_CLIENT_ID"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_TOKEN_URL"))
 				}
 
 				if sec.GetFlows().Implicit != nil {
@@ -310,12 +309,14 @@ func extractSecuritySchemesSpeakeasy(ctx context.Context, logger *slog.Logger, d
 		}
 
 		res[key] = &repo.CreateHTTPSecurityParams{
-			Key:          key,
-			DeploymentID: task.DeploymentID,
-			Type:         conv.ToPGText(sec.GetType().String()),
-			Name:         conv.ToPGTextEmpty(sec.GetName()),
-			InPlacement:  conv.ToPGTextEmpty(sec.GetIn().String()),
-			Scheme:       conv.ToPGTextEmpty(sec.GetScheme()),
+			Key:                 key,
+			DeploymentID:        task.DeploymentID,
+			ProjectID:           uuid.NullUUID{UUID: task.ProjectID, Valid: task.ProjectID != uuid.Nil},
+			Openapiv3DocumentID: uuid.NullUUID{UUID: task.DocumentID, Valid: task.DocumentID != uuid.Nil},
+			Type:                conv.ToPGText(sec.GetType().String()),
+			Name:                conv.ToPGTextEmpty(sec.GetName()),
+			InPlacement:         conv.ToPGTextEmpty(sec.GetIn().String()),
+			Scheme:              conv.ToPGTextEmpty(sec.GetScheme()),
 			// No real reason to store this since it's purely for documentation
 			// purposes and we should eventually drop the DB column. Setting it
 			// to NULL.
@@ -405,10 +406,12 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 		requestBody := op.GetRequestBody().GetObject()
 		if requestBody.GetContent().Len() > 1 {
 			if err := tx.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
-				DeploymentID: deploymentID,
-				ProjectID:    projectID,
-				Event:        "deployment:warning",
-				Message:      fmt.Sprintf("%s: %s: only one request body content type processed for operation", docInfo.Name, opID),
+				DeploymentID:   deploymentID,
+				ProjectID:      projectID,
+				Event:          "deployment:warning",
+				Message:        fmt.Sprintf("%s: %s: only one request body content type processed for operation", docInfo.Name, opID),
+				AttachmentID:   uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
+				AttachmentType: conv.ToPGText("openapi"),
 			}); err != nil {
 				logger.ErrorContext(ctx, "failed to log deployment event", attr.SlogError(err))
 			}
@@ -761,7 +764,7 @@ func mergeDefs(ctx context.Context, logger *slog.Logger, a, b Defs) Defs {
 			aHash := hashing.Hash(a.GetOrZero(key))
 			bHash := hashing.Hash(val)
 			if aHash != bHash {
-				_ = oops.E(oops.CodeUnexpected, oops.Perm(fmt.Errorf("hash mismatch for defs schema %s", key)), "hash mismatch for defs schema %s", key).Log(ctx, logger)
+				_ = oops.E(oops.CodeUnexpected, oops.Permanent(fmt.Errorf("hash mismatch for defs schema %s", key)), "hash mismatch for defs schema %s", key).Log(ctx, logger)
 				continue
 			}
 		} else {

@@ -6,6 +6,7 @@
 import { Toolset } from "@gram/client/models/components";
 
 let value: Toolset = {
+  accountType: "<value>",
   createdAt: new Date("2025-09-03T11:41:50.334Z"),
   httpTools: [],
   id: "<id>",
@@ -22,6 +23,7 @@ let value: Toolset = {
 
 | Field                                                                                         | Type                                                                                          | Required                                                                                      | Description                                                                                   |
 | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `accountType`                                                                                 | *string*                                                                                      | :heavy_check_mark:                                                                            | The account type of the organization                                                          |
 | `createdAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | When the toolset was created.                                                                 |
 | `customDomainId`                                                                              | *string*                                                                                      | :heavy_minus_sign:                                                                            | The ID of the custom domain to use for the toolset                                            |
 | `defaultEnvironmentSlug`                                                                      | *string*                                                                                      | :heavy_minus_sign:                                                                            | A short url-friendly label that uniquely identifies a resource.                               |

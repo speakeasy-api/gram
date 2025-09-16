@@ -50,7 +50,7 @@ func (p *ToolExtractor) doLibOpenAPI(
 		IgnoreArrayCircularReferences:       true,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error opening openapi document").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document").Log(ctx, logger)
 	}
 
 	v3Model, errs := document.BuildV3Model()
@@ -61,7 +61,7 @@ func (p *ToolExtractor) doLibOpenAPI(
 
 		return nil, oops.E(
 			oops.CodeBadRequest,
-			oops.Perm(errors.Join(errs...)),
+			oops.Permanent(errors.Join(errs...)),
 			"openapi v3 document '%s' had %d errors", docInfo.Name, len(errs),
 		).Log(ctx, logger, attr.SlogEvent("openapi:error"))
 	}
@@ -95,7 +95,7 @@ func (p *ToolExtractor) doLibOpenAPI(
 
 	globalSecurity, err := serializeSecurityLibOpenAPI(v3Model.Model.Security)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "error serializing global security").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error serializing global security").Log(ctx, logger)
 	}
 
 	securitySchemesParams, errs := extractSecuritySchemesLibOpenAPI(v3Model.Model, task)
@@ -111,7 +111,7 @@ func (p *ToolExtractor) doLibOpenAPI(
 	for key, scheme := range securitySchemesParams {
 		sec, err := tx.CreateHTTPSecurity(ctx, *scheme)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, oops.Perm(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "%s: error writing security scheme: %s", docInfo.Name, err.Error()).Log(ctx, logger)
 		}
 
 		securitySchemes[key] = sec
@@ -189,7 +189,7 @@ func (p *ToolExtractor) doLibOpenAPI(
 	}
 
 	if writeErrCount > 0 {
-		err := oops.Perm(fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr))
+		err := oops.Permanent(fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr))
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to save %d tool definitions", writeErrCount).Log(ctx, logger)
 	}
 
@@ -262,15 +262,14 @@ func extractSecuritySchemesLibOpenAPI(doc v3.Document, task ToolExtractorTask) (
 		case "oauth2":
 			if sec.Flows != nil {
 				if sec.Flows.AuthorizationCode != nil || sec.Flows.ClientCredentials != nil || sec.Flows.Implicit != nil {
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_ACCESS_TOKEN"))
 				}
 
 				if sec.Flows.ClientCredentials != nil {
 					oauthTypes = append(oauthTypes, "client_credentials")
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_SECRET"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_ID"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_TOKEN_URL"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_CLIENT_SECRET"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_CLIENT_ID"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_TOKEN_URL"))
 				}
 
 				if sec.Flows.Implicit != nil {
@@ -298,12 +297,14 @@ func extractSecuritySchemesLibOpenAPI(doc v3.Document, task ToolExtractorTask) (
 		}
 
 		res[key] = &repo.CreateHTTPSecurityParams{
-			Key:          key,
-			DeploymentID: task.DeploymentID,
-			Type:         conv.ToPGText(sec.Type),
-			Name:         conv.ToPGTextEmpty(sec.Name),
-			InPlacement:  conv.ToPGTextEmpty(sec.In),
-			Scheme:       conv.ToPGTextEmpty(sec.Scheme),
+			Key:                 key,
+			DeploymentID:        task.DeploymentID,
+			ProjectID:           uuid.NullUUID{UUID: task.ProjectID, Valid: task.ProjectID != uuid.Nil},
+			Openapiv3DocumentID: uuid.NullUUID{UUID: task.DocumentID, Valid: task.DocumentID != uuid.Nil},
+			Type:                conv.ToPGText(sec.Type),
+			Name:                conv.ToPGTextEmpty(sec.Name),
+			InPlacement:         conv.ToPGTextEmpty(sec.In),
+			Scheme:              conv.ToPGTextEmpty(sec.Scheme),
 			// No real reason to store this since it's purely for documentation
 			// purposes and we should eventually drop the DB column. Setting it
 			// to NULL.
@@ -377,10 +378,12 @@ func extractToolDefLibOpenAPI(ctx context.Context, logger *slog.Logger, tx *repo
 
 	if op.RequestBody != nil && op.RequestBody.Content != nil && op.RequestBody.Content.Len() > 1 {
 		if err := tx.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
-			DeploymentID: deploymentID,
-			ProjectID:    projectID,
-			Event:        "deployment:warning",
-			Message:      fmt.Sprintf("%s: %s: only one request body content type processed for operation", docInfo.Name, opID),
+			DeploymentID:   deploymentID,
+			ProjectID:      projectID,
+			Event:          "deployment:warning",
+			Message:        fmt.Sprintf("%s: %s: only one request body content type processed for operation", docInfo.Name, opID),
+			AttachmentID:   uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
+			AttachmentType: conv.ToPGText("openapi"),
 		}); err != nil {
 			logger.ErrorContext(ctx, "failed to log deployment event", attr.SlogError(err))
 		}

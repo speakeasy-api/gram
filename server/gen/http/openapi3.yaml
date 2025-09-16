@@ -7655,6 +7655,10 @@ components:
                     items:
                         $ref: '#/components/schemas/OpenAPIv3DeploymentAsset'
                     description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
+                openapiv3_tool_count:
+                    type: integer
+                    description: The number of tools in the deployment generated from OpenAPI documents.
+                    format: int64
                 organization_id:
                     type: string
                     description: The ID of the organization that the deployment belongs to.
@@ -7669,10 +7673,6 @@ components:
                 status:
                     type: string
                     description: The status of the deployment.
-                tool_count:
-                    type: integer
-                    description: The number of tools in the deployment.
-                    format: int64
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
@@ -7685,10 +7685,16 @@ components:
                 - openapiv3_assets
                 - status
                 - packages
-                - tool_count
+                - openapiv3_tool_count
         DeploymentLogEvent:
             type: object
             properties:
+                attachment_id:
+                    type: string
+                    description: The ID of the asset tied to the log event
+                attachment_type:
+                    type: string
+                    description: The type of the asset tied to the log event
                 created_at:
                     type: string
                     description: The creation date of the log event
@@ -7725,10 +7731,6 @@ components:
         DeploymentSummary:
             type: object
             properties:
-                asset_count:
-                    type: integer
-                    description: The number of upstream assets.
-                    format: int64
                 created_at:
                     type: string
                     description: The creation date of the deployment.
@@ -7737,13 +7739,17 @@ components:
                     type: string
                     description: The ID to of the deployment.
                     example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
+                openapiv3_asset_count:
+                    type: integer
+                    description: The number of upstream OpenAPI assets.
+                    format: int64
+                openapiv3_tool_count:
+                    type: integer
+                    description: The number of tools in the deployment generated from OpenAPI documents.
+                    format: int64
                 status:
                     type: string
                     description: The status of the deployment.
-                tool_count:
-                    type: integer
-                    description: The number of tools in the deployment.
-                    format: int64
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
@@ -7752,8 +7758,8 @@ components:
                 - created_at
                 - user_id
                 - status
-                - asset_count
-                - tool_count
+                - openapiv3_asset_count
+                - openapiv3_tool_count
         Environment:
             type: object
             properties:
@@ -8022,6 +8028,10 @@ components:
                     items:
                         $ref: '#/components/schemas/OpenAPIv3DeploymentAsset'
                     description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
+                openapiv3_tool_count:
+                    type: integer
+                    description: The number of tools in the deployment generated from OpenAPI documents.
+                    format: int64
                 organization_id:
                     type: string
                     description: The ID of the organization that the deployment belongs to.
@@ -8036,10 +8046,6 @@ components:
                 status:
                     type: string
                     description: The status of the deployment.
-                tool_count:
-                    type: integer
-                    description: The number of tools in the deployment.
-                    format: int64
                 user_id:
                     type: string
                     description: The ID of the user that created the deployment.
@@ -8052,7 +8058,7 @@ components:
                 - openapiv3_assets
                 - status
                 - packages
-                - tool_count
+                - openapiv3_tool_count
         GetInstanceForm:
             type: object
             properties:
@@ -8976,6 +8982,9 @@ components:
                 id:
                     type: string
                     description: The ID of the prompt template
+                kind:
+                    type: string
+                    description: The kind of the prompt template
                 name:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -9330,6 +9339,9 @@ components:
         Toolset:
             type: object
             properties:
+                account_type:
+                    type: string
+                    description: The account type of the organization
                 created_at:
                     type: string
                     description: When the toolset was created.
@@ -9405,6 +9417,7 @@ components:
                 - id
                 - project_id
                 - organization_id
+                - account_type
                 - name
                 - slug
                 - http_tools

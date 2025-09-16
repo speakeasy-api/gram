@@ -1,8 +1,8 @@
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
-import { Button } from "@/components/ui/button";
-import { ButtonRainbow } from "@/components/ui/button-rainbow";
+import { Button, Icon } from "@speakeasy-api/moonshine";
+import { ExternalLink, Trash2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -34,7 +34,7 @@ import {
 } from "@gram/client/react-query";
 import { Grid, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Globe, Trash2 } from "lucide-react";
+import { Globe } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
@@ -80,14 +80,13 @@ export function MCPDetailPage() {
               <TooltipTrigger asChild>
                 {!activeOAuthAuthCode || !toolset.data.mcpIsPublic ? (
                   <span className="inline-block">
-                    <Button variant="secondary" size="lg" disabled={true}>
+                    <Button variant="secondary" size="md" disabled={true}>
                       {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
                     </Button>
                   </span>
                 ) : (
-                  <Button
-                    variant="secondary"
-                    size="lg"
+                  <Button variant="secondary"
+                    size="md"
                     onClick={() =>
                       isOAuthConnected
                         ? setIsOAuthDetailsModalOpen(true)
@@ -168,9 +167,12 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
 
   return (
     <>
-      <ButtonRainbow onClick={async () => setIsServerEnableDialogOpen(true)} className="max-w-fit">
-        {toolset.mcpEnabled ? "Enabled" : "Enable"}
-      </ButtonRainbow>
+      <Button 
+        variant="secondary"
+        onClick={() => setIsServerEnableDialogOpen(true)}
+      >
+        {toolset.mcpEnabled ? "ENABLED" : "ENABLE"}
+      </Button>
       <ServerEnableDialog
         isOpen={isServerEnableDialogOpen}
         onClose={() => setIsServerEnableDialogOpen(false)}
@@ -281,8 +283,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button
-            variant="outline"
+          <Button variant="secondary"
             size="sm"
             className="mr-2"
             disabled={updateToolsetMutation.isPending}
@@ -310,8 +311,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
     domain && session.gramAccountType !== "free" && !toolset.customDomainId ? (
       linkDomainButton
     ) : (
-      <Button
-        variant="outline"
+      <Button variant="secondary"
         size="sm"
         onClick={() => {
           if (session.gramAccountType == "free") {
@@ -348,8 +348,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   );
 
   const discardButton = anyChanges && (
-    <Button
-      variant="ghost"
+    <Button variant="tertiary"
       size="sm"
       onClick={() => {
         setMcpSlug(toolset.mcpSlug || "");
@@ -392,8 +391,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         className="border rounded-md p-1 w-fit bg-background"
       >
         <Button
-          icon={"globe"}
-          variant="ghost"
+          variant="tertiary"
           size="sm"
           className={cn(
             classes.both,
@@ -401,11 +399,13 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           )}
           {...(!isPublic ? { onClick: onToggle } : {})}
         >
-          Public
+          <Button.LeftIcon>
+            <Icon name="globe" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Public</Button.Text>
         </Button>
         <Button
-          icon={"lock"}
-          variant="ghost"
+          variant="tertiary"
           size="sm"
           className={cn(
             classes.both,
@@ -413,7 +413,10 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           )}
           {...(isPublic ? { onClick: onToggle } : {})}
         >
-          Private
+          <Button.LeftIcon>
+            <Icon name="lock" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Private</Button.Text>
         </Button>
       </Stack>
     );
@@ -528,18 +531,14 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
             >{`${mcpUrl}/install`}</CodeBlock>
             <Link external to={`${mcpUrl}/install`} noIcon>
               <Button
-                variant="outline"
+                variant="secondary"
                 className="px-4"
-                icon={"external-link"}
-                iconAfter
                 disabled={!toolset.mcpIsPublic}
-                tooltip={
-                  toolset.mcpIsPublic
-                    ? "Open the install page"
-                    : "Make your MCP server public to view the installation page."
-                }
               >
-                View
+                <Button.Text>View</Button.Text>
+                <Button.RightIcon>
+                  <ExternalLink className="w-4 h-4" />
+                </Button.RightIcon>
               </Button>
             </Link>
           </Stack>
@@ -1048,8 +1047,7 @@ function OAuthTabModal({
                   meeting and we'll help you get started.
                 </Type>
                 <div className="mt-6 flex gap-3 justify-end items-center">
-                  <Button
-                    variant="outline"
+                  <Button variant="secondary"
                     onClick={() =>
                       window.open(
                         "https://docs.getgram.ai/host-mcp/adding-oauth#oauth-proxy",
@@ -1122,8 +1120,7 @@ function OAuthDetailsModal({
             {toolset.oauthProxyServer && (
               <div className="flex items-center justify-between">
                 <Type className="font-medium">OAuth Proxy Server</Type>
-                <Button
-                  variant="ghost"
+                <Button variant="tertiary"
                   size="sm"
                   className="hover:bg-destructive hover:text-white border-none"
                   onClick={() =>
@@ -1192,17 +1189,18 @@ function OAuthDetailsModal({
                 <div className="flex items-center justify-between">
                   <Type className="font-medium">External OAuth Server</Type>
                   <Button
-                    variant="ghost"
+                    variant="tertiary"
                     size="sm"
                     className="text-muted-foreground hover:text-destructive hover:border-destructive"
-                    tooltip="Unlink this OAuth config from your MCP Server"
                     onClick={() =>
                       removeOAuthMutation.mutate({
                         request: { slug: toolset.slug },
                       })
                     }
                   >
-                    <Trash2 className="w-4 h-4" />
+                    <Button.Icon>
+                      <Trash2 className="w-4 h-4" />
+                    </Button.Icon>
                   </Button>
                 </div>
                 <Stack gap={2} className="pl-4">

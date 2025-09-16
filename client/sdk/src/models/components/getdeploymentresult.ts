@@ -62,6 +62,10 @@ export type GetDeploymentResult = {
    */
   openapiv3Assets: Array<OpenAPIv3DeploymentAsset>;
   /**
+   * The number of tools in the deployment generated from OpenAPI documents.
+   */
+  openapiv3ToolCount: number;
+  /**
    * The ID of the organization that the deployment belongs to.
    */
   organizationId: string;
@@ -77,10 +81,6 @@ export type GetDeploymentResult = {
    * The status of the deployment.
    */
   status: string;
-  /**
-   * The number of tools in the deployment.
-   */
-  toolCount: number;
   /**
    * The ID of the user that created the deployment.
    */
@@ -103,11 +103,11 @@ export const GetDeploymentResult$inboundSchema: z.ZodType<
   id: z.string(),
   idempotency_key: z.string().optional(),
   openapiv3_assets: z.array(OpenAPIv3DeploymentAsset$inboundSchema),
+  openapiv3_tool_count: z.number().int(),
   organization_id: z.string(),
   packages: z.array(DeploymentPackage$inboundSchema),
   project_id: z.string(),
   status: z.string(),
-  tool_count: z.number().int(),
   user_id: z.string(),
 }).transform((v) => {
   return remap$(v, {
@@ -120,9 +120,9 @@ export const GetDeploymentResult$inboundSchema: z.ZodType<
     "github_sha": "githubSha",
     "idempotency_key": "idempotencyKey",
     "openapiv3_assets": "openapiv3Assets",
+    "openapiv3_tool_count": "openapiv3ToolCount",
     "organization_id": "organizationId",
     "project_id": "projectId",
-    "tool_count": "toolCount",
     "user_id": "userId",
   });
 });
@@ -139,11 +139,11 @@ export type GetDeploymentResult$Outbound = {
   id: string;
   idempotency_key?: string | undefined;
   openapiv3_assets: Array<OpenAPIv3DeploymentAsset$Outbound>;
+  openapiv3_tool_count: number;
   organization_id: string;
   packages: Array<DeploymentPackage$Outbound>;
   project_id: string;
   status: string;
-  tool_count: number;
   user_id: string;
 };
 
@@ -163,11 +163,11 @@ export const GetDeploymentResult$outboundSchema: z.ZodType<
   id: z.string(),
   idempotencyKey: z.string().optional(),
   openapiv3Assets: z.array(OpenAPIv3DeploymentAsset$outboundSchema),
+  openapiv3ToolCount: z.number().int(),
   organizationId: z.string(),
   packages: z.array(DeploymentPackage$outboundSchema),
   projectId: z.string(),
   status: z.string(),
-  toolCount: z.number().int(),
   userId: z.string(),
 }).transform((v) => {
   return remap$(v, {
@@ -180,9 +180,9 @@ export const GetDeploymentResult$outboundSchema: z.ZodType<
     githubSha: "github_sha",
     idempotencyKey: "idempotency_key",
     openapiv3Assets: "openapiv3_assets",
+    openapiv3ToolCount: "openapiv3_tool_count",
     organizationId: "organization_id",
     projectId: "project_id",
-    toolCount: "tool_count",
     userId: "user_id",
   });
 });

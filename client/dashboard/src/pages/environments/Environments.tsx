@@ -12,8 +12,10 @@ import {
   useCreateEnvironmentMutation,
   useListEnvironmentsSuspense,
 } from "@gram/client/react-query/index.js";
+import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
+import { Button } from "@speakeasy-api/moonshine";
 export function EnvironmentsRoot() {
   return <Outlet />;
 }
@@ -81,11 +83,15 @@ export default function Environments() {
             Use environments to manage API keys, allowing Gram to handle
             authentication for you
           </Page.Section.Description>
-          <Page.Section.CTA
-            onClick={() => setCreateEnvironmentDialogOpen(true)}
-            icon="plus"
-          >
-            New Environment
+          <Page.Section.CTA>
+            <Button
+              onClick={() => setCreateEnvironmentDialogOpen(true)}
+            >
+              <Button.LeftIcon>
+                <Plus className="w-4 h-4" />
+              </Button.LeftIcon>
+              <Button.Text>New Environment</Button.Text>
+            </Button>
           </Page.Section.CTA>
           <Page.Section.Body>
             <Cards>

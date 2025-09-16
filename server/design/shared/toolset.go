@@ -32,6 +32,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("id", String, "The ID of the toolset")
 	Attribute("project_id", String, "The project ID this toolset belongs to")
 	Attribute("organization_id", String, "The organization ID this toolset belongs to")
+	Attribute("account_type", String, "The account type of the organization")
 	Attribute("name", String, "The name of the toolset")
 	Attribute("slug", Slug, "The slug of the toolset")
 	Attribute("description", String, "Description of the toolset")
@@ -54,7 +55,7 @@ var Toolset = Type("Toolset", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "name", "slug", "http_tools", "prompt_templates", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "http_tools", "prompt_templates", "created_at", "updated_at")
 })
 
 var ToolsetEntry = Type("ToolsetEntry", func() {

@@ -1,36 +1,24 @@
 package oops
 
-type retryError struct {
-	permanent bool
-	err       error
-}
+import (
+	"errors"
+	"fmt"
+)
 
-func (e *retryError) Unwrap() error {
-	return e.err
-}
+type permanentError struct{}
 
-func (e *retryError) Error() string {
-	return e.err.Error()
-}
+func (e *permanentError) Error() string { return "permanent error" }
 
-func Perm(err error) error {
+var ErrPermanent = &permanentError{}
+
+func Permanent(err error) error {
 	if err == nil {
 		return nil
 	}
 
-	return &retryError{
-		permanent: true,
-		err:       err,
-	}
-}
-
-func Temp(err error) error {
-	if err == nil {
-		return nil
+	if errors.Is(err, ErrPermanent) {
+		return err
 	}
 
-	return &retryError{
-		permanent: false,
-		err:       err,
-	}
+	return fmt.Errorf("%w: %w", ErrPermanent, err)
 }

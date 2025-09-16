@@ -63,6 +63,7 @@ const (
 	CacheKeyKey                    = attribute.Key("gram.cache.key")
 	CacheNamespaceKey              = attribute.Key("gram.cache.namespace")
 	ComponentKey                   = attribute.Key("gram.component")
+	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
 	DeploymentIDKey                = attribute.Key("gram.deployment.id")
 	DeploymentOpenAPIIDKey         = attribute.Key("gram.deployment.openapi.id")
 	DeploymentOpenAPINameKey       = attribute.Key("gram.deployment.openapi.name")
@@ -267,6 +268,9 @@ func SlogCacheNamespace(v string) slog.Attr      { return slog.String(string(Cac
 
 func Component(v string) attribute.KeyValue { return ComponentKey.String(v) }
 func SlogComponent(v string) slog.Attr      { return slog.String(string(ComponentKey), v) }
+
+func DBDeletedRowsCount(v int64) attribute.KeyValue { return DBDeletedRowsCountKey.Int64(v) }
+func SlogDBDeletedRowsCount(v int64) slog.Attr      { return slog.Int64(string(DBDeletedRowsCountKey), v) }
 
 func DeploymentID(v string) attribute.KeyValue { return DeploymentIDKey.String(v) }
 func SlogDeploymentID(v string) slog.Attr      { return slog.String(string(DeploymentIDKey), v) }

@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Card } from "@/components/ui/card";
 import { Spinner } from "@/components/ui/spinner";
 import { useErrorHandler } from "@/contexts/ErrorHandler";
@@ -37,12 +37,13 @@ function ContentErrorFallback({ error }: ContentErrorFallbackProps) {
         </div>
       </Card.Content>
       <Card.Footer className="justify-start">
-        <Button
-          variant="outline"
-          icon="rotate-ccw"
+        <Button variant="secondary"
           onClick={() => window.location.reload()}
         >
-          Reload page
+          <Button.LeftIcon>
+            <Icon name="rotate-ccw" className="h-4 w-4" />
+          </Button.LeftIcon>
+          <Button.Text>Reload page</Button.Text>
         </Button>
       </Card.Footer>
     </Card>

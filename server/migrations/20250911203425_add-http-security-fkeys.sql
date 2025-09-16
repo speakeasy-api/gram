@@ -1,0 +1,2 @@
+-- Modify "http_security" table
+ALTER TABLE "http_security" ADD COLUMN "project_id" uuid NULL, ADD COLUMN "openapiv3_document_id" uuid NULL, ADD CONSTRAINT "http_security_openapiv3_document_id_fkey" FOREIGN KEY ("openapiv3_document_id") REFERENCES "deployments_openapiv3_assets" ("id") ON UPDATE NO ACTION ON DELETE RESTRICT, ADD CONSTRAINT "http_security_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects" ("id") ON UPDATE NO ACTION ON DELETE CASCADE;
