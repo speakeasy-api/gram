@@ -219,10 +219,15 @@ export function APIsContent() {
       </Page.Section.Description>
       {logsCta}
       <Page.Section.CTA>
-        <MoonshineButton.LeftIcon>
-          <Plus className="w-4 h-4" />
-        </MoonshineButton.LeftIcon>
-        <MoonshineButton.Text>Add API</MoonshineButton.Text>
+        <MoonshineButton
+          onClick={() => setNewDocumentDialogOpen(true)}
+          variant="secondary"
+        >
+          <MoonshineButton.LeftIcon>
+            <Plus className="w-4 h-4" />
+          </MoonshineButton.LeftIcon>
+          <MoonshineButton.Text>Add API</MoonshineButton.Text>
+        </MoonshineButton>
       </Page.Section.CTA>
       <Page.Section.Body>
         <MiniCards isLoading={isLoading}>
