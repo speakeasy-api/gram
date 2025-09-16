@@ -404,7 +404,7 @@ func (p *Client) getCustomerState(ctx context.Context, orgID string) (*polarComp
 
 // This is used during auth, so keep it as lightweight as possible.
 func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.Tier, err error) {
-	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer_tier")
+	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer_tier", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
@@ -433,7 +433,7 @@ func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerStat
 }
 
 func (p *Client) GetCustomer(ctx context.Context, orgID string) (c *billing.Customer, err error) {
-	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer")
+	ctx, span := p.tracer.Start(ctx, "polar_client.get_customer", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
@@ -586,13 +586,17 @@ func (p *Client) GetStoredPeriodUsage(ctx context.Context, orgID string) (pu *ge
 }
 
 func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL string, successURL string) (u string, err error) {
-	ctx, span := p.tracer.Start(ctx, "polar_client.create_checkout")
+	ctx, span := p.tracer.Start(ctx, "polar_client.create_checkout", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
 		}
 		span.End()
 	}()
+
+	if orgID == "" {
+		return "", errors.New("organization ID is required")
+	}
 
 	res, err := p.polar.Checkouts.Create(ctx, polarComponents.CheckoutCreate{
 		ExternalCustomerID: &orgID,
@@ -611,7 +615,7 @@ func (p *Client) CreateCheckout(ctx context.Context, orgID string, serverURL str
 }
 
 func (p *Client) CreateCustomerSession(ctx context.Context, orgID string) (cpu string, err error) {
-	ctx, span := p.tracer.Start(ctx, "polar_client.create_customer_session")
+	ctx, span := p.tracer.Start(ctx, "polar_client.create_customer_session", trace.WithAttributes(attr.OrganizationID(orgID)))
 	defer func() {
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
