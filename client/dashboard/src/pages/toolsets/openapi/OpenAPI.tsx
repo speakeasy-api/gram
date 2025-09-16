@@ -21,7 +21,7 @@ import {
   useListAssets,
 } from "@gram/client/react-query/index.js";
 import { Icon, Button as MoonshineButton } from "@speakeasy-api/moonshine";
-import { OctagonAlertIcon, Plus } from "lucide-react";
+import { Loader2Icon, OctagonAlertIcon, Plus } from "lucide-react";
 import {
   forwardRef,
   useEffect,
@@ -311,6 +311,7 @@ const RemoveAPISourceDialog = forwardRef<
 >(({ onConfirmRemoval }, ref) => {
   const [open, setOpen] = useState(false);
   const [asset, setAsset] = useState<NamedAsset>({} as NamedAsset);
+  const [pending, setPending] = useState(false);
   const [inputMatches, setInputMatches] = useState(false);
 
   useImperativeHandle(ref, () => ({
@@ -318,10 +319,12 @@ const RemoveAPISourceDialog = forwardRef<
       setAsset(assetToDelete);
       setOpen(true);
       setInputMatches(false);
+      setPending(false);
     },
     close: () => {
       setOpen(false);
       setInputMatches(false);
+      setPending(false);
     },
   }));
 
@@ -333,9 +336,34 @@ const RemoveAPISourceDialog = forwardRef<
   };
 
   const handleConfirm = async () => {
+    setPending(true);
     await onConfirmRemoval(asset.id);
+    setPending(false);
+
     setOpen(false);
     setInputMatches(false);
+  };
+
+  const DeleteButton = () => {
+    if (pending) {
+      return (
+        <Button disabled variant="destructive">
+          <Loader2Icon className="size-4 animate-spin" />
+          Deleting API Source
+        </Button>
+      );
+    }
+
+    return (
+      <Button
+        disabled={!inputMatches}
+        variant="destructive"
+        onClick={handleConfirm}
+        tooltip={!inputMatches ? "Type the name to confirm" : undefined}
+      >
+        Delete API Source
+      </Button>
+    );
   };
 
   return (
@@ -362,15 +390,10 @@ const RemoveAPISourceDialog = forwardRef<
           <div>Deleting {asset.name} cannot be undone.</div>
         </div>
         <Dialog.Footer>
-          <Button variant="ghost">Cancel</Button>
-          <Button
-            disabled={!inputMatches}
-            variant="destructive"
-            onClick={handleConfirm}
-            tooltip={inputMatches ? undefined : "Type to confirm"}
-          >
-            Delete API Source
+          <Button hidden={pending} variant="ghost">
+            Cancel
           </Button>
+          <DeleteButton />
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
