@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
+import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Cards } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { MoreActions } from "@/components/ui/more-actions";
@@ -201,8 +201,11 @@ export function ToolsetView({
 
   const actions = (
     <Stack direction="horizontal" gap={2} align="center">
-      <Button icon="plus" onClick={gotoAddTools} caps size="sm">
-        Add/Remove Tools
+      <Button onClick={gotoAddTools} size="sm">
+        <Button.LeftIcon>
+          <Icon name="plus" className="h-4 w-4" />
+        </Button.LeftIcon>
+        <Button.Text>Add/Remove Tools</Button.Text>
       </Button>
       <MoreActions
         actions={[

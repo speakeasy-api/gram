@@ -25,7 +25,7 @@ func TestToolsetsService_GetToolset_Success(t *testing.T) {
 
 	// Get tools from the deployment
 	repo := testrepo.New(ti.conn)
-	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
 	require.NoError(t, err, "list deployment tools")
 	require.GreaterOrEqual(t, len(tools), 2, "expected at least 2 tools from petstore")
 

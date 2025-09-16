@@ -62,9 +62,8 @@ func DescribeToolsetEntry(
 	var serverVars []*types.ServerVariable
 	if len(toolset.HttpToolNames) > 0 {
 		definitions, err := toolsRepo.FindToolEntriesByName(ctx, tr.FindToolEntriesByNameParams{
-			ProjectID:    pid,
-			Names:        toolset.HttpToolNames,
-			DeploymentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ProjectID: pid,
+			Names:     toolset.HttpToolNames,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
@@ -200,9 +199,8 @@ func DescribeToolset(
 	var serverVars []*types.ServerVariable
 	if len(toolset.HttpToolNames) > 0 {
 		definitions, err := toolsRepo.FindToolsByName(ctx, tr.FindToolsByNameParams{
-			ProjectID:    pid,
-			Names:        toolset.HttpToolNames,
-			DeploymentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ProjectID: pid,
+			Names:     toolset.HttpToolNames,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)

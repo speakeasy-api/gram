@@ -29,6 +29,9 @@ updates:
       kubernetes:
         patterns:
           - "k8s.io/*"
+      redis:
+        patterns:
+          - "github.com/redis/go-redis/*"
   - package-ecosystem: "docker"
     directory: "/server"
     schedule:

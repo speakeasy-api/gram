@@ -1,7 +1,8 @@
 import { HttpRoute } from "@/components/http-route";
 import { Page } from "@/components/page-layout";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
+import { Check, X } from "lucide-react";
 import { Card, Cards } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dot } from "@/components/ui/dot";
@@ -24,7 +25,7 @@ import {
 import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
-import { AlertTriangleIcon, Check, CheckCircleIcon } from "lucide-react";
+import { AlertTriangleIcon, CheckCircleIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router";
 import { useCustomTools } from "../toolBuilder/CustomTools";
@@ -99,15 +100,17 @@ const groupColumnsToggleable: Column<ToggleableToolGroup>[] = [
 
       return (
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
-          icon={allEnabled ? "x" : "check"}
           onClick={(e) => {
             e.stopPropagation();
             row.toggleAll();
           }}
         >
-          {allEnabled ? "Disable All" : "Enable All"}
+          <Button.LeftIcon>
+            {allEnabled ? <X className="w-4 h-4" /> : <Check className="w-4 h-4" />}
+          </Button.LeftIcon>
+          <Button.Text>{allEnabled ? "Disable All" : "Enable All"}</Button.Text>
         </Button>
       );
     },
@@ -447,8 +450,7 @@ function CustomToolCard({
   const allToolsAvailable = template.toolsHint.every(isToolInToolset);
 
   const addButton = (
-    <Button
-      variant="outline"
+    <Button variant="secondary"
       disabled={!templateIsInToolset && !allToolsAvailable}
       onClick={toggleEnabled}
     >

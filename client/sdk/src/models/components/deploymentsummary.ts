@@ -10,10 +10,6 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type DeploymentSummary = {
   /**
-   * The number of upstream assets.
-   */
-  assetCount: number;
-  /**
    * The creation date of the deployment.
    */
   createdAt: Date;
@@ -22,13 +18,17 @@ export type DeploymentSummary = {
    */
   id: string;
   /**
+   * The number of upstream OpenAPI assets.
+   */
+  openapiv3AssetCount: number;
+  /**
+   * The number of tools in the deployment generated from OpenAPI documents.
+   */
+  openapiv3ToolCount: number;
+  /**
    * The status of the deployment.
    */
   status: string;
-  /**
-   * The number of tools in the deployment.
-   */
-  toolCount: number;
   /**
    * The ID of the user that created the deployment.
    */
@@ -41,28 +41,28 @@ export const DeploymentSummary$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  asset_count: z.number().int(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   id: z.string(),
+  openapiv3_asset_count: z.number().int(),
+  openapiv3_tool_count: z.number().int(),
   status: z.string(),
-  tool_count: z.number().int(),
   user_id: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    "asset_count": "assetCount",
     "created_at": "createdAt",
-    "tool_count": "toolCount",
+    "openapiv3_asset_count": "openapiv3AssetCount",
+    "openapiv3_tool_count": "openapiv3ToolCount",
     "user_id": "userId",
   });
 });
 
 /** @internal */
 export type DeploymentSummary$Outbound = {
-  asset_count: number;
   created_at: string;
   id: string;
+  openapiv3_asset_count: number;
+  openapiv3_tool_count: number;
   status: string;
-  tool_count: number;
   user_id: string;
 };
 
@@ -72,17 +72,17 @@ export const DeploymentSummary$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   DeploymentSummary
 > = z.object({
-  assetCount: z.number().int(),
   createdAt: z.date().transform(v => v.toISOString()),
   id: z.string(),
+  openapiv3AssetCount: z.number().int(),
+  openapiv3ToolCount: z.number().int(),
   status: z.string(),
-  toolCount: z.number().int(),
   userId: z.string(),
 }).transform((v) => {
   return remap$(v, {
-    assetCount: "asset_count",
     createdAt: "created_at",
-    toolCount: "tool_count",
+    openapiv3AssetCount: "openapiv3_asset_count",
+    openapiv3ToolCount: "openapiv3_tool_count",
     userId: "user_id",
   });
 });

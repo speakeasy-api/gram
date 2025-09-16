@@ -106,9 +106,12 @@ For complex queries, use Common Table Expressions (CTEs):
 ```sql
 -- name: GetProjectWithTools :one
 WITH latest_deployment AS (
-    SELECT id FROM deployments
-    WHERE project_id = @project_id
-    ORDER` BY seq DESC
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = @project_id
+      AND ds.status = 'completed'
+    ORDER BY seq DESC
     LIMIT 1
 )
 SELECT

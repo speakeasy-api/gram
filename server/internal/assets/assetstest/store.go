@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func NewTestBlobStore(t *testing.T) assets.BlobStore {
@@ -15,5 +16,5 @@ func NewTestBlobStore(t *testing.T) assets.BlobStore {
 		t.Fatalf("failed to open root: %v", err)
 	}
 
-	return &assets.FSBlobStore{Root: root}
+	return assets.NewFSBlobStore(testenv.NewLogger(t), root)
 }

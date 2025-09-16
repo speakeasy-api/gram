@@ -30,15 +30,15 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 
 	deployment := rows[0].Deployment
 	stat := rows[0].Status
-	toolCount := rows[0].ToolCount
-	attachedAssets := make([]*types.OpenAPIv3DeploymentAsset, 0, len(rows))
+	openapiv3ToolCount := rows[0].Openapiv3ToolCount
+	attachedOpenAPIv3 := make([]*types.OpenAPIv3DeploymentAsset, 0, len(rows))
 	attachedPackages := make([]*types.DeploymentPackage, 0, len(rows))
-	var seenAssets = make(map[uuid.UUID]bool)
+	var seenOpenAPIv3 = make(map[uuid.UUID]bool)
 	var seenPackages = make(map[uuid.UUID]bool)
 
 	for _, r := range rows {
-		depAssetID := r.DeploymentsOpenapiv3AssetID.UUID
-		if depAssetID != uuid.Nil && !seenAssets[depAssetID] {
+		depOpenAPIv3ID := r.DeploymentsOpenapiv3AssetID.UUID
+		if depOpenAPIv3ID != uuid.Nil && !seenOpenAPIv3[depOpenAPIv3ID] {
 			if err := inv.Check(
 				"describe deployment asset",
 				"valid asset store id", r.DeploymentsOpenapiv3AssetStoreID.Valid && r.DeploymentsOpenapiv3AssetStoreID.UUID != uuid.Nil,
@@ -48,13 +48,13 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 				return nil, oops.E(oops.CodeInvariantViolation, err, "invalid state for deployment openapiv3 asset").Log(ctx, logger)
 			}
 
-			attachedAssets = append(attachedAssets, &types.OpenAPIv3DeploymentAsset{
-				ID:      depAssetID.String(),
+			attachedOpenAPIv3 = append(attachedOpenAPIv3, &types.OpenAPIv3DeploymentAsset{
+				ID:      depOpenAPIv3ID.String(),
 				AssetID: r.DeploymentsOpenapiv3AssetStoreID.UUID.String(),
 				Name:    r.DeploymentsOpenapiv3AssetName.String,
 				Slug:    types.Slug(r.DeploymentsOpenapiv3AssetSlug.String),
 			})
-			seenAssets[depAssetID] = true
+			seenOpenAPIv3[depOpenAPIv3ID] = true
 		}
 
 		pkgID := r.DeploymentPackageID.UUID
@@ -77,21 +77,21 @@ func DescribeDeployment(ctx context.Context, logger *slog.Logger, depRepo *repo.
 	}
 
 	return &types.Deployment{
-		ID:              deployment.ID.String(),
-		CreatedAt:       deployment.CreatedAt.Time.Format(time.RFC3339),
-		OrganizationID:  deployment.OrganizationID,
-		ProjectID:       deployment.ProjectID.String(),
-		UserID:          deployment.UserID,
-		Status:          stat,
-		ExternalID:      conv.FromPGText[string](deployment.ExternalID),
-		ExternalURL:     conv.FromPGText[string](deployment.ExternalUrl),
-		GithubSha:       conv.FromPGText[string](deployment.GithubSha),
-		GithubPr:        conv.FromPGText[string](deployment.GithubPr),
-		GithubRepo:      conv.FromPGText[string](deployment.GithubRepo),
-		IdempotencyKey:  conv.Ptr(deployment.IdempotencyKey),
-		ClonedFrom:      conv.FromNullableUUID(deployment.ClonedFrom),
-		Openapiv3Assets: attachedAssets,
-		Packages:        attachedPackages,
-		ToolCount:       toolCount,
+		ID:                 deployment.ID.String(),
+		CreatedAt:          deployment.CreatedAt.Time.Format(time.RFC3339),
+		OrganizationID:     deployment.OrganizationID,
+		ProjectID:          deployment.ProjectID.String(),
+		UserID:             deployment.UserID,
+		Status:             stat,
+		ExternalID:         conv.FromPGText[string](deployment.ExternalID),
+		ExternalURL:        conv.FromPGText[string](deployment.ExternalUrl),
+		GithubSha:          conv.FromPGText[string](deployment.GithubSha),
+		GithubPr:           conv.FromPGText[string](deployment.GithubPr),
+		GithubRepo:         conv.FromPGText[string](deployment.GithubRepo),
+		IdempotencyKey:     conv.Ptr(deployment.IdempotencyKey),
+		ClonedFrom:         conv.FromNullableUUID(deployment.ClonedFrom),
+		Openapiv3Assets:    attachedOpenAPIv3,
+		Openapiv3ToolCount: openapiv3ToolCount,
+		Packages:           attachedPackages,
 	}, nil
 }

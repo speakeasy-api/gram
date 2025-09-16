@@ -5,7 +5,7 @@ import { ProjectSelector } from "@/components/project-menu";
 import { ToolBadge } from "@/components/tool-badge";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -35,6 +35,7 @@ import {
   ServerCog,
   Upload,
   Wrench,
+  X,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
@@ -255,11 +256,14 @@ export const UploadedDocument = ({
             {file.name}
           </Type>
           <Button
-            variant="ghost"
+            variant="tertiary"
             onClick={onReset}
             className="size-6 opacity-50 hover:opacity-100"
-            icon="x"
-          />
+          >
+            <Button.Icon>
+              <X className="w-4 h-4" />
+            </Button.Icon>
+          </Button>
         </Stack>
       </Expandable.Trigger>
       <Expandable.Content className="text-xs">
@@ -338,7 +342,10 @@ const UploadStep = ({
     setToolsetName(slugify(apiName || "my-toolset"));
     const deployment = await createDeployment(undefined, true);
 
-    if (deployment?.toolCount === 0 || deployment?.status === "failed") {
+    if (
+      deployment?.openapiv3ToolCount === 0 ||
+      deployment?.status === "failed"
+    ) {
       setDeploymentToShowLogsFor(deployment?.id);
       toast.error("Unable to create tools from your OpenAPI spec");
       return;
@@ -582,7 +589,6 @@ const McpStep = ({
   );
 };
 
-// TODO: replace with moonshine button
 const ContinueButton = ({
   disabled,
   inProgressText,
@@ -594,46 +600,26 @@ const ContinueButton = ({
 }) => {
   const [isLoading, setIsLoading] = useState(false);
 
-  const buttonClasses = cn(
-    "relative inline-flex items-center justify-center gap-2 px-4 py-2",
-    "font-mono text-sm uppercase text-foreground",
-    "rounded-md cursor-pointer",
-    "transition-all outline-none"
-  );
-
   return (
-    <div
-      className={cn(
-        "inline-block rounded-md p-[1px]",
-        "bg-gradient-primary",
-        (disabled || isLoading) && "opacity-50"
-      )}
+    <Button
+      variant="brand"
+      disabled={disabled || isLoading}
+      onClick={async () => {
+        setIsLoading(true);
+        try {
+          await onClick();
+        } catch (error) {
+          // Error is already handled by the individual step components
+          console.error("Button click error:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      }}
+      className="w-full"
     >
-      <button
-        disabled={disabled || isLoading}
-        onClick={async () => {
-          setIsLoading(true);
-          try {
-            await onClick();
-          } catch (error) {
-            // Error is already handled by the individual step components
-            console.error("Button click error:", error);
-          } finally {
-            setIsLoading(false);
-          }
-        }}
-        className={cn(
-          buttonClasses,
-          "w-full rounded-[7px] bg-background border-0",
-          "hover:bg-background/90 transition-all duration-300",
-          "disabled:cursor-not-allowed",
-          "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-neutral-500"
-        )}
-      >
-        {isLoading && <Spinner />}
-        {isLoading && inProgressText ? inProgressText : "Continue"}
-      </button>
-    </div>
+      {isLoading && <Spinner />}
+      {isLoading && inProgressText ? inProgressText : "Continue"}
+    </Button>
   );
 };
 

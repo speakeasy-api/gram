@@ -2,6 +2,10 @@
 
 version: "2"
 
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
 run:
   relative-path-mode: wd
 
