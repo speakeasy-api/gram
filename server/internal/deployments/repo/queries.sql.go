@@ -789,7 +789,7 @@ LEFT JOIN deployments_packages ON deployments.id = deployments_packages.deployme
 LEFT JOIN latest_status ON deployments.id = latest_status.deployment_id
 LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
-LEFT JOIN openapiv3_tool_counts ON deployments.id = tool_counts.deployment_id
+LEFT JOIN openapiv3_tool_counts ON deployments.id = openapiv3_tool_counts.deployment_id
 WHERE deployments.id = $1 AND deployments.project_id = $2
 `
 
