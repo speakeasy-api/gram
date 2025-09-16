@@ -122,13 +122,15 @@ function ToolsetsContent({
       <Page.Section.Description>
         Organized collections of tools and prompts for your AI applications
       </Page.Section.Description>
-      <Page.Section.CTA
-        onClick={() => setCreateToolsetDialogOpen(true)}
-      >
-        <Button.LeftIcon>
-          <Plus className="w-4 h-4" />
-        </Button.LeftIcon>
-        <Button.Text>Add Toolset</Button.Text>
+      <Page.Section.CTA>
+        <Button
+          onClick={() => setCreateToolsetDialogOpen(true)}
+        >
+          <Button.LeftIcon>
+            <Plus className="w-4 h-4" />
+          </Button.LeftIcon>
+          <Button.Text>Add Toolset</Button.Text>
+        </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
         <Cards isLoading={toolsets.isLoading}>
