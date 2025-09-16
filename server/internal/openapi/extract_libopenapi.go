@@ -262,15 +262,14 @@ func extractSecuritySchemesLibOpenAPI(doc v3.Document, task ToolExtractorTask) (
 		case "oauth2":
 			if sec.Flows != nil {
 				if sec.Flows.AuthorizationCode != nil || sec.Flows.ClientCredentials != nil || sec.Flows.Implicit != nil {
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_ACCESS_TOKEN"))
 				}
 
 				if sec.Flows.ClientCredentials != nil {
 					oauthTypes = append(oauthTypes, "client_credentials")
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_SECRET"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_ID"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_TOKEN_URL"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_CLIENT_SECRET"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_CLIENT_ID"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_TOKEN_URL"))
 				}
 
 				if sec.Flows.Implicit != nil {
