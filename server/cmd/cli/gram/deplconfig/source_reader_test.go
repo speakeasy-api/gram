@@ -2,6 +2,8 @@ package deplconfig
 
 import (
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -110,22 +112,66 @@ func TestSourceReader_NonexistentFile(t *testing.T) {
 
 func TestSourceReader_RemoteURL(t *testing.T) {
 	t.Parallel()
+
+	stubSpec := `openapi: 3.0.0
+			info:
+			title: Remote Test API
+			version: 1.0.0`
+
+	staticHandler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/yaml")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(stubSpec))
+	}
+	staticServer := httptest.NewServer(http.HandlerFunc(staticHandler))
+	defer staticServer.Close()
+
 	source := Source{
 		Type:     SourceTypeOpenAPIV3,
-		Location: "https://example.com/api-spec.yaml",
+		Location: staticServer.URL + "/api-spec.yaml",
+		Name:     "Remote API",
+		Slug:     "remote-api",
+	}
+
+	reader := NewSourceReader(source)
+	require.Equal(t, "application/yaml", reader.GetContentType())
+
+	rc, size, err := reader.Read()
+	require.NoError(t, err)
+	require.Positive(t, size)
+
+	defer func() {
+		require.NoError(t, rc.Close())
+	}()
+
+	content, err := io.ReadAll(rc)
+	require.NoError(t, err)
+	require.Equal(t, stubSpec, string(content))
+}
+
+func TestSourceReader_RemoteURL_Error(t *testing.T) {
+	t.Parallel()
+
+	// Create a test HTTP server that returns 404
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("Not Found"))
+	}))
+	defer server.Close()
+
+	source := Source{
+		Type:     SourceTypeOpenAPIV3,
+		Location: server.URL + "/nonexistent.yaml",
 		Name:     "Remote API",
 		Slug:     "remote-api",
 	}
 
 	reader := NewSourceReader(source)
 
-	// Test content type detection from URL
-	require.Equal(t, "application/yaml", reader.GetContentType())
-
-	// Remote URL reading should fail (not implemented yet)
+	// Should fail with HTTP error
 	_, _, err := reader.Read()
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "remote URL reading not yet implemented")
+	require.Contains(t, err.Error(), "404")
 }
 
 func TestGetContentTypeFromPath(t *testing.T) {

@@ -42,7 +42,7 @@ type cliApp struct {
 func NewCLI() CLI {
 	app := &cli.App{
 		Name:    "gram",
-		Usage:   "Remote MCP management",
+		Usage:   "A command line interface for the Gram platform. Get started at https://docs.getgram.ai/",
 		Version: version.Version,
 		Commands: []*cli.Command{
 			{
