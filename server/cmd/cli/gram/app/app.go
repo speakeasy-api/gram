@@ -76,7 +76,6 @@ func NewCLI() CLI {
 
 func (c *cliApp) Run(args []string) error {
 	if err := c.app.Run(args); err != nil {
-		// Extract the command name from args if available
 		commandName := c.app.Name
 		if len(args) > 1 {
 			commandName = args[1]

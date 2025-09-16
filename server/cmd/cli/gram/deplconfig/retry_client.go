@@ -26,7 +26,7 @@ func newRetryHTTPClient() *http.Client {
 	retryClient.RetryWaitMax = RETRY_MAX_BACKOFF
 	retryClient.HTTPClient.Timeout = RETRY_TIMEOUT
 	// To turn off debug logging for the retry client, uncomment the following
-	// line. By default, it will emit lines like [DEBUG] GET ...
+	// line. By default, it emits lines like `[DEBUG] GET ...`.
 	// retryClient.Logger = nil
 
 	return retryClient.StandardClient()

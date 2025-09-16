@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 
 	"github.com/speakeasy-api/gram/server/cmd/cli/gram/deplconfig"
 	"github.com/speakeasy-api/gram/server/cmd/cli/gram/env"
+	"github.com/speakeasy-api/gram/server/cmd/cli/gram/log"
 
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	assets_client "github.com/speakeasy-api/gram/server/gen/http/assets/client"
@@ -22,24 +22,6 @@ func NewAssetsClient() *AssetsClient {
 	return &AssetsClient{
 		client: newAssetsClient(),
 	}
-}
-
-func (c *AssetsClient) ListAssets(
-	apiKey string, projectSlug string,
-) *assets.ListAssetsResult {
-	ctx := context.Background()
-	payload := &assets.ListAssetsPayload{
-		ApikeyToken:      &apiKey,
-		ProjectSlugInput: &projectSlug,
-		SessionToken:     nil,
-	}
-
-	result, err := c.client.ListAssets(ctx, payload)
-	if err != nil {
-		log.Fatalf("Error calling ListAssets: %v", err)
-	}
-
-	return result
 }
 
 // SourceReader defines the interface for reading source content.
@@ -65,7 +47,6 @@ func (c *AssetsClient) CreateAsset(
 ) (*assets.UploadOpenAPIv3Result, error) {
 	ctx := context.Background()
 
-	// TODO(cj): This will support other types later.
 	if !isOpenAPIV3(ac) {
 		return nil, fmt.Errorf(
 			"unsupported source type: '%s', expected '%s'",
@@ -77,15 +58,15 @@ func (c *AssetsClient) CreateAsset(
 	if err != nil {
 		return nil, fmt.Errorf("failed to read source: %w", err)
 	}
+
 	defer func() {
 		if closeErr := reader.Close(); closeErr != nil {
-			log.Printf("Error closing reader: %v", closeErr)
+			log.L.WarnContext(ctx, "Error closing reader", "error", closeErr)
 		}
 	}()
 
 	apiKey := ac.GetApiKey()
 	projectSlug := ac.GetProjectSlug()
-
 	payload := &assets.UploadOpenAPIv3Form{
 		ApikeyToken:      &apiKey,
 		ProjectSlugInput: &projectSlug,

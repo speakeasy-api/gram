@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"slices"
 
@@ -47,8 +46,8 @@ func (dc DeploymentConfig) GetProducerToken() string {
 	return env.APIKey()
 }
 
-// ResolveLocations resolves relative source locations relative to the specified directory.
-// URLs and absolute paths are left unchanged.
+// ResolveLocations resolves relative source locations to `baseDir`. URLs and
+// absolute paths are left unchanged.
 func (dc *DeploymentConfig) ResolveLocations(baseDir string) {
 	for i := range dc.Sources {
 		location := dc.Sources[i].Location
@@ -69,12 +68,12 @@ func isURL(s string) bool {
 }
 
 // ReadDeploymentConfig reads a deployment config.
-func ReadDeploymentConfig(filePath string) (*DeploymentConfig, error) {
+func ReadDeploymentConfig(configPath string) (*DeploymentConfig, error) {
 	var cfg DeploymentConfig
 
-	data, err := readFile(filePath)
+	data, err := readFile(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read file %s: %w", filePath, err)
+		return nil, fmt.Errorf("failed to read file %s: %w", configPath, err)
 	}
 
 	if err := json.Unmarshal(data, &cfg); err != nil {
@@ -85,27 +84,7 @@ func ReadDeploymentConfig(filePath string) (*DeploymentConfig, error) {
 		return nil, err
 	}
 
-	// Resolve relative paths in sources relative to the config file's directory
-	configDir := filepath.Dir(filePath)
-	cfg.ResolveLocations(configDir)
+	cfg.ResolveLocations(filepath.Dir(configPath))
 
 	return &cfg, nil
-}
-
-// readFile validates that a file exists at `filePath` and that its mode is
-// regular.
-func readFile(filePath string) ([]byte, error) {
-	fi, err := os.Stat(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("invalid file path: %w", err)
-	}
-	if !fi.Mode().IsRegular() {
-		return nil, fmt.Errorf("path must be a regular file")
-	}
-
-	data, err := os.ReadFile(filePath) // #nosec G304
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-	return data, nil
 }

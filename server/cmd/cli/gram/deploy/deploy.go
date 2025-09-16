@@ -4,13 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
-	"os"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/cmd/cli/gram/api"
 	"github.com/speakeasy-api/gram/server/cmd/cli/gram/deplconfig"
 	"github.com/speakeasy-api/gram/server/cmd/cli/gram/env"
+	"github.com/speakeasy-api/gram/server/cmd/cli/gram/log"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
@@ -129,7 +128,6 @@ func convertSourcesToAssets(
 	ctx context.Context,
 	req *CreateDeploymentRequest,
 ) ([]*deployments.AddOpenAPIv3DeploymentAssetForm, error) {
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	sources := req.Config.Sources
 	project := req.Project
 
@@ -138,7 +136,7 @@ func convertSourcesToAssets(
 
 	for _, source := range sources {
 		if source.Type != deplconfig.SourceTypeOpenAPIV3 {
-			logger.WarnContext(ctx, "skipping unsupported source type", slog.Any(logKeyType, source.Type), slog.Any(logKeyLocation, source.Location))
+			log.L.WarnContext(ctx, "skipping unsupported source type", logKeyType, source.Type, logKeyLocation, source.Location)
 			continue
 		}
 
