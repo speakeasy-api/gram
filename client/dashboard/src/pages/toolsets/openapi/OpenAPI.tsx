@@ -37,6 +37,7 @@ import {
   useOnboardingSteps,
 } from "../../onboarding/Onboarding";
 import { ApisEmptyState } from "./ApisEmptyState";
+import { slugify } from "@/lib/constants";
 
 export default function OpenAPIDocuments() {
   return (
@@ -319,6 +320,7 @@ const RemoveAPISourceDialog = forwardRef<
   const [pending, setPending] = useState(false);
   const [inputMatches, setInputMatches] = useState(false);
 
+  const apiSourceSlug = slugify(asset.name);
   useImperativeHandle(ref, () => ({
     open: (assetToDelete: NamedAsset) => {
       setAsset(assetToDelete);
@@ -384,10 +386,10 @@ const RemoveAPISourceDialog = forwardRef<
         <div className="grid gap-2">
           <Label>
             <span>
-              To confirm, type "<strong>{asset.name}</strong>"
+              To confirm, type "<strong>{apiSourceSlug}</strong>"
             </span>
           </Label>
-          <Input onChange={(v) => setInputMatches(v === asset.name)} />
+          <Input onChange={(v) => setInputMatches(v === apiSourceSlug)} />
         </div>
 
         <div className="flex items-center gap-2 rounded-md bg-destructive-softest text-destructive px-3 py-2 text-sm">
