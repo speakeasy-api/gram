@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/cmd/cli/gram/api"
@@ -20,9 +21,11 @@ const (
 )
 
 type DeploymentRequest struct {
-	config  *deplconfig.DeploymentConfig
-	assets  []*deployments.AddOpenAPIv3DeploymentAssetForm
-	project string
+	config           *deplconfig.DeploymentConfig
+	assets           []*deployments.AddOpenAPIv3DeploymentAssetForm
+	project          string
+	idempotencyKey   string
+	idempotencyOnce  sync.Once
 }
 
 func (dr *DeploymentRequest) GetApiKey() string {
@@ -35,7 +38,10 @@ func (dr *DeploymentRequest) GetProjectSlug() string {
 
 // GetIdempotencyKey returns a unique key to identify a deployment request.
 func (dr *DeploymentRequest) GetIdempotencyKey() string {
-	return uuid.New().String()
+	dr.idempotencyOnce.Do(func() {
+		dr.idempotencyKey = uuid.New().String()
+	})
+	return dr.idempotencyKey
 }
 
 func (dr *DeploymentRequest) GetOpenAPIv3Assets() []*deployments.AddOpenAPIv3DeploymentAssetForm {
