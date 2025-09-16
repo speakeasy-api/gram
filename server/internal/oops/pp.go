@@ -140,7 +140,7 @@ func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...a
 func (e *ShareableError) AsGoa() *goa.ServiceError {
 	var timeout, temporary, fault bool
 
-	temporary = !errors.Is(e.cause, ErrPermanent)
+	temporary = !errors.Is(e.cause, ErrPermanent) && e.Code.IsTemporary()
 
 	switch e.Code {
 	case CodeUnexpected, CodeInvariantViolation:
