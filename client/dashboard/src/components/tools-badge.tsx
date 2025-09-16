@@ -1,7 +1,12 @@
-import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
-import { Stack } from "@speakeasy-api/moonshine";
-import { Badge, TwoPartBadge } from "./ui/badge";
+import {
+  Stack,
+  Badge,
+  Tooltip,
+  TooltipTrigger,
+  TooltipProvider,
+  TooltipContent
+} from "@speakeasy-api/moonshine";
 import { UrgentWarningIcon } from "./ui/urgent-warning-icon";
 import { cn } from "@/lib/utils";
 import { higherOrderToolNames, promptNames } from "@/lib/toolNames";
@@ -11,33 +16,6 @@ type ToolsetForBadge = Pick<
   ToolsetEntry,
   "name" | "slug" | "httpTools" | "promptTemplates"
 >;
-
-export const ToolsetBadge = ({
-  toolset,
-  size = "md",
-}: {
-  toolset: ToolsetForBadge | undefined;
-  size?: "sm" | "md";
-}) => {
-  const routes = useRoutes();
-
-  if (!toolset) {
-    return <Badge size={size} variant="outline" isLoading />;
-  }
-
-  return (
-    <TwoPartBadge>
-      <routes.toolsets.toolset.Link params={[toolset.slug]}>
-        <Badge className="capitalize">{toolset.name}</Badge>
-      </routes.toolsets.toolset.Link>
-      <ToolsetToolsBadge
-        toolset={toolset}
-        variant="outline"
-        className="lowercase"
-      />
-    </TwoPartBadge>
-  );
-};
 
 export const ToolsetPromptsBadge = ({
   toolset,
@@ -61,9 +39,15 @@ export const ToolsetPromptsBadge = ({
   );
 
   return names && names.length > 0 ? (
-    <Badge size={size} variant={variant} tooltip={tooltipContent}>
+    <TooltipProvider>
+    
+      <TooltipTrigger>
+        
+    <Badge size={size} variant={variant} >
       {names.length} Prompt{names.length === 1 ? "" : "s"}
     </Badge>
+  </TooltipTrigger>
+  </TooltipProvider>
   ) : null;
 };
 
@@ -144,21 +128,25 @@ export const ToolsBadge = ({
   const anyWarnings = toolsWarnings || toolsSevere;
 
   return toolNames && toolNames.length > 0 ? (
-    <Badge
-      size={size}
-      variant={
-        toolsSevere ? "urgent-warning" : toolsWarnings ? "warning" : variant
-      }
-      tooltip={tooltipContent}
-      className={cn(!anyWarnings && "bg-card", className)}
-    >
-      {anyWarnings && (
-        <UrgentWarningIcon
-          className={toolsSevere ? "text-white dark:text-white" : undefined}
-        />
-      )}
-      {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
-    </Badge>
+    <TooltipProvider>
+      <Tooltip>
+      <TooltipTrigger>
+        <Badge
+          size={size}
+          variant={"warning"}
+          className={cn(!anyWarnings && "bg-card", className)}
+        >
+          {anyWarnings && (
+            <UrgentWarningIcon
+              className={toolsSevere ? "text-white dark:text-white" : undefined}
+            />
+          )}
+          {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>{tooltipContent}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   ) : (
     <Badge size={size} variant={variant} className={className}>
       No Tools
