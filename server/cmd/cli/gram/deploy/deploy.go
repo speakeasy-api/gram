@@ -10,9 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/cmd/cli/gram/api"
 	"github.com/speakeasy-api/gram/server/cmd/cli/gram/deplconfig"
 	"github.com/speakeasy-api/gram/server/cmd/cli/gram/env"
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/log"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
-	"github.com/speakeasy-api/gram/server/gen/types"
 )
 
 const (
@@ -21,11 +19,11 @@ const (
 )
 
 type DeploymentRequest struct {
-	config           *deplconfig.DeploymentConfig
-	assets           []*deployments.AddOpenAPIv3DeploymentAssetForm
-	project          string
-	idempotencyKey   string
-	idempotencyOnce  sync.Once
+	config          *deplconfig.DeploymentConfig
+	assets          []*deployments.AddOpenAPIv3DeploymentAssetForm
+	project         string
+	idempotencyKey  string
+	idempotencyOnce sync.Once
 }
 
 func (dr *DeploymentRequest) GetApiKey() string {
@@ -58,7 +56,7 @@ func CreateDeployment(
 	req *CreateDeploymentRequest,
 ) (*deployments.CreateDeploymentResult, error) {
 	ctx := context.Background()
-	assets, err := convertSourcesToAssets(ctx, req)
+	assets, err := createAssetsForDeployment(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert sources to assets: %w", err)
 	}
@@ -99,79 +97,31 @@ func CreateDeploymentFromFile(
 	return CreateDeployment(createReq)
 }
 
-type createAssetRequest struct {
+type uploadRequest struct {
 	sourceReader *deplconfig.SourceReader
 	project      string
 }
 
-func (sac *createAssetRequest) GetApiKey() string {
+func (ur *uploadRequest) GetApiKey() string {
 	return env.APIKey()
 }
 
-func (sac *createAssetRequest) GetProjectSlug() string {
-	return sac.project
+func (ur *uploadRequest) GetProjectSlug() string {
+	return ur.project
 }
 
-func (sac *createAssetRequest) GetType() string {
-	return sac.sourceReader.GetType()
+func (ur *uploadRequest) GetType() string {
+	return ur.sourceReader.GetType()
 }
 
-func (sac *createAssetRequest) GetContentType() string {
-	return sac.sourceReader.GetContentType()
+func (ur *uploadRequest) GetContentType() string {
+	return ur.sourceReader.GetContentType()
 }
 
-func (sac *createAssetRequest) Read() (io.ReadCloser, int64, error) {
-	reader, size, err := sac.sourceReader.Read()
+func (ur *uploadRequest) Read() (io.ReadCloser, int64, error) {
+	reader, size, err := ur.sourceReader.Read()
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to read source: %w", err)
 	}
 	return reader, size, nil
-}
-
-// convertSourcesToAssets creates remote assets out of each incoming source. The
-// returned forms can be submitted to create a deployment.
-func convertSourcesToAssets(
-	ctx context.Context,
-	req *CreateDeploymentRequest,
-) ([]*deployments.AddOpenAPIv3DeploymentAssetForm, error) {
-	sources := req.Config.Sources
-	project := req.Project
-
-	assetsClient := api.NewAssetsClient()
-	assets := make([]*deployments.AddOpenAPIv3DeploymentAssetForm, 0, len(sources))
-
-	for _, source := range sources {
-		if source.Type != deplconfig.SourceTypeOpenAPIV3 {
-			log.L.WarnContext(ctx, "skipping unsupported source type", logKeyType, source.Type, logKeyLocation, source.Location)
-			continue
-		}
-
-		sourceReader := deplconfig.NewSourceReader(source)
-		assetCreator := &createAssetRequest{
-			sourceReader: sourceReader,
-			project:      project,
-		}
-
-		uploadResult, err := assetsClient.CreateAsset(assetCreator)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to upload asset in project '%s' for source %s: %w",
-				project, source.Location, err,
-			)
-		}
-
-		asset := &deployments.AddOpenAPIv3DeploymentAssetForm{
-			AssetID: uploadResult.Asset.ID,
-			Name:    source.Name,
-			Slug:    types.Slug(source.Slug),
-		}
-
-		assets = append(assets, asset)
-	}
-
-	if len(assets) == 0 {
-		return nil, fmt.Errorf("no valid OpenAPI v3 sources found")
-	}
-
-	return assets, nil
 }
