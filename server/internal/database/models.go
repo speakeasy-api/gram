@@ -130,7 +130,7 @@ type DeploymentsFunction struct {
 	AssetID      uuid.UUID
 	Name         string
 	Slug         string
-	ToolRuntime  string
+	Runtime      string
 }
 
 type DeploymentsOpenapiv3Asset struct {
