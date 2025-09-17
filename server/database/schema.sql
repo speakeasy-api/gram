@@ -307,6 +307,48 @@ CREATE TABLE IF NOT EXISTS http_tool_definitions (
 CREATE INDEX IF NOT EXISTS http_tool_definitions_name_idx ON http_tool_definitions (name);
 CREATE INDEX IF NOT EXISTS http_tool_definitions_deployment_deleted_id_idx ON http_tool_definitions(deployment_id, deleted, id DESC) WHERE deleted IS FALSE;
 
+CREATE TABLE IF NOT EXISTS deployments_functions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  deployment_id uuid NOT NULL,
+  asset_id uuid NOT NULL,
+  name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 60),
+  slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
+  tool_runtime TEXT NOT NULL, -- nodejs:22, python:3.12, ...
+
+  CONSTRAINT deployments_functions_pkey PRIMARY KEY (id),
+  CONSTRAINT deployments_functions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
+  CONSTRAINT deployments_functions_asset_id_fkey FOREIGN KEY (asset_id) REFERENCES assets (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS deployments_functions_deployment_id_slug_key ON deployments_functions (deployment_id, slug);
+
+CREATE TABLE IF NOT EXISTS function_tool_definitions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  tool_urn TEXT NOT NULL,
+
+  deployment_id uuid NOT NULL,
+  function_id uuid NOT NULL,
+
+  runtime TEXT NOT NULL, -- nodejs:22, python:3.12, ...
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  input_schema JSONB,
+  -- Record<string, { description?: string }>
+  variables JSONB,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT function_tool_definitions_pkey PRIMARY KEY (id),
+  CONSTRAINT function_tool_definitions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
+  CONSTRAINT function_tool_definitions_function_id_fkey FOREIGN KEY (function_id) REFERENCES deployments_functions (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS function_tool_definitions_deployment_id_tool_urn_key ON function_tool_definitions (deployment_id, tool_urn) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS function_tool_definitions_function_id_idx ON function_tool_definitions (function_id) WHERE deleted IS FALSE;
+
 CREATE TABLE IF NOT EXISTS environments (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   organization_id TEXT NOT NULL,

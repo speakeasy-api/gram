@@ -20,6 +20,10 @@ overrides:
           import: github.com/speakeasy-api/gram/server/internal/tools/repo/models
           type: ResponseFilter
           pointer: true
+      - column: function_tool_definitions.tool_urn
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Tool
 
 sql:
   - schema: schema.sql

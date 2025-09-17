@@ -1,4 +1,4 @@
-h1:8F2d4MdDUs/OQZOn6FHZj7XIbMnDMI1/VWBy5Vv7mo4=
+h1:Pj1zn2brNUk/Ucs1GXWgxPC59IvndgGDtO/MOC7S3lo=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -47,3 +47,4 @@ h1:8F2d4MdDUs/OQZOn6FHZj7XIbMnDMI1/VWBy5Vv7mo4=
 20250903230646_create-mcp-enabled-column.sql h1:/6/n+cZ4/EqbdyG1QFkVRju9W+A/VTSbhX7HW+jtSy4=
 20250911203425_add-http-security-fkeys.sql h1:I0uZsFFAZcDazOebRiP4h95SdrZGh6Cb7fT1vPNzhlg=
 20250916174416_add-asset-table-migration.sql h1:hSNaGyCYtT0hYHWiwkuIlJqhrzcuc62xFgpLwHUB0VQ=
+20250917203437_add-tool-functions.sql h1:N3sYfUh3wTX3m0EftS7YtUpYoVJTNLtpBiZM10HYUp8=
