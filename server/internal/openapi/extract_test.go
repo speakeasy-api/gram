@@ -46,6 +46,7 @@ func TestDoProcess_Equal(t *testing.T) {
 	require.NoError(t, err)
 
 	tet := ToolExtractorTask{
+		Parser: "speakeasy",
 		DocInfo: &types.OpenAPIv3DeploymentAsset{
 			Name:    "speakeasy-bar",
 			Slug:    "speakeasy_bar",

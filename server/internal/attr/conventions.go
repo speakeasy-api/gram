@@ -70,6 +70,7 @@ const (
 	DeploymentFunctionsSlugKey     = attribute.Key("gram.deployment.functions.slug")
 	DeploymentOpenAPIIDKey         = attribute.Key("gram.deployment.openapi.id")
 	DeploymentOpenAPINameKey       = attribute.Key("gram.deployment.openapi.name")
+	DeploymentOpenAPIParserKey     = attribute.Key("gram.deployment.openapi_parser")
 	DeploymentOpenAPISlugKey       = attribute.Key("gram.deployment.openapi.slug")
 	DeploymentStatusKey            = attribute.Key("gram.deployment.status")
 	EnvironmentIDKey               = attribute.Key("gram.environment.id")
@@ -307,6 +308,13 @@ func SlogDeploymentOpenAPIID(v string) slog.Attr {
 func DeploymentOpenAPIName(v string) attribute.KeyValue { return DeploymentOpenAPINameKey.String(v) }
 func SlogDeploymentOpenAPIName(v string) slog.Attr {
 	return slog.String(string(DeploymentOpenAPINameKey), v)
+}
+
+func DeploymentOpenAPIParser(v string) attribute.KeyValue {
+	return DeploymentOpenAPIParserKey.String(v)
+}
+func SlogDeploymentOpenAPIParser(v string) slog.Attr {
+	return slog.String(string(DeploymentOpenAPIParserKey), v)
 }
 
 func DeploymentOpenAPISlug(v string) attribute.KeyValue { return DeploymentOpenAPISlugKey.String(v) }

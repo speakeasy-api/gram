@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sourcegraph/conc/pool"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/temporal"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -30,6 +32,7 @@ import (
 
 type ProcessDeployment struct {
 	logger       *slog.Logger
+	tracer       trace.Tracer
 	metrics      *metrics
 	db           *pgxpool.Pool
 	features     feature.Provider
@@ -42,6 +45,7 @@ type ProcessDeployment struct {
 
 func NewProcessDeployment(
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	features feature.Provider,
@@ -49,6 +53,7 @@ func NewProcessDeployment(
 ) *ProcessDeployment {
 	return &ProcessDeployment{
 		logger:       logger,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities"),
 		metrics:      newMetrics(newMeter(meterProvider), logger),
 		db:           db,
 		features:     features,
@@ -69,6 +74,25 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 	orgData, err := p.projects.GetProjectWithOrganizationMetadata(ctx, uuid.MustParse(deployment.ProjectID))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error loading organization metadata").Log(ctx, p.logger)
+	}
+
+	f := conv.Default[feature.Provider](p.features, &feature.InMemory{})
+	useSpeakeasy, err := f.IsFlagEnabled(ctx, feature.FlagSpeakeasyOpenAPIParserV0, projectID.String())
+	if err != nil {
+		useSpeakeasy = false
+		p.logger.ErrorContext(
+			ctx, "error checking openapi parser feature flag for organization",
+			attr.SlogError(err),
+			attr.SlogOrganizationID(orgData.ID),
+			attr.SlogOrganizationSlug(orgData.Slug),
+			attr.SlogProjectID(projectID.String()),
+			attr.SlogProjectSlug(orgData.ProjectSlug),
+		)
+	}
+
+	parser := "libopenapi"
+	if useSpeakeasy {
+		parser = "speakeasy"
 	}
 
 	workers := pool.New().WithErrors().WithMaxGoroutines(2)
@@ -107,11 +131,33 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		}
 
 		workers.Go(func() error {
+			var processErr error
+			var res *openapi.ToolExtractorResult
+
+			ctx, span := p.tracer.Start(ctx, "openapiv3.extractTools", trace.WithAttributes(
+				attr.DeploymentOpenAPIParser(parser),
+				attr.OrganizationID(orgData.ID),
+				attr.OrganizationSlug(orgData.Slug),
+				attr.ProjectID(deployment.ProjectID),
+				attr.ProjectSlug(orgData.ProjectSlug),
+				attr.DeploymentID(deployment.ID),
+				attr.DeploymentOpenAPIID(docInfo.ID),
+				attr.AssetID(docInfo.AssetID),
+			))
+			defer func() {
+				if processErr != nil {
+					span.SetStatus(codes.Error, processErr.Error())
+				}
+				span.End()
+			}()
+
 			start := time.Now()
 
 			processor := openapi.NewToolExtractor(p.logger, p.db, p.features, p.assetStorage)
 
-			res, processErr := processor.Do(ctx, openapi.ToolExtractorTask{
+			res, processErr = processor.Do(ctx, openapi.ToolExtractorTask{
+				Parser: parser,
+
 				ProjectID:    projectID,
 				DeploymentID: deploymentID,
 				DocumentID:   openapiDocID,
@@ -130,10 +176,6 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 				},
 			})
 
-			if processErr == nil {
-				trace.SpanFromContext(ctx).AddEvent("openapiv3_processed")
-			}
-
 			if processErr != nil {
 				var se *oops.ShareableError
 				if errors.As(processErr, &se) && !se.AsGoa().Temporary {
@@ -146,9 +188,9 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 				docVersion = res.DocumentVersion
 			}
 
-			p.metrics.RecordOpenAPIProcessed(ctx, o11y.OutcomeFromError(processErr), time.Since(start), docVersion)
+			p.metrics.RecordOpenAPIProcessed(ctx, parser, o11y.OutcomeFromError(processErr), time.Since(start), docVersion)
 			if res != nil && res.DocumentUpgrade != nil {
-				p.metrics.RecordOpenAPIUpgrade(ctx, *res.DocumentUpgrade, res.DocumentUpgradeDuration, docVersion)
+				p.metrics.RecordOpenAPIUpgrade(ctx, parser, *res.DocumentUpgrade, res.DocumentUpgradeDuration, docVersion)
 			}
 
 			return processErr

@@ -341,7 +341,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create billing provider: %w", err)
 			}
 
-			temporalWorker := background.NewTemporalWorker(temporalClient, logger, meterProvider, &background.WorkerOptions{
+			temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				DB:                  db,
 				FeatureProvider:     features,
 				AssetStorage:        assetStorage,
