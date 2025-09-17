@@ -5,7 +5,7 @@ import {
   Tooltip,
   TooltipTrigger,
   TooltipProvider,
-  TooltipContent
+  TooltipContent,
 } from "@speakeasy-api/moonshine";
 import { UrgentWarningIcon } from "./ui/urgent-warning-icon";
 import { cn } from "@/lib/utils";
@@ -39,15 +39,14 @@ export const ToolsetPromptsBadge = ({
   );
 
   return names && names.length > 0 ? (
-    <TooltipProvider>
-    
+    <Tooltip>
       <TooltipTrigger>
-        
-    <Badge size={size} variant={variant} >
-      {names.length} Prompt{names.length === 1 ? "" : "s"}
-    </Badge>
-  </TooltipTrigger>
-  </TooltipProvider>
+        <Badge size={size} variant={variant}>
+          {names.length} Prompt{names.length === 1 ? "" : "s"}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{tooltipContent}</TooltipContent>
+    </Tooltip>
   ) : null;
 };
 
@@ -128,25 +127,21 @@ export const ToolsBadge = ({
   const anyWarnings = toolsWarnings || toolsSevere;
 
   return toolNames && toolNames.length > 0 ? (
-    <TooltipProvider>
-      <Tooltip>
+    <Tooltip open>
       <TooltipTrigger>
         <Badge
           size={size}
-          variant={"warning"}
+          variant={anyWarnings ? "warning" : variant}
           className={cn(!anyWarnings && "bg-card", className)}
         >
-          {anyWarnings && (
-            <UrgentWarningIcon
-              className={toolsSevere ? "text-white dark:text-white" : undefined}
-            />
-          )}
-          {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
+          <div className="flex gap-1 items-center">
+            {anyWarnings && <UrgentWarningIcon />}
+            {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
+          </div>
         </Badge>
       </TooltipTrigger>
-      <TooltipContent>{tooltipContent}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+      <TooltipContent side="bottom">{tooltipContent}</TooltipContent>
+    </Tooltip>
   ) : (
     <Badge size={size} variant={variant} className={className}>
       No Tools

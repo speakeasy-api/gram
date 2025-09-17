@@ -3,7 +3,6 @@ import { Badge } from "./ui/badge";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "./ui/tooltip";
 import { Type } from "./ui/type";
@@ -88,14 +87,12 @@ export const HttpMethod = ({
 
     if (path) {
       return (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>{badge}</TooltipTrigger>
-            <TooltipContent>
-              <HttpRoute method={method} path={path} />
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>{badge}</TooltipTrigger>
+          <TooltipContent>
+            <HttpRoute method={method} path={path} />
+          </TooltipContent>
+        </Tooltip>
       );
     }
 

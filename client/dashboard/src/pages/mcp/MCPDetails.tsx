@@ -12,7 +12,6 @@ import { TextArea } from "@/components/ui/textarea";
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
@@ -75,37 +74,35 @@ export function MCPDetailPage() {
       >
         <Heading variant="h2">MCP Details</Heading>
         <Stack direction="horizontal" gap={2}>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                {!activeOAuthAuthCode || !toolset.data.mcpIsPublic ? (
-                  <span className="inline-block">
-                    <Button variant="secondary" size="md" disabled={true}>
-                      {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
-                    </Button>
-                  </span>
-                ) : (
-                  <Button variant="secondary"
-                    size="md"
-                    onClick={() =>
-                      isOAuthConnected
-                        ? setIsOAuthDetailsModalOpen(true)
-                        : setIsOAuthModalOpen(true)
-                    }
-                  >
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {!activeOAuthAuthCode || !toolset.data.mcpIsPublic ? (
+                <span className="inline-block">
+                  <Button variant="secondary" size="md" disabled={true}>
                     {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
                   </Button>
-                )}
-              </TooltipTrigger>
-              {(!activeOAuthAuthCode || !toolset.data.mcpIsPublic) && (
-                <TooltipContent>
-                  {!activeOAuthAuthCode
-                    ? "This MCP server does not require the OAuth authorization code flow"
-                    : "This MCP Server must not be private to enable OAuth"}
-                </TooltipContent>
+                </span>
+              ) : (
+                <Button variant="secondary"
+                  size="md"
+                  onClick={() =>
+                    isOAuthConnected
+                      ? setIsOAuthDetailsModalOpen(true)
+                      : setIsOAuthModalOpen(true)
+                  }
+                >
+                  {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
+                </Button>
               )}
-            </Tooltip>
-          </TooltipProvider>
+            </TooltipTrigger>
+            {(!activeOAuthAuthCode || !toolset.data.mcpIsPublic) && (
+              <TooltipContent>
+                {!activeOAuthAuthCode
+                  ? "This MCP server does not require the OAuth authorization code flow"
+                  : "This MCP Server must not be private to enable OAuth"}
+              </TooltipContent>
+            )}
+          </Tooltip>
           <MCPEnableButton toolset={toolset.data} />
         </Stack>
       </Stack>
@@ -280,31 +277,29 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   };
 
   const linkDomainButton = domain && (
-    <TooltipProvider>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button variant="secondary"
-            size="sm"
-            className="mr-2"
-            disabled={updateToolsetMutation.isPending}
-            onClick={() => {
-              updateToolsetMutation.mutate({
-                request: {
-                  slug: toolset.slug,
-                  updateToolsetRequestBody: {
-                    customDomainId: domain.id,
-                    mcpSlug: mcpSlug,
-                  },
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button variant="secondary"
+          size="sm"
+          className="mr-2"
+          disabled={updateToolsetMutation.isPending}
+          onClick={() => {
+            updateToolsetMutation.mutate({
+              request: {
+                slug: toolset.slug,
+                updateToolsetRequestBody: {
+                  customDomainId: domain.id,
+                  mcpSlug: mcpSlug,
                 },
-              });
-            }}
-          >
-            Link Domain
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{domain.domain}</TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+              },
+            });
+          }}
+        >
+          Link Domain
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{domain.domain}</TooltipContent>
+    </Tooltip>
   );
 
   const customDomain =
