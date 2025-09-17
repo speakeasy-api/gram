@@ -592,9 +592,9 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
   "mcpServers": {
     "{{ .MCPSlug }}": {
       "command": "npx",
-      "args": ["-y", "mcp-remote", "{{ .MCPURL }}"{{- range .Headers }}, "--header", "{{ . }}:${{ "{" }}{{ . }}{{ "}" }}"{{- end }}]{{- if .Headers }},
+      "args": ["-y", "mcp-remote", "{{ .MCPURL }}"{{- range $i, $header := .Headers }}, "--header", "{{ $header }}:${{ "{" }}{{ index $.EnvHeaders $i }}{{ "}" }}"{{- end }}]{{- if .Headers }},
       "env": {
-        {{- range $i, $header := .Headers }}{{- if $i }},{{ end }}
+        {{- range $i, $header := .EnvHeaders }}{{- if $i }},{{ end }}
         "{{ $header }}": "your-{{ $header }}-value"{{- end }}
       }{{- end }}
     }
@@ -602,6 +602,21 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
 }</code>
             </div>
           </li>
+          {{- if .Headers }}
+          <li class="instruction-item">(optional) If you'd rather set variables in your shell, you can remove the env key from the config above and set these environment variables in your shell:
+            <div class="card code-container">
+              <button class="copy-button waiting">
+                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                  <use href="#icon-copy"></use>
+                </svg>
+                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                  <use href="#icon-copy-check"></use>
+                </svg>
+              </button>
+              <code class="code-snippet language-sh">{{- range .EnvHeaders -}}
+export {{ . }}="your-{{ . }}-value"{{- end }}</code>
+            </div></li>
+          {{- end }}
           <li class="instruction-item">
             Restart Gemini CLI to load the new configuration
           </li>
@@ -625,12 +640,12 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
               </button>
               <code class="code-snippet language-toml">[mcp_servers.{{ .MCPSlug }}]
 command = "npx"
-args = ["-y", "mcp-remote", "{{ .MCPURL }}"{{- range .Headers }}, "--header", "{{ . }}:${{ "{" }}{{ . }}{{ "}" }}"{{- end }}]{{- if .Headers }}
-env = { {{- range $i, $header := .Headers }}{{- if $i }}, {{ end }}"{{ $header }}" = "your-{{ $header }}-value"{{- end }} }{{- end }}</code>
+args = ["-y", "mcp-remote", "{{ .MCPURL }}"{{- range $i, $header := .Headers }}, "--header", "{{ $header }}:${{ "{" }}{{ index $.EnvHeaders $i }}{{ "}" }}"{{- end }}]{{- if .Headers }}
+env = { {{- range $i, $header := .EnvHeaders }}{{- if $i }}, {{ end }}"{{ $header }}" = "your-{{ $header }}-value"{{- end }} }{{- end }}</code>
             </div>
           </li>
           {{- if .Headers }}
-          <li class="instruction-item">Set these environment variables in your shell:
+          <li class="instruction-item">(optional) If you'd rather set variables in your shell, you can remove the env key from the config above and set these environment variables in your shell:
             <div class="card code-container">
               <button class="copy-button waiting">
                 <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
