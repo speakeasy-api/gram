@@ -602,21 +602,6 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
 }</code>
             </div>
           </li>
-          {{- if .Headers }}
-          <li class="instruction-item">Set these environment variables in your shell:
-            <div class="card code-container">
-              <button class="copy-button waiting">
-                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
-                  <use href="#icon-copy"></use>
-                </svg>
-                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
-                  <use href="#icon-copy-check"></use>
-                </svg>
-              </button>
-              <code class="code-snippet language-sh">{{- range .EnvHeaders -}}
-export {{ . }}="your-{{ . }}-value"{{- end }}</code>
-            </div></li>
-          {{- end }}
           <li class="instruction-item">
             Restart Gemini CLI to load the new configuration
           </li>
