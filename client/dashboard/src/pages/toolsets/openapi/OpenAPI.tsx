@@ -21,7 +21,7 @@ import {
   useListAssets,
 } from "@gram/client/react-query/index.js";
 import { Icon, Button, Alert } from "@speakeasy-api/moonshine";
-import { Loader2Icon, OctagonAlertIcon, Plus } from "lucide-react";
+import { Loader2Icon, Plus } from "lucide-react";
 import {
   forwardRef,
   useEffect,
@@ -37,7 +37,6 @@ import {
   useOnboardingSteps,
 } from "../../onboarding/Onboarding";
 import { ApisEmptyState } from "./ApisEmptyState";
-import { AlertTitle } from "@/components/ui/alert";
 
 export default function OpenAPIDocuments() {
   return (
