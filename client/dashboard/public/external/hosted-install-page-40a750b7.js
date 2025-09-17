@@ -96,7 +96,7 @@ function copyContainerSnippet(e) {
       copyBadge.classList.replace("waiting", "success");
       setTimeout(() => {
         copyBadge.classList.replace("success", "waiting");
-      }, 2000);
+      }, 1000);
     })
     .catch((err) => {
       console.error("Failed to copy text: ", err);
