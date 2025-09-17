@@ -403,8 +403,8 @@ const RemoveAPISourceDialog = forwardRef<
 
         <Dialog.Footer>
           <Button
+            hidden={pending}
             onClick={() => handleOpenChange(false)}
-            className={cn(pending && "invisible")}
             variant="tertiary"
           >
             Cancel
