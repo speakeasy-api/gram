@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { Button } from "@speakeasy-api/moonshine";
+import { Badge, Button } from "@speakeasy-api/moonshine";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -61,11 +61,11 @@ const RedeploySuccessToast = ({ href }: { href: string | undefined }) => {
 };
 
 function DeploymentActionsDropdown({
-  deploymentId,
-  deployments,
+  deployment,
+  latest,
 }: {
-  deploymentId: string;
-  deployments: DeploymentSummary[];
+  deployment: DeploymentSummary;
+  latest: boolean;
 }) {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
@@ -97,18 +97,13 @@ function DeploymentActionsDropdown({
     },
   });
 
-  // Check if this is the latest deployment (first item, assuming sorted by date desc)
-  const isLatestDeployment =
-    deployments.length > 0 && deployments[0]?.id === deploymentId;
-
   // Find the current deployment to check its status
-  const currentDeployment = deployments.find((d) => d.id === deploymentId);
-  const isCompletedDeployment = currentDeployment?.status === "completed";
+  const isCompletedDeployment = deployment.status === "completed";
 
   // Show actions for:
   // 1. Latest deployment (regardless of status) - shows "Retry"
   // 2. Completed deployments that are not the latest - shows "Redeploy"
-  if (!isLatestDeployment && !isCompletedDeployment) {
+  if (!latest && !isCompletedDeployment) {
     return null;
   }
 
@@ -116,14 +111,14 @@ function DeploymentActionsDropdown({
     redeployMutation.mutate({
       request: {
         redeployRequestBody: {
-          deploymentId,
+          deploymentId: deployment.id,
         },
       },
     });
   };
 
   const isRedeploying = redeployMutation.isPending;
-  const actionText = isLatestDeployment ? "Retry Deployment" : "Redeploy";
+  const actionText = latest ? "Retry Deployment" : "Redeploy";
   const buttonText = isRedeploying ? "Redeploying..." : actionText;
 
   return (
@@ -148,89 +143,87 @@ function DeploymentActionsDropdown({
   );
 }
 
-const columns: TableProps<DeploymentSummary>["columns"] = [
-  {
-    key: "status",
-    header: "",
-    width: "50px",
-    render: (row) => {
-      switch (row.status) {
-        case "completed":
-          return (
-            <div className="flex items-center justify-center rounded-full bg-success p-1">
-              <Icon name="check" className="text-success-foreground" />
-            </div>
-          );
-        case "failed":
-          return (
-            <div className="flex items-center justify-center rounded-full bg-destructive/20 p-1">
-              <Icon name="x" className="text-destructive-foreground" />
-            </div>
-          );
-        default:
-          return (
-            <div className="flex items-center justify-center rounded-full bg-warning p-1">
-              <Icon name="circle-dashed" className="text-warning-foreground" />
-            </div>
-          );
-      }
-    },
-  },
-  {
-    key: "id",
-    header: "ID",
-    render: (row) => {
-      const createdAt = relativeTime(row.createdAt);
-
-      return (
-        <div>
-          <DeploymentLink id={row.id} />
-          <p className="text-muted-foreground text-sm">{createdAt}</p>
-        </div>
-      );
-    },
-  },
-  {
-    key: "assetCount",
-    header: "Assets",
-    render: (row) => row.openapiv3AssetCount,
-    width: "150px",
-  },
-  {
-    key: "toolCount",
-    header: "Tools",
-    render: (row) => row.openapiv3ToolCount,
-    width: "0.5fr",
-  },
-  {
-    key: "actions",
-    header: "",
-    render: () => {
-      // This will be overridden in DeploymentsTable with proper deployments prop
-      return null;
-    },
-    width: "auto",
-  },
-];
-
 function DeploymentsTable() {
   const { data: res } = useListDeploymentsSuspense();
   const deployments = res.items ?? [];
+  const activeDeployment = deployments.find((d) => d.status === "completed");
 
   if (deployments.length === 0) {
     return <DeploymentsEmptyState />;
   }
 
   const columnsWithData: TableProps<DeploymentSummary>["columns"] = [
-    ...columns.slice(0, -1), // All columns except the last one (actions)
+    {
+      key: "status",
+      header: "",
+      width: "50px",
+      render: (row) => {
+        switch (row.status) {
+          case "completed":
+            return (
+              <div className="flex items-center justify-center rounded-full bg-success p-1">
+                <Icon name="check" className="text-success-foreground" />
+              </div>
+            );
+          case "failed":
+            return (
+              <div className="flex items-center justify-center rounded-full bg-destructive/20 p-1">
+                <Icon name="x" className="text-destructive-foreground" />
+              </div>
+            );
+          default:
+            return (
+              <div className="flex items-center justify-center rounded-full bg-warning p-1">
+                <Icon
+                  name="circle-dashed"
+                  className="text-warning-foreground"
+                />
+              </div>
+            );
+        }
+      },
+    },
+    {
+      key: "id",
+      header: "ID",
+      render: (row) => {
+        const createdAt = relativeTime(row.createdAt);
+
+        return (
+          <div>
+            <DeploymentLink id={row.id} />
+            <div className="flex gap-2">
+              <p className="text-muted-foreground text-sm">{createdAt}</p>
+              {activeDeployment === row && (
+                <Badge size="xs" variant="success" className="py-0.25 px-1.5">
+                  Active
+                </Badge>
+              )}
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      key: "assetCount",
+      header: "Assets",
+      render: (row) => row.openapiv3AssetCount,
+      width: "150px",
+    },
+    {
+      key: "toolCount",
+      header: "Tools",
+      render: (row) => row.openapiv3ToolCount,
+      width: "0.5fr",
+    },
     {
       key: "actions",
       header: "",
       render: (row) => {
         return (
           <DeploymentActionsDropdown
-            deploymentId={row.id}
-            deployments={deployments}
+            deployment={row}
+            latest={deployments[0] === row}
           />
         );
       },
