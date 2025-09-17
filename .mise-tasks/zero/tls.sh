@@ -69,10 +69,36 @@ turn_on_tls() {
 }
 
 trust_local_ca() {
-  echo "Trusting local certificate."
-  mkcert -install >/dev/null 2>&1
-  echo "Local certificate is trusted."
+  echo "Trusting local certificate." >&2
+
+  # Run mkcert -install and capture output for diagnostics (do not swallow it)
+  if output="$(mkcert -install 2>&1)"; then
+    echo "Local certificate is trusted." >&2
+
+    # If we're running under WSL, warn that Windows browsers may still show 'Not secure'
+    if grep -qi microsoft /proc/version 2>/dev/null; then
+      echo "" >&2
+      echo "NOTE: Detected WSL environment." >&2
+      echo "mkcert installed the CA in the Linux trust store. If you open this site with a Windows browser (Edge/Chrome), the browser may still show 'Not secure'." >&2
+      echo "Quick recommendation: for fast local development, switch to HTTP to avoid browser certificate warnings:" >&2
+      echo "  mise set --file mise.local.toml GRAM_SERVER_URL=http://localhost:8080" >&2
+      echo "  mise set --file mise.local.toml GRAM_SITE_URL=http://localhost:5173" >&2
+      echo "Then re-run ./zero and use http://localhost:5173 in your browser." >&2
+      echo "" >&2
+    fi
+
+    return 0
+  else
+    echo "ERROR: mkcert -install failed." >&2
+    echo "" >&2
+    echo "mkcert output (for debugging):" >&2
+    echo "$output" >&2
+    echo "" >&2
+    exit 1
+  fi
 }
+
+
 
 found_keypair() {
   [ -f "$CERT_PATH" ] && [ -f "$KEY_PATH" ]
