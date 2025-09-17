@@ -1,19 +1,31 @@
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
-import { HumanizeDateTime } from "@/lib/dates";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { dateTimeFormatters } from "@/lib/dates";
 import { cn, getServerURL } from "@/lib/utils";
 import {
   useDeploymentLogs,
   useDeploymentLogsSuspense,
   useDeploymentSuspense,
 } from "@gram/client/react-query";
-import { Icon } from "@speakeasy-api/moonshine";
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 import { useParams } from "react-router";
-import { DeploymentLink } from "./Deployments";
 import { ToolsList } from "./ToolsList";
 import { Type } from "@/components/ui/type";
 import { useProject } from "@/contexts/Auth";
+import {
+  DotIcon,
+  FileTextIcon,
+  FileCodeIcon,
+  WrenchIcon,
+  CheckIcon,
+  XIcon,
+} from "lucide-react";
+import { Separator } from "@speakeasy-api/moonshine";
+import {
+  DeploymentLogEvent,
+  OpenAPIv3DeploymentAsset,
+} from "@gram/client/models/components";
 
 export default function DeploymentPage() {
   const { deploymentId } = useParams();
@@ -45,106 +57,179 @@ function DeploymentLogs(props: { deploymentId: string }) {
       staleTime: Infinity,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
-    }
+    },
   );
-  const { data: res } = useDeploymentLogsSuspense({ deploymentId }, undefined, {
-    staleTime: Infinity,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-  });
+
+  const { data: deploymentLogs } = useDeploymentLogsSuspense(
+    { deploymentId },
+    undefined,
+    {
+      staleTime: Infinity,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  );
+
+  const humanizedDate = useMemo(() => {
+    const isOneDayOld =
+      Date.now() - deployment.createdAt.getTime() >= 24 * 60 * 60 * 1000;
+
+    if (isOneDayOld) {
+      return dateTimeFormatters.sameYear.format(deployment.createdAt);
+    }
+
+    return dateTimeFormatters.humanize(deployment.createdAt);
+  }, [deployment.createdAt]);
 
   return (
     <>
-      <div className="mb-6">
-        <Heading variant="h2" className="mb-4">
-          Overview
-        </Heading>
-        <dl className="grid grid-cols-[max-content_1fr] gap-x-4">
-          <dt>
-            <Type muted>Created</Type>
-          </dt>
-          <dd>
-            <HumanizeDateTime date={deployment.createdAt} />
-          </dd>
-          {deployment.clonedFrom ? (
-            <>
-              <dt>
-                <Type muted>Predecessor</Type>
-              </dt>
-              <dd>
-                <DeploymentLink id={deployment.clonedFrom} />
-              </dd>
-            </>
-          ) : null}
-        </dl>
-      </div>
-      <div className="mb-6">
-        <Heading variant="h2" className="mb-4">
-          OpenAPI Documents
-        </Heading>
-        <ul className="flex gap-2 flex-wrap">
-          {deployment.openapiv3Assets.map((asset) => {
-            const downloadURL = new URL(
-              "/rpc/assets.serveOpenAPIv3",
-              getServerURL()
-            );
-            downloadURL.searchParams.set("id", asset.assetId);
-            downloadURL.searchParams.set("project_id", project.id);
+      <div className="grid gap-4">
+        <Heading variant="h1">Deployment Overview</Heading>
 
-            return (
-              <li
-                key={asset.id}
-                className="text-xl flex flex-nowrap gap-1 items-center bg-muted py-1 px-2 rounded-md"
-              >
-                <Icon
-                  name="file-text"
-                  size="small"
-                  className="text-muted-foreground"
-                />
-                <a href={`${downloadURL}`} download>
-                  <Type>{asset.name}</Type>
-                </a>
-              </li>
-            );
-          })}
-        </ul>
+        <div className="text-sm flex items-center gap-3 h-4">
+          <span>{deployment.id}</span>
+          <Separator orientation="vertical" />
+          <div className="flex items-center gap-0.5">
+            <HumanizedDeploymentStatus status={deployment.status} />
+            {/* <span>{deployment.status}</span> */}
+            <DotIcon className="text-border" />
+            {humanizedDate}
+          </div>
+          <Separator orientation="vertical" />
+          <span className="flex items-center gap-1">
+            <FileCodeIcon size={16} />
+            {deployment.openapiv3Assets.length} Assets
+          </span>
+          <Separator orientation="vertical" />
+          <span className="flex items-center gap-1">
+            <WrenchIcon size={16} />
+            {deployment.openapiv3ToolCount} Tools
+          </span>
+        </div>
       </div>
-      <div className="mb-6">
-        <Heading variant="h2" className="mb-4">
-          Logs
-        </Heading>
-        <ol className="font-mono w-full overflow-auto bg-muted p-4 rounded space-y-1">
-          {res.events.map((event, index) => {
-            return (
-              <li
-                id={`event-${event.id}`}
-                key={event.id}
-                className={cn(
-                  "whitespace-nowrap grid grid-cols-[max-content_1fr] gap-2 hover:not-target:bg-primary/10 target:bg-primary/30",
-                  event.event.includes("error") ? "text-destructive" : ""
-                )}
-              >
-                <a
-                  href={`#event-${event.id}`}
-                  className="text-muted-foreground"
-                >
-                  {index + 1}.
-                </a>
-                <pre>{event.message}</pre>
-              </li>
-            );
-          })}
-        </ol>
-      </div>
-      <div className="mb-8 pb-8">
-        <Heading variant="h2" className="mb-4">
-          Tools
-        </Heading>
-        <ToolsList deploymentId={deploymentId} />
-      </div>
+
+      <Tabs defaultValue="logs">
+        <TabsList className="mb-4">
+          <TabsTrigger value="logs">Logs</TabsTrigger>
+          <TabsTrigger value="assets">Assets</TabsTrigger>
+          <TabsTrigger value="tools">Tools</TabsTrigger>
+        </TabsList>
+        <TabsContent value="logs">
+          <LogsTabContents events={deploymentLogs.events} />
+        </TabsContent>
+        <TabsContent value="assets">
+          <AssetsTabContents
+            projectId={project.id}
+            assets={deployment.openapiv3Assets}
+          />
+        </TabsContent>
+        <TabsContent value="tools">
+          <ToolsTabContents deploymentId={deploymentId} />
+        </TabsContent>
+      </Tabs>
     </>
   );
 }
+
+const LogsTabContents = ({ events }: { events: DeploymentLogEvent[] }) => {
+  return (
+    <>
+      <Heading variant="h2" className="mb-4">
+        Logs
+      </Heading>
+      <ol className="font-mono w-full overflow-auto bg-muted p-4 rounded space-y-1">
+        {events.map((event, index) => {
+          return (
+            <li
+              id={`event-${event.id}`}
+              key={event.id}
+              className={cn(
+                "whitespace-nowrap grid grid-cols-[max-content_1fr] gap-2 hover:not-target:bg-primary/10 target:bg-primary/30",
+                event.event.includes("error") ? "text-destructive" : "",
+              )}
+            >
+              <a href={`#event-${event.id}`} className="text-muted-foreground">
+                {index + 1}.
+              </a>
+              <pre>{event.message}</pre>
+            </li>
+          );
+        })}
+      </ol>
+    </>
+  );
+};
+
+const AssetsTabContents = ({
+  projectId,
+  assets,
+}: {
+  projectId: string;
+  assets: OpenAPIv3DeploymentAsset[];
+}) => {
+  return (
+    <>
+      <Heading variant="h2" className="mb-4">
+        OpenAPI Documents
+      </Heading>
+      <ul className="flex gap-2 flex-wrap">
+        {assets.map((asset) => {
+          const downloadURL = new URL(
+            "/rpc/assets.serveOpenAPIv3",
+            getServerURL(),
+          );
+          downloadURL.searchParams.set("id", asset.assetId);
+          downloadURL.searchParams.set("project_id", projectId);
+
+          return (
+            <li
+              key={asset.id}
+              className="text-xl flex flex-nowrap gap-1 items-center bg-muted py-1 px-2 rounded-md"
+            >
+              <FileTextIcon size={16} className="text-muted-foreground" />
+              <a href={`${downloadURL}`} download>
+                <Type>{asset.name}</Type>
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+};
+
+const ToolsTabContents = ({ deploymentId }: { deploymentId: string }) => {
+  return (
+    <>
+      <Heading variant="h2" className="mb-4">
+        Tools
+      </Heading>
+      <ToolsList deploymentId={deploymentId} />
+    </>
+  );
+};
+
+const HumanizedDeploymentStatus = (props: { status: string }) => {
+  if (props.status === "completed") {
+    return (
+      <div className="flex items-center">
+        <CheckIcon className="size-4 text-default-success" />
+        <span className="ml-2">Succeeded</span>
+      </div>
+    );
+  }
+
+  if (props.status === "failed") {
+    return (
+      <div className="flex items-center">
+        <XIcon className="size-4 text-destructive" />
+        <span className="ml-2">Failed</span>
+      </div>
+    );
+  }
+
+  return <span className="capitalize">{props.status}</span>;
+};
 
 export function useDeploymentLogsSummary(deploymentId: string | undefined) {
   const { data: logs } = useDeploymentLogs(
@@ -155,7 +240,7 @@ export function useDeploymentLogsSummary(deploymentId: string | undefined) {
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       enabled: !!deploymentId,
-    }
+    },
   );
 
   return logs?.events.reduce(
@@ -169,6 +254,6 @@ export function useDeploymentLogsSummary(deploymentId: string | undefined) {
       }
       return acc;
     },
-    { skipped: 0, errors: 0 }
+    { skipped: 0, errors: 0 },
   );
 }
