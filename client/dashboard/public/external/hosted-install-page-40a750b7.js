@@ -48,10 +48,15 @@ function togglePopover(e) {
 function openModal(childContent) {
   const template = document.querySelector("#modal-template");
   const modalElement = template.content.cloneNode(true);
+
   modalElement.querySelector(".content-slot").appendChild(childContent);
-  document.body.appendChild(modalElement);
+  modalElement.querySelectorAll(".code-container").forEach((el) => {
+    el.addEventListener("click", copyContainerSnippet);
+  });
+
+  document.body.appendChild(modalElement)
   const backdrop = document.querySelector(".modal-backdrop");
-  backdrop.addEventListener("scroll", (e) => e.stopPropagation());
+
   backdrop.addEventListener("click", () => {
     const modal = document.querySelector(".modal");
     modal.remove();
@@ -80,42 +85,17 @@ function toggleToolVisibility() {
   }
 }
 
-function copyClaudeCodeSnippet() {
-  const installElement = document.getElementById("claude-code-script");
-  if (installElement) {
-    const text = installElement.textContent;
-    navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        const button = e.target.classList.contains("quick-action")
-          ? e.target
-          : e.target.closest(".quick-action");
-        const originalText = button.textContent;
-        button.textContent = "Copied!";
-        setTimeout(() => {
-          button.textContent = originalText;
-        }, 2000);
-      })
-      .catch((err) => {
-        console.error("Failed to copy text: ", err);
-      });
-  }
-}
-
 function copyContainerSnippet(e) {
-  const codeEl = e.target.parentElement.querySelector('pre');
-  console.log(e)
-  const text = codeEl.textContent;
+  const containerEl = e.currentTarget;
+  const text = containerEl.querySelector('.code-snippet').textContent;
+  const copyBadge = containerEl.querySelector('.copy-button')
+
   navigator.clipboard
     .writeText(text)
     .then(() => {
-      const button = e.target.classList.contains("quick-action")
-        ? e.target
-        : e.target.closest(".quick-action");
-      const originalText = button.textContent;
-      button.textContent = "Copied!";
+      copyBadge.classList.replace("waiting", "success");
       setTimeout(() => {
-        button.textContent = originalText;
+        copyBadge.classList.replace("success", "waiting");
       }, 2000);
     })
     .catch((err) => {
@@ -132,12 +112,12 @@ function initializeHandlers() {
     el.addEventListener("click", openInstallTargetModal);
   });
 
-  document.querySelectorAll(".code-container .copy-button").forEach((el) => {
+  document.querySelectorAll(".code-container").forEach((el) => {
     el.addEventListener("click", copyContainerSnippet);
   });
 
   document
-    .querySelector('.install-target[data-install-target="claude-desktop"]')
+    .querySelector('[data-install-target="claude-desktop"]')
     .addEventListener("click", (e) => {
       e.stopPropagation();
       downloadDxtHandler(e);
