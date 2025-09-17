@@ -126,8 +126,8 @@ importers:
         specifier: ^1.2.8
         version: 1.2.8(@types/react-dom@19.1.9(@types/react@19.1.12))(@types/react@19.1.12)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@speakeasy-api/moonshine':
-        specifier: 1.28.2
-        version: 1.28.2(@types/react-dom@19.1.9(@types/react@19.1.12))(@types/react@19.1.12)(lucide-react@0.542.0(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(zod@3.25.76)
+        specifier: 1.28.3
+        version: 1.28.3(@types/react-dom@19.1.9(@types/react@19.1.12))(@types/react@19.1.12)(lucide-react@0.542.0(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(zod@3.25.76)
       '@tailwindcss/typography':
         specifier: ^0.5.16
         version: 0.5.16(tailwindcss@4.1.13)
@@ -1972,8 +1972,8 @@ packages:
     resolution: {integrity: sha512-IUuj2zpGdeKaY5OdGnU83BUJsv7OA9uw3rNVSOuvzLMXMpBTU+W6V0SsQh6iI32lKUJArlnEU4BIzp83hghR/g==}
     engines: {node: '>=18.0.0'}
 
-  '@speakeasy-api/moonshine@1.28.2':
-    resolution: {integrity: sha512-Zuh0dnRAAyR0mOinN63641G6Q5zdywENoeos31U2u4u/XLo1N//99ALJ2upR1F0cOrv7j2iKtVDdYBebBE/jug==}
+  '@speakeasy-api/moonshine@1.28.3':
+    resolution: {integrity: sha512-QqGHIybznQKoKJpeD6CLcJMUby1yPBf4tLKmvnkYj7IaELvsdRK0kU4a6Y0Uf733a3ikeCHzJmuxefIkccBdKA==}
     peerDependencies:
       '@types/react': ^18.3.11 || ^19.0.0
       lucide-react: ^0.453.0
@@ -7238,7 +7238,7 @@ snapshots:
       '@smithy/types': 4.4.0
       tslib: 2.8.1
 
-  '@speakeasy-api/moonshine@1.28.2(@types/react-dom@19.1.9(@types/react@19.1.12))(@types/react@19.1.12)(lucide-react@0.542.0(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(zod@3.25.76)':
+  '@speakeasy-api/moonshine@1.28.3(@types/react-dom@19.1.9(@types/react@19.1.12))(@types/react@19.1.12)(lucide-react@0.542.0(react@19.1.1))(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(zod@3.25.76)':
     dependencies:
       '@dnd-kit/core': 6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@dnd-kit/modifiers': 9.0.0(@dnd-kit/core@6.3.1(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)
@@ -7538,7 +7538,7 @@ snapshots:
     dependencies:
       '@typescript-eslint/tsconfig-utils': 8.43.0(typescript@5.8.3)
       '@typescript-eslint/types': 8.43.0
-      debug: 4.4.1
+      debug: 4.4.3
       typescript: 5.8.3
     transitivePeerDependencies:
       - supports-color
@@ -7547,7 +7547,7 @@ snapshots:
     dependencies:
       '@typescript-eslint/tsconfig-utils': 8.43.0(typescript@5.9.2)
       '@typescript-eslint/types': 8.43.0
-      debug: 4.4.1
+      debug: 4.4.3
       typescript: 5.9.2
     transitivePeerDependencies:
       - supports-color
@@ -7570,7 +7570,7 @@ snapshots:
       '@typescript-eslint/types': 8.43.0
       '@typescript-eslint/typescript-estree': 8.43.0(typescript@5.8.3)
       '@typescript-eslint/utils': 8.43.0(eslint@9.35.0(jiti@2.5.1))(typescript@5.8.3)
-      debug: 4.4.1
+      debug: 4.4.3
       eslint: 9.35.0(jiti@2.5.1)
       ts-api-utils: 2.1.0(typescript@5.8.3)
       typescript: 5.8.3
@@ -7582,7 +7582,7 @@ snapshots:
       '@typescript-eslint/types': 8.43.0
       '@typescript-eslint/typescript-estree': 8.43.0(typescript@5.9.2)
       '@typescript-eslint/utils': 8.43.0(eslint@9.35.0(jiti@2.5.1))(typescript@5.9.2)
-      debug: 4.4.1
+      debug: 4.4.3
       eslint: 9.35.0(jiti@2.5.1)
       ts-api-utils: 2.1.0(typescript@5.9.2)
       typescript: 5.9.2
@@ -7684,7 +7684,7 @@ snapshots:
 
   agent-base@6.0.2:
     dependencies:
-      debug: 4.4.1
+      debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
 

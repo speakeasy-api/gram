@@ -1,6 +1,5 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
 import { MiniCard, MiniCards } from "@/components/ui/card-mini";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -11,6 +10,7 @@ import { UpdatedAt } from "@/components/updated-at";
 import FileUpload from "@/components/upload";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { slugify } from "@/lib/constants";
 import { cn, getServerURL } from "@/lib/utils";
 import { useDeploymentLogsSummary } from "@/pages/deployments/Deployment";
 import { UploadedDocument } from "@/pages/onboarding/Wizard";
@@ -20,8 +20,8 @@ import {
   useLatestDeployment,
   useListAssets,
 } from "@gram/client/react-query/index.js";
-import { Icon, Button as MoonshineButton } from "@speakeasy-api/moonshine";
-import { Loader2Icon, OctagonAlertIcon, Plus } from "lucide-react";
+import { Icon, Button, Alert } from "@speakeasy-api/moonshine";
+import { Loader2Icon, Plus } from "lucide-react";
 import {
   forwardRef,
   useEffect,
@@ -37,7 +37,6 @@ import {
   useOnboardingSteps,
 } from "../../onboarding/Onboarding";
 import { ApisEmptyState } from "./ApisEmptyState";
-import { slugify } from "@/lib/constants";
 
 export default function OpenAPIDocuments() {
   return (
@@ -117,12 +116,12 @@ export function APIsContent() {
         </Dialog.Header>
         <OnboardingContent onOnboardingComplete={finishUpload} />
         <Dialog.Footer>
-          <MoonshineButton
+          <Button
             variant="tertiary"
             onClick={() => setNewDocumentDialogOpen(false)}
           >
             Back
-          </MoonshineButton>
+          </Button>
         </Dialog.Footer>
       </Dialog.Content>
     </Dialog>
@@ -144,7 +143,7 @@ export function APIsContent() {
     return (
       <Page.Section.CTA>
         <a href={routes.deployments.deployment.href(deployment.id)}>
-          <MoonshineButton
+          <Button
             variant="tertiary"
             className={cn(
               hasErrors &&
@@ -153,7 +152,7 @@ export function APIsContent() {
           >
             {icon}
             HISTORY
-          </MoonshineButton>
+          </Button>
         </a>
       </Page.Section.CTA>
     );
@@ -220,15 +219,15 @@ export function APIsContent() {
       </Page.Section.Description>
       {logsCta}
       <Page.Section.CTA>
-        <MoonshineButton
+        <Button
           onClick={() => setNewDocumentDialogOpen(true)}
           variant="secondary"
         >
-          <MoonshineButton.LeftIcon>
+          <Button.LeftIcon>
             <Plus className="w-4 h-4" />
-          </MoonshineButton.LeftIcon>
-          <MoonshineButton.Text>Add API</MoonshineButton.Text>
-        </MoonshineButton>
+          </Button.LeftIcon>
+          <Button.Text>Add API</Button.Text>
+        </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
         <MiniCards isLoading={isLoading}>
@@ -274,7 +273,7 @@ export function APIsContent() {
               />
             )}
             <Dialog.Footer>
-              <MoonshineButton
+              <Button
                 variant="tertiary"
                 onClick={() => {
                   setChangeDocumentTargetSlug(null);
@@ -282,14 +281,14 @@ export function APIsContent() {
                 }}
               >
                 Back
-              </MoonshineButton>
-              <MoonshineButton
+              </Button>
+              <Button
                 onClick={() => deploySpecUpdate(changeDocumentTargetSlug!)}
                 disabled={!file || isDeploying || !changeDocumentTargetSlug}
               >
                 {isDeploying && <Spinner />}
                 {isDeploying ? "Deploying..." : "Deploy"}
-              </MoonshineButton>
+              </Button>
             </Dialog.Footer>
           </Dialog.Content>
         </Dialog>
@@ -359,9 +358,11 @@ const RemoveAPISourceDialog = forwardRef<
   const DeleteButton = () => {
     if (pending) {
       return (
-        <Button disabled variant="destructive">
-          <Loader2Icon className="size-4 animate-spin" />
-          Deleting API Source
+        <Button disabled variant="destructive-primary">
+          <Button.LeftIcon>
+            <Loader2Icon className="size-4 animate-spin" />
+          </Button.LeftIcon>
+          <Button.Text>Deleting API Source</Button.Text>
         </Button>
       );
     }
@@ -369,9 +370,8 @@ const RemoveAPISourceDialog = forwardRef<
     return (
       <Button
         disabled={!inputMatches}
-        variant="destructive"
+        variant="destructive-primary"
         onClick={handleConfirm}
-        tooltip={!inputMatches ? "Type the name to confirm" : undefined}
       >
         Delete API Source
       </Button>
@@ -397,15 +397,15 @@ const RemoveAPISourceDialog = forwardRef<
           <Input onChange={(v) => setInputMatches(v === apiSourceSlug)} />
         </div>
 
-        <div className="flex items-center gap-2 rounded-md bg-destructive-softest text-destructive px-3 py-2 text-sm">
-          <OctagonAlertIcon size={20} />
-          <div>Deleting {asset.name} cannot be undone.</div>
-        </div>
+        <Alert variant="error" dismissible={false}>
+          Deleting {asset.name} cannot be undone.
+        </Alert>
+
         <Dialog.Footer>
           <Button
-            onClick={() => handleOpenChange(false)}
             hidden={pending}
-            variant="ghost"
+            onClick={() => handleOpenChange(false)}
+            variant="tertiary"
           >
             Cancel
           </Button>
