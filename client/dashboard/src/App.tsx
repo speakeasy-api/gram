@@ -1,7 +1,7 @@
 import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import this second to override certain values in moonshine.css
 
-import { MoonshineConfigProvider } from "@speakeasy-api/moonshine";
+import { MoonshineConfigProvider, TooltipProvider } from "@speakeasy-api/moonshine";
 import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
@@ -54,18 +54,20 @@ export default function App() {
 
   return (
     <MoonshineConfigProvider theme={theme} setTheme={applyTheme}>
-      <TelemetryProvider>
-        <BrowserRouter>
-          <SdkProvider>
-            <AuthProvider>
-              <ProjectProvider>
-                <RouteProvider />
-              </ProjectProvider>
-              <Toaster />
-            </AuthProvider>
-          </SdkProvider>
-        </BrowserRouter>
-      </TelemetryProvider>
+      <TooltipProvider>
+        <TelemetryProvider>
+          <BrowserRouter>
+            <SdkProvider>
+              <AuthProvider>
+                <ProjectProvider>
+                  <RouteProvider />
+                </ProjectProvider>
+                <Toaster />
+              </AuthProvider>
+            </SdkProvider>
+          </BrowserRouter>
+        </TelemetryProvider>
+      </TooltipProvider>
     </MoonshineConfigProvider>
   );
 }
