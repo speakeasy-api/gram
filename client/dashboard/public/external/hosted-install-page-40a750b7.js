@@ -54,7 +54,7 @@ function openModal(childContent) {
     el.addEventListener("click", copyContainerSnippet);
   });
 
-  document.body.appendChild(modalElement)
+  document.body.appendChild(modalElement);
   const backdrop = document.querySelector(".modal-backdrop");
 
   backdrop.addEventListener("click", () => {
@@ -87,8 +87,8 @@ function toggleToolVisibility() {
 
 function copyContainerSnippet(e) {
   const containerEl = e.currentTarget;
-  const text = containerEl.querySelector('.code-snippet').textContent;
-  const copyBadge = containerEl.querySelector('.copy-button')
+  const text = containerEl.querySelector(".code-snippet").textContent;
+  const copyBadge = containerEl.querySelector(".copy-button");
 
   navigator.clipboard
     .writeText(text)
@@ -117,11 +117,13 @@ function initializeHandlers() {
   });
 
   document
-    .querySelector('[data-install-target="claude-desktop"]')
-    .addEventListener("click", (e) => {
-      e.stopPropagation();
-      downloadDxtHandler(e);
-    });
+    .querySelectorAll('[data-install-target="claude-desktop"]')
+    .forEach((el) =>
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        downloadDxtHandler(e);
+      }),
+    );
 }
 
 document.addEventListener("DOMContentLoaded", () => {
