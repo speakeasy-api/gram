@@ -578,7 +578,7 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
         <h1>Instructions</h1>
         <ol>
           <li class="instruction-item">
-            Install this MCP server using the Gemini CLI:
+            Add this configuration to your ~/.gemini/settings.json:
             <div class="card code-container">
               <button class="copy-button waiting">
                 <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
@@ -588,7 +588,18 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh">gemini mcp add {{ .MCPSlug }} {{ .MCPURL }}</code>
+              <code class="code-snippet language-json">{
+  "mcpServers": {
+    "{{ .MCPSlug }}": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "{{ .MCPURL }}"{{- range .Headers }}, "--header", "{{ . }}:${{ "{" }}{{ . }}{{ "}" }}"{{- end }}]{{- if .Headers }},
+      "env": {
+        {{- range $i, $header := .Headers }}{{- if $i }},{{ end }}
+        "{{ $header }}": "your-{{ $header }}-value"{{- end }}
+      }{{- end }}
+    }
+  }
+}</code>
             </div>
           </li>
           {{- if .Headers }}
@@ -607,8 +618,7 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
             </div></li>
           {{- end }}
           <li class="instruction-item">
-            Verify installation with:
-            <code>gemini mcp list</code>
+            Restart Gemini CLI to load the new configuration
           </li>
         </ol>
       </div>
@@ -630,7 +640,7 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
               </button>
               <code class="code-snippet language-toml">[mcp_servers.{{ .MCPSlug }}]
 command = "npx"
-args = ["-y", "mcp-remote", "{{ .MCPURL }}"]{{- if .Headers }}
+args = ["-y", "mcp-remote", "{{ .MCPURL }}"{{- range .Headers }}, "--header", "{{ . }}:${{ "{" }}{{ . }}{{ "}" }}"{{- end }}]{{- if .Headers }}
 env = { {{- range $i, $header := .Headers }}{{- if $i }}, {{ end }}"{{ $header }}" = "your-{{ $header }}-value"{{- end }} }{{- end }}</code>
             </div>
           </li>
