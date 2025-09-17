@@ -300,6 +300,11 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 	description := op.description
 	summary := op.summary
 
+	// Soon we will stop storing summary. Still we want to make sure that we do a best-effort to set a description.
+	if description == "" {
+		description = summary
+	}
+
 	toolDesc := toolDescriptor{
 		xGramFound:          false,
 		xSpeakeasyMCPFound:  false,
