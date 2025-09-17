@@ -20,7 +20,9 @@
     <link rel="canonical" href="{{ .SiteURL }}/mcp/{{ .MCPSlug }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&display=swap" rel="stylesheet">
     <style>
       /**************/
     /* PAGE SETUP */
@@ -31,7 +33,7 @@
       /* Font Families */
       --font-diatype: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI',
         Roboto, Helvetica, Arial, sans-serif;
-      --font-diatype-mono: 'Diatype Mono', SFMono-Regular, Menlo, Monaco, Consolas,
+      --font-diatype-mono: 'Geist Mono', SFMono-Regular, Menlo, Monaco, Consolas,
         'Liberation Mono', 'Courier New', monospace;
 
       /* Color Values */
@@ -264,22 +266,27 @@
       right: 1.5rem;
       border-radius: 4px;
       border: 1px var(--border-neutral-softest) solid;
-      padding: 0.5rem;
       cursor: pointer;
       transition: opacity 0.2s ease, background-color 0.2s ease;
       z-index: 10;
       display: flex;
       align-items: center;
       justify-content: center;
+      width: 1.5rem;
+      height: 1.5rem;
+      padding: 4px;
     }
 
     .copy-button svg {
-      width: 1rem;
-      height: 1rem;
+      width: 100%;
+      height: 100%;
     }
 
 
-    pre {
+    pre, code {
+      font-size: 1rem;
+      line-height: 150%;
+      font-family: var(--font-diatype-mono);
       overflow-x: auto;
       margin: 0;
     }
@@ -324,7 +331,7 @@
       font-weight: 300;
     }
 
-    h2: {
+    h2, .modal-sub-heading {
       font-weight: 300;
     }
 
@@ -401,52 +408,30 @@
       </div>
       <div class="modal-backdrop"></div>
     </template>
-    <template class="install-target-template" data-install-target="cursor">
-      <div class="modal-content">
-        <h1>
-          Cursor MCP Guide
-        </h1>
-        <h2>Step 1: Click the Deep Link</h2>
-        <p>Click the "Open in Cursor" button to automatically configure the MCP server in Cursor.</p>
-        <a href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}">
-          <img
-            src="https://cursor.com/deeplink/mcp-install-dark.svg"
-            alt="Add {{ .MCPName }} MCP server to Cursor"
-            height="32"
-          >
-        </a>
-        <h2>Step 2: Set Environment Variables</h2>
-        <p>After installation, you'll need to set the following environment variables in the cursor UI:</p>
-        {{- if .Headers }}
-        <ul>
-          {{- range .Headers }}
-          <li><code>{{ . }}</code>
-            - Get this value from your gram environment</li>
-          {{- end }}
-        </ul>
-        {{- else }}
-        <p>No environment variables needed for this MCP server.</p>
-        {{- end }}
-      </div>
-    </template>
     <template class="install-target-template" data-install-target="claude-code">
       <div class="modal-content">
         <h1>Claude Code</h1>
         <p>Install this MCP server using the Claude Code CLI:</p>
-        <div class="code-container">
-          <button
-            class="copy-button"
-          >Copy</button>
+        <div class="card code-container">
+          <button class="copy-button">
+            <svg width="24" height="24" viewBox="0 0 24 24">
+              <use href="#icon-copy"></use>
+            </svg>
+          </button>
           <pre id="claude-code-install"><code class="language-sh">claude mcp add-json "{{ .MCPSlug }}" "$(cat &lt;&lt;'EOF'
 {{ .MCPConfig }}
 EOF
 )"</code></pre>
         </div>
         {{- if .Headers }}
-        <h2>Environment Variables</h2>
+        <h2 class="modal-sub-heading">Environment Variables</h2>
         <p>After installation, set these environment variables in your shell:</p>
-        <div class="code-container">
-          <button class="copy-button">Copy</button>
+        <div class="card code-container">
+          <button class="copy-button">
+            <svg width="24" height="24" viewBox="0 0 24 24">
+              <use href="#icon-copy"></use>
+            </svg>
+          </button>
           <pre id="claude-code-env"><code class="language-sh">{{- range .Headers }}
 export {{ . }}="your-{{ . }}-value"{{- end }}</code></pre>
         </div>
@@ -560,15 +545,23 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code></pre>
         <div class="mcp-url container">
           <div class="section-title">Server URL</div>
           <div class="code-container card">
-            <button class="copy-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy-icon lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
+            <button class="copy-button">
+              <svg width="24" height="24" viewBox="0 0 24 24">
+                <use href="#icon-copy"></use>
+              </svg>
+            </button>
             <pre id="mcp-url">{{ .MCPURL }}</pre>
           </div>
         </div>
         <div class="raw-configuration container">
           <div class="section-title">Raw Configuration</div>
           <div class="code-container card">
-            <button class="copy-button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy-icon lucide-copy"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>
-            <pre class="snippet" id="json-blob"><code class="language-json">{{ .MCPConfig }}</code></pre>
+            <button class="copy-button">
+              <svg width="24" height="24" viewBox="0 0 24 24">
+                <use href="#icon-copy"></use>
+              </svg>
+            </button>
+            <pre id="json-blob"><code class="language-json">{{ .MCPConfig }}</code></pre>
           </div>
           <script id="manifest-json-blob" type="application/json">
             {
@@ -618,6 +611,24 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code></pre>
 {{ .MCPConfig }}
 EOF
 )"</code>
+    <svg style="display: none;">
+      <defs>
+        <symbol
+          id="icon-copy"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+        >
+          <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
+          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+        </symbol>
+      </defs>
+    </svg>
     <script
       type="module"
       src="{{ .SiteURL }}/external/hosted-install-page-40a750b7.js"
