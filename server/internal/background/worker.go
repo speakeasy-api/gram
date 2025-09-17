@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
@@ -61,6 +62,7 @@ func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage 
 func NewTemporalWorker(
 	client client.Client,
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	options ...*WorkerOptions,
 ) worker.Worker {
@@ -106,6 +108,7 @@ func NewTemporalWorker(
 
 	activities := NewActivities(
 		logger,
+		tracerProvider,
 		meterProvider,
 		opts.DB,
 		opts.FeatureProvider,

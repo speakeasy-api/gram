@@ -140,29 +140,37 @@ func (m *metrics) RecordOpenAPIOperationSkipped(ctx context.Context, reason stri
 	}
 }
 
-func (m *metrics) RecordOpenAPIProcessed(ctx context.Context, outcome o11y.Outcome, duration time.Duration, version string) {
+func (m *metrics) RecordOpenAPIProcessed(ctx context.Context, parser string, outcome o11y.Outcome, duration time.Duration, version string) {
 	if counter := m.openAPIProcessedCounter; counter != nil {
 		counter.Add(ctx, 1, metric.WithAttributes(
 			attr.Outcome(outcome),
 			attr.OpenAPIVersion(sanitizeOpenAPIVersion(version)),
+			attr.DeploymentOpenAPIParser(parser),
 		))
 	}
 
 	if histogram := m.openAPIProcessedDuration; histogram != nil {
-		histogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attr.Outcome(string(outcome))))
+		histogram.Record(ctx, duration.Seconds(), metric.WithAttributes(
+			attr.Outcome(outcome),
+			attr.DeploymentOpenAPIParser(parser),
+		))
 	}
 }
 
-func (m *metrics) RecordOpenAPIUpgrade(ctx context.Context, outcome o11y.Outcome, duration time.Duration, version string) {
+func (m *metrics) RecordOpenAPIUpgrade(ctx context.Context, parser string, outcome o11y.Outcome, duration time.Duration, version string) {
 	if counter := m.openAPIUpgradeCounter; counter != nil {
 		counter.Add(ctx, 1, metric.WithAttributes(
 			attr.Outcome(string(outcome)),
 			attr.OpenAPIVersion(sanitizeOpenAPIVersion(version)),
+			attr.DeploymentOpenAPIParser(parser),
 		))
 	}
 
 	if histogram := m.openAPIUpgradeDuration; histogram != nil {
-		histogram.Record(ctx, duration.Seconds(), metric.WithAttributes(attr.Outcome(string(outcome))))
+		histogram.Record(ctx, duration.Seconds(), metric.WithAttributes(
+			attr.Outcome(outcome),
+			attr.DeploymentOpenAPIParser(parser),
+		))
 	}
 }
 
