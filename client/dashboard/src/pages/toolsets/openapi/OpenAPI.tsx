@@ -20,7 +20,7 @@ import {
   useLatestDeployment,
   useListAssets,
 } from "@gram/client/react-query/index.js";
-import { Icon, Button } from "@speakeasy-api/moonshine";
+import { Icon, Button, Alert } from "@speakeasy-api/moonshine";
 import { Loader2Icon, OctagonAlertIcon, Plus } from "lucide-react";
 import {
   forwardRef,
@@ -37,6 +37,7 @@ import {
   useOnboardingSteps,
 } from "../../onboarding/Onboarding";
 import { ApisEmptyState } from "./ApisEmptyState";
+import { AlertTitle } from "@/components/ui/alert";
 
 export default function OpenAPIDocuments() {
   return (
@@ -397,10 +398,10 @@ const RemoveAPISourceDialog = forwardRef<
           <Input onChange={(v) => setInputMatches(v === apiSourceSlug)} />
         </div>
 
-        <div className="flex items-center gap-2 rounded-md bg-destructive-softest text-destructive px-3 py-2 text-sm">
-          <OctagonAlertIcon size={20} />
-          <div>Deleting {asset.name} cannot be undone.</div>
-        </div>
+        <Alert variant="error" dismissible={false}>
+          Deleting {asset.name} cannot be undone.
+        </Alert>
+
         <Dialog.Footer>
           <Button
             onClick={() => handleOpenChange(false)}
