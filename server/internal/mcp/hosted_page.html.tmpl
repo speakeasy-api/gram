@@ -332,7 +332,7 @@
 
     pre, code {
       white-space: pre-wrap;
-      display: block;
+      display: inline-block;
       font-size: 1rem;
       line-height: 150%;
       font-family: var(--font-diatype-mono);
@@ -516,6 +516,130 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
         </ol>
       </div>
     </template>
+    <template class="install-target-template" data-install-target="windsurf">
+      <div class="modal-content">
+        <h1>Instructions</h1>
+        <ol>
+          <li class="instruction-item">
+            Open Windsurf and navigate to the Cascade panel
+          </li>
+          <li class="instruction-item">
+            Click "Configure" to open the Manage plugins tab
+          </li>
+          <li>Click "View raw config" to open mcp_config.json</li>
+          <li>Add this configuration to your mcp_config.json (don't forget to add
+          your values for any environment variables):
+            <div class="card code-container">
+              <button class="copy-button waiting">
+                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                  <use href="#icon-copy"></use>
+                </svg>
+                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                  <use href="#icon-copy-check"></use>
+                </svg>
+              </button>
+              <code class="code-snippet language-json">{
+  "mcpServers": {
+    "{{ .MCPSlug }}": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "{{ .MCPURL }}"]{{- if .Headers }},
+      "env": {
+        {{- range $i, $header := .Headers }}{{- if $i }},{{ end }}
+        "{{ $header }}": "your-{{ $header }}-value"{{- end }}
+      }{{- end }}
+    }
+  }
+}</code>
+            </div></li>
+          <li>Back in the Manage plugins tab, click "Refresh" to connect</li>
+          <li class="instruction-item">
+            Verify installation by checking for "1 available MCP server" in the MCP toolbar and a green dot next to the server name
+          </li>
+        </ol>
+      </div>
+    </template>
+    <template class="install-target-template" data-install-target="gemini-cli">
+      <div class="modal-content">
+        <h1>Instructions</h1>
+        <ol>
+          <li class="instruction-item">
+            Install this MCP server using the Gemini CLI:
+            <div class="card code-container">
+              <button class="copy-button waiting">
+                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                  <use href="#icon-copy"></use>
+                </svg>
+                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                  <use href="#icon-copy-check"></use>
+                </svg>
+              </button>
+              <code class="code-snippet language-sh">gemini mcp add {{ .MCPSlug }} {{ .MCPURL }}</code>
+            </div>
+          </li>
+          {{- if .Headers }}
+          <li class="instruction-item">Set these environment variables in your shell:
+            <div class="card code-container">
+              <button class="copy-button waiting">
+                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                  <use href="#icon-copy"></use>
+                </svg>
+                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                  <use href="#icon-copy-check"></use>
+                </svg>
+              </button>
+              <code class="code-snippet language-sh">{{- range .EnvHeaders -}}
+export {{ . }}="your-{{ . }}-value"{{- end }}</code>
+            </div></li>
+          {{- end }}
+          <li class="instruction-item">
+            Verify installation with:
+            <code>gemini mcp list</code>
+          </li>
+        </ol>
+      </div>
+    </template>
+    <template class="install-target-template" data-install-target="codex-cli">
+      <div class="modal-content">
+        <h1>Instructions</h1>
+        <ol>
+          <li class="instruction-item">
+            Add this configuration to your ~/.codex/config.toml:
+            <div class="card code-container">
+              <button class="copy-button waiting">
+                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                  <use href="#icon-copy"></use>
+                </svg>
+                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                  <use href="#icon-copy-check"></use>
+                </svg>
+              </button>
+              <code class="code-snippet language-toml">[mcp_servers.{{ .MCPSlug }}]
+command = "npx"
+args = ["-y", "mcp-remote", "{{ .MCPURL }}"]{{- if .Headers }}
+env = { {{- range $i, $header := .Headers }}{{- if $i }}, {{ end }}"{{ $header }}" = "your-{{ $header }}-value"{{- end }} }{{- end }}</code>
+            </div>
+          </li>
+          {{- if .Headers }}
+          <li class="instruction-item">Set these environment variables in your shell:
+            <div class="card code-container">
+              <button class="copy-button waiting">
+                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                  <use href="#icon-copy"></use>
+                </svg>
+                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                  <use href="#icon-copy-check"></use>
+                </svg>
+              </button>
+              <code class="code-snippet language-sh">{{- range .EnvHeaders -}}
+export {{ . }}="your-{{ . }}-value"{{- end }}</code>
+            </div></li>
+          {{- end }}
+          <li class="instruction-item">
+            Restart Codex CLI to load the new configuration
+          </li>
+        </ol>
+      </div>
+    </template>
   </head>
   <body>
     <main class="main">
@@ -554,6 +678,12 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
               </button>
               <button class="popover-button" data-install-method="dxt-download" data-install-target="claude-desktop">
                 Claude Desktop
+              </button>
+              <button class="popover-button" data-install-method="modal" data-install-target="gemini-cli">
+                Gemini CLI
+              </button>
+              <button class="popover-button" data-install-method="modal" data-install-target="codex-cli">
+                Codex CLI
               </button>
             </div>
           </div>
@@ -598,6 +728,32 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
                 <span>Windsurf</span>
               </div>
             </div>
+            <div tabindex="0" class="card install-target" data-install-method="modal" data-install-target="gemini-cli">
+              <div class="target">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M16 2L19.5 12.5L30 16L19.5 19.5L16 30L12.5 19.5L2 16L12.5 12.5L16 2Z" fill="url(#gemini-gradient)"/>
+                  <defs>
+                    <linearGradient id="gemini-gradient" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
+                      <stop offset="0%" stop-color="#4285F4"/>
+                      <stop offset="25%" stop-color="#34A853"/>
+                      <stop offset="50%" stop-color="#FBBC04"/>
+                      <stop offset="75%" stop-color="#EA4335"/>
+                      <stop offset="100%" stop-color="#4285F4"/>
+                    </linearGradient>
+                  </defs>
+                </svg>
+                <span>Gemini CLI</span>
+              </div>
+            </div>
+            <div tabindex="0" class="card install-target" data-install-method="modal" data-install-target="codex-cli">
+              <div class="target">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <rect x="4" y="4" width="24" height="24" rx="2" fill="#10A37F"/>
+                  <path d="M8 12h16M8 16h12M8 20h8" stroke="white" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <span>Codex CLI</span>
+              </div>
+            </div>
           </div>
         </div>
         <div class="available-tools container">
@@ -639,7 +795,9 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
           <div class="section-title">Raw Configuration</div>
           <span class="section-description">
             If you have a client that's not listed above, access the raw MCP configuration below. For more information, see the
-            <a href="/">gram documentation</a>.
+            <a href="https://www.speakeasy.com/mcp/using-mcp/installing-mcp-servers">
+              the linked documentation
+            </a>.
           </span>
           <div class="code-container card">
             <button class="copy-button waiting">
