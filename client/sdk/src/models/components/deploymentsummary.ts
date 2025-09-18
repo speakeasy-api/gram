@@ -14,6 +14,14 @@ export type DeploymentSummary = {
    */
   createdAt: Date;
   /**
+   * The number of Functions assets.
+   */
+  functionsAssetCount: number;
+  /**
+   * The number of tools in the deployment generated from Functions.
+   */
+  functionsToolCount: number;
+  /**
    * The ID to of the deployment.
    */
   id: string;
@@ -42,6 +50,8 @@ export const DeploymentSummary$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  functions_asset_count: z.number().int(),
+  functions_tool_count: z.number().int(),
   id: z.string(),
   openapiv3_asset_count: z.number().int(),
   openapiv3_tool_count: z.number().int(),
@@ -50,6 +60,8 @@ export const DeploymentSummary$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
+    "functions_asset_count": "functionsAssetCount",
+    "functions_tool_count": "functionsToolCount",
     "openapiv3_asset_count": "openapiv3AssetCount",
     "openapiv3_tool_count": "openapiv3ToolCount",
     "user_id": "userId",
@@ -59,6 +71,8 @@ export const DeploymentSummary$inboundSchema: z.ZodType<
 /** @internal */
 export type DeploymentSummary$Outbound = {
   created_at: string;
+  functions_asset_count: number;
+  functions_tool_count: number;
   id: string;
   openapiv3_asset_count: number;
   openapiv3_tool_count: number;
@@ -73,6 +87,8 @@ export const DeploymentSummary$outboundSchema: z.ZodType<
   DeploymentSummary
 > = z.object({
   createdAt: z.date().transform(v => v.toISOString()),
+  functionsAssetCount: z.number().int(),
+  functionsToolCount: z.number().int(),
   id: z.string(),
   openapiv3AssetCount: z.number().int(),
   openapiv3ToolCount: z.number().int(),
@@ -81,6 +97,8 @@ export const DeploymentSummary$outboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     createdAt: "created_at",
+    functionsAssetCount: "functions_asset_count",
+    functionsToolCount: "functions_tool_count",
     openapiv3AssetCount: "openapiv3_asset_count",
     openapiv3ToolCount: "openapiv3_tool_count",
     userId: "user_id",

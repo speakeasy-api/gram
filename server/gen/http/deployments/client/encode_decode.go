@@ -1730,6 +1730,24 @@ func unmarshalOpenAPIv3DeploymentAssetResponseBodyToTypesOpenAPIv3DeploymentAsse
 	return res
 }
 
+// unmarshalDeploymentFunctionsResponseBodyToTypesDeploymentFunctions builds a
+// value of type *types.DeploymentFunctions from a value of type
+// *DeploymentFunctionsResponseBody.
+func unmarshalDeploymentFunctionsResponseBodyToTypesDeploymentFunctions(v *DeploymentFunctionsResponseBody) *types.DeploymentFunctions {
+	if v == nil {
+		return nil
+	}
+	res := &types.DeploymentFunctions{
+		ID:      *v.ID,
+		AssetID: *v.AssetID,
+		Name:    *v.Name,
+		Slug:    types.Slug(*v.Slug),
+		Runtime: *v.Runtime,
+	}
+
+	return res
+}
+
 // unmarshalDeploymentPackageResponseBodyToTypesDeploymentPackage builds a
 // value of type *types.DeploymentPackage from a value of type
 // *DeploymentPackageResponseBody.
@@ -1764,10 +1782,17 @@ func unmarshalDeploymentResponseBodyToTypesDeployment(v *DeploymentResponseBody)
 		ExternalURL:        v.ExternalURL,
 		ClonedFrom:         v.ClonedFrom,
 		Openapiv3ToolCount: *v.Openapiv3ToolCount,
+		FunctionsToolCount: *v.FunctionsToolCount,
 	}
 	res.Openapiv3Assets = make([]*types.OpenAPIv3DeploymentAsset, len(v.Openapiv3Assets))
 	for i, val := range v.Openapiv3Assets {
 		res.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetResponseBodyToTypesOpenAPIv3DeploymentAsset(val)
+	}
+	if v.FunctionsAssets != nil {
+		res.FunctionsAssets = make([]*types.DeploymentFunctions, len(v.FunctionsAssets))
+		for i, val := range v.FunctionsAssets {
+			res.FunctionsAssets[i] = unmarshalDeploymentFunctionsResponseBodyToTypesDeploymentFunctions(val)
+		}
 	}
 	res.Packages = make([]*types.DeploymentPackage, len(v.Packages))
 	for i, val := range v.Packages {
@@ -1788,6 +1813,23 @@ func marshalDeploymentsAddOpenAPIv3DeploymentAssetFormToAddOpenAPIv3DeploymentAs
 		AssetID: v.AssetID,
 		Name:    v.Name,
 		Slug:    string(v.Slug),
+	}
+
+	return res
+}
+
+// marshalDeploymentsAddFunctionsFormToAddFunctionsFormRequestBody builds a
+// value of type *AddFunctionsFormRequestBody from a value of type
+// *deployments.AddFunctionsForm.
+func marshalDeploymentsAddFunctionsFormToAddFunctionsFormRequestBody(v *deployments.AddFunctionsForm) *AddFunctionsFormRequestBody {
+	if v == nil {
+		return nil
+	}
+	res := &AddFunctionsFormRequestBody{
+		AssetID: v.AssetID,
+		Name:    v.Name,
+		Slug:    string(v.Slug),
+		Runtime: v.Runtime,
 	}
 
 	return res
@@ -1819,6 +1861,23 @@ func marshalAddOpenAPIv3DeploymentAssetFormRequestBodyToDeploymentsAddOpenAPIv3D
 		AssetID: v.AssetID,
 		Name:    v.Name,
 		Slug:    types.Slug(v.Slug),
+	}
+
+	return res
+}
+
+// marshalAddFunctionsFormRequestBodyToDeploymentsAddFunctionsForm builds a
+// value of type *deployments.AddFunctionsForm from a value of type
+// *AddFunctionsFormRequestBody.
+func marshalAddFunctionsFormRequestBodyToDeploymentsAddFunctionsForm(v *AddFunctionsFormRequestBody) *deployments.AddFunctionsForm {
+	if v == nil {
+		return nil
+	}
+	res := &deployments.AddFunctionsForm{
+		AssetID: v.AssetID,
+		Name:    v.Name,
+		Slug:    types.Slug(v.Slug),
+		Runtime: v.Runtime,
 	}
 
 	return res
@@ -1880,6 +1939,8 @@ func unmarshalDeploymentSummaryResponseBodyToDeploymentsDeploymentSummary(v *Dep
 		CreatedAt:           *v.CreatedAt,
 		Openapiv3AssetCount: *v.Openapiv3AssetCount,
 		Openapiv3ToolCount:  *v.Openapiv3ToolCount,
+		FunctionsAssetCount: *v.FunctionsAssetCount,
+		FunctionsToolCount:  *v.FunctionsToolCount,
 	}
 
 	return res

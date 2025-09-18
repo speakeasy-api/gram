@@ -7027,6 +7027,28 @@ components:
                     $ref: '#/components/schemas/ExternalOAuthServerForm'
             required:
                 - external_oauth_server
+        AddFunctionsForm:
+            type: object
+            properties:
+                asset_id:
+                    type: string
+                    description: The ID of the functions file from the assets service.
+                name:
+                    type: string
+                    description: The functions file display name.
+                runtime:
+                    type: string
+                    description: 'The runtime to use when executing functions. Allowed values are: nodejs:22, python:3.12.'
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+            required:
+                - asset_id
+                - name
+                - slug
+                - runtime
         AddOpenAPIv3DeploymentAssetForm:
             type: object
             properties:
@@ -7265,6 +7287,10 @@ components:
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
+                functions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddFunctionsForm'
                 github_pr:
                     type: string
                     description: The github pull request that resulted in the deployment.
@@ -7301,6 +7327,10 @@ components:
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
+                functions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddFunctionsForm'
                 github_pr:
                     type: string
                     description: The github pull request that resulted in the deployment.
@@ -7630,6 +7660,15 @@ components:
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
+                functions_assets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeploymentFunctions'
+                    description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
+                functions_tool_count:
+                    type: integer
+                    description: The number of tools in the deployment generated from OpenAPI documents.
+                    format: int64
                 github_pr:
                     type: string
                     description: The github pull request that resulted in the deployment.
@@ -7686,6 +7725,33 @@ components:
                 - status
                 - packages
                 - openapiv3_tool_count
+                - functions_tool_count
+        DeploymentFunctions:
+            type: object
+            properties:
+                asset_id:
+                    type: string
+                    description: The ID of the uploaded asset.
+                id:
+                    type: string
+                    description: The ID of the deployment asset.
+                name:
+                    type: string
+                    description: The name to give the document as it will be displayed in UIs.
+                runtime:
+                    type: string
+                    description: The runtime to use when executing functions.
+                slug:
+                    type: string
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    maxLength: 40
+            required:
+                - id
+                - asset_id
+                - name
+                - slug
+                - runtime
         DeploymentLogEvent:
             type: object
             properties:
@@ -7735,6 +7801,14 @@ components:
                     type: string
                     description: The creation date of the deployment.
                     format: date-time
+                functions_asset_count:
+                    type: integer
+                    description: The number of Functions assets.
+                    format: int64
+                functions_tool_count:
+                    type: integer
+                    description: The number of tools in the deployment generated from Functions.
+                    format: int64
                 id:
                     type: string
                     description: The ID to of the deployment.
@@ -7760,6 +7834,8 @@ components:
                 - status
                 - openapiv3_asset_count
                 - openapiv3_tool_count
+                - functions_asset_count
+                - functions_tool_count
         Environment:
             type: object
             properties:
@@ -7880,16 +7956,26 @@ components:
                 deployment_id:
                     type: string
                     description: The ID of the deployment to evolve. If omitted, the latest deployment will be used.
+                exclude_functions:
+                    type: array
+                    items:
+                        type: string
+                    description: The functions, identified by slug, to exclude from the new deployment when cloning a previous deployment.
                 exclude_openapiv3_assets:
                     type: array
                     items:
                         type: string
-                    description: The OpenAPI 3.x documents to exclude from the new deployment when cloning a previous deployment.
+                    description: The OpenAPI 3.x documents, identified by slug, to exclude from the new deployment when cloning a previous deployment.
                 exclude_packages:
                     type: array
                     items:
                         type: string
                     description: The packages to exclude from the new deployment when cloning a previous deployment.
+                upsert_functions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AddFunctionsForm'
+                    description: The tool functions to upsert in the new deployment.
                 upsert_openapiv3_assets:
                     type: array
                     items:
@@ -8003,6 +8089,15 @@ components:
                 external_url:
                     type: string
                     description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
+                functions_assets:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/DeploymentFunctions'
+                    description: The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
+                functions_tool_count:
+                    type: integer
+                    description: The number of tools in the deployment generated from OpenAPI documents.
+                    format: int64
                 github_pr:
                     type: string
                     description: The github pull request that resulted in the deployment.
@@ -8059,6 +8154,7 @@ components:
                 - status
                 - packages
                 - openapiv3_tool_count
+                - functions_tool_count
         GetInstanceForm:
             type: object
             properties:

@@ -8,6 +8,12 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  DeploymentFunctions,
+  DeploymentFunctions$inboundSchema,
+  DeploymentFunctions$Outbound,
+  DeploymentFunctions$outboundSchema,
+} from "./deploymentfunctions.js";
+import {
   DeploymentPackage,
   DeploymentPackage$inboundSchema,
   DeploymentPackage$Outbound,
@@ -37,6 +43,14 @@ export type Deployment = {
    * The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
    */
   externalUrl?: string | undefined;
+  /**
+   * The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
+   */
+  functionsAssets?: Array<DeploymentFunctions> | undefined;
+  /**
+   * The number of tools in the deployment generated from OpenAPI documents.
+   */
+  functionsToolCount: number;
   /**
    * The github pull request that resulted in the deployment.
    */
@@ -97,6 +111,8 @@ export const Deployment$inboundSchema: z.ZodType<
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   external_id: z.string().optional(),
   external_url: z.string().optional(),
+  functions_assets: z.array(DeploymentFunctions$inboundSchema).optional(),
+  functions_tool_count: z.number().int(),
   github_pr: z.string().optional(),
   github_repo: z.string().optional(),
   github_sha: z.string().optional(),
@@ -115,6 +131,8 @@ export const Deployment$inboundSchema: z.ZodType<
     "created_at": "createdAt",
     "external_id": "externalId",
     "external_url": "externalUrl",
+    "functions_assets": "functionsAssets",
+    "functions_tool_count": "functionsToolCount",
     "github_pr": "githubPr",
     "github_repo": "githubRepo",
     "github_sha": "githubSha",
@@ -133,6 +151,8 @@ export type Deployment$Outbound = {
   created_at: string;
   external_id?: string | undefined;
   external_url?: string | undefined;
+  functions_assets?: Array<DeploymentFunctions$Outbound> | undefined;
+  functions_tool_count: number;
   github_pr?: string | undefined;
   github_repo?: string | undefined;
   github_sha?: string | undefined;
@@ -157,6 +177,8 @@ export const Deployment$outboundSchema: z.ZodType<
   createdAt: z.date().transform(v => v.toISOString()),
   externalId: z.string().optional(),
   externalUrl: z.string().optional(),
+  functionsAssets: z.array(DeploymentFunctions$outboundSchema).optional(),
+  functionsToolCount: z.number().int(),
   githubPr: z.string().optional(),
   githubRepo: z.string().optional(),
   githubSha: z.string().optional(),
@@ -175,6 +197,8 @@ export const Deployment$outboundSchema: z.ZodType<
     createdAt: "created_at",
     externalId: "external_id",
     externalUrl: "external_url",
+    functionsAssets: "functions_assets",
+    functionsToolCount: "functions_tool_count",
     githubPr: "github_pr",
     githubRepo: "github_repo",
     githubSha: "github_sha",

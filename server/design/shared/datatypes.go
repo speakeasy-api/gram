@@ -1,8 +1,9 @@
 package shared
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	. "goa.design/goa/v3/dsl"
+
+	"github.com/speakeasy-api/gram/server/internal/constants"
 )
 
 var Slug = Type("Slug", String, func() {
