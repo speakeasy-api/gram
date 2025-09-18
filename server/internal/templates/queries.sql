@@ -19,6 +19,7 @@ ORDER BY pt.project_id, pt.name, pt.id DESC;
 INSERT INTO prompt_templates (
   project_id,
   history_id,
+  tool_urn,
   name,
   prompt,
   description,
@@ -30,6 +31,7 @@ INSERT INTO prompt_templates (
 SELECT
   @project_id,
   generate_uuidv7(),
+  @tool_urn,
   @name,
   @prompt,
   NULLIF(@description, ''),
@@ -44,6 +46,7 @@ INSERT INTO prompt_templates (
   project_id,
   history_id,
   predecessor_id,
+  tool_urn,
   name,
   prompt,
   description,
@@ -56,6 +59,7 @@ SELECT
   c.project_id,
   c.history_id,
   c.id,
+  COALESCE(sqlc.narg(tool_urn), c.tool_urn),
   c.name,
   COALESCE(sqlc.narg(prompt), c.prompt),
   NULLIF(sqlc.narg(description), ''),

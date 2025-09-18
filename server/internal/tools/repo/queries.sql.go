@@ -95,7 +95,7 @@ external_deployments AS (
   WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
 )
 SELECT 
-  http_tool_definitions.id, http_tool_definitions.project_id, http_tool_definitions.deployment_id, http_tool_definitions.openapiv3_document_id, http_tool_definitions.confirm, http_tool_definitions.confirm_prompt, http_tool_definitions.summarizer, http_tool_definitions.name, http_tool_definitions.untruncated_name, http_tool_definitions.summary, http_tool_definitions.description, http_tool_definitions.openapiv3_operation, http_tool_definitions.tags, http_tool_definitions.x_gram, http_tool_definitions.original_name, http_tool_definitions.original_summary, http_tool_definitions.original_description, http_tool_definitions.server_env_var, http_tool_definitions.default_server_url, http_tool_definitions.security, http_tool_definitions.http_method, http_tool_definitions.path, http_tool_definitions.schema_version, http_tool_definitions.schema, http_tool_definitions.header_settings, http_tool_definitions.query_settings, http_tool_definitions.path_settings, http_tool_definitions.request_content_type, http_tool_definitions.response_filter, http_tool_definitions.created_at, http_tool_definitions.updated_at, http_tool_definitions.deleted_at, http_tool_definitions.deleted,
+  http_tool_definitions.id, http_tool_definitions.tool_urn, http_tool_definitions.project_id, http_tool_definitions.deployment_id, http_tool_definitions.openapiv3_document_id, http_tool_definitions.confirm, http_tool_definitions.confirm_prompt, http_tool_definitions.summarizer, http_tool_definitions.name, http_tool_definitions.untruncated_name, http_tool_definitions.summary, http_tool_definitions.description, http_tool_definitions.openapiv3_operation, http_tool_definitions.tags, http_tool_definitions.x_gram, http_tool_definitions.original_name, http_tool_definitions.original_summary, http_tool_definitions.original_description, http_tool_definitions.server_env_var, http_tool_definitions.default_server_url, http_tool_definitions.security, http_tool_definitions.http_method, http_tool_definitions.path, http_tool_definitions.schema_version, http_tool_definitions.schema, http_tool_definitions.header_settings, http_tool_definitions.query_settings, http_tool_definitions.path_settings, http_tool_definitions.request_content_type, http_tool_definitions.response_filter, http_tool_definitions.created_at, http_tool_definitions.updated_at, http_tool_definitions.deleted_at, http_tool_definitions.deleted,
   (select id from deployment) as owning_deployment_id,
   (CASE
     WHEN http_tool_definitions.project_id = $1 THEN ''
@@ -133,6 +133,7 @@ func (q *Queries) FindToolsByName(ctx context.Context, arg FindToolsByNameParams
 		var i FindToolsByNameRow
 		if err := rows.Scan(
 			&i.HttpToolDefinition.ID,
+			&i.HttpToolDefinition.ToolUrn,
 			&i.HttpToolDefinition.ProjectID,
 			&i.HttpToolDefinition.DeploymentID,
 			&i.HttpToolDefinition.Openapiv3DocumentID,
@@ -198,7 +199,7 @@ third_party AS (
     AND NOT EXISTS(SELECT 1 FROM first_party)
   LIMIT 1
 )
-SELECT id, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
 FROM http_tool_definitions
 WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party))
 `
@@ -214,6 +215,7 @@ func (q *Queries) GetHTTPToolDefinitionByID(ctx context.Context, arg GetHTTPTool
 	var i HttpToolDefinition
 	err := row.Scan(
 		&i.ID,
+		&i.ToolUrn,
 		&i.ProjectID,
 		&i.DeploymentID,
 		&i.Openapiv3DocumentID,
