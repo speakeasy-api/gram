@@ -1,5 +1,17 @@
 # @gram/dashboard
 
+## 0.11.0
+
+### Minor Changes
+
+- 87136d0: Rename deployment fields for asset/tool count to prefix with openapiv3 and make room for new tool types/sources.
+
+### Patch Changes
+
+- 33cdfa7: Repairs errant release of install page by actually including assets
+- 5a2214e: add GPT-5 to playground
+- 0397ead: Enable cross-origin access to static assets
+
 ## 0.10.0
 
 ### Minor Changes

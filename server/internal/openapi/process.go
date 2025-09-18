@@ -81,6 +81,8 @@ var preferredRequestTypes = []*regexp.Regexp{
 }
 
 type ToolExtractorTask struct {
+	Parser string
+
 	ProjectID    uuid.UUID
 	DeploymentID uuid.UUID
 	DocumentID   uuid.UUID
@@ -144,6 +146,7 @@ func (p *ToolExtractor) Do(
 	tx := repo.New(dbtx)
 
 	slogArgs := []any{
+		attr.SlogDeploymentOpenAPIParser(task.Parser),
 		attr.SlogProjectID(projectID.String()),
 		attr.SlogDeploymentOpenAPIName(docInfo.Name),
 		attr.SlogDeploymentOpenAPISlug(string(docInfo.Slug)),
@@ -212,18 +215,14 @@ func (p *ToolExtractor) Do(
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading openapi document").Log(ctx, logger)
 	}
 
-	f := conv.Default[feature.Provider](p.feature, &feature.InMemory{})
-
-	useSpeakeasyParser, err := f.IsFlagEnabled(ctx, feature.FlagSpeakeasyOpenAPIParserV0, task.ProjectID.String())
-	if err != nil {
-		useSpeakeasyParser = false
-		p.logger.ErrorContext(ctx, "error checking openapi parser feature flag for organization", attr.SlogError(err), attr.SlogOrganizationSlug(task.OrgSlug))
-	}
-
 	var res *ToolExtractorResult
-	if useSpeakeasyParser {
+	switch task.Parser {
+	case "speakeasy":
 		res, err = p.doSpeakeasy(ctx, logger, tx, doc, task)
-	} else {
+	default:
+		if task.Parser != "libopenapi" {
+			logger.ErrorContext(ctx, "unrecognized parser specified: defaulting to libopenapi", attr.SlogDeploymentOpenAPIParser(task.Parser))
+		}
 		res, err = p.doLibOpenAPI(ctx, logger, tx, doc, task)
 	}
 	if err != nil {
@@ -300,6 +299,11 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 
 	description := op.description
 	summary := op.summary
+
+	// Soon we will stop storing summary. Still we want to make sure that we do a best-effort to set a description.
+	if description == "" {
+		description = summary
+	}
 
 	toolDesc := toolDescriptor{
 		xGramFound:          false,

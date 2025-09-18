@@ -413,7 +413,9 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		SiteURL:             os.Getenv("GRAM_SITE_URL"),
 	}
 
-	hostedPageTmpl, err := template.New("hosted_page").Parse(hostedPageTmplData)
+	hostedPageTmpl, err := template.New("hosted_page").Funcs(template.FuncMap{
+		"diff": func(a, b int) int { return a - b },
+	}).Parse(hostedPageTmplData)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted page template").Log(ctx, s.logger)
 	}

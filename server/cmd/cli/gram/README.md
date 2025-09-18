@@ -45,5 +45,5 @@ $ go install github.com/speakeasy-api/gram/server/cmd/cli/gram@latest
 Verify with:
 
 ```bash
-$ go list -m -versions -json github.com/speakeasy-api/server/cmd/cli/gram@latest
+$ go list -m -versions -json github.com/speakeasy-api/gram/server/cmd/cli/gram@latest
 ```

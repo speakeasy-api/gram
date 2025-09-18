@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type ApiKey struct {
@@ -123,6 +124,15 @@ type DeploymentStatus struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
+type DeploymentsFunction struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	AssetID      uuid.UUID
+	Name         string
+	Slug         string
+	Runtime      string
+}
+
 type DeploymentsOpenapiv3Asset struct {
 	ID           uuid.UUID
 	DeploymentID uuid.UUID
@@ -168,6 +178,22 @@ type ExternalOauthServerMetadatum struct {
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
 	Deleted   bool
+}
+
+type FunctionToolDefinition struct {
+	ID           uuid.UUID
+	ToolUrn      urn.Tool
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+	InputSchema  []byte
+	Variables    []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
 }
 
 type HttpSecurity struct {

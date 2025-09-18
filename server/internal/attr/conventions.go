@@ -65,8 +65,12 @@ const (
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
 	DeploymentIDKey                = attribute.Key("gram.deployment.id")
+	DeploymentFunctionsIDKey       = attribute.Key("gram.deployment.functions.id")
+	DeploymentFunctionsNameKey     = attribute.Key("gram.deployment.functions.name")
+	DeploymentFunctionsSlugKey     = attribute.Key("gram.deployment.functions.slug")
 	DeploymentOpenAPIIDKey         = attribute.Key("gram.deployment.openapi.id")
 	DeploymentOpenAPINameKey       = attribute.Key("gram.deployment.openapi.name")
+	DeploymentOpenAPIParserKey     = attribute.Key("gram.deployment.openapi_parser")
 	DeploymentOpenAPISlugKey       = attribute.Key("gram.deployment.openapi.slug")
 	DeploymentStatusKey            = attribute.Key("gram.deployment.status")
 	EnvironmentIDKey               = attribute.Key("gram.environment.id")
@@ -74,6 +78,8 @@ const (
 	EnvVarNameKey                  = attribute.Key("gram.envvar.name")
 	ErrorIDKey                     = attribute.Key("gram.error.id")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
+	FunctionsManifestVersionKey    = attribute.Key("gram.functions.manifest_version")
+	FunctionsToolRuntimeKey        = attribute.Key("gram.functions.tool_runtime")
 	HTTPEncodingStyleKey           = attribute.Key("gram.http.encoding.style")
 	HTTPParamNameKey               = attribute.Key("gram.http.param.name")
 	HTTPParamValueKey              = attribute.Key("gram.http.param.value")
@@ -275,6 +281,25 @@ func SlogDBDeletedRowsCount(v int64) slog.Attr      { return slog.Int64(string(D
 func DeploymentID(v string) attribute.KeyValue { return DeploymentIDKey.String(v) }
 func SlogDeploymentID(v string) slog.Attr      { return slog.String(string(DeploymentIDKey), v) }
 
+func DeploymentFunctionsID(v string) attribute.KeyValue { return DeploymentFunctionsIDKey.String(v) }
+func SlogDeploymentFunctionsID(v string) slog.Attr {
+	return slog.String(string(DeploymentFunctionsIDKey), v)
+}
+
+func DeploymentFunctionsName(v string) attribute.KeyValue {
+	return DeploymentFunctionsNameKey.String(v)
+}
+func SlogDeploymentFunctionsName(v string) slog.Attr {
+	return slog.String(string(DeploymentFunctionsNameKey), v)
+}
+
+func DeploymentFunctionsSlug(v string) attribute.KeyValue {
+	return DeploymentFunctionsSlugKey.String(v)
+}
+func SlogDeploymentFunctionsSlug(v string) slog.Attr {
+	return slog.String(string(DeploymentFunctionsSlugKey), v)
+}
+
 func DeploymentOpenAPIID(v string) attribute.KeyValue { return DeploymentOpenAPIIDKey.String(v) }
 func SlogDeploymentOpenAPIID(v string) slog.Attr {
 	return slog.String(string(DeploymentOpenAPIIDKey), v)
@@ -283,6 +308,13 @@ func SlogDeploymentOpenAPIID(v string) slog.Attr {
 func DeploymentOpenAPIName(v string) attribute.KeyValue { return DeploymentOpenAPINameKey.String(v) }
 func SlogDeploymentOpenAPIName(v string) slog.Attr {
 	return slog.String(string(DeploymentOpenAPINameKey), v)
+}
+
+func DeploymentOpenAPIParser(v string) attribute.KeyValue {
+	return DeploymentOpenAPIParserKey.String(v)
+}
+func SlogDeploymentOpenAPIParser(v string) slog.Attr {
+	return slog.String(string(DeploymentOpenAPIParserKey), v)
 }
 
 func DeploymentOpenAPISlug(v string) attribute.KeyValue { return DeploymentOpenAPISlugKey.String(v) }
@@ -307,6 +339,18 @@ func SlogErrorID(v string) slog.Attr      { return slog.String(string(ErrorIDKey
 
 func FilterExpression(v string) attribute.KeyValue { return FilterExpressionKey.String(v) }
 func SlogFilterExpression(v string) slog.Attr      { return slog.String(string(FilterExpressionKey), v) }
+
+func FunctionsManifestVersion(v string) attribute.KeyValue {
+	return FunctionsManifestVersionKey.String(v)
+}
+func SlogFunctionsManifestVersion(v string) slog.Attr {
+	return slog.String(string(FunctionsManifestVersionKey), v)
+}
+
+func FunctionsToolRuntime(v string) attribute.KeyValue { return FunctionsToolRuntimeKey.String(v) }
+func SlogFunctionsToolRuntime(v string) slog.Attr {
+	return slog.String(string(FunctionsToolRuntimeKey), v)
+}
 
 func HTTPEncodingStyle(v string) attribute.KeyValue { return HTTPEncodingStyleKey.String(v) }
 func SlogHTTPEncodingStyle(v string) slog.Attr      { return slog.String(string(HTTPEncodingStyleKey), v) }
@@ -387,8 +431,8 @@ func SlogOrganizationAccountType(v string) slog.Attr {
 	return slog.String(string(OrganizationAccountTypeKey), v)
 }
 
-func Outcome(v string) attribute.KeyValue { return OutcomeKey.String(v) }
-func SlogOutcome(v string) slog.Attr      { return slog.String(string(OutcomeKey), v) }
+func Outcome[V ~string](v V) attribute.KeyValue { return OutcomeKey.String(string(v)) }
+func SlogOutcome(v string) slog.Attr            { return slog.String(string(OutcomeKey), v) }
 
 func PackageName(v string) attribute.KeyValue { return PackageNameKey.String(v) }
 func SlogPackageName(v string) slog.Attr      { return slog.String(string(PackageNameKey), v) }
