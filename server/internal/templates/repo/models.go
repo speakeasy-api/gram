@@ -11,6 +11,7 @@ import (
 
 type PromptTemplate struct {
 	ID            uuid.UUID
+	ToolUrn       pgtype.Text
 	ProjectID     uuid.UUID
 	HistoryID     uuid.UUID
 	PredecessorID uuid.NullUUID
