@@ -1,31 +1,34 @@
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Type } from "@/components/ui/type";
+import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters } from "@/lib/dates";
 import { cn, getServerURL } from "@/lib/utils";
+import {
+  DeploymentLogEvent,
+  OpenAPIv3DeploymentAsset,
+} from "@gram/client/models/components";
 import {
   useDeploymentLogs,
   useDeploymentLogsSuspense,
   useDeploymentSuspense,
 } from "@gram/client/react-query";
+import { Button, Separator } from "@speakeasy-api/moonshine";
+import {
+  CheckIcon,
+  DotIcon,
+  FileCodeIcon,
+  FileTextIcon,
+  RefreshCcwIcon,
+  WrenchIcon,
+  XIcon,
+} from "lucide-react";
 import { Suspense, useMemo } from "react";
 import { useParams } from "react-router";
 import { ToolsList } from "./ToolsList";
-import { Type } from "@/components/ui/type";
-import { useProject } from "@/contexts/Auth";
-import {
-  DotIcon,
-  FileTextIcon,
-  FileCodeIcon,
-  WrenchIcon,
-  CheckIcon,
-  XIcon,
-} from "lucide-react";
-import { Separator } from "@speakeasy-api/moonshine";
-import {
-  DeploymentLogEvent,
-  OpenAPIv3DeploymentAsset,
-} from "@gram/client/models/components";
+import { useActiveDeployment } from "./useActiveDeployment";
+import { useRedeployDeployment } from "./useRedeployDeployment";
 
 export default function DeploymentPage() {
   const { deploymentId } = useParams();
@@ -70,6 +73,9 @@ function DeploymentLogs(props: { deploymentId: string }) {
     },
   );
 
+  const { data: activeDeployment } = useActiveDeployment();
+  const redeployMutation = useRedeployDeployment();
+
   const humanizedDate = useMemo(() => {
     const isOneDayOld =
       Date.now() - deployment.createdAt.getTime() >= 24 * 60 * 60 * 1000;
@@ -81,17 +87,55 @@ function DeploymentLogs(props: { deploymentId: string }) {
     return dateTimeFormatters.humanize(deployment.createdAt);
   }, [deployment.createdAt]);
 
+  const handleRedeploy = () => {
+    redeployMutation.mutate({
+      request: {
+        redeployRequestBody: {
+          deploymentId: deployment.id,
+        },
+      },
+    });
+  };
+
+  const RedeployButton = () => {
+    const isActiveDeployment = activeDeployment?.id === deployment.id;
+    const { isPending } = redeployMutation;
+
+    let buttonText: string;
+    if (isActiveDeployment) {
+      if (isPending) buttonText = "Retrying Deployment";
+      else buttonText = "Retry Deployment";
+    } else if (deployment.status === "completed") {
+      if (isPending) buttonText = "Rolling Back...";
+      else buttonText = "Roll Back";
+    } else return null;
+
+    return (
+      <Button onClick={handleRedeploy} disabled={isPending}>
+        <Button.LeftIcon>
+          <RefreshCcwIcon
+            size={16}
+            className={cn(isPending && "direction-reverse animate-spin")}
+          />
+        </Button.LeftIcon>
+        <Button.Text>{buttonText}</Button.Text>
+      </Button>
+    );
+  };
+
   return (
     <>
       <div className="grid gap-4">
-        <Heading variant="h1">Deployment Overview</Heading>
+        <div className="flex items-center justify-between">
+          <Heading variant="h1">Deployment Overview</Heading>
+          <RedeployButton />
+        </div>
 
         <div className="text-sm flex items-center gap-3 h-4">
           <span>{deployment.id}</span>
           <Separator orientation="vertical" />
           <div className="flex items-center gap-0.5">
             <HumanizedDeploymentStatus status={deployment.status} />
-            {/* <span>{deployment.status}</span> */}
             <DotIcon className="text-border" />
             {humanizedDate}
           </div>

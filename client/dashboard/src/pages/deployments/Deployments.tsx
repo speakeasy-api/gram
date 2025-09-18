@@ -18,6 +18,8 @@ import { Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
 import { toast } from "sonner";
+import { useRedeployDeployment } from "./useRedeployDeployment";
+import { useActiveDeployment } from "./useActiveDeployment";
 
 export default function DeploymentsPage() {
   return (
@@ -67,32 +69,10 @@ function DeploymentActionsDropdown({
   deployment: DeploymentSummary;
   latest: boolean;
 }) {
-  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
-  const routes = useRoutes();
 
-  const redeployMutation = useRedeployDeploymentMutation({
-    onMutate: ({ request }) => {
-      toast.loading("Redeploying...", {
-        id: request.redeployRequestBody.deploymentId,
-      });
-    },
-    onSuccess: ({ deployment }) => {
-      // Invalidate and refetch deployments list
-      queryClient.invalidateQueries({
-        queryKey: ["@gram/client", "deployments", "list"],
-      });
-      const href = deployment?.id
-        ? routes.deployments.deployment.href(deployment.id)
-        : undefined;
-      toast.success(() => <RedeploySuccessToast href={href} />);
-    },
-    onError: (error) => {
-      console.error("Failed to redeploy:", error);
-      toast.error(`Failed to redeploy. Please try again.`);
-    },
-    onSettled: (_, __, { request }) => {
-      toast.dismiss(request.redeployRequestBody.deploymentId);
+  const redeployMutation = useRedeployDeployment({
+    onSettled() {
       setIsOpen(false);
     },
   });
@@ -146,7 +126,8 @@ function DeploymentActionsDropdown({
 function DeploymentsTable() {
   const { data: res } = useListDeploymentsSuspense();
   const deployments = res.items ?? [];
-  const activeDeployment = deployments.find((d) => d.status === "completed");
+
+  const { data: activeDeployment } = useActiveDeployment();
 
   if (deployments.length === 0) {
     return <DeploymentsEmptyState />;
