@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	slogmulti "github.com/samber/slog-multi"
+	"go.opentelemetry.io/otel/trace"
 	"gopkg.in/yaml.v3"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -102,14 +103,16 @@ type ToolExtractorResult struct {
 
 type ToolExtractor struct {
 	logger       *slog.Logger
+	tracer       trace.Tracer
 	db           *pgxpool.Pool
 	feature      feature.Provider
 	assetStorage assets.BlobStore
 }
 
-func NewToolExtractor(logger *slog.Logger, db *pgxpool.Pool, fp feature.Provider, assetStorage assets.BlobStore) *ToolExtractor {
+func NewToolExtractor(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, fp feature.Provider, assetStorage assets.BlobStore) *ToolExtractor {
 	return &ToolExtractor{
 		logger:       logger,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/openapi"),
 		db:           db,
 		feature:      fp,
 		assetStorage: assetStorage,
@@ -218,12 +221,12 @@ func (p *ToolExtractor) Do(
 	var res *ToolExtractorResult
 	switch task.Parser {
 	case "speakeasy":
-		res, err = p.doSpeakeasy(ctx, logger, tx, doc, task)
+		res, err = p.doSpeakeasy(ctx, logger, p.tracer, tx, doc, task)
 	default:
 		if task.Parser != "libopenapi" {
 			logger.ErrorContext(ctx, "unrecognized parser specified: defaulting to libopenapi", attr.SlogDeploymentOpenAPIParser(task.Parser))
 		}
-		res, err = p.doLibOpenAPI(ctx, logger, tx, doc, task)
+		res, err = p.doLibOpenAPI(ctx, logger, p.tracer, tx, doc, task)
 	}
 	if err != nil {
 		return nil, err
