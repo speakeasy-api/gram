@@ -1,4 +1,4 @@
-minimumReleaseAge: 10080
+minimumReleaseAge: 10080 # 1 week in minutes
 
 packages:
   - client/*
