@@ -1,0 +1,52 @@
+{
+  "version": "0.0.0",
+  "tools": [
+    {
+      "description": "Missing tool name",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The ID of the todo item"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "missing-description",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The ID of the todo item"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "not-valid-json-schema",
+      "description": "Tool with invalid JSON schema",
+      "inputSchema": "should be an object"
+    },
+    {
+      "name": "bad $1 tool Name",
+      "description": "Tool with invalid name",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ]
+}

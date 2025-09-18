@@ -46,6 +46,7 @@ func TestDeploymentsService_Redeploy_BasicCloning(t *testing.T) {
 				Slug:    "initial-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -92,7 +93,7 @@ func TestDeploymentsService_Redeploy_BasicCloning(t *testing.T) {
 	require.Len(t, tools, 5, "expected 5 tools")
 }
 
-func TestDeploymentsService_Redeploy_WithAssets(t *testing.T) {
+func TestDeploymentsService_Redeploy_WithOpenAPIv3(t *testing.T) {
 	t.Parallel()
 
 	assetStorage := assetstest.NewTestBlobStore(t)
@@ -134,6 +135,7 @@ func TestDeploymentsService_Redeploy_WithAssets(t *testing.T) {
 				Slug:    "petstore-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -196,6 +198,7 @@ func TestDeploymentsService_Redeploy_WithPackages(t *testing.T) {
 				Slug:    "package-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -254,6 +257,7 @@ func TestDeploymentsService_Redeploy_WithPackages(t *testing.T) {
 				Slug:    "main-doc",
 			},
 		},
+		Functions: []*gen.AddFunctionsForm{},
 		Packages: []*gen.AddDeploymentPackageForm{
 			{
 				Name:    "test-package",
@@ -375,6 +379,7 @@ func TestDeploymentsService_Redeploy_ComplexDeployment(t *testing.T) {
 				Slug:    "package-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -448,6 +453,7 @@ func TestDeploymentsService_Redeploy_ComplexDeployment(t *testing.T) {
 				Slug:    "petstore-api",
 			},
 		},
+		Functions: []*gen.AddFunctionsForm{},
 		Packages: []*gen.AddDeploymentPackageForm{
 			{
 				Name:    "external-package",

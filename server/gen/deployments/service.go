@@ -62,6 +62,19 @@ type AddDeploymentPackageForm struct {
 	Version *string
 }
 
+type AddFunctionsForm struct {
+	// The ID of the functions file from the assets service.
+	AssetID string
+	// The functions file display name.
+	Name string
+	// A URL-friendly string that identifies the functions file. Usually derived
+	// from the name.
+	Slug types.Slug
+	// The runtime to use when executing functions. Allowed values are: nodejs:22,
+	// python:3.12.
+	Runtime string
+}
+
 type AddOpenAPIv3DeploymentAssetForm struct {
 	// The ID of the uploaded asset.
 	AssetID string
@@ -100,6 +113,7 @@ type CreateDeploymentPayload struct {
 	// commit hash or pull request.
 	ExternalURL     *string
 	Openapiv3Assets []*AddOpenAPIv3DeploymentAssetForm
+	Functions       []*AddFunctionsForm
 	Packages        []*AddDeploymentPackageForm
 }
 
@@ -138,6 +152,10 @@ type DeploymentSummary struct {
 	Openapiv3AssetCount int64
 	// The number of tools in the deployment generated from OpenAPI documents.
 	Openapiv3ToolCount int64
+	// The number of Functions assets.
+	FunctionsAssetCount int64
+	// The number of tools in the deployment generated from Functions.
+	FunctionsToolCount int64
 }
 
 // EvolvePayload is the payload type of the deployments service evolve method.
@@ -152,12 +170,17 @@ type EvolvePayload struct {
 	UpsertOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetForm
 	// The packages to upsert in the new deployment.
 	UpsertPackages []*AddPackageForm
-	// The OpenAPI 3.x documents to exclude from the new deployment when cloning a
-	// previous deployment.
+	// The tool functions to upsert in the new deployment.
+	UpsertFunctions []*AddFunctionsForm
+	// The OpenAPI 3.x documents, identified by slug, to exclude from the new
+	// deployment when cloning a previous deployment.
 	ExcludeOpenapiv3Assets []string
 	// The packages to exclude from the new deployment when cloning a previous
 	// deployment.
 	ExcludePackages []string
+	// The functions, identified by slug, to exclude from the new deployment when
+	// cloning a previous deployment.
+	ExcludeFunctions []string
 }
 
 // EvolveResult is the result type of the deployments service evolve method.
@@ -235,6 +258,11 @@ type GetDeploymentResult struct {
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*types.OpenAPIv3DeploymentAsset
+	// The number of tools in the deployment generated from OpenAPI documents.
+	FunctionsToolCount int64
+	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
+	// documents whose operations will become tool definitions.
+	FunctionsAssets []*types.DeploymentFunctions
 	// The packages that were deployed.
 	Packages []*types.DeploymentPackage
 }

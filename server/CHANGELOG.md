@@ -1,5 +1,23 @@
 # @gram/server
 
+## 0.2.0
+
+### Minor Changes
+
+- 6d8ee87: Add an improved MCP installation page that offers one-click install to several popular clients as well as a more aesthetically pleasing presentation
+- c7864b6: Improved revision of the server install page with simpler ergonomics and more install options
+- 87136d0: Rename deployment fields for asset/tool count to prefix with openapiv3 and make room for new tool types/sources.
+
+### Patch Changes
+
+- ceb108f: Fix flakes in global ordering unit test.
+- ece9cbb: ensure the latest tools in the system reflect from the latest successful deployment
+- db11042: Add tool type field to HTTP tool definitions
+- 33cdfa7: Repairs errant release of install page by actually including assets
+- bc7faae: fix scope oauth variables to security key
+- f5dc8b5: Include org id in tracing spans for polar
+- 61f419f: Add OpenTelemetry tracing around OpenAPI processing
+
 ## 0.1.5
 
 ### Patch Changes

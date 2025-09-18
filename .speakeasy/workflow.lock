@@ -1,4 +1,4 @@
-speakeasyVersion: 1.617.1
+speakeasyVersion: 1.620.0
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
@@ -30,6 +30,7 @@ workflow:
             overlays:
                 - location: overlays/goa.yaml
                 - location: overlays/public-sdk.yaml
+            output: .speakeasy/openapi-public.yaml
             registry:
                 location: registry.speakeasyapi.dev/gram/gram/gram-public-api-description
     targets:

@@ -257,6 +257,7 @@ CREATE TABLE IF NOT EXISTS deployments_packages (
 
 CREATE TABLE IF NOT EXISTS http_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  tool_urn TEXT,
 
   project_id uuid NOT NULL,
   deployment_id uuid NOT NULL,
@@ -726,6 +727,7 @@ WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS prompt_templates (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  tool_urn TEXT,
   project_id uuid NOT NULL,
 
   history_id uuid NOT NULL,

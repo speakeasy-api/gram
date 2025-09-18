@@ -13,9 +13,11 @@ type ToolKind string
 const (
 	ToolKindFunction ToolKind = "function"
 	ToolKindHTTP     ToolKind = "http"
+	ToolKindPrompt   ToolKind = "prompt"
 )
 
 var toolKinds = map[ToolKind]struct{}{
 	ToolKindFunction: {},
 	ToolKindHTTP:     {},
+	ToolKindPrompt:   {},
 }

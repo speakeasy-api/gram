@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/templates/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -104,8 +105,11 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		}
 	}
 
+	toolURN := urn.NewTool(urn.ToolKindPrompt, payload.Kind, string(payload.Name))
+
 	id, err := tr.CreateTemplate(ctx, repo.CreateTemplateParams{
 		ProjectID:   projectID,
+		ToolUrn:     conv.ToPGTextEmpty(toolURN.String()),
 		Name:        string(payload.Name),
 		Prompt:      payload.Prompt,
 		Description: conv.PtrToPGTextEmpty(payload.Description),
@@ -188,9 +192,16 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 		}
 	}
 
+	if payload.Kind != nil && *payload.Kind != current.Kind.String {
+		return nil, oops.E(oops.CodeBadRequest, nil, "kind cannot be changed").Log(ctx, logger)
+	}
+
+	toolURN := urn.NewTool(urn.ToolKindPrompt, current.Kind.String, current.Name)
+
 	newid, err := tr.UpdateTemplate(ctx, repo.UpdateTemplateParams{
 		ProjectID:   uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
 		ID:          uuid.NullUUID{UUID: id, Valid: id != uuid.Nil},
+		ToolUrn:     conv.ToPGTextEmpty(toolURN.String()),
 		Prompt:      conv.PtrToPGTextEmpty(payload.Prompt),
 		Description: conv.PtrToPGTextEmpty(payload.Description),
 		Arguments:   args,
