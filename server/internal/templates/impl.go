@@ -196,7 +196,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 		return nil, oops.E(oops.CodeBadRequest, nil, "kind cannot be changed").Log(ctx, logger)
 	}
 
-	toolURN := urn.NewTool(urn.ToolKindPrompt, *payload.Kind, string(current.Name))
+	toolURN := urn.NewTool(urn.ToolKindPrompt, current.Kind.String, current.Name)
 
 	newid, err := tr.UpdateTemplate(ctx, repo.UpdateTemplateParams{
 		ProjectID:   uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
