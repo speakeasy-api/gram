@@ -398,6 +398,7 @@ INSERT INTO http_tool_definitions (
     project_id
   , deployment_id
   , openapiv3_document_id
+  , tool_urn
   , name
   , untruncated_name
   , openapiv3_operation
@@ -426,6 +427,7 @@ INSERT INTO http_tool_definitions (
     @project_id
   , @deployment_id
   , @openapiv3_document_id
+  , @tool_urn
   , @name
   , @untruncated_name
   , @openapiv3_operation

@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orderedmap"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/openapi/hashing"
 	"github.com/speakeasy-api/openapi/jsonschema/oas3"
 	"github.com/speakeasy-api/openapi/marshaller"
@@ -543,10 +544,13 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 		tags = []string{}
 	}
 
+	toolURN := urn.NewTool(urn.ToolKindHTTP, string(docInfo.Slug), descriptor.name)
+
 	return repo.CreateOpenAPIv3ToolDefinitionParams{
 		ProjectID:           projectID,
 		DeploymentID:        deploymentID,
 		Openapiv3DocumentID: uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
+		ToolUrn:             conv.ToPGTextEmpty(toolURN.String()),
 		Security:            security,
 		Path:                path,
 		HttpMethod:          strings.ToUpper(method),
