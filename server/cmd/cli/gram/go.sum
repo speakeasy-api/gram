@@ -24,8 +24,8 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/russross/blackfriday/v2 v2.1.0 h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf35Ld67mk=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/speakeasy-api/gram/server v0.0.0-20250918181346-155c2e1bd291 h1:oKAbCdSK6+fmEBGJvyIE928E+dYcS3mjpvVUsSBpF/s=
-github.com/speakeasy-api/gram/server v0.0.0-20250918181346-155c2e1bd291/go.mod h1:9sycybmes3tNuFM3+gFhvAkjYx3cpVIAqXNnXaQE3po=
+github.com/speakeasy-api/gram/server v0.0.0-20250918191855-47da0e45ec63 h1:0gGH0QGDZevLQ0GJFGcKwjpNJ7nUorLu4WpbusxQTbs=
+github.com/speakeasy-api/gram/server v0.0.0-20250918191855-47da0e45ec63/go.mod h1:9sycybmes3tNuFM3+gFhvAkjYx3cpVIAqXNnXaQE3po=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/urfave/cli/v2 v2.27.7 h1:bH59vdhbjLv3LAvIu6gd0usJHgoTTPhCFib8qqOwXYU=
