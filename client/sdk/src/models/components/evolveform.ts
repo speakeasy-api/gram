@@ -8,6 +8,12 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AddFunctionsForm,
+  AddFunctionsForm$inboundSchema,
+  AddFunctionsForm$Outbound,
+  AddFunctionsForm$outboundSchema,
+} from "./addfunctionsform.js";
+import {
   AddOpenAPIv3DeploymentAssetForm,
   AddOpenAPIv3DeploymentAssetForm$inboundSchema,
   AddOpenAPIv3DeploymentAssetForm$Outbound,
@@ -26,13 +32,21 @@ export type EvolveForm = {
    */
   deploymentId?: string | undefined;
   /**
-   * The OpenAPI 3.x documents to exclude from the new deployment when cloning a previous deployment.
+   * The functions, identified by slug, to exclude from the new deployment when cloning a previous deployment.
+   */
+  excludeFunctions?: Array<string> | undefined;
+  /**
+   * The OpenAPI 3.x documents, identified by slug, to exclude from the new deployment when cloning a previous deployment.
    */
   excludeOpenapiv3Assets?: Array<string> | undefined;
   /**
    * The packages to exclude from the new deployment when cloning a previous deployment.
    */
   excludePackages?: Array<string> | undefined;
+  /**
+   * The tool functions to upsert in the new deployment.
+   */
+  upsertFunctions?: Array<AddFunctionsForm> | undefined;
   /**
    * The OpenAPI 3.x documents to upsert in the new deployment.
    */
@@ -50,8 +64,10 @@ export const EvolveForm$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   deployment_id: z.string().optional(),
+  exclude_functions: z.array(z.string()).optional(),
   exclude_openapiv3_assets: z.array(z.string()).optional(),
   exclude_packages: z.array(z.string()).optional(),
+  upsert_functions: z.array(AddFunctionsForm$inboundSchema).optional(),
   upsert_openapiv3_assets: z.array(
     AddOpenAPIv3DeploymentAssetForm$inboundSchema,
   ).optional(),
@@ -59,8 +75,10 @@ export const EvolveForm$inboundSchema: z.ZodType<
 }).transform((v) => {
   return remap$(v, {
     "deployment_id": "deploymentId",
+    "exclude_functions": "excludeFunctions",
     "exclude_openapiv3_assets": "excludeOpenapiv3Assets",
     "exclude_packages": "excludePackages",
+    "upsert_functions": "upsertFunctions",
     "upsert_openapiv3_assets": "upsertOpenapiv3Assets",
     "upsert_packages": "upsertPackages",
   });
@@ -69,8 +87,10 @@ export const EvolveForm$inboundSchema: z.ZodType<
 /** @internal */
 export type EvolveForm$Outbound = {
   deployment_id?: string | undefined;
+  exclude_functions?: Array<string> | undefined;
   exclude_openapiv3_assets?: Array<string> | undefined;
   exclude_packages?: Array<string> | undefined;
+  upsert_functions?: Array<AddFunctionsForm$Outbound> | undefined;
   upsert_openapiv3_assets?:
     | Array<AddOpenAPIv3DeploymentAssetForm$Outbound>
     | undefined;
@@ -84,16 +104,20 @@ export const EvolveForm$outboundSchema: z.ZodType<
   EvolveForm
 > = z.object({
   deploymentId: z.string().optional(),
+  excludeFunctions: z.array(z.string()).optional(),
   excludeOpenapiv3Assets: z.array(z.string()).optional(),
   excludePackages: z.array(z.string()).optional(),
+  upsertFunctions: z.array(AddFunctionsForm$outboundSchema).optional(),
   upsertOpenapiv3Assets: z.array(AddOpenAPIv3DeploymentAssetForm$outboundSchema)
     .optional(),
   upsertPackages: z.array(AddPackageForm$outboundSchema).optional(),
 }).transform((v) => {
   return remap$(v, {
     deploymentId: "deployment_id",
+    excludeFunctions: "exclude_functions",
     excludeOpenapiv3Assets: "exclude_openapiv3_assets",
     excludePackages: "exclude_packages",
+    upsertFunctions: "upsert_functions",
     upsertOpenapiv3Assets: "upsert_openapiv3_assets",
     upsertPackages: "upsert_packages",
   });

@@ -14,6 +14,12 @@ import {
   AddDeploymentPackageForm$outboundSchema,
 } from "./adddeploymentpackageform.js";
 import {
+  AddFunctionsForm,
+  AddFunctionsForm$inboundSchema,
+  AddFunctionsForm$Outbound,
+  AddFunctionsForm$outboundSchema,
+} from "./addfunctionsform.js";
+import {
   AddOpenAPIv3DeploymentAssetForm,
   AddOpenAPIv3DeploymentAssetForm$inboundSchema,
   AddOpenAPIv3DeploymentAssetForm$Outbound,
@@ -29,6 +35,7 @@ export type CreateDeploymentRequestBody = {
    * The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
    */
   externalUrl?: string | undefined;
+  functions?: Array<AddFunctionsForm> | undefined;
   /**
    * The github pull request that resulted in the deployment.
    */
@@ -53,6 +60,7 @@ export const CreateDeploymentRequestBody$inboundSchema: z.ZodType<
 > = z.object({
   external_id: z.string().optional(),
   external_url: z.string().optional(),
+  functions: z.array(AddFunctionsForm$inboundSchema).optional(),
   github_pr: z.string().optional(),
   github_repo: z.string().optional(),
   github_sha: z.string().optional(),
@@ -74,6 +82,7 @@ export const CreateDeploymentRequestBody$inboundSchema: z.ZodType<
 export type CreateDeploymentRequestBody$Outbound = {
   external_id?: string | undefined;
   external_url?: string | undefined;
+  functions?: Array<AddFunctionsForm$Outbound> | undefined;
   github_pr?: string | undefined;
   github_repo?: string | undefined;
   github_sha?: string | undefined;
@@ -91,6 +100,7 @@ export const CreateDeploymentRequestBody$outboundSchema: z.ZodType<
 > = z.object({
   externalId: z.string().optional(),
   externalUrl: z.string().optional(),
+  functions: z.array(AddFunctionsForm$outboundSchema).optional(),
   githubPr: z.string().optional(),
   githubRepo: z.string().optional(),
   githubSha: z.string().optional(),

@@ -1,18 +1,18 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: bc3cc53afb4ba4de1bd55315d1d86cb6
+  docChecksum: 60f7bf8366967f5c922819630bb17c1c
   docVersion: 0.0.1
-  speakeasyVersion: 1.617.1
-  generationVersion: 2.701.8
-  releaseVersion: 0.12.64
-  configChecksum: 33176e09135108331acfec6b6857bde6
+  speakeasyVersion: 1.620.0
+  generationVersion: 2.706.1
+  releaseVersion: 0.12.65
+  configChecksum: a69153550c52412f2150c76fdaf4352a
 features:
   typescript:
     additionalDependencies: 0.1.0
     core: 3.21.22
     defaultEnabledRetries: 0.1.0
-    devContainers: 2.90.0
+    devContainers: 2.90.1
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
@@ -38,6 +38,7 @@ generatedFiles:
   - docs/lib/utils/retryconfig.md
   - docs/models/components/adddeploymentpackageform.md
   - docs/models/components/addexternaloauthserverrequestbody.md
+  - docs/models/components/addfunctionsform.md
   - docs/models/components/addopenapiv3deploymentassetform.md
   - docs/models/components/addpackageform.md
   - docs/models/components/asset.md
@@ -64,6 +65,7 @@ generatedFiles:
   - docs/models/components/customdomain.md
   - docs/models/components/deleteglobaltoolvariationresult.md
   - docs/models/components/deployment.md
+  - docs/models/components/deploymentfunctions.md
   - docs/models/components/deploymentlogevent.md
   - docs/models/components/deploymentpackage.md
   - docs/models/components/deploymentsummary.md
@@ -478,6 +480,7 @@ generatedFiles:
   - src/lib/url.ts
   - src/models/components/adddeploymentpackageform.ts
   - src/models/components/addexternaloauthserverrequestbody.ts
+  - src/models/components/addfunctionsform.ts
   - src/models/components/addopenapiv3deploymentassetform.ts
   - src/models/components/addpackageform.ts
   - src/models/components/asset.ts
@@ -501,6 +504,7 @@ generatedFiles:
   - src/models/components/customdomain.ts
   - src/models/components/deleteglobaltoolvariationresult.ts
   - src/models/components/deployment.ts
+  - src/models/components/deploymentfunctions.ts
   - src/models/components/deploymentlogevent.ts
   - src/models/components/deploymentpackage.ts
   - src/models/components/deploymentsummary.ts
@@ -927,7 +931,7 @@ examples:
         application/json: {"external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161"}
       responses:
         "200":
-          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2023-01-07T04:35:31.471Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 5649, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2023-01-07T04:35:31.471Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 5649, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 5649, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -938,7 +942,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-12-06T08:41:21.182Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 976608, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-12-06T08:41:21.182Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 976608, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [{"asset_id": "<id>", "id": "<id>", "name": "<value>", "slug": "<value>"}], "openapiv3_tool_count": 976608, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -950,7 +954,7 @@ examples:
           id: "<id>"
       responses:
         "200":
-          application/json: {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-09-04T09:09:38.559Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 891772, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}
+          application/json: {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-09-04T09:09:38.559Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 891772, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 891772, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -959,7 +963,7 @@ examples:
     speakeasy-default-get-latest-deployment:
       responses:
         "200":
-          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-09-22T00:37:56.766Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 907871, "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2025-09-22T00:37:56.766Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 907871, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 907871, "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -968,7 +972,7 @@ examples:
     speakeasy-default-list-deployments:
       responses:
         "200":
-          application/json: {"items": [{"created_at": "2023-05-14T18:10:51.662Z", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "openapiv3_asset_count": 522593, "openapiv3_tool_count": 585740, "status": "<value>", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
+          application/json: {"items": [{"created_at": "2023-05-14T18:10:51.662Z", "functions_asset_count": 522593, "functions_tool_count": 585740, "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "openapiv3_asset_count": 522593, "openapiv3_tool_count": 585740, "status": "<value>", "user_id": "<id>"}], "next_cursor": "01jp3f054qc02gbcmpp0qmyzed"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -1393,7 +1397,7 @@ examples:
         application/json: {"deployment_id": "<id>"}
       responses:
         "200":
-          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2024-06-03T17:13:21.766Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 474195, "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2024-06-03T17:13:21.766Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 474195, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 474195, "organization_id": "<id>", "packages": [{"id": "<id>", "name": "<value>", "version": "<value>"}], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
