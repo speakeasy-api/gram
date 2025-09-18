@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -594,15 +595,8 @@ func TestCreateDeployment_WithFunctions_InvalidRuntime(t *testing.T) {
 		ExternalURL:      nil,
 	})
 
-	require.NoError(t, err, "create deployment should succeed but processing should fail")
-	require.NotEqual(t, uuid.Nil.String(), dep.Deployment.ID, "deployment ID is nil")
-	require.Equal(t, "failed", dep.Deployment.Status, "deployment status should be failed due to invalid runtime")
-
-	// Verify that NO function tools were created due to invalid runtime
-	repo := testrepo.New(ti.conn)
-	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
-	require.NoError(t, err, "list deployment function tools")
-	require.Empty(t, functionTools, "expected zero function tools due to invalid runtime")
+	require.ErrorIs(t, err, deployments.ErrUnsupported)
+	require.Nil(t, dep, "evolve result must be nil")
 }
 
 func TestCreateDeployment_WithFunctions_NonExistentAsset(t *testing.T) {
