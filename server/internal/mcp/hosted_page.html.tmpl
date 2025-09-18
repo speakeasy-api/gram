@@ -90,19 +90,18 @@
     }
 
     .main {
-      padding: 6rem 13rem;
+      padding: 6rem 1rem;
     }
 
-
-    @media (max-width: 768px) {
+    @media (min-width: 768px) {
       .main {
-        padding: 6rem 1rem;
+        padding: 6rem 6rem;
       }
     }
 
-    @media (max-width: 1080px) {
+    @media (min-width: 1024px) {
       .main {
-        padding: 6rem 6rem;
+        padding: 6rem 13rem;
       }
     }
 
@@ -269,6 +268,7 @@
     .code-container {
       position: relative;
       cursor: pointer;
+      overflow: auto;
     }
     
     .code-container code {
@@ -920,7 +920,7 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
     </svg>
     <script
       type="module"
-      src="{{ .SiteURL }}/external/hosted-install-page-40a750b7.js"
+      src="{{ .SiteURL }}/external/hosted-install-page-8b2e430d.js"
     ></script>
   </body>
 </html>
