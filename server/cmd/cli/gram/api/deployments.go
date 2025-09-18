@@ -48,6 +48,7 @@ func (c *DeploymentsClient) CreateDeployment(
 		ProjectSlugInput: &projectSlug,
 		IdempotencyKey:   dc.GetIdempotencyKey(),
 		Openapiv3Assets:  dc.GetOpenAPIv3Assets(),
+		Functions:        []*deployments.AddFunctionsForm{},
 		SessionToken:     nil,
 		GithubRepo:       nil,
 		GithubPr:         nil,
