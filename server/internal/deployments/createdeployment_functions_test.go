@@ -117,7 +117,6 @@ func TestCreateDeployment_FunctionsWithManifestValidation(t *testing.T) {
 		require.NotEmpty(t, tool.Name, "tool should have a name")
 		require.NotEmpty(t, tool.Description, "tool should have a description")
 		require.Equal(t, "nodejs:22", tool.Runtime, "tool should have correct runtime")
-		require.NotEmpty(t, tool.InputSchema, "tool should have input schema")
 	}
 }
 

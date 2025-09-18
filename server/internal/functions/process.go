@@ -42,6 +42,22 @@ var pythonEntrypoints = map[string]struct{}{
 	"functions.py": {},
 }
 
+type runtimes map[string]struct{}
+
+func (r runtimes) String() string {
+	return strings.Join(slices.Sorted(maps.Keys(supportedRuntimes)), ", ")
+}
+
+var supportedRuntimes = runtimes{
+	"nodejs:22":   {},
+	"python:3.12": {},
+}
+
+func IsSupportedRuntime(runtime string) bool {
+	_, ok := supportedRuntimes[runtime]
+	return ok
+}
+
 type ProcessError struct {
 	reason string
 	err    error
@@ -147,17 +163,12 @@ func (p *ToolExtractor) Do(
 		}
 	}()
 
-	rc, size, err := p.assetStorage.ReadAt(ctx, assetURL)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "%s: error fetching functions zip file", slug).Log(ctx, logger)
-	}
-	defer o11y.LogDefer(ctx, logger, func() error {
-		return rc.Close()
-	})
-
-	rdr, err := zip.NewReader(rc, size)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "%s: error opening functions zip file", slug).Log(ctx, logger)
+	if !IsSupportedRuntime(attachement.Runtime) {
+		return nil, oops.E(
+			oops.CodeBadRequest,
+			nil,
+			"%s: unsupported functions runtime: %s (allowed: %s)", slug, attachement.Runtime, supportedRuntimes,
+		).Log(ctx, logger, attrError)
 	}
 
 	var validEntrypoint map[string]struct{}
@@ -170,6 +181,19 @@ func (p *ToolExtractor) Do(
 		return nil, oops.E(oops.CodeBadRequest, nil, "%s: unrecognized functions runtime", slug).Log(ctx, logger)
 	}
 	entrypointKeys := slices.Sorted(maps.Keys(validEntrypoint))
+
+	rc, size, err := p.assetStorage.ReadAt(ctx, assetURL)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "%s: error fetching functions zip file", slug).Log(ctx, logger)
+	}
+	defer o11y.LogDefer(ctx, logger, func() error {
+		return rc.Close()
+	})
+
+	rdr, err := zip.NewReader(rc, size)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "%s: error opening functions zip file", slug).Log(ctx, logger)
+	}
 
 	foundEntrypoint := false
 	var manifestFile *zip.File
