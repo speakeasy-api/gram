@@ -6,7 +6,7 @@ import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useGroupedHttpTools } from "@/lib/toolNames";
 import { HTTPToolDefinition } from "@gram/client/models/components";
-import { useListToolsSuspense } from "@gram/client/react-query/listTools.js";
+import { useListTools } from "@gram/client/react-query/listTools.js";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
 
@@ -70,7 +70,7 @@ const columns: Column<Tool>[] = [
 ];
 
 export function ToolsList(props: { deploymentId?: string }) {
-  const { data: tools, isLoading: isLoadingTools } = useListToolsSuspense({
+  const { data: tools, isLoading: isLoadingTools } = useListTools({
     deploymentId: props.deploymentId,
   });
   const [search, setSearch] = useState("");
@@ -78,7 +78,7 @@ export function ToolsList(props: { deploymentId?: string }) {
   const groupedTools = useGroupedHttpTools(tools?.tools ?? []);
 
   const tagFilterOptions = groupedTools.flatMap((group) =>
-    group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`))
+    group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`)),
   );
   const uniqueTags = [...new Set(tagFilterOptions)];
   const tagFilterItems = uniqueTags.map((tag) => ({
