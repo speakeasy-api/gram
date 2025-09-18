@@ -1,5 +1,4 @@
 import { Page } from "@/components/page-layout";
-import { Badge, Button } from "@speakeasy-api/moonshine";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,18 +7,19 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Heading } from "@/components/ui/heading";
 import { useRoutes } from "@/routes";
+import { useListDeploymentsSuspense } from "@gram/client/react-query";
 import {
-  useListDeploymentsSuspense,
-  useRedeployDeploymentMutation,
-} from "@gram/client/react-query";
-import { Icon, Table, TableProps } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
+  Badge,
+  Button,
+  Icon,
+  Table,
+  TableProps,
+} from "@speakeasy-api/moonshine";
 import { Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";
-import { toast } from "sonner";
-import { useRedeployDeployment } from "./useRedeployDeployment";
 import { useActiveDeployment } from "./useActiveDeployment";
+import { useRedeployDeployment } from "./useRedeployDeployment";
 
 export default function DeploymentsPage() {
   return (
@@ -46,20 +46,6 @@ type DeploymentSummary = {
   createdAt: Date;
   openapiv3AssetCount: number;
   openapiv3ToolCount: number;
-};
-
-const RedeploySuccessToast = ({ href }: { href: string | undefined }) => {
-  if (!href) return <p>Successfully redeployed!</p>;
-
-  return (
-    <p>
-      Successfully redeployed!{" "}
-      <a href={href} className="underline">
-        View deployment
-      </a>
-      .
-    </p>
-  );
 };
 
 function DeploymentActionsDropdown({

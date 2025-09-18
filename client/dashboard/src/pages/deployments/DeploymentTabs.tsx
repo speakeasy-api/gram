@@ -1,14 +1,13 @@
+import { MiniCard } from "@/components/ui/card-mini";
 import { Heading } from "@/components/ui/heading";
-import { Type } from "@/components/ui/type";
 import { cn, getServerURL } from "@/lib/utils";
 import {
   useDeploymentLogsSuspense,
   useDeploymentSuspense,
 } from "@gram/client/react-query";
-import { DownloadIcon, FileCodeIcon, FileTextIcon } from "lucide-react";
+import { FileCodeIcon } from "lucide-react";
 import { useParams } from "react-router";
 import { ToolsList } from "./ToolsList";
-import { MiniCard } from "@/components/ui/card-mini";
 
 export const LogsTabContents = () => {
   const { deploymentId } = useParams();
