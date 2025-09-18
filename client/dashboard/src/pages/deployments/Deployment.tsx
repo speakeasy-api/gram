@@ -1,32 +1,29 @@
 import { Page } from "@/components/page-layout";
 import { Heading } from "@/components/ui/heading";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Type } from "@/components/ui/type";
-import { useProject } from "@/contexts/Auth";
 import { dateTimeFormatters } from "@/lib/dates";
-import { cn, getServerURL } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import {
-  DeploymentLogEvent,
-  OpenAPIv3DeploymentAsset,
-} from "@gram/client/models/components";
-import {
+  useDeployment,
   useDeploymentLogs,
-  useDeploymentLogsSuspense,
   useDeploymentSuspense,
 } from "@gram/client/react-query";
-import { Button, Separator } from "@speakeasy-api/moonshine";
+import { Button, Separator, Skeleton } from "@speakeasy-api/moonshine";
 import {
   CheckIcon,
   DotIcon,
   FileCodeIcon,
-  FileTextIcon,
   RefreshCcwIcon,
   WrenchIcon,
   XIcon,
 } from "lucide-react";
-import { Suspense, useMemo } from "react";
+import { memo, Suspense, useState } from "react";
 import { useParams } from "react-router";
-import { ToolsList } from "./ToolsList";
+import {
+  AssetsTabContents,
+  LogsTabContents,
+  ToolsTabContents,
+} from "./DeploymentTabs";
 import { useActiveDeployment } from "./useActiveDeployment";
 import { useRedeployDeployment } from "./useRedeployDeployment";
 
@@ -52,53 +49,80 @@ export default function DeploymentPage() {
 
 function DeploymentLogs(props: { deploymentId: string }) {
   const { deploymentId } = props;
-  const project = useProject();
-  const { data: deployment } = useDeploymentSuspense(
-    { id: deploymentId },
-    undefined,
-    {
-      staleTime: Infinity,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-    },
-  );
+  const [selectedTab, setSelectedTab] = useState<string>("logs");
 
-  const { data: deploymentLogs } = useDeploymentLogsSuspense(
-    { deploymentId },
-    undefined,
-    {
-      staleTime: Infinity,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-    },
-  );
+  return (
+    <div className="grid gap-6">
+      <HeadingSection />
+      <Suspense
+        fallback={
+          <Skeleton>
+            <div className="h-4 w-1/3" />
+          </Skeleton>
+        }
+      >
+        <StatsSection
+          onClickTools={() => setSelectedTab("tools")}
+          onClickAssets={() => setSelectedTab("assets")}
+        />
+      </Suspense>
 
+      <Tabs value={selectedTab} onValueChange={setSelectedTab}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="logs">Logs</TabsTrigger>
+          <TabsTrigger value="assets">Assets</TabsTrigger>
+          <TabsTrigger value="tools">Tools</TabsTrigger>
+        </TabsList>
+        <TabsContent value="logs">
+          <Suspense fallback={<div>Loading logs...</div>}>
+            <LogsTabContents />
+          </Suspense>
+        </TabsContent>
+        <TabsContent value="assets">
+          <Suspense fallback={<div>Loading assets...</div>}>
+            <AssetsTabContents />
+          </Suspense>
+        </TabsContent>
+        <TabsContent value="tools">
+          <ToolsTabContents deploymentId={deploymentId} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+const HeadingSection = () => {
+  const { deploymentId } = useParams();
+  const { data: deployment } = useDeployment({ id: deploymentId! }, undefined, {
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
   const { data: activeDeployment } = useActiveDeployment();
   const redeployMutation = useRedeployDeployment();
-
-  const humanizedDate = useMemo(() => {
-    const isOneDayOld =
-      Date.now() - deployment.createdAt.getTime() >= 24 * 60 * 60 * 1000;
-
-    if (isOneDayOld) {
-      return dateTimeFormatters.sameYear.format(deployment.createdAt);
-    }
-
-    return dateTimeFormatters.humanize(deployment.createdAt);
-  }, [deployment.createdAt]);
 
   const handleRedeploy = () => {
     redeployMutation.mutate({
       request: {
         redeployRequestBody: {
-          deploymentId: deployment.id,
+          deploymentId: deploymentId!,
         },
       },
     });
   };
 
   const RedeployButton = () => {
-    const isActiveDeployment = activeDeployment?.id === deployment.id;
+    if (!deployment)
+      return (
+        <Button onClick={handleRedeploy} disabled>
+          <Button.LeftIcon>
+            <RefreshCcwIcon size={16} />
+          </Button.LeftIcon>
+          <Button.Text>Roll Back</Button.Text>
+        </Button>
+      );
+
+    const isActiveDeployment = activeDeployment?.id === deploymentId!;
     const { isPending } = redeployMutation;
 
     let buttonText: string;
@@ -124,136 +148,75 @@ function DeploymentLogs(props: { deploymentId: string }) {
   };
 
   return (
-    <>
-      <div className="grid gap-4">
-        <div className="flex items-center justify-between">
-          <Heading variant="h1">Deployment Overview</Heading>
-          <RedeployButton />
-        </div>
-
-        <div className="text-sm flex items-center gap-3 h-4">
-          <span>{deployment.id}</span>
-          <Separator orientation="vertical" />
-          <div className="flex items-center gap-0.5">
-            <HumanizedDeploymentStatus status={deployment.status} />
-            <DotIcon className="text-border" />
-            {humanizedDate}
-          </div>
-          <Separator orientation="vertical" />
-          <span className="flex items-center gap-1">
-            <FileCodeIcon size={16} />
-            {deployment.openapiv3Assets.length} Assets
-          </span>
-          <Separator orientation="vertical" />
-          <span className="flex items-center gap-1">
-            <WrenchIcon size={16} />
-            {deployment.openapiv3ToolCount} Tools
-          </span>
-        </div>
-      </div>
-
-      <Tabs defaultValue="logs">
-        <TabsList className="mb-4">
-          <TabsTrigger value="logs">Logs</TabsTrigger>
-          <TabsTrigger value="assets">Assets</TabsTrigger>
-          <TabsTrigger value="tools">Tools</TabsTrigger>
-        </TabsList>
-        <TabsContent value="logs">
-          <LogsTabContents events={deploymentLogs.events} />
-        </TabsContent>
-        <TabsContent value="assets">
-          <AssetsTabContents
-            projectId={project.id}
-            assets={deployment.openapiv3Assets}
-          />
-        </TabsContent>
-        <TabsContent value="tools">
-          <ToolsTabContents deploymentId={deploymentId} />
-        </TabsContent>
-      </Tabs>
-    </>
+    <div className="flex items-center justify-between">
+      <Heading variant="h1">Deployment Overview</Heading>
+      <RedeployButton />
+    </div>
   );
+};
+
+type HeaderSectionStatsProps = {
+  onClickAssets?: () => void;
+  onClickTools?: () => void;
+};
+
+const StatsSection = ({
+  onClickAssets,
+  onClickTools,
+}: HeaderSectionStatsProps) => {
+  const { deploymentId } = useParams();
+  const { data: deployment } = useDeploymentSuspense(
+    { id: deploymentId! },
+    undefined,
+    {
+      staleTime: Infinity,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
+    },
+  );
+
+  const humanizedDate = humanizeDeploymentDate(deployment.createdAt);
+
+  return (
+    <div className="text-sm flex items-center gap-3 h-4">
+      <span>{deployment.id}</span>
+      <Separator orientation="vertical" />
+      <div className="flex items-center gap-0.5">
+        <HumanizedDeploymentStatus status={deployment.status} />
+        <DotIcon className="text-border" />
+        {humanizedDate}
+      </div>
+      <Separator orientation="vertical" />
+      <button
+        className="flex items-center gap-1"
+        onClick={() => onClickAssets?.()}
+      >
+        <FileCodeIcon size={16} />
+        {deployment.openapiv3Assets.length} Assets
+      </button>
+      <Separator orientation="vertical" />
+      <button
+        className="flex items-center gap-1"
+        onClick={() => onClickTools?.()}
+      >
+        <WrenchIcon size={16} />
+        {deployment.openapiv3ToolCount} Tools
+      </button>
+    </div>
+  );
+};
+
+function humanizeDeploymentDate(date: Date) {
+  const isOneDayOld = Date.now() - date.getTime() >= 24 * 60 * 60 * 1000;
+
+  if (isOneDayOld) {
+    return dateTimeFormatters.sameYear.format(date);
+  }
+
+  return dateTimeFormatters.humanize(date);
 }
 
-const LogsTabContents = ({ events }: { events: DeploymentLogEvent[] }) => {
-  return (
-    <>
-      <Heading variant="h2" className="mb-4">
-        Logs
-      </Heading>
-      <ol className="font-mono w-full overflow-auto bg-muted p-4 rounded space-y-1">
-        {events.map((event, index) => {
-          return (
-            <li
-              id={`event-${event.id}`}
-              key={event.id}
-              className={cn(
-                "whitespace-nowrap grid grid-cols-[max-content_1fr] gap-2 hover:not-target:bg-primary/10 target:bg-primary/30",
-                event.event.includes("error") ? "text-destructive" : "",
-              )}
-            >
-              <a href={`#event-${event.id}`} className="text-muted-foreground">
-                {index + 1}.
-              </a>
-              <pre>{event.message}</pre>
-            </li>
-          );
-        })}
-      </ol>
-    </>
-  );
-};
-
-const AssetsTabContents = ({
-  projectId,
-  assets,
-}: {
-  projectId: string;
-  assets: OpenAPIv3DeploymentAsset[];
-}) => {
-  return (
-    <>
-      <Heading variant="h2" className="mb-4">
-        OpenAPI Documents
-      </Heading>
-      <ul className="flex gap-2 flex-wrap">
-        {assets.map((asset) => {
-          const downloadURL = new URL(
-            "/rpc/assets.serveOpenAPIv3",
-            getServerURL(),
-          );
-          downloadURL.searchParams.set("id", asset.assetId);
-          downloadURL.searchParams.set("project_id", projectId);
-
-          return (
-            <li
-              key={asset.id}
-              className="text-xl flex flex-nowrap gap-1 items-center bg-muted py-1 px-2 rounded-md"
-            >
-              <FileTextIcon size={16} className="text-muted-foreground" />
-              <a href={`${downloadURL}`} download>
-                <Type>{asset.name}</Type>
-              </a>
-            </li>
-          );
-        })}
-      </ul>
-    </>
-  );
-};
-
-const ToolsTabContents = ({ deploymentId }: { deploymentId: string }) => {
-  return (
-    <>
-      <Heading variant="h2" className="mb-4">
-        Tools
-      </Heading>
-      <ToolsList deploymentId={deploymentId} />
-    </>
-  );
-};
-
-const HumanizedDeploymentStatus = (props: { status: string }) => {
+const HumanizedDeploymentStatus = memo((props: { status: string }) => {
   if (props.status === "completed") {
     return (
       <div className="flex items-center">
@@ -273,7 +236,7 @@ const HumanizedDeploymentStatus = (props: { status: string }) => {
   }
 
   return <span className="capitalize">{props.status}</span>;
-};
+});
 
 export function useDeploymentLogsSummary(deploymentId: string | undefined) {
   const { data: logs } = useDeploymentLogs(

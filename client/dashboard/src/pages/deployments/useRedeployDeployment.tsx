@@ -7,6 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useRoutes } from "@/routes.js";
 import { MutationHookOptions } from "@gram/client/react-query";
+import { useParams } from "react-router";
 
 /**
  * A wrapper around the useRedeployDeploymentMutation hook that adds UI

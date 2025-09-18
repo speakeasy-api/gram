@@ -1,15 +1,12 @@
-import {
-  useDeploymentSuspense,
-  useListDeploymentsSuspense,
-} from "@gram/client/react-query";
+import { useListDeployments } from "@gram/client/react-query";
 import { useMemo } from "react";
 
 export const useActiveDeployment = () => {
-  const { data, ...rest } = useListDeploymentsSuspense({}, {});
+  const { data, ...rest } = useListDeployments({}, {});
 
   const activeDeployment = useMemo(() => {
     return data?.items.find((item) => item.status === "completed");
-  }, [data.items]);
+  }, [data?.items]);
 
   return {
     data: activeDeployment,
