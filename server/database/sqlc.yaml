@@ -24,6 +24,14 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Tool
+      - column: http_tool_definitions.tool_urn
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Tool
+      - column: prompt_templates.tool_urn
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Tool
 
 sql:
   - schema: schema.sql
