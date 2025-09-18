@@ -24,13 +24,13 @@ export const useRedeployDeployment = (
 
   const redeployMutation = useRedeployDeploymentMutation({
     ...options,
-    onMutate: (vars) => {
+    onMutate: (vars, ctx) => {
       toast.loading("Redeploying...", {
         id: vars.request.redeployRequestBody.deploymentId,
       });
-      options?.onMutate?.(vars);
+      options?.onMutate?.(vars, ctx);
     },
-    onSuccess: (data, vars, ctx) => {
+    onSuccess: (data, vars, onMutateResult, ctx) => {
       // Invalidate and refetch deployments list
       queryClient.invalidateQueries({
         queryKey: ["@gram/client", "deployments", "list"],
@@ -39,16 +39,16 @@ export const useRedeployDeployment = (
         ? routes.deployments.deployment.href(data.deployment.id)
         : undefined;
       toast.success(() => <RedeploySuccessToast href={href} />);
-      options?.onSuccess?.(data, vars, ctx);
+      options?.onSuccess?.(data, vars, onMutateResult, ctx);
     },
-    onError: (err, vars, ctx) => {
+    onError: (err, vars, onMutateResult, ctx) => {
       console.error("Failed to redeploy:", err);
       toast.error(`Failed to redeploy. Please try again.`);
-      options?.onError?.(err, vars, ctx);
+      options?.onError?.(err, vars, onMutateResult, ctx);
     },
-    onSettled: (data, err, vars, ctx) => {
+    onSettled: (data, err, vars, onMutateResult, ctx) => {
       toast.dismiss(vars.request.redeployRequestBody.deploymentId);
-      options?.onSettled?.(data, err, vars, ctx);
+      options?.onSettled?.(data, err, vars, onMutateResult, ctx);
     },
   });
 
