@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -56,6 +57,20 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 
 type dbClientOptions struct {
 	enableUnsafeLogging bool
+}
+
+func newClickhouseClient(ctx context.Context, logger *slog.Logger, connstring string) (clickhouse.Conn, error) {
+	conn, err := clickhouse.Open(&clickhouse.Options{
+		Auth: clickhouse.Auth{
+			Database: "gram_metrics",
+			Username: "gram",
+			Password: "gram",
+		},
+		Addr:     []string{connstring},
+		Protocol: clickhouse.HTTP,
+	})
+
+	return conn, err
 }
 
 func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, connstring string, opts dbClientOptions) (*pgxpool.Pool, error) {

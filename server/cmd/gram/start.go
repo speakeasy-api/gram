@@ -302,6 +302,12 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_CONFIG_FILE"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "clickhouse-url",
+			Usage:    "Clickhouse URL",
+			Required: false,
+			EnvVars:  []string{"GRAM_CLICKHOUSE_URL"},
+		},
 	}
 
 	return &cli.Command{
@@ -334,6 +340,14 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			clickhouse, err := newClickhouseClient(ctx, logger, c.String("clickhouse-url"))
+			// Ping the clickhouse server to ensure connectivity
+			if err := clickhouse.Ping(ctx); err != nil {
+				logger.ErrorContext(ctx, "failed to ping clickhouse", attr.SlogError(err))
+				return fmt.Errorf("failed to ping clickhouse: %w", err)
+			}
+			defer clickhouse.Close()
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
