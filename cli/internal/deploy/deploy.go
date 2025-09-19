@@ -5,26 +5,18 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"sync"
 
-	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/cli/internal/api"
 	"github.com/speakeasy-api/gram/cli/internal/deplconfig"
 	"github.com/speakeasy-api/gram/cli/internal/env"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 )
 
-const (
-	logKeyType     = "type"
-	logKeyLocation = "location"
-)
-
 type DeploymentRequest struct {
-	config          *deplconfig.DeploymentConfig
-	assets          []*deployments.AddOpenAPIv3DeploymentAssetForm
-	project         string
-	idempotencyKey  string
-	idempotencyOnce sync.Once
+	config         *deplconfig.DeploymentConfig
+	assets         []*deployments.AddOpenAPIv3DeploymentAssetForm
+	project        string
+	idempotencyKey string
 }
 
 func (dr *DeploymentRequest) GetApiKey() string {
@@ -37,9 +29,6 @@ func (dr *DeploymentRequest) GetProjectSlug() string {
 
 // GetIdempotencyKey returns a unique key to identify a deployment request.
 func (dr *DeploymentRequest) GetIdempotencyKey() string {
-	dr.idempotencyOnce.Do(func() {
-		dr.idempotencyKey = uuid.New().String()
-	})
 	return dr.idempotencyKey
 }
 
@@ -48,8 +37,9 @@ func (dr *DeploymentRequest) GetOpenAPIv3Assets() []*deployments.AddOpenAPIv3Dep
 }
 
 type CreateDeploymentRequest struct {
-	Config  *deplconfig.DeploymentConfig
-	Project string
+	Config         *deplconfig.DeploymentConfig
+	Project        string
+	IdempotencyKey string
 }
 
 // CreateDeployment creates a remote deployment from the incoming sources.
@@ -65,9 +55,10 @@ func CreateDeployment(
 
 	client := api.NewDeploymentsClient()
 	deploymentRequest := &DeploymentRequest{
-		assets:  assets,
-		config:  req.Config,
-		project: req.Project,
+		assets:         assets,
+		config:         req.Config,
+		project:        req.Project,
+		idempotencyKey: req.IdempotencyKey,
 	}
 
 	result, err := client.CreateDeployment(ctx, deploymentRequest)
@@ -79,8 +70,9 @@ func CreateDeployment(
 }
 
 type CreateDeploymentFromFileRequest struct {
-	FilePath string
-	Project  string
+	FilePath       string
+	Project        string
+	IdempotencyKey string
 }
 
 func CreateDeploymentFromFile(
@@ -94,8 +86,9 @@ func CreateDeploymentFromFile(
 	}
 
 	createReq := &CreateDeploymentRequest{
-		Config:  config,
-		Project: req.Project,
+		Config:         config,
+		Project:        req.Project,
+		IdempotencyKey: req.IdempotencyKey,
 	}
 
 	return CreateDeployment(ctx, logger, createReq)

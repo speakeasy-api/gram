@@ -58,7 +58,7 @@ func createAssetsForDeployment(
 	for _, source := range sources {
 		if !isSupportedSourceType(source) {
 			msg := "skipping unsupported source type"
-			logger.WarnContext(ctx, msg, logKeyType, source.Type, logKeyLocation, source.Location)
+			logger.WarnContext(ctx, msg, slog.String("type", string(source.Type)), slog.String("location", source.Location))
 			continue
 		}
 

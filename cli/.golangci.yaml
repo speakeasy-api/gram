@@ -78,15 +78,24 @@ linters:
         - '^github.com/urfave/cli/v2\.App$'
         - '^github.com/urfave/cli/v2\.Command$'
         - '^github.com/urfave/cli/v2\..*Flag$'
-
+        - '^github.com/charmbracelet/log\.Options$'
+    exhaustive:
+      check:
+        - switch
+        - map
+      default-signifies-exhaustive: true
+    errcheck:
+      exclude-functions:
+        - "github.com/speakeasy-api/gram/server/internal/o11y.LogDefer"
+        - "github.com/speakeasy-api/gram/server/internal/o11y.NoLogDefer"
 
     sloglint:
       no-mixed-args: true
       attr-only: true
       no-global: all
       context: all
-      no-raw-keys: true
+      no-raw-keys: false
       forbidden-keys:
+        - msg
         - err
         - org
-        - project

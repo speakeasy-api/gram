@@ -61,7 +61,7 @@ func (c *AssetsClient) CreateAsset(
 
 	defer func() {
 		if closeErr := reader.Close(); closeErr != nil {
-			logger.WarnContext(ctx, "Error closing reader", "error", closeErr)
+			logger.WarnContext(ctx, "Error closing reader", slog.String("error", closeErr.Error()))
 		}
 	}()
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/speakeasy-api/gram/cli/internal/must"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,7 +122,7 @@ func TestSourceReader_RemoteURL(t *testing.T) {
 	staticHandler := func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/yaml")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(stubSpec))
+		must.Value(w.Write([]byte(stubSpec)))
 	}
 	staticServer := httptest.NewServer(http.HandlerFunc(staticHandler))
 	defer staticServer.Close()
@@ -155,7 +156,7 @@ func TestSourceReader_RemoteURL_Error(t *testing.T) {
 	// Create a test HTTP server that returns 404
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Not Found"))
+		must.Value(w.Write([]byte("Not Found")))
 	}))
 	defer server.Close()
 

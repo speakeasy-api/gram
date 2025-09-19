@@ -36,8 +36,9 @@ func NewLogHandler(opts *LogHandlerOptions) slog.Handler {
 		return &ContextHandler{
 			DataDogAttr: opts.DataDogAttr,
 			Handler: slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-				AddSource: true,
-				Level:     Levels[rl].Slog,
+				AddSource:   true,
+				Level:       Levels[rl].Slog,
+				ReplaceAttr: nil,
 			}),
 		}
 	}

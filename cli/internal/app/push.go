@@ -47,6 +47,11 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				Usage:    "Path to the deployment file (relative locations resolve to the deployment file's directory)",
 				Required: true,
 			},
+			&cli.StringFlag{
+				Name:     "idempotency-key",
+				Usage:    "A unique key to identify this deployment request for idempotency",
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
@@ -60,8 +65,9 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			logger.InfoContext(ctx, "Deploying to project", slog.String("project", projectSlug), slog.String("file", filePath))
 
 			result, err := deploy.CreateDeploymentFromFile(ctx, logger, deploy.CreateDeploymentFromFileRequest{
-				FilePath: filePath,
-				Project:  projectSlug,
+				FilePath:       filePath,
+				Project:        projectSlug,
+				IdempotencyKey: c.String("idempotency-key"),
 			})
 			if err != nil {
 				return fmt.Errorf("deployment failed: %w", err)
