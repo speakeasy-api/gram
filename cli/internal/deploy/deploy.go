@@ -3,41 +3,16 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
-	"github.com/speakeasy-api/gram/cli/internal/env"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 )
 
-type DeploymentRequest struct {
-	config         *Config
-	assets         []*deployments.AddOpenAPIv3DeploymentAssetForm
-	project        string
-	idempotencyKey string
-}
-
-func (dr *DeploymentRequest) GetApiKey() string {
-	return env.APIKey()
-}
-
-func (dr *DeploymentRequest) GetProjectSlug() string {
-	return dr.project
-}
-
-// GetIdempotencyKey returns a unique key to identify a deployment request.
-func (dr *DeploymentRequest) GetIdempotencyKey() string {
-	return dr.idempotencyKey
-}
-
-func (dr *DeploymentRequest) GetOpenAPIv3Assets() []*deployments.AddOpenAPIv3DeploymentAssetForm {
-	return dr.assets
-}
-
 type CreateDeploymentRequest struct {
 	Config         *Config
-	Project        string
+	APIKey         string
+	ProjectSlug    string
 	IdempotencyKey string
 }
 
@@ -49,7 +24,8 @@ func CreateDeployment(
 ) (*deployments.CreateDeploymentResult, error) {
 	assets, err := createAssetsForDeployment(ctx, logger, &CreateDeploymentRequest{
 		Config:         req.Config,
-		Project:        req.Project,
+		APIKey:         req.APIKey,
+		ProjectSlug:    req.ProjectSlug,
 		IdempotencyKey: req.IdempotencyKey,
 	})
 	if err != nil {
@@ -57,46 +33,16 @@ func CreateDeployment(
 	}
 
 	client := api.NewDeploymentsClient()
-	deploymentRequest := &DeploymentRequest{
-		assets:         assets,
-		config:         req.Config,
-		project:        req.Project,
-		idempotencyKey: req.IdempotencyKey,
-	}
 
-	result, err := client.CreateDeployment(ctx, deploymentRequest)
+	result, err := client.CreateDeployment(ctx, api.CreateDeploymentRequest{
+		APIKey:          req.APIKey,
+		ProjectSlug:     req.ProjectSlug,
+		IdempotencyKey:  req.IdempotencyKey,
+		OpenAPIv3Assets: assets,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("deployment creation failed: %w", err)
 	}
 
 	return result, nil
-}
-
-type uploadRequest struct {
-	sourceReader *SourceReader
-	project      string
-}
-
-func (ur *uploadRequest) GetApiKey() string {
-	return env.APIKey()
-}
-
-func (ur *uploadRequest) GetProjectSlug() string {
-	return ur.project
-}
-
-func (ur *uploadRequest) GetType() string {
-	return ur.sourceReader.GetType()
-}
-
-func (ur *uploadRequest) GetContentType() string {
-	return ur.sourceReader.GetContentType()
-}
-
-func (ur *uploadRequest) Read(ctx context.Context) (io.ReadCloser, int64, error) {
-	reader, size, err := ur.sourceReader.Read(ctx)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to read source: %w", err)
-	}
-	return reader, size, nil
 }

@@ -3,9 +3,11 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
+	"github.com/speakeasy-api/gram/cli/internal/env"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
@@ -14,11 +16,40 @@ func isSupportedSourceType(source Source) bool {
 	return source.Type == SourceTypeOpenAPIV3
 }
 
+type uploadRequest struct {
+	sourceReader *SourceReader
+	project      string
+}
+
 func NewUploadRequest(source Source, project string) *uploadRequest {
 	return &uploadRequest{
 		sourceReader: NewSourceReader(source),
 		project:      project,
 	}
+}
+
+func (ur *uploadRequest) GetApiKey() string {
+	return env.APIKey()
+}
+
+func (ur *uploadRequest) GetProjectSlug() string {
+	return ur.project
+}
+
+func (ur *uploadRequest) GetType() string {
+	return ur.sourceReader.GetType()
+}
+
+func (ur *uploadRequest) GetContentType() string {
+	return ur.sourceReader.GetContentType()
+}
+
+func (ur *uploadRequest) Read(ctx context.Context) (io.ReadCloser, int64, error) {
+	reader, size, err := ur.sourceReader.Read(ctx)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to read source: %w", err)
+	}
+	return reader, size, nil
 }
 
 func uploadFromSource(
@@ -51,7 +82,7 @@ func createAssetsForDeployment(
 	req *CreateDeploymentRequest,
 ) ([]*deployments.AddOpenAPIv3DeploymentAssetForm, error) {
 	sources := req.Config.Sources
-	project := req.Project
+	project := req.ProjectSlug
 	assets := make([]*deployments.AddOpenAPIv3DeploymentAssetForm, 0, len(sources))
 
 	for _, source := range sources {

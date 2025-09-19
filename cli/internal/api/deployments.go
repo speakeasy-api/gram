@@ -21,32 +21,23 @@ func NewDeploymentsClient() *DeploymentsClient {
 	}
 }
 
-// DeploymentCreator represents a request for creating a deployment
-type DeploymentCreator interface {
-	CredentialGetter
-
-	// GetIdempotencyKey returns a unique identifier that will mitigate against
-	// duplicate deployments.
-	GetIdempotencyKey() string
-
-	// GetOpenAPIv3Assets returns the OpenAPI v3 assets to include in the
-	// deployment.
-	GetOpenAPIv3Assets() []*deployments.AddOpenAPIv3DeploymentAssetForm
+type CreateDeploymentRequest struct {
+	APIKey          string
+	ProjectSlug     string
+	IdempotencyKey  string
+	OpenAPIv3Assets []*deployments.AddOpenAPIv3DeploymentAssetForm
 }
 
 // CreateDeployment creates a remote deployment.
 func (c *DeploymentsClient) CreateDeployment(
 	ctx context.Context,
-	dc DeploymentCreator,
+	dc CreateDeploymentRequest,
 ) (*deployments.CreateDeploymentResult, error) {
-	apiKey := dc.GetApiKey()
-	projectSlug := dc.GetProjectSlug()
-
-	payload := &deployments.CreateDeploymentPayload{
-		ApikeyToken:      &apiKey,
-		ProjectSlugInput: &projectSlug,
-		IdempotencyKey:   dc.GetIdempotencyKey(),
-		Openapiv3Assets:  dc.GetOpenAPIv3Assets(),
+	result, err := c.client.CreateDeployment(ctx, &deployments.CreateDeploymentPayload{
+		ApikeyToken:      &dc.APIKey,
+		ProjectSlugInput: &dc.ProjectSlug,
+		IdempotencyKey:   dc.IdempotencyKey,
+		Openapiv3Assets:  dc.OpenAPIv3Assets,
 		Functions:        []*deployments.AddFunctionsForm{},
 		SessionToken:     nil,
 		GithubRepo:       nil,
@@ -55,9 +46,7 @@ func (c *DeploymentsClient) CreateDeployment(
 		ExternalID:       nil,
 		ExternalURL:      nil,
 		Packages:         nil,
-	}
-
-	result, err := c.client.CreateDeployment(ctx, payload)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create deployment: %w", err)
 	}

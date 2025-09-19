@@ -39,6 +39,12 @@ Sample deployment file
 NOTE: Names and slugs must be unique across all sources.`[1:],
 		Flags: []cli.Flag{
 			&cli.StringFlag{
+				Name:     "api-key",
+				Usage:    "The Gram project to push to",
+				EnvVars:  []string{env.VarNameProducerKey},
+				Required: true,
+			},
+			&cli.StringFlag{
 				Name:     "project",
 				Usage:    "The Gram project to push to",
 				EnvVars:  []string{env.VarNameProjectSlug},
@@ -85,7 +91,8 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 
 			result, err := deploy.CreateDeployment(ctx, logger, deploy.CreateDeploymentRequest{
 				Config:         config,
-				Project:        projectSlug,
+				APIKey:         c.String("api-key"),
+				ProjectSlug:    projectSlug,
 				IdempotencyKey: c.String("idempotency-key"),
 			})
 			if err != nil {

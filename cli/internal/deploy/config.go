@@ -7,8 +7,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"slices"
-
-	"github.com/speakeasy-api/gram/cli/internal/env"
 )
 
 var urlSchemes = []string{"http", "https"}
@@ -36,8 +34,12 @@ type Source struct {
 	Slug string `json:"slug"`
 }
 
-// MissingRequiredFields returns an error if the source is missing required fields.
-func (s Source) MissingRequiredFields() error {
+// Validate returns an error if the source is missing required fields.
+func (s Source) Validate() error {
+	if !isSupportedType(s) {
+		return fmt.Errorf("source has unsupported type %q (allowed types: %s)", s.Type, SourceTypeOpenAPIV3)
+	}
+
 	if s.Location == "" {
 		return fmt.Errorf("source is missing required field 'Location'")
 	}
@@ -48,6 +50,10 @@ func (s Source) MissingRequiredFields() error {
 		return fmt.Errorf("source is missing required field 'slug'")
 	}
 	return nil
+}
+
+func isSupportedType(s Source) bool {
+	return s.Type == SourceTypeOpenAPIV3
 }
 
 type Config struct {
@@ -86,35 +92,15 @@ func NewConfig(cfgRdr io.Reader, workDir string) (*Config, error) {
 	return &cfg, nil
 }
 
-// SchemaValid returns true if the incoming schema version is valid.
-func (dc Config) SchemaValid() bool {
-	return slices.Contains(validSchemaVersions, dc.SchemaVersion)
-}
-
-// SupportedType returns true if the source type is supported.
-func (s Source) SupportedType() bool {
-	return s.Type == SourceTypeOpenAPIV3
-}
-
-// TypeValid returns true if the incoming schema version is valid.
-func (dc Config) TypeValid() bool {
-	return dc.Type == configTypeDeployment
-}
-
-// GetProducerToken returns an API key with a `producer` scope.
-func (dc Config) GetProducerToken() string {
-	return env.APIKey()
-}
-
 // Validate returns an error if the schema version is invalid, if the config
 // is missing sources, if sources have missing required fields, or if names/slugs are not unique.
 func (dc Config) Validate() error {
-	if !dc.SchemaValid() {
+	if !slices.Contains(validSchemaVersions, dc.SchemaVersion) {
 		msg := "unexpected value for 'schema_version': '%s'. Expected one of %+v"
 		return fmt.Errorf(msg, dc.SchemaVersion, validSchemaVersions)
 	}
 
-	if !dc.TypeValid() {
+	if dc.Type != configTypeDeployment {
 		msg := "unexpected value for 'type': '%s'. Expected '%s'"
 		return fmt.Errorf(msg, dc.Type, configTypeDeployment)
 	}
@@ -124,19 +110,16 @@ func (dc Config) Validate() error {
 	}
 
 	for i, source := range dc.Sources {
-		if !source.SupportedType() {
-			return fmt.Errorf("source at index %d has unsupported type '%s'. Only '%s' is supported", i, source.Type, SourceTypeOpenAPIV3)
-		}
-		if err := source.MissingRequiredFields(); err != nil {
+		if err := source.Validate(); err != nil {
 			return fmt.Errorf("source at index %d: %w", i, err)
 		}
 	}
 
-	if err := ValidateUniqueNames(dc.Sources); err != nil {
+	if err := validateUniqueNames(dc.Sources); err != nil {
 		return err
 	}
 
-	if err := ValidateUniqueSlugs(dc.Sources); err != nil {
+	if err := validateUniqueSlugs(dc.Sources); err != nil {
 		return err
 	}
 

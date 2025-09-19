@@ -53,7 +53,7 @@ func (c *AssetsClient) UploadOpenAPIv3(
 
 	defer func() {
 		if closeErr := reader.Close(); closeErr != nil {
-			logger.WarnContext(ctx, "Error closing reader", slog.String("error", closeErr.Error()))
+			logger.WarnContext(ctx, "error closing reader", slog.String("error", closeErr.Error()))
 		}
 	}()
 

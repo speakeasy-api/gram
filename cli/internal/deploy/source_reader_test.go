@@ -37,7 +37,7 @@ info:
 	reader := NewSourceReader(source)
 
 	// Test type method
-	require.Equal(t, "openapiv3", reader.GetType())
+	require.Equal(t, "openapiv3", reader.source.Type)
 
 	// Test content type method
 	require.Equal(t, "application/yaml", reader.GetContentType())

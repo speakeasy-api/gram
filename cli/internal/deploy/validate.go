@@ -19,8 +19,8 @@ func failDuplicates(counter map[string]int, errorPrefix string) error {
 	return nil
 }
 
-// ValidateUniqueNames returns an error if source names are not unique.
-func ValidateUniqueNames(sources []Source) error {
+// validateUniqueNames returns an error if source names are not unique.
+func validateUniqueNames(sources []Source) error {
 	counter := make(map[string]int)
 	for _, source := range sources {
 		counter[source.Name]++
@@ -29,8 +29,8 @@ func ValidateUniqueNames(sources []Source) error {
 	return failDuplicates(counter, "source names must be unique")
 }
 
-// ValidateUniqueSlugs returns an error if source slugs are not unique.
-func ValidateUniqueSlugs(sources []Source) error {
+// validateUniqueSlugs returns an error if source slugs are not unique.
+func validateUniqueSlugs(sources []Source) error {
 	counter := make(map[string]int)
 	for _, source := range sources {
 		counter[source.Slug]++

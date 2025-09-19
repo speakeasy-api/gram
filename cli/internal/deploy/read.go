@@ -14,18 +14,17 @@ import (
 
 // readLocal reads a source from a local file path.
 func (sr *SourceReader) readLocal() (io.ReadCloser, int64, error) {
-	data, err := os.ReadFile(sr.source.Location)
+	f, err := os.Open(sr.source.Location)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to read local file: %w", err)
 	}
 
-	fi, err := os.Stat(sr.source.Location)
+	fi, err := f.Stat()
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get file info: %w", err)
 	}
 
-	reader := strings.NewReader(string(data))
-	return io.NopCloser(reader), fi.Size(), nil
+	return f, fi.Size(), nil
 }
 
 // readRemote reads a source from a remote URL.
