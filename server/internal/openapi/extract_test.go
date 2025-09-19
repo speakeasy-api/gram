@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,8 +21,12 @@ import (
 func TestDoProcess_Equal(t *testing.T) {
 	t.Parallel()
 
+	logger := testenv.NewLogger(t)
+	tracer := testenv.NewTracerProvider(t).Tracer("github.com/speakeasy-api/gram/server/internal/openapi")
+
 	p := &ToolExtractor{
-		logger:       nil,
+		logger:       logger,
+		tracer:       tracer,
 		db:           nil,
 		feature:      nil,
 		assetStorage: nil,
@@ -62,10 +67,10 @@ func TestDoProcess_Equal(t *testing.T) {
 		OnOperationSkipped: nil,
 	}
 
-	libOpenAPIResult, err := p.doLibOpenAPI(t.Context(), nil, libopenapiTx, data, tet)
+	libOpenAPIResult, err := p.doLibOpenAPI(t.Context(), logger, tracer, libopenapiTx, data, tet)
 	require.NoError(t, err)
 
-	speakeasyResult, err := p.doSpeakeasy(t.Context(), nil, speakeasyTx, data, tet)
+	speakeasyResult, err := p.doSpeakeasy(t.Context(), logger, tracer, speakeasyTx, data, tet)
 	require.NoError(t, err)
 
 	assert.Equal(t, libOpenAPIResult.DocumentUpgrade, speakeasyResult.DocumentUpgrade)

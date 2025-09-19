@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/url"
 	"regexp"
@@ -17,6 +18,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/openapi/hashing"
+	"github.com/speakeasy-api/openapi/jsonschema/oas3"
+	"github.com/speakeasy-api/openapi/marshaller"
+	"github.com/speakeasy-api/openapi/openapi"
+	"github.com/speakeasy-api/openapi/pointer"
+	"github.com/speakeasy-api/openapi/sequencedmap"
+	"github.com/speakeasy-api/openapi/yml"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -26,25 +37,36 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orderedmap"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/openapi/hashing"
-	"github.com/speakeasy-api/openapi/jsonschema/oas3"
-	"github.com/speakeasy-api/openapi/marshaller"
-	"github.com/speakeasy-api/openapi/openapi"
-	"github.com/speakeasy-api/openapi/pointer"
-	"github.com/speakeasy-api/openapi/sequencedmap"
-	"github.com/speakeasy-api/openapi/yml"
 )
+
+func parseSpeakeasy(ctx context.Context, tracer trace.Tracer, reader io.Reader) (doc *openapi.OpenAPI, err error) {
+	ctx, span := tracer.Start(ctx, "openapiv3.parseSpeakeasy")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	doc, _, err = openapi.Unmarshal(ctx, reader, openapi.WithSkipValidation())
+	if err != nil {
+		return nil, fmt.Errorf("parse document: %w", err)
+	}
+
+	return doc, nil
+}
 
 func (p *ToolExtractor) doSpeakeasy(
 	ctx context.Context,
 	logger *slog.Logger,
+	tracer trace.Tracer,
 	tx *repo.Queries,
 	data []byte,
 	task ToolExtractorTask,
 ) (*ToolExtractorResult, error) {
 	docInfo := task.DocInfo
 
-	doc, _, err := openapi.Unmarshal(ctx, bytes.NewReader(data), openapi.WithSkipValidation())
+	doc, err := parseSpeakeasy(ctx, tracer, bytes.NewReader(data))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document").Log(ctx, logger)
 	}

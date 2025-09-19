@@ -33,16 +33,17 @@ import (
 )
 
 type ProcessDeployment struct {
-	logger       *slog.Logger
-	tracer       trace.Tracer
-	metrics      *metrics
-	db           *pgxpool.Pool
-	features     feature.Provider
-	repo         *repo.Queries
-	assets       *assetsRepo.Queries
-	tools        *toolsRepo.Queries
-	assetStorage assets.BlobStore
-	projects     *projectsRepo.Queries
+	logger         *slog.Logger
+	tracer         trace.Tracer
+	tracerProvider trace.TracerProvider
+	metrics        *metrics
+	db             *pgxpool.Pool
+	features       feature.Provider
+	repo           *repo.Queries
+	assets         *assetsRepo.Queries
+	tools          *toolsRepo.Queries
+	assetStorage   assets.BlobStore
+	projects       *projectsRepo.Queries
 }
 
 func NewProcessDeployment(
@@ -54,16 +55,17 @@ func NewProcessDeployment(
 	assetStorage assets.BlobStore,
 ) *ProcessDeployment {
 	return &ProcessDeployment{
-		logger:       logger,
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities"),
-		metrics:      newMetrics(newMeter(meterProvider), logger),
-		db:           db,
-		features:     features,
-		repo:         repo.New(db),
-		assets:       assetsRepo.New(db),
-		assetStorage: assetStorage,
-		tools:        toolsRepo.New(db),
-		projects:     projectsRepo.New(db),
+		logger:         logger,
+		tracer:         tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/background/activities"),
+		tracerProvider: tracerProvider,
+		metrics:        newMetrics(newMeter(meterProvider), logger),
+		db:             db,
+		features:       features,
+		repo:           repo.New(db),
+		assets:         assetsRepo.New(db),
+		assetStorage:   assetStorage,
+		tools:          toolsRepo.New(db),
+		projects:       projectsRepo.New(db),
 	}
 }
 
@@ -209,7 +211,7 @@ func (p *ProcessDeployment) doOpenAPIv3(
 
 			start := time.Now()
 
-			processor := openapi.NewToolExtractor(p.logger, p.db, p.features, p.assetStorage)
+			processor := openapi.NewToolExtractor(p.logger, p.tracerProvider, p.db, p.features, p.assetStorage)
 
 			res, err := processor.Do(ctx, openapi.ToolExtractorTask{
 				Parser:       parser,
