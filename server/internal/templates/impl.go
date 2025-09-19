@@ -105,6 +105,10 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 		}
 	}
 
+	if payload.Kind == "" {
+		return nil, oops.E(oops.CodeBadRequest, nil, "kind is required").Log(ctx, logger)
+	}
+
 	toolURN := urn.NewTool(urn.ToolKindPrompt, payload.Kind, string(payload.Name))
 
 	id, err := tr.CreateTemplate(ctx, repo.CreateTemplateParams{
