@@ -3,9 +3,8 @@ package app
 import (
 	"fmt"
 
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/deploy"
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/env"
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/version"
+	"github.com/speakeasy-api/gram/cli/internal/deploy"
+	"github.com/speakeasy-api/gram/cli/internal/env"
 	"github.com/urfave/cli/v2"
 )
 
@@ -43,7 +42,7 @@ func NewCLI() CLI {
 	app := &cli.App{
 		Name:    "gram",
 		Usage:   "A command line interface for the Gram platform. Get started at https://docs.getgram.ai/",
-		Version: version.Version,
+		Version: Version,
 		Commands: []*cli.Command{
 			{
 				Name:        "push",

@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/api"
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/deplconfig"
+	"github.com/speakeasy-api/gram/cli/internal/api"
+	"github.com/speakeasy-api/gram/cli/internal/deplconfig"
 )
 
 func TestSourceReader_ImplementsAssetSource(t *testing.T) {

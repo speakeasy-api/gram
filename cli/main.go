@@ -3,8 +3,8 @@ package main
 import (
 	"os"
 
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/app"
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/log"
+	"github.com/speakeasy-api/gram/cli/internal/app"
+	"github.com/speakeasy-api/gram/cli/internal/log"
 )
 
 func main() {

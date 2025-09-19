@@ -1,11 +1,13 @@
-module github.com/speakeasy-api/gram/server/cmd/cli/gram
+module github.com/speakeasy-api/gram/cli
 
 go 1.25.0
+
+replace github.com/speakeasy-api/gram/server => ../server
 
 require (
 	github.com/google/uuid v1.6.0
 	github.com/hashicorp/go-retryablehttp v0.7.8
-	github.com/speakeasy-api/gram/server v0.0.0-20250918191855-47da0e45ec63
+	github.com/speakeasy-api/gram/server v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
 	goa.design/goa/v3 v3.22.2

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/deplconfig"
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/env"
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/log"
+	"github.com/speakeasy-api/gram/cli/internal/deplconfig"
+	"github.com/speakeasy-api/gram/cli/internal/env"
+	"github.com/speakeasy-api/gram/cli/internal/log"
 
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	assets_client "github.com/speakeasy-api/gram/server/gen/http/assets/client"

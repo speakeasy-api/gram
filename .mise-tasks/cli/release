@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-#MISE description="Update go.mod and set the version (requires manual release)"
-mise run cli:tidy
-mise run cli:version

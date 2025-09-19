@@ -7,9 +7,9 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/api"
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/deplconfig"
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/env"
+	"github.com/speakeasy-api/gram/cli/internal/api"
+	"github.com/speakeasy-api/gram/cli/internal/deplconfig"
+	"github.com/speakeasy-api/gram/cli/internal/env"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 )
 

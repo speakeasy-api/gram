@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/api"
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/deplconfig"
-	"github.com/speakeasy-api/gram/server/cmd/cli/gram/log"
+	"github.com/speakeasy-api/gram/cli/internal/api"
+	"github.com/speakeasy-api/gram/cli/internal/deplconfig"
+	"github.com/speakeasy-api/gram/cli/internal/log"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
