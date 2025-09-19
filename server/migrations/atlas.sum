@@ -1,4 +1,4 @@
-h1:gU2C+8DDg+f1Dx7Fy2D8PrnolgpObJI3+20u7SFvngo=
+h1:9URB/Xk5ImQMF958ZdoMx6fhbeZcSCobwSXGSOZUt1k=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -49,4 +49,4 @@ h1:gU2C+8DDg+f1Dx7Fy2D8PrnolgpObJI3+20u7SFvngo=
 20250916174416_add-asset-table-migration.sql h1:hSNaGyCYtT0hYHWiwkuIlJqhrzcuc62xFgpLwHUB0VQ=
 20250917213300_add-tool-functions.sql h1:FvR4XxH5LHi9SRy15dyDfn45EPVUmUWkB8G9/EH/Ols=
 20250918183732_add-tool-urn-to-tables.sql h1:MARJ8WJyN1A4tEjpBP15feOJTG4hGrP19vn11S0JePE=
-20250918234525_toolset-versions-add-unique-constraint.sql h1:oZTsRZQNaFNjgFC0w3++OsPfZDRIvvBYaolf5r9QF3E=
+20250919164533_toolset-versions-add-predecessor-id.sql h1:MRup6pJPSHnUjxLCHFBnqNmWWBFOlSxit3r1OE3Fmic=
