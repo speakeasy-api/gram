@@ -26,10 +26,9 @@ func randstr(length int) string {
 func TestKeysService_CreateKey(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestKeysService(t)
-
 	t.Run("successful key creation with default scope", func(t *testing.T) {
 		t.Parallel()
+		ctx, ti := newTestKeysService(t)
 
 		name := "test-api-key" + randstr(6)
 
@@ -60,6 +59,7 @@ func TestKeysService_CreateKey(t *testing.T) {
 
 	t.Run("successful key creation with custom scope", func(t *testing.T) {
 		t.Parallel()
+		ctx, ti := newTestKeysService(t)
 
 		name := "test-api-key" + randstr(6)
 
@@ -90,6 +90,7 @@ func TestKeysService_CreateKey(t *testing.T) {
 
 	t.Run("successful key creation with multiple scopes", func(t *testing.T) {
 		t.Parallel()
+		ctx, ti := newTestKeysService(t)
 
 		name := "test-api-key" + randstr(6)
 
@@ -120,6 +121,7 @@ func TestKeysService_CreateKey(t *testing.T) {
 
 	t.Run("successful key creation with invalid scope", func(t *testing.T) {
 		t.Parallel()
+		ctx, ti := newTestKeysService(t)
 
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
 			SessionToken: nil,
@@ -135,6 +137,7 @@ func TestKeysService_CreateKey(t *testing.T) {
 
 	t.Run("successful key creation with invalid scopes", func(t *testing.T) {
 		t.Parallel()
+		ctx, ti := newTestKeysService(t)
 
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
 			SessionToken: nil,
@@ -150,6 +153,7 @@ func TestKeysService_CreateKey(t *testing.T) {
 
 	t.Run("key creation without project context", func(t *testing.T) {
 		t.Parallel()
+		ctx, ti := newTestKeysService(t)
 
 		// Ensure there's no project ID in the auth context
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -178,6 +182,7 @@ func TestKeysService_CreateKey(t *testing.T) {
 
 	t.Run("unauthorized without auth context", func(t *testing.T) {
 		t.Parallel()
+		_, ti := newTestKeysService(t)
 
 		// Create a context without auth
 		ctxWithoutAuth := t.Context()
@@ -196,6 +201,7 @@ func TestKeysService_CreateKey(t *testing.T) {
 
 	t.Run("multiple keys have unique tokens", func(t *testing.T) {
 		t.Parallel()
+		ctx, ti := newTestKeysService(t)
 
 		key1, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
 			SessionToken: nil,
