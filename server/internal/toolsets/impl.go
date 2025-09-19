@@ -170,7 +170,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	_, err = s.repo.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
 		ToolsetID:     createdToolset.ID,
 		ToolUrns:      toolUrnStrings,
-		PredecessorID: uuid.NullUUID{Valid: false},
+		PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
 		s.logger.ErrorContext(ctx, "failed to create toolset version", attr.SlogError(err))
