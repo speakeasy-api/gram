@@ -654,7 +654,7 @@
                 </svg>
               </button>
               <code class="code-snippet language-sh">claude mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range $i, $header := .Headers }} \
-  --header '{{ $header }}: {{ printf "${%s}" (index $.EnvHeaders $i) }}'{{- end }}</code>
+  --header '{{ $header }}:{{ printf "${%s}" (index $.EnvHeaders $i) }}'{{- end }}</code>
             </div>
           </li>
           {{- if .Headers }}
@@ -747,7 +747,7 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
                 </svg>
               </button>
               <code class="code-snippet language-sh">gemini mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range $i, $header := .Headers }} \
-  --header '{{ $header }}: {{ printf "${%s}" (index $.EnvHeaders $i) }}'{{- end }}</code>
+  --header '{{ $header }}:{{ printf "${%s}" (index $.EnvHeaders $i) }}'{{- end }}</code>
             </div>
           </li>
           {{- if .Headers }}
