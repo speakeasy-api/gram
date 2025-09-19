@@ -24,7 +24,7 @@ import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { Button, Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { AlertTriangleIcon, Check, CheckCircleIcon, X } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { useCustomTools } from "../toolBuilder/CustomTools";
@@ -192,6 +192,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
   const { customTools } = useCustomTools();
 
   const [selectedTools, setSelectedTools] = useState<string[]>([]);
+  const selectedToolsRef = useRef<string[]>([]);
   const [search, setSearch] = useState("");
   const [tagFilters, setTagFilters] = useState<string[]>([]);
 
@@ -209,29 +210,37 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
   }, []);
 
   useEffect(() => {
-    setSelectedTools(toolset?.httpTools.map((t) => t.canonicalName) ?? []);
+    const tools = toolset?.httpTools.map((t) => t.canonicalName) ?? [];
+    setSelectedTools(tools);
+    selectedToolsRef.current = tools;
   }, [toolset]);
 
-  const setToolsEnabled = (tools: string[], enabled: boolean) => {
-    setSelectedTools((prev) => {
-      const excluded = prev.filter((t) => !tools.includes(t));
+  const setToolsEnabled = useCallback(
+    (tools: string[], enabled: boolean) => {
+      // Calculate the updated tools first using the ref
+      const excluded = selectedToolsRef.current.filter(
+        (t) => !tools.includes(t)
+      );
+      const updatedTools = enabled ? [...excluded, ...tools] : excluded;
 
-      // Append from excluded so we don't add duplicates to the list
-      const updated = enabled ? [...excluded, ...tools] : excluded;
+      // Update state and ref
+      setSelectedTools(updatedTools);
+      selectedToolsRef.current = updatedTools;
 
+      // Call mutation
       updateToolsetMutation.mutate({
         request: {
           slug: toolsetSlug,
           updateToolsetRequestBody: {
-            httpToolNames: updated,
+            httpToolNames: updatedTools,
             promptTemplateNames:
               toolset?.promptTemplates.map((t) => t.name) ?? [],
           },
         },
       });
-      return updated;
-    });
-  };
+    },
+    [toolsetSlug, toolset?.promptTemplates, updateToolsetMutation]
+  );
 
   const toggleTemplateEnabled = (template: string) => {
     const cur = toolset?.promptTemplates.map((t) => t.name) ?? [];
@@ -243,7 +252,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
       request: {
         slug: toolsetSlug,
         updateToolsetRequestBody: {
-          httpToolNames: selectedTools,
+          httpToolNames: selectedToolsRef.current,
           promptTemplateNames: updated,
         },
       },
@@ -330,7 +339,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     });
 
     return toolGroupsFinal;
-  }, [filteredGroups, selectedTools, toolsetSlug]);
+  }, [filteredGroups, selectedTools, setToolsEnabled]);
 
   return (
     <Stack gap={4} className="mb-8">

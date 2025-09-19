@@ -7,6 +7,7 @@ package repo
 import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type HttpSecurity struct {
@@ -48,4 +49,16 @@ type Toolset struct {
 	UpdatedAt              pgtype.Timestamptz
 	DeletedAt              pgtype.Timestamptz
 	Deleted                bool
+}
+
+type ToolsetVersion struct {
+	ID            uuid.UUID
+	ToolsetID     uuid.UUID
+	Version       int64
+	ToolUrns      []urn.Tool
+	PredecessorID uuid.NullUUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
 }
