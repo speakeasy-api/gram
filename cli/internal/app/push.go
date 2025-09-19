@@ -3,13 +3,14 @@ package app
 import (
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 
+	"github.com/speakeasy-api/gram/cli/internal/api"
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
-	"github.com/speakeasy-api/gram/cli/internal/env"
 	"github.com/speakeasy-api/gram/cli/internal/o11y"
 	"github.com/urfave/cli/v2"
 )
@@ -39,15 +40,21 @@ Sample deployment file
 NOTE: Names and slugs must be unique across all sources.`[1:],
 		Flags: []cli.Flag{
 			&cli.StringFlag{
+				Name:    "api-url",
+				Usage:   "The base URL to use for API calls.",
+				EnvVars: []string{"GRAM_API_URL"},
+				Value:   "https://app.getgram.ai",
+			},
+			&cli.StringFlag{
 				Name:     "api-key",
 				Usage:    "The Gram project to push to",
-				EnvVars:  []string{env.VarNameProducerKey},
+				EnvVars:  []string{"GRAM_API_KEY"},
 				Required: true,
 			},
 			&cli.StringFlag{
 				Name:     "project",
 				Usage:    "The Gram project to push to",
-				EnvVars:  []string{env.VarNameProjectSlug},
+				EnvVars:  []string{"GRAM_PROJECT"},
 				Required: true,
 			},
 			&cli.PathFlag{
@@ -66,10 +73,25 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			defer cancel()
 
 			logger := PullLogger(ctx)
-
 			projectSlug := c.String("project")
 
-			logger.InfoContext(ctx, "Deploying to project", slog.String("project", projectSlug), slog.String("config", c.String("config")))
+			apiURLArg := c.String("api-url")
+			apiURL, err := url.Parse(apiURLArg)
+			if err != nil {
+				return fmt.Errorf("failed to parse API URL '%s': %w", apiURLArg, err)
+			}
+			if apiURL.Scheme == "" || apiURL.Host == "" {
+				return fmt.Errorf("API URL '%s' must include scheme and host", apiURLArg)
+			}
+
+			assetsClient := api.NewAssetsClient(&api.AssetsClientOptions{
+				Scheme: apiURL.Scheme,
+				Host:   apiURL.Host,
+			})
+			deploymentsClient := api.NewDeploymentsClient(&api.DeploymentsClientOptions{
+				Scheme: apiURL.Scheme,
+				Host:   apiURL.Host,
+			})
 
 			configFilename, err := filepath.Abs(c.String("config"))
 			if err != nil {
@@ -89,12 +111,15 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				return fmt.Errorf("failed to parseread deployment config: %w", err)
 			}
 
-			result, err := deploy.CreateDeployment(ctx, logger, deploy.CreateDeploymentRequest{
+			logger.InfoContext(ctx, "Deploying to project", slog.String("project", projectSlug), slog.String("config", c.String("config")))
+
+			req := deploy.CreateDeploymentRequest{
 				Config:         config,
 				APIKey:         c.String("api-key"),
 				ProjectSlug:    projectSlug,
 				IdempotencyKey: c.String("idempotency-key"),
-			})
+			}
+			result, err := deploy.CreateDeployment(ctx, logger, assetsClient, deploymentsClient, req)
 			if err != nil {
 				return fmt.Errorf("deployment failed: %w", err)
 			}

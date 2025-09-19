@@ -4,21 +4,40 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/speakeasy-api/gram/cli/internal/env"
-
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	depl_client "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
 	goahttp "goa.design/goa/v3/http"
 )
 
+type DeploymentsClientOptions struct {
+	Scheme string
+	Host   string
+}
+
 type DeploymentsClient struct {
 	client *deployments.Client
 }
 
-func NewDeploymentsClient() *DeploymentsClient {
-	return &DeploymentsClient{
-		client: newDeploymentClient(),
-	}
+func NewDeploymentsClient(options *DeploymentsClientOptions) *DeploymentsClient {
+	doer := goaSharedHTTPClient
+
+	enc := goahttp.RequestEncoder
+	dec := goahttp.ResponseDecoder
+	restoreBody := true // Enable body restoration to allow reading raw response on decode errors
+
+	h := depl_client.NewClient(options.Scheme, options.Host, doer, enc, dec, restoreBody)
+
+	client := deployments.NewClient(
+		h.GetDeployment(),
+		h.GetLatestDeployment(),
+		h.CreateDeployment(),
+		h.Evolve(),
+		h.Redeploy(),
+		h.ListDeployments(),
+		h.GetDeploymentLogs(),
+	)
+
+	return &DeploymentsClient{client: client}
 }
 
 type CreateDeploymentRequest struct {
@@ -52,29 +71,4 @@ func (c *DeploymentsClient) CreateDeployment(
 	}
 
 	return result, nil
-}
-
-func newDeploymentClient() *deployments.Client {
-	h := deploymentService()
-	return deployments.NewClient(
-		h.GetDeployment(),
-		h.GetLatestDeployment(),
-		h.CreateDeployment(),
-		h.Evolve(),
-		h.Redeploy(),
-		h.ListDeployments(),
-		h.GetDeploymentLogs(),
-	)
-}
-
-func deploymentService() *depl_client.Client {
-	doer := goaSharedHTTPClient
-
-	scheme := env.APIScheme()
-	host := env.APIHost()
-	enc := goahttp.RequestEncoder
-	dec := goahttp.ResponseDecoder
-	restoreBody := true // Enable body restoration to allow reading raw response on decode errors
-
-	return depl_client.NewClient(scheme, host, doer, enc, dec, restoreBody)
 }

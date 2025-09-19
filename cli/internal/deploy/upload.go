@@ -32,6 +32,7 @@ func (ur *uploadRequest) Read(ctx context.Context) (io.ReadCloser, int64, error)
 func uploadFromSource(
 	ctx context.Context,
 	logger *slog.Logger,
+	assetsClient *api.AssetsClient,
 	req *uploadRequest,
 ) (*deployments.AddOpenAPIv3DeploymentAssetForm, error) {
 	rc, length, err := req.sourceReader.Read(ctx)
@@ -41,7 +42,7 @@ func uploadFromSource(
 
 	source := req.sourceReader.source
 
-	uploadRes, err := api.NewAssetsClient().UploadOpenAPIv3(ctx, logger, &api.UploadOpenAPIv3Request{
+	uploadRes, err := assetsClient.UploadOpenAPIv3(ctx, logger, &api.UploadOpenAPIv3Request{
 		APIKey:        req.apiKey,
 		ProjectSlug:   req.projectSlug,
 		Reader:        rc,
@@ -66,6 +67,7 @@ func uploadFromSource(
 func createAssetsForDeployment(
 	ctx context.Context,
 	logger *slog.Logger,
+	assetsClient *api.AssetsClient,
 	req *CreateDeploymentRequest,
 ) ([]*deployments.AddOpenAPIv3DeploymentAssetForm, error) {
 	sources := req.Config.Sources
@@ -79,7 +81,7 @@ func createAssetsForDeployment(
 			continue
 		}
 
-		asset, err := uploadFromSource(ctx, logger, &uploadRequest{
+		asset, err := uploadFromSource(ctx, logger, assetsClient, &uploadRequest{
 			apiKey:       req.APIKey,
 			projectSlug:  project,
 			sourceReader: NewSourceReader(source),

@@ -10,6 +10,8 @@ import (
 )
 
 type CreateDeploymentRequest struct {
+	APIHost        string
+	APIScheme      string
 	Config         *Config
 	APIKey         string
 	ProjectSlug    string
@@ -20,9 +22,11 @@ type CreateDeploymentRequest struct {
 func CreateDeployment(
 	ctx context.Context,
 	logger *slog.Logger,
+	assetsClient *api.AssetsClient,
+	deploymentsClient *api.DeploymentsClient,
 	req CreateDeploymentRequest,
 ) (*deployments.CreateDeploymentResult, error) {
-	assets, err := createAssetsForDeployment(ctx, logger, &CreateDeploymentRequest{
+	assets, err := createAssetsForDeployment(ctx, logger, assetsClient, &CreateDeploymentRequest{
 		Config:         req.Config,
 		APIKey:         req.APIKey,
 		ProjectSlug:    req.ProjectSlug,
@@ -32,9 +36,7 @@ func CreateDeployment(
 		return nil, fmt.Errorf("failed to convert sources to assets: %w", err)
 	}
 
-	client := api.NewDeploymentsClient()
-
-	result, err := client.CreateDeployment(ctx, api.CreateDeploymentRequest{
+	result, err := deploymentsClient.CreateDeployment(ctx, api.CreateDeploymentRequest{
 		APIKey:          req.APIKey,
 		ProjectSlug:     req.ProjectSlug,
 		IdempotencyKey:  req.IdempotencyKey,

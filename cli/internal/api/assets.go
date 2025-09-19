@@ -6,21 +6,39 @@ import (
 	"io"
 	"log/slog"
 
-	"github.com/speakeasy-api/gram/cli/internal/env"
-
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	assets_client "github.com/speakeasy-api/gram/server/gen/http/assets/client"
 	goahttp "goa.design/goa/v3/http"
 )
 
+type AssetsClientOptions struct {
+	Scheme string
+	Host   string
+}
+
 type AssetsClient struct {
 	client *assets.Client
 }
 
-func NewAssetsClient() *AssetsClient {
-	return &AssetsClient{
-		client: newAssetsClient(),
-	}
+func NewAssetsClient(options *AssetsClientOptions) *AssetsClient {
+	doer := goaSharedHTTPClient
+
+	enc := goahttp.RequestEncoder
+	dec := goahttp.ResponseDecoder
+	restoreBody := false
+
+	h := assets_client.NewClient(options.Scheme, options.Host, doer, enc, dec, restoreBody)
+
+	client := assets.NewClient(
+		h.ServeImage(),
+		h.UploadImage(),
+		h.UploadFunctions(),
+		h.UploadOpenAPIv3(),
+		h.ServeOpenAPIv3(),
+		h.ListAssets(),
+	)
+
+	return &AssetsClient{client: client}
 }
 
 // SourceReader defines the interface for reading source content.
@@ -37,7 +55,6 @@ type SourceReader interface {
 // AssetCreator represents a source for creating an asset, composed of
 // credential access and source reading.
 type AssetCreator interface {
-	CredentialGetter
 	SourceReader
 }
 
@@ -68,28 +85,4 @@ func (c *AssetsClient) UploadOpenAPIv3(
 	}
 
 	return result, nil
-}
-
-func newAssetsClient() *assets.Client {
-	h := assetsService()
-	return assets.NewClient(
-		h.ServeImage(),
-		h.UploadImage(),
-		h.UploadFunctions(),
-		h.UploadOpenAPIv3(),
-		h.ServeOpenAPIv3(),
-		h.ListAssets(),
-	)
-}
-
-func assetsService() *assets_client.Client {
-	doer := goaSharedHTTPClient
-
-	scheme := env.APIScheme()
-	host := env.APIHost()
-	enc := goahttp.RequestEncoder
-	dec := goahttp.ResponseDecoder
-	restoreBody := false
-
-	return assets_client.NewClient(scheme, host, doer, enc, dec, restoreBody)
 }
