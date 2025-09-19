@@ -610,7 +610,7 @@ func (s *Service) CreateToolsetVersion(ctx context.Context, payload *gen.UpdateT
 
 	// Create toolset version if either HTTP tools or prompt templates changed
 	if httpToolNamesChanged || promptTemplateNamesChanged {
-		var allToolUrns []urn.Tool
+		allToolUrns := []urn.Tool{}
 
 		toolNames := conv.Ternary(payload.HTTPToolNames != nil, payload.HTTPToolNames, existingToolset.HttpToolNames)
 
