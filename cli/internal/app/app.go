@@ -12,10 +12,15 @@ import (
 )
 
 func newApp() *cli.App {
+	shortSha := GitSHA
+	if len(GitSHA) > 7 {
+		shortSha = GitSHA[:7]
+	}
+
 	return &cli.App{
 		Name:    "gram",
 		Usage:   "A command line interface for the Gram platform. Get started at https://docs.getgram.ai/",
-		Version: Version,
+		Version: fmt.Sprintf("%s (%s)", Version, shortSha),
 		Commands: []*cli.Command{
 			newPushCommand(),
 		},
