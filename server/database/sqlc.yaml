@@ -32,10 +32,11 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Tool
-      - column: toolset_versions.tool_urns
+      - column: "toolset_versions.tool_urns"
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
-          type: "[]Tool"
+          type: Tool
+          slice: true
 
 sql:
   - schema: schema.sql
