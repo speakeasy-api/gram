@@ -29,7 +29,7 @@ type FunctionToolDefinition struct {
 
 type HttpToolDefinition struct {
 	ID                  uuid.UUID
-	ToolUrn             urn.Tool
+	ToolUrn             pgtype.Text
 	ProjectID           uuid.UUID
 	DeploymentID        uuid.UUID
 	Openapiv3DocumentID uuid.NullUUID
