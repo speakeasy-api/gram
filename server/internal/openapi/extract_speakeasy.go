@@ -550,7 +550,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 		ProjectID:           projectID,
 		DeploymentID:        deploymentID,
 		Openapiv3DocumentID: uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
-		ToolUrn:             toolURN,
+		ToolUrn:             conv.ToPGTextEmpty(toolURN.String()),
 		Security:            security,
 		Path:                path,
 		HttpMethod:          strings.ToUpper(method),

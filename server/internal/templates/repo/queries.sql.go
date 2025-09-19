@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const createTemplate = `-- name: CreateTemplate :one
@@ -42,7 +41,7 @@ RETURNING id
 
 type CreateTemplateParams struct {
 	ProjectID   uuid.UUID
-	ToolUrn     urn.Tool
+	ToolUrn     pgtype.Text
 	Name        string
 	Prompt      string
 	Description pgtype.Text

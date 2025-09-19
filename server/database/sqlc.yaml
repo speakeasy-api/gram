@@ -24,14 +24,15 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Tool
-      - column: http_tool_definitions.tool_urn
-        go_type:
-          import: github.com/speakeasy-api/gram/server/internal/urn
-          type: Tool
-      - column: prompt_templates.tool_urn
-        go_type:
-          import: github.com/speakeasy-api/gram/server/internal/urn
-          type: Tool
+      # TODO: Add back in on next PR
+      #  - column: http_tool_definitions.tool_urn
+      #   go_type:
+      #     import: github.com/speakeasy-api/gram/server/internal/urn
+      #     type: Tool
+      # - column: prompt_templates.tool_urn
+      #   go_type:
+      #     import: github.com/speakeasy-api/gram/server/internal/urn
+      #     type: Tool
       - column: toolset_versions.tool_urns
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
