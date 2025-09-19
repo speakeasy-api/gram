@@ -70,8 +70,12 @@ function DeploymentLogs(props: { deploymentId: string }) {
         </Suspense>
       </section>
 
-      <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-        <TabsList className="mb-16">
+      <Tabs
+        value={selectedTab}
+        onValueChange={setSelectedTab}
+        className="gap-16"
+      >
+        <TabsList>
           <TabsTrigger value="logs">Logs</TabsTrigger>
           <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="tools">Tools</TabsTrigger>
