@@ -23,7 +23,7 @@ export const LogsTabContents = () => {
 
   return (
     <>
-      <Heading variant="h2" className="mb-4 text-xl">
+      <Heading variant="h2" className="mb-6">
         Logs
       </Heading>
       <ol className="font-mono w-full overflow-auto bg-muted p-4 rounded space-y-1">
@@ -76,26 +76,25 @@ export const AssetsTabContents = () => {
 
   return (
     <>
-      <Heading variant="h2" className="mb-4 text-xl">
+      <Heading variant="h2" className="mb-6">
         Assets
       </Heading>
-      <ul className="flex gap-2 flex-wrap">
+      <ul className="flex flex-col gap-4 flex-wrap">
         {deployment.openapiv3Assets.map((asset) => {
-          const downloadURL = new URL(
-            "/rpc/assets.serveOpenAPIv3",
-            getServerURL(),
-          );
-          downloadURL.searchParams.set("id", asset.assetId);
-          downloadURL.searchParams.set("project_id", deployment.projectId);
-
           return (
             <li key={asset.id}>
-              <MiniCard className="w-64">
+              <MiniCard className="w-full max-w-full bg-surface-secondary-default border-neutral-softest p-6">
                 <MiniCard.Title className="truncate max-w-48">
-                  <FileCodeIcon size={16} className="inline mr-2" />
-                  {asset.name}
+                  <div className="flex gap-4 w-full items-center">
+                    <FileCodeIcon size={48} strokeWidth={1} />
+                    <div className="flex flex-col">
+                      <span className="text-base leading-7">{asset.name}</span>
+                      <span className="text-xs text-muted leading-5">
+                        OpenAPI Document
+                      </span>
+                    </div>
+                  </div>
                 </MiniCard.Title>
-                <MiniCard.Description>OpenAPI Document</MiniCard.Description>
                 <MiniCard.Actions
                   actions={[
                     {
@@ -121,7 +120,7 @@ export const ToolsTabContents = ({
 }) => {
   return (
     <>
-      <Heading variant="h2" className="mb-4 text-xl">
+      <Heading variant="h2" className="mb-6">
         Tools
       </Heading>
       <ToolsList deploymentId={deploymentId} />

@@ -52,23 +52,26 @@ function DeploymentLogs(props: { deploymentId: string }) {
   const [selectedTab, setSelectedTab] = useState<string>("logs");
 
   return (
-    <div className="grid gap-6">
-      <HeadingSection />
-      <Suspense
-        fallback={
-          <Skeleton>
-            <div className="h-4 w-1/3" />
-          </Skeleton>
-        }
-      >
-        <StatsSection
-          onClickTools={() => setSelectedTab("tools")}
-          onClickAssets={() => setSelectedTab("assets")}
-        />
-      </Suspense>
+    <div className="grid gap-16">
+      <section className="space-y-6">
+        <HeadingSection />
+
+        <Suspense
+          fallback={
+            <Skeleton>
+              <div className="h-4 w-1/3" />
+            </Skeleton>
+          }
+        >
+          <StatsSection
+            onClickTools={() => setSelectedTab("tools")}
+            onClickAssets={() => setSelectedTab("assets")}
+          />
+        </Suspense>
+      </section>
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab}>
-        <TabsList className="mb-4">
+        <TabsList className="mb-16">
           <TabsTrigger value="logs">Logs</TabsTrigger>
           <TabsTrigger value="assets">Assets</TabsTrigger>
           <TabsTrigger value="tools">Tools</TabsTrigger>
