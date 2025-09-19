@@ -1,112 +1,27 @@
 package app
 
 import (
+	"context"
 	"fmt"
+	"os"
 
-	"github.com/speakeasy-api/gram/cli/internal/deploy"
-	"github.com/speakeasy-api/gram/cli/internal/env"
 	"github.com/urfave/cli/v2"
 )
 
-var (
-	pushUsageDescription = `Push a deployment to Gram.
-
-Sample deployment file
-======================
-{
-  "schema_version": "1.0.0",
-  "type": "deployment",
-  "sources": [
-    {
-      "type": "openapiv3",
-      "location": "/path/to/spec.yaml",
-      "name": "My API",
-      "slug": "my-api"
-    }
-  ]
-}
-
-NOTE: Names and slugs must be unique across all sources.
-`
-)
-
-type CLI interface {
-	Run(args []string) error
-}
-
-type cliApp struct {
-	app *cli.App
-}
-
-func NewCLI() CLI {
-	app := &cli.App{
+func newApp() *cli.App {
+	return &cli.App{
 		Name:    "gram",
 		Usage:   "A command line interface for the Gram platform. Get started at https://docs.getgram.ai/",
 		Version: Version,
 		Commands: []*cli.Command{
-			{
-				Name:        "push",
-				Usage:       "Push a deployment to Gram",
-				Description: pushUsageDescription,
-				Flags: []cli.Flag{
-					&cli.StringFlag{
-						Name:     "file",
-						Aliases:  []string{"f"},
-						Usage:    "Path to the deployment file (relative locations resolve to the deployment file's directory)",
-						Required: true,
-					},
-					&cli.StringFlag{
-						Name:    "project",
-						Aliases: []string{"p"},
-						EnvVars: []string{env.VarNameProjectSlug},
-						Usage: fmt.Sprintf(
-							"Project slug (falls back to %s environment variable)",
-							env.VarNameProjectSlug),
-						Required: true,
-					},
-				},
-				Action: pushAction,
-			},
+			newPushCommand(),
 		},
 	}
-
-	return &cliApp{app: app}
 }
 
-func (c *cliApp) Run(args []string) error {
-	if err := c.app.Run(args); err != nil {
-		commandName := c.app.Name
-		if len(args) > 1 {
-			commandName = args[1]
-		}
-		return fmt.Errorf("%s failed: %w", commandName, err)
+func Execute(ctx context.Context, osArgs []string) {
+	if err := newApp().RunContext(ctx, osArgs); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
-
-	return nil
-}
-
-func pushAction(c *cli.Context) error {
-	filePath := c.String("file")
-	projectSlug := c.String("project")
-
-	if env.APIKeyMissing() {
-		return fmt.Errorf(
-			"API key not set. Please set the %s environment variable and retry",
-			env.VarNameProducerKey,
-		)
-	}
-
-	fmt.Printf("Deploying to project: %s\n", projectSlug)
-
-	req := deploy.CreateDeploymentFromFileRequest{
-		FilePath: filePath,
-		Project:  projectSlug,
-	}
-	result, err := deploy.CreateDeploymentFromFile(req)
-	if err != nil {
-		return fmt.Errorf("deployment failed: %w", err)
-	}
-
-	fmt.Printf("Deployment created successfully: %+v\n", result.Deployment)
-	return nil
 }
