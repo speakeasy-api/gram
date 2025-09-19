@@ -124,6 +124,34 @@ function initializeHandlers() {
         downloadDxtHandler(e);
       }),
     );
+
+  let mouseX = 0;
+  let mouseY = 0;
+
+  document.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+  })
+
+  const gramBrandBadge = document.querySelector('.gram-brand-badge')
+  gramBrandBadge.addEventListener('mouseenter', (e) => {
+    const updateOffset = () => {
+      console.log('updating')
+      const el = gramBrandBadge;
+      const rect = el.getBoundingClientRect();
+
+
+      const xOffset = mouseX - rect.x - el.clientWidth / 2
+      const yOffset = mouseY - rect.y - el.clientHeight / 2
+
+      el.style.setProperty('--mouse-center-offset-x', xOffset)
+      el.style.setProperty('--mouse-center-offset-y', yOffset)
+      requestAnimationFrame(updateOffset)
+    }
+
+    updateOffset()
+  }) 
+    
 }
 
 document.addEventListener("DOMContentLoaded", () => {
