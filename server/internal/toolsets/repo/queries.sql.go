@@ -174,7 +174,7 @@ INSERT INTO toolset_versions (
   , predecessor_id
 ) VALUES (
     $1
-  , COALESCE($2::text[], '{}'::text[])
+  , $2
   , $3
 )
 RETURNING id, toolset_id, version, tool_urns, predecessor_id, created_at, updated_at, deleted_at, deleted
@@ -182,7 +182,7 @@ RETURNING id, toolset_id, version, tool_urns, predecessor_id, created_at, update
 
 type CreateToolsetVersionParams struct {
 	ToolsetID     uuid.UUID
-	ToolUrns      []string
+	ToolUrns      []urn.Tool
 	PredecessorID uuid.NullUUID
 }
 

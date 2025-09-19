@@ -37,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
 
@@ -151,25 +152,20 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	// Create initial toolset version with tool URNs
-	var toolUrnStrings []string
+	var toolURNs []urn.Tool
 	if len(payload.HTTPToolNames) > 0 {
-		toolUrns, err := s.repo.GetToolUrnsByNames(ctx, repo.GetToolUrnsByNamesParams{
+		toolURNs, err = s.repo.GetToolUrnsByNames(ctx, repo.GetToolUrnsByNamesParams{
 			ToolNames: payload.HTTPToolNames,
 			ProjectID: *authCtx.ProjectID,
 		})
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to get tool URNs for toolset version", attr.SlogError(err))
-		} else {
-			toolUrnStrings = make([]string, len(toolUrns))
-			for i, urn := range toolUrns {
-				toolUrnStrings[i] = urn.String()
-			}
 		}
 	}
 
 	_, err = s.repo.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
 		ToolsetID:     createdToolset.ID,
-		ToolUrns:      toolUrnStrings,
+		ToolUrns:      toolURNs,
 		PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	if err != nil {
@@ -614,7 +610,7 @@ func (s *Service) CreateToolsetVersion(ctx context.Context, payload *gen.UpdateT
 
 	// Create toolset version if either HTTP tools or prompt templates changed
 	if httpToolNamesChanged || promptTemplateNamesChanged {
-		var allToolUrns []string
+		var allToolUrns []urn.Tool
 
 		toolNames := conv.Ternary(payload.HTTPToolNames != nil, payload.HTTPToolNames, existingToolset.HttpToolNames)
 
@@ -627,9 +623,7 @@ func (s *Service) CreateToolsetVersion(ctx context.Context, payload *gen.UpdateT
 			if err != nil {
 				logger.WarnContext(ctx, "failed to get tool URNs for toolset version", attr.SlogError(err))
 			} else {
-				for _, urn := range toolUrns {
-					allToolUrns = append(allToolUrns, urn.String())
-				}
+				allToolUrns = append(allToolUrns, toolUrns...)
 			}
 		}
 
@@ -652,9 +646,7 @@ func (s *Service) CreateToolsetVersion(ctx context.Context, payload *gen.UpdateT
 			if err != nil {
 				logger.WarnContext(ctx, "failed to get prompt template URNs for toolset version", attr.SlogError(err))
 			} else {
-				for _, urn := range templateUrns {
-					allToolUrns = append(allToolUrns, urn.String())
-				}
+				allToolUrns = append(allToolUrns, templateUrns...)
 			}
 		}
 

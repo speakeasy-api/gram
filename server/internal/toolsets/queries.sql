@@ -169,7 +169,7 @@ INSERT INTO toolset_versions (
   , predecessor_id
 ) VALUES (
     @toolset_id
-  , COALESCE(@tool_urns::text[], '{}'::text[])
+  , @tool_urns
   , @predecessor_id
 )
 RETURNING *;
