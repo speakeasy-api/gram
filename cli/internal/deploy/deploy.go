@@ -70,9 +70,10 @@ func CreateDeployment(
 }
 
 type CreateDeploymentFromFileRequest struct {
-	FilePath       string
 	Project        string
 	IdempotencyKey string
+	WorkDir        string
+	Config         io.Reader
 }
 
 func CreateDeploymentFromFile(
@@ -80,7 +81,7 @@ func CreateDeploymentFromFile(
 	logger *slog.Logger,
 	req CreateDeploymentFromFileRequest,
 ) (*deployments.CreateDeploymentResult, error) {
-	config, err := deplconfig.ReadDeploymentConfig(req.FilePath)
+	config, err := deplconfig.NewDeploymentConfig(req.Config, req.WorkDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read deployment config: %w", err)
 	}

@@ -12,27 +12,9 @@ import (
 	"time"
 )
 
-// readFile validates that a file exists at `filePath` and that its mode is
-// regular.
-func readFile(filePath string) ([]byte, error) {
-	fi, err := os.Stat(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("invalid file path: %w", err)
-	}
-	if !fi.Mode().IsRegular() {
-		return nil, fmt.Errorf("path must be a regular file")
-	}
-
-	data, err := os.ReadFile(filePath) // #nosec G304
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-	return data, nil
-}
-
 // readLocal reads a source from a local file path.
 func (sr *SourceReader) readLocal() (io.ReadCloser, int64, error) {
-	data, err := readFile(sr.source.Location)
+	data, err := os.ReadFile(sr.source.Location)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to read local file: %w", err)
 	}

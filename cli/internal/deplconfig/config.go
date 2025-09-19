@@ -3,6 +3,7 @@ package deplconfig
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"path/filepath"
 	"slices"
@@ -46,19 +47,6 @@ func (dc DeploymentConfig) GetProducerToken() string {
 	return env.APIKey()
 }
 
-// ResolveLocations resolves relative source locations to `baseDir`. URLs and
-// absolute paths are left unchanged.
-func (dc *DeploymentConfig) ResolveLocations(baseDir string) {
-	for i := range dc.Sources {
-		location := dc.Sources[i].Location
-		if isURL(location) || filepath.IsAbs(location) {
-			continue
-		}
-
-		dc.Sources[i].Location = filepath.Join(baseDir, location)
-	}
-}
-
 var urlSchemes = []string{"http", "https"}
 
 // isURL checks if the given string is a URL (http or https).
@@ -67,24 +55,26 @@ func isURL(s string) bool {
 	return err == nil && slices.Contains(urlSchemes, u.Scheme)
 }
 
-// ReadDeploymentConfig reads a deployment config.
-func ReadDeploymentConfig(configPath string) (*DeploymentConfig, error) {
+// NewDeploymentConfig reads a deployment config.
+func NewDeploymentConfig(cfgRdr io.Reader, workDir string) (*DeploymentConfig, error) {
 	var cfg DeploymentConfig
 
-	data, err := readFile(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file %s: %w", configPath, err)
-	}
-
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	if err := json.NewDecoder(cfgRdr).Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse config JSON: %w", err)
 	}
 
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
-	cfg.ResolveLocations(filepath.Dir(configPath))
+	for i := range cfg.Sources {
+		location := cfg.Sources[i].Location
+		if isURL(location) || filepath.IsAbs(location) {
+			continue
+		}
+
+		cfg.Sources[i].Location = filepath.Join(workDir, location)
+	}
 
 	return &cfg, nil
 }

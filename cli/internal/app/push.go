@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
@@ -43,7 +44,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				Required: true,
 			},
 			&cli.PathFlag{
-				Name:     "file",
+				Name:     "config",
 				Usage:    "Path to the deployment file (relative locations resolve to the deployment file's directory)",
 				Required: true,
 			},
@@ -60,12 +61,23 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			logger := PullLogger(ctx)
 
 			projectSlug := c.String("project")
-			filePath := c.Path("file")
 
-			logger.InfoContext(ctx, "Deploying to project", slog.String("project", projectSlug), slog.String("file", filePath))
+			configFilename, err := filepath.Abs(c.String("config"))
+			if err != nil {
+				return fmt.Errorf("failed to resolve deployment file path: %w", err)
+			}
+
+			configFile, err := os.Open(configFilename)
+			if err != nil {
+				return fmt.Errorf("failed to open deployment file: %w", err)
+			}
+			defer configFile.Close()
+
+			logger.InfoContext(ctx, "Deploying to project", slog.String("project", projectSlug), slog.String("config", c.String("config")))
 
 			result, err := deploy.CreateDeploymentFromFile(ctx, logger, deploy.CreateDeploymentFromFileRequest{
-				FilePath:       filePath,
+				WorkDir:        filepath.Dir(configFilename),
+				Config:         configFile,
 				Project:        projectSlug,
 				IdempotencyKey: c.String("idempotency-key"),
 			})
