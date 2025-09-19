@@ -41,33 +41,28 @@ type AssetCreator interface {
 	SourceReader
 }
 
+type UploadOpenAPIv3Request struct {
+	APIKey        string
+	ProjectSlug   string
+	Reader        io.ReadCloser
+	ContentType   string
+	ContentLength int64
+}
+
 func (c *AssetsClient) UploadOpenAPIv3(
 	ctx context.Context,
 	logger *slog.Logger,
-	ac AssetCreator,
+	req *UploadOpenAPIv3Request,
 ) (*assets.UploadOpenAPIv3Result, error) {
-	reader, contentLength, err := ac.Read(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read source: %w", err)
-	}
-
-	defer func() {
-		if closeErr := reader.Close(); closeErr != nil {
-			logger.WarnContext(ctx, "error closing reader", slog.String("error", closeErr.Error()))
-		}
-	}()
-
-	apiKey := ac.GetApiKey()
-	projectSlug := ac.GetProjectSlug()
 	payload := &assets.UploadOpenAPIv3Form{
-		ApikeyToken:      &apiKey,
-		ProjectSlugInput: &projectSlug,
+		ApikeyToken:      &req.APIKey,
+		ProjectSlugInput: &req.ProjectSlug,
 		SessionToken:     nil,
-		ContentType:      ac.GetContentType(),
-		ContentLength:    contentLength,
+		ContentType:      req.ContentType,
+		ContentLength:    req.ContentLength,
 	}
 
-	result, err := c.client.UploadOpenAPIv3(ctx, payload, reader)
+	result, err := c.client.UploadOpenAPIv3(ctx, payload, req.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload OpenAPI asset: %w", err)
 	}

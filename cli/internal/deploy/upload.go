@@ -7,7 +7,6 @@ import (
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
-	"github.com/speakeasy-api/gram/cli/internal/env"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
@@ -17,31 +16,9 @@ func isSupportedSourceType(source Source) bool {
 }
 
 type uploadRequest struct {
+	apiKey       string
+	projectSlug  string
 	sourceReader *SourceReader
-	project      string
-}
-
-func NewUploadRequest(source Source, project string) *uploadRequest {
-	return &uploadRequest{
-		sourceReader: NewSourceReader(source),
-		project:      project,
-	}
-}
-
-func (ur *uploadRequest) GetApiKey() string {
-	return env.APIKey()
-}
-
-func (ur *uploadRequest) GetProjectSlug() string {
-	return ur.project
-}
-
-func (ur *uploadRequest) GetType() string {
-	return ur.sourceReader.GetType()
-}
-
-func (ur *uploadRequest) GetContentType() string {
-	return ur.sourceReader.GetContentType()
 }
 
 func (ur *uploadRequest) Read(ctx context.Context) (io.ReadCloser, int64, error) {
@@ -55,15 +32,25 @@ func (ur *uploadRequest) Read(ctx context.Context) (io.ReadCloser, int64, error)
 func uploadFromSource(
 	ctx context.Context,
 	logger *slog.Logger,
-	source Source,
-	project string,
+	req *uploadRequest,
 ) (*deployments.AddOpenAPIv3DeploymentAssetForm, error) {
-	uploadReq := NewUploadRequest(source, project)
-	uploadRes, err := api.NewAssetsClient().UploadOpenAPIv3(ctx, logger, uploadReq)
+	rc, length, err := req.sourceReader.Read(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read source: %w", err)
+	}
 
+	source := req.sourceReader.source
+
+	uploadRes, err := api.NewAssetsClient().UploadOpenAPIv3(ctx, logger, &api.UploadOpenAPIv3Request{
+		APIKey:        req.apiKey,
+		ProjectSlug:   req.projectSlug,
+		Reader:        rc,
+		ContentType:   req.sourceReader.GetContentType(),
+		ContentLength: length,
+	})
 	if err != nil {
 		msg := "failed to upload asset in project '%s' for source %s: %w"
-		return nil, fmt.Errorf(msg, project, source.Location, err)
+		return nil, fmt.Errorf(msg, req.projectSlug, source.Location, err)
 	}
 
 	return &deployments.AddOpenAPIv3DeploymentAssetForm{
@@ -92,7 +79,11 @@ func createAssetsForDeployment(
 			continue
 		}
 
-		asset, err := uploadFromSource(ctx, logger, source, project)
+		asset, err := uploadFromSource(ctx, logger, &uploadRequest{
+			apiKey:       req.APIKey,
+			projectSlug:  project,
+			sourceReader: NewSourceReader(source),
+		})
 		if err != nil {
 			return nil, err
 		}
