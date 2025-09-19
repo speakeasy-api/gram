@@ -45,6 +45,17 @@ function togglePopover(e) {
   }
 }
 
+function closeModal() {
+  const modal = document.querySelector(".modal");
+  const backdrop = document.querySelector(".modal-backdrop");
+  modal.classList.add('fade-out');
+  backdrop.classList.add('fade-out');
+  modal.addEventListener('transitionend', () => {
+    modal.remove();
+    backdrop.remove();
+  })
+}
+
 function openModal(childContent) {
   const template = document.querySelector("#modal-template");
   const modalElement = template.content.cloneNode(true);
@@ -55,13 +66,21 @@ function openModal(childContent) {
   });
 
   document.body.appendChild(modalElement);
+  const modal = document.querySelector('.modal')
   const backdrop = document.querySelector(".modal-backdrop");
-
-  backdrop.addEventListener("click", () => {
-    const modal = document.querySelector(".modal");
-    modal.remove();
-    backdrop.remove();
-  });
+  modal.addEventListener('animationend', () => {
+    modal.classList.remove('fade-in');
+    backdrop.classList.remove('fade-in');
+  })
+  modal.classList.add('fade-in')
+  backdrop.classList.add('fade-in')
+  backdrop.addEventListener("click", closeModal);
+  document.querySelector('.modal-close').addEventListener('click', closeModal)
+  document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeModal();
+  }
+});
 }
 
 function openInstallTargetModal(e) {
@@ -103,6 +122,36 @@ function copyContainerSnippet(e) {
     });
 }
 
+function registerCenterOffsetUpdaters(el) {
+  let mouseX = 0;
+  let mouseY = 0;
+  let taskId = null;
+
+  const updateOffset = () => {
+    const rect = el.getBoundingClientRect();
+
+    const xOffset = mouseX - rect.x - el.clientWidth / 2;
+    const yOffset = mouseY - rect.y - el.clientHeight / 2;
+
+    el.style.setProperty("--mouse-center-offset-x", xOffset);
+    el.style.setProperty("--mouse-center-offset-y", yOffset);
+    taskId = requestAnimationFrame(updateOffset);
+  };
+
+  el.addEventListener("mousemove", (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+  });
+
+  el.addEventListener("mouseenter", (e) => {
+    updateOffset();
+  });
+
+  el.addEventListener("mouseleave", (e) => {
+    cancelAnimationFrame(taskId);
+  });
+}
+
 function initializeHandlers() {
   document
     .querySelector(".action-button")
@@ -124,6 +173,8 @@ function initializeHandlers() {
         downloadDxtHandler(e);
       }),
     );
+
+  registerCenterOffsetUpdaters(document.querySelector(".gram-brand-badge"));
 }
 
 document.addEventListener("DOMContentLoaded", () => {
