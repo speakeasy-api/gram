@@ -1,5 +1,19 @@
 # @gram/server
 
+## 0.3.0
+
+### Minor Changes
+
+- f17c187: Support uploading Gram Functions as part of deployments
+- 9a93cdd: adds branding and improved install instructions to mcp install page
+
+### Patch Changes
+
+- 155c2e1: Add gram cli v0.1.0
+- bd15d15: Fixes mobile layout for install page
+- ee7b023: Add basic validation for deployment attachments
+- 49a5851: support non security scheme input header parameters
+
 ## 0.2.0
 
 ### Minor Changes
