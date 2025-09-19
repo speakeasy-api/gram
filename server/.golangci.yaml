@@ -148,6 +148,7 @@ linters:
     wrapcheck:
       ignore-sigs:
         - "errors.New("
+        - "errors.Join("
         - "fmt.Errorf("
 
         - "(*github.com/sourcegraph/conc/pool.ErrorPool).Wait("

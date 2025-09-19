@@ -554,7 +554,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 			packagesToUpsert,
 		)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error initializing deployment").Log(ctx, logger)
+			return nil, err
 		}
 
 		ierr := inv.Check("initial deployment state", "deployment id cannot be nil", newID != uuid.Nil)

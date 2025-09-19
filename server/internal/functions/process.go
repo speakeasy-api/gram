@@ -42,22 +42,6 @@ var pythonEntrypoints = map[string]struct{}{
 	"functions.py": {},
 }
 
-type runtimes map[string]struct{}
-
-func (r runtimes) String() string {
-	return strings.Join(slices.Sorted(maps.Keys(supportedRuntimes)), ", ")
-}
-
-var supportedRuntimes = runtimes{
-	"nodejs:22":   {},
-	"python:3.12": {},
-}
-
-func IsSupportedRuntime(runtime string) bool {
-	_, ok := supportedRuntimes[runtime]
-	return ok
-}
-
 type ProcessError struct {
 	reason string
 	err    error

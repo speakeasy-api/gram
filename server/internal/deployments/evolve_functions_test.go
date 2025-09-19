@@ -13,6 +13,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
+	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -982,15 +983,8 @@ func TestEvolve_UpsertFunctions_InvalidRuntime(t *testing.T) {
 		ExcludePackages:        []string{},
 	})
 
-	require.NoError(t, err, "evolve should succeed but processing should fail")
-	require.NotEqual(t, uuid.Nil.String(), result.Deployment.ID, "deployment ID is nil")
-	require.Equal(t, "failed", result.Deployment.Status, "deployment status should be failed due to invalid runtime")
-
-	// Verify that NO function tools were created due to invalid runtime
-	repo := testrepo.New(ti.conn)
-	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(result.Deployment.ID))
-	require.NoError(t, err, "list deployment function tools")
-	require.Empty(t, functionTools, "expected zero function tools due to invalid runtime")
+	require.ErrorIs(t, err, deployments.ErrUnsupported)
+	require.Nil(t, result, "evolve result must be nil")
 }
 
 func TestEvolve_UpsertFunctions_BadToolsManifest(t *testing.T) {

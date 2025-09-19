@@ -68,6 +68,10 @@ func createDeployment(
 		key = uuid.New().String()
 	}
 
+	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert); err != nil {
+		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).Log(ctx, logger)
+	}
+
 	cmd, err := tx.CreateDeployment(ctx, repo.CreateDeploymentParams{
 		ProjectID:      fields.projectID,
 		UserID:         fields.userID,
@@ -138,6 +142,10 @@ func cloneDeployment(
 	ctx, span := tracer.Start(ctx, "cloneDeployment")
 	defer span.End()
 	defer span.SetStatus(codes.Ok, "deployment cloned")
+
+	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert); err != nil {
+		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).Log(ctx, logger)
+	}
 
 	srcDepID := uuid.UUID(srcDeploymentID)
 	projID := uuid.UUID(projectID)
