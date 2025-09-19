@@ -48,6 +48,8 @@ importers:
         specifier: ^8.8.1
         version: 8.8.1
 
+  cli: {}
+
   client/dashboard:
     dependencies:
       '@ai-sdk/openai':
