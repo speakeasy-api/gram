@@ -60,7 +60,7 @@ type ResponseFilterRequest struct {
 type ToolCallBody struct {
 	PathParameters       map[string]any         `json:"pathParameters"`
 	QueryParameters      map[string]any         `json:"queryParameters"`
-	Headers              map[string]any         `json:"headers"`
+	HeaderParameters     map[string]any         `json:"headerParameters"`
 	Body                 json.RawMessage        `json:"body"`
 	ResponseFilter       *ResponseFilterRequest `json:"responseFilter"`
 	EnvironmentVariables map[string]string      `json:"environmentVariables"`
@@ -336,9 +336,9 @@ func (itp *ToolProxy) Do(
 		req.URL.RawQuery = values.Encode()
 	}
 
-	// Handle headers
-	if toolCallBody.Headers != nil {
-		for name, value := range toolCallBody.Headers {
+	// Handle header parameters (non security schemes)
+	if toolCallBody.HeaderParameters != nil {
+		for name, value := range toolCallBody.HeaderParameters {
 			param := tool.HeaderParams[name]
 			var settings *serialization.HTTPParameter
 			if param == nil {

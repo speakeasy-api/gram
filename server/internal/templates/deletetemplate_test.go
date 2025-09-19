@@ -26,7 +26,7 @@ func TestTemplatesService_DeleteTemplate_ByID_Success(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 	})
 	require.NoError(t, err, "create template")
@@ -68,7 +68,7 @@ func TestTemplatesService_DeleteTemplate_ByName_Success(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 	})
 	require.NoError(t, err, "create template")

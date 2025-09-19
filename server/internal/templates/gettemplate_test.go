@@ -68,7 +68,7 @@ func TestTemplatesService_GetTemplate_ByName_Success(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 	})
 	require.NoError(t, err, "create template")
@@ -225,7 +225,7 @@ func TestTemplatesService_GetTemplate_BothIDAndName(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 	})
 	require.NoError(t, err, "create template")
