@@ -31,3 +31,4 @@ gram.code-workspace
 
 **/.claude/settings.local.json
 .vercel
+cover.*
