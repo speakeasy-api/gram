@@ -1,0 +1,257 @@
+---
+title: "Using Roo Code with Gram-hosted MCP servers"
+description: "Learn how to connect Roo Code to Gram-hosted MCP servers to give your AI coding assistant access to your APIs and tools in VS Code."
+sidebar:
+  order: 5
+---
+
+Roo Code is a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.roo-cline) that embeds autonomous coding agents directly in your editor. Once installed, the extension has full read-write access to your open workspace, letting you chat with the agent, generate code, run tests, and refactor files within your editor.
+
+When paired with [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers, you can connect Roo Code to your APIs, databases, and infrastructure services, granting it contextual access to your tools and data.
+
+This guide will show you how to connect Roo Code to a [Gram-hosted MCP server](/blog/the-easiest-way-to-host-mcp-servers) using the example Push Advisor API from the [Gram concepts guide](/blog/gram-concepts). You'll learn how to set up the connection, test it, and use natural language to perform vibe checks before you vibe code.
+
+Find the full code and OpenAPI document in the [Push Advisor API repository](https://github.com/ritza-co/gram-examples/tree/main/push-advisor-api).
+
+## Prerequisites
+
+You'll need:
+
+- A [Gram account](https://app.getgram.ai).
+- A [VS Code](https://code.visualstudio.com/) editor or any other VS Code fork such as [Cursor](https://www.cursor.com/) or [VSCodium](https://vscodium.com/).
+- The [Roo Code VS Code extension](https://marketplace.visualstudio.com/items?itemName=RooVeterinaryInc.roo-cline) installed.
+- An API key from an LLM provider supported by Roo Code (such as Anthropic or OpenAI).
+
+## Creating a Gram MCP server
+
+If you already have a Gram MCP server configured, you can skip to [connecting Roo Code to your Gram-hosted MCP server](#connecting-roo-code-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and more details on creating a Gram-hosted MCP server, check out the [Gram concepts guide](/blog/gram-concepts).
+
+### Setting up a Gram project
+
+In the [Gram dashboard](https://app.getgram.ai), click **New Project** to start the guided setup flow for creating a toolset and MCP server.
+
+![Screenshot of the Gram dashboard showing the New Project link](/img/guides/mcp-installing-roo-code/gram-new-project.png)
+
+Enter a project name and click **Submit**.
+
+Gram will then guide you through the following steps.
+
+#### Step 1: Upload the OpenAPI document
+
+Upload the [Push Advisor OpenAPI document](https://github.com/ritza-co/gram-examples/blob/main/push-advisor-api/openapi.yaml), enter the name of your API, and click **Continue**.
+
+![Screenshot of the upload your OpenAPI spec dialog](/img/guides/mcp-installing-roo-code/upload-openapi-spec.png)
+
+#### Step 2: Create a toolset
+
+Give your toolset a name (for example, "Push Advisor") and click **Continue**.
+
+![Screenshot of the create toolset dialog](/img/guides/mcp-installing-roo-code/create-toolset.png)
+
+Notice that the names of the tools that will be generated from your OpenAPI document are displayed in this dialog.
+
+#### Step 3: Configure MCP
+
+Enter a URL slug for the MCP server and click **Continue**.
+
+![Screenshot of the configure MCP dialog](/img/guides/mcp-installing-roo-code/configure-mcp.png)
+
+Gram will create the toolset from the OpenAPI document.
+
+Click **Toolsets** in the sidebar to view the Push Advisor toolset.
+
+![Screenshot of the Gram dashboard showing the Push Advisor toolset](/img/guides/mcp-installing-roo-code/toolset-created.png)
+
+### Configuring environment variables
+
+[Environments](/concepts/environments) store API keys and configuration separate from your toolset logic.
+
+In the **Environments** tab, click the "Default" environment. Click the three dots in the top right corner of the environment card and then **Fill for Toolset**. Select the **Push Advisor** toolset and click **Fill Variables** to automatically populate the required variables.
+
+![Screenshot showing the fill for toolset dialog to automatically populate required variables](/img/guides/mcp-installing-roo-code/fill-env-vars-toolset.png)
+
+The Push Advisor API is hosted at `canpushtoprod.abdulbaaridavids04.workers.dev`, so set the `<API_name>_SERVER_URL` environment variable to `https://canpushtoprod.abdulbaaridavids04.workers.dev`. Click **Update** and then **Save**.
+
+![Screenshot showing setting the server URL environment variable](/img/guides/mcp-installing-roo-code/set-server-url.png)
+
+### Publishing an MCP server
+
+Let's make the toolset available as an MCP server.
+
+Go to the **MCP** tab, find the Push Advisor toolset and click on it to open the MCP details page. 
+
+
+Scroll down to the **Visibility** section and tick the **Public** checkbox.
+
+![Screenshot of the MCP details page](/img/guides/mcp-installing-roo-code/mcp-details.png)
+
+Next, you'll need to copy the MCP server configuration.
+
+Scroll down to the **MCP Config** section and copy the **Public Server** configuration.
+
+![Screenshot showing the MCP server config dialog for the Push Advisor toolset](/img/guides/mcp-installing-roo-code/copy-mcp-config.png)
+
+The configuration will look something like this:
+
+```json
+{
+  "mcpServers": {
+    "GramPushadvisor": {
+      "command": "npx",
+      "args": [
+          "mcp-remote",
+          "https://app.getgram.ai/mcp/canipushtoprod"
+        ]
+    }
+  }
+}
+```
+
+Use the **Authenticated Server** configuration if you want to use the MCP server in a private environment.
+
+You'll need an API key to use an authenticated server. [Generate an API key](/concepts/api-keys) in the **Settings** tab and copy it to the `GRAM_KEY` environment variable in place of `<your-key-here>`.
+
+The authenticated server configuration looks something like this:
+
+```json
+{
+  "mcpServers": {
+    "GramPushadvisor": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://app.getgram.ai/mcp/canipushtoprod",
+        "--header",
+        "Authorization: ${GRAM_KEY}"
+      ],
+      "env": {
+        "GRAM_KEY": "Bearer <your-key-here>"
+      }
+    }
+  }
+}
+```
+
+Here's what these configuration options do:
+
+- `"command"` – The executable to run (in this case, `npx`).
+- `"args"` – Array of command-line arguments.
+- `"env"` – Environment variables for the server process (optional).
+- `"timeout"` – Request timeout in milliseconds (optional, defaults to `600,000ms`).
+- `"trust"` – When `true`, bypasses all tool call confirmations (optional, defaults to `false`).
+
+## Connecting Roo Code to your Gram-hosted MCP server
+
+Now we'll connect Roo Code to your newly created MCP server.
+
+Roo Code uses an `mcp_settings.json` configuration file to manage MCP servers.
+
+To add a server to Roo Code, click the **Server** icon at the top right of the Roo Code window.
+
+![Screenshot showing the Roo Code Edit Global MCP button](/img/guides/mcp-installing-roo-code/roo-code-mcp-button.png)
+
+Click **Edit Global MCP** to open Roo Code's global MCP server `mcp_settings.json` file.
+
+![Screenshot showing the Roo Code MCP server mcp_settings.json file](/img/guides/mcp-installing-roo-code/roo-code-settings-paste.png)
+
+If you're using a public server, add the following to the `mcp_settings.json` file:
+
+```json
+{
+  "mcpServers": {
+    "GramPushadvisor": {
+      "command": "npx",
+      "args": [
+          "mcp-remote",
+          "https://app.getgram.ai/mcp/canipushtoprod"
+        ]
+    }
+  }
+}
+```
+
+If you're using an authenticated server, add the following:
+
+```json
+{
+  "mcpServers": {
+    "GramPushadvisor": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://app.getgram.ai/mcp/canipushtoprod",
+        "--header",
+        "Authorization: ${GRAM_KEY}"
+      ],
+      "env": {
+        "GRAM_KEY": "Bearer <your-key-here>"
+      }
+    }
+  }
+}
+```
+
+Save the file, and your MCP server should show up in the Roo Code MCP server list.
+
+![Screenshot showing the Roo Code MCP server list](/img/guides/mcp-installing-roo-code/roo-code-installed-server.png)
+
+## Testing the connection
+
+Now test the connection by running a vibe check.
+
+Ask Roo Code a basic question like, "What's the vibe today?"
+
+<video width="600" controls>
+  <source src="/videos/roo-code-vibe-check.mp4" type="video/mp4" />
+    Your browser does not support the video tag.
+</video>
+
+Roo Code will use the `vibe_check` tool to check the current day. Before making the API call, it will ask for your permission to use the tool:
+
+![Screenshot showing Roo Code asking for permission to use the tool](/img/guides/mcp-installing-roo-code/roo-code-tool-permission.png)
+
+You can approve the tool call once or select **Auto-approve** to always allow this tool and skip future confirmation prompts. Once approved, Roo Code will make the API call and respond with the vibe check results.
+
+## Troubleshooting
+
+Let's go through some common issues and how to fix them.
+
+### Server not found
+
+If Roo Code can't find your server:
+
+- Check that the `mcp_settings.json` file is correct and matches the configuration from Gram.
+- Verify that the MCP server is listed in Roo Code's server configuration panel.
+- Ensure the `npx` command is available (reinstall Node.js if needed).
+- Try restarting Roo Code after making configuration changes.
+
+### Connection issues
+
+If you're having trouble connecting to the MCP server:
+
+- Verify the MCP server URL is correct in your configuration.
+- Check that the API behind the MCP server is reachable from your machine.
+- Try restarting Roo Code after making configuration changes.
+
+### Authentication errors
+
+If you're using an authenticated server and getting authentication errors:
+
+- Verify your Gram API key in the dashboard under **Settings > API Keys**.
+- Ensure the API key is correctly formatted with the `Bearer ` prefix.
+- Check that the `GRAM_KEY` environment variable is properly set in your configuration.
+
+### Tools not appearing
+
+If the tools aren't showing up in Roo Code:
+
+- Test the MCP server in the **Gram Playground** first to ensure it's working.
+- Check that the toolset includes the tools you expect to use.
+- Verify the environment is correctly configured with the required variables.
+- Look for any error messages in Roo Code's output panel or logs.
+
+## What's next
+
+Ready to build your own MCP server? [Try Gram today](https://getgram.ai) and see how easy it is to turn any API into agent-ready tools that work across all your development environments.
+
+

@@ -1,0 +1,382 @@
+---
+title: "Using OpenAI API with Gram-hosted MCP servers"
+description: "Learn how to connect OpenAI's Responses API to Gram-hosted MCP servers, giving GPT models access to your APIs and tools."
+sidebar:
+  order: 1
+---
+
+OpenAI's [Responses API](https://platform.openai.com/docs/api-reference/responses) supports remote MCP servers through their MCP tool feature. This allows you to give GPT models direct access to your tools and infrastructure by connecting to [Gram-hosted MCP servers](/gram-quickstart).
+
+This guide will show you how to connect OpenAI's API to a Gram-hosted MCP server using an example [Push Advisor API](https://github.com/ritza-co/gram-examples/blob/main/push-advisor-api/openapi.yaml). You'll learn how to create an MCP server from an OpenAPI document, set up the connection, configure authentication, and use natural language to query the example API.
+
+Find the full code and OpenAPI document in the [Push Advisor API repository](https://github.com/ritza-co/gram-examples/tree/main/push-advisor-api).
+
+## Prerequisites
+
+You'll need:
+
+- A [Gram account](https://app.getgram.ai).
+- An [OpenAI API key](https://platform.openai.com/api-keys).
+- A Python environment set up on your machine.
+- Basic familiarity with making API requests.
+
+## Creating a Gram MCP server
+
+If you already have a Gram MCP server configured, you can skip to [connecting OpenAI API to your Gram-hosted MCP server](#connecting-openai-api-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and more details on creating a Gram-hosted MCP server, check out our [introduction to Gram](/introduction).
+
+### Setting up a Gram project
+
+In the [Gram dashboard](https://app.getgram.ai), click **New Project** to start the guided setup flow for creating a toolset and MCP server.
+
+![Screenshot of the Gram dashboard showing the New Project link](/img/guides/mcp-installing-ide/gram-new-project.png)
+
+Enter a project name and click **Submit**.
+
+Gram will then guide you through the following steps.
+
+#### Step 1: Upload the OpenAPI document
+
+Upload the [Push Advisor OpenAPI document](https://github.com/ritza-co/gram-examples/blob/main/push-advisor-api/openapi.yaml), enter the name of your API, and click **Continue**.
+
+![Screenshot of the upload your OpenAPI document dialog](/img/guides/mcp-installing-ide/upload-openapi-spec.png)
+
+#### Step 2: Create a toolset
+
+Give your toolset a name (for example, "Push Advisor") and click **Continue**.
+
+![Screenshot of the create toolset dialog](/img/guides/mcp-installing-ide/create-toolset.png)
+
+Notice that the names of the tools that will be generated from your OpenAPI document are displayed in this dialog.
+
+#### Step 3: Configure MCP
+
+Enter a URL slug for the MCP server and click **Continue**.
+
+![Screenshot of the configure MCP dialog](/img/guides/mcp-installing-ide/configure-mcp.png)
+
+Gram will create a new toolset from the OpenAPI document.
+
+Click **Toolsets** in the sidebar to view the Push Advisor toolset.
+
+![Screenshot of the Gram dashboard showing the Push Advisor toolset](/img/guides/mcp-installing-ide/toolset-created.png)
+
+### Publishing an MCP server
+
+Let's make the toolset available as an MCP server.
+
+Go to the **MCP** tab, find the Push Advisor toolset, and click the title of the server.
+
+On the **MCP Details** page, tick the **Public** checkbox and click **Save**.
+
+![Screenshot of the MCP details page](/img/guides/mcp-installing-ide/mcp-details.png)
+
+Scroll down to the **MCP Config** section and note your MCP server URL. For this guide, we'll use the public server URL format:
+
+`https://app.getgram.ai/mcp/canipushtoprod`
+
+For authenticated servers, you'll need an API key. [Generate an API key](/concepts/api-keys) in the **Settings** tab.
+
+## Connecting OpenAI API to your Gram-hosted MCP server
+
+The OpenAI Responses API supports MCP servers through the `tools` parameter. Here's how to connect to your Gram-hosted MCP server.
+
+### Basic connection (public server)
+
+Here's a basic example using a public Gram MCP server. Start by setting your OpenAI API key:
+
+```bash
+export OPENAI_API_KEY=your-openai-api-key-here
+```
+
+Install the OpenAI Python package:
+
+```bash
+pip install openai
+```
+
+Then run the following Python script:
+
+```python
+from openai import OpenAI
+
+client = OpenAI()
+
+response = client.responses.create(
+    model="gpt-4.1",
+    tools=[
+        {
+            "type": "mcp",
+            "server_label": "gram-pushadvisor",
+            "server_url": "https://app.getgram.ai/mcp/canipushtoprod",
+            "require_approval": "never",
+        },
+    ],
+    input="What's the vibe today?",
+)
+
+print(response.output_text)
+```
+
+### Authenticated connection
+
+For authenticated Gram MCP servers, include your Gram API key in the headers.
+
+It is safest to use environment variables to manage your API keys, so let's set that up first:
+
+```bash
+export OPENAI_API_KEY=your-openai-api-key-here
+export GRAM_API_KEY=your-gram-api-key-here
+```
+
+Again, with the OpenAI Python client installed, run the following Python script to connect to your authenticated Gram MCP server:
+
+```python
+import os
+from openai import OpenAI
+
+GRAM_API_KEY = os.getenv("GRAM_API_KEY")
+
+if not GRAM_API_KEY:
+    raise ValueError("Missing GRAM_API_KEY environment variable")
+
+client = OpenAI()
+
+response = client.responses.create(
+    model="gpt-4.1",
+    tools=[
+        {
+            "type": "mcp",
+            "server_label": "gram-pushadvisor",
+            "server_url": "https://app.getgram.ai/mcp/canipushtoprod",
+            "headers": {
+                "Authorization": f"Bearer {GRAM_API_KEY}"
+            },
+            "require_approval": "never",
+        },
+    ],
+    input="Can I push to production today?",
+)
+
+print(response.output_text)
+```
+
+### Understanding the configuration
+
+Here's what each parameter in the `tools` array does:
+
+- `type: "mcp"` - Specifies this is an MCP tool.
+- `server_label` - A unique identifier for your MCP server.
+- `server_url` - Your Gram-hosted MCP server URL.
+- `headers` - Authentication headers (optional for public servers).
+- `require_approval` - Control tool call approval behavior.
+
+## Tool filtering and permissions
+
+Using the `allowed_tools` parameter, you can control which tools are available for use in your MCP server while making an API call.
+
+### Filtering specific tools
+
+If your Gram MCP server has multiple tools but you only want to expose certain ones in this particular API call, use the `allowed_tools` parameter:
+
+```javascript
+const response = await client.responses.create({
+    model: "gpt-4.1",
+    tools: [
+        {
+            type: "mcp",
+            server_label: "gram-pushadvisor",
+            server_url: "https://app.getgram.ai/mcp/canipushtoprod",
+            allowed_tools: ["can_i_push_to_prod"],
+            require_approval: "never",
+        },
+    ],
+    input: "Is it safe to deploy today?",
+});
+```
+
+```python
+import os
+from openai import OpenAI
+
+client = OpenAI()
+
+response = client.responses.create(
+    model="gpt-4.1",
+    tools=[
+        {
+            "type": "mcp",
+            "server_label": "gram-pushadvisor",
+            "server_url": "https://app.getgram.ai/mcp/canipushtoprod",
+            "allowed_tools": [
+                "can_i_push_to_prod",
+                # "vibe_check", # Excluded from the allowed tools
+            ],
+            "require_approval": "never",
+        },
+    ],
+    input="What is the vibe today?",
+)
+
+print(response.output_text)
+# Could you clarify what you mean by “the vibe today”?
+```
+
+Note how the `vibe_check` tool is excluded from the `allowed_tools` list. This means it won't be available for use in this API call, even if it's defined in your curated toolset and MCP server.
+
+### Managing tool approvals
+
+For production applications, you might want to control when tools are called. The OpenAI API provides several approval options:
+
+1. **Never require approval** (fastest):
+
+```python
+{
+    "require_approval": "never"
+}
+```
+
+2. **Always require approval** (most secure):
+
+```python
+{
+    "require_approval": "always"
+}
+# Default behavior - approval required for all tools
+```
+
+3. **Selective approval**:
+
+```python
+{
+    "require_approval": {
+        "always": {
+            "tool_names": ["can_i_push_to_prod"]
+        },
+        "never": {
+            "tool_names": ["vibe_check"]
+        }
+    }
+}
+```
+
+When approvals are required, the API will return an `mcp_approval_request` that you can respond to in a subsequent API call. See OpenAI's documentation about [approvals](https://platform.openai.com/docs/guides/tools-remote-mcp#approvals) for more details.
+
+## Working with responses
+
+The OpenAI Responses API returns detailed information about MCP tool usage:
+
+### Successful tool calls
+
+When a tool call succeeds, you'll see an `mcp_call` item in the response:
+
+```json
+{
+  "id": "mcp_example123",
+  "type": "mcp_call",
+  "name": "can_i_push_to_prod",
+  "server_label": "gram-pushadvisor",
+  "arguments": "{}",
+  "output": "{'safe_to_push': true, 'reason': 'It\\'s a Tuesday and the vibe is excellent!'}",
+  "error": null
+}
+```
+
+### Error handling
+
+Failed tool calls will populate the `error` field:
+
+```python
+from openai import OpenAI
+
+client = OpenAI()
+
+response = client.responses.create(
+    model="gpt-4.1",
+    tools=[
+        {
+            "type": "mcp",
+            "server_label": "gram-pushadvisor",
+            "server_url": "https://app.getgram.ai/mcp/canipushtoprod",
+            "require_approval": "never",
+        },
+    ],
+    input="What's the deployment status?",
+)
+
+for output in response.output:
+    if output.type == "mcp_call" and output.error:
+        print(f"Error occurred in MCP call '{output.name}': {output.error}")
+```
+
+## Differences from Anthropic's MCP integration
+
+While both OpenAI and Anthropic support MCP servers, there are key differences in their approaches:
+
+### Connection method
+
+- **OpenAI**: Connects directly to remote MCP servers via HTTP/HTTPS in the Responses API
+- **Anthropic**: Uses both direct HTTP connections (Claude API) and local MCP clients (Claude Desktop/Code)
+
+### Authentication
+
+- **OpenAI**: Uses simple HTTP headers for authentication
+- **Anthropic**: Supports OAuth Bearer tokens and more complex authentication flows
+
+### Tool management
+
+- **OpenAI**: Tool filtering via `allowed_tools` parameter
+- **Anthropic**: Tool configuration through `tool_configuration` object
+
+### Approval workflow
+
+- **OpenAI**: Approval requests handled through response chaining with `previous_response_id`
+- **Anthropic**: Direct tool execution with optional authentication prompts
+
+### API structure
+
+- **OpenAI**: Uses `tools` array with `type: "mcp"`
+- **Anthropic**: Uses `mcp_servers` parameter with server configurations
+
+### Response format
+
+- **OpenAI**: Returns `mcp_call` and `mcp_list_tools` items
+- **Anthropic**: Returns `mcp_tool_use` and `mcp_tool_result` blocks
+
+## Testing your integration
+
+If you encounter issues during integration, follow these steps to troubleshoot:
+
+### Validate MCP server connectivity
+
+Before integrating into your application, test your Gram MCP server in the [Gram Playground](https://app.getgram.ai) to ensure tools work correctly.
+
+### Use the MCP Inspector
+
+Anthropic provides an [MCP Inspector](https://modelcontextprotocol.io/legacy/tools/inspector) command line tool that helps you test and debug MCP servers before integrating them with OpenAI's API. You can use it to validate your Gram MCP server's connectivity and functionality.
+
+To test your Gram MCP server with the Inspector:
+
+```bash
+# For public servers
+npx -y @modelcontextprotocol/inspector
+```
+
+In the **Transport Type** field, select **Streamable HTTP**.
+
+Enter your server URL in the **URL** field, for example:
+
+```
+https://app.getgram.ai/mcp/canipushtoprod
+```
+
+Click **Connect** to establish a connection to your MCP server.
+
+![Screenshot of the MCP Inspector connecting to a Gram MCP server](/img/guides/mcp-debugger.png)
+
+Use the Inspector to verify that your MCP server responds correctly before integrating it with your OpenAI API calls.
+
+## What's next
+
+You now have OpenAI's GPT models connected to your Gram-hosted MCP server, giving them access to your custom APIs and tools.
+
+Ready to build your own MCP server? [Try Gram today](https://getgram.ai) and see how easy it is to turn any API into agent-ready tools that work with both OpenAI and Anthropic models.

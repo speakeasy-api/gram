@@ -1,0 +1,8 @@
+{
+  "tailwindCSS.classAttributes": ["class", "className", "class:list"],
+  "debug.javascript.defaultRuntimeExecutable": {
+    "pwa-node": "/home/disintegrator/.local/share/mise/shims/node"
+  },
+  "php.validate.executablePath": "/home/disintegrator/.local/share/mise/shims/php",
+  "python.defaultInterpreterPath": "/home/disintegrator/.local/share/mise/installs/python/3.12.10/bin/python"
+}

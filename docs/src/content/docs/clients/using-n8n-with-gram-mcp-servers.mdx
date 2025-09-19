@@ -1,0 +1,228 @@
+---
+title: "Using n8n with Gram-hosted MCP servers"
+description: "Learn how to connect n8n to Gram-hosted MCP servers to give your automation workflows access to your APIs and tools."
+sidebar:
+  order: 6
+---
+
+[n8n](https://n8n.io/) is a powerful workflow automation tool that lets you build complex automations with a visual node-based interface. It's open-source, self-hostable, and supports hundreds of integrations out of the box.
+
+When combined with [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers, n8n can leverage AI agents that have access to your tools and infrastructure, enabling intelligent automation workflows that can interact with your APIs, databases, and other services.
+
+This guide will show you how to connect n8n to a [Gram-hosted MCP server](/blog/the-easiest-way-to-host-mcp-servers) using the example Push Advisor API from the [Gram concepts guide](/blog/gram-concepts). You'll learn how to set up the connection, test it, and use natural language to perform vibe checks before running automated deployments.
+
+Find the full code and OpenAPI document in the [Push Advisor API repository](https://github.com/ritza-co/gram-examples/tree/main/push-advisor-api).
+
+## Prerequisites
+
+You'll need:
+
+- A [Gram account](https://getgram.ai).
+- [n8n](https://n8n.io/) installed and running (either self-hosted or cloud).
+- An API key from an LLM provider supported by n8n (such as Anthropic or OpenAI).
+
+## Creating a Gram MCP server
+
+If you already have a Gram MCP server configured, you can skip to [connecting n8n to your Gram-hosted MCP server](#connecting-n8n-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and more details on how to create a Gram-hosted MCP server, check out the [Gram concepts guide](/blog/gram-concepts).
+
+### Setting up a Gram project
+
+In the [Gram dashboard](https://getgram.ai), click **New Project** to start the guided setup flow for creating a toolset and MCP server.
+
+![Screenshot of the Gram dashboard showing the New Project link](/img/guides/n8n/gram-new-project.png)
+
+Enter a project name and click **Submit**. 
+
+Gram will then guide you through the following steps.
+
+#### Step 1: Upload the OpenAPI document
+
+Upload the [Push Advisor OpenAPI document](https://github.com/ritza-co/gram-examples/blob/main/push-advisor-api/openapi.yaml), enter the name of your API, and click **Continue**.
+
+![Screenshot of the upload your OpenAPI spec dialog](/img/guides/n8n/upload-openapi-spec.png)
+
+#### Step 2: Create a toolset
+
+Give your toolset a name (for example, "Push Advisor") and click **Continue**. 
+
+![Screenshot of the create toolset dialog](/img/guides/n8n/create-toolset.png)
+
+Notice that the names of the tools that will be generated from your OpenAPI document are displayed in this dialog.
+
+#### Step 3: Configure MCP
+
+Enter a URL slug for the MCP server and click **Continue**.
+
+![Screenshot of the configure MCP dialog](/img/guides/n8n/configure-mcp.png)
+
+Gram will create the toolset from the OpenAPI document.
+
+Click **Toolsets** in the sidebar to view the Push Advisor toolset.
+
+![Screenshot of the Gram dashboard showing the Push Advisor toolset](/img/guides/n8n/toolset-created.png)
+
+### Configuring environment variables
+
+[Environments](/concepts/environments) store API keys and configuration separate from your toolset logic.
+
+In the **Environments** tab, click the "Default" environment. Click the three dots in the top right corner of the environment card and then **Fill for Toolset**. Select the **Push Advisor** toolset and click **Fill Variables** to automatically populate the required variables.
+
+![Screenshot showing the fill for toolset dialog to automatically populate required variables](/img/guides/n8n/fill-env-vars-toolset.png)
+
+The Push Advisor API is hosted at `canpushtoprod.abdulbaaridavids04.workers.dev`, so set the `<API_name>_SERVER_URL` environment variable to `https://canpushtoprod.abdulbaaridavids04.workers.dev`. Click **Update** and then **Save**.
+
+![Set server URL](/img/guides/n8n/set-server-url.png)
+
+### Publishing an MCP server
+
+Let's make the toolset available as an MCP server.
+
+Go to the **MCP** tab, find the Push Advisor toolset and click on it to open the MCP details page. 
+
+
+Scroll down to the **Visibility** section and tick the **Public** checkbox.
+
+![Screenshot of the MCP details page](/img/guides/n8n/mcp-details.png)
+
+Next, you'll need to copy the MCP server configuration.
+
+Scroll down to the **MCP Config** section and copy the **Public Server** configuration.
+
+![Screenshot showing the MCP server config dialog for the Push Advisor toolset](/img/guides/n8n/copy-mcp-config.png)
+
+The configuration will look something like this:
+
+```json
+{
+  "mcpServers": {
+    "GramPushadvisor": {
+      "command": "npx",
+      "args": [
+          "mcp-remote",
+          "https://app.getgram.ai/mcp/canipushtoprod"
+        ]
+    }
+  }
+}
+```
+
+Use the **Authenticated Server** configuration if you want to use the MCP server in a private environment.
+
+You'll need an API key to use an authenticated server. [Generate an API key](/concepts/api-keys) in the **Settings** tab and copy it to the `GRAM_KEY` environment variable in place of `<your-key-here>`.
+
+The authenticated server configuration looks something like this:
+
+```json
+{
+  "mcpServers": {
+    "GramPushadvisor": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://app.getgram.ai/mcp/canipushtoprod",
+        "--header",
+        "Authorization: ${GRAM_KEY}"
+      ],
+      "env": {
+        "GRAM_KEY": "Bearer <your-key-here>"
+      }
+    }
+  }
+}
+```
+
+## Connecting n8n to your Gram-hosted MCP server
+
+Now we'll create an n8n workflow that connects to your MCP server.
+
+### Creating a basic workflow
+
+In your n8n instance, create a new workflow. We'll build a simple chat workflow that can interact with the Push Advisor API.
+
+1. Add a **Chat Trigger** node to start the workflow:
+   * Click the **+** button
+   * Search for "Chat Trigger"
+   * Click anywhere outside the canvas or hit Esc to add the node with default settings
+
+![Screenshot showing how to add a Chat Trigger node in n8n](/img/guides/n8n/n8n-add-chat-trigger.png)
+
+2. Add an **AI Agent** node:
+   * Click the **+** button after the Chat Trigger
+   * Search for "AI Agent" 
+   * Click anywhere outside the canvas or hit Esc to add the node with default settings
+
+![Screenshot showing how to add an AI Agent node in n8n](/img/guides/n8n/n8n-add-ai-node.png)
+
+After adding the AI Agent node, you need to configure two things: a chat model and a tool.
+
+### Configuring the chat model
+
+For the chat model, you can use any AI provider you prefer. In this demo, we're using OpenAI:
+
+1. Click on the AI Agent node to open its configuration
+2. In the **Model** section, select your preferred chat model (e.g., OpenAI GPT-4)
+3. Add your API key for the chosen provider
+
+![Screenshot showing how to add a chat model in n8n](/img/guides/n8n/n8n-adding-chat-model.png)
+
+### Adding MCP Client Tool
+
+Now add the tool to connect to the Gram MCP server:
+
+1. In the **Tools** section, click **Add Tool**
+2. Search for "MCP Client" and select it
+
+![Screenshot showing how to add the MCP Client tool](/img/guides/n8n/n8n-add-mcp-client.png)
+
+3. Configure the MCP Client with your Gram server details:
+   * Add your public URL from the Gram MCP config: `https://app.getgram.ai/mcp/canipushtoprod`
+   * Change the connection type to **HTTP Streamable**
+
+![Screenshot showing the MCP configuration in n8n](/img/guides/n8n/n8n-configure-mcp.png)
+
+### Testing the workflow
+
+Now you should have two connected nodes in your workflow. To test it:
+
+1. Click **Open Chat** in the bottom panel
+2. Ask a question like "Is it safe to push to production today?"
+3. The AI agent will use the MCP server to check the current day and provide a response
+
+![Screenshot showing the final chat interface with a user asking about pushing to production](/img/guides/n8n/n8n-final-output.png)
+
+## Troubleshooting
+
+Let's go through some common issues and how to fix them.
+
+### MCP Client not connecting
+
+If the MCP Client can't connect to your server:
+
+- Verify the server URL is correct
+- Check that the MCP server is published as public in Gram
+- For authenticated servers, ensure your API key is valid
+- Test the connection using the Gram Playground first
+
+### Tool calls not working
+
+If the AI agent isn't calling the MCP tools:
+
+- Ensure the MCP Client is properly configured in the AI Agent node
+- Check that your AI model has sufficient context about available tools
+- Try being more explicit in your prompts about using the Push Advisor tool
+
+### Authentication errors
+
+For authenticated servers:
+
+- Verify your Gram API key in the dashboard under **Settings > API Keys**
+- Ensure the authorization header format is correct
+- Check that environment variables are correctly set in Gram
+
+## What's next
+
+You now have n8n connected to a Gram-hosted MCP server, enabling AI-powered automation workflows with access to your APIs and tools.
+
+Ready to build your own MCP server? [Try Gram today](https://getgram.ai) and see how easy it is to turn any API into agent-ready tools.
+
+

@@ -1,0 +1,17 @@
+---
+import Default from '@astrojs/starlight/components/Page.astro';
+import type { Props } from '@astrojs/starlight/props';
+---
+
+<Default {...Astro.props}>
+  <slot />
+</Default>
+
+<script>
+  import { initCopyMarkdown } from '../scripts/copy-markdown';
+  
+  // Initialize the copy markdown functionality when the page loads
+  document.addEventListener('DOMContentLoaded', () => {
+    initCopyMarkdown();
+  });
+</script>

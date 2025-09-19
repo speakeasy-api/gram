@@ -1,0 +1,37 @@
+---
+import { Icon } from "@astrojs/starlight/components";
+
+const { editUrl, entry } = Astro.locals.starlightRoute;
+let mdpath = Astro.url.pathname || "index";
+if (mdpath === "/") {
+  mdpath = "index";
+}
+---
+
+<div class="flex w-full items-center justify-between gap-4 print:hidden">
+  {
+    editUrl ? (
+      <a
+        href={editUrl}
+        class="flex items-center gap-2 text-gray-300 no-underline hover:text-content"
+      >
+        <Icon name="pencil" size="1.2em" />
+        {Astro.locals.t("page.editLink")}
+      </a>
+    ) : (
+      <span />
+    )
+  }
+
+  {
+    entry.id !== "404" ? (
+      <a
+        href={`${mdpath}.md`}
+        class="flex items-center gap-2 text-gray-300 no-underline hover:text-content"
+      >
+        <Icon name="seti:markdown" size="1.2em" />
+        Markdown version
+      </a>
+    ) : null
+  }
+</div>

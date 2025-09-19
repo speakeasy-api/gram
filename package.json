@@ -7,6 +7,9 @@
   "private": true,
   "scripts": {
     "dev": "pnpm --filter ./client/dashboard dev",
+    "docs:dev": "pnpm --filter @gram/docs dev",
+    "docs:build": "pnpm --filter @gram/docs build",
+    "docs:preview": "pnpm --filter @gram/docs preview",
     "lint": "tsc --noEmit && pnpm -r lint",
     "build": "pnpm -r build"
   },
