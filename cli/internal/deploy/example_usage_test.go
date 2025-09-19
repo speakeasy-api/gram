@@ -1,4 +1,4 @@
-package deplconfig_test
+package deploy_test
 
 import (
 	"os"
@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
-	"github.com/speakeasy-api/gram/cli/internal/deplconfig"
+	"github.com/speakeasy-api/gram/cli/internal/deploy"
 )
 
 func TestSourceReader_ImplementsAssetSource(t *testing.T) {
@@ -29,14 +29,14 @@ paths:
 
 	require.NoError(t, os.WriteFile(testFile, []byte(testContent), 0600))
 
-	source := deplconfig.Source{
-		Type:     deplconfig.SourceTypeOpenAPIV3,
+	source := deploy.Source{
+		Type:     deploy.SourceTypeOpenAPIV3,
 		Location: testFile,
 		Name:     "Example API",
 		Slug:     "example-api",
 	}
 
-	reader := deplconfig.NewSourceReader(source)
+	reader := deploy.NewSourceReader(source)
 
 	// Verify it satisfies SourceReader interface by using it as one.
 	var assetSource api.SourceReader = reader
@@ -60,13 +60,13 @@ func TestSource_MissingRequiredFields(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		source  deplconfig.Source
+		source  deploy.Source
 		wantErr string
 	}{
 		{
 			name: "missing name",
-			source: deplconfig.Source{
-				Type:     deplconfig.SourceTypeOpenAPIV3,
+			source: deploy.Source{
+				Type:     deploy.SourceTypeOpenAPIV3,
 				Location: "/path/to/file",
 				Name:     "",
 				Slug:     "valid-slug",
@@ -75,8 +75,8 @@ func TestSource_MissingRequiredFields(t *testing.T) {
 		},
 		{
 			name: "missing slug",
-			source: deplconfig.Source{
-				Type:     deplconfig.SourceTypeOpenAPIV3,
+			source: deploy.Source{
+				Type:     deploy.SourceTypeOpenAPIV3,
 				Location: "/path/to/file",
 				Name:     "Valid Name",
 				Slug:     "",
@@ -85,8 +85,8 @@ func TestSource_MissingRequiredFields(t *testing.T) {
 		},
 		{
 			name: "missing both name and slug",
-			source: deplconfig.Source{
-				Type:     deplconfig.SourceTypeOpenAPIV3,
+			source: deploy.Source{
+				Type:     deploy.SourceTypeOpenAPIV3,
 				Location: "/path/to/file",
 				Name:     "",
 				Slug:     "",
@@ -95,8 +95,8 @@ func TestSource_MissingRequiredFields(t *testing.T) {
 		},
 		{
 			name: "valid source",
-			source: deplconfig.Source{
-				Type:     deplconfig.SourceTypeOpenAPIV3,
+			source: deploy.Source{
+				Type:     deploy.SourceTypeOpenAPIV3,
 				Location: "/path/to/file",
 				Name:     "Valid Name",
 				Slug:     "valid-slug",
@@ -126,40 +126,40 @@ func TestValidateUniqueNames(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		sources []deplconfig.Source
+		sources []deploy.Source
 		wantErr string
 	}{
 		{
 			name: "unique names",
-			sources: []deplconfig.Source{
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/one", Name: "API One", Slug: "api-one"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/two", Name: "API Two", Slug: "api-two"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/three", Name: "API Three", Slug: "api-three"},
+			sources: []deploy.Source{
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/one", Name: "API One", Slug: "api-one"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/two", Name: "API Two", Slug: "api-two"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/three", Name: "API Three", Slug: "api-three"},
 			},
 			wantErr: "",
 		},
 		{
 			name: "duplicate names",
-			sources: []deplconfig.Source{
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/one", Name: "Duplicate API", Slug: "api-one"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/two", Name: "API Two", Slug: "api-two"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/three", Name: "Duplicate API", Slug: "api-three"},
+			sources: []deploy.Source{
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/one", Name: "Duplicate API", Slug: "api-one"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/two", Name: "API Two", Slug: "api-two"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/three", Name: "Duplicate API", Slug: "api-three"},
 			},
 			wantErr: "source names must be unique: ['Duplicate API' (2 times)]",
 		},
 		{
 			name: "multiple duplicate names",
-			sources: []deplconfig.Source{
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/one", Name: "First Duplicate", Slug: "api-one"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/two", Name: "Second Duplicate", Slug: "api-two"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/three", Name: "First Duplicate", Slug: "api-three"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/four", Name: "Second Duplicate", Slug: "api-four"},
+			sources: []deploy.Source{
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/one", Name: "First Duplicate", Slug: "api-one"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/two", Name: "Second Duplicate", Slug: "api-two"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/three", Name: "First Duplicate", Slug: "api-three"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/four", Name: "Second Duplicate", Slug: "api-four"},
 			},
 			wantErr: "source names must be unique:",
 		},
 		{
 			name:    "empty sources",
-			sources: []deplconfig.Source{},
+			sources: []deploy.Source{},
 			wantErr: "",
 		},
 	}
@@ -168,7 +168,7 @@ func TestValidateUniqueNames(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := deplconfig.ValidateUniqueNames(tt.sources)
+			err := deploy.ValidateUniqueNames(tt.sources)
 
 			if tt.wantErr == "" {
 				require.NoError(t, err)
@@ -185,40 +185,40 @@ func TestValidateUniqueSlugs(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		sources []deplconfig.Source
+		sources []deploy.Source
 		wantErr string
 	}{
 		{
 			name: "unique slugs",
-			sources: []deplconfig.Source{
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/one", Name: "API One", Slug: "api-one"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/two", Name: "API Two", Slug: "api-two"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/three", Name: "API Three", Slug: "api-three"},
+			sources: []deploy.Source{
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/one", Name: "API One", Slug: "api-one"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/two", Name: "API Two", Slug: "api-two"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/three", Name: "API Three", Slug: "api-three"},
 			},
 			wantErr: "",
 		},
 		{
 			name: "duplicate slugs",
-			sources: []deplconfig.Source{
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/one", Name: "API One", Slug: "duplicate-slug"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/two", Name: "API Two", Slug: "api-two"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/three", Name: "API Three", Slug: "duplicate-slug"},
+			sources: []deploy.Source{
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/one", Name: "API One", Slug: "duplicate-slug"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/two", Name: "API Two", Slug: "api-two"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/three", Name: "API Three", Slug: "duplicate-slug"},
 			},
 			wantErr: "source slugs must be unique: ['duplicate-slug' (2 times)]",
 		},
 		{
 			name: "multiple duplicate slugs",
-			sources: []deplconfig.Source{
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/one", Name: "API One", Slug: "first-duplicate"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/two", Name: "API Two", Slug: "second-duplicate"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/three", Name: "API Three", Slug: "first-duplicate"},
-				{Type: deplconfig.SourceTypeOpenAPIV3, Location: "/path/four", Name: "API Four", Slug: "second-duplicate"},
+			sources: []deploy.Source{
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/one", Name: "API One", Slug: "first-duplicate"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/two", Name: "API Two", Slug: "second-duplicate"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/three", Name: "API Three", Slug: "first-duplicate"},
+				{Type: deploy.SourceTypeOpenAPIV3, Location: "/path/four", Name: "API Four", Slug: "second-duplicate"},
 			},
 			wantErr: "source slugs must be unique:",
 		},
 		{
 			name:    "empty sources",
-			sources: []deplconfig.Source{},
+			sources: []deploy.Source{},
 			wantErr: "",
 		},
 	}
@@ -227,7 +227,7 @@ func TestValidateUniqueSlugs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := deplconfig.ValidateUniqueSlugs(tt.sources)
+			err := deploy.ValidateUniqueSlugs(tt.sources)
 
 			if tt.wantErr == "" {
 				require.NoError(t, err)

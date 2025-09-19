@@ -7,13 +7,12 @@ import (
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
-	"github.com/speakeasy-api/gram/cli/internal/deplconfig"
 	"github.com/speakeasy-api/gram/cli/internal/env"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 )
 
 type DeploymentRequest struct {
-	config         *deplconfig.DeploymentConfig
+	config         *Config
 	assets         []*deployments.AddOpenAPIv3DeploymentAssetForm
 	project        string
 	idempotencyKey string
@@ -37,7 +36,7 @@ func (dr *DeploymentRequest) GetOpenAPIv3Assets() []*deployments.AddOpenAPIv3Dep
 }
 
 type CreateDeploymentRequest struct {
-	Config         *deplconfig.DeploymentConfig
+	Config         *Config
 	Project        string
 	IdempotencyKey string
 }
@@ -46,9 +45,13 @@ type CreateDeploymentRequest struct {
 func CreateDeployment(
 	ctx context.Context,
 	logger *slog.Logger,
-	req *CreateDeploymentRequest,
+	req CreateDeploymentRequest,
 ) (*deployments.CreateDeploymentResult, error) {
-	assets, err := createAssetsForDeployment(ctx, logger, req)
+	assets, err := createAssetsForDeployment(ctx, logger, &CreateDeploymentRequest{
+		Config:         req.Config,
+		Project:        req.Project,
+		IdempotencyKey: req.IdempotencyKey,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert sources to assets: %w", err)
 	}
@@ -69,34 +72,8 @@ func CreateDeployment(
 	return result, nil
 }
 
-type CreateDeploymentFromFileRequest struct {
-	Project        string
-	IdempotencyKey string
-	WorkDir        string
-	Config         io.Reader
-}
-
-func CreateDeploymentFromFile(
-	ctx context.Context,
-	logger *slog.Logger,
-	req CreateDeploymentFromFileRequest,
-) (*deployments.CreateDeploymentResult, error) {
-	config, err := deplconfig.NewDeploymentConfig(req.Config, req.WorkDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read deployment config: %w", err)
-	}
-
-	createReq := &CreateDeploymentRequest{
-		Config:         config,
-		Project:        req.Project,
-		IdempotencyKey: req.IdempotencyKey,
-	}
-
-	return CreateDeployment(ctx, logger, createReq)
-}
-
 type uploadRequest struct {
-	sourceReader *deplconfig.SourceReader
+	sourceReader *SourceReader
 	project      string
 }
 

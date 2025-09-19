@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/env"
+	"github.com/speakeasy-api/gram/cli/internal/o11y"
 	"github.com/urfave/cli/v2"
 )
 
@@ -62,22 +63,28 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 
 			projectSlug := c.String("project")
 
+			logger.InfoContext(ctx, "Deploying to project", slog.String("project", projectSlug), slog.String("config", c.String("config")))
+
 			configFilename, err := filepath.Abs(c.String("config"))
 			if err != nil {
 				return fmt.Errorf("failed to resolve deployment file path: %w", err)
 			}
 
-			configFile, err := os.Open(configFilename)
+			configFile, err := os.Open(filepath.Clean(configFilename))
 			if err != nil {
 				return fmt.Errorf("failed to open deployment file: %w", err)
 			}
-			defer configFile.Close()
+			defer o11y.LogDefer(ctx, logger, func() error {
+				return configFile.Close()
+			})
 
-			logger.InfoContext(ctx, "Deploying to project", slog.String("project", projectSlug), slog.String("config", c.String("config")))
+			config, err := deploy.NewConfig(configFile, filepath.Dir(configFilename))
+			if err != nil {
+				return fmt.Errorf("failed to parseread deployment config: %w", err)
+			}
 
-			result, err := deploy.CreateDeploymentFromFile(ctx, logger, deploy.CreateDeploymentFromFileRequest{
-				WorkDir:        filepath.Dir(configFilename),
-				Config:         configFile,
+			result, err := deploy.CreateDeployment(ctx, logger, deploy.CreateDeploymentRequest{
+				Config:         config,
 				Project:        projectSlug,
 				IdempotencyKey: c.String("idempotency-key"),
 			})

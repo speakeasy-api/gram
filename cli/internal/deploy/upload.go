@@ -6,18 +6,17 @@ import (
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
-	"github.com/speakeasy-api/gram/cli/internal/deplconfig"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
 
-func isSupportedSourceType(source deplconfig.Source) bool {
-	return source.Type == deplconfig.SourceTypeOpenAPIV3
+func isSupportedSourceType(source Source) bool {
+	return source.Type == SourceTypeOpenAPIV3
 }
 
-func NewUploadRequest(source deplconfig.Source, project string) *uploadRequest {
+func NewUploadRequest(source Source, project string) *uploadRequest {
 	return &uploadRequest{
-		sourceReader: deplconfig.NewSourceReader(source),
+		sourceReader: NewSourceReader(source),
 		project:      project,
 	}
 }
@@ -25,11 +24,11 @@ func NewUploadRequest(source deplconfig.Source, project string) *uploadRequest {
 func uploadFromSource(
 	ctx context.Context,
 	logger *slog.Logger,
-	source deplconfig.Source,
+	source Source,
 	project string,
 ) (*deployments.AddOpenAPIv3DeploymentAssetForm, error) {
 	uploadReq := NewUploadRequest(source, project)
-	uploadRes, err := api.NewAssetsClient().CreateAsset(ctx, logger, uploadReq)
+	uploadRes, err := api.NewAssetsClient().UploadOpenAPIv3(ctx, logger, uploadReq)
 
 	if err != nil {
 		msg := "failed to upload asset in project '%s' for source %s: %w"

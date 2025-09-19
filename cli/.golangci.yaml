@@ -86,8 +86,8 @@ linters:
       default-signifies-exhaustive: true
     errcheck:
       exclude-functions:
-        - "github.com/speakeasy-api/gram/server/internal/o11y.LogDefer"
-        - "github.com/speakeasy-api/gram/server/internal/o11y.NoLogDefer"
+        - "github.com/speakeasy-api/gram/cli/internal/o11y.LogDefer"
+        - "github.com/speakeasy-api/gram/cli/internal/o11y.NoLogDefer"
 
     sloglint:
       no-mixed-args: true

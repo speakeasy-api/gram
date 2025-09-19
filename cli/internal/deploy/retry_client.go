@@ -1,4 +1,4 @@
-package deplconfig
+package deploy
 
 import (
 	"net/http"

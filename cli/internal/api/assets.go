@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 
-	"github.com/speakeasy-api/gram/cli/internal/deplconfig"
 	"github.com/speakeasy-api/gram/cli/internal/env"
 
 	"github.com/speakeasy-api/gram/server/gen/assets"
@@ -42,18 +41,11 @@ type AssetCreator interface {
 	SourceReader
 }
 
-func (c *AssetsClient) CreateAsset(
+func (c *AssetsClient) UploadOpenAPIv3(
 	ctx context.Context,
 	logger *slog.Logger,
 	ac AssetCreator,
 ) (*assets.UploadOpenAPIv3Result, error) {
-	if !isOpenAPIV3(ac) {
-		return nil, fmt.Errorf(
-			"unsupported source type: '%s', expected '%s'",
-			ac.GetType(), deplconfig.SourceTypeOpenAPIV3,
-		)
-	}
-
 	reader, contentLength, err := ac.Read(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read source: %w", err)
@@ -81,10 +73,6 @@ func (c *AssetsClient) CreateAsset(
 	}
 
 	return result, nil
-}
-
-func isOpenAPIV3(a AssetCreator) bool {
-	return a.GetType() == string(deplconfig.SourceTypeOpenAPIV3)
 }
 
 func newAssetsClient() *assets.Client {
