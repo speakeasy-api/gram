@@ -41,7 +41,7 @@ const APIVersion = "0.0.1"
 // key.
 const ServiceName = "keys"
 
-// MethodNames lists the service method names so as defined in the design. These
+// MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
 var MethodNames = [3]string{"createKey", "listKeys", "revokeKey"}
