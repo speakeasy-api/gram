@@ -26,11 +26,6 @@ func NewSourceReader(source Source) *SourceReader {
 	}
 }
 
-// GetType returns the source type (e.g., "openapiv3").
-func (sr *SourceReader) GetType() string {
-	return string(sr.source.Type)
-}
-
 // GetContentType returns the MIME type of the content based on file extension.
 func (sr *SourceReader) GetContentType() string {
 	if isRemoteURL(sr.source.Location) {

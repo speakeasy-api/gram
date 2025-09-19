@@ -10,8 +10,6 @@ import (
 )
 
 type CreateDeploymentRequest struct {
-	APIHost        string
-	APIScheme      string
 	Config         *Config
 	APIKey         string
 	ProjectSlug    string

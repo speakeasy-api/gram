@@ -41,23 +41,6 @@ func NewAssetsClient(options *AssetsClientOptions) *AssetsClient {
 	return &AssetsClient{client: client}
 }
 
-// SourceReader defines the interface for reading source content.
-type SourceReader interface {
-	// GetType returns the type of the source (e.g., "openapiv3").
-	GetType() string
-	// GetContentType returns the MIME type of the content (e.g.,
-	// "application/json", "application/yaml").
-	GetContentType() string
-	// Read returns a reader for the asset content and its size.
-	Read(context.Context) (io.ReadCloser, int64, error)
-}
-
-// AssetCreator represents a source for creating an asset, composed of
-// credential access and source reading.
-type AssetCreator interface {
-	SourceReader
-}
-
 type UploadOpenAPIv3Request struct {
 	APIKey        string
 	ProjectSlug   string
