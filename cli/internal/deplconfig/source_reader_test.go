@@ -42,7 +42,7 @@ info:
 	require.Equal(t, "application/yaml", reader.GetContentType())
 
 	// Test read method
-	rc, size, err := reader.Read()
+	rc, size, err := reader.Read(t.Context())
 	require.NoError(t, err)
 	require.Positive(t, size)
 
@@ -80,7 +80,7 @@ func TestSourceReader_JSONFile(t *testing.T) {
 	require.Equal(t, "application/json", reader.GetContentType())
 
 	// Test read method
-	rc, size, err := reader.Read()
+	rc, size, err := reader.Read(t.Context())
 	require.NoError(t, err)
 	require.Positive(t, size)
 
@@ -105,7 +105,7 @@ func TestSourceReader_NonexistentFile(t *testing.T) {
 	reader := NewSourceReader(source)
 
 	// Should fail to read nonexistent file
-	_, _, err := reader.Read()
+	_, _, err := reader.Read(t.Context())
 	require.Error(t, err)
 	require.Contains(t, strings.ToLower(err.Error()), "no such file")
 }
@@ -136,7 +136,7 @@ func TestSourceReader_RemoteURL(t *testing.T) {
 	reader := NewSourceReader(source)
 	require.Equal(t, "application/yaml", reader.GetContentType())
 
-	rc, size, err := reader.Read()
+	rc, size, err := reader.Read(t.Context())
 	require.NoError(t, err)
 	require.Positive(t, size)
 
@@ -169,7 +169,7 @@ func TestSourceReader_RemoteURL_Error(t *testing.T) {
 	reader := NewSourceReader(source)
 
 	// Should fail with HTTP error
-	_, _, err := reader.Read()
+	_, _, err := reader.Read(t.Context())
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "404")
 }

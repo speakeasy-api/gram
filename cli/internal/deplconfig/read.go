@@ -47,8 +47,8 @@ func (sr *SourceReader) readLocal() (io.ReadCloser, int64, error) {
 }
 
 // readRemote reads a source from a remote URL.
-func (sr *SourceReader) readRemote() (io.ReadCloser, int64, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (sr *SourceReader) readRemote(ctx context.Context) (io.ReadCloser, int64, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, "GET", sr.source.Location, nil)

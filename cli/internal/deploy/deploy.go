@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"sync"
 
 	"github.com/google/uuid"
@@ -53,10 +54,11 @@ type CreateDeploymentRequest struct {
 
 // CreateDeployment creates a remote deployment from the incoming sources.
 func CreateDeployment(
+	ctx context.Context,
+	logger *slog.Logger,
 	req *CreateDeploymentRequest,
 ) (*deployments.CreateDeploymentResult, error) {
-	ctx := context.Background()
-	assets, err := createAssetsForDeployment(ctx, req)
+	assets, err := createAssetsForDeployment(ctx, logger, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert sources to assets: %w", err)
 	}
@@ -68,7 +70,7 @@ func CreateDeployment(
 		project: req.Project,
 	}
 
-	result, err := client.CreateDeployment(deploymentRequest)
+	result, err := client.CreateDeployment(ctx, deploymentRequest)
 	if err != nil {
 		return nil, fmt.Errorf("deployment creation failed: %w", err)
 	}
@@ -82,6 +84,8 @@ type CreateDeploymentFromFileRequest struct {
 }
 
 func CreateDeploymentFromFile(
+	ctx context.Context,
+	logger *slog.Logger,
 	req CreateDeploymentFromFileRequest,
 ) (*deployments.CreateDeploymentResult, error) {
 	config, err := deplconfig.ReadDeploymentConfig(req.FilePath)
@@ -94,7 +98,7 @@ func CreateDeploymentFromFile(
 		Project: req.Project,
 	}
 
-	return CreateDeployment(createReq)
+	return CreateDeployment(ctx, logger, createReq)
 }
 
 type uploadRequest struct {
@@ -118,8 +122,8 @@ func (ur *uploadRequest) GetContentType() string {
 	return ur.sourceReader.GetContentType()
 }
 
-func (ur *uploadRequest) Read() (io.ReadCloser, int64, error) {
-	reader, size, err := ur.sourceReader.Read()
+func (ur *uploadRequest) Read(ctx context.Context) (io.ReadCloser, int64, error) {
+	reader, size, err := ur.sourceReader.Read(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to read source: %w", err)
 	}

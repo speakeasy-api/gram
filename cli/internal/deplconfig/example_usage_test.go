@@ -45,7 +45,7 @@ paths:
 	require.Equal(t, "openapiv3", assetSource.GetType())
 	require.Equal(t, "application/yaml", assetSource.GetContentType())
 
-	rc, size, err := assetSource.Read()
+	rc, size, err := assetSource.Read(t.Context())
 	require.NoError(t, err)
 	require.Positive(t, size)
 	defer func() {

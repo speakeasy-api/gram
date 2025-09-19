@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/speakeasy-api/gram/cli/internal/deplconfig"
 	"github.com/speakeasy-api/gram/cli/internal/env"
-	"github.com/speakeasy-api/gram/cli/internal/log"
 
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	assets_client "github.com/speakeasy-api/gram/server/gen/http/assets/client"
@@ -32,7 +32,7 @@ type SourceReader interface {
 	// "application/json", "application/yaml").
 	GetContentType() string
 	// Read returns a reader for the asset content and its size.
-	Read() (io.ReadCloser, int64, error)
+	Read(context.Context) (io.ReadCloser, int64, error)
 }
 
 // AssetCreator represents a source for creating an asset, composed of
@@ -43,10 +43,10 @@ type AssetCreator interface {
 }
 
 func (c *AssetsClient) CreateAsset(
+	ctx context.Context,
+	logger *slog.Logger,
 	ac AssetCreator,
 ) (*assets.UploadOpenAPIv3Result, error) {
-	ctx := context.Background()
-
 	if !isOpenAPIV3(ac) {
 		return nil, fmt.Errorf(
 			"unsupported source type: '%s', expected '%s'",
@@ -54,14 +54,14 @@ func (c *AssetsClient) CreateAsset(
 		)
 	}
 
-	reader, contentLength, err := ac.Read()
+	reader, contentLength, err := ac.Read(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read source: %w", err)
 	}
 
 	defer func() {
 		if closeErr := reader.Close(); closeErr != nil {
-			log.L.WarnContext(ctx, "Error closing reader", "error", closeErr)
+			logger.WarnContext(ctx, "Error closing reader", "error", closeErr)
 		}
 	}()
 

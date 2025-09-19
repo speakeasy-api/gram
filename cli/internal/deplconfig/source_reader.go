@@ -1,6 +1,7 @@
 package deplconfig
 
 import (
+	"context"
 	"io"
 	"mime"
 	"path/filepath"
@@ -43,9 +44,9 @@ func (sr *SourceReader) GetContentType() string {
 }
 
 // Read returns a reader for the asset content and its size.
-func (sr *SourceReader) Read() (io.ReadCloser, int64, error) {
+func (sr *SourceReader) Read(ctx context.Context) (io.ReadCloser, int64, error) {
 	if isRemoteURL(sr.source.Location) {
-		return sr.readRemote()
+		return sr.readRemote(ctx)
 	}
 	return sr.readLocal()
 }

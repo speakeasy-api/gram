@@ -3,10 +3,10 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
 	"github.com/speakeasy-api/gram/cli/internal/deplconfig"
-	"github.com/speakeasy-api/gram/cli/internal/log"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
@@ -23,11 +23,13 @@ func NewUploadRequest(source deplconfig.Source, project string) *uploadRequest {
 }
 
 func uploadFromSource(
+	ctx context.Context,
+	logger *slog.Logger,
 	source deplconfig.Source,
 	project string,
 ) (*deployments.AddOpenAPIv3DeploymentAssetForm, error) {
 	uploadReq := NewUploadRequest(source, project)
-	uploadRes, err := api.NewAssetsClient().CreateAsset(uploadReq)
+	uploadRes, err := api.NewAssetsClient().CreateAsset(ctx, logger, uploadReq)
 
 	if err != nil {
 		msg := "failed to upload asset in project '%s' for source %s: %w"
@@ -46,6 +48,7 @@ func uploadFromSource(
 // The returned forms can be submitted to create a deployment.
 func createAssetsForDeployment(
 	ctx context.Context,
+	logger *slog.Logger,
 	req *CreateDeploymentRequest,
 ) ([]*deployments.AddOpenAPIv3DeploymentAssetForm, error) {
 	sources := req.Config.Sources
@@ -55,11 +58,11 @@ func createAssetsForDeployment(
 	for _, source := range sources {
 		if !isSupportedSourceType(source) {
 			msg := "skipping unsupported source type"
-			log.L.WarnContext(ctx, msg, logKeyType, source.Type, logKeyLocation, source.Location)
+			logger.WarnContext(ctx, msg, logKeyType, source.Type, logKeyLocation, source.Location)
 			continue
 		}
 
-		asset, err := uploadFromSource(source, project)
+		asset, err := uploadFromSource(ctx, logger, source, project)
 		if err != nil {
 			return nil, err
 		}

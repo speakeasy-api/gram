@@ -36,10 +36,9 @@ type DeploymentCreator interface {
 
 // CreateDeployment creates a remote deployment.
 func (c *DeploymentsClient) CreateDeployment(
+	ctx context.Context,
 	dc DeploymentCreator,
 ) (*deployments.CreateDeploymentResult, error) {
-	ctx := context.Background()
-
 	apiKey := dc.GetApiKey()
 	projectSlug := dc.GetProjectSlug()
 

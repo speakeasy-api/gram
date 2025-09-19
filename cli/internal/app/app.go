@@ -3,9 +3,12 @@ package app
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/urfave/cli/v2"
+
+	"github.com/speakeasy-api/gram/cli/internal/o11y"
 )
 
 func newApp() *cli.App {
@@ -15,6 +18,37 @@ func newApp() *cli.App {
 		Version: Version,
 		Commands: []*cli.Command{
 			newPushCommand(),
+		},
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "log-level",
+				Value:   "info",
+				Usage:   "Set the base log level",
+				EnvVars: []string{"GRAM_LOG_LEVEL"},
+				Action: func(c *cli.Context, val string) error {
+					if _, ok := o11y.Levels[val]; !ok {
+						return fmt.Errorf("invalid log level: %s", val)
+					}
+					return nil
+				},
+			},
+			&cli.BoolFlag{
+				Name:    "log-pretty",
+				Value:   true,
+				Usage:   "Toggle pretty logging",
+				EnvVars: []string{"GRAM_LOG_PRETTY"},
+			},
+		},
+		Before: func(c *cli.Context) error {
+			logger := slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
+				RawLevel:    c.String("log-level"),
+				Pretty:      c.Bool("pretty"),
+				DataDogAttr: true,
+			}))
+
+			ctx := PushLogger(c.Context, logger)
+			c.Context = ctx
+			return nil
 		},
 	}
 }

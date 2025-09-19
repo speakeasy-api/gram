@@ -2,6 +2,10 @@ package app
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/env"
@@ -33,44 +37,38 @@ Sample deployment file
 NOTE: Names and slugs must be unique across all sources.`[1:],
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "file",
-				Aliases:  []string{"f"},
-				Usage:    "Path to the deployment file (relative locations resolve to the deployment file's directory)",
+				Name:     "project",
+				Usage:    "The Gram project to push to",
+				EnvVars:  []string{env.VarNameProjectSlug},
 				Required: true,
 			},
-			&cli.StringFlag{
-				Name:    "project",
-				Aliases: []string{"p"},
-				EnvVars: []string{env.VarNameProjectSlug},
-				Usage: fmt.Sprintf(
-					"Project slug (falls back to %s environment variable)",
-					env.VarNameProjectSlug),
+			&cli.PathFlag{
+				Name:     "file",
+				Usage:    "Path to the deployment file (relative locations resolve to the deployment file's directory)",
 				Required: true,
 			},
 		},
 		Action: func(c *cli.Context) error {
-			filePath := c.String("file")
+			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
+			defer cancel()
+
+			logger := PullLogger(ctx)
+
 			projectSlug := c.String("project")
+			filePath := c.Path("file")
 
-			if env.APIKeyMissing() {
-				return fmt.Errorf(
-					"API key not set. Please set the %s environment variable and retry",
-					env.VarNameProducerKey,
-				)
-			}
+			logger.InfoContext(ctx, "Deploying to project", slog.String("project", projectSlug), slog.String("file", filePath))
 
-			fmt.Printf("Deploying to project: %s\n", projectSlug)
-
-			req := deploy.CreateDeploymentFromFileRequest{
+			result, err := deploy.CreateDeploymentFromFile(ctx, logger, deploy.CreateDeploymentFromFileRequest{
 				FilePath: filePath,
 				Project:  projectSlug,
-			}
-			result, err := deploy.CreateDeploymentFromFile(req)
+			})
 			if err != nil {
 				return fmt.Errorf("deployment failed: %w", err)
 			}
 
-			fmt.Printf("Deployment created successfully: %+v\n", result.Deployment)
+			logger.InfoContext(ctx, "Deployment created successfully", slog.Any("id", result.Deployment.ID))
+
 			return nil
 		},
 	}
