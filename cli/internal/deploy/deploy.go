@@ -6,12 +6,13 @@ import (
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
+	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 )
 
 type CreateDeploymentRequest struct {
 	Config         *Config
-	APIKey         string
+	APIKey         secret.Secret
 	ProjectSlug    string
 	IdempotencyKey string
 }

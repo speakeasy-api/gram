@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	depl_client "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
 	goahttp "goa.design/goa/v3/http"
@@ -41,7 +42,7 @@ func NewDeploymentsClient(options *DeploymentsClientOptions) *DeploymentsClient 
 }
 
 type CreateDeploymentRequest struct {
-	APIKey          string
+	APIKey          secret.Secret
 	ProjectSlug     string
 	IdempotencyKey  string
 	OpenAPIv3Assets []*deployments.AddOpenAPIv3DeploymentAssetForm
@@ -50,13 +51,14 @@ type CreateDeploymentRequest struct {
 // CreateDeployment creates a remote deployment.
 func (c *DeploymentsClient) CreateDeployment(
 	ctx context.Context,
-	dc CreateDeploymentRequest,
+	req CreateDeploymentRequest,
 ) (*deployments.CreateDeploymentResult, error) {
+	key := req.APIKey.Reveal()
 	result, err := c.client.CreateDeployment(ctx, &deployments.CreateDeploymentPayload{
-		ApikeyToken:      &dc.APIKey,
-		ProjectSlugInput: &dc.ProjectSlug,
-		IdempotencyKey:   dc.IdempotencyKey,
-		Openapiv3Assets:  dc.OpenAPIv3Assets,
+		ApikeyToken:      &key,
+		ProjectSlugInput: &req.ProjectSlug,
+		IdempotencyKey:   req.IdempotencyKey,
+		Openapiv3Assets:  req.OpenAPIv3Assets,
 		Functions:        []*deployments.AddFunctionsForm{},
 		SessionToken:     nil,
 		GithubRepo:       nil,

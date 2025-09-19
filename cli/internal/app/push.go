@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/api"
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/o11y"
+	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/urfave/cli/v2"
 )
 
@@ -115,7 +116,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 
 			req := deploy.CreateDeploymentRequest{
 				Config:         config,
-				APIKey:         c.String("api-key"),
+				APIKey:         secret.Secret(c.String("api-key")),
 				ProjectSlug:    projectSlug,
 				IdempotencyKey: c.String("idempotency-key"),
 			}

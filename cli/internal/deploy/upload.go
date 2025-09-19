@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
+	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
@@ -16,7 +17,7 @@ func isSupportedSourceType(source Source) bool {
 }
 
 type uploadRequest struct {
-	apiKey       string
+	apiKey       secret.Secret
 	projectSlug  string
 	sourceReader *SourceReader
 }
@@ -43,7 +44,7 @@ func uploadFromSource(
 	source := req.sourceReader.source
 
 	uploadRes, err := assetsClient.UploadOpenAPIv3(ctx, logger, &api.UploadOpenAPIv3Request{
-		APIKey:        req.apiKey,
+		APIKey:        req.apiKey.Reveal(),
 		ProjectSlug:   req.projectSlug,
 		Reader:        rc,
 		ContentType:   req.sourceReader.GetContentType(),
