@@ -109,7 +109,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 
 	id, err := tr.CreateTemplate(ctx, repo.CreateTemplateParams{
 		ProjectID:   projectID,
-		ToolUrn:     toolURN,
+		ToolUrn:     conv.ToPGTextEmpty(toolURN.String()),
 		Name:        string(payload.Name),
 		Prompt:      payload.Prompt,
 		Description: conv.PtrToPGTextEmpty(payload.Description),
