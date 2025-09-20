@@ -311,7 +311,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
         }
 
         if (methodFilters.length > 0) {
-          const method = (t.httpMethod || "").toUpperCase();
+          const method = (t.httpMethod || "OTHER").toUpperCase();
           if (!methodFilters.includes(method)) return false;
         }
 
