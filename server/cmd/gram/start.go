@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
@@ -302,6 +303,12 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_CONFIG_FILE"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "clickhouse-url",
+			Usage:    "Clickhouse URL",
+			Required: false,
+			EnvVars:  []string{"GRAM_CLICKHOUSE_URL"},
+		},
 	}
 
 	return &cli.Command{
@@ -334,6 +341,23 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			ch, err := newClickhouseClient(c.String("clickhouse-url"))
+			if err != nil {
+				return fmt.Errorf("failed to connect to clickhouse: %w", err)
+			}
+
+			if err = ch.Ping(ctx); err != nil {
+				logger.ErrorContext(ctx, "failed to ping clickhouse", attr.SlogError(err))
+				return fmt.Errorf("failed to ping clickhouse: %w", err)
+			}
+
+			defer func(c clickhouse.Conn) {
+				closeErr := c.Close()
+				if closeErr != nil {
+					logger.ErrorContext(ctx, "failed to close clickhouse connection", attr.SlogError(closeErr))
+				}
+			}(ch)
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
