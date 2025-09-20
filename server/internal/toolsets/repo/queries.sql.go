@@ -235,13 +235,13 @@ func (q *Queries) GetHTTPSecurityDefinitions(ctx context.Context, arg GetHTTPSec
 const getPromptTemplatesForToolset = `-- name: GetPromptTemplatesForToolset :many
 WITH ranked_templates AS (
   SELECT 
-    pt.id, pt.project_id, pt.history_id, pt.predecessor_id, pt.name, pt.description, pt.arguments, pt.prompt, pt.engine, pt.kind, pt.tools_hint, pt.created_at, pt.updated_at, pt.deleted_at, pt.deleted,
+    pt.id, pt.tool_urn, pt.project_id, pt.history_id, pt.predecessor_id, pt.name, pt.description, pt.arguments, pt.prompt, pt.engine, pt.kind, pt.tools_hint, pt.created_at, pt.updated_at, pt.deleted_at, pt.deleted,
     ROW_NUMBER() OVER (PARTITION BY pt.history_id ORDER BY pt.id DESC) as rn
   FROM prompt_templates pt
   WHERE project_id = $2
     AND pt.deleted IS FALSE
 )
-SELECT rel.id as tp_id, rt.id, rt.project_id, rt.history_id, rt.predecessor_id, rt.name, rt.description, rt.arguments, rt.prompt, rt.engine, rt.kind, rt.tools_hint, rt.created_at, rt.updated_at, rt.deleted_at, rt.deleted, rt.rn
+SELECT rel.id as tp_id, rt.id, rt.tool_urn, rt.project_id, rt.history_id, rt.predecessor_id, rt.name, rt.description, rt.arguments, rt.prompt, rt.engine, rt.kind, rt.tools_hint, rt.created_at, rt.updated_at, rt.deleted_at, rt.deleted, rt.rn
 FROM toolset_prompts rel
 JOIN ranked_templates rt ON (
   (rel.prompt_template_id IS NOT NULL AND rt.id = rel.prompt_template_id)
@@ -261,6 +261,7 @@ type GetPromptTemplatesForToolsetParams struct {
 type GetPromptTemplatesForToolsetRow struct {
 	TpID          uuid.UUID
 	ID            uuid.UUID
+	ToolUrn       pgtype.Text
 	ProjectID     uuid.UUID
 	HistoryID     uuid.UUID
 	PredecessorID uuid.NullUUID
@@ -290,6 +291,7 @@ func (q *Queries) GetPromptTemplatesForToolset(ctx context.Context, arg GetPromp
 		if err := rows.Scan(
 			&i.TpID,
 			&i.ID,
+			&i.ToolUrn,
 			&i.ProjectID,
 			&i.HistoryID,
 			&i.PredecessorID,

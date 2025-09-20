@@ -130,11 +130,8 @@ function PageSectionBody({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function PageSectionCTA({
-  children,
-  ...props
-}: { children: React.ReactNode } & React.ComponentProps<typeof Button>) {
-  return <Button {...props}>{children}</Button>;
+function PageSectionCTA({ children }: { children: React.ReactNode }) {
+  return <>{children}</>;
 }
 
 const PageSection = Object.assign(PageSectionComponent, {

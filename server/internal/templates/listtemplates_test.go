@@ -52,7 +52,7 @@ func TestTemplatesService_ListTemplates_Success(t *testing.T) {
 		Prompt:           "Third template prompt",
 		Description:      nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "higher_order_tool",
 		ToolsHint:        nil,
 		Arguments:        conv.Ptr(`{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`),
 	})
@@ -135,7 +135,7 @@ func TestTemplatesService_ListTemplates_SingleTemplate(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 	})
 	require.NoError(t, err, "create template")
@@ -173,7 +173,7 @@ func TestTemplatesService_ListTemplates_DeletedTemplateNotIncluded(t *testing.T)
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 	})
 	require.NoError(t, err, "create template to keep")
@@ -187,7 +187,7 @@ func TestTemplatesService_ListTemplates_DeletedTemplateNotIncluded(t *testing.T)
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 	})
 	require.NoError(t, err, "create template to delete")

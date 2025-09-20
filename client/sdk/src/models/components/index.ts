@@ -4,6 +4,7 @@
 
 export * from "./adddeploymentpackageform.js";
 export * from "./addexternaloauthserverrequestbody.js";
+export * from "./addfunctionsform.js";
 export * from "./addopenapiv3deploymentassetform.js";
 export * from "./addpackageform.js";
 export * from "./asset.js";
@@ -27,6 +28,7 @@ export * from "./creditusageresponsebody.js";
 export * from "./customdomain.js";
 export * from "./deleteglobaltoolvariationresult.js";
 export * from "./deployment.js";
+export * from "./deploymentfunctions.js";
 export * from "./deploymentlogevent.js";
 export * from "./deploymentpackage.js";
 export * from "./deploymentsummary.js";

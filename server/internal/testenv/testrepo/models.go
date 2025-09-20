@@ -8,10 +8,28 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+type FunctionToolDefinition struct {
+	ID           uuid.UUID
+	ToolUrn      urn.Tool
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+	InputSchema  []byte
+	Variables    []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
 
 type HttpToolDefinition struct {
 	ID                  uuid.UUID
+	ToolUrn             pgtype.Text
 	ProjectID           uuid.UUID
 	DeploymentID        uuid.UUID
 	Openapiv3DocumentID uuid.NullUUID

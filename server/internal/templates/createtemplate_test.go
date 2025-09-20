@@ -58,7 +58,7 @@ func TestTemplatesService_CreateTemplate_MinimalPayload(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 	})
 	require.NoError(t, err, "create template")
@@ -89,7 +89,7 @@ func TestTemplatesService_CreateTemplate_DuplicateName(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 	})
 	require.NoError(t, err, "create first template")
@@ -104,7 +104,7 @@ func TestTemplatesService_CreateTemplate_DuplicateName(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 	})
 	require.Error(t, err, "expected error for duplicate name")
@@ -150,7 +150,7 @@ func TestTemplatesService_CreateTemplate_InvalidArguments(t *testing.T) {
 				Prompt:           "Test prompt",
 				Description:      nil,
 				Engine:           "",
-				Kind:             "",
+				Kind:             "prompt",
 				ToolsHint:        nil,
 				Arguments:        &tt.arguments,
 			})
@@ -174,7 +174,7 @@ func TestTemplatesService_CreateTemplate_EmptyArgumentsSchema(t *testing.T) {
 		Prompt:           "Test prompt",
 		Description:      nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 		Arguments:        conv.Ptr(`{"type": "object"}`),
 	})
@@ -196,7 +196,7 @@ func TestTemplatesService_CreateTemplate_ArgumentsWithoutEngine(t *testing.T) {
 		Prompt:           "Test prompt",
 		Description:      nil,
 		Engine:           "", // No engine specified
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
 	})
@@ -222,7 +222,7 @@ func TestTemplatesService_CreateTemplate_Unauthorized(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        []string{},
 	})
 	require.Error(t, err, "expected error for unauthorized request")

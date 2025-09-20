@@ -2,12 +2,16 @@ package shared
 
 import (
 	. "goa.design/goa/v3/dsl"
-)
 
-const SlugPattern = `^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$`
+	"github.com/speakeasy-api/gram/server/internal/constants"
+)
 
 var Slug = Type("Slug", String, func() {
 	Description("A short url-friendly label that uniquely identifies a resource.")
-	Pattern(SlugPattern)
+	Pattern(constants.SlugPattern)
 	MaxLength(40)
+})
+
+var URN = Type("URN", String, func() {
+	Meta("struct:field:type", "urn.Tool", "github.com/speakeasy-api/gram/server/internal/urn")
 })

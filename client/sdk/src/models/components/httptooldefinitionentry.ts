@@ -3,9 +3,18 @@
  */
 
 import * as z from "zod";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+export const HTTPToolDefinitionEntryToolType = {
+  Http: "http",
+} as const;
+export type HTTPToolDefinitionEntryToolType = ClosedEnum<
+  typeof HTTPToolDefinitionEntryToolType
+>;
 
 export type HTTPToolDefinitionEntry = {
   /**
@@ -16,7 +25,29 @@ export type HTTPToolDefinitionEntry = {
    * The name of the tool
    */
   name: string;
+  toolType: HTTPToolDefinitionEntryToolType;
 };
+
+/** @internal */
+export const HTTPToolDefinitionEntryToolType$inboundSchema: z.ZodNativeEnum<
+  typeof HTTPToolDefinitionEntryToolType
+> = z.nativeEnum(HTTPToolDefinitionEntryToolType);
+
+/** @internal */
+export const HTTPToolDefinitionEntryToolType$outboundSchema: z.ZodNativeEnum<
+  typeof HTTPToolDefinitionEntryToolType
+> = HTTPToolDefinitionEntryToolType$inboundSchema;
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace HTTPToolDefinitionEntryToolType$ {
+  /** @deprecated use `HTTPToolDefinitionEntryToolType$inboundSchema` instead. */
+  export const inboundSchema = HTTPToolDefinitionEntryToolType$inboundSchema;
+  /** @deprecated use `HTTPToolDefinitionEntryToolType$outboundSchema` instead. */
+  export const outboundSchema = HTTPToolDefinitionEntryToolType$outboundSchema;
+}
 
 /** @internal */
 export const HTTPToolDefinitionEntry$inboundSchema: z.ZodType<
@@ -26,12 +57,18 @@ export const HTTPToolDefinitionEntry$inboundSchema: z.ZodType<
 > = z.object({
   id: z.string(),
   name: z.string(),
+  tool_type: HTTPToolDefinitionEntryToolType$inboundSchema,
+}).transform((v) => {
+  return remap$(v, {
+    "tool_type": "toolType",
+  });
 });
 
 /** @internal */
 export type HTTPToolDefinitionEntry$Outbound = {
   id: string;
   name: string;
+  tool_type: string;
 };
 
 /** @internal */
@@ -42,6 +79,11 @@ export const HTTPToolDefinitionEntry$outboundSchema: z.ZodType<
 > = z.object({
   id: z.string(),
   name: z.string(),
+  toolType: HTTPToolDefinitionEntryToolType$outboundSchema,
+}).transform((v) => {
+  return remap$(v, {
+    toolType: "tool_type",
+  });
 });
 
 /**

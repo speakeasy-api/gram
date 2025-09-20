@@ -206,7 +206,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 			requestBody := ToolCallBody{
 				PathParameters:       tt.pathParam,
 				QueryParameters:      nil,
-				Headers:              nil,
+				HeaderParameters:     nil,
 				Body:                 nil,
 				ResponseFilter:       nil,
 				EnvironmentVariables: nil,
@@ -242,6 +242,135 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Verify the path was correctly constructed with the number
 			require.Equal(t, tt.expectedPath, capturedRequest.URL.Path)
+		})
+	}
+}
+
+func TestToolProxy_Do_HeaderParams(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		headerParam    map[string]any
+		expectedHeader string
+		expectedError  bool
+	}{
+		{
+			name:           "string header param",
+			headerParam:    map[string]any{"Authorization": "Bearer token123"},
+			expectedHeader: "Bearer token123",
+			expectedError:  false,
+		},
+		{
+			name:           "large integer header param",
+			headerParam:    map[string]any{"X-Order-ID": 9007199254740991},
+			expectedHeader: "9007199254740991",
+			expectedError:  false,
+		},
+		{
+			name:           "float header param",
+			headerParam:    map[string]any{"X-Rating": 4.5},
+			expectedHeader: "4.5",
+			expectedError:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create a mock server that captures the request headers
+			var capturedRequest *http.Request
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				capturedRequest = r
+				w.WriteHeader(http.StatusOK)
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"success": true}`))
+			}))
+			defer mockServer.Close()
+
+			// Setup test dependencies
+			ctx := context.Background()
+			logger := testenv.NewLogger(t)
+			tracerProvider := testenv.NewTracerProvider(t)
+			meterProvider := testenv.NewMeterProvider(t)
+			policy, err := guardian.NewUnsafePolicy([]string{})
+			require.NoError(t, err)
+
+			// Create tool with header parameter configuration
+			tool := &HTTPTool{
+				ID:                 uuid.New().String(),
+				ProjectID:          uuid.New().String(),
+				DeploymentID:       uuid.New().String(),
+				OrganizationID:     uuid.New().String(),
+				Name:               "test_tool",
+				ServerEnvVar:       "TEST_SERVER_URL",
+				DefaultServerUrl:   NullString{Value: mockServer.URL, Valid: true},
+				Security:           []*HTTPToolSecurity{},
+				SecurityScopes:     map[string][]string{},
+				Method:             "GET",
+				Path:               "/test",
+				Schema:             []byte{},
+				HeaderParams:       map[string]*HTTPParameter{},
+				QueryParams:        map[string]*HTTPParameter{},
+				PathParams:         map[string]*HTTPParameter{},
+				RequestContentType: NullString{Value: "application/json", Valid: true},
+				ResponseFilter:     nil,
+			}
+
+			// Add header parameter configuration for the parameter in the test
+			for paramName := range tt.headerParam {
+				tool.HeaderParams[paramName] = &HTTPParameter{
+					Name:            paramName,
+					Style:           "simple",
+					Explode:         boolPtr(false),
+					AllowEmptyValue: true,
+				}
+			}
+
+			// Create request body with header parameters
+			requestBody := ToolCallBody{
+				PathParameters:       nil,
+				QueryParameters:      nil,
+				HeaderParameters:     tt.headerParam,
+				Body:                 nil,
+				ResponseFilter:       nil,
+				EnvironmentVariables: nil,
+				GramRequestSummary:   "",
+			}
+
+			bodyBytes, err := json.Marshal(requestBody)
+			require.NoError(t, err)
+
+			// Create tool proxy
+			proxy := NewToolProxy(
+				logger,
+				tracerProvider,
+				meterProvider,
+				ToolCallSourceDirect,
+				nil, // no cache needed for this test
+				policy,
+			)
+
+			// Create response recorder
+			recorder := httptest.NewRecorder()
+
+			// Execute the proxy call
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), map[string]string{}, tool)
+
+			if tt.expectedError {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, capturedRequest)
+
+			// Verify the header was correctly set with the expected value
+			for headerName := range tt.headerParam {
+				actualHeaderValue := capturedRequest.Header.Get(headerName)
+				require.Equal(t, tt.expectedHeader, actualHeaderValue, "header %s value mismatch", headerName)
+			}
 		})
 	}
 }
@@ -550,7 +679,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 			requestBody := ToolCallBody{
 				PathParameters:       nil,
 				QueryParameters:      tt.queryParams,
-				Headers:              nil,
+				HeaderParameters:     nil,
 				Body:                 nil,
 				ResponseFilter:       nil,
 				EnvironmentVariables: nil,
@@ -767,7 +896,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 			toolCallBody := ToolCallBody{
 				PathParameters:       nil,
 				QueryParameters:      nil,
-				Headers:              nil,
+				HeaderParameters:     nil,
 				Body:                 json.RawMessage(bodyJSON),
 				ResponseFilter:       nil,
 				EnvironmentVariables: nil,

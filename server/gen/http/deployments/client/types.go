@@ -31,6 +31,7 @@ type CreateDeploymentRequestBody struct {
 	// commit hash or pull request.
 	ExternalURL     *string                                       `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	Openapiv3Assets []*AddOpenAPIv3DeploymentAssetFormRequestBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
+	Functions       []*AddFunctionsFormRequestBody                `form:"functions,omitempty" json:"functions,omitempty" xml:"functions,omitempty"`
 	Packages        []*AddDeploymentPackageFormRequestBody        `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
 }
 
@@ -44,12 +45,17 @@ type EvolveRequestBody struct {
 	UpsertOpenapiv3Assets []*AddOpenAPIv3DeploymentAssetFormRequestBody `form:"upsert_openapiv3_assets,omitempty" json:"upsert_openapiv3_assets,omitempty" xml:"upsert_openapiv3_assets,omitempty"`
 	// The packages to upsert in the new deployment.
 	UpsertPackages []*AddPackageFormRequestBody `form:"upsert_packages,omitempty" json:"upsert_packages,omitempty" xml:"upsert_packages,omitempty"`
-	// The OpenAPI 3.x documents to exclude from the new deployment when cloning a
-	// previous deployment.
+	// The tool functions to upsert in the new deployment.
+	UpsertFunctions []*AddFunctionsFormRequestBody `form:"upsert_functions,omitempty" json:"upsert_functions,omitempty" xml:"upsert_functions,omitempty"`
+	// The OpenAPI 3.x documents, identified by slug, to exclude from the new
+	// deployment when cloning a previous deployment.
 	ExcludeOpenapiv3Assets []string `form:"exclude_openapiv3_assets,omitempty" json:"exclude_openapiv3_assets,omitempty" xml:"exclude_openapiv3_assets,omitempty"`
 	// The packages to exclude from the new deployment when cloning a previous
 	// deployment.
 	ExcludePackages []string `form:"exclude_packages,omitempty" json:"exclude_packages,omitempty" xml:"exclude_packages,omitempty"`
+	// The functions, identified by slug, to exclude from the new deployment when
+	// cloning a previous deployment.
+	ExcludeFunctions []string `form:"exclude_functions,omitempty" json:"exclude_functions,omitempty" xml:"exclude_functions,omitempty"`
 }
 
 // RedeployRequestBody is the type of the "deployments" service "redeploy"
@@ -90,11 +96,16 @@ type GetDeploymentResponseBody struct {
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	// The ID of the deployment that this deployment was cloned from.
 	ClonedFrom *string `form:"cloned_from,omitempty" json:"cloned_from,omitempty" xml:"cloned_from,omitempty"`
-	// The number of tools in the deployment.
-	ToolCount *int64 `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// The number of tools in the deployment generated from OpenAPI documents.
+	Openapiv3ToolCount *int64 `form:"openapiv3_tool_count,omitempty" json:"openapiv3_tool_count,omitempty" xml:"openapiv3_tool_count,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
+	// The number of tools in the deployment generated from OpenAPI documents.
+	FunctionsToolCount *int64 `form:"functions_tool_count,omitempty" json:"functions_tool_count,omitempty" xml:"functions_tool_count,omitempty"`
+	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
+	// documents whose operations will become tool definitions.
+	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
 }
@@ -1463,6 +1474,21 @@ type OpenAPIv3DeploymentAssetResponseBody struct {
 	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 }
 
+// DeploymentFunctionsResponseBody is used to define fields on response body
+// types.
+type DeploymentFunctionsResponseBody struct {
+	// The ID of the deployment asset.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The ID of the uploaded asset.
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
+	// The name to give the document as it will be displayed in UIs.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug to give the document as it will be displayed in URLs.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// The runtime to use when executing functions.
+	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
+}
+
 // DeploymentPackageResponseBody is used to define fields on response body
 // types.
 type DeploymentPackageResponseBody struct {
@@ -1504,11 +1530,16 @@ type DeploymentResponseBody struct {
 	ExternalURL *string `form:"external_url,omitempty" json:"external_url,omitempty" xml:"external_url,omitempty"`
 	// The ID of the deployment that this deployment was cloned from.
 	ClonedFrom *string `form:"cloned_from,omitempty" json:"cloned_from,omitempty" xml:"cloned_from,omitempty"`
-	// The number of tools in the deployment.
-	ToolCount *int64 `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// The number of tools in the deployment generated from OpenAPI documents.
+	Openapiv3ToolCount *int64 `form:"openapiv3_tool_count,omitempty" json:"openapiv3_tool_count,omitempty" xml:"openapiv3_tool_count,omitempty"`
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAssetResponseBody `form:"openapiv3_assets,omitempty" json:"openapiv3_assets,omitempty" xml:"openapiv3_assets,omitempty"`
+	// The number of tools in the deployment generated from OpenAPI documents.
+	FunctionsToolCount *int64 `form:"functions_tool_count,omitempty" json:"functions_tool_count,omitempty" xml:"functions_tool_count,omitempty"`
+	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
+	// documents whose operations will become tool definitions.
+	FunctionsAssets []*DeploymentFunctionsResponseBody `form:"functions_assets,omitempty" json:"functions_assets,omitempty" xml:"functions_assets,omitempty"`
 	// The packages that were deployed.
 	Packages []*DeploymentPackageResponseBody `form:"packages,omitempty" json:"packages,omitempty" xml:"packages,omitempty"`
 }
@@ -1522,6 +1553,20 @@ type AddOpenAPIv3DeploymentAssetFormRequestBody struct {
 	Name string `form:"name" json:"name" xml:"name"`
 	// The slug to give the document as it will be displayed in URLs.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
+}
+
+// AddFunctionsFormRequestBody is used to define fields on request body types.
+type AddFunctionsFormRequestBody struct {
+	// The ID of the functions file from the assets service.
+	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
+	// The functions file display name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// A URL-friendly string that identifies the functions file. Usually derived
+	// from the name.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// The runtime to use when executing functions. Allowed values are: nodejs:22,
+	// python:3.12.
+	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
 }
 
 // AddDeploymentPackageFormRequestBody is used to define fields on request body
@@ -1553,10 +1598,14 @@ type DeploymentSummaryResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// The creation date of the deployment.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// The number of upstream assets.
-	AssetCount *int64 `form:"asset_count,omitempty" json:"asset_count,omitempty" xml:"asset_count,omitempty"`
-	// The number of tools in the deployment.
-	ToolCount *int64 `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+	// The number of upstream OpenAPI assets.
+	Openapiv3AssetCount *int64 `form:"openapiv3_asset_count,omitempty" json:"openapiv3_asset_count,omitempty" xml:"openapiv3_asset_count,omitempty"`
+	// The number of tools in the deployment generated from OpenAPI documents.
+	Openapiv3ToolCount *int64 `form:"openapiv3_tool_count,omitempty" json:"openapiv3_tool_count,omitempty" xml:"openapiv3_tool_count,omitempty"`
+	// The number of Functions assets.
+	FunctionsAssetCount *int64 `form:"functions_asset_count,omitempty" json:"functions_asset_count,omitempty" xml:"functions_asset_count,omitempty"`
+	// The number of tools in the deployment generated from Functions.
+	FunctionsToolCount *int64 `form:"functions_tool_count,omitempty" json:"functions_tool_count,omitempty" xml:"functions_tool_count,omitempty"`
 }
 
 // DeploymentLogEventResponseBody is used to define fields on response body
@@ -1592,6 +1641,12 @@ func NewCreateDeploymentRequestBody(p *deployments.CreateDeploymentPayload) *Cre
 			body.Openapiv3Assets[i] = marshalDeploymentsAddOpenAPIv3DeploymentAssetFormToAddOpenAPIv3DeploymentAssetFormRequestBody(val)
 		}
 	}
+	if p.Functions != nil {
+		body.Functions = make([]*AddFunctionsFormRequestBody, len(p.Functions))
+		for i, val := range p.Functions {
+			body.Functions[i] = marshalDeploymentsAddFunctionsFormToAddFunctionsFormRequestBody(val)
+		}
+	}
 	if p.Packages != nil {
 		body.Packages = make([]*AddDeploymentPackageFormRequestBody, len(p.Packages))
 		for i, val := range p.Packages {
@@ -1619,6 +1674,12 @@ func NewEvolveRequestBody(p *deployments.EvolvePayload) *EvolveRequestBody {
 			body.UpsertPackages[i] = marshalDeploymentsAddPackageFormToAddPackageFormRequestBody(val)
 		}
 	}
+	if p.UpsertFunctions != nil {
+		body.UpsertFunctions = make([]*AddFunctionsFormRequestBody, len(p.UpsertFunctions))
+		for i, val := range p.UpsertFunctions {
+			body.UpsertFunctions[i] = marshalDeploymentsAddFunctionsFormToAddFunctionsFormRequestBody(val)
+		}
+	}
 	if p.ExcludeOpenapiv3Assets != nil {
 		body.ExcludeOpenapiv3Assets = make([]string, len(p.ExcludeOpenapiv3Assets))
 		for i, val := range p.ExcludeOpenapiv3Assets {
@@ -1629,6 +1690,12 @@ func NewEvolveRequestBody(p *deployments.EvolvePayload) *EvolveRequestBody {
 		body.ExcludePackages = make([]string, len(p.ExcludePackages))
 		for i, val := range p.ExcludePackages {
 			body.ExcludePackages[i] = val
+		}
+	}
+	if p.ExcludeFunctions != nil {
+		body.ExcludeFunctions = make([]string, len(p.ExcludeFunctions))
+		for i, val := range p.ExcludeFunctions {
+			body.ExcludeFunctions[i] = val
 		}
 	}
 	return body
@@ -1647,24 +1714,31 @@ func NewRedeployRequestBody(p *deployments.RedeployPayload) *RedeployRequestBody
 // endpoint result from a HTTP "OK" response.
 func NewGetDeploymentResultOK(body *GetDeploymentResponseBody) *deployments.GetDeploymentResult {
 	v := &deployments.GetDeploymentResult{
-		ID:             *body.ID,
-		OrganizationID: *body.OrganizationID,
-		ProjectID:      *body.ProjectID,
-		UserID:         *body.UserID,
-		CreatedAt:      *body.CreatedAt,
-		Status:         *body.Status,
-		IdempotencyKey: body.IdempotencyKey,
-		GithubRepo:     body.GithubRepo,
-		GithubPr:       body.GithubPr,
-		GithubSha:      body.GithubSha,
-		ExternalID:     body.ExternalID,
-		ExternalURL:    body.ExternalURL,
-		ClonedFrom:     body.ClonedFrom,
-		ToolCount:      *body.ToolCount,
+		ID:                 *body.ID,
+		OrganizationID:     *body.OrganizationID,
+		ProjectID:          *body.ProjectID,
+		UserID:             *body.UserID,
+		CreatedAt:          *body.CreatedAt,
+		Status:             *body.Status,
+		IdempotencyKey:     body.IdempotencyKey,
+		GithubRepo:         body.GithubRepo,
+		GithubPr:           body.GithubPr,
+		GithubSha:          body.GithubSha,
+		ExternalID:         body.ExternalID,
+		ExternalURL:        body.ExternalURL,
+		ClonedFrom:         body.ClonedFrom,
+		Openapiv3ToolCount: *body.Openapiv3ToolCount,
+		FunctionsToolCount: *body.FunctionsToolCount,
 	}
 	v.Openapiv3Assets = make([]*types.OpenAPIv3DeploymentAsset, len(body.Openapiv3Assets))
 	for i, val := range body.Openapiv3Assets {
 		v.Openapiv3Assets[i] = unmarshalOpenAPIv3DeploymentAssetResponseBodyToTypesOpenAPIv3DeploymentAsset(val)
+	}
+	if body.FunctionsAssets != nil {
+		v.FunctionsAssets = make([]*types.DeploymentFunctions, len(body.FunctionsAssets))
+		for i, val := range body.FunctionsAssets {
+			v.FunctionsAssets[i] = unmarshalDeploymentFunctionsResponseBodyToTypesDeploymentFunctions(val)
+		}
 	}
 	v.Packages = make([]*types.DeploymentPackage, len(body.Packages))
 	for i, val := range body.Packages {
@@ -2823,8 +2897,11 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	if body.Packages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("packages", "body"))
 	}
-	if body.ToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	if body.Openapiv3ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3_tool_count", "body"))
+	}
+	if body.FunctionsToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("functions_tool_count", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -2832,6 +2909,13 @@ func ValidateGetDeploymentResponseBody(body *GetDeploymentResponseBody) (err err
 	for _, e := range body.Openapiv3Assets {
 		if e != nil {
 			if err2 := ValidateOpenAPIv3DeploymentAssetResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.FunctionsAssets {
+		if e != nil {
+			if err2 := ValidateDeploymentFunctionsResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -4630,6 +4714,35 @@ func ValidateOpenAPIv3DeploymentAssetResponseBody(body *OpenAPIv3DeploymentAsset
 	return
 }
 
+// ValidateDeploymentFunctionsResponseBody runs the validations defined on
+// DeploymentFunctionsResponseBody
+func ValidateDeploymentFunctionsResponseBody(body *DeploymentFunctionsResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.AssetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("asset_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Runtime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	return
+}
+
 // ValidateDeploymentPackageResponseBody runs the validations defined on
 // DeploymentPackageResponseBody
 func ValidateDeploymentPackageResponseBody(body *DeploymentPackageResponseBody) (err error) {
@@ -4672,8 +4785,11 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 	if body.Packages == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("packages", "body"))
 	}
-	if body.ToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	if body.Openapiv3ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3_tool_count", "body"))
+	}
+	if body.FunctionsToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("functions_tool_count", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -4681,6 +4797,13 @@ func ValidateDeploymentResponseBody(body *DeploymentResponseBody) (err error) {
 	for _, e := range body.Openapiv3Assets {
 		if e != nil {
 			if err2 := ValidateOpenAPIv3DeploymentAssetResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.FunctionsAssets {
+		if e != nil {
+			if err2 := ValidateDeploymentFunctionsResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -4705,6 +4828,16 @@ func ValidateAddOpenAPIv3DeploymentAssetFormRequestBody(body *AddOpenAPIv3Deploy
 	return
 }
 
+// ValidateAddFunctionsFormRequestBody runs the validations defined on
+// AddFunctionsFormRequestBody
+func ValidateAddFunctionsFormRequestBody(body *AddFunctionsFormRequestBody) (err error) {
+	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	if utf8.RuneCountInString(body.Slug) > 40 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
+	}
+	return
+}
+
 // ValidateDeploymentSummaryResponseBody runs the validations defined on
 // DeploymentSummaryResponseBody
 func ValidateDeploymentSummaryResponseBody(body *DeploymentSummaryResponseBody) (err error) {
@@ -4720,11 +4853,17 @@ func ValidateDeploymentSummaryResponseBody(body *DeploymentSummaryResponseBody) 
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
-	if body.AssetCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("asset_count", "body"))
+	if body.Openapiv3AssetCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3_asset_count", "body"))
 	}
-	if body.ToolCount == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_count", "body"))
+	if body.Openapiv3ToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("openapiv3_tool_count", "body"))
+	}
+	if body.FunctionsAssetCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("functions_asset_count", "body"))
+	}
+	if body.FunctionsToolCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("functions_tool_count", "body"))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))

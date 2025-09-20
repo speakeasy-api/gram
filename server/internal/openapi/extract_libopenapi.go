@@ -21,6 +21,10 @@ import (
 	"github.com/pb33f/libopenapi/datamodel/high/base"
 	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	libopenapiJSON "github.com/pb33f/libopenapi/json"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+	"gopkg.in/yaml.v3"
+
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -29,19 +33,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orderedmap"
-	"gopkg.in/yaml.v3"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func (p *ToolExtractor) doLibOpenAPI(
-	ctx context.Context,
-	logger *slog.Logger,
-	tx *repo.Queries,
-	doc []byte,
-	task ToolExtractorTask,
-) (*ToolExtractorResult, error) {
-	docInfo := task.DocInfo
+func parseLibOpenAPI(ctx context.Context, logger *slog.Logger, tracer trace.Tracer, doc []byte, docInfo *types.OpenAPIv3DeploymentAsset) (document libopenapi.Document, v3Model *libopenapi.DocumentModel[v3.Document], err error) {
+	ctx, span := tracer.Start(ctx, "openapiv3.parseLibOpenAPI")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 
-	document, err := libopenapi.NewDocumentWithConfiguration(doc, &datamodel.DocumentConfiguration{
+	document, err = libopenapi.NewDocumentWithConfiguration(doc, &datamodel.DocumentConfiguration{
 		AllowFileReferences:                 false,
 		AllowRemoteReferences:               false,
 		BundleInlineRefs:                    false,
@@ -50,7 +54,7 @@ func (p *ToolExtractor) doLibOpenAPI(
 		IgnoreArrayCircularReferences:       true,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document").Log(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document").Log(ctx, logger)
 	}
 
 	v3Model, errs := document.BuildV3Model()
@@ -59,11 +63,29 @@ func (p *ToolExtractor) doLibOpenAPI(
 			logger.ErrorContext(ctx, fmt.Sprintf("%s: %s", docInfo.Name, err.Error()), attr.SlogEvent("openapi:error"))
 		}
 
-		return nil, oops.E(
+		return nil, nil, oops.E(
 			oops.CodeBadRequest,
 			oops.Permanent(errors.Join(errs...)),
 			"openapi v3 document '%s' had %d errors", docInfo.Name, len(errs),
 		).Log(ctx, logger, attr.SlogEvent("openapi:error"))
+	}
+
+	return document, v3Model, nil
+}
+
+func (p *ToolExtractor) doLibOpenAPI(
+	ctx context.Context,
+	logger *slog.Logger,
+	tracer trace.Tracer,
+	tx *repo.Queries,
+	doc []byte,
+	task ToolExtractorTask,
+) (*ToolExtractorResult, error) {
+	docInfo := task.DocInfo
+
+	document, v3Model, err := parseLibOpenAPI(ctx, logger, tracer, doc, docInfo)
+	if err != nil {
+		return nil, fmt.Errorf("libopenapi parse: %w", err)
 	}
 
 	upgradeStart := time.Now()
@@ -262,15 +284,14 @@ func extractSecuritySchemesLibOpenAPI(doc v3.Document, task ToolExtractorTask) (
 		case "oauth2":
 			if sec.Flows != nil {
 				if sec.Flows.AuthorizationCode != nil || sec.Flows.ClientCredentials != nil || sec.Flows.Implicit != nil {
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_ACCESS_TOKEN"))
 				}
 
 				if sec.Flows.ClientCredentials != nil {
 					oauthTypes = append(oauthTypes, "client_credentials")
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_SECRET"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_ID"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_TOKEN_URL"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_CLIENT_SECRET"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_CLIENT_ID"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_TOKEN_URL"))
 				}
 
 				if sec.Flows.Implicit != nil {
@@ -492,10 +513,13 @@ func extractToolDefLibOpenAPI(ctx context.Context, logger *slog.Logger, tx *repo
 		tags = []string{}
 	}
 
+	toolURN := urn.NewTool(urn.ToolKindHTTP, string(docInfo.Slug), descriptor.name)
+
 	return repo.CreateOpenAPIv3ToolDefinitionParams{
 		ProjectID:           projectID,
 		DeploymentID:        deploymentID,
 		Openapiv3DocumentID: uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
+		ToolUrn:             conv.ToPGTextEmpty(toolURN.String()),
 		Security:            security,
 		Path:                path,
 		HttpMethod:          strings.ToUpper(method),

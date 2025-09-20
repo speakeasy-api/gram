@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
@@ -38,6 +39,7 @@ type Activities struct {
 
 func NewActivities(
 	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
 	features feature.Provider,
@@ -52,7 +54,7 @@ func NewActivities(
 	posthogClient *posthog.Posthog,
 ) *Activities {
 	return &Activities{
-		processDeployment:             activities.NewProcessDeployment(logger, meterProvider, db, features, assetStorage),
+		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage),
 		transitionDeployment:          activities.NewTransitionDeployment(logger, db),
 		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
 		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),

@@ -3,10 +3,9 @@
 
 set -e
 
-mods=$(find . -name node_modules -prune -o -name go.mod -print)
+mods="server cli"
 
 for mod in $mods; do
-  dir=$(dirname "$mod")
-  echo "$dir"
-  (cd "$dir" && go mod tidy)
+  echo "$mod"
+  (cd "$mod" && go mod tidy)
 done

@@ -10,6 +10,7 @@ let value: CreateDeploymentResult = {
     clonedFrom: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
     createdAt: new Date("2025-05-24T05:11:37.963Z"),
     externalId: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
+    functionsToolCount: 643083,
     githubPr: "1234",
     githubRepo: "speakeasyapi/gram",
     githubSha: "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
@@ -23,6 +24,7 @@ let value: CreateDeploymentResult = {
         slug: "<value>",
       },
     ],
+    openapiv3ToolCount: 325382,
     organizationId: "<id>",
     packages: [
       {
@@ -33,7 +35,6 @@ let value: CreateDeploymentResult = {
     ],
     projectId: "<id>",
     status: "<value>",
-    toolCount: 325382,
     userId: "<id>",
   },
 };

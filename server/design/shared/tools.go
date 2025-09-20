@@ -1,6 +1,7 @@
 package shared
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -18,6 +19,10 @@ var ResponseFilter = Type("ResponseFilter", func() {
 
 var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Meta("struct:pkg:path", "types")
+
+	Attribute("tool_type", String, func() {
+		Enum(constants.ToolTypeHTTP)
+	})
 
 	Attribute("id", String, "The ID of the HTTP tool")
 	Attribute("project_id", String, "The ID of the project")
@@ -55,14 +60,18 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("canonical", CanonicalToolAttributes, "The original details of a tool, excluding any variations")
 	Attribute("variation", ToolVariation, "The variation details of a tool. Only includes explicitly varied fields.")
 
-	Required("id", "project_id", "deployment_id", "name", "canonical_name", "summary", "description", "confirm", "tags", "http_method", "path", "schema", "created_at", "updated_at")
+	Required("tool_type", "id", "project_id", "deployment_id", "name", "canonical_name", "summary", "description", "confirm", "tags", "http_method", "path", "schema", "created_at", "updated_at")
 })
 
 var HTTPToolDefinitionEntry = Type("HTTPToolDefinitionEntry", func() {
+	Attribute("tool_type", String, func() {
+		Enum(constants.ToolTypeHTTP)
+	})
+
 	Attribute("id", String, "The ID of the HTTP tool")
 	Attribute("name", String, "The name of the tool")
 
-	Required("id", "name")
+	Required("tool_type", "id", "name")
 })
 
 var CanonicalToolAttributes = Type("CanonicalToolAttributes", func() {

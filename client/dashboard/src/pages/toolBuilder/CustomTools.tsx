@@ -56,11 +56,13 @@ export default function CustomTools() {
       <Page.Section.Description>
         Create higher-order tools by sequencing together tools and instructions
       </Page.Section.Description>
-      <Page.Section.CTA onClick={onNewCustomTool}>
-        <Button.LeftIcon>
-          <Plus className="w-4 h-4" />
-        </Button.LeftIcon>
-        <Button.Text>New Custom Tool</Button.Text>
+      <Page.Section.CTA>
+        <Button onClick={onNewCustomTool}>
+          <Button.LeftIcon>
+            <Plus className="w-4 h-4" />
+          </Button.LeftIcon>
+          <Button.Text>New Custom Tool</Button.Text>
+        </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
         <Cards isLoading={isLoading}>

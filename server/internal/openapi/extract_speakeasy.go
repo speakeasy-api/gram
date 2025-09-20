@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/url"
 	"regexp"
@@ -17,6 +18,16 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/openapi/hashing"
+	"github.com/speakeasy-api/openapi/jsonschema/oas3"
+	"github.com/speakeasy-api/openapi/marshaller"
+	"github.com/speakeasy-api/openapi/openapi"
+	"github.com/speakeasy-api/openapi/pointer"
+	"github.com/speakeasy-api/openapi/sequencedmap"
+	"github.com/speakeasy-api/openapi/yml"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -25,25 +36,37 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orderedmap"
-	"github.com/speakeasy-api/openapi/hashing"
-	"github.com/speakeasy-api/openapi/jsonschema/oas3"
-	"github.com/speakeasy-api/openapi/marshaller"
-	"github.com/speakeasy-api/openapi/openapi"
-	"github.com/speakeasy-api/openapi/pointer"
-	"github.com/speakeasy-api/openapi/sequencedmap"
-	"github.com/speakeasy-api/openapi/yml"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func parseSpeakeasy(ctx context.Context, tracer trace.Tracer, reader io.Reader) (doc *openapi.OpenAPI, err error) {
+	ctx, span := tracer.Start(ctx, "openapiv3.parseSpeakeasy")
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
+
+	doc, _, err = openapi.Unmarshal(ctx, reader, openapi.WithSkipValidation())
+	if err != nil {
+		return nil, fmt.Errorf("parse document: %w", err)
+	}
+
+	return doc, nil
+}
 
 func (p *ToolExtractor) doSpeakeasy(
 	ctx context.Context,
 	logger *slog.Logger,
+	tracer trace.Tracer,
 	tx *repo.Queries,
 	data []byte,
 	task ToolExtractorTask,
 ) (*ToolExtractorResult, error) {
 	docInfo := task.DocInfo
 
-	doc, _, err := openapi.Unmarshal(ctx, bytes.NewReader(data), openapi.WithSkipValidation())
+	doc, err := parseSpeakeasy(ctx, tracer, bytes.NewReader(data))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "error opening openapi document").Log(ctx, logger)
 	}
@@ -270,15 +293,14 @@ func extractSecuritySchemesSpeakeasy(ctx context.Context, logger *slog.Logger, d
 		case openapi.SecuritySchemeTypeOAuth2:
 			if sec.GetFlows() != nil {
 				if sec.GetFlows().AuthorizationCode != nil || sec.GetFlows().ClientCredentials != nil || sec.GetFlows().Implicit != nil {
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_ACCESS_TOKEN"))
 				}
 
 				if sec.GetFlows().ClientCredentials != nil {
 					oauthTypes = append(oauthTypes, "client_credentials")
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_SECRET"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_CLIENT_ID"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_TOKEN_URL"))
-					envvars = append(envvars, strcase.ToSNAKE(slug+"_ACCESS_TOKEN"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_CLIENT_SECRET"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_CLIENT_ID"))
+					envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_TOKEN_URL"))
 				}
 
 				if sec.GetFlows().Implicit != nil {
@@ -544,10 +566,13 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 		tags = []string{}
 	}
 
+	toolURN := urn.NewTool(urn.ToolKindHTTP, string(docInfo.Slug), descriptor.name)
+
 	return repo.CreateOpenAPIv3ToolDefinitionParams{
 		ProjectID:           projectID,
 		DeploymentID:        deploymentID,
 		Openapiv3DocumentID: uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
+		ToolUrn:             conv.ToPGTextEmpty(toolURN.String()),
 		Security:            security,
 		Path:                path,
 		HttpMethod:          strings.ToUpper(method),

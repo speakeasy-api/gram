@@ -81,7 +81,7 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	f := &feature.InMemory{}
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage))
+	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()
@@ -140,6 +140,7 @@ func createPetstoreDeployment(t *testing.T, ctx context.Context, ti *testInstanc
 				Slug:    "petstore-doc",
 			},
 		},
+		Functions:        []*dgen.AddFunctionsForm{},
 		Packages:         []*dgen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,

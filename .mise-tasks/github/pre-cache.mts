@@ -31,11 +31,12 @@ async function setupGoCaching() {
   const hash = crypto.createHash("sha256");
 
   const iter = await fs.glob(["./*/go.mod", "./*/go.sum"]);
-  const gomods: string[] = [];
+  const gomodsuniq = new Set<string>();
   for await (const entry of iter) {
-    gomods.push(entry);
+    gomodsuniq.add(entry);
   }
-  gomods.sort();
+
+  const gomods = Array.from(gomodsuniq).sort();
 
   for (const entry of gomods) {
     console.log("Hashing:", entry);

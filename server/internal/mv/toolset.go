@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -62,9 +63,8 @@ func DescribeToolsetEntry(
 	var serverVars []*types.ServerVariable
 	if len(toolset.HttpToolNames) > 0 {
 		definitions, err := toolsRepo.FindToolEntriesByName(ctx, tr.FindToolEntriesByNameParams{
-			ProjectID:    pid,
-			Names:        toolset.HttpToolNames,
-			DeploymentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ProjectID: pid,
+			Names:     toolset.HttpToolNames,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
@@ -105,8 +105,9 @@ func DescribeToolsetEntry(
 			name := conv.Default(nameVariations[def.Name], def.Name)
 
 			tool := &types.HTTPToolDefinitionEntry{
-				ID:   def.ID.String(),
-				Name: name,
+				ToolType: constants.ToolTypeHTTP,
+				ID:       def.ID.String(),
+				Name:     name,
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
@@ -200,9 +201,8 @@ func DescribeToolset(
 	var serverVars []*types.ServerVariable
 	if len(toolset.HttpToolNames) > 0 {
 		definitions, err := toolsRepo.FindToolsByName(ctx, tr.FindToolsByNameParams{
-			ProjectID:    pid,
-			Names:        toolset.HttpToolNames,
-			DeploymentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			ProjectID: pid,
+			Names:     toolset.HttpToolNames,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
@@ -301,6 +301,7 @@ func DescribeToolset(
 			}
 
 			tool := &types.HTTPToolDefinition{
+				ToolType:            constants.ToolTypeHTTP,
 				ID:                  def.HttpToolDefinition.ID.String(),
 				ProjectID:           def.HttpToolDefinition.Description,
 				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
