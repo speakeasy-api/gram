@@ -36,11 +36,16 @@ type Deployment struct {
 	ExternalURL *string
 	// The ID of the deployment that this deployment was cloned from.
 	ClonedFrom *string
-	// The number of tools in the deployment.
-	ToolCount int64
+	// The number of tools in the deployment generated from OpenAPI documents.
+	Openapiv3ToolCount int64
 	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
 	// documents whose operations will become tool definitions.
 	Openapiv3Assets []*OpenAPIv3DeploymentAsset
+	// The number of tools in the deployment generated from OpenAPI documents.
+	FunctionsToolCount int64
+	// The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x
+	// documents whose operations will become tool definitions.
+	FunctionsAssets []*DeploymentFunctions
 	// The packages that were deployed.
 	Packages []*DeploymentPackage
 }

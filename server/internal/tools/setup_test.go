@@ -79,7 +79,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	f := &feature.InMemory{}
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage))
+	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()

@@ -26,7 +26,7 @@ func TestTemplatesService_RenderTemplateByID_NoEngine_Success(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        []string{},
 	})
 	require.NoError(t, err, "create template")
@@ -60,7 +60,7 @@ func TestTemplatesService_RenderTemplateByID_EmptyEngine_Success(t *testing.T) {
 		ProjectSlugInput: nil,
 		Description:      nil,
 		Arguments:        nil,
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        []string{},
 	})
 	require.NoError(t, err, "create template")
@@ -94,7 +94,7 @@ func TestTemplatesService_RenderTemplateByID_Mustache_Success(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		Description:      nil,
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        []string{},
 	})
 	require.NoError(t, err, "create template")
@@ -132,7 +132,7 @@ func TestTemplatesService_RenderTemplateByID_Mustache_PartialData(t *testing.T) 
 		ProjectSlugInput: nil,
 		Description:      nil,
 		Arguments:        nil,
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        []string{},
 	})
 	require.NoError(t, err, "create template")
@@ -169,7 +169,7 @@ func TestTemplatesService_RenderTemplateByID_Mustache_EmptyArguments(t *testing.
 		ProjectSlugInput: nil,
 		Description:      nil,
 		Arguments:        nil,
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        []string{},
 	})
 	require.NoError(t, err, "create template")
@@ -238,7 +238,7 @@ func TestTemplatesService_RenderTemplateByID_InvalidMustacheTemplate(t *testing.
 		ProjectSlugInput: nil,
 		Description:      nil,
 		Arguments:        nil,
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        []string{},
 	})
 	require.NoError(t, err, "create template")
@@ -275,7 +275,7 @@ func TestTemplatesService_RenderTemplateByID_Mustache_NestedObjects(t *testing.T
 		ProjectSlugInput: nil,
 		Description:      nil,
 		Arguments:        nil,
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        []string{},
 	})
 	require.NoError(t, err, "create template")

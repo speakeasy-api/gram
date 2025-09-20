@@ -270,6 +270,7 @@ func DecodeListToolsResponse(decoder func(*http.Response) goahttp.Decoder, resto
 // *HTTPToolDefinitionResponseBody.
 func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToolDefinitionResponseBody) *types.HTTPToolDefinition {
 	res := &types.HTTPToolDefinition{
+		ToolType:            *v.ToolType,
 		ID:                  *v.ID,
 		ProjectID:           *v.ProjectID,
 		DeploymentID:        *v.DeploymentID,

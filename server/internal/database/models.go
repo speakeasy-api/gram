@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type ApiKey struct {
@@ -123,6 +124,15 @@ type DeploymentStatus struct {
 	UpdatedAt    pgtype.Timestamptz
 }
 
+type DeploymentsFunction struct {
+	ID           uuid.UUID
+	DeploymentID uuid.UUID
+	AssetID      uuid.UUID
+	Name         string
+	Slug         string
+	Runtime      string
+}
+
 type DeploymentsOpenapiv3Asset struct {
 	ID           uuid.UUID
 	DeploymentID uuid.UUID
@@ -170,6 +180,22 @@ type ExternalOauthServerMetadatum struct {
 	Deleted   bool
 }
 
+type FunctionToolDefinition struct {
+	ID           uuid.UUID
+	ToolUrn      urn.Tool
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+	InputSchema  []byte
+	Variables    []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
 type HttpSecurity struct {
 	ID                  uuid.UUID
 	DeploymentID        uuid.UUID
@@ -192,6 +218,7 @@ type HttpSecurity struct {
 
 type HttpToolDefinition struct {
 	ID                  uuid.UUID
+	ToolUrn             pgtype.Text
 	ProjectID           uuid.UUID
 	DeploymentID        uuid.UUID
 	Openapiv3DocumentID uuid.NullUUID
@@ -348,6 +375,7 @@ type ProjectToolVariation struct {
 
 type PromptTemplate struct {
 	ID            uuid.UUID
+	ToolUrn       pgtype.Text
 	ProjectID     uuid.UUID
 	HistoryID     uuid.UUID
 	PredecessorID uuid.NullUUID
@@ -431,6 +459,18 @@ type ToolsetPrompt struct {
 	PromptHistoryID  uuid.UUID
 	PromptTemplateID uuid.NullUUID
 	PromptName       string
+}
+
+type ToolsetVersion struct {
+	ID            uuid.UUID
+	ToolsetID     uuid.UUID
+	Version       int64
+	ToolUrns      []urn.Tool
+	PredecessorID uuid.NullUUID
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
 }
 
 type User struct {

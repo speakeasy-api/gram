@@ -15,12 +15,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	slogmulti "github.com/samber/slog-multi"
+	"go.opentelemetry.io/otel/trace"
 	"gopkg.in/yaml.v3"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deployments/events"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/inv"
@@ -80,6 +82,8 @@ var preferredRequestTypes = []*regexp.Regexp{
 }
 
 type ToolExtractorTask struct {
+	Parser string
+
 	ProjectID    uuid.UUID
 	DeploymentID uuid.UUID
 	DocumentID   uuid.UUID
@@ -99,14 +103,16 @@ type ToolExtractorResult struct {
 
 type ToolExtractor struct {
 	logger       *slog.Logger
+	tracer       trace.Tracer
 	db           *pgxpool.Pool
 	feature      feature.Provider
 	assetStorage assets.BlobStore
 }
 
-func NewToolExtractor(logger *slog.Logger, db *pgxpool.Pool, fp feature.Provider, assetStorage assets.BlobStore) *ToolExtractor {
+func NewToolExtractor(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, fp feature.Provider, assetStorage assets.BlobStore) *ToolExtractor {
 	return &ToolExtractor{
 		logger:       logger,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/openapi"),
 		db:           db,
 		feature:      fp,
 		assetStorage: assetStorage,
@@ -143,6 +149,7 @@ func (p *ToolExtractor) Do(
 	tx := repo.New(dbtx)
 
 	slogArgs := []any{
+		attr.SlogDeploymentOpenAPIParser(task.Parser),
 		attr.SlogProjectID(projectID.String()),
 		attr.SlogDeploymentOpenAPIName(docInfo.Name),
 		attr.SlogDeploymentOpenAPISlug(string(docInfo.Slug)),
@@ -152,7 +159,7 @@ func (p *ToolExtractor) Do(
 		attr.SlogOrganizationSlug(task.OrgSlug),
 	}
 
-	eventsHandler := NewLogHandler()
+	eventsHandler := events.NewLogHandler()
 	logger := slog.New(slogmulti.Fanout(
 		p.logger.Handler(),
 		eventsHandler,
@@ -211,19 +218,15 @@ func (p *ToolExtractor) Do(
 		return nil, oops.E(oops.CodeUnexpected, err, "error reading openapi document").Log(ctx, logger)
 	}
 
-	f := conv.Default[feature.Provider](p.feature, &feature.InMemory{})
-
-	useSpeakeasyParser, err := f.IsFlagEnabled(ctx, feature.FlagSpeakeasyOpenAPIParserV0, task.ProjectID.String())
-	if err != nil {
-		useSpeakeasyParser = false
-		p.logger.ErrorContext(ctx, "error checking openapi parser feature flag for organization", attr.SlogError(err), attr.SlogOrganizationSlug(task.OrgSlug))
-	}
-
 	var res *ToolExtractorResult
-	if useSpeakeasyParser {
-		res, err = p.doSpeakeasy(ctx, logger, tx, doc, task)
-	} else {
-		res, err = p.doLibOpenAPI(ctx, logger, tx, doc, task)
+	switch task.Parser {
+	case "speakeasy":
+		res, err = p.doSpeakeasy(ctx, logger, p.tracer, tx, doc, task)
+	default:
+		if task.Parser != "libopenapi" {
+			logger.ErrorContext(ctx, "unrecognized parser specified: defaulting to libopenapi", attr.SlogDeploymentOpenAPIParser(task.Parser))
+		}
+		res, err = p.doLibOpenAPI(ctx, logger, p.tracer, tx, doc, task)
 	}
 	if err != nil {
 		return nil, err
@@ -299,6 +302,11 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 
 	description := op.description
 	summary := op.summary
+
+	// Soon we will stop storing summary. Still we want to make sure that we do a best-effort to set a description.
+	if description == "" {
+		description = summary
+	}
 
 	toolDesc := toolDescriptor{
 		xGramFound:          false,

@@ -83,13 +83,15 @@ export default function Environments() {
             Use environments to manage API keys, allowing Gram to handle
             authentication for you
           </Page.Section.Description>
-          <Page.Section.CTA
-            onClick={() => setCreateEnvironmentDialogOpen(true)}
-          >
-            <Button.LeftIcon>
-              <Plus className="w-4 h-4" />
-            </Button.LeftIcon>
-            <Button.Text>New Environment</Button.Text>
+          <Page.Section.CTA>
+            <Button
+              onClick={() => setCreateEnvironmentDialogOpen(true)}
+            >
+              <Button.LeftIcon>
+                <Plus className="w-4 h-4" />
+              </Button.LeftIcon>
+              <Button.Text>New Environment</Button.Text>
+            </Button>
           </Page.Section.CTA>
           <Page.Section.Body>
             <Cards>

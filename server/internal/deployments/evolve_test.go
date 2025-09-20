@@ -49,8 +49,10 @@ func TestDeploymentsService_Evolve_InitialDeployment(t *testing.T) {
 				Slug:    "initial-doc",
 			},
 		},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
 		UpsertPackages:         []*gen.AddPackageForm{},
 		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{},
 	})
 	require.NoError(t, err, "evolve initial deployment")
@@ -63,12 +65,12 @@ func TestDeploymentsService_Evolve_InitialDeployment(t *testing.T) {
 
 	// Verify tools were generated
 	repo := testrepo.New(ti.conn)
-	tools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(result.Deployment.ID))
+	tools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(result.Deployment.ID))
 	require.NoError(t, err, "list deployment tools")
 	require.Len(t, tools, 5, "expected 5 tools")
 }
 
-func TestDeploymentsService_Evolve_UpsertAssets(t *testing.T) {
+func TestDeploymentsService_Evolve_UpsertOpenAPIv3(t *testing.T) {
 	t.Parallel()
 
 	assetStorage := assetstest.NewTestBlobStore(t)
@@ -94,6 +96,7 @@ func TestDeploymentsService_Evolve_UpsertAssets(t *testing.T) {
 				Slug:    "initial-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -131,8 +134,10 @@ func TestDeploymentsService_Evolve_UpsertAssets(t *testing.T) {
 				Slug:    "second-doc",
 			},
 		},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
 		UpsertPackages:         []*gen.AddPackageForm{},
 		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{},
 	})
 	require.NoError(t, err, "evolve deployment")
@@ -174,6 +179,7 @@ func TestDeploymentsService_Evolve_UpsertBadAssets(t *testing.T) {
 				Slug:    "initial-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -187,7 +193,7 @@ func TestDeploymentsService_Evolve_UpsertBadAssets(t *testing.T) {
 	require.NoError(t, err, "create initial deployment")
 	require.Equal(t, "completed", initial.Deployment.Status, "initial deployment status is not completed")
 
-	expectedToolCount := initial.Deployment.ToolCount
+	expectedToolCount := initial.Deployment.Openapiv3ToolCount
 	require.NotZero(t, expectedToolCount, "initial deployment has incorrect tool count")
 
 	// Upload second OpenAPI asset
@@ -214,15 +220,17 @@ func TestDeploymentsService_Evolve_UpsertBadAssets(t *testing.T) {
 				Slug:    "second-doc",
 			},
 		},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
 		UpsertPackages:         []*gen.AddPackageForm{},
 		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{},
 	})
 	require.NoError(t, err, "evolve deployment")
 
 	require.NotEqual(t, initial.Deployment.ID, evolved.Deployment.ID, "evolved deployment should have different ID")
 	require.Equal(t, "failed", evolved.Deployment.Status, "evolved deployment status is not completed")
-	require.Equal(t, expectedToolCount, evolved.Deployment.ToolCount, "evolved deployment has incorrect tool count")
+	require.Equal(t, expectedToolCount, evolved.Deployment.Openapiv3ToolCount, "evolved deployment has incorrect openapi tool count")
 	require.Len(t, evolved.Deployment.Openapiv3Assets, 2, "expected 2 openapi assets")
 
 	// Verify both assets are present
@@ -232,7 +240,7 @@ func TestDeploymentsService_Evolve_UpsertBadAssets(t *testing.T) {
 	require.ElementsMatch(t, assetNames, []string{"initial-doc", "second-doc"}, "unexpected asset names")
 }
 
-func TestDeploymentsService_Evolve_ExcludeAssets(t *testing.T) {
+func TestDeploymentsService_Evolve_ExcludeOpenAPIv3(t *testing.T) {
 	t.Parallel()
 
 	assetStorage := assetstest.NewTestBlobStore(t)
@@ -274,6 +282,7 @@ func TestDeploymentsService_Evolve_ExcludeAssets(t *testing.T) {
 				Slug:    "doc-2",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -294,8 +303,10 @@ func TestDeploymentsService_Evolve_ExcludeAssets(t *testing.T) {
 		ProjectSlugInput:       nil,
 		DeploymentID:           nil,
 		UpsertOpenapiv3Assets:  []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
 		UpsertPackages:         []*gen.AddPackageForm{},
 		ExcludeOpenapiv3Assets: []string{ares1.Asset.ID},
+		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{},
 	})
 	require.NoError(t, err, "evolve deployment")
@@ -306,7 +317,7 @@ func TestDeploymentsService_Evolve_ExcludeAssets(t *testing.T) {
 	require.Equal(t, "doc-2", evolved.Deployment.Openapiv3Assets[0].Name, "wrong asset remained")
 }
 
-func TestDeploymentsService_Evolve_ExcludeAllAssets(t *testing.T) {
+func TestDeploymentsService_Evolve_ExcludeAllOpenAPIv3(t *testing.T) {
 	t.Parallel()
 
 	assetStorage := assetstest.NewTestBlobStore(t)
@@ -348,6 +359,7 @@ func TestDeploymentsService_Evolve_ExcludeAllAssets(t *testing.T) {
 				Slug:    "doc-2",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -363,7 +375,7 @@ func TestDeploymentsService_Evolve_ExcludeAllAssets(t *testing.T) {
 
 	// Verify initial deployment has tools
 	repo := testrepo.New(ti.conn)
-	initialTools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(initial.Deployment.ID))
+	initialTools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(initial.Deployment.ID))
 	require.NoError(t, err, "list initial deployment tools")
 	require.NotEmpty(t, initialTools, "expected tools in initial deployment")
 
@@ -374,8 +386,10 @@ func TestDeploymentsService_Evolve_ExcludeAllAssets(t *testing.T) {
 		ProjectSlugInput:       nil,
 		DeploymentID:           nil,
 		UpsertOpenapiv3Assets:  []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
 		UpsertPackages:         []*gen.AddPackageForm{},
 		ExcludeOpenapiv3Assets: []string{ares1.Asset.ID, ares2.Asset.ID},
+		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{},
 	})
 	require.NoError(t, err, "evolve deployment")
@@ -385,7 +399,7 @@ func TestDeploymentsService_Evolve_ExcludeAllAssets(t *testing.T) {
 	require.Empty(t, evolved.Deployment.Openapiv3Assets, "expected 0 openapi assets after excluding all")
 
 	// Verify no tools remain in the deployment
-	evolvedTools, err := repo.ListDeploymentTools(ctx, uuid.MustParse(evolved.Deployment.ID))
+	evolvedTools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(evolved.Deployment.ID))
 	require.NoError(t, err, "list evolved deployment tools")
 	require.Empty(t, evolvedTools, "expected no tools after excluding all assets")
 }
@@ -420,6 +434,7 @@ func TestDeploymentsService_Evolve_UpsertPackages(t *testing.T) {
 				Slug:    "package-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -466,6 +481,7 @@ func TestDeploymentsService_Evolve_UpsertPackages(t *testing.T) {
 		ProjectSlugInput:      nil,
 		DeploymentID:          nil,
 		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions:       []*gen.AddFunctionsForm{},
 		UpsertPackages: []*gen.AddPackageForm{
 			{
 				Name:    "test-package",
@@ -473,6 +489,7 @@ func TestDeploymentsService_Evolve_UpsertPackages(t *testing.T) {
 			},
 		},
 		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{},
 	})
 	require.NoError(t, err, "evolve deployment with package")
@@ -525,6 +542,7 @@ func TestDeploymentsService_Evolve_ExcludePackages(t *testing.T) {
 				Slug:    "package-doc-1",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -546,6 +564,7 @@ func TestDeploymentsService_Evolve_ExcludePackages(t *testing.T) {
 				Slug:    "package-doc-2",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -617,6 +636,7 @@ func TestDeploymentsService_Evolve_ExcludePackages(t *testing.T) {
 		ProjectSlugInput:      nil,
 		DeploymentID:          nil,
 		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions:       []*gen.AddFunctionsForm{},
 		UpsertPackages: []*gen.AddPackageForm{
 			{
 				Name:    "test-package-1",
@@ -628,6 +648,7 @@ func TestDeploymentsService_Evolve_ExcludePackages(t *testing.T) {
 			},
 		},
 		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{},
 	})
 	require.NoError(t, err, "create initial deployment with packages")
@@ -650,8 +671,10 @@ func TestDeploymentsService_Evolve_ExcludePackages(t *testing.T) {
 		ProjectSlugInput:       nil,
 		DeploymentID:           nil,
 		UpsertOpenapiv3Assets:  []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
 		UpsertPackages:         []*gen.AddPackageForm{},
 		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{excludePackageID},
 	})
 	require.NoError(t, err, "evolve deployment")
@@ -677,8 +700,10 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 			ProjectSlugInput:       nil,
 			DeploymentID:           nil,
 			UpsertOpenapiv3Assets:  []*gen.AddOpenAPIv3DeploymentAssetForm{},
+			UpsertFunctions:        []*gen.AddFunctionsForm{},
 			UpsertPackages:         []*gen.AddPackageForm{},
 			ExcludeOpenapiv3Assets: []string{},
+			ExcludeFunctions:       []string{},
 			ExcludePackages:        []string{},
 		})
 
@@ -701,13 +726,15 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 					Slug:    "test-doc",
 				},
 			},
+			UpsertFunctions:        []*gen.AddFunctionsForm{},
 			UpsertPackages:         []*gen.AddPackageForm{},
 			ExcludeOpenapiv3Assets: []string{},
+			ExcludeFunctions:       []string{},
 			ExcludePackages:        []string{},
 		})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "error parsing asset id")
+		require.Contains(t, err.Error(), "error parsing openapiv3 asset id to upsert")
 	})
 
 	t.Run("invalid asset ID to exclude", func(t *testing.T) {
@@ -719,13 +746,15 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 			ProjectSlugInput:       nil,
 			DeploymentID:           nil,
 			UpsertOpenapiv3Assets:  []*gen.AddOpenAPIv3DeploymentAssetForm{},
+			UpsertFunctions:        []*gen.AddFunctionsForm{},
 			UpsertPackages:         []*gen.AddPackageForm{},
 			ExcludeOpenapiv3Assets: []string{"invalid-uuid"},
+			ExcludeFunctions:       []string{},
 			ExcludePackages:        []string{},
 		})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "error parsing deployment asset id to exclude")
+		require.Contains(t, err.Error(), "error parsing openapiv3 asset id to exclude")
 	})
 
 	t.Run("invalid package ID to exclude", func(t *testing.T) {
@@ -737,13 +766,15 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 			ProjectSlugInput:       nil,
 			DeploymentID:           nil,
 			UpsertOpenapiv3Assets:  []*gen.AddOpenAPIv3DeploymentAssetForm{},
+			UpsertFunctions:        []*gen.AddFunctionsForm{},
 			UpsertPackages:         []*gen.AddPackageForm{},
 			ExcludeOpenapiv3Assets: []string{},
+			ExcludeFunctions:       []string{},
 			ExcludePackages:        []string{"invalid-uuid"},
 		})
 
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "error parsing deployment package id to exclude")
+		require.Contains(t, err.Error(), "error parsing package id to exclude")
 	})
 
 	t.Run("invalid package version", func(t *testing.T) {
@@ -755,6 +786,7 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 			ProjectSlugInput:      nil,
 			DeploymentID:          nil,
 			UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+			UpsertFunctions:       []*gen.AddFunctionsForm{},
 			UpsertPackages: []*gen.AddPackageForm{
 				{
 					Name:    "test-package",
@@ -762,6 +794,7 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 				},
 			},
 			ExcludeOpenapiv3Assets: []string{},
+			ExcludeFunctions:       []string{},
 			ExcludePackages:        []string{},
 		})
 
@@ -793,6 +826,7 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 					Slug:    "test-doc",
 				},
 			},
+			Functions:        []*gen.AddFunctionsForm{},
 			Packages:         []*gen.AddDeploymentPackageForm{},
 			ApikeyToken:      nil,
 			SessionToken:     nil,
@@ -839,6 +873,7 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 			ProjectSlugInput:      nil,
 			DeploymentID:          nil,
 			UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+			UpsertFunctions:       []*gen.AddFunctionsForm{},
 			UpsertPackages: []*gen.AddPackageForm{
 				{
 					Name:    "self-package",
@@ -846,6 +881,7 @@ func TestDeploymentsService_Evolve_Validation(t *testing.T) {
 				},
 			},
 			ExcludeOpenapiv3Assets: []string{},
+			ExcludeFunctions:       []string{},
 			ExcludePackages:        []string{},
 		})
 
@@ -881,6 +917,7 @@ func TestDeploymentsService_Evolve_ComplexScenario(t *testing.T) {
 				Slug:    "package-doc",
 			},
 		},
+		Functions:        []*gen.AddFunctionsForm{},
 		Packages:         []*gen.AddDeploymentPackageForm{},
 		ApikeyToken:      nil,
 		SessionToken:     nil,
@@ -958,7 +995,9 @@ func TestDeploymentsService_Evolve_ComplexScenario(t *testing.T) {
 				Version: conv.Ptr("1.0.0"),
 			},
 		},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
 		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{},
 	})
 	require.NoError(t, err, "create initial deployment")
@@ -988,7 +1027,9 @@ func TestDeploymentsService_Evolve_ComplexScenario(t *testing.T) {
 			},
 		},
 		UpsertPackages:         []*gen.AddPackageForm{},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
 		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{excludePackageID},
 	})
 	require.NoError(t, err, "evolve deployment with complex changes")

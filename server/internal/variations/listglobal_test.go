@@ -3,6 +3,7 @@ package variations_test
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -239,6 +240,8 @@ func TestVariationsService_ListGlobal_OrderedByID(t *testing.T) {
 		Summarizer:       nil,
 	})
 	require.NoError(t, err, "create first variation")
+
+	time.Sleep(2 * time.Millisecond)
 
 	second, err := ti.service.UpsertGlobal(ctx, &gen.UpsertGlobalPayload{
 		ApikeyToken:      nil,

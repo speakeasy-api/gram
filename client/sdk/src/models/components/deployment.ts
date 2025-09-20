@@ -8,6 +8,12 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  DeploymentFunctions,
+  DeploymentFunctions$inboundSchema,
+  DeploymentFunctions$Outbound,
+  DeploymentFunctions$outboundSchema,
+} from "./deploymentfunctions.js";
+import {
   DeploymentPackage,
   DeploymentPackage$inboundSchema,
   DeploymentPackage$Outbound,
@@ -38,6 +44,14 @@ export type Deployment = {
    */
   externalUrl?: string | undefined;
   /**
+   * The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.
+   */
+  functionsAssets?: Array<DeploymentFunctions> | undefined;
+  /**
+   * The number of tools in the deployment generated from OpenAPI documents.
+   */
+  functionsToolCount: number;
+  /**
    * The github pull request that resulted in the deployment.
    */
   githubPr?: string | undefined;
@@ -62,6 +76,10 @@ export type Deployment = {
    */
   openapiv3Assets: Array<OpenAPIv3DeploymentAsset>;
   /**
+   * The number of tools in the deployment generated from OpenAPI documents.
+   */
+  openapiv3ToolCount: number;
+  /**
    * The ID of the organization that the deployment belongs to.
    */
   organizationId: string;
@@ -78,10 +96,6 @@ export type Deployment = {
    */
   status: string;
   /**
-   * The number of tools in the deployment.
-   */
-  toolCount: number;
-  /**
    * The ID of the user that created the deployment.
    */
   userId: string;
@@ -97,17 +111,19 @@ export const Deployment$inboundSchema: z.ZodType<
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   external_id: z.string().optional(),
   external_url: z.string().optional(),
+  functions_assets: z.array(DeploymentFunctions$inboundSchema).optional(),
+  functions_tool_count: z.number().int(),
   github_pr: z.string().optional(),
   github_repo: z.string().optional(),
   github_sha: z.string().optional(),
   id: z.string(),
   idempotency_key: z.string().optional(),
   openapiv3_assets: z.array(OpenAPIv3DeploymentAsset$inboundSchema),
+  openapiv3_tool_count: z.number().int(),
   organization_id: z.string(),
   packages: z.array(DeploymentPackage$inboundSchema),
   project_id: z.string(),
   status: z.string(),
-  tool_count: z.number().int(),
   user_id: z.string(),
 }).transform((v) => {
   return remap$(v, {
@@ -115,14 +131,16 @@ export const Deployment$inboundSchema: z.ZodType<
     "created_at": "createdAt",
     "external_id": "externalId",
     "external_url": "externalUrl",
+    "functions_assets": "functionsAssets",
+    "functions_tool_count": "functionsToolCount",
     "github_pr": "githubPr",
     "github_repo": "githubRepo",
     "github_sha": "githubSha",
     "idempotency_key": "idempotencyKey",
     "openapiv3_assets": "openapiv3Assets",
+    "openapiv3_tool_count": "openapiv3ToolCount",
     "organization_id": "organizationId",
     "project_id": "projectId",
-    "tool_count": "toolCount",
     "user_id": "userId",
   });
 });
@@ -133,17 +151,19 @@ export type Deployment$Outbound = {
   created_at: string;
   external_id?: string | undefined;
   external_url?: string | undefined;
+  functions_assets?: Array<DeploymentFunctions$Outbound> | undefined;
+  functions_tool_count: number;
   github_pr?: string | undefined;
   github_repo?: string | undefined;
   github_sha?: string | undefined;
   id: string;
   idempotency_key?: string | undefined;
   openapiv3_assets: Array<OpenAPIv3DeploymentAsset$Outbound>;
+  openapiv3_tool_count: number;
   organization_id: string;
   packages: Array<DeploymentPackage$Outbound>;
   project_id: string;
   status: string;
-  tool_count: number;
   user_id: string;
 };
 
@@ -157,17 +177,19 @@ export const Deployment$outboundSchema: z.ZodType<
   createdAt: z.date().transform(v => v.toISOString()),
   externalId: z.string().optional(),
   externalUrl: z.string().optional(),
+  functionsAssets: z.array(DeploymentFunctions$outboundSchema).optional(),
+  functionsToolCount: z.number().int(),
   githubPr: z.string().optional(),
   githubRepo: z.string().optional(),
   githubSha: z.string().optional(),
   id: z.string(),
   idempotencyKey: z.string().optional(),
   openapiv3Assets: z.array(OpenAPIv3DeploymentAsset$outboundSchema),
+  openapiv3ToolCount: z.number().int(),
   organizationId: z.string(),
   packages: z.array(DeploymentPackage$outboundSchema),
   projectId: z.string(),
   status: z.string(),
-  toolCount: z.number().int(),
   userId: z.string(),
 }).transform((v) => {
   return remap$(v, {
@@ -175,14 +197,16 @@ export const Deployment$outboundSchema: z.ZodType<
     createdAt: "created_at",
     externalId: "external_id",
     externalUrl: "external_url",
+    functionsAssets: "functions_assets",
+    functionsToolCount: "functions_tool_count",
     githubPr: "github_pr",
     githubRepo: "github_repo",
     githubSha: "github_sha",
     idempotencyKey: "idempotency_key",
     openapiv3Assets: "openapiv3_assets",
+    openapiv3ToolCount: "openapiv3_tool_count",
     organizationId: "organization_id",
     projectId: "project_id",
-    toolCount: "tool_count",
     userId: "user_id",
   });
 });

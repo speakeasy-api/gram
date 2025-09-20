@@ -148,6 +148,7 @@ linters:
     wrapcheck:
       ignore-sigs:
         - "errors.New("
+        - "errors.Join("
         - "fmt.Errorf("
 
         - "(*github.com/sourcegraph/conc/pool.ErrorPool).Wait("
@@ -163,6 +164,7 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).CheckProjectAccess("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/sessions.Manager).Authenticate("
         - "(*github.com/speakeasy-api/gram/server/internal/openapi.ToolExtractor).Do("
+        - "(*github.com/speakeasy-api/gram/server/internal/functions.ToolExtractor).Do("
 
       ignore-sig-regexps:
         - "\\(\\*github\\.com\\/speakeasy-api\\/gram\\/server\\/internal\\/background\\/activities\\..+\\)\\.Do\\("

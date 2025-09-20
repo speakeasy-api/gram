@@ -183,7 +183,7 @@ const LHS = ({
 
       {/* Content - absolutely positioned within left container */}
       <div className="absolute inset-x-0 top-0 bottom-0 flex items-center justify-center px-16 pointer-events-none">
-        <Stack className="w-full max-w-3xl gap-8 pointer-events-auto">
+        <Stack className="w-full max-w-3xl gap-8 pointer-events-auto z-10">
           {currentStep === "upload" && (
             <UploadStep
               setCurrentStep={setCurrentStep}
@@ -342,7 +342,10 @@ const UploadStep = ({
     setToolsetName(slugify(apiName || "my-toolset"));
     const deployment = await createDeployment(undefined, true);
 
-    if (deployment?.toolCount === 0 || deployment?.status === "failed") {
+    if (
+      deployment?.openapiv3ToolCount === 0 ||
+      deployment?.status === "failed"
+    ) {
       setDeploymentToShowLogsFor(deployment?.id);
       toast.error("Unable to create tools from your OpenAPI spec");
       return;

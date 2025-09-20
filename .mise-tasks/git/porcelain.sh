@@ -8,6 +8,7 @@ git_status_output=$(git status --porcelain)
 
 if [[ -n "$git_status_output" ]]; then
   >&2 echo "$git_status_output"
+  >&2 git diff | cat
   >&2 echo "🚨 FAIL: Build process resulted in file changes."
   exit 1
 else

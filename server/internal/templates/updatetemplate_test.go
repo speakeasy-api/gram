@@ -88,7 +88,7 @@ func TestTemplatesService_UpdateTemplate_PartialUpdate(t *testing.T) {
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
 		Arguments:        nil,
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        []string{},
 	})
 	require.NoError(t, err, "create template")
@@ -133,7 +133,7 @@ func TestTemplatesService_UpdateTemplate_NoChanges(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        []string{},
 	})
 	require.NoError(t, err, "create template")
@@ -218,7 +218,7 @@ func TestTemplatesService_UpdateTemplate_InvalidArguments(t *testing.T) {
 		Description:      nil,
 		Arguments:        nil,
 		Engine:           "",
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        []string{},
 	})
 	require.NoError(t, err, "create template")
@@ -278,7 +278,7 @@ func TestTemplatesService_UpdateTemplate_ArgumentsWithoutEngine(t *testing.T) {
 		Prompt:           "Original prompt",
 		Description:      nil,
 		Engine:           "", // No engine
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 		Arguments:        nil, // No arguments initially
 		ApikeyToken:      nil,
@@ -316,7 +316,7 @@ func TestTemplatesService_UpdateTemplate_ArgumentsWithExistingEngine(t *testing.
 		Prompt:           "Original prompt",
 		Description:      nil,
 		Engine:           "mustache", // Has engine
-		Kind:             "",
+		Kind:             "prompt",
 		ToolsHint:        nil,
 		Arguments:        nil, // No arguments initially
 		ApikeyToken:      nil,

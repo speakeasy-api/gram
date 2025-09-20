@@ -16,6 +16,7 @@ const createTemplate = `-- name: CreateTemplate :one
 INSERT INTO prompt_templates (
   project_id,
   history_id,
+  tool_urn,
   name,
   prompt,
   description,
@@ -29,16 +30,18 @@ SELECT
   generate_uuidv7(),
   $2,
   $3,
-  NULLIF($4, ''),
-  $5,
+  $4,
+  NULLIF($5, ''),
   $6,
   $7,
-  $8
+  $8,
+  $9
 RETURNING id
 `
 
 type CreateTemplateParams struct {
 	ProjectID   uuid.UUID
+	ToolUrn     pgtype.Text
 	Name        string
 	Prompt      string
 	Description pgtype.Text
@@ -51,6 +54,7 @@ type CreateTemplateParams struct {
 func (q *Queries) CreateTemplate(ctx context.Context, arg CreateTemplateParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, createTemplate,
 		arg.ProjectID,
+		arg.ToolUrn,
 		arg.Name,
 		arg.Prompt,
 		arg.Description,
@@ -99,7 +103,7 @@ func (q *Queries) DeleteTemplateByName(ctx context.Context, arg DeleteTemplateBy
 }
 
 const getTemplateByID = `-- name: GetTemplateByID :one
-SELECT id, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
 FROM prompt_templates pt
 WHERE
   pt.project_id = $1
@@ -119,6 +123,7 @@ func (q *Queries) GetTemplateByID(ctx context.Context, arg GetTemplateByIDParams
 	var i PromptTemplate
 	err := row.Scan(
 		&i.ID,
+		&i.ToolUrn,
 		&i.ProjectID,
 		&i.HistoryID,
 		&i.PredecessorID,
@@ -138,7 +143,7 @@ func (q *Queries) GetTemplateByID(ctx context.Context, arg GetTemplateByIDParams
 }
 
 const getTemplateByName = `-- name: GetTemplateByName :one
-SELECT id, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
 FROM prompt_templates pt
 WHERE
   pt.project_id = $1
@@ -158,6 +163,7 @@ func (q *Queries) GetTemplateByName(ctx context.Context, arg GetTemplateByNamePa
 	var i PromptTemplate
 	err := row.Scan(
 		&i.ID,
+		&i.ToolUrn,
 		&i.ProjectID,
 		&i.HistoryID,
 		&i.PredecessorID,
@@ -177,7 +183,7 @@ func (q *Queries) GetTemplateByName(ctx context.Context, arg GetTemplateByNamePa
 }
 
 const listTemplates = `-- name: ListTemplates :many
-SELECT DISTINCT ON (pt.project_id, pt.name) id, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
+SELECT DISTINCT ON (pt.project_id, pt.name) id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
 FROM prompt_templates pt
 WHERE pt.project_id = $1
   AND pt.deleted IS FALSE
@@ -195,6 +201,7 @@ func (q *Queries) ListTemplates(ctx context.Context, projectID uuid.UUID) ([]Pro
 		var i PromptTemplate
 		if err := rows.Scan(
 			&i.ID,
+			&i.ToolUrn,
 			&i.ProjectID,
 			&i.HistoryID,
 			&i.PredecessorID,
@@ -293,6 +300,7 @@ INSERT INTO prompt_templates (
   project_id,
   history_id,
   predecessor_id,
+  tool_urn,
   name,
   prompt,
   description,
@@ -305,28 +313,30 @@ SELECT
   c.project_id,
   c.history_id,
   c.id,
+  COALESCE($1, c.tool_urn),
   c.name,
-  COALESCE($1, c.prompt),
-  NULLIF($2, ''),
-  $3,
-  COALESCE(NULLIF($4, ''), c.engine),
-  COALESCE(NULLIF($5, ''), c.kind),
-  COALESCE($6, ARRAY[]::TEXT[])
+  COALESCE($2, c.prompt),
+  NULLIF($3, ''),
+  $4,
+  COALESCE(NULLIF($5, ''), c.engine),
+  COALESCE(NULLIF($6, ''), c.kind),
+  COALESCE($7, ARRAY[]::TEXT[])
 FROM prompt_templates c
-WHERE project_id = $7
-  AND id = $8
+WHERE project_id = $8
+  AND id = $9
   AND (
-    (NULLIF($1, '') IS NOT NULL AND $1 != c.prompt)
-    OR (NULLIF($2, '') IS NOT NULL AND $2 != c.description)
-    OR ($3 != c.arguments)
-    OR (NULLIF($4, '') IS NOT NULL AND $4 != c.engine)
-    OR (NULLIF($5, '') IS NOT NULL AND NULLIF($5, '') != c.kind)
-    OR ($6 IS DISTINCT FROM c.tools_hint)
+    (NULLIF($2, '') IS NOT NULL AND $2 != c.prompt)
+    OR (NULLIF($3, '') IS NOT NULL AND $3 != c.description)
+    OR ($4 != c.arguments)
+    OR (NULLIF($5, '') IS NOT NULL AND $5 != c.engine)
+    OR (NULLIF($6, '') IS NOT NULL AND NULLIF($6, '') != c.kind)
+    OR ($7 IS DISTINCT FROM c.tools_hint)
   )
 RETURNING id
 `
 
 type UpdateTemplateParams struct {
+	ToolUrn     pgtype.Text
 	Prompt      pgtype.Text
 	Description pgtype.Text
 	Arguments   []byte
@@ -339,6 +349,7 @@ type UpdateTemplateParams struct {
 
 func (q *Queries) UpdateTemplate(ctx context.Context, arg UpdateTemplateParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, updateTemplate,
+		arg.ToolUrn,
 		arg.Prompt,
 		arg.Description,
 		arg.Arguments,

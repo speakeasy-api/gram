@@ -26,6 +26,13 @@ type upsertOpenAPIv3 struct {
 	slug    string
 }
 
+type upsertFunctions struct {
+	assetID uuid.UUID
+	name    string
+	slug    string
+	runtime string
+}
+
 type upsertPackage struct {
 	packageID uuid.UUID
 	versionID uuid.UUID
@@ -50,6 +57,7 @@ func createDeployment(
 	idempotencyKey IdempotencyKey,
 	fields deploymentFields,
 	openAPIv3ToUpsert []upsertOpenAPIv3,
+	functionsToUpsert []upsertFunctions,
 	packagesToUpsert []upsertPackage,
 ) (uuid.UUID, error) {
 	ctx, span := tracer.Start(ctx, "createDeployment")
@@ -58,6 +66,10 @@ func createDeployment(
 	key := conv.PtrValOr(idempotencyKey, "")
 	if key == "" {
 		key = uuid.New().String()
+	}
+
+	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert); err != nil {
+		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).Log(ctx, logger)
 	}
 
 	cmd, err := tx.CreateDeployment(ctx, repo.CreateDeploymentParams{
@@ -94,7 +106,7 @@ func createDeployment(
 	logger = logger.With(attr.SlogDeploymentID(d.Deployment.ID.String()))
 	span.SetAttributes(attr.DeploymentID(d.Deployment.ID.String()))
 
-	aerr := amendDeployment(ctx, logger, tx, DeploymentID(newID), openAPIv3ToUpsert, packagesToUpsert)
+	aerr := amendDeployment(ctx, logger, tx, DeploymentID(newID), openAPIv3ToUpsert, functionsToUpsert, packagesToUpsert)
 	if aerr != nil {
 		return uuid.Nil, aerr
 	}
@@ -121,13 +133,19 @@ func cloneDeployment(
 	projectID ProjectID,
 	srcDeploymentID DeploymentID,
 	openAPIv3ToUpsert []upsertOpenAPIv3,
+	functionsToUpsert []upsertFunctions,
 	packagesToUpsert []upsertPackage,
 	openAPIv3ToExclude []uuid.UUID,
+	functionsToExclude []uuid.UUID,
 	packagesToExclude []uuid.UUID,
 ) (uuid.UUID, error) {
 	ctx, span := tracer.Start(ctx, "cloneDeployment")
 	defer span.End()
 	defer span.SetStatus(codes.Ok, "deployment cloned")
+
+	if err := validateUpserts(openAPIv3ToUpsert, functionsToUpsert); err != nil {
+		return uuid.Nil, oops.E(oops.CodeInvalid, err, "one or more deployment assets are invalid:\n%s", err.Error()).Log(ctx, logger)
+	}
 
 	srcDepID := uuid.UUID(srcDeploymentID)
 	projID := uuid.UUID(projectID)
@@ -161,7 +179,16 @@ func cloneDeployment(
 		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment openapi v3 assets").Log(ctx, logger)
 	}
 
-	err = amendDeployment(ctx, logger, depRepo, DeploymentID(newID), openAPIv3ToUpsert, packagesToUpsert)
+	_, err = depRepo.CloneDeploymentFunctionsAssets(ctx, repo.CloneDeploymentFunctionsAssetsParams{
+		OriginalDeploymentID: srcDepID,
+		CloneDeploymentID:    newID,
+		ExcludedIds:          functionsToExclude,
+	})
+	if err != nil {
+		return uuid.Nil, oops.E(oops.CodeUnexpected, err, "error cloning deployment functions assets").Log(ctx, logger)
+	}
+
+	err = amendDeployment(ctx, logger, depRepo, DeploymentID(newID), openAPIv3ToUpsert, functionsToUpsert, packagesToUpsert)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -186,6 +213,7 @@ func amendDeployment(
 	depRepo *repo.Queries,
 	deploymentID DeploymentID,
 	openAPIv3ToUpsert []upsertOpenAPIv3,
+	functionsToUpsert []upsertFunctions,
 	packagesToUpsert []upsertPackage,
 ) error {
 	id := uuid.UUID(deploymentID)
@@ -199,6 +227,19 @@ func amendDeployment(
 		})
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return oops.E(oops.CodeUnexpected, err, "error adding deployment openapi v3 asset").Log(ctx, logger)
+		}
+	}
+
+	for _, a := range functionsToUpsert {
+		_, err := depRepo.UpsertDeploymentFunctionsAsset(ctx, repo.UpsertDeploymentFunctionsAssetParams{
+			DeploymentID: id,
+			AssetID:      a.assetID,
+			Name:         a.name,
+			Slug:         a.slug,
+			Runtime:      a.runtime,
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return oops.E(oops.CodeUnexpected, err, "error adding deployment functions asset").Log(ctx, logger)
 		}
 	}
 

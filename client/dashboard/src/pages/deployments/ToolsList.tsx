@@ -1,13 +1,12 @@
 import { HttpRoute } from "@/components/http-route";
 import { Badge } from "@/components/ui/badge";
-import { Dot } from "@/components/ui/dot";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchBar } from "@/components/ui/search-bar";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
 import { useGroupedHttpTools } from "@/lib/toolNames";
 import { HTTPToolDefinition } from "@gram/client/models/components";
-import { useListToolsSuspense } from "@gram/client/react-query/listTools.js";
+import { useListTools } from "@gram/client/react-query/listTools.js";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
 
@@ -61,12 +60,8 @@ const columns: Column<Tool>[] = [
     key: "description",
     render: (row) => (
       <Type muted className="line-clamp-2 overflow-auto self-start">
-        <span className="text-foreground">
-          {row.summary}
-          {row.summary && <Dot className="mx-2" />}
-        </span>
         {row.description}
-        {!row.summary && !row.description && (
+        {!row.description && (
           <span className="text-muted-foreground italic">No description.</span>
         )}
       </Type>
@@ -75,7 +70,7 @@ const columns: Column<Tool>[] = [
 ];
 
 export function ToolsList(props: { deploymentId?: string }) {
-  const { data: tools, isLoading: isLoadingTools } = useListToolsSuspense({
+  const { data: tools, isLoading: isLoadingTools } = useListTools({
     deploymentId: props.deploymentId,
   });
   const [search, setSearch] = useState("");
@@ -83,7 +78,7 @@ export function ToolsList(props: { deploymentId?: string }) {
   const groupedTools = useGroupedHttpTools(tools?.tools ?? []);
 
   const tagFilterOptions = groupedTools.flatMap((group) =>
-    group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`))
+    group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`)),
   );
   const uniqueTags = [...new Set(tagFilterOptions)];
   const tagFilterItems = uniqueTags.map((tag) => ({

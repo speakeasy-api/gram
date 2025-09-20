@@ -13,10 +13,9 @@ import (
 func TestKeysService_RevokeKey(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestKeysService(t)
-
 	t.Run("successful key revocation", func(t *testing.T) {
 		t.Parallel()
+		ctx, ti := newTestKeysService(t)
 
 		// Create a key first
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
@@ -47,6 +46,7 @@ func TestKeysService_RevokeKey(t *testing.T) {
 
 	t.Run("revoke non-existent key", func(t *testing.T) {
 		t.Parallel()
+		ctx, ti := newTestKeysService(t)
 
 		// Try to revoke a non-existent key
 		nonExistentID := uuid.New().String()
@@ -62,6 +62,7 @@ func TestKeysService_RevokeKey(t *testing.T) {
 
 	t.Run("invalid key ID format", func(t *testing.T) {
 		t.Parallel()
+		ctx, ti := newTestKeysService(t)
 
 		// Try to revoke with an invalid UUID format
 		err := ti.service.RevokeKey(ctx, &gen.RevokeKeyPayload{
@@ -78,6 +79,7 @@ func TestKeysService_RevokeKey(t *testing.T) {
 
 	t.Run("unauthorized without auth context", func(t *testing.T) {
 		t.Parallel()
+		_, ti := newTestKeysService(t)
 
 		// Create a context without auth
 		ctxWithoutAuth := t.Context()
@@ -96,6 +98,7 @@ func TestKeysService_RevokeKey(t *testing.T) {
 
 	t.Run("revoke multiple keys", func(t *testing.T) {
 		t.Parallel()
+		ctx, ti := newTestKeysService(t)
 
 		// Create multiple keys
 		key1, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{

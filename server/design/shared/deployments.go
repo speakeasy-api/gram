@@ -5,7 +5,7 @@ import (
 )
 
 var Deployment = Type("Deployment", func() {
-	Required("id", "created_at", "organization_id", "project_id", "user_id", "openapiv3_assets", "status", "packages", "tool_count")
+	Required("id", "created_at", "organization_id", "project_id", "user_id", "openapiv3_assets", "status", "packages", "openapiv3_tool_count", "functions_tool_count")
 
 	Attribute("id", String, func() {
 		Description("The ID to of the deployment.")
@@ -54,11 +54,18 @@ var Deployment = Type("Deployment", func() {
 		Description("The ID of the deployment that this deployment was cloned from.")
 		Example("bc5f4a555e933e6861d12edba4c2d87ef6caf8e6")
 	})
-	Attribute("tool_count", Int64, func() {
-		Description("The number of tools in the deployment.")
+
+	Attribute("openapiv3_tool_count", Int64, func() {
+		Description("The number of tools in the deployment generated from OpenAPI documents.")
+	})
+	Attribute("openapiv3_assets", ArrayOf(OpenAPIv3DeploymentAsset), func() {
+		Description("The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.")
 	})
 
-	Attribute("openapiv3_assets", ArrayOf(OpenAPIv3DeploymentAsset), func() {
+	Attribute("functions_tool_count", Int64, func() {
+		Description("The number of tools in the deployment generated from OpenAPI documents.")
+	})
+	Attribute("functions_assets", ArrayOf(DeploymentFunctions), func() {
 		Description("The IDs, as returned from the assets upload service, to uploaded OpenAPI 3.x documents whose operations will become tool definitions.")
 	})
 
@@ -83,6 +90,28 @@ var OpenAPIv3DeploymentAsset = Type("OpenAPIv3DeploymentAsset", func() {
 	})
 	Attribute("slug", Slug, func() {
 		Description("The slug to give the document as it will be displayed in URLs.")
+	})
+
+	Meta("struct:pkg:path", "types")
+})
+
+var DeploymentFunctions = Type("DeploymentFunctions", func() {
+	Required("id", "asset_id", "name", "slug", "runtime")
+
+	Attribute("id", String, func() {
+		Description("The ID of the deployment asset.")
+	})
+	Attribute("asset_id", String, func() {
+		Description("The ID of the uploaded asset.")
+	})
+	Attribute("name", String, func() {
+		Description("The name to give the document as it will be displayed in UIs.")
+	})
+	Attribute("slug", Slug, func() {
+		Description("The slug to give the document as it will be displayed in URLs.")
+	})
+	Attribute("runtime", String, func() {
+		Description("The runtime to use when executing functions.")
 	})
 
 	Meta("struct:pkg:path", "types")
