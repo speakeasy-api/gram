@@ -69,8 +69,11 @@ func newClickhouseClient(connstring string) (clickhouse.Conn, error) {
 		Addr:     []string{connstring},
 		Protocol: clickhouse.HTTP,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create clickhouse client: %w", err)
+	}
 
-	return conn, fmt.Errorf("failed to create clickhouse client: %w", err)
+	return conn, nil
 }
 
 func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, connstring string, opts dbClientOptions) (*pgxpool.Pool, error) {
