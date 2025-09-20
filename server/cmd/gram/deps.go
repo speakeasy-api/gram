@@ -59,7 +59,7 @@ type dbClientOptions struct {
 	enableUnsafeLogging bool
 }
 
-func newClickhouseClient(ctx context.Context, logger *slog.Logger, connstring string) (clickhouse.Conn, error) {
+func newClickhouseClient(connstring string) (clickhouse.Conn, error) {
 	conn, err := clickhouse.Open(&clickhouse.Options{
 		Auth: clickhouse.Auth{
 			Database: "gram_metrics",
@@ -70,7 +70,7 @@ func newClickhouseClient(ctx context.Context, logger *slog.Logger, connstring st
 		Protocol: clickhouse.HTTP,
 	})
 
-	return conn, err
+	return conn, fmt.Errorf("failed to create clickhouse client: %w", err)
 }
 
 func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, connstring string, opts dbClientOptions) (*pgxpool.Pool, error) {

@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
@@ -341,13 +342,22 @@ func newStartCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			clickhouse, err := newClickhouseClient(ctx, logger, c.String("clickhouse-url"))
-			// Ping the clickhouse server to ensure connectivity
-			if err := clickhouse.Ping(ctx); err != nil {
+			ch, err := newClickhouseClient(c.String("clickhouse-url"))
+			if err != nil {
+				return fmt.Errorf("failed to connect to clickhouse: %w", err)
+			}
+
+			if err = ch.Ping(ctx); err != nil {
 				logger.ErrorContext(ctx, "failed to ping clickhouse", attr.SlogError(err))
 				return fmt.Errorf("failed to ping clickhouse: %w", err)
 			}
-			defer clickhouse.Close()
+
+			defer func(c clickhouse.Conn) {
+				closeErr := c.Close()
+				if closeErr != nil {
+					logger.ErrorContext(ctx, "failed to close clickhouse connection", attr.SlogError(closeErr))
+				}
+			}(ch)
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
