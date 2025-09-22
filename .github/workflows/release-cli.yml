@@ -24,6 +24,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Conventional Commits
+        id: changelog
         uses: TriPSs/conventional-changelog-action@5f00b899ccbbcbc112bd6d715d5e76e7a9e4501d # v6.1.0
         with:
           github-token: ${{ secrets.github_token }}
@@ -34,6 +35,11 @@ jobs:
           tag-prefix: "@gram/cli@"
           pre-release: true
           pre-release-identifier: "rc"
+      - name: Prepare version
+        run: |
+          CLEAN_TAG=$(sed 's|@gram/cli@||' <<< "${{ steps.changelog.outputs.tag }}")
+          echo "GORELEASER_CURRENT_TAG=$CLEAN_TAG" >> $GITHUB_ENV
+
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version-file: "cli/go.mod"
