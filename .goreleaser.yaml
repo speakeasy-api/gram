@@ -48,50 +48,51 @@ brews:
     test: |
       system "#{bin}/gram --version"
 
-chocolateys:
-  - name: gram
-    title: Gram CLI
-    authors: Speakeasy Inc
-    project_url: https://github.com/speakeasy-api/gram
-    url_template: "https://github.com/speakeasy-api/gram/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
-    copyright: 2025 Speakeasy, Inc
-    license_url: https://github.com/speakeasy-api/gram/blob/main/LICENSE
-    project_source_url: https://github.com/speakeasy-api/gram
-    docs_url: https://docs.getgram.ai
-    bug_tracker_url: https://github.com/speakeasy-api/gram/issues
-    tags: openapi api speakeasy gram tools agents llm client-libraries
-    summary: Everything you need to build powerful integrations for agents and LLMs.
-    description: |-
-      A command line interface for the Gram platform. Get started at https://docs.getgram.ai/
-      Bring the functionality of Gram into your development workflow. It can be run locally or in your CI/CD pipeline.
-    release_notes: "https://github.com/speakeasy-api/gram/releases/tag/v{{ .Version }}"
-    api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
-    source_repo: "https://push.chocolatey.org/"
-winget:
-  - name: gram
-    publisher: Gram
-    short_description: Everything you need to build powerful integrations for agents and LLMs.
-    license_url: https://github.com/speakeasy-api/gram/blob/main/LICENSE
-    license: "elastic"
-    publisher_url: https://app.getgram.ai
-    publisher_support_url: https://github.com/speakeasy-api/gram/issues
-    homepage: https://app.getgram.ai
-    description: |-
-      A command line interface for the Gram platform. Get started at https://docs.getgram.ai/
-      Bring the functionality of Gram into your development workflow. It can be run locally or in your CI/CD pipeline.
-    copyright: 2025 Speakeasy, Inc
-    skip_upload: auto
-    release_notes: "https://github.com/speakeasy-api/gram/releases/tag/v{{ .Version }}"
-    release_notes_url: "https://github.com/speakeasy-api/gram/releases/tag/v{{ .Version }}"
+# TODO(cjea): Support windows releases.
+# chocolateys:
+#   - name: gram
+#     title: Gram CLI
+#     authors: Speakeasy Inc
+#     project_url: https://github.com/speakeasy-api/gram
+#     url_template: "https://github.com/speakeasy-api/gram/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
+#     copyright: 2025 Speakeasy, Inc
+#     license_url: https://github.com/speakeasy-api/gram/blob/main/LICENSE
+#     project_source_url: https://github.com/speakeasy-api/gram
+#     docs_url: https://docs.getgram.ai
+#     bug_tracker_url: https://github.com/speakeasy-api/gram/issues
+#     tags: openapi api speakeasy gram tools agents llm client-libraries
+#     summary: Everything you need to build powerful integrations for agents and LLMs.
+#     description: |-
+#       A command line interface for the Gram platform. Get started at https://docs.getgram.ai/
+#       Bring the functionality of Gram into your development workflow. It can be run locally or in your CI/CD pipeline.
+#     release_notes: "https://github.com/speakeasy-api/gram/releases/tag/v{{ .Version }}"
+#     api_key: "{{ .Env.CHOCOLATEY_API_KEY }}"
+#     source_repo: "https://push.chocolatey.org/"
+# winget:
+#   - name: gram
+#     publisher: Gram
+#     short_description: Everything you need to build powerful integrations for agents and LLMs.
+#     license_url: https://github.com/speakeasy-api/gram/blob/main/LICENSE
+#     license: "elastic"
+#     publisher_url: https://app.getgram.ai
+#     publisher_support_url: https://github.com/speakeasy-api/gram/issues
+#     homepage: https://app.getgram.ai
+#     description: |-
+#       A command line interface for the Gram platform. Get started at https://docs.getgram.ai/
+#       Bring the functionality of Gram into your development workflow. It can be run locally or in your CI/CD pipeline.
+#     copyright: 2025 Speakeasy, Inc
+#     skip_upload: auto
+#     release_notes: "https://github.com/speakeasy-api/gram/releases/tag/v{{ .Version }}"
+#     release_notes_url: "https://github.com/speakeasy-api/gram/releases/tag/v{{ .Version }}"
 
-    repository:
-      owner: speakeasy-api
-      name: winget-pkgs
-      branch: "gram-{{.Version}}"
-      pull_request:
-        enabled: true
-        draft: false
-        base:
-          owner: microsoft
-          name: winget-pkgs
-          branch: main
+#     repository:
+#       owner: speakeasy-api
+#       name: winget-pkgs
+#       branch: "gram-{{.Version}}"
+#       pull_request:
+#         enabled: true
+#         draft: false
+#         base:
+#           owner: microsoft
+#           name: winget-pkgs
+#           branch: main
