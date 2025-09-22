@@ -2133,6 +2133,14 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 	} else {
 		res.PromptTemplates = []*PromptTemplateEntryResponseBody{}
 	}
+	if v.ToolUrns != nil {
+		res.ToolUrns = make([]string, len(v.ToolUrns))
+		for i, val := range v.ToolUrns {
+			res.ToolUrns[i] = val
+		}
+	} else {
+		res.ToolUrns = []string{}
+	}
 
 	return res
 }

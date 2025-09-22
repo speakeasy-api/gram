@@ -85,8 +85,8 @@ type CreateToolsetPayload struct {
 	Name string
 	// Description of the toolset
 	Description *string
-	// List of HTTP tool names to include
-	HTTPToolNames []string
+	// List of tool URNs to include in the toolset
+	ToolUrns []string
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *types.Slug
 	ProjectSlugInput       *string
@@ -145,9 +145,10 @@ type UpdateToolsetPayload struct {
 	Description *string
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *types.Slug
-	// List of HTTP tool names to include
-	HTTPToolNames []string
-	// List of prompt template names to include
+	// List of tool URNs to include in the toolset
+	ToolUrns []string
+	// List of prompt template names to include (note: for actual prompts, not
+	// tools)
 	PromptTemplateNames []string
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool

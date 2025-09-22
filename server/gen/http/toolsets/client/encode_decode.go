@@ -2220,6 +2220,10 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 	for i, val := range v.PromptTemplates {
 		res.PromptTemplates[i] = unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(val)
 	}
+	res.ToolUrns = make([]string, len(v.ToolUrns))
+	for i, val := range v.ToolUrns {
+		res.ToolUrns[i] = val
+	}
 
 	return res
 }

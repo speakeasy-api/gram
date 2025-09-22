@@ -142,6 +142,16 @@ func DescribeToolsetEntry(
 		})
 	}
 
+	// Get tool URNs from latest toolset version
+	var toolUrns []string
+	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
+	if err == nil {
+		toolUrns = make([]string, len(latestVersion.ToolUrns))
+		for i, urn := range latestVersion.ToolUrns {
+			toolUrns[i] = urn.String()
+		}
+	}
+
 	return &types.ToolsetEntry{
 		ID:                     toolset.ID.String(),
 		OrganizationID:         toolset.OrganizationID,
@@ -160,6 +170,7 @@ func DescribeToolsetEntry(
 		UpdatedAt:              toolset.UpdatedAt.Time.Format(time.RFC3339),
 		HTTPTools:              httpTools,
 		PromptTemplates:        promptTemplates,
+		ToolUrns:               toolUrns,
 	}, nil
 }
 
@@ -465,6 +476,16 @@ func DescribeToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
 	}
 
+	// Get tool URNs from latest toolset version
+	var toolUrns []string
+	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
+	if err == nil {
+		toolUrns = make([]string, len(latestVersion.ToolUrns))
+		for i, urn := range latestVersion.ToolUrns {
+			toolUrns[i] = urn.String()
+		}
+	}
+
 	return &types.Toolset{
 		ID:                     toolset.ID.String(),
 		OrganizationID:         toolset.OrganizationID,
@@ -484,6 +505,7 @@ func DescribeToolset(
 		McpIsPublic:            &toolset.McpIsPublic,
 		CreatedAt:              toolset.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:              toolset.UpdatedAt.Time.Format(time.RFC3339),
+		ToolUrns:               toolUrns,
 		ExternalOauthServer:    externalOAuthServer,
 		OauthProxyServer:       oauthProxyServer,
 	}, nil
