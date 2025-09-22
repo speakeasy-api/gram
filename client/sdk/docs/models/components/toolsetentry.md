@@ -14,7 +14,10 @@ let value: ToolsetEntry = {
   projectId: "<id>",
   promptTemplates: [],
   slug: "<value>",
-  updatedAt: new Date("2023-12-06T06:26:11.959Z"),
+  toolUrns: [
+    "<value 1>",
+  ],
+  updatedAt: new Date("2023-08-13T19:01:15.619Z"),
 };
 ```
 
@@ -38,4 +41,5 @@ let value: ToolsetEntry = {
 | `securityVariables`                                                                           | [components.SecurityVariable](../../models/components/securityvariable.md)[]                  | :heavy_minus_sign:                                                                            | The security variables that are relevant to the toolset                                       |
 | `serverVariables`                                                                             | [components.ServerVariable](../../models/components/servervariable.md)[]                      | :heavy_minus_sign:                                                                            | The server variables that are relevant to the toolset                                         |
 | `slug`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | A short url-friendly label that uniquely identifies a resource.                               |
+| `toolUrns`                                                                                    | *string*[]                                                                                    | :heavy_check_mark:                                                                            | The tool URNs in this toolset                                                                 |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | When the toolset was last updated.                                                            |

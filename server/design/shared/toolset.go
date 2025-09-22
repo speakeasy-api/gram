@@ -41,6 +41,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("server_variables", ArrayOf(ServerVariable), "The server variables that are relevant to the toolset")
 	Attribute("http_tools", ArrayOf(HTTPToolDefinition), "The HTTP tools in this toolset")
 	Attribute("prompt_templates", ArrayOf(PromptTemplate), "The prompt templates in this toolset")
+	Attribute("tool_urns", ArrayOf(String), "The tool URNs in this toolset")
 	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
@@ -55,7 +56,7 @@ var Toolset = Type("Toolset", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "http_tools", "prompt_templates", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "http_tools", "prompt_templates", "tool_urns", "created_at", "updated_at")
 })
 
 var ToolsetEntry = Type("ToolsetEntry", func() {
@@ -72,6 +73,7 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 	Attribute("server_variables", ArrayOf(ServerVariable), "The server variables that are relevant to the toolset")
 	Attribute("http_tools", ArrayOf(HTTPToolDefinitionEntry), "The HTTP tools in this toolset")
 	Attribute("prompt_templates", ArrayOf(PromptTemplateEntry), "The prompt templates in this toolset")
+	Attribute("tool_urns", ArrayOf(String), "The tool URNs in this toolset")
 	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
@@ -84,7 +86,7 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "name", "slug", "http_tools", "prompt_templates", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "name", "slug", "http_tools", "prompt_templates", "tool_urns", "created_at", "updated_at")
 })
 
 var ExternalOAuthServer = Type("ExternalOAuthServer", func() {

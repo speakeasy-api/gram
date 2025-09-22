@@ -8,6 +8,8 @@
 package client
 
 import (
+	"unicode/utf8"
+
 	tools "github.com/speakeasy-api/gram/server/gen/tools"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -18,8 +20,10 @@ import (
 type ListToolsResponseBody struct {
 	// The cursor to fetch results from
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-	// The list of tools
-	Tools []*HTTPToolDefinitionResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// The list of HTTP tools
+	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
+	// The list of prompt templates
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
 }
 
 // ListToolsUnauthorizedResponseBody is the type of the "tools" service
@@ -257,6 +261,8 @@ type HTTPToolDefinitionResponseBody struct {
 	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
 	// The variation details of a tool. Only includes explicitly varied fields.
 	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
+	// The URN of this HTTP tool
+	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
 }
 
 // ResponseFilterResponseBody is used to define fields on response body types.
@@ -318,15 +324,49 @@ type ToolVariationResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// PromptTemplateResponseBody is used to define fields on response body types.
+type PromptTemplateResponseBody struct {
+	// The ID of the prompt template
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The revision tree ID for the prompt template
+	HistoryID *string `form:"history_id,omitempty" json:"history_id,omitempty" xml:"history_id,omitempty"`
+	// The previous version of the prompt template to use as predecessor
+	PredecessorID *string `form:"predecessor_id,omitempty" json:"predecessor_id,omitempty" xml:"predecessor_id,omitempty"`
+	// The name of the prompt template
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The template content
+	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
+	// The description of the prompt template
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The JSON Schema defining the placeholders found in the prompt template
+	Arguments *string `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
+	// The template engine
+	Engine *string `form:"engine,omitempty" json:"engine,omitempty" xml:"engine,omitempty"`
+	// The kind of prompt the template is used for
+	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
+	// The suggested tool names associated with the prompt template
+	ToolsHint []string `form:"tools_hint,omitempty" json:"tools_hint,omitempty" xml:"tools_hint,omitempty"`
+	// The creation date of the prompt template.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The last update date of the prompt template.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The URN of this prompt template
+	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
+}
+
 // NewListToolsResultOK builds a "tools" service "listTools" endpoint result
 // from a HTTP "OK" response.
 func NewListToolsResultOK(body *ListToolsResponseBody) *tools.ListToolsResult {
 	v := &tools.ListToolsResult{
 		NextCursor: body.NextCursor,
 	}
-	v.Tools = make([]*types.HTTPToolDefinition, len(body.Tools))
-	for i, val := range body.Tools {
-		v.Tools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
+	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
+	for i, val := range body.HTTPTools {
+		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
+	}
+	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
+	for i, val := range body.PromptTemplates {
+		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
 
 	return v
@@ -484,12 +524,22 @@ func NewListToolsGatewayError(body *ListToolsGatewayErrorResponseBody) *goa.Serv
 // ValidateListToolsResponseBody runs the validations defined on
 // ListToolsResponseBody
 func ValidateListToolsResponseBody(body *ListToolsResponseBody) (err error) {
-	if body.Tools == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	if body.HTTPTools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("http_tools", "body"))
 	}
-	for _, e := range body.Tools {
+	if body.PromptTemplates == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
+	}
+	for _, e := range body.HTTPTools {
 		if e != nil {
 			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.PromptTemplates {
+		if e != nil {
+			if err2 := ValidatePromptTemplateResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -779,6 +829,9 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	if body.Schema == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
 	}
+	if body.ToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
+	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
 	}
@@ -858,6 +911,72 @@ func ValidateToolVariationResponseBody(body *ToolVariationResponseBody) (err err
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	return
+}
+
+// ValidatePromptTemplateResponseBody runs the validations defined on
+// PromptTemplateResponseBody
+func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.HistoryID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("history_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Prompt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("prompt", "body"))
+	}
+	if body.Engine == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("engine", "body"))
+	}
+	if body.Kind == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("kind", "body"))
+	}
+	if body.ToolsHint == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools_hint", "body"))
+	}
+	if body.ToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Name != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 40, false))
+		}
+	}
+	if body.Arguments != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.arguments", *body.Arguments, goa.FormatJSON))
+	}
+	if body.Engine != nil {
+		if !(*body.Engine == "mustache") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.engine", *body.Engine, []any{"mustache"}))
+		}
+	}
+	if body.Kind != nil {
+		if !(*body.Kind == "prompt" || *body.Kind == "higher_order_tool") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.kind", *body.Kind, []any{"prompt", "higher_order_tool"}))
+		}
+	}
+	if len(body.ToolsHint) > 20 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools_hint", body.ToolsHint, len(body.ToolsHint), 20, false))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
 	}
 	return
 }

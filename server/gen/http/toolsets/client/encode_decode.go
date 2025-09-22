@@ -1978,6 +1978,7 @@ func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToo
 		PackageName:         v.PackageName,
 		CreatedAt:           *v.CreatedAt,
 		UpdatedAt:           *v.UpdatedAt,
+		ToolUrn:             *v.ToolUrn,
 	}
 	if v.ResponseFilter != nil {
 		res.ResponseFilter = unmarshalResponseFilterResponseBodyToTypesResponseFilter(v.ResponseFilter)
@@ -2087,6 +2088,7 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 		Kind:          *v.Kind,
 		CreatedAt:     *v.CreatedAt,
 		UpdatedAt:     *v.UpdatedAt,
+		ToolUrn:       *v.ToolUrn,
 	}
 	res.ToolsHint = make([]string, len(v.ToolsHint))
 	for i, val := range v.ToolsHint {
@@ -2219,6 +2221,10 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 	res.PromptTemplates = make([]*types.PromptTemplateEntry, len(v.PromptTemplates))
 	for i, val := range v.PromptTemplates {
 		res.PromptTemplates[i] = unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(val)
+	}
+	res.ToolUrns = make([]string, len(v.ToolUrns))
+	for i, val := range v.ToolUrns {
+		res.ToolUrns[i] = val
 	}
 
 	return res

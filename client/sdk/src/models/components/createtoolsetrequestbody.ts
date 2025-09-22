@@ -18,13 +18,13 @@ export type CreateToolsetRequestBody = {
    */
   description?: string | undefined;
   /**
-   * List of HTTP tool names to include
-   */
-  httpToolNames?: Array<string> | undefined;
-  /**
    * The name of the toolset
    */
   name: string;
+  /**
+   * List of tool URNs to include in the toolset
+   */
+  toolUrns?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -35,12 +35,12 @@ export const CreateToolsetRequestBody$inboundSchema: z.ZodType<
 > = z.object({
   default_environment_slug: z.string().optional(),
   description: z.string().optional(),
-  http_tool_names: z.array(z.string()).optional(),
   name: z.string(),
+  tool_urns: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     "default_environment_slug": "defaultEnvironmentSlug",
-    "http_tool_names": "httpToolNames",
+    "tool_urns": "toolUrns",
   });
 });
 
@@ -48,8 +48,8 @@ export const CreateToolsetRequestBody$inboundSchema: z.ZodType<
 export type CreateToolsetRequestBody$Outbound = {
   default_environment_slug?: string | undefined;
   description?: string | undefined;
-  http_tool_names?: Array<string> | undefined;
   name: string;
+  tool_urns?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -60,12 +60,12 @@ export const CreateToolsetRequestBody$outboundSchema: z.ZodType<
 > = z.object({
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
-  httpToolNames: z.array(z.string()).optional(),
   name: z.string(),
+  toolUrns: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     defaultEnvironmentSlug: "default_environment_slug",
-    httpToolNames: "http_tool_names",
+    toolUrns: "tool_urns",
   });
 });
 

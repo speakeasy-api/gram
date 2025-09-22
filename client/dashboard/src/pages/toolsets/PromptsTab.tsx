@@ -25,9 +25,9 @@ export function PromptsTabContent({
   const [promptSelectPopoverOpen, setPromptSelectPopoverOpen] = useState(false);
   const routes = useRoutes();
 
+  const currentPromptNames = toolsetPrompts?.map((t) => t.name) ?? [];
+
   const addPromptToToolset = (prompt: PromptTemplate) => {
-    const currentPromptNames =
-      toolset?.promptTemplates.map((t) => t.name) ?? [];
     if (currentPromptNames.includes(prompt.name)) {
       return;
     }
@@ -43,8 +43,6 @@ export function PromptsTabContent({
   };
 
   const removePromptFromToolset = (promptName: string) => {
-    const currentPromptNames =
-      toolset?.promptTemplates.map((t) => t.name) ?? [];
     updateToolsetMutation.mutate({
       request: {
         slug: toolset.slug,

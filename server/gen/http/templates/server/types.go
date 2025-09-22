@@ -1430,6 +1430,8 @@ type PromptTemplateResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the prompt template.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The URN of this prompt template
+	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
 }
 
 // NewCreateTemplateResponseBody builds the HTTP response body from the result

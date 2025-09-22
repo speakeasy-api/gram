@@ -278,6 +278,7 @@ func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTT
 		PackageName:         v.PackageName,
 		CreatedAt:           v.CreatedAt,
 		UpdatedAt:           v.UpdatedAt,
+		ToolUrn:             v.ToolUrn,
 	}
 	if v.ResponseFilter != nil {
 		res.ResponseFilter = marshalTypesResponseFilterToResponseFilterResponseBody(v.ResponseFilter)
@@ -379,6 +380,35 @@ func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation
 		for i, val := range v.Tags {
 			res.Tags[i] = val
 		}
+	}
+
+	return res
+}
+
+// marshalTypesPromptTemplateToPromptTemplateResponseBody builds a value of
+// type *PromptTemplateResponseBody from a value of type *types.PromptTemplate.
+func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTemplate) *PromptTemplateResponseBody {
+	res := &PromptTemplateResponseBody{
+		ID:            v.ID,
+		HistoryID:     v.HistoryID,
+		PredecessorID: v.PredecessorID,
+		Name:          string(v.Name),
+		Prompt:        v.Prompt,
+		Description:   v.Description,
+		Arguments:     v.Arguments,
+		Engine:        v.Engine,
+		Kind:          v.Kind,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
+		ToolUrn:       v.ToolUrn,
+	}
+	if v.ToolsHint != nil {
+		res.ToolsHint = make([]string, len(v.ToolsHint))
+		for i, val := range v.ToolsHint {
+			res.ToolsHint[i] = val
+		}
+	} else {
+		res.ToolsHint = []string{}
 	}
 
 	return res

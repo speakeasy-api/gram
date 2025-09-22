@@ -75,7 +75,7 @@ export function ToolsList(props: { deploymentId?: string }) {
   });
   const [search, setSearch] = useState("");
   const [tagFilters, setTagFilters] = useState<string[]>([]);
-  const groupedTools = useGroupedHttpTools(tools?.tools ?? []);
+  const groupedTools = useGroupedHttpTools(tools?.httpTools ?? []);
 
   const tagFilterOptions = groupedTools.flatMap((group) =>
     group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`)),

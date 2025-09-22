@@ -13,6 +13,7 @@ let value: PromptTemplate = {
   kind: "prompt",
   name: "<value>",
   prompt: "<value>",
+  toolUrn: "<value>",
   toolsHint: [
     "<value 1>",
     "<value 2>",
@@ -35,5 +36,6 @@ let value: PromptTemplate = {
 | `name`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | A short url-friendly label that uniquely identifies a resource.                               |
 | `predecessorId`                                                                               | *string*                                                                                      | :heavy_minus_sign:                                                                            | The previous version of the prompt template to use as predecessor                             |
 | `prompt`                                                                                      | *string*                                                                                      | :heavy_check_mark:                                                                            | The template content                                                                          |
+| `toolUrn`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The URN of this prompt template                                                               |
 | `toolsHint`                                                                                   | *string*[]                                                                                    | :heavy_check_mark:                                                                            | The suggested tool names associated with the prompt template                                  |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | The last update date of the prompt template.                                                  |

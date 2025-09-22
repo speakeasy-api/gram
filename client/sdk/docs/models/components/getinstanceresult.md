@@ -42,6 +42,7 @@ let value: GetInstanceResult = {
         "<value 1>",
       ],
       toolType: "http",
+      toolUrn: "<value>",
       updatedAt: new Date("2025-03-13T06:28:48.216Z"),
     },
   ],

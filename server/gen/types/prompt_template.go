@@ -32,4 +32,6 @@ type PromptTemplate struct {
 	CreatedAt string
 	// The last update date of the prompt template.
 	UpdatedAt string
+	// The URN of this prompt template
+	ToolUrn string
 }

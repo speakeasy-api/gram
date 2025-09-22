@@ -15,7 +15,8 @@ let value: Toolset = {
   projectId: "<id>",
   promptTemplates: [],
   slug: "<value>",
-  updatedAt: new Date("2023-03-17T16:58:47.552Z"),
+  toolUrns: [],
+  updatedAt: new Date("2024-06-10T16:31:29.362Z"),
 };
 ```
 
@@ -42,4 +43,5 @@ let value: Toolset = {
 | `securityVariables`                                                                           | [components.SecurityVariable](../../models/components/securityvariable.md)[]                  | :heavy_minus_sign:                                                                            | The security variables that are relevant to the toolset                                       |
 | `serverVariables`                                                                             | [components.ServerVariable](../../models/components/servervariable.md)[]                      | :heavy_minus_sign:                                                                            | The server variables that are relevant to the toolset                                         |
 | `slug`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | A short url-friendly label that uniquely identifies a resource.                               |
+| `toolUrns`                                                                                    | *string*[]                                                                                    | :heavy_check_mark:                                                                            | The tool URNs in this toolset                                                                 |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | When the toolset was last updated.                                                            |

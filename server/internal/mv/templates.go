@@ -98,6 +98,7 @@ func fromPromptTemplateRow(row repo.PromptTemplate) *types.PromptTemplate {
 
 	return &types.PromptTemplate{
 		ID:            row.ID.String(),
+		ToolUrn:       row.ToolUrn.String(),
 		HistoryID:     row.HistoryID.String(),
 		PredecessorID: conv.FromNullableUUID(row.PredecessorID),
 		Name:          types.Slug(row.Name),

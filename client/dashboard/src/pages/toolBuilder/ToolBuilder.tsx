@@ -399,7 +399,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
               event: "update_tool",
             });
           } else {
-            await client.templates.create({
+            const template = await client.templates.create({
               createPromptTemplateForm: {
                 name,
                 description,
@@ -419,10 +419,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             await client.toolsets.updateBySlug({
               slug: toolsetFilter?.slug ?? "",
               updateToolsetRequestBody: {
-                promptTemplateNames: [
-                  ...(toolsetData?.promptTemplates ?? []).map((t) => t.name),
-                  name,
-                ],
+                toolUrns: [...(toolsetData?.toolUrns ?? []), template.template.toolUrn],
               },
             });
 

@@ -127,6 +127,10 @@ export type HTTPToolDefinition = {
   tags: Array<string>;
   toolType: ToolType;
   /**
+   * The URN of this HTTP tool
+   */
+  toolUrn: string;
+  /**
    * The last update date of the tool.
    */
   updatedAt: Date;
@@ -182,6 +186,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   summary: z.string(),
   tags: z.array(z.string()),
   tool_type: ToolType$inboundSchema,
+  tool_urn: z.string(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   variation: ToolVariation$inboundSchema.optional(),
 }).transform((v) => {
@@ -199,6 +204,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
     "response_filter": "responseFilter",
     "schema_version": "schemaVersion",
     "tool_type": "toolType",
+    "tool_urn": "toolUrn",
     "updated_at": "updatedAt",
   });
 });
@@ -229,6 +235,7 @@ export type HTTPToolDefinition$Outbound = {
   summary: string;
   tags: Array<string>;
   tool_type: string;
+  tool_urn: string;
   updated_at: string;
   variation?: ToolVariation$Outbound | undefined;
 };
@@ -263,6 +270,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   summary: z.string(),
   tags: z.array(z.string()),
   toolType: ToolType$outboundSchema,
+  toolUrn: z.string(),
   updatedAt: z.date().transform(v => v.toISOString()),
   variation: ToolVariation$outboundSchema.optional(),
 }).transform((v) => {
@@ -280,6 +288,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
     responseFilter: "response_filter",
     schemaVersion: "schema_version",
     toolType: "tool_type",
+    toolUrn: "tool_urn",
     updatedAt: "updated_at",
   });
 });

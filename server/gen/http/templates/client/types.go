@@ -1430,6 +1430,8 @@ type PromptTemplateResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the prompt template.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The URN of this prompt template
+	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
 }
 
 // NewCreateTemplateRequestBody builds the HTTP request body from the payload
@@ -4394,6 +4396,9 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 	}
 	if body.ToolsHint == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tools_hint", "body"))
+	}
+	if body.ToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

@@ -21,6 +21,7 @@ let value: HTTPToolDefinition = {
   summary: "<value>",
   tags: [],
   toolType: "http",
+  toolUrn: "<value>",
   updatedAt: new Date("2025-05-22T21:11:55.475Z"),
 };
 ```
@@ -53,5 +54,6 @@ let value: HTTPToolDefinition = {
 | `summary`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | Summary of the tool                                                                           |
 | `tags`                                                                                        | *string*[]                                                                                    | :heavy_check_mark:                                                                            | The tags list for this http tool                                                              |
 | `toolType`                                                                                    | [components.ToolType](../../models/components/tooltype.md)                                    | :heavy_check_mark:                                                                            | N/A                                                                                           |
+| `toolUrn`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The URN of this HTTP tool                                                                     |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | The last update date of the tool.                                                             |
 | `variation`                                                                                   | [components.ToolVariation](../../models/components/toolvariation.md)                          | :heavy_minus_sign:                                                                            | N/A                                                                                           |

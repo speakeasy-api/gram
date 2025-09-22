@@ -30,6 +30,8 @@ type ToolsetEntry struct {
 	HTTPTools []*HTTPToolDefinitionEntry
 	// The prompt templates in this toolset
 	PromptTemplates []*PromptTemplateEntry
+	// The tool URNs in this toolset
+	ToolUrns []string
 	// The slug of the MCP to use for the toolset
 	McpSlug *Slug
 	// Whether the toolset is public in MCP
