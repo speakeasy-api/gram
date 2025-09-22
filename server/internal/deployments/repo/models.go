@@ -74,7 +74,7 @@ type HttpSecurity struct {
 
 type HttpToolDefinition struct {
 	ID                  uuid.UUID
-	ToolUrn             pgtype.Text
+	ToolUrn             urn.Tool
 	ProjectID           uuid.UUID
 	DeploymentID        uuid.UUID
 	Openapiv3DocumentID uuid.NullUUID
