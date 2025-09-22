@@ -1,0 +1,55 @@
+name: Release Gram CLI
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  release:
+    name: Release
+    # NOTE(cjea): Using Windows runner for Chocolatey/Winget compatibility.
+    # Would a cheaper ubuntu-latest machine work instead?
+    runs-on:
+      group: windows-latest-large
+    if: |
+      startsWith(github.event.head_commit.message, 'feat') || startsWith(github.event.head_commit.message, 'fix')
+    steps:
+      - name: Setup environment
+        run: |-
+          chcp 65001 #set code page to utf-8
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+      - name: Conventional Commits
+        uses: TriPSs/conventional-changelog-action@5f00b899ccbbcbc112bd6d715d5e76e7a9e4501d # v6.1.0
+        with:
+          github-token: ${{ secrets.github_token }}
+          skip-commit: "true"
+          output-file: "false"
+          skip-on-empty: "false"
+          preset: conventionalcommits
+      - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
+        with:
+          go-version-file: "go.mod"
+          # Reference: https://github.com/actions/setup-go/issues/495
+          cache: false
+      - name: Setup Choco
+        uses: crazy-max/ghaction-chocolatey@2526f467ccbd337d307fe179959cabbeca0bc8c0 # v3.4.0
+        with:
+          args: --version
+      - name: goreleaser
+        uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
+        with:
+          distribution: goreleaser
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.BOT_REPO_TOKEN }}
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+      - name: Trigger changelog reconcile
+        run: gh workflow run changelog-reconcile.yml --repo speakeasy-api/marketing-site --ref main
+        env:
+          GH_TOKEN: ${{ secrets.BOT_REPO_TOKEN }}

@@ -48,7 +48,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			},
 			&cli.StringFlag{
 				Name:     "api-key",
-				Usage:    "The Gram project to push to",
+				Usage:    "Your Gram API key (must be scoped as a 'Provider')",
 				EnvVars:  []string{"GRAM_API_KEY"},
 				Required: true,
 			},
@@ -60,7 +60,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			},
 			&cli.PathFlag{
 				Name:     "config",
-				Usage:    "Path to the deployment file (relative locations resolve to the deployment file's directory)",
+				Usage:    "Path to the deployment file",
 				Required: true,
 			},
 			&cli.StringFlag{
