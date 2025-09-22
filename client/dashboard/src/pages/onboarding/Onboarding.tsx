@@ -247,7 +247,7 @@ const useAssetNumtools = (
   )?.id;
 
   return documentId
-    ? tools?.tools.filter(
+    ? tools?.httpTools.filter(
         (tool) =>
           tool.openapiv3DocumentId !== undefined &&
           tool.deploymentId === deployment?.id &&

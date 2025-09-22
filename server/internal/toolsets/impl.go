@@ -338,13 +338,9 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.McpIsPublic = *payload.McpIsPublic
 	}
 
-	// Process tool URNs and split them by type, fallback to legacy fields
-	if payload.ToolUrns != nil {
-		httpToolNames, err := s.extractToolNamesFromUrns(payload.ToolUrns, urn.ToolKindHTTP)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URNs").Log(ctx, logger)
-		}
-		updateParams.HttpToolNames = httpToolNames
+	err = s.createToolsetVersion(ctx, payload.ToolUrns, existingToolset.ID, tr)
+	if err != nil {
+		return nil, err
 	}
 
 	updatedToolset, err := tr.UpdateToolset(ctx, updateParams)
@@ -352,9 +348,24 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").Log(ctx, logger)
 	}
 
-	err = s.createToolsetVersion(ctx, payload.ToolUrns, existingToolset.ID, tr)
-	if err != nil {
-		return nil, err
+	// BELOW: Legacy logic to continue keeping the http_tool_definitions field up to date
+	// Process tool URNs and split them by type when ToolUrns are provided
+	if payload.ToolUrns != nil {
+		httpToolNames, err := s.extractToolNamesFromUrns(payload.ToolUrns, urn.ToolKindHTTP)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URNs").Log(ctx, logger)
+		}
+		
+		// Update only the http_tool_names field
+		// This is done separately from the updateToolset call above because that call can't distinguish between setting the field to an empty array and not setting it at all
+		updatedToolset, err = tr.UpdateToolsetHttpToolNames(ctx, repo.UpdateToolsetHttpToolNamesParams{
+			Slug:          conv.ToLower(payload.Slug),
+			ProjectID:     *authCtx.ProjectID,
+			HttpToolNames: httpToolNames,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset http tool names").Log(ctx, logger)
+		}
 	}
 
 	// Handle prompt templates from tool URNs
@@ -551,8 +562,8 @@ func (s *Service) createToolsetVersion(ctx context.Context, urnStrings []string,
 	}
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetID(toolsetID.String()))
 
-	// Only create a version if tool URNs are provided (indicating a change)
-	if len(urnStrings) == 0 {
+	// Only create a version if tool URNs are provided (indicating a change). Check nil (not len==0) so that toolsets can be made empty.
+	if urnStrings == nil {
 		return nil
 	}
 
@@ -611,7 +622,7 @@ func (s *Service) createToolsetVersion(ctx context.Context, urnStrings []string,
 
 // extractToolNamesFromUrns extracts tool names of a specific kind from URN strings,
 func (s *Service) extractToolNamesFromUrns(toolUrns []string, kind urn.ToolKind) ([]string, error) {
-	if len(toolUrns) == 0 {
+	if toolUrns == nil {
 		return nil, nil
 	}
 
