@@ -219,6 +219,7 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("name", String, "The new name of the toolset")
 	Attribute("description", String, "The new description of the toolset")
 	Attribute("default_environment_slug", shared.Slug, "The slug of the environment to use as the default for the toolset")
+	Attribute("prompt_template_names", ArrayOf(String), "List of prompt template names to include (note: for actual prompts, not tools)")
 	Attribute("tool_urns", ArrayOf(String), "List of tool URNs to include in the toolset")
 	Attribute("mcp_enabled", Boolean, "Whether the toolset is enabled for MCP")
 	Attribute("mcp_slug", shared.Slug, "The slug of the MCP to use for the toolset")

@@ -189,6 +189,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   };
 
   const tools = useToolDefinitions(toolsetData);
+  console.log("tools", tools);
 
   // Ensures that the canonical tool and update function is set for the step
   const makeStep = (step: Step) => {
@@ -399,7 +400,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
               event: "update_tool",
             });
           } else {
-            await client.templates.create({
+            const template = await client.templates.create({
               createPromptTemplateForm: {
                 name,
                 description,
@@ -419,10 +420,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             await client.toolsets.updateBySlug({
               slug: toolsetFilter?.slug ?? "",
               updateToolsetRequestBody: {
-                promptTemplateNames: [
-                  ...(toolsetData?.promptTemplates ?? []).map((t) => t.name),
-                  name,
-                ],
+                toolUrns: [...(toolsetData?.toolUrns ?? []), template.template.toolUrn],
               },
             });
 

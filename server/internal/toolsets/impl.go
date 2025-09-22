@@ -163,32 +163,6 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, err
 	}
 
-	// Handle prompt templates from tool URNs
-	if len(payload.ToolUrns) > 0 {
-		promptTemplateNames, err := s.extractToolNamesFromUrns(payload.ToolUrns, urn.ToolKindPrompt)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid prompt template URNs").Log(ctx, s.logger)
-		}
-		
-		if len(promptTemplateNames) > 0 {
-			dbtx, err := s.db.Begin(ctx)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to begin transaction").Log(ctx, s.logger)
-			}
-			defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-			
-			err = s.updatePromptTemplates(ctx, dbtx, *authCtx.ProjectID, createdToolset.ID, promptTemplateNames, s.logger)
-			if err != nil {
-				return nil, err
-			}
-			
-			err = dbtx.Commit(ctx)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to commit transaction").Log(ctx, s.logger)
-			}
-		}
-	}
-
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug))
 	if err != nil {
 		return nil, err
@@ -348,6 +322,13 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").Log(ctx, logger)
 	}
 
+	if payload.PromptTemplateNames != nil {
+		err = s.updatePromptTemplates(ctx, dbtx, *authCtx.ProjectID, existingToolset.ID, payload.PromptTemplateNames, logger)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// BELOW: Legacy logic to continue keeping the http_tool_definitions field up to date
 	// Process tool URNs and split them by type when ToolUrns are provided
 	if payload.ToolUrns != nil {
@@ -365,22 +346,6 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset http tool names").Log(ctx, logger)
-		}
-	}
-
-	// Handle prompt templates from tool URNs
-	var promptTemplateNames []string
-	if payload.ToolUrns != nil {
-		promptTemplateNames, err = s.extractToolNamesFromUrns(payload.ToolUrns, urn.ToolKindPrompt)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid prompt template URNs").Log(ctx, logger)
-		}
-	}
-
-	if promptTemplateNames != nil {
-		err = s.updatePromptTemplates(ctx, dbtx, *authCtx.ProjectID, existingToolset.ID, promptTemplateNames, logger)
-		if err != nil {
-			return nil, err
 		}
 	}
 
@@ -641,7 +606,7 @@ func (s *Service) extractToolNamesFromUrns(toolUrns []string, kind urn.ToolKind)
 	return toolNames, nil
 }
 
-// updatePromptTemplates updates the prompt templates for a toolset
+// updatePromptTemplates updates the prompt templates for a toolset. NOTE: promptTemplates are NOT tools! These correspond to actual "prompts" in MCP
 func (s *Service) updatePromptTemplates(ctx context.Context, dbtx pgx.Tx, projectID uuid.UUID, toolsetID uuid.UUID, promptTemplateNames []string, logger *slog.Logger) error {
 	tr := repo.New(dbtx)
 	tplr := tplRepo.New(dbtx)
