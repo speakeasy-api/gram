@@ -165,10 +165,12 @@ ORDER BY pt.tool_urn;
 -- name: CreateToolsetVersion :one
 INSERT INTO toolset_versions (
     toolset_id
+  , version
   , tool_urns
   , predecessor_id
 ) VALUES (
     @toolset_id
+  , @version
   , @tool_urns
   , @predecessor_id
 )

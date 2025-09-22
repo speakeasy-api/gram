@@ -152,7 +152,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	// Create initial toolset version with tool URNs
-	var toolURNs []urn.Tool
+	toolURNs := []urn.Tool{}
 	if len(payload.HTTPToolNames) > 0 {
 		toolURNs, err = s.repo.GetToolUrnsByNames(ctx, repo.GetToolUrnsByNamesParams{
 			ToolNames: payload.HTTPToolNames,
@@ -165,6 +165,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 
 	_, err = s.repo.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
 		ToolsetID:     createdToolset.ID,
+		Version:       1,
 		ToolUrns:      toolURNs,
 		PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
@@ -652,13 +653,16 @@ func (s *Service) CreateToolsetVersion(ctx context.Context, payload *gen.UpdateT
 
 		// Get the latest version to set as predecessor
 		latestVersion, err := tr.GetLatestToolsetVersion(ctx, existingToolset.ID)
+		latestVersionNumber := int64(0)
 		var predecessorID uuid.NullUUID
 		if err == nil {
 			predecessorID = uuid.NullUUID{UUID: latestVersion.ID, Valid: true}
+			latestVersionNumber = latestVersion.Version
 		}
 
 		_, err = tr.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
 			ToolsetID:     existingToolset.ID,
+			Version:       latestVersionNumber + 1,
 			ToolUrns:      allToolUrns,
 			PredecessorID: predecessorID,
 		})

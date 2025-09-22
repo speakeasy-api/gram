@@ -170,24 +170,32 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 const createToolsetVersion = `-- name: CreateToolsetVersion :one
 INSERT INTO toolset_versions (
     toolset_id
+  , version
   , tool_urns
   , predecessor_id
 ) VALUES (
     $1
   , $2
   , $3
+  , $4
 )
 RETURNING id, toolset_id, version, tool_urns, predecessor_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateToolsetVersionParams struct {
 	ToolsetID     uuid.UUID
+	Version       int64
 	ToolUrns      []urn.Tool
 	PredecessorID uuid.NullUUID
 }
 
 func (q *Queries) CreateToolsetVersion(ctx context.Context, arg CreateToolsetVersionParams) (ToolsetVersion, error) {
-	row := q.db.QueryRow(ctx, createToolsetVersion, arg.ToolsetID, arg.ToolUrns, arg.PredecessorID)
+	row := q.db.QueryRow(ctx, createToolsetVersion,
+		arg.ToolsetID,
+		arg.Version,
+		arg.ToolUrns,
+		arg.PredecessorID,
+	)
 	var i ToolsetVersion
 	err := row.Scan(
 		&i.ID,
