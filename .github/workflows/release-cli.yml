@@ -2,13 +2,15 @@ name: Release Gram CLI
 on:
   push:
     branches:
-      - main
+      # TODO(cjea): pre-merge testing. Undo this change before merging.
+      # - main
+      - feat/age-541-release-gram-cli-homebrew
   workflow_dispatch:
 permissions:
   contents: write
 jobs:
   release:
-    name: Release
+    name: Release Gram CLI
     # NOTE(cjea): Using Windows runner for Chocolatey/Winget compatibility.
     # Would a cheaper ubuntu-latest machine work instead?
     runs-on:
@@ -31,6 +33,9 @@ jobs:
           output-file: "false"
           skip-on-empty: "false"
           preset: conventionalcommits
+          tag-prefix: "@gram/cli@"
+          pre-release: true
+          pre-release-identifier: "rc"
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version-file: "go.mod"
@@ -49,7 +54,3 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.BOT_REPO_TOKEN }}
           CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
-      - name: Trigger changelog reconcile
-        run: gh workflow run changelog-reconcile.yml --repo speakeasy-api/marketing-site --ref main
-        env:
-          GH_TOKEN: ${{ secrets.BOT_REPO_TOKEN }}
