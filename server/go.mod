@@ -53,8 +53,8 @@ require (
 	go.temporal.io/sdk v1.36.0
 	go.temporal.io/sdk/contrib/opentelemetry v0.6.0
 	goa.design/clue v1.2.3
-	goa.design/goa/v3 v3.22.2
-	goa.design/plugins/v3 v3.22.2
+	goa.design/goa/v3 v3.22.3
+	goa.design/plugins/v3 v3.22.3
 	k8s.io/api v0.34.1
 	k8s.io/apimachinery v0.34.1
 	k8s.io/client-go v0.34.1
