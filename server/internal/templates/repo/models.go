@@ -7,11 +7,12 @@ package repo
 import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type PromptTemplate struct {
 	ID            uuid.UUID
-	ToolUrn       pgtype.Text
+	ToolUrn       urn.Tool
 	ProjectID     uuid.UUID
 	HistoryID     uuid.UUID
 	PredecessorID uuid.NullUUID

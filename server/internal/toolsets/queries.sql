@@ -143,3 +143,48 @@ SET
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;
+
+-- name: GetToolUrnsByNames :many
+SELECT DISTINCT tool_urn
+FROM http_tool_definitions
+WHERE name = ANY(@tool_names::TEXT[])
+  AND project_id = @project_id
+  AND deleted IS FALSE
+  AND tool_urn IS NOT NULL
+ORDER BY tool_urn;
+
+-- name: GetPromptTemplateUrnsByNames :many
+SELECT DISTINCT pt.tool_urn
+FROM prompt_templates pt
+WHERE pt.name = ANY(@template_names::TEXT[])
+  AND pt.project_id = @project_id
+  AND pt.deleted IS FALSE
+  AND pt.tool_urn IS NOT NULL
+ORDER BY pt.tool_urn;
+
+-- name: CreateToolsetVersion :one
+INSERT INTO toolset_versions (
+    toolset_id
+  , tool_urns
+  , predecessor_id
+) VALUES (
+    @toolset_id
+  , @tool_urns
+  , @predecessor_id
+)
+RETURNING *;
+
+-- name: GetLatestToolsetVersion :one
+SELECT *
+FROM toolset_versions
+WHERE toolset_id = @toolset_id
+  AND deleted IS FALSE
+ORDER BY version DESC
+LIMIT 1;
+
+-- name: GetToolsetPromptTemplateNames :many
+SELECT tp.prompt_name
+FROM toolset_prompts tp
+WHERE tp.toolset_id = @toolset_id
+  AND tp.project_id = @project_id
+ORDER BY tp.prompt_name;

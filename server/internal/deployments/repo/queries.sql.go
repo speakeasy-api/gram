@@ -521,7 +521,7 @@ type CreateOpenAPIv3ToolDefinitionParams struct {
 	ProjectID           uuid.UUID
 	DeploymentID        uuid.UUID
 	Openapiv3DocumentID uuid.NullUUID
-	ToolUrn             pgtype.Text
+	ToolUrn             urn.Tool
 	Name                string
 	UntruncatedName     pgtype.Text
 	Openapiv3Operation  pgtype.Text
