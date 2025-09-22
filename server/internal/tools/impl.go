@@ -25,7 +25,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	vr "github.com/speakeasy-api/gram/server/internal/variations/repo"
+	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 )
 
 type Service struct {
@@ -75,7 +77,8 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		limit = 10000
 	}
 
-	params := repo.ListToolsParams{
+	// Get HTTP tools
+	toolParams := repo.ListToolsParams{
 		ProjectID:    *authCtx.ProjectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
 		DeploymentID: uuid.NullUUID{Valid: false, UUID: uuid.Nil},
@@ -87,7 +90,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").Log(ctx, s.logger)
 		}
-		params.Cursor = uuid.NullUUID{UUID: cursorUUID, Valid: true}
+		toolParams.Cursor = uuid.NullUUID{UUID: cursorUUID, Valid: true}
 	}
 
 	if payload.DeploymentID != nil {
@@ -95,19 +98,28 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid deployment ID").Log(ctx, s.logger)
 		}
-		params.DeploymentID = uuid.NullUUID{UUID: deploymentUUID, Valid: true}
+		toolParams.DeploymentID = uuid.NullUUID{UUID: deploymentUUID, Valid: true}
 	}
 
-	tools, err := s.repo.ListTools(ctx, params)
+	tools, err := s.repo.ListTools(ctx, toolParams)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools").Log(ctx, s.logger)
 	}
 
-	result := &gen.ListToolsResult{
-		Tools:      make([]*types.HTTPToolDefinition, len(tools)),
-		NextCursor: nil,
+	// Get prompt templates
+	templateRepo := tplRepo.New(s.db)
+	templates, err := templateRepo.ListTemplates(ctx, *authCtx.ProjectID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list prompt templates").Log(ctx, s.logger)
 	}
 
+	result := &gen.ListToolsResult{
+		HTTPTools:       make([]*types.HTTPToolDefinition, len(tools)),
+		PromptTemplates: make([]*types.PromptTemplate, len(templates)),
+		NextCursor:      nil,
+	}
+
+	// Process HTTP tools with variations
 	names := make([]string, 0, len(tools))
 	for _, def := range tools {
 		names = append(names, def.Name)
@@ -195,7 +207,10 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			}
 		}
 
-		result.Tools[i] = &types.HTTPToolDefinition{
+		// Create HTTP tool URN
+		toolUrn := urn.NewTool(urn.ToolKindHTTP, "project", tool.Name)
+
+		result.HTTPTools[i] = &types.HTTPToolDefinition{
 			ToolType:            constants.ToolTypeHTTP,
 			ID:                  tool.ID.String(),
 			DeploymentID:        tool.DeploymentID.String(),
@@ -218,6 +233,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			Security:            conv.Ptr(string(tool.Security)),
 			DefaultServerURL:    conv.FromPGText[string](tool.DefaultServerUrl),
 			PackageName:         pkg,
+			ToolUrn:             toolUrn.String(),
 			CreatedAt:           tool.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
 			Canonical:           canonical,
@@ -225,10 +241,44 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		}
 	}
 
+	// Process prompt templates
+	for i, template := range templates {
+		var args *string
+		if len(template.Arguments) > 0 {
+			args = conv.PtrEmpty(string(template.Arguments))
+		}
+
+		hint := template.ToolsHint
+		if hint == nil {
+			hint = []string{}
+		}
+
+		// Create prompt template URN
+		templateUrn := urn.NewTool(urn.ToolKindPrompt, "project", template.Name)
+
+		result.PromptTemplates[i] = &types.PromptTemplate{
+			ID:            template.ID.String(),
+			HistoryID:     template.HistoryID.String(),
+			PredecessorID: conv.FromNullableUUID(template.PredecessorID),
+			Name:          types.Slug(template.Name),
+			Prompt:        template.Prompt,
+			Description:   conv.FromPGText[string](template.Description),
+			Arguments:     args,
+			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](template.Engine), "none"),
+			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](template.Kind), "prompt"),
+			ToolsHint:     hint,
+			ToolUrn:       templateUrn.String(),
+			CreatedAt:     template.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     template.UpdatedAt.Time.Format(time.RFC3339),
+		}
+	}
+
+	// For pagination, use the HTTP tools cursor since that's what the original API did
+	// TODO: this doesn't really make sense, but we also don't use the pagination at the moment
 	if len(tools) >= int(limit+1) {
 		lastID := tools[len(tools)-1].ID.String()
 		result.NextCursor = &lastID
-		result.Tools = result.Tools[:len(result.Tools)-1]
+		result.HTTPTools = result.HTTPTools[:len(result.HTTPTools)-1]
 	}
 
 	return result, nil

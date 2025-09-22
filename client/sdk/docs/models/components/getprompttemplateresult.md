@@ -14,6 +14,7 @@ let value: GetPromptTemplateResult = {
     kind: "prompt",
     name: "<value>",
     prompt: "<value>",
+    toolUrn: "<value>",
     toolsHint: [
       "<value 1>",
       "<value 2>",

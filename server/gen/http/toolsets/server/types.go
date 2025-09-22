@@ -1859,6 +1859,8 @@ type HTTPToolDefinitionResponseBody struct {
 	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
 	// The variation details of a tool. Only includes explicitly varied fields.
 	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
+	// The URN of this HTTP tool
+	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
 }
 
 // ResponseFilterResponseBody is used to define fields on response body types.
@@ -1946,6 +1948,8 @@ type PromptTemplateResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the prompt template.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The URN of this prompt template
+	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
 }
 
 // ExternalOAuthServerResponseBody is used to define fields on response body

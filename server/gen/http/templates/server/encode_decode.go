@@ -1654,6 +1654,7 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 		Kind:          v.Kind,
 		CreatedAt:     v.CreatedAt,
 		UpdatedAt:     v.UpdatedAt,
+		ToolUrn:       v.ToolUrn,
 	}
 	if v.ToolsHint != nil {
 		res.ToolsHint = make([]string, len(v.ToolsHint))

@@ -8341,6 +8341,9 @@ components:
                     type: string
                     enum:
                         - http
+                tool_urn:
+                    type: string
+                    description: The URN of this HTTP tool
                 updated_at:
                     type: string
                     description: The last update date of the tool.
@@ -8361,6 +8364,7 @@ components:
                 - http_method
                 - path
                 - schema
+                - tool_urn
                 - created_at
                 - updated_at
         HTTPToolDefinitionEntry:
@@ -8667,16 +8671,22 @@ components:
         ListToolsResult:
             type: object
             properties:
-                next_cursor:
-                    type: string
-                    description: The cursor to fetch results from
-                tools:
+                http_tools:
                     type: array
                     items:
                         $ref: '#/components/schemas/HTTPToolDefinition'
-                    description: The list of tools
+                    description: The list of HTTP tools
+                next_cursor:
+                    type: string
+                    description: The cursor to fetch results from
+                prompt_templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptTemplate'
+                    description: The list of prompt templates
             required:
-                - tools
+                - http_tools
+                - prompt_templates
         ListToolsetsResult:
             type: object
             properties:
@@ -9062,6 +9072,9 @@ components:
                 prompt:
                     type: string
                     description: The template content
+                tool_urn:
+                    type: string
+                    description: The URN of this prompt template
                 tools_hint:
                     type: array
                     items:
@@ -9080,6 +9093,7 @@ components:
                 - engine
                 - kind
                 - tools_hint
+                - tool_urn
                 - created_at
                 - updated_at
         PromptTemplateEntry:
