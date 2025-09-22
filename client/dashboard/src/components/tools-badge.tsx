@@ -118,24 +118,16 @@ export const ToolsBadge = ({
       "LLM tool-use performance typically degrades with toolset size. General industry standards recommend keeping MCP servers at around 40 tool or fewer";
   }
 
-  const toolsSevere = warnOnTooManyTools && toolNames && toolNames.length > 150;
-  if (toolsSevere) {
-    tooltipContent =
-      "An LLM is unlikely to consistently perform well with a toolset of this size. General industry standards recommend keeping MCP servers at around 40 tool or fewer";
-  }
-
-  const anyWarnings = toolsWarnings || toolsSevere;
-
   return toolNames && toolNames.length > 0 ? (
     <Tooltip open>
       <TooltipTrigger>
         <Badge
           size={size}
-          variant={anyWarnings ? "warning" : variant}
-          className={cn(!anyWarnings && "bg-card", className)}
+          variant={toolsWarnings ? "warning" : variant}
+          className={cn(!toolsWarnings && "bg-card", className)}
         >
           <div className="flex gap-1 items-center">
-            {anyWarnings && <UrgentWarningIcon />}
+            {toolsWarnings && <UrgentWarningIcon />}
             {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
           </div>
         </Badge>
