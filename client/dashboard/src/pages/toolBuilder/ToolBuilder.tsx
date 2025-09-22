@@ -189,7 +189,6 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   };
 
   const tools = useToolDefinitions(toolsetData);
-  console.log("tools", tools);
 
   // Ensures that the canonical tool and update function is set for the step
   const makeStep = (step: Step) => {
