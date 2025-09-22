@@ -1,18 +1,18 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 60f7bf8366967f5c922819630bb17c1c
+  docChecksum: cba7a7e024307e406535c77808ce9a79
   docVersion: 0.0.1
-  speakeasyVersion: 1.620.0
-  generationVersion: 2.706.1
-  releaseVersion: 0.12.65
-  configChecksum: a69153550c52412f2150c76fdaf4352a
+  speakeasyVersion: 1.613.0
+  generationVersion: 2.696.0
+  releaseVersion: 0.12.66
+  configChecksum: 51ef37ed823859c960b0f4149a78665c
 features:
   typescript:
     additionalDependencies: 0.1.0
     core: 3.21.22
     defaultEnabledRetries: 0.1.0
-    devContainers: 2.90.1
+    devContainers: 2.90.0
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
@@ -1264,7 +1264,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2024-05-10T06:01:51.541Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "updated_at": "2024-05-10T06:01:51.541Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1286,7 +1286,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "tool_type": "http", "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2025-12-20T03:22:44.412Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "tool_type": "http", "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "updated_at": "2025-12-20T03:22:44.412Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1309,7 +1309,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"created_at": "2025-09-02T01:42:31.498Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2024-05-27T18:01:12.846Z"}], "slug": "<value>", "updated_at": "2025-08-07T19:20:12.233Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"created_at": "2025-09-02T01:42:31.498Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2024-05-27T18:01:12.846Z"}], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-08-07T19:20:12.233Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1443,7 +1443,7 @@ examples:
         application/json: {"external_oauth_server": {"metadata": "<value>", "slug": "<value>"}}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2025-03-28T09:33:33.851Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "updated_at": "2025-03-28T09:33:33.851Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1467,7 +1467,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2023-10-21T14:21:06.001Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "updated_at": "2023-10-21T14:21:06.001Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

@@ -98,6 +98,10 @@ export type ToolsetEntry = {
    */
   slug: string;
   /**
+   * The tool URNs in this toolset
+   */
+  toolUrns: Array<string>;
+  /**
    * When the toolset was last updated.
    */
   updatedAt: Date;
@@ -125,6 +129,7 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
   security_variables: z.array(SecurityVariable$inboundSchema).optional(),
   server_variables: z.array(ServerVariable$inboundSchema).optional(),
   slug: z.string(),
+  tool_urns: z.array(z.string()),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
 }).transform((v) => {
   return remap$(v, {
@@ -140,6 +145,7 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
     "prompt_templates": "promptTemplates",
     "security_variables": "securityVariables",
     "server_variables": "serverVariables",
+    "tool_urns": "toolUrns",
     "updated_at": "updatedAt",
   });
 });
@@ -162,6 +168,7 @@ export type ToolsetEntry$Outbound = {
   security_variables?: Array<SecurityVariable$Outbound> | undefined;
   server_variables?: Array<ServerVariable$Outbound> | undefined;
   slug: string;
+  tool_urns: Array<string>;
   updated_at: string;
 };
 
@@ -187,6 +194,7 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
   securityVariables: z.array(SecurityVariable$outboundSchema).optional(),
   serverVariables: z.array(ServerVariable$outboundSchema).optional(),
   slug: z.string(),
+  toolUrns: z.array(z.string()),
   updatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
   return remap$(v, {
@@ -202,6 +210,7 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
     promptTemplates: "prompt_templates",
     securityVariables: "security_variables",
     serverVariables: "server_variables",
+    toolUrns: "tool_urns",
     updatedAt: "updated_at",
   });
 });
