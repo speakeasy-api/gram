@@ -36,6 +36,7 @@ jobs:
           pre-release: true
           pre-release-identifier: "rc"
       - name: Prepare version
+        shell: bash
         run: |
           CLEAN_TAG=$(sed 's|@gram/cli@||' <<< "${{ steps.changelog.outputs.tag }}")
           echo "GORELEASER_CURRENT_TAG=$CLEAN_TAG" >> $GITHUB_ENV
