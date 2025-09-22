@@ -1,9 +1,6 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
 
-before:
-  hooks:
-    - "cd cli; go mod tidy"
 builds:
   - dir: ./cli
     env:
