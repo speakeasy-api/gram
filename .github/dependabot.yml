@@ -10,7 +10,9 @@ updates:
     schedule:
       interval: "weekly"
   - package-ecosystem: "gomod"
-    directory: "/server"
+    directories:
+      - /server
+      - /cli
     schedule:
       interval: "weekly"
     groups:
