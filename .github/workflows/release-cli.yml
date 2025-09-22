@@ -12,10 +12,7 @@ jobs:
   release:
     name: Release Gram CLI
     # NOTE(cjea): Using Windows runner for Chocolatey/Winget compatibility.
-    # Would a cheaper ubuntu-latest machine work instead?
-    # runs-on:
-    #   group: windows-latest-large
-    runs-on: ubicloud-standard-4
+    runs-on: windows-latest
     if: |
       startsWith(github.event.head_commit.message, 'feat') || startsWith(github.event.head_commit.message, 'fix')
     steps:
