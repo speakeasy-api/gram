@@ -39,9 +39,6 @@ type UpdateToolsetRequestBody struct {
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
 	// List of tool URNs to include in the toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
-	// List of prompt template names to include (note: for actual prompts, not
-	// tools)
-	PromptTemplateNames []string `form:"prompt_template_names,omitempty" json:"prompt_template_names,omitempty" xml:"prompt_template_names,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The slug of the MCP to use for the toolset
@@ -2120,12 +2117,6 @@ func NewUpdateToolsetRequestBody(p *toolsets.UpdateToolsetPayload) *UpdateToolse
 		body.ToolUrns = make([]string, len(p.ToolUrns))
 		for i, val := range p.ToolUrns {
 			body.ToolUrns[i] = val
-		}
-	}
-	if p.PromptTemplateNames != nil {
-		body.PromptTemplateNames = make([]string, len(p.PromptTemplateNames))
-		for i, val := range p.PromptTemplateNames {
-			body.PromptTemplateNames[i] = val
 		}
 	}
 	return body

@@ -147,9 +147,6 @@ type UpdateToolsetPayload struct {
 	DefaultEnvironmentSlug *types.Slug
 	// List of tool URNs to include in the toolset
 	ToolUrns []string
-	// List of prompt template names to include (note: for actual prompts, not
-	// tools)
-	PromptTemplateNames []string
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool
 	// The slug of the MCP to use for the toolset

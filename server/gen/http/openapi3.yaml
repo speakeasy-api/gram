@@ -9809,11 +9809,6 @@ components:
                     description: The new name of the toolset
                 project_slug_input:
                     type: string
-                prompt_template_names:
-                    type: array
-                    items:
-                        type: string
-                    description: 'List of prompt template names to include (note: for actual prompts, not tools)'
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
@@ -9854,11 +9849,6 @@ components:
                 name:
                     type: string
                     description: The new name of the toolset
-                prompt_template_names:
-                    type: array
-                    items:
-                        type: string
-                    description: 'List of prompt template names to include (note: for actual prompts, not tools)'
                 tool_urns:
                     type: array
                     items:

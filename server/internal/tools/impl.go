@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 	vr "github.com/speakeasy-api/gram/server/internal/variations/repo"
 	tplRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 )
@@ -207,12 +206,10 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			}
 		}
 
-		// Create HTTP tool URN
-		toolUrn := urn.NewTool(urn.ToolKindHTTP, "project", tool.Name)
-
 		result.HTTPTools[i] = &types.HTTPToolDefinition{
 			ToolType:            constants.ToolTypeHTTP,
 			ID:                  tool.ID.String(),
+			ToolUrn:             tool.ToolUrn.String(),
 			DeploymentID:        tool.DeploymentID.String(),
 			ProjectID:           authCtx.ProjectID.String(),
 			Name:                name,
@@ -233,7 +230,6 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			Security:            conv.Ptr(string(tool.Security)),
 			DefaultServerURL:    conv.FromPGText[string](tool.DefaultServerUrl),
 			PackageName:         pkg,
-			ToolUrn:             toolUrn.String(),
 			CreatedAt:           tool.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
 			Canonical:           canonical,
@@ -253,13 +249,11 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			hint = []string{}
 		}
 
-		// Create prompt template URN
-		templateUrn := urn.NewTool(urn.ToolKindPrompt, "project", template.Name)
-
 		result.PromptTemplates[i] = &types.PromptTemplate{
 			ID:            template.ID.String(),
 			HistoryID:     template.HistoryID.String(),
 			PredecessorID: conv.FromNullableUUID(template.PredecessorID),
+			ToolUrn:       template.ToolUrn.String(),
 			Name:          types.Slug(template.Name),
 			Prompt:        template.Prompt,
 			Description:   conv.FromPGText[string](template.Description),
@@ -267,7 +261,6 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](template.Engine), "none"),
 			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](template.Kind), "prompt"),
 			ToolsHint:     hint,
-			ToolUrn:       templateUrn.String(),
 			CreatedAt:     template.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:     template.UpdatedAt.Time.Format(time.RFC3339),
 		}

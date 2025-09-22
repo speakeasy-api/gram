@@ -314,6 +314,7 @@ func DescribeToolset(
 			tool := &types.HTTPToolDefinition{
 				ToolType:            constants.ToolTypeHTTP,
 				ID:                  def.HttpToolDefinition.ID.String(),
+				ToolUrn:             def.HttpToolDefinition.ToolUrn.String(),
 				ProjectID:           def.HttpToolDefinition.Description,
 				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
 				Openapiv3DocumentID: conv.FromNullableUUID(def.HttpToolDefinition.Openapiv3DocumentID),
@@ -386,6 +387,7 @@ func DescribeToolset(
 
 		promptTemplates = append(promptTemplates, &types.PromptTemplate{
 			ID:            pt.ID.String(),
+			ToolUrn:       pt.ToolUrn.String,
 			HistoryID:     pt.HistoryID.String(),
 			PredecessorID: conv.FromNullableUUID(pt.PredecessorID),
 			Name:          types.Slug(pt.Name),
