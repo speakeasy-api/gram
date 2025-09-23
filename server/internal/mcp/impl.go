@@ -415,6 +415,20 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	hostedPageTmpl, err := template.New("hosted_page").Funcs(template.FuncMap{
 		"diff": func(a, b int) int { return a - b },
+		"indent": func(spaces int, text string) string {
+			if spaces <= 0 || text == "" {
+				return text
+			}
+			indent := strings.Repeat(" ", spaces)
+			lines := strings.Split(text, "\n")
+			for i := 1; i < len(lines); i++ {
+				if i == len(lines)-1 && lines[i] == "" {
+					continue
+				}
+				lines[i] = indent + lines[i]
+			}
+			return strings.Join(lines, "\n")
+		},
 	}).Parse(hostedPageTmplData)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted page template").Log(ctx, s.logger)
