@@ -31,6 +31,7 @@ import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useRoutes } from "@/routes";
+import { CheckIcon } from "lucide-react";
 
 export default function UploadOpenAPI() {
   const navigate = useNavigate();
@@ -361,7 +362,9 @@ export function UploadOpenAPIContent({
               <Accordion type="single" collapsible className="max-w-2xl">
                 <AccordionItem value="logs">
                   <AccordionTrigger className="text-base">
-                    ✓ Created {numtools} tools
+                    <div className="flex items-center gap-2">
+                      <CheckIcon className="size-4" /> Created {numtools} tools
+                    </div>
                   </AccordionTrigger>
                   <AccordionContent>
                     <DeploymentLogs
