@@ -4,6 +4,7 @@ import { CheckIcon, XIcon } from "lucide-react";
 import { Button } from "./ui/button";
 import { Heading } from "./ui/heading";
 import { Type } from "./ui/type";
+import { memo } from "react";
 
 // Step number component for the left side
 function StepNumber({
@@ -17,11 +18,13 @@ function StepNumber({
   active?: boolean;
   failed?: boolean;
 }) {
-  const Content = () => {
-    if (failed) return <XIcon className="size-4" />;
-    if (completed) return <CheckIcon className="size-4" />;
-    return <span>{number}</span>;
-  };
+  const Content = memo(
+    (props: { number: number; failed?: boolean; completed?: boolean }) => {
+      if (props.failed) return <XIcon className="size-4" />;
+      if (props.completed) return <CheckIcon className="size-4" />;
+      return <span>{props.number}</span>;
+    },
+  );
 
   return (
     <div
@@ -33,7 +36,7 @@ function StepNumber({
         failed && "bg-destructive text-destructive-foreground",
       )}
     >
-      <Content />
+      <Content number={number} completed={completed} failed={failed} />
     </div>
   );
 }
