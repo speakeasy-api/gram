@@ -128,7 +128,6 @@ func (p *ToolExtractor) doSpeakeasy(
 	globalServerEnvVar := strcase.ToSNAKE(string(docInfo.Slug) + "_SERVER_URL")
 	globalDefaultServer := extractDefaultServerSpeakeasy(ctx, logger, docInfo, doc.GetServers())
 
-	// Collect all tool definitions first
 	var allToolDefs []repo.BulkCreateOpenAPIv3ToolDefinitionsParams
 	var skippedCount int
 
@@ -190,18 +189,15 @@ func (p *ToolExtractor) doSpeakeasy(
 				continue
 			}
 
-			// Pre-validate constraints to avoid bulk insert failures
 			if !validateToolDefinition(ctx, logger, def, opID, op.method) {
 				skippedCount++
 				continue
 			}
 
-			// Add to bulk collection
 			allToolDefs = append(allToolDefs, convertToBulkParams(def))
 		}
 	}
 
-	// Bulk insert all valid tool definitions
 	if len(allToolDefs) > 0 {
 		insertedCount, err := tx.BulkCreateOpenAPIv3ToolDefinitions(ctx, allToolDefs)
 		if err != nil {
@@ -209,19 +205,19 @@ func (p *ToolExtractor) doSpeakeasy(
 			if errors.As(err, &pgErr) {
 				logger.ErrorContext(ctx, "bulk tool insertion failed",
 					attr.SlogErrorMessage(fmt.Sprintf("SQLSTATE %s: %s %s", pgErr.Code, pgErr.Message, pgErr.Detail)),
-					slog.Int("attempted_count", len(allToolDefs)), //nolint:sloglint // no custom attr for count
-					slog.Int("skipped_count", skippedCount),       //nolint:sloglint // no custom attr for count
+					attr.SlogAttemptedCount(len(allToolDefs)),
+					attr.SlogSkippedCount(skippedCount),
 				)
 			}
 			return nil, oops.E(oops.CodeUnexpected, err, "bulk tool insertion failed").Log(ctx, logger)
 		}
 
 		logger.InfoContext(ctx, "bulk tool insertion completed",
-			slog.Int("inserted_count", int(insertedCount)), //nolint:sloglint // no custom attr for count
-			slog.Int("skipped_count", skippedCount))        //nolint:sloglint // no custom attr for count
+			attr.SlogInsertedCount(int(insertedCount)),
+			attr.SlogSkippedCount(skippedCount))
 	} else {
 		logger.InfoContext(ctx, "no valid tools to insert",
-			slog.Int("skipped_count", skippedCount)) //nolint:sloglint // no custom attr for count
+			attr.SlogSkippedCount(skippedCount))
 	}
 
 	return &ToolExtractorResult{

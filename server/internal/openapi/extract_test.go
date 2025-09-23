@@ -319,11 +319,9 @@ func (m *MockedDBTX) QueryRow(ctx context.Context, sql string, args ...interface
 }
 
 func (m *MockedDBTX) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
-	// Count the rows by iterating through the source
 	var count int64
 	for rowSrc.Next() {
 		count++
-		// We don't need to do anything with the values, just count them
 		_, _ = rowSrc.Values()
 	}
 	if err := rowSrc.Err(); err != nil {
