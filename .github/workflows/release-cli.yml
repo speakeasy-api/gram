@@ -58,6 +58,6 @@ jobs:
           version: latest
           args: release --clean
         env:
-          GITHUB_TOKEN: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
-          # GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
           # CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
