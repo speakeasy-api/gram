@@ -39,15 +39,24 @@ type ClickhouseClient struct {
 
 func (c *ClickhouseClient) Exec(ctx context.Context, query string, args ...any) error {
 	err := c.Conn.Exec(ctx, query, args...)
-	return fmt.Errorf("exec query: %w", err)
+	if err != nil {
+		return fmt.Errorf("exec query: %w", err)
+	}
+	return nil
 }
 
 func (c *ClickhouseClient) Ping(ctx context.Context) error {
 	err := c.Conn.Ping(ctx)
-	return fmt.Errorf("ping: %w", err)
+	if err != nil {
+		return fmt.Errorf("ping: %w", err)
+	}
+	return nil
 }
 
 func (c *ClickhouseClient) Close() error {
 	err := c.Conn.Close()
-	return fmt.Errorf("close: %w", err)
+	if err != nil {
+		return fmt.Errorf("close: %w", err)
+	}
+	return nil
 }
