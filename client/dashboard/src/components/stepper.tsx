@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Check } from "lucide-react";
+import { CheckIcon, XIcon } from "lucide-react";
 import { Button } from "./ui/button";
 import { Heading } from "./ui/heading";
 import { Type } from "./ui/type";
@@ -10,11 +10,19 @@ function StepNumber({
   number,
   completed,
   active,
+  failed,
 }: {
   number: number;
   completed: boolean;
   active?: boolean;
+  failed?: boolean;
 }) {
+  const Content = () => {
+    if (failed) return <XIcon className="size-4" />;
+    if (completed) return <CheckIcon className="size-4" />;
+    return <span>{number}</span>;
+  };
+
   return (
     <div
       className={cn(
@@ -22,9 +30,10 @@ function StepNumber({
         active && "bg-primary text-primary-foreground",
         completed &&
           "dark:bg-emerald-900 dark:text-emerald-300 bg-emerald-300 text-emerald-900",
+        failed && "bg-destructive text-destructive-foreground",
       )}
     >
-      {completed ? <Check className="w-5 h-5" /> : <span>{number}</span>}
+      <Content />
     </div>
   );
 }
@@ -35,6 +44,7 @@ export type StepProps = {
   display: React.ReactNode;
   displayComplete: React.ReactNode;
   isComplete: boolean;
+  failed?: boolean;
 };
 
 export function Stepper({
@@ -60,6 +70,7 @@ export function Stepper({
           display={step.display}
           displayComplete={step.displayComplete}
           isComplete={step.isComplete}
+          failed={step.failed}
         />
       ))}
       {onComplete && allCompleted && (
@@ -84,6 +95,7 @@ export function Step({
   display,
   displayComplete,
   isComplete,
+  failed,
   activeStep,
 }: StepProps & {
   stepNumber: number;
@@ -104,6 +116,7 @@ export function Step({
         number={stepNumber}
         completed={isComplete}
         active={stepNumber === activeStep}
+        failed={failed}
       />
       <Stack gap={2} className="mb-4 w-full">
         <Heading variant="h2">{heading}</Heading>

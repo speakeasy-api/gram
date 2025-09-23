@@ -6,7 +6,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Button } from "@speakeasy-api/moonshine";
+import { Alert, Button } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
@@ -32,10 +32,10 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useRoutes } from "@/routes";
 
-export default function Onboarding() {
+export default function UploadOpenAPI() {
   const navigate = useNavigate();
 
-  const onOnboardingComplete = () => {
+  const onStepsComplete = () => {
     navigate("/toolsets");
   };
 
@@ -44,12 +44,12 @@ export default function Onboarding() {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <OnboardingContent onOnboardingComplete={onOnboardingComplete} />
+      <UploadOpenAPIContent onStepsComplete={onStepsComplete} />
     </Page>
   );
 }
 
-export function useOnboardingSteps(checkDocumentSlugUnique = true) {
+export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
   const project = useProject();
   const session = useSession();
   const client = useSdkClient();
@@ -257,11 +257,11 @@ const useAssetNumtools = (
     : 0;
 };
 
-export function OnboardingContent({
-  onOnboardingComplete,
+export function UploadOpenAPIContent({
+  onStepsComplete,
   className,
 }: {
-  onOnboardingComplete?: (deployment: Deployment) => void;
+  onStepsComplete?: (deployment: Deployment) => void;
   className?: string;
 }) {
   const {
@@ -275,7 +275,7 @@ export function OnboardingContent({
     apiNameError,
     file,
     asset,
-  } = useOnboardingSteps();
+  } = useUploadOpenAPISteps();
   const routes = useRoutes();
 
   const numtools = useAssetNumtools(asset?.asset.id, createdDeployment);
@@ -343,16 +343,16 @@ export function OnboardingContent({
 
         if (createdDeployment.status === "failed")
           return (
-            <Type className="text-destructive">
-              ✗ Deployment failed. Check the{" "}
+            <Alert variant="error" dismissible={false} className="text-sm">
+              The deployment failed. Check the{" "}
               <routes.deployments.deployment.Link
                 params={[createdDeployment.id]}
                 className="text-link"
               >
                 deployment logs
               </routes.deployments.deployment.Link>{" "}
-              for more details.
-            </Type>
+              for more information.
+            </Alert>
           );
 
         return (
@@ -376,6 +376,7 @@ export function OnboardingContent({
         );
       },
       isComplete: !!createdDeployment,
+      failed: createdDeployment?.status === "failed",
     },
   ];
 
@@ -383,7 +384,7 @@ export function OnboardingContent({
     <Page.Body className={className}>
       <Stepper
         steps={steps}
-        onComplete={() => onOnboardingComplete?.(createdDeployment!)}
+        onComplete={() => onStepsComplete?.(createdDeployment!)}
       />
     </Page.Body>
   );

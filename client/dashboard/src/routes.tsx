@@ -16,7 +16,7 @@ import Register from "./pages/login/Register";
 import { MCPDetailPage, MCPDetailsRoot } from "./pages/mcp/MCPDetails";
 import { MCPHostedPage } from "./pages/mcp/MCPHostedPage";
 import { MCPOverview, MCPRoot } from "./pages/mcp/MCPOverview";
-import Onboarding from "./pages/onboarding/Onboarding";
+import UploadOpenAPI from "./pages/onboarding/UploadOpenAPI";
 import { OnboardingWizard } from "./pages/onboarding/Wizard";
 import Playground from "./pages/playground/Playground";
 import NewPromptPage from "./pages/prompts/NewPrompt";
@@ -233,7 +233,7 @@ const ROUTE_STRUCTURE = {
     title: "Upload OpenAPI",
     url: "upload",
     icon: "upload",
-    component: Onboarding,
+    component: UploadOpenAPI,
   },
   deployments: {
     title: "Deployments",
@@ -287,8 +287,8 @@ type TransformAppRoute<T extends AppRouteBasic> = T extends {
 type TransformElem<T> = T extends AppRouteBasic
   ? TransformAppRoute<T>
   : T extends AppRouteBasic
-  ? TransformRouteToGoTo<T>
-  : T;
+    ? TransformRouteToGoTo<T>
+    : T;
 
 type TransformRouteToGoTo<T> = {
   [K in keyof T]: TransformElem<T[K]>;
@@ -311,13 +311,13 @@ export const useRoutes = (): RoutesWithGoTo => {
     }
 
     return urlParts.every(
-      (part, index) => part === currentParts[index] || part.startsWith(":")
+      (part, index) => part === currentParts[index] || part.startsWith(":"),
     );
   };
 
   const addRouteUtilities = (
     route: AppRouteBasic,
-    parent?: string
+    parent?: string,
   ): AppRoute => {
     if (parent === undefined && !route.url.startsWith("/")) {
       parent = `/:orgSlug/:projectSlug`;
@@ -343,7 +343,9 @@ export const useRoutes = (): RoutesWithGoTo => {
             const v = params.shift();
             if (!v) {
               // Instead of throwing an error, fallback to home page
-              console.warn(`No value provided for ${part}, falling back to home page`);
+              console.warn(
+                `No value provided for ${part}, falling back to home page`,
+              );
               return `/${orgSlug}/${projectSlug}`;
             }
             finalParts.push(v);
@@ -410,19 +412,19 @@ export const useRoutes = (): RoutesWithGoTo => {
 
   const addGoToToRoutes = <T extends AppRoutesBasic>(
     routes: T,
-    parent?: string
+    parent?: string,
   ): TransformRouteToGoTo<T> => {
     return Object.fromEntries(
       Object.entries(routes).map(([key, route]) => [
         key,
         addRouteUtilities(route, parent),
-      ])
+      ]),
     ) as TransformRouteToGoTo<T>;
   };
 
   const routes: RoutesWithGoTo = useMemo(
     () => addGoToToRoutes(ROUTE_STRUCTURE),
-    [location.pathname]
+    [location.pathname],
   );
 
   return routes;
