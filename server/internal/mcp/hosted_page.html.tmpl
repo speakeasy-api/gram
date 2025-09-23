@@ -1007,11 +1007,7 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
         "{{ .MCPURL }}"{{- range $i, $header := .Headers }},
         "--header",
         "{{ printf "%s:${user_config.%s}" $header (index $.EnvHeaders $i) }}"{{- end }}
-      ]{{- if gt (len .Headers) 0 }},
-      "env": {
-        {{- range $i, $header := .Headers }}{{- if $i }},{{ end }}
-        "{{ index $.EnvHeaders $i }}": "<your-value-here>"{{- end }}
-      }{{- end }}
+      ]
     }
   },
   "user_config": {
