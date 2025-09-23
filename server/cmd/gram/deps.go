@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/tool-metrics"
 )
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
@@ -59,21 +60,30 @@ type dbClientOptions struct {
 	enableUnsafeLogging bool
 }
 
-func newClickhouseClient(connstring string) (clickhouse.Conn, error) {
+func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (tm.ToolMetricsClient, error) {
 	conn, err := clickhouse.Open(&clickhouse.Options{
 		Auth: clickhouse.Auth{
-			Database: "gram_metrics",
-			Username: "gram",
-			Password: "gram",
+			Database: c.String("clickhouse-database"),
+			Username: c.String("clickhouse-username"),
+			Password: c.String("clickhouse-password"),
 		},
-		Addr:     []string{connstring},
+		Addr:     []string{c.String("clickhouse-host")},
 		Protocol: clickhouse.HTTP,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create clickhouse client: %w", err)
+		logger.WarnContext(ctx, "error connecting to clickhouse; falling back to stub tool call metrics client")
+		return &tm.StubToolMetricsClient{}, nil
 	}
 
-	return conn, nil
+	if err = conn.Ping(ctx); err != nil {
+		logger.WarnContext(ctx, "failed to ping clickhouse; falling back to stub tool call metrics client", attr.SlogError(err))
+		return &tm.StubToolMetricsClient{}, nil
+	}
+
+	return &tm.ClickhouseClient{
+		Conn:   conn,
+		Logger: logger,
+	}, nil
 }
 
 func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, connstring string, opts dbClientOptions) (*pgxpool.Pool, error) {

@@ -12,10 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/tool-metrics"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -304,10 +304,28 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
-			Name:     "clickhouse-url",
-			Usage:    "Clickhouse URL",
+			Name:     "clickhouse-host",
+			Usage:    "Clickhouse Host",
 			Required: false,
-			EnvVars:  []string{"GRAM_CLICKHOUSE_URL"},
+			EnvVars:  []string{"CLICKHOUSE_HOST"},
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-database",
+			Usage:    "Clickhouse Database",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_DATABASE"},
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-username",
+			Usage:    "Clickhouse Username",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_USERNAME"},
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-password",
+			Usage:    "Clickhouse Password",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_PASSWORD"},
 		},
 	}
 
@@ -342,22 +360,17 @@ func newStartCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			ch, err := newClickhouseClient(c.String("clickhouse-url"))
+			tcm, err := newToolMetricsClient(ctx, logger, c)
 			if err != nil {
-				return fmt.Errorf("failed to connect to clickhouse: %w", err)
+				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
 			}
 
-			if err = ch.Ping(ctx); err != nil {
-				logger.ErrorContext(ctx, "failed to ping clickhouse", attr.SlogError(err))
-				return fmt.Errorf("failed to ping clickhouse: %w", err)
-			}
-
-			defer func(c clickhouse.Conn) {
+			defer func(c tm.ToolMetricsClient) {
 				closeErr := c.Close()
 				if closeErr != nil {
-					logger.ErrorContext(ctx, "failed to close clickhouse connection", attr.SlogError(closeErr))
+					logger.ErrorContext(ctx, "failed to close tool metrics client connection", attr.SlogError(closeErr))
 				}
-			}(ch)
+			}(tcm)
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
