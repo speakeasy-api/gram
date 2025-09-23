@@ -9,6 +9,8 @@ builds:
       - linux
       - windows
       - darwin
+    flags:
+      - -trimpath
     ldflags:
       - "-s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}} -X main.builtBy=goreleaser -X main.artifactArch={{ .Os }}_{{ .Arch }}{{ if .Arm }}v{{ .Arm }}{{ end }}"
 archives:
