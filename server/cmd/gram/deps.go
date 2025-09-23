@@ -61,7 +61,7 @@ type dbClientOptions struct {
 }
 
 func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (tm.ToolMetricsClient, error) {
-	conn, err := clickhouse.Open(&clickhouse.Options{
+	conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // too many fields
 		Auth: clickhouse.Auth{
 			Database: c.String("clickhouse-database"),
 			Username: c.String("clickhouse-username"),

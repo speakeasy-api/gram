@@ -2,6 +2,7 @@ package tool_metrics
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -37,13 +38,16 @@ type ClickhouseClient struct {
 }
 
 func (c *ClickhouseClient) Exec(ctx context.Context, query string, args ...any) error {
-	return c.Conn.Exec(ctx, query, args...)
+	err := c.Conn.Exec(ctx, query, args...)
+	return fmt.Errorf("exec query: %w", err)
 }
 
 func (c *ClickhouseClient) Ping(ctx context.Context) error {
-	return c.Conn.Ping(ctx)
+	err := c.Conn.Ping(ctx)
+	return fmt.Errorf("ping: %w", err)
 }
 
 func (c *ClickhouseClient) Close() error {
-	return c.Conn.Close()
+	err := c.Conn.Close()
+	return fmt.Errorf("close: %w", err)
 }
