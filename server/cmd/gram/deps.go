@@ -295,7 +295,7 @@ func newBillingProvider(
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to parse local user: %w", err)
 		}
-		stub := billing.NewStubClient(logger, tracerProvider, *userInfo)
+		stub := billing.NewStubClient(logger, tracerProvider, userInfo)
 		return stub, stub, nil
 	default:
 		return nil, nil, fmt.Errorf("billing provider is not configured")

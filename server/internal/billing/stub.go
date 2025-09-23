@@ -28,16 +28,20 @@ type StubClient struct {
 	localUser stub.LocalUser
 }
 
-func NewStubClient(logger *slog.Logger, tracerProvider trace.TracerProvider, userInfo stub.LocalUser) *StubClient {
+func NewStubClient(logger *slog.Logger, tracerProvider trace.TracerProvider, userInfo *stub.LocalUser) *StubClient {
 	if logger == nil {
 		logger = slog.Default()
+	}
+
+	if userInfo == nil {
+		userInfo = &stub.LocalUser{}
 	}
 
 	return &StubClient{
 		mut:       sync.Mutex{},
 		logger:    logger.With(attr.SlogComponent("billing-stub")),
 		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/billing"),
-		localUser: userInfo,
+		localUser: *userInfo,
 	}
 }
 

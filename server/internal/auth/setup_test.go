@@ -289,7 +289,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host")
 
-	billingClient := billing.NewStubClient(logger, tracerProvider)
+	billingClient := billing.NewStubClient(logger, tracerProvider, nil)
 
 	sessionManager := sessions.NewManager(logger, conn, redisClient, cache.Suffix("gram-test"), mockServer.URL, "test-secret-key", pylon, posthog, billingClient)
 
