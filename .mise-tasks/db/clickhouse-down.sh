@@ -11,12 +11,12 @@ echo "Rolling back ClickHouse migrations..."
 for migration_file in $(ls -r clickhouse/migrations/*.down.sql 2>/dev/null || true); do
     if [ -f "$migration_file" ]; then
         echo "Rolling back migration: $(basename "$migration_file")"
-        docker exec gram-clickhouse-1 clickhouse-client \
-            --user "$CLICKHOUSE_USER" \
+        clickhouse client \
+            --user "$CLICKHOUSE_USERNAME" \
             --password "$CLICKHOUSE_PASSWORD" \
             --host "$CLICKHOUSE_HOST" \
             --port "$CLICKHOUSE_NATIVE_PORT" \
-            --database "$CLICKHOUSE_DB" \
+            --database "$CLICKHOUSE_DATABASE" \
             --query "$(cat "$migration_file")"
     fi
 done

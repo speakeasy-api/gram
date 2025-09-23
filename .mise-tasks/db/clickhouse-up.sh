@@ -11,12 +11,12 @@ echo "Applying ClickHouse migrations..."
 for migration_file in clickhouse/migrations/*.up.sql; do
     if [ -f "$migration_file" ]; then
         echo "Applying migration: $(basename "$migration_file")"
-        docker exec gram-clickhouse-1 clickhouse-client \
-            --user "$CLICKHOUSE_USER" \
+        clickhouse client \
+            --user "$CLICKHOUSE_USERNAME" \
             --password "$CLICKHOUSE_PASSWORD" \
             --host "$CLICKHOUSE_HOST" \
             --port "$CLICKHOUSE_NATIVE_PORT" \
-            --database "$CLICKHOUSE_DB" \
+            --database "$CLICKHOUSE_DATABASE" \
             --query "$(cat "$migration_file")"
     fi
 done
