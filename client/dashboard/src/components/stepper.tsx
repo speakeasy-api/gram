@@ -1,30 +1,42 @@
 import { cn } from "@/lib/utils";
 import { Stack } from "@speakeasy-api/moonshine";
-import { Check } from "lucide-react";
+import { CheckIcon, XIcon } from "lucide-react";
 import { Button } from "./ui/button";
 import { Heading } from "./ui/heading";
 import { Type } from "./ui/type";
+import { memo } from "react";
 
 // Step number component for the left side
 function StepNumber({
   number,
   completed,
   active,
+  failed,
 }: {
   number: number;
   completed: boolean;
   active?: boolean;
+  failed?: boolean;
 }) {
+  const Content = memo(
+    (props: { number: number; failed?: boolean; completed?: boolean }) => {
+      if (props.failed) return <XIcon className="size-4" />;
+      if (props.completed) return <CheckIcon className="size-4" />;
+      return <span>{props.number}</span>;
+    },
+  );
+
   return (
     <div
       className={cn(
         "flex items-center justify-center w-7 h-7 rounded-full bg-accent mt-1",
         active && "bg-primary text-primary-foreground",
         completed &&
-          "dark:bg-emerald-900 dark:text-emerald-300 bg-emerald-300 text-emerald-900"
+          "dark:bg-emerald-900 dark:text-emerald-300 bg-emerald-300 text-emerald-900",
+        failed && "bg-destructive text-destructive-foreground",
       )}
     >
-      {completed ? <Check className="w-5 h-5" /> : <span>{number}</span>}
+      <Content number={number} completed={completed} failed={failed} />
     </div>
   );
 }
@@ -35,6 +47,7 @@ export type StepProps = {
   display: React.ReactNode;
   displayComplete: React.ReactNode;
   isComplete: boolean;
+  failed?: boolean;
 };
 
 export function Stepper({
@@ -60,6 +73,7 @@ export function Stepper({
           display={step.display}
           displayComplete={step.displayComplete}
           isComplete={step.isComplete}
+          failed={step.failed}
         />
       ))}
       {onComplete && allCompleted && (
@@ -84,6 +98,7 @@ export function Step({
   display,
   displayComplete,
   isComplete,
+  failed,
   activeStep,
 }: StepProps & {
   stepNumber: number;
@@ -97,13 +112,14 @@ export function Step({
       direction={"horizontal"}
       className={cn(
         "trans opacity-50 mb-4 w-full",
-        isActive && "opacity-100 mb-8"
+        isActive && "opacity-100 mb-8",
       )}
     >
       <StepNumber
         number={stepNumber}
         completed={isComplete}
         active={stepNumber === activeStep}
+        failed={failed}
       />
       <Stack gap={2} className="mb-4 w-full">
         <Heading variant="h2">{heading}</Heading>
