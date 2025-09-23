@@ -9,11 +9,15 @@ import (
 
 type ToolMetricsClient interface {
 	Ping(ctx context.Context) error
-	Stats(ctx context.Context) (map[string]interface{}, error)
+	Exec(ctx context.Context, query string, args ...any) error
 	Close() error
 }
 
 type StubToolMetricsClient struct{}
+
+func (n *StubToolMetricsClient) Exec(ctx context.Context, query string, args ...any) error {
+	return nil
+}
 
 func (n *StubToolMetricsClient) Ping(ctx context.Context) error {
 	return nil
@@ -32,12 +36,12 @@ type ClickhouseClient struct {
 	Logger *slog.Logger
 }
 
-func (c *ClickhouseClient) Ping(ctx context.Context) error {
-	return c.Conn.Ping(ctx)
+func (c *ClickhouseClient) Exec(ctx context.Context, query string, args ...any) error {
+	return c.Conn.Exec(ctx, query, args...)
 }
 
-func (c *ClickhouseClient) Stats(ctx context.Context) (map[string]interface{}, error) {
-	return c.Stats(ctx)
+func (c *ClickhouseClient) Ping(ctx context.Context) error {
+	return c.Conn.Ping(ctx)
 }
 
 func (c *ClickhouseClient) Close() error {
