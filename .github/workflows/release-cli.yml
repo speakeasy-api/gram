@@ -34,10 +34,12 @@ jobs:
           skip-on-empty: "false"
           preset: conventionalcommits
           tag-prefix: "@gram/cli@"
-          pre-release: true
-          pre-release-identifier: "rc"
       - name: Prepare version
         shell: bash
+        # GoReleaser tags must be valid semver, but conventional-changelog
+        # should be namespaced (e.g. @gram/cli). Strip the prefix from the tag
+        # so that GoReleaser can find a valid tag. If this gets too messy,
+        # consider https://goreleaser.com/cookbooks/set-a-custom-git-tag/
         run: |
           CLEAN_TAG=$(sed 's|@gram/cli@||' <<< "${{ steps.changelog.outputs.tag }}")
           echo "GORELEASER_CURRENT_TAG=$CLEAN_TAG" >> $GITHUB_ENV
