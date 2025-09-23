@@ -67,4 +67,4 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
-          # CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
