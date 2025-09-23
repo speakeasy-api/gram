@@ -45,3 +45,62 @@ func (r iteratorForBatchLogEvents) Err() error {
 func (q *Queries) BatchLogEvents(ctx context.Context, arg []BatchLogEventsParams) (int64, error) {
 	return q.db.CopyFrom(ctx, []string{"deployment_logs"}, []string{"deployment_id", "project_id", "event", "message", "attachment_id", "attachment_type"}, &iteratorForBatchLogEvents{rows: arg})
 }
+
+// iteratorForBulkCreateOpenAPIv3ToolDefinitions implements pgx.CopyFromSource.
+type iteratorForBulkCreateOpenAPIv3ToolDefinitions struct {
+	rows                 []BulkCreateOpenAPIv3ToolDefinitionsParams
+	skippedFirstNextCall bool
+}
+
+func (r *iteratorForBulkCreateOpenAPIv3ToolDefinitions) Next() bool {
+	if len(r.rows) == 0 {
+		return false
+	}
+	if !r.skippedFirstNextCall {
+		r.skippedFirstNextCall = true
+		return true
+	}
+	r.rows = r.rows[1:]
+	return len(r.rows) > 0
+}
+
+func (r iteratorForBulkCreateOpenAPIv3ToolDefinitions) Values() ([]interface{}, error) {
+	return []interface{}{
+		r.rows[0].ProjectID,
+		r.rows[0].DeploymentID,
+		r.rows[0].Openapiv3DocumentID,
+		r.rows[0].ToolUrn,
+		r.rows[0].Name,
+		r.rows[0].UntruncatedName,
+		r.rows[0].Openapiv3Operation,
+		r.rows[0].Summary,
+		r.rows[0].Description,
+		r.rows[0].Tags,
+		r.rows[0].Confirm,
+		r.rows[0].ConfirmPrompt,
+		r.rows[0].XGram,
+		r.rows[0].OriginalName,
+		r.rows[0].OriginalSummary,
+		r.rows[0].OriginalDescription,
+		r.rows[0].Security,
+		r.rows[0].HttpMethod,
+		r.rows[0].Path,
+		r.rows[0].SchemaVersion,
+		r.rows[0].Schema,
+		r.rows[0].HeaderSettings,
+		r.rows[0].QuerySettings,
+		r.rows[0].PathSettings,
+		r.rows[0].ServerEnvVar,
+		r.rows[0].DefaultServerUrl,
+		r.rows[0].RequestContentType,
+		r.rows[0].ResponseFilter,
+	}, nil
+}
+
+func (r iteratorForBulkCreateOpenAPIv3ToolDefinitions) Err() error {
+	return nil
+}
+
+func (q *Queries) BulkCreateOpenAPIv3ToolDefinitions(ctx context.Context, arg []BulkCreateOpenAPIv3ToolDefinitionsParams) (int64, error) {
+	return q.db.CopyFrom(ctx, []string{"http_tool_definitions"}, []string{"project_id", "deployment_id", "openapiv3_document_id", "tool_urn", "name", "untruncated_name", "openapiv3_operation", "summary", "description", "tags", "confirm", "confirm_prompt", "x_gram", "original_name", "original_summary", "original_description", "security", "http_method", "path", "schema_version", "schema", "header_settings", "query_settings", "path_settings", "server_env_var", "default_server_url", "request_content_type", "response_filter"}, &iteratorForBulkCreateOpenAPIv3ToolDefinitions{rows: arg})
+}

@@ -455,6 +455,67 @@ INSERT INTO http_tool_definitions (
 )
 RETURNING *;
 
+-- name: BulkCreateOpenAPIv3ToolDefinitions :copyfrom
+INSERT INTO http_tool_definitions (
+    project_id
+  , deployment_id
+  , openapiv3_document_id
+  , tool_urn
+  , name
+  , untruncated_name
+  , openapiv3_operation
+  , summary
+  , description
+  , tags
+  , confirm
+  , confirm_prompt
+  , x_gram
+  , original_name
+  , original_summary
+  , original_description
+  , security
+  , http_method
+  , path
+  , schema_version
+  , schema
+  , header_settings
+  , query_settings
+  , path_settings
+  , server_env_var
+  , default_server_url
+  , request_content_type
+  , response_filter
+) VALUES (
+    @project_id
+  , @deployment_id
+  , @openapiv3_document_id
+  , @tool_urn
+  , @name
+  , @untruncated_name
+  , @openapiv3_operation
+  , @summary
+  , @description
+  , @tags
+  , @confirm
+  , @confirm_prompt
+  , @x_gram
+  , @original_name
+  , @original_summary
+  , @original_description
+  , @security
+  , @http_method
+  , @path
+  , @schema_version
+  , @schema
+  , @header_settings
+  , @query_settings
+  , @path_settings
+  , @server_env_var
+  , @default_server_url
+  , @request_content_type
+  , @response_filter
+);
+
 -- name: CreateHTTPSecurity :one
 INSERT INTO http_security (
     key

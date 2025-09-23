@@ -73,6 +73,73 @@ func parseLibOpenAPI(ctx context.Context, logger *slog.Logger, tracer trace.Trac
 	return document, v3Model, nil
 }
 
+func validateToolDefinition(ctx context.Context, logger *slog.Logger, def repo.CreateOpenAPIv3ToolDefinitionParams, opID string, method string) bool {
+	valid := true
+
+	if len(def.Name) > 100 {
+		valid = false
+		logger.WarnContext(ctx, "skipping tool: name exceeds character limit",
+			attr.SlogEvent("openapi:warning:name-too-long"),
+			attr.SlogOpenAPIOperationID(opID),
+			attr.SlogOpenAPIMethod(method),
+			attr.SlogValueInt(len(def.Name)),
+		)
+	}
+
+	if def.Openapiv3Operation.Valid && len(def.Openapiv3Operation.String) > 255 {
+		valid = false
+		logger.WarnContext(ctx, "skipping tool: openapiv3_operation exceeds character limit",
+			attr.SlogEvent("openapi:warning:operation-too-long"),
+			attr.SlogOpenAPIOperationID(opID),
+			attr.SlogOpenAPIMethod(method),
+			attr.SlogValueInt(len(def.Openapiv3Operation.String)),
+		)
+	}
+
+	if len(def.Tags) > 40 {
+		valid = false
+		logger.WarnContext(ctx, "skipping tool: tags array exceeds limit",
+			attr.SlogEvent("openapi:warning:tags-too-many"),
+			attr.SlogOpenAPIOperationID(opID),
+			attr.SlogOpenAPIMethod(method),
+			attr.SlogValueInt(len(def.Tags)),
+		)
+	}
+
+	if len(def.HttpMethod) > 20 {
+		valid = false
+		logger.WarnContext(ctx, "skipping tool: http_method exceeds character limit",
+			attr.SlogEvent("openapi:warning:method-too-long"),
+			attr.SlogOpenAPIOperationID(opID),
+			attr.SlogOpenAPIMethod(method),
+			attr.SlogValueInt(len(def.HttpMethod)),
+		)
+	}
+
+	if len(def.Path) > 2000 {
+		valid = false
+		logger.WarnContext(ctx, "skipping tool: path exceeds character limit",
+			attr.SlogEvent("openapi:warning:path-too-long"),
+			attr.SlogOpenAPIOperationID(opID),
+			attr.SlogOpenAPIPath(def.Path),
+			attr.SlogOpenAPIMethod(method),
+			attr.SlogValueInt(len(def.Path)),
+		)
+	}
+
+	if len(def.SchemaVersion) > 20 {
+		valid = false
+		logger.WarnContext(ctx, "skipping tool: schema_version exceeds character limit",
+			attr.SlogEvent("openapi:warning:schema-version-too-long"),
+			attr.SlogOpenAPIOperationID(opID),
+			attr.SlogOpenAPIMethod(method),
+			attr.SlogValueInt(len(def.SchemaVersion)),
+		)
+	}
+
+	return valid
+}
+
 func (p *ToolExtractor) doLibOpenAPI(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -127,8 +194,6 @@ func (p *ToolExtractor) doLibOpenAPI(
 		}
 	}
 
-	var writeErrCount int
-	var writeErr error
 	securitySchemes := make(map[string]repo.HttpSecurity, len(securitySchemesParams))
 	for key, scheme := range securitySchemesParams {
 		sec, err := tx.CreateHTTPSecurity(ctx, *scheme)
@@ -141,6 +206,10 @@ func (p *ToolExtractor) doLibOpenAPI(
 
 	globalServerEnvVar := strcase.ToSNAKE(string(docInfo.Slug) + "_SERVER_URL")
 	globalDefaultServer := extractDefaultServerLibOpenAPI(ctx, logger, docInfo, v3Model.Model.Servers)
+
+	// Collect all tool definitions first
+	var allToolDefs []repo.BulkCreateOpenAPIv3ToolDefinitionsParams
+	var skippedCount int
 
 	for path, pathItem := range v3Model.Model.Paths.PathItems.FromOldest() {
 		ops := []operationMetadata[v3.Operation]{
@@ -183,36 +252,42 @@ func (p *ToolExtractor) doLibOpenAPI(
 					task.OnOperationSkipped(err)
 				}
 				_ = oops.E(oops.CodeUnexpected, err, "%s: %s: skipped operation due to error: %s", docInfo.Name, opID, err.Error()).Log(ctx, logger)
+				skippedCount++
 				continue
 			}
 
-			if _, err := tx.CreateOpenAPIv3ToolDefinition(ctx, def); err != nil {
-				var pgErr *pgconn.PgError
-				if errors.As(err, &pgErr) {
-					// Special logging for path constraint violations
-					if pgErr.ConstraintName == "http_tool_definitions_path_check" {
-						logger.ErrorContext(ctx, "path exceeds 2000 character limit",
-							attr.SlogEvent("openapi:error:path-too-long"),
-							attr.SlogOpenAPIOperationID(opID),
-							attr.SlogOpenAPIPath(path),
-							attr.SlogValueInt(len(path)),
-							attr.SlogOpenAPIMethod(op.method),
-						)
-					}
-					err = fmt.Errorf("%s: %s %s (SQLSTATE %s)", docInfo.Name, pgErr.Message, pgErr.Detail, pgErr.Code)
-				}
-				// Only capture the first error as the rest will just be transaction aborted errors
-				if writeErr == nil {
-					writeErr = err
-				}
-				writeErrCount++
+			// Pre-validate constraints to avoid bulk insert failures
+			if !validateToolDefinition(ctx, logger, def, opID, op.method) {
+				skippedCount++
+				continue
 			}
+
+			// Add to bulk collection
+			allToolDefs = append(allToolDefs, convertToBulkParams(def))
 		}
 	}
 
-	if writeErrCount > 0 {
-		err := oops.Permanent(fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr))
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to save %d tool definitions", writeErrCount).Log(ctx, logger)
+	// Bulk insert all valid tool definitions
+	if len(allToolDefs) > 0 {
+		insertedCount, err := tx.BulkCreateOpenAPIv3ToolDefinitions(ctx, allToolDefs)
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				logger.ErrorContext(ctx, "bulk tool insertion failed",
+					attr.SlogErrorMessage(fmt.Sprintf("SQLSTATE %s: %s %s", pgErr.Code, pgErr.Message, pgErr.Detail)),
+					slog.Int("attempted_count", len(allToolDefs)), //nolint:sloglint // no custom attr for count
+					slog.Int("skipped_count", skippedCount),      //nolint:sloglint // no custom attr for count
+				)
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "bulk tool insertion failed").Log(ctx, logger)
+		}
+
+		logger.InfoContext(ctx, "bulk tool insertion completed",
+			slog.Int("inserted_count", int(insertedCount)), //nolint:sloglint // no custom attr for count
+			slog.Int("skipped_count", skippedCount))        //nolint:sloglint // no custom attr for count
+	} else {
+		logger.InfoContext(ctx, "no valid tools to insert",
+			slog.Int("skipped_count", skippedCount)) //nolint:sloglint // no custom attr for count
 	}
 
 	return &ToolExtractorResult{
