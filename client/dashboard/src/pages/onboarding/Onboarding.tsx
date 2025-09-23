@@ -30,6 +30,7 @@ import {
 import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { useRoutes } from "@/routes";
 
 export default function Onboarding() {
   const navigate = useNavigate();
@@ -236,14 +237,14 @@ export function useOnboardingSteps(checkDocumentSlugUnique = true) {
 
 const useAssetNumtools = (
   assetId: string | undefined,
-  deployment: Deployment | undefined
+  deployment: Deployment | undefined,
 ) => {
   const { data: tools } = useListTools({
     deploymentId: deployment?.id,
   });
 
   const documentId = deployment?.openapiv3Assets.find(
-    (doc) => doc.assetId === assetId
+    (doc) => doc.assetId === assetId,
   )?.id;
 
   return documentId
@@ -251,7 +252,7 @@ const useAssetNumtools = (
         (tool) =>
           tool.openapiv3DocumentId !== undefined &&
           tool.deploymentId === deployment?.id &&
-          tool.openapiv3DocumentId === documentId
+          tool.openapiv3DocumentId === documentId,
       ).length
     : 0;
 };
@@ -275,6 +276,7 @@ export function OnboardingContent({
     file,
     asset,
   } = useOnboardingSteps();
+  const routes = useRoutes();
 
   const numtools = useAssetNumtools(asset?.asset.id, createdDeployment);
 
@@ -336,25 +338,43 @@ export function OnboardingContent({
           <Spinner />
         </>
       ),
-      displayComplete: (
-        <div>
-          {createdDeployment ? (
-            <Accordion type="single" collapsible className="max-w-2xl">
-              <AccordionItem value="logs">
-                <AccordionTrigger className="text-base">
-                  ✓ Created {numtools} tools
-                </AccordionTrigger>
-                <AccordionContent>
-                  <DeploymentLogs
-                    deploymentId={createdDeployment?.id}
-                    onlyErrors
-                  />
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          ) : null}
-        </div>
-      ),
+      get displayComplete() {
+        if (!createdDeployment) return null;
+
+        if (createdDeployment.status === "failed")
+          return (
+            <Type className="text-destructive">
+              ✗ Deployment failed. Check the{" "}
+              <routes.deployments.deployment.Link
+                params={[createdDeployment.id]}
+                className="text-link"
+              >
+                deployment logs
+              </routes.deployments.deployment.Link>{" "}
+              for more details.
+            </Type>
+          );
+
+        return (
+          <div>
+            {createdDeployment ? (
+              <Accordion type="single" collapsible className="max-w-2xl">
+                <AccordionItem value="logs">
+                  <AccordionTrigger className="text-base">
+                    ✓ Created {numtools} tools
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <DeploymentLogs
+                      deploymentId={createdDeployment?.id}
+                      onlyErrors
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            ) : null}
+          </div>
+        );
+      },
       isComplete: !!createdDeployment,
     },
   ];
@@ -404,7 +424,7 @@ export function DeploymentLogs(props: {
         key={e.id}
         className={cn(
           e.event.includes("error") && "text-destructive",
-          "py-1 px-4 dark:hover:bg-white/15 rounded hover:bg-gray-100"
+          "py-1 px-4 dark:hover:bg-white/15 rounded hover:bg-gray-100",
         )}
       >
         {e.message}

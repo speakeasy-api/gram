@@ -21,7 +21,7 @@ function StepNumber({
         "flex items-center justify-center w-7 h-7 rounded-full bg-accent mt-1",
         active && "bg-primary text-primary-foreground",
         completed &&
-          "dark:bg-emerald-900 dark:text-emerald-300 bg-emerald-300 text-emerald-900"
+          "dark:bg-emerald-900 dark:text-emerald-300 bg-emerald-300 text-emerald-900",
       )}
     >
       {completed ? <Check className="w-5 h-5" /> : <span>{number}</span>}
@@ -97,7 +97,7 @@ export function Step({
       direction={"horizontal"}
       className={cn(
         "trans opacity-50 mb-4 w-full",
-        isActive && "opacity-100 mb-8"
+        isActive && "opacity-100 mb-8",
       )}
     >
       <StepNumber
