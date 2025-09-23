@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type AddToolsetPromptTemplatesParams struct {
@@ -166,6 +167,50 @@ func (q *Queries) CreateToolset(ctx context.Context, arg CreateToolsetParams) (T
 	return i, err
 }
 
+const createToolsetVersion = `-- name: CreateToolsetVersion :one
+INSERT INTO toolset_versions (
+    toolset_id
+  , version
+  , tool_urns
+  , predecessor_id
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+)
+RETURNING id, toolset_id, version, tool_urns, predecessor_id, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateToolsetVersionParams struct {
+	ToolsetID     uuid.UUID
+	Version       int64
+	ToolUrns      []urn.Tool
+	PredecessorID uuid.NullUUID
+}
+
+func (q *Queries) CreateToolsetVersion(ctx context.Context, arg CreateToolsetVersionParams) (ToolsetVersion, error) {
+	row := q.db.QueryRow(ctx, createToolsetVersion,
+		arg.ToolsetID,
+		arg.Version,
+		arg.ToolUrns,
+		arg.PredecessorID,
+	)
+	var i ToolsetVersion
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.Version,
+		&i.ToolUrns,
+		&i.PredecessorID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const deleteToolset = `-- name: DeleteToolset :exec
 UPDATE toolsets
 SET deleted_at = clock_timestamp()
@@ -225,6 +270,67 @@ func (q *Queries) GetHTTPSecurityDefinitions(ctx context.Context, arg GetHTTPSec
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getLatestToolsetVersion = `-- name: GetLatestToolsetVersion :one
+SELECT id, toolset_id, version, tool_urns, predecessor_id, created_at, updated_at, deleted_at, deleted
+FROM toolset_versions
+WHERE toolset_id = $1
+  AND deleted IS FALSE
+ORDER BY version DESC
+LIMIT 1
+`
+
+func (q *Queries) GetLatestToolsetVersion(ctx context.Context, toolsetID uuid.UUID) (ToolsetVersion, error) {
+	row := q.db.QueryRow(ctx, getLatestToolsetVersion, toolsetID)
+	var i ToolsetVersion
+	err := row.Scan(
+		&i.ID,
+		&i.ToolsetID,
+		&i.Version,
+		&i.ToolUrns,
+		&i.PredecessorID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getPromptTemplateUrnsByNames = `-- name: GetPromptTemplateUrnsByNames :many
+SELECT DISTINCT pt.tool_urn
+FROM prompt_templates pt
+WHERE pt.name = ANY($1::TEXT[])
+  AND pt.project_id = $2
+  AND pt.deleted IS FALSE
+  AND pt.tool_urn IS NOT NULL
+ORDER BY pt.tool_urn
+`
+
+type GetPromptTemplateUrnsByNamesParams struct {
+	TemplateNames []string
+	ProjectID     uuid.UUID
+}
+
+func (q *Queries) GetPromptTemplateUrnsByNames(ctx context.Context, arg GetPromptTemplateUrnsByNamesParams) ([]urn.Tool, error) {
+	rows, err := q.db.Query(ctx, getPromptTemplateUrnsByNames, arg.TemplateNames, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []urn.Tool
+	for rows.Next() {
+		var tool_urn urn.Tool
+		if err := rows.Scan(&tool_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, tool_urn)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -311,6 +417,41 @@ func (q *Queries) GetPromptTemplatesForToolset(ctx context.Context, arg GetPromp
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getToolUrnsByNames = `-- name: GetToolUrnsByNames :many
+SELECT DISTINCT tool_urn
+FROM http_tool_definitions
+WHERE name = ANY($1::TEXT[])
+  AND project_id = $2
+  AND deleted IS FALSE
+  AND tool_urn IS NOT NULL
+ORDER BY tool_urn
+`
+
+type GetToolUrnsByNamesParams struct {
+	ToolNames []string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetToolUrnsByNames(ctx context.Context, arg GetToolUrnsByNamesParams) ([]urn.Tool, error) {
+	rows, err := q.db.Query(ctx, getToolUrnsByNames, arg.ToolNames, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []urn.Tool
+	for rows.Next() {
+		var tool_urn urn.Tool
+		if err := rows.Scan(&tool_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, tool_urn)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -426,6 +567,39 @@ func (q *Queries) GetToolsetByMcpSlugAndCustomDomain(ctx context.Context, arg Ge
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getToolsetPromptTemplateNames = `-- name: GetToolsetPromptTemplateNames :many
+SELECT tp.prompt_name
+FROM toolset_prompts tp
+WHERE tp.toolset_id = $1
+  AND tp.project_id = $2
+ORDER BY tp.prompt_name
+`
+
+type GetToolsetPromptTemplateNamesParams struct {
+	ToolsetID uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetToolsetPromptTemplateNames(ctx context.Context, arg GetToolsetPromptTemplateNamesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, getToolsetPromptTemplateNames, arg.ToolsetID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var prompt_name string
+		if err := rows.Scan(&prompt_name); err != nil {
+			return nil, err
+		}
+		items = append(items, prompt_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPublicToolsetsByOrganization = `-- name: ListPublicToolsetsByOrganization :many

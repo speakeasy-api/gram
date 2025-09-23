@@ -11,7 +11,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
 	go.opentelemetry.io/otel/trace v1.38.0
-	goa.design/goa/v3 v3.22.2
+	goa.design/goa/v3 v3.22.3
 )
 
 require (
