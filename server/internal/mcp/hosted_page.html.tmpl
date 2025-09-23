@@ -1000,7 +1000,15 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
   "server": {
     "type": "node",
     "entry_point": "npx",
-    "mcp_config": {{- .MCPConfig -}}
+    "mcp_config": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "{{ .MCPURL }}"{{- range $i, $header := .Headers }},
+        "--header",
+        "{{ printf "%s:${user_config.%s}" $header (index $.EnvHeaders $i) }}"{{- end }}
+      ]
+    }
   },
   "user_config": {
     {{- range $i, $header := .EnvHeaders }}{{- if $i }},{{ end }}
