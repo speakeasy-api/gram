@@ -17,24 +17,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"github.com/speakeasy-api/gram/server/internal/users/stub"
 )
-
-type localEnvFile map[string]struct {
-	UserEmail     string `json:"user_email"`
-	Admin         bool   `json:"admin"`
-	Organizations []struct {
-		OrganizationID   string `json:"organization_id"`
-		OrganizationName string `json:"organization_name"`
-		OrganizationSlug string `json:"organization_slug"`
-		AccountType      string `json:"account_type"`
-	} `json:"organizations"`
-}
 
 type Manager struct {
 	logger                 *slog.Logger
 	sessionCache           cache.TypedCacheObject[Session]
 	userInfoCache          cache.TypedCacheObject[CachedUserInfo]
-	localEnvFile           localEnvFile
+	stubbedUser            stub.LocalUser
 	unsafeLocal            bool
 	speakeasyServerAddress string
 	speakeasySecretKey     string
@@ -52,7 +42,7 @@ func NewManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client
 		logger:                 logger.With(attr.SlogComponent("sessions")),
 		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		localEnvFile:           localEnvFile{},
+		stubbedUser:            stub.LocalUser{},
 		unsafeLocal:            false,
 		speakeasyServerAddress: speakeasyServerAddress,
 		speakeasySecretKey:     speakeasySecretKey,

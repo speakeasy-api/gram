@@ -309,7 +309,7 @@ func (s *Service) Info(ctx context.Context, payload *gen.InfoPayload) (res *gen.
 	// Fully unpack the userInfo object
 	organizations := make([]*gen.OrganizationEntry, 0, len(userInfo.Organizations))
 	for _, org := range userInfo.Organizations {
-		// TODO: Not the cleanest but a temporary measue while in POC phase.
+		// TODO: Not the cleanest but a temporary measure while in POC phase.
 		// This may actually be bettter executed from elsewhere
 		projectRows, err := s.getProjectsOrSetupDefaults(ctx, org.ID)
 		if err != nil {

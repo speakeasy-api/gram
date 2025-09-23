@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
+	"github.com/speakeasy-api/gram/server/internal/users/stub"
 )
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
@@ -290,7 +291,11 @@ func newBillingProvider(
 		return pclient, pclient, nil
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
-		stub := billing.NewStubClient(logger, tracerProvider)
+		userInfo, err := stub.UnmarshalLocalUser(c.String("unsafe-local-env-path"), logger)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to parse local user: %w", err)
+		}
+		stub := billing.NewStubClient(logger, tracerProvider, *userInfo)
 		return stub, stub, nil
 	default:
 		return nil, nil, fmt.Errorf("billing provider is not configured")
