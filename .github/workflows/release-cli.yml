@@ -2,16 +2,17 @@ name: Release Gram CLI
 on:
   push:
     branches:
-      # TODO(cjea): pre-merge testing. Undo this change before merging.
-      # - main
-      - feat/age-541-release-gram-cli-homebrew
+      - main
+    paths:
+      - "cli/**/*.go"
   workflow_dispatch:
 permissions:
   contents: write
 jobs:
   release:
     name: Release Gram CLI
-    # NOTE(cjea): Using Windows runner for Chocolatey/Winget compatibility.
+    # NOTE(cjea): Using Windows runner for future Chocolatey/Winget
+    # compatibility.
     runs-on: windows-latest
     if: |
       startsWith(github.event.head_commit.message, 'feat') || startsWith(github.event.head_commit.message, 'fix')
