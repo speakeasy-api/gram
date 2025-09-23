@@ -205,6 +205,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
   const [search, setSearch] = useState("");
   const [tagFilters, setTagFilters] = useState<string[]>([]);
   const [methodFilters, setMethodFilters] = useState<string[]>([]);
+  const [enabledFilters, setEnabledFilters] = useState<string[]>([]);
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
@@ -263,12 +264,6 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
 
   const groupedTools = useGroupedHttpTools(tools?.tools ?? []);
 
-  // build method filter options from available tools
-  const methodOptions = useMemo(() => {
-    const methods = new Set<string>();
-    groupedTools.forEach((g) => g.tools.forEach((t) => methods.add((t.httpMethod || "OTHER").toUpperCase())));
-    return Array.from(methods).sort().map((m) => ({ label: m, value: m }));
-  }, [groupedTools]);
 
   const tagFilterOptions = groupedTools.flatMap((group) =>
     group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`))
@@ -287,7 +282,12 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     />
   );
 
-  // method filter MultiSelect
+  const methodOptions = useMemo(() => {
+    const methods = new Set<string>();
+    groupedTools.forEach((g) => g.tools.forEach((t) => methods.add((t.httpMethod || "OTHER").toUpperCase())));
+    return Array.from(methods).sort().map((m) => ({ label: m, value: m }));
+  }, [groupedTools]);
+
   const methodsFilter = (
     <MultiSelect
       options={methodOptions}
@@ -296,6 +296,20 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
       className="w-fit capitalize"
     />
   );
+
+  const enabledFilterItems = [
+    { label: "Enabled", value: "ENABLED" },
+    { label: "Disabled", value: "DISABLED" },
+  ];
+
+  const enabledFilter = (
+      <MultiSelect
+      options={enabledFilterItems}
+      onValueChange={setEnabledFilters}
+      placeholder="Filter by status"
+      className="w-fit capitalize"
+    />
+  )
 
   // Compose filtering: tag, search, method, enabled/disabled
   const filteredGroups = useMemo(() => {
@@ -310,9 +324,21 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
           return false;
         }
 
+        // method filter
         if (methodFilters.length > 0) {
           const method = (t.httpMethod || "OTHER").toUpperCase();
           if (!methodFilters.includes(method)) return false;
+        }
+
+        // enabled/disabled filter
+        const isEnabled = selectedTools.includes(t.canonicalName);
+        const wantsEnabled = enabledFilters.includes("ENABLED");
+        const wantsDisabled = enabledFilters.includes("DISABLED");
+
+        if (wantsEnabled && !wantsDisabled) {
+          if (!isEnabled) return false;
+        } else if (!wantsEnabled && wantsDisabled) {
+          if (isEnabled) return false;
         }
 
         const tags = t.tags.join(",");
@@ -324,7 +350,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     }));
 
     return filteredGroups.filter((g) => g.tools.length > 0);
-  }, [tools, search, tagFilters, methodFilters, selectedTools]);
+  }, [tools, search, tagFilters, methodFilters, selectedTools, enabledFilters]);
 
   const toolGroups = useMemo(() => {
     const enableAll = (tools: ToggleableTool[]) => {
@@ -376,6 +402,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
           <Stack direction="horizontal" gap={2} className="h-fit">
             {tagsFilter}
             {methodsFilter}
+            {enabledFilter}
             <SearchBar
               value={search}
               onChange={setSearch}
