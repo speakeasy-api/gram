@@ -16,25 +16,28 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/users/stub"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
 type StubClient struct {
-	mut    sync.Mutex
-	logger *slog.Logger
-	tracer trace.Tracer
+	mut       sync.Mutex
+	logger    *slog.Logger
+	tracer    trace.Tracer
+	localUser stub.LocalUser
 }
 
-func NewStubClient(logger *slog.Logger, tracerProvider trace.TracerProvider) *StubClient {
+func NewStubClient(logger *slog.Logger, tracerProvider trace.TracerProvider, userInfo stub.LocalUser) *StubClient {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	return &StubClient{
-		mut:    sync.Mutex{},
-		logger: logger.With(attr.SlogComponent("billing-stub")),
-		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/billing"),
+		mut:       sync.Mutex{},
+		logger:    logger.With(attr.SlogComponent("billing-stub")),
+		tracer:    tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/billing"),
+		localUser: userInfo,
 	}
 }
 
@@ -44,6 +47,14 @@ var _ Repository = (*StubClient)(nil)
 func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (*Tier, error) {
 	_, span := s.tracer.Start(ctx, "stub_client.get_customer")
 	defer span.End()
+
+	for _, user := range s.localUser {
+		for _, org := range user.Organizations {
+			if org.OrganizationID == orgID {
+				return conv.Ptr(Tier(org.AccountType)), nil
+			}
+		}
+	}
 
 	return conv.Ptr(TierFree), nil
 }

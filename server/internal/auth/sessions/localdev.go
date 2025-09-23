@@ -2,12 +2,8 @@ package sessions
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"slices"
 
 	"github.com/google/uuid"
@@ -18,59 +14,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	userRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	"github.com/speakeasy-api/gram/server/internal/users/stub"
 )
-
-var unsafeSessionData = []byte(`
-{
-  "1245": {
-    "user_email": "user@example.com",
-    "admin": false,
-    "organizations": [
-      {
-        "organization_id": "550e8400-e29b-41d4-a716-446655440000",
-        "organization_name": "Organization 123",
-        "organization_slug": "organization-123",
-        "account_type": "pro"
-      },
-      {
-        "organization_id": "e0395991-d5c5-4c2f-8c3b-4eae305524ed",
-        "organization_name": "Organization 456",
-        "organization_slug": "organization-456",
-        "account_type": "enterprise"
-      }
-    ]
-  }
-}
-`)
 
 func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.Client, suffix cache.Suffix, localEnvPath string, billingRepo billing.Repository) (*Manager, error) {
 	logger = logger.With(attr.SlogComponent("sessions"))
-
-	raw := unsafeSessionData
-	if localEnvPath != "" {
-		file, err := os.Open(filepath.Clean(localEnvPath))
-		if err != nil {
-			logger.WarnContext(context.Background(), "failed to open local env file, defaulting to inlined data (localdev.go)", attr.SlogError(err))
-		} else if file != nil {
-			defer o11y.LogDefer(context.Background(), logger, func() error {
-				return file.Close()
-			})
-
-			raw, err = io.ReadAll(file)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read local env file: %w", err)
-			}
-		}
-	}
-
-	var data localEnvFile
-	if err := json.Unmarshal(raw, &data); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal local env file: %w", err)
+	data, err := stub.UnmarshalLocalUser(localEnvPath, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load stubbed local user: %w", err)
 	}
 
 	fakePylon, err := pylon.NewPylon(logger, "")
@@ -84,7 +39,7 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 		logger:                 logger.With(attr.SlogComponent("sessions")),
 		sessionCache:           cache.NewTypedObjectCache[Session](logger.With(attr.SlogCacheNamespace("session")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
 		userInfoCache:          cache.NewTypedObjectCache[CachedUserInfo](logger.With(attr.SlogCacheNamespace("user_info")), cache.NewRedisCacheAdapter(redisClient), cache.SuffixNone),
-		localEnvFile:           data,
+		stubbedUser:            *data,
 		unsafeLocal:            true,
 		speakeasyServerAddress: "",
 		speakeasySecretKey:     "",
@@ -97,7 +52,7 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 }
 
 func (s *Manager) GetUserInfoFromLocalEnvFile(userID string) (*CachedUserInfo, error) {
-	userInfo, ok := s.localEnvFile[userID]
+	userInfo, ok := s.stubbedUser[userID]
 	if !ok {
 		return nil, fmt.Errorf("user with ID %s not found", userID)
 	}
@@ -136,7 +91,7 @@ func (s *Manager) PopulateLocalDevDefaultAuthSession(ctx context.Context) (strin
 
 	var gramSession *Session
 
-	for userID, userInfo := range s.localEnvFile {
+	for userID, userInfo := range s.stubbedUser {
 		if err := s.InvalidateUserInfoCache(ctx, userID); err != nil {
 			s.logger.WarnContext(ctx, "failed to invalidate user info cache", attr.SlogError(err))
 		}
