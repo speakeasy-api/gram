@@ -58,7 +58,7 @@ func newTestVariationsService(t *testing.T) (context.Context, *testInstance) {
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 
-	billingClient := billing.NewStubClient(logger, tracerProvider)
+	billingClient := billing.NewStubClient(logger, tracerProvider, nil)
 
 	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-local"), "", billingClient)
 	require.NoError(t, err)
