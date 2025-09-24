@@ -269,7 +269,7 @@ func (p *ToolExtractor) doLibOpenAPI(
 		if err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) {
-				logger.ErrorContext(ctx, "bulk tool insertion failed",
+				logger.ErrorContext(ctx, "bulk OpenAPI tool insertion failed",
 					attr.SlogErrorMessage(fmt.Sprintf("SQLSTATE %s: %s %s", pgErr.Code, pgErr.Message, pgErr.Detail)),
 					attr.SlogAttemptedCount(len(allToolDefs)),
 					attr.SlogSkippedCount(skippedCount),
