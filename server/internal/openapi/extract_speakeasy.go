@@ -10,8 +10,10 @@ import (
 	"log/slog"
 	"net/url"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ettle/strcase"
@@ -39,7 +41,69 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// convertToBulkParams converts CreateOpenAPIv3ToolDefinitionParams to BulkCreateOpenAPIv3ToolDefinitionsParams
+// operationWorkItem represents work to be done on a single operation
+type operationWorkItem struct {
+	path             string
+	method           string
+	opID             string
+	operation        *openapi.Operation
+	sharedParameters []*openapi.ReferencedParameter
+	globalSecurity   []byte
+	serverEnvVar     string
+	defaultServer    *string
+	task             ToolExtractorTask
+}
+
+// operationWorkResult represents the result of processing an operation
+type operationWorkResult struct {
+	toolDef *repo.BulkCreateOpenAPIv3ToolDefinitionsParams
+	skipped bool
+	err     error
+}
+
+// processOperation processes a single operation
+func processOperation(
+	ctx context.Context,
+	logger *slog.Logger,
+	tracer trace.Tracer,
+	tx *repo.Queries,
+	doc *openapi.OpenAPI,
+	work operationWorkItem,
+) operationWorkResult {
+	docInfo := work.task.DocInfo
+
+	ctx, extractSpan := tracer.Start(ctx, "openapiv3.doSpeakeasy.extractToolDefSpeakeasy")
+	def, err := extractToolDefSpeakeasy(ctx, logger, tx, doc, operationTask[openapi.Operation, openapi.ReferencedParameter]{
+		extractTask:      work.task,
+		method:           work.method,
+		path:             work.path,
+		opID:             work.opID,
+		operation:        work.operation,
+		sharedParameters: work.sharedParameters,
+		globalSecurity:   work.globalSecurity,
+		serverEnvVar:     work.serverEnvVar,
+		defaultServer:    work.defaultServer,
+	})
+	if err != nil {
+		extractSpan.SetStatus(codes.Error, err.Error())
+	}
+	extractSpan.End()
+	if err != nil {
+		if work.task.OnOperationSkipped != nil {
+			work.task.OnOperationSkipped(err)
+		}
+		_ = oops.E(oops.CodeUnexpected, err, "%s: %s: skipped operation due to error: %s", docInfo.Name, work.opID, err.Error()).Log(ctx, logger)
+		return operationWorkResult{toolDef: nil, skipped: true, err: err}
+	}
+
+	if !validateToolDefinition(ctx, logger, def, work.opID, work.method) {
+		return operationWorkResult{toolDef: nil, skipped: true, err: nil}
+	}
+
+	toolDef := convertToBulkParams(def)
+	return operationWorkResult{toolDef: &toolDef, skipped: false, err: nil}
+}
+
 func convertToBulkParams(params repo.CreateOpenAPIv3ToolDefinitionParams) repo.BulkCreateOpenAPIv3ToolDefinitionsParams {
 	return repo.BulkCreateOpenAPIv3ToolDefinitionsParams(params)
 }
@@ -143,6 +207,7 @@ func (p *ToolExtractor) doSpeakeasy(
 	var allToolDefs []repo.BulkCreateOpenAPIv3ToolDefinitionsParams
 	var skippedCount int
 
+	var operations []operationWorkItem
 	for path, pi := range doc.Paths.All() {
 		ctx, resolveSpan := tracer.Start(ctx, "openapiv3.doSpeakeasy.resolvePath")
 		_, err := pi.Resolve(ctx, openapi.ResolveOptions{
@@ -160,6 +225,7 @@ func (p *ToolExtractor) doSpeakeasy(
 		resolveSpan.End()
 
 		pathItem := pi.GetObject()
+		sharedParameters := pathItem.GetParameters()
 
 		ops := []operationMetadata[openapi.Operation]{
 			{method: "GET", operation: pathItem.Get(), path: path},
@@ -170,52 +236,66 @@ func (p *ToolExtractor) doSpeakeasy(
 			{method: "PATCH", operation: pathItem.Patch(), path: path},
 		}
 
-		sharedParameters := pathItem.GetParameters()
-
 		for _, op := range ops {
 			if op.operation == nil {
 				continue
 			}
-
-			// TODO: Currently ignoring servers at path item level until we
-			// figure out how to name env variable
 
 			opID := op.operation.GetOperationID()
 			if opID == "" {
 				opID = fmt.Sprintf("%s_%s", op.method, path)
 			}
 
-			ctx, extractSpan := tracer.Start(ctx, "openapiv3.doSpeakeasy.extractToolDefSpeakeasy")
-			def, err := extractToolDefSpeakeasy(ctx, logger, tx, doc, operationTask[openapi.Operation, openapi.ReferencedParameter]{
-				extractTask:      task,
-				method:           op.method,
+			operations = append(operations, operationWorkItem{
 				path:             path,
+				method:           op.method,
 				opID:             opID,
 				operation:        op.operation,
 				sharedParameters: sharedParameters,
 				globalSecurity:   globalSecurity,
 				serverEnvVar:     globalServerEnvVar,
 				defaultServer:    globalDefaultServer,
+				task:             task,
 			})
-			if err != nil {
-				extractSpan.SetStatus(codes.Error, err.Error())
-			}
-			extractSpan.End()
-			if err != nil {
-				if task.OnOperationSkipped != nil {
-					task.OnOperationSkipped(err)
-				}
-				_ = oops.E(oops.CodeUnexpected, err, "%s: %s: skipped operation due to error: %s", docInfo.Name, opID, err.Error()).Log(ctx, logger)
-				skippedCount++
-				continue
-			}
+		}
+	}
 
-			if !validateToolDefinition(ctx, logger, def, opID, op.method) {
-				skippedCount++
-				continue
-			}
+	numWorkers := runtime.NumCPU()
+	workCh := make(chan operationWorkItem, len(operations))
+	resultsCh := make(chan operationWorkResult, len(operations))
 
-			allToolDefs = append(allToolDefs, convertToBulkParams(def))
+	workerCtx := ctx
+
+	var wg sync.WaitGroup
+
+	for range numWorkers {
+		wg.Go(func() {
+			for work := range workCh {
+				workCtx, workSpan := tracer.Start(workerCtx, "openapiv3.doSpeakeasy.processOperation")
+
+				result := processOperation(workCtx, logger, tracer, tx, doc, work)
+
+				workSpan.End()
+				resultsCh <- result
+			}
+		})
+	}
+
+	for _, operation := range operations {
+		workCh <- operation
+	}
+	close(workCh)
+
+	go func() {
+		wg.Wait()
+		close(resultsCh)
+	}()
+
+	for result := range resultsCh {
+		if result.skipped {
+			skippedCount++
+		} else if result.toolDef != nil {
+			allToolDefs = append(allToolDefs, *result.toolDef)
 		}
 	}
 
