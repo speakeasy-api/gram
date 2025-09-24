@@ -146,7 +146,7 @@
       display: flex;
       flex-wrap: wrap;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
       gap: 1.5rem;
     }
 
@@ -192,19 +192,29 @@
 
     .popover {
       position: relative;
-      font-weight: 400;
     }
 
     .action-button {
-      text-transform: uppercase;
       background: var(--fill-neutral-default);
       color: var(--text-default-inverse);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 0.5rem;
+      font-weight: 400;
+      font-size: calc(1rem - 2px);
+      text-transform: uppercase;
+    }
+
+    .header-action {
+      border-radius: 6px;
+      padding: 0.5rem 1rem;
       display: flex;
       align-items: center;
-      border-radius: 0.5rem;
       gap: 0.75rem;
-      padding: 0.75rem 1rem;
       transition: background-color 300ms var(--ease-in-out-quad);
+      text-transform: uppercase;
     }
 
     .action-button:hover {
@@ -238,6 +248,13 @@
 
     .popover-button:hover {
       background: var(--fill-neutral-highlight);
+    }
+
+    .external-docs {
+      background: var(--color-neutral-200);
+      text-transform: uppercase;
+      color: var(--color-neutral-900);
+      box-shadow: rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 2px 1px 0px inset, rgba(0, 0, 0, 0.15) 0px -2px 1px 0px inset;
     }
 
     /***********/
@@ -828,29 +845,34 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
               <div class="mcp-description">{{ .MCPDescription }}</div>
             </div>
           </div>
-          <div class="popover">
-            <button class="action-button" id="action-button">
-              Add to Client
-              <svg class="chevron-down" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M4.00049 6L8.00049 10L12.0005 6" stroke="currentColor" stroke-width="1.3334" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <div class="popover-menu hidden">
-              <a class="popover-button install-link" href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}" data-install-target="cursor">
-                Cursor
-              </a>
-              <button class="popover-button" data-install-method="modal" data-install-target="claude-code">
-                Claude Code
+          <div class="header-actions">
+            <a class="external-docs header-action" href="https://example.com">
+              View docs
+            </a>
+            <div class="popover">
+              <button class="action-button header-action">
+                Add to Client
+                <svg class="chevron-down" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M4.00049 6L8.00049 10L12.0005 6" stroke="currentColor" stroke-width="1.3334" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
               </button>
-              <button class="popover-button" data-install-method="dxt-download" data-install-target="claude-desktop">
-                Claude Desktop
-              </button>
-              <button class="popover-button" data-install-method="modal" data-install-target="gemini-cli">
-                Gemini CLI
-              </button>
-              <button class="popover-button" data-install-method="modal" data-install-target="codex-cli">
-                Codex CLI
-              </button>
+              <div class="popover-menu hidden">
+                <a class="popover-button install-link" href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}" data-install-target="cursor">
+                  Cursor
+                </a>
+                <button class="popover-button" data-install-method="modal" data-install-target="claude-code">
+                  Claude Code
+                </button>
+                <button class="popover-button" data-install-method="dxt-download" data-install-target="claude-desktop">
+                  Claude Desktop
+                </button>
+                <button class="popover-button" data-install-method="modal" data-install-target="gemini-cli">
+                  Gemini CLI
+                </button>
+                <button class="popover-button" data-install-method="modal" data-install-target="codex-cli">
+                  Codex CLI
+                </button>
+              </div>
             </div>
           </div>
         </div>
