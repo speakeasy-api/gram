@@ -494,7 +494,7 @@ func DecodeUpdateToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if slug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
@@ -708,7 +708,7 @@ func DecodeDeleteToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) g
 		if slug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
@@ -925,7 +925,7 @@ func DecodeGetToolsetRequest(mux goahttp.Muxer, decoder func(*http.Request) goah
 		if slug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
@@ -1142,7 +1142,7 @@ func DecodeCheckMCPSlugAvailabilityRequest(mux goahttp.Muxer, decoder func(*http
 		if slug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
@@ -1378,7 +1378,7 @@ func DecodeAddExternalOAuthServerRequest(mux goahttp.Muxer, decoder func(*http.R
 		if slug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
@@ -1595,7 +1595,7 @@ func DecodeRemoveOAuthServerRequest(mux goahttp.Muxer, decoder func(*http.Reques
 		if slug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("slug", "query string"))
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(slug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
 		}
