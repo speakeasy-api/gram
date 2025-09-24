@@ -3645,7 +3645,7 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
@@ -3653,7 +3653,7 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 		}
 	}
 	if body.DefaultEnvironmentSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.DefaultEnvironmentSlug != nil {
 		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
@@ -3689,7 +3689,7 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 		}
 	}
 	if body.McpSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
@@ -3765,7 +3765,7 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
@@ -3773,7 +3773,7 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 		}
 	}
 	if body.DefaultEnvironmentSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.DefaultEnvironmentSlug != nil {
 		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
@@ -3809,7 +3809,7 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 		}
 	}
 	if body.McpSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
@@ -3869,7 +3869,7 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
@@ -3877,7 +3877,7 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 		}
 	}
 	if body.DefaultEnvironmentSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.DefaultEnvironmentSlug != nil {
 		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
@@ -3913,7 +3913,7 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 		}
 	}
 	if body.McpSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
@@ -3973,7 +3973,7 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
@@ -3981,7 +3981,7 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 		}
 	}
 	if body.DefaultEnvironmentSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.DefaultEnvironmentSlug != nil {
 		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
@@ -4017,7 +4017,7 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 		}
 	}
 	if body.McpSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
@@ -4077,7 +4077,7 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
@@ -4085,7 +4085,7 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 		}
 	}
 	if body.DefaultEnvironmentSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.DefaultEnvironmentSlug != nil {
 		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
@@ -4121,7 +4121,7 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 		}
 	}
 	if body.McpSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
@@ -6256,7 +6256,7 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.Name != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Name != nil {
 		if utf8.RuneCountInString(*body.Name) > 40 {
@@ -6310,7 +6310,7 @@ func ValidateExternalOAuthServerResponseBody(body *ExternalOAuthServerResponseBo
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
@@ -6345,7 +6345,7 @@ func ValidateOAuthProxyServerResponseBody(body *OAuthProxyServerResponseBody) (e
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
@@ -6390,7 +6390,7 @@ func ValidateOAuthProxyProviderResponseBody(body *OAuthProxyProviderResponseBody
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
@@ -6437,7 +6437,7 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
@@ -6445,7 +6445,7 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 		}
 	}
 	if body.DefaultEnvironmentSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.DefaultEnvironmentSlug != nil {
 		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
@@ -6481,7 +6481,7 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 		}
 	}
 	if body.McpSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
@@ -6527,7 +6527,7 @@ func ValidatePromptTemplateEntryResponseBody(body *PromptTemplateEntryResponseBo
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	if body.Name != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Name != nil {
 		if utf8.RuneCountInString(*body.Name) > 40 {
@@ -6543,7 +6543,7 @@ func ValidateExternalOAuthServerFormRequestBody(body *ExternalOAuthServerFormReq
 	if body.Metadata == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("metadata", "body"))
 	}
-	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+	err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", body.Slug, "^[a-z0-9_-]{1,128}$"))
 	if utf8.RuneCountInString(body.Slug) > 40 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", body.Slug, utf8.RuneCountInString(body.Slug), 40, false))
 	}

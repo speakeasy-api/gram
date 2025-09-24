@@ -26,7 +26,7 @@ func BuildCreatePackagePayload(packagesCreatePackageBody string, packagesCreateP
 		if err != nil {
 			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"zor\",\n      \"image_asset_id\": \"rt6\",\n      \"keywords\": [\n         \"In dolore.\",\n         \"Itaque minima voluptates.\",\n         \"Magnam ullam consequatur et ad culpa fugit.\"\n      ],\n      \"name\": \"www\",\n      \"summary\": \"5nu\",\n      \"title\": \"vhf\",\n      \"url\": \"4nz\"\n   }'")
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.Name) > 100 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", body.Name, utf8.RuneCountInString(body.Name), 100, false))
 		}
