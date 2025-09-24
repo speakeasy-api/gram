@@ -34,7 +34,8 @@ function PageBody({
     <div className="overflow-y-auto h-full w-full">
       <div
         className={cn(
-          "@container/main flex flex-col gap-4 p-8 pb-0 h-full w-full",
+          // QUINN YOU BETTER MAKE A NOTE OF THIS CHANGE IN THE PR YOU DUMMY
+          "flex flex-col gap-4 p-8 pb-0 h-full w-full",
           !fullWidth && "max-w-7xl mx-auto ",
           className,
         )}
