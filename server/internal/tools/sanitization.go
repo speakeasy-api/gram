@@ -2,66 +2,71 @@ package tools
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
-	"unicode"
 
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"golang.org/x/sync/singleflight"
 )
 
 var (
 	sanitizeNameGroup = new(singleflight.Group)
+	multiUnderscoreRE = regexp.MustCompile(`_+`)
 )
 
 // Adapted from https://github.com/speakeasy-api/openapi-generation/blob/26e86daa32f8eebe2832080552237394aebfeb13/internal/sanitization/sanitization.go
 func SanitizeName(name string) string {
 	rawResult, _, _ := sanitizeNameGroup.Do(name, func() (any, error) {
+		if name == "" {
+			return "", nil
+		}
+
 		var sb strings.Builder
 
-		prefix := true
-
-		var last rune
-
 		for _, r := range name {
-			isLower := r >= 'a' && r <= 'z'
-			isUpper := r >= 'A' && r <= 'Z'
-			isDigit := r >= '0' && r <= '9'
-
-			// Check if the current rune is a diatritic and if so, replace it with the appropriate replacement
+			// Check if the current rune is a diacritic and if so, replace it with the lowercase replacement
 			if replacement, ok := normalizedDiatriticsLookup[r]; ok {
+				// Convert diacritic replacement to lowercase
+				if replacement >= 'A' && replacement <= 'Z' {
+					replacement = replacement - 'A' + 'a'
+				}
 				sb.WriteRune(replacement)
-				last = replacement
-				prefix = false
-			} else if r > unicode.MaxASCII {
-				// If the current rune is not ASCII and the last rune was not an underscore and we are not at the prefix, add an underscore otherwise skip it
-				if last != '_' && !prefix {
-					sb.WriteRune('_')
-					last = '_'
-				}
-			} else if isLower || isUpper || isDigit {
-				// if the current rune is a letter or number, add it to the sanitized name
-				if !isDigit {
-					prefix = false // when we encounter the first letter we are no longer at the prefix
-				}
+			} else if r >= 'a' && r <= 'z' {
+				// Valid lowercase letter - keep as-is
 				sb.WriteRune(r)
-				last = r
-			} else if prefix {
-				// if we are at the prefix and weren't a letter or number, replace the current rune with the appropriate prefix replacement
-				replacement := replacePrefixChar(r)
-				if replacement != "" && (replacement != "_" || last != '_') {
-					sb.WriteString(replacement)
-					last = rune(replacement[len(replacement)-1])
-				}
+			} else if r >= 'A' && r <= 'Z' {
+				// Convert uppercase to lowercase
+				sb.WriteRune(r - 'A' + 'a')
+			} else if r >= '0' && r <= '9' {
+				// Valid digit - keep as-is
+				sb.WriteRune(r)
+			} else if r == '_' || r == '-' {
+				// Valid symbols for slug pattern - keep as-is
+				sb.WriteRune(r)
 			} else {
-				// else if we are here we are likely an ascii symbol that needs to be replaced
-				replacement := replaceChar(r)
-				if replacement != "_" || last != '_' {
-					sb.WriteString(replacement)
-					last = rune(replacement[len(replacement)-1])
-				}
+				// All other characters (ASCII symbols, non-ASCII, etc.) become underscore
+				sb.WriteRune('_')
 			}
 		}
 
-		return sb.String(), nil
+		result := sb.String()
+		
+		// Clean up multiple consecutive underscores
+		result = multiUnderscoreRE.ReplaceAllString(result, "_")
+		
+		// Remove leading underscores that are invalid (leave at most one)
+		for len(result) > 1 && result[0] == '_' && result[1] == '_' {
+			result = result[1:]
+		}
+		
+		// Remove trailing underscores that are invalid (leave at most one)
+		for len(result) > 1 && result[len(result)-1] == '_' && result[len(result)-2] == '_' {
+			result = result[:len(result)-1]
+		}
+		
+		// No need to remove leading characters - regex allows them
+
+		return result, nil
 	})
 
 	res, ok := rawResult.(string)
@@ -69,75 +74,11 @@ func SanitizeName(name string) string {
 		panic(fmt.Sprintf("SanitizeName: expected string, got %T", rawResult))
 	}
 
+	if !constants.SlugPatternRE.MatchString(res) {
+		panic(fmt.Sprintf("SanitizeName: %s does not match regular expression: %s", res, constants.SlugPattern))
+	}
+
 	return res
-}
-
-func replaceChar(char rune) string {
-	switch char {
-	case '$':
-		fallthrough
-	case '+':
-		fallthrough
-	case '<':
-		fallthrough
-	case '>':
-		fallthrough
-	case '=':
-		fallthrough
-	case '@':
-		fallthrough
-	case '#':
-		fallthrough
-	case '&':
-		fallthrough
-	case '%':
-		fallthrough
-	case '*':
-		fallthrough
-	case '£':
-		return string(char)
-	default:
-		return "_"
-	}
-}
-
-func replacePrefixChar(char rune) string {
-	switch char {
-	case '$':
-		fallthrough
-	case '+':
-		fallthrough
-	case '-':
-		fallthrough
-	case '<':
-		fallthrough
-	case '>':
-		fallthrough
-	case '=':
-		fallthrough
-	case '@':
-		fallthrough
-	case '#':
-		fallthrough
-	case '&':
-		fallthrough
-	case '%':
-		fallthrough
-	case '*':
-		fallthrough
-	case '/':
-		fallthrough
-	case '!':
-		fallthrough
-	case '.':
-		fallthrough
-	case '£':
-		fallthrough
-	case '_':
-		return string(char)
-	default:
-		return ""
-	}
 }
 
 var normalizedDiatriticsLookup = map[rune]rune{
