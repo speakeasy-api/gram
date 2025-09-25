@@ -71,6 +71,11 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				Usage:    "A unique key to identify this deployment request for idempotency",
 				Required: false,
 			},
+			&cli.BoolFlag{
+				Name:  "skip-poll",
+				Usage: "Skip polling for deployment completion and return immediately",
+				Value: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
@@ -128,7 +133,13 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				return fmt.Errorf("deployment failed: %w", err)
 			}
 
-			logger.InfoContext(ctx, "Deployment created successfully", slog.Any("id", result.Deployment.ID))
+			logger.InfoContext(ctx, "Deployment has begun processing", slog.Any("id", result.Deployment.ID))
+
+			if c.Bool("skip-poll") {
+				logger.InfoContext(ctx, "Skipping deployment status polling", slog.String("deployment_id", result.Deployment.ID))
+				logger.InfoContext(ctx, "You can check deployment status with", slog.String("command", fmt.Sprintf("gram status --id %s", result.Deployment.ID)))
+				return nil
+			}
 
 			deploymentResult, err := pollDeploymentStatus(ctx, logger, deploymentsClient, req.APIKey, req.ProjectSlug, result.Deployment.ID)
 			if err != nil {
