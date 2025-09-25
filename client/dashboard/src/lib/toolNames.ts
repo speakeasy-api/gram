@@ -2,12 +2,9 @@ import { ToolDefinition, useToolDefinitions } from "@/pages/toolsets/types";
 import {
   HTTPToolDefinition,
   PromptTemplateKind,
-  PromptTemplate,
   PromptTemplateEntry,
   Toolset,
-  ToolsetEntry,
   HTTPToolDefinitionEntry,
-  PromptTemplateEntry,
 } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
@@ -120,7 +117,7 @@ export const httpToolNames = (toolset: {
 };
 
 // Quinn you better make a note of this one in the PR
-export const userFacingToolnames = (toolset: {
+export const userFacingToolNames = (toolset: {
   httpTools: HTTPToolDefinitionEntry[];
   promptTemplates: PromptTemplateEntry[];
 }) => {

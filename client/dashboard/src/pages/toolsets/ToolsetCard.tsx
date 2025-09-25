@@ -8,7 +8,7 @@ import { ToolsetEntry } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useDeleteToolset } from "./Toolset";
 import { UpdatedAt } from "@/components/updated-at";
-import { userFacingToolnames } from "@/lib/toolNames";
+import { userFacingToolNames } from "@/lib/toolNames";
 
 type ToolsetForCard = Pick<
   ToolsetEntry,
@@ -30,7 +30,7 @@ const BoundToolsBadge = ({
   variant?: "outline" | "default";
   className?: string;
 }) => {
-  const names: string[] = toolset ? userFacingToolnames(toolset) : [];
+  const names: string[] = toolset ? userFacingToolNames(toolset) : [];
 
   return (
     <ToolsBadge

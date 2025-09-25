@@ -14,7 +14,7 @@ import { useMiniModel } from "../playground/Openrouter";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { useToolDefinitions } from "../toolsets/types";
 import { useToolset } from "@gram/client/react-query";
-import { userFacingToolnames } from "@/lib/toolNames";
+import { userFacingToolNames } from "@/lib/toolNames";
 
 const SuggestionSchema = z.object({
   name: z.string(),
@@ -176,7 +176,7 @@ export const ToolifyDialog = ({
                 setSelectedToolset={(toolset) => setSelectedToolset(toolset)}
               />
               <ToolsBadge
-                toolNames={toolset ? userFacingToolnames(toolset) : []}
+                toolNames={toolset ? userFacingToolNames(toolset) : []}
                 size={"md"}
                 warnOnTooManyTools
               />

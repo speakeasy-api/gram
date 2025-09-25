@@ -4,7 +4,7 @@ import { ToolsetPromptsBadge, ToolsBadge } from "@/components/tools-badge";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
-import { userFacingToolnames } from "@/lib/toolNames";
+import { userFacingToolNames } from "@/lib/toolNames";
 import { Toolset } from "@gram/client/models/components";
 import { useToolset } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
@@ -72,9 +72,10 @@ export const ToolsetHeader = ({
         </EditableText>
         <Stack direction="horizontal" gap={2}>
           <ToolsBadge
-            toolNames={toolset ? userFacingToolnames(toolset) : []}
+            toolNames={toolset ? userFacingToolNames(toolset) : []}
             size="md"
             variant="secondary"
+            warnOnTooManyTools
           />
           <ToolsetPromptsBadge toolset={toolset} size="md" variant="outline" />
         </Stack>
