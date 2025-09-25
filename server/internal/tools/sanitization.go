@@ -50,20 +50,20 @@ func SanitizeName(name string) string {
 		}
 
 		result := sb.String()
-		
+
 		// Clean up multiple consecutive underscores
 		result = multiUnderscoreRE.ReplaceAllString(result, "_")
-		
+
 		// Remove leading underscores that are invalid (leave at most one)
 		for len(result) > 1 && result[0] == '_' && result[1] == '_' {
 			result = result[1:]
 		}
-		
+
 		// Remove trailing underscores that are invalid (leave at most one)
 		for len(result) > 1 && result[len(result)-1] == '_' && result[len(result)-2] == '_' {
 			result = result[:len(result)-1]
 		}
-		
+
 		// No need to remove leading characters - regex allows them
 
 		return result, nil
@@ -74,8 +74,13 @@ func SanitizeName(name string) string {
 		panic(fmt.Sprintf("SanitizeName: expected string, got %T", rawResult))
 	}
 
+	// Handle empty string case - return empty string without validation
+	if res == "" {
+		return res
+	}
+
 	if !constants.SlugPatternRE.MatchString(res) {
-		panic(fmt.Sprintf("SanitizeName: %s does not match regular expression: %s", res, constants.SlugPattern))
+		panic(fmt.Sprintf("SanitizeName: '%s' does not match regular expression: %s", res, constants.SlugPattern))
 	}
 
 	return res
