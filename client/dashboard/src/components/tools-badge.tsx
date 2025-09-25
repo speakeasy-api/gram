@@ -6,8 +6,8 @@ import {
   TooltipTrigger,
   TooltipContent,
   TooltipPortal,
+  Icon
 } from "@speakeasy-api/moonshine";
-import { UrgentWarningIcon } from "./ui/urgent-warning-icon";
 import { cn } from "@/lib/utils";
 import { promptNames } from "@/lib/toolNames";
 
@@ -92,7 +92,7 @@ export const ToolsBadge = ({
             className,
           )}
         >
-          {toolsWarnings && <UrgentWarningIcon className="inline-block" />}
+          {toolsWarnings && <Icon name="triangle-alert" className="inline-block" />}
           {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
         </Badge>
       </TooltipTrigger>
