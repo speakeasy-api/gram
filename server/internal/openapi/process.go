@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/ettle/strcase"
@@ -296,7 +297,10 @@ type toolDescriptor struct {
 func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *types.OpenAPIv3DeploymentAsset, opID string, op operation) toolDescriptor {
 	// gramExtNode, _ := op.Extensions.Get("x-gram")
 	// speakeasyExtNode, _ := op.Extensions.Get("x-speakeasy-mcp")
-	untruncatedName := strcase.ToSnake(tools.SanitizeName(fmt.Sprintf("%s_%s", docInfo.Slug, opID)))
+	// Convert doc slug hyphens to underscores for consistency with tool naming
+	sanitizedSlug := strings.ReplaceAll(tools.SanitizeName(string(docInfo.Slug)), "-", "_")
+	snakeCasedOp := strcase.ToSnake(opID)
+	untruncatedName := fmt.Sprintf("%s_%s", sanitizedSlug, snakeCasedOp)
 	// we limit actual tool name to 60 character by default to stay in line with common MCP client restrictions
 	name := truncateWithHash(untruncatedName, 60)
 
