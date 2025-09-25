@@ -6,7 +6,7 @@ import {
   TooltipTrigger,
   TooltipContent,
   TooltipPortal,
-  Icon
+  Icon,
 } from "@speakeasy-api/moonshine";
 import { cn } from "@/lib/utils";
 import { promptNames } from "@/lib/toolNames";
@@ -77,7 +77,9 @@ export const ToolsBadge = ({
     warnOnTooManyTools && toolNames && toolNames.length > 40;
   if (toolsWarnings) {
     tooltipContent =
-      "LLM tool-use performance typically degrades with toolset size. General industry standards recommend keeping MCP servers at around 40 tool or fewer";
+      "LLM tool-use performance typically degrades with toolset size. General " +
+      "industry standards recommend keeping MCP servers at around 40 tools or " +
+      "fewer";
   }
 
   return toolNames && toolNames.length > 0 ? (
@@ -92,7 +94,9 @@ export const ToolsBadge = ({
             className,
           )}
         >
-          {toolsWarnings && <Icon name="triangle-alert" className="inline-block" />}
+          {toolsWarnings && (
+            <Icon name="triangle-alert" className="inline-block" />
+          )}
           {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
         </Badge>
       </TooltipTrigger>
