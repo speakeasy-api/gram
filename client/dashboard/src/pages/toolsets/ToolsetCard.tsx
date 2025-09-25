@@ -1,9 +1,9 @@
 import { CopyableSlug } from "@/components/name-and-slug";
 import {
+    ToolsBadge,
   ToolsetPromptsBadge,
-  ToolsetToolsBadge,
 } from "@/components/tools-badge";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button, cn } from "@speakeasy-api/moonshine";
 import { Card } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { useRoutes } from "@/routes";
@@ -11,8 +11,31 @@ import { ToolsetEntry } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useDeleteToolset } from "./Toolset";
 import { UpdatedAt } from "@/components/updated-at";
+import { userFacingToolnames } from "@/lib/toolNames";
 
 type ToolsetForCard = Pick<ToolsetEntry, 'id' | 'name' | 'slug' | 'description' | 'updatedAt' | 'httpTools' | 'promptTemplates'>;
+
+
+const BoundToolsBadge = ({
+  toolset,
+  className,
+}: {
+  toolset: ToolsetForCard
+  size?: "sm" | "md";
+  variant?: "outline" | "default";
+  className?: string;
+}) => {
+  const names: string[] = toolset ? userFacingToolnames(toolset) : [];
+
+  return (
+      <ToolsBadge
+        toolNames={names}
+        size={"md"}
+        className={className}
+        warnOnTooManyTools
+      />
+  );
+};
 
 export function ToolsetCard({
   toolset,
@@ -26,7 +49,7 @@ export function ToolsetCard({
 
   return (
     <routes.toolsets.toolset.Link params={[toolset.slug]} className="hover:no-underline">
-      <Card className={className}>
+      <Card className={cn(className)}>
         <Card.Header>
           <Card.Title>
             <CopyableSlug slug={toolset.slug}>
@@ -59,7 +82,7 @@ export function ToolsetCard({
         </Card.Content>
         <Card.Footer>
           <Stack direction="horizontal" gap={1} align="center">
-            <ToolsetToolsBadge toolset={toolset} />
+            <BoundToolsBadge toolset={toolset} />
             <ToolsetPromptsBadge toolset={toolset} />
           </Stack>
           <UpdatedAt date={new Date(toolset.updatedAt)} />
