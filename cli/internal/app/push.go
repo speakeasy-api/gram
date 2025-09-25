@@ -107,7 +107,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				return configFile.Close()
 			})
 
-			config, err := deploy.NewConfig(configFile, filepath.Dir(configFilename))
+			config, err := deploy.NewConfig(configFile, configFilename)
 			if err != nil {
 				return fmt.Errorf("failed to parseread deployment config: %w", err)
 			}
