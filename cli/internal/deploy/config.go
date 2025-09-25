@@ -7,6 +7,10 @@ import (
 	"net/url"
 	"path/filepath"
 	"slices"
+	"strings"
+
+	"github.com/BurntSushi/toml"
+	"gopkg.in/yaml.v3"
 )
 
 var urlSchemes = []string{"http", "https"}
@@ -22,16 +26,16 @@ const (
 )
 
 type Source struct {
-	Type SourceType `json:"type"`
+	Type SourceType `json:"type" yaml:"type" toml:"type"`
 
 	// Location is the filepath or remote URL of the asset source.
-	Location string `json:"location"`
+	Location string `json:"location" yaml:"location" toml:"location"`
 
 	// Name is the human readable name of the asset.
-	Name string `json:"name"`
+	Name string `json:"name" yaml:"name" toml:"name"`
 
 	// Slug is the human readable public id of the asset.
-	Slug string `json:"slug"`
+	Slug string `json:"slug" yaml:"slug" toml:"slug"`
 }
 
 // Validate returns an error if the source is missing required fields.
@@ -58,28 +62,48 @@ func isSupportedType(s Source) bool {
 
 type Config struct {
 	// SchemaVersion defines the version of the configuration schema.
-	SchemaVersion string `json:"schema_version"`
+	SchemaVersion string `json:"schema_version" yaml:"schema_version" toml:"schema_version"`
 
 	// Type must always be set to "deployment". See `ConfigTypeDeployment`.
-	Type string `json:"type"`
+	Type string `json:"type" yaml:"type" toml:"type"`
 
 	// Sources defines the list of prospective assets to include in the
 	// deployment.
-	Sources []Source `json:"sources"`
+	Sources []Source `json:"sources" yaml:"sources" toml:"sources"`
 }
 
 // NewConfig reads a deployment config.
-func NewConfig(cfgRdr io.Reader, workDir string) (*Config, error) {
+func NewConfig(cfgRdr io.Reader, filename string) (*Config, error) {
 	var cfg Config
 
-	if err := json.NewDecoder(cfgRdr).Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config JSON: %w", err)
+	data, err := io.ReadAll(cfgRdr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	ext := strings.ToLower(filepath.Ext(filename))
+	switch ext {
+	case ".json":
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse config JSON: %w", err)
+		}
+	case ".yaml", ".yml":
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse config YAML: %w", err)
+		}
+	case ".toml":
+		if err := toml.Unmarshal(data, &cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse config TOML: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("unsupported config file format: %s (supported: .json, .yaml, .yml, .toml)", ext)
 	}
 
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
+	workDir := filepath.Dir(filename)
 	for i := range cfg.Sources {
 		location := cfg.Sources[i].Location
 		if isURL(location) || filepath.IsAbs(location) {
