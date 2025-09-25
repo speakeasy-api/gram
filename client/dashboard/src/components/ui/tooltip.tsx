@@ -48,7 +48,7 @@ function TooltipContent({
           "z-50 rounded-md px-3 py-1.5 text-xs text-pretty w-fit max-w-sm",
           inverted &&
             "bg-background [&_svg]:fill-background [&_svg]:bg-background shadow-md dark:border-1",
-          className
+          className,
         )}
         {...props}
       >

@@ -96,7 +96,6 @@ export const useGroupedTools = (tools: ToolDefinition[]): ToolGroup[] => {
   return toolGroups;
 };
 
-
 const templateName = (template: PromptTemplateEntry) => template.name;
 
 export const isPrompt = (template: PromptTemplateEntry) =>
@@ -112,7 +111,9 @@ export const higherOrderToolNames = (
   promptTemplates: PromptTemplateEntry[],
 ): string[] => promptTemplates.filter(isHigherOrderTool).map(templateName);
 
-export const httpToolNames = (toolset: { httpTools: HTTPToolDefinitionEntry[] }) => {
+export const httpToolNames = (toolset: {
+  httpTools: HTTPToolDefinitionEntry[];
+}) => {
   const { httpTools } = toolset;
 
   return httpTools.map((tool) => tool.name);

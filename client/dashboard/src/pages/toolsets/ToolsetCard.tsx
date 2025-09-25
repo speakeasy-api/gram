@@ -1,8 +1,5 @@
 import { CopyableSlug } from "@/components/name-and-slug";
-import {
-    ToolsBadge,
-  ToolsetPromptsBadge,
-} from "@/components/tools-badge";
+import { ToolsBadge, ToolsetPromptsBadge } from "@/components/tools-badge";
 import { Button, cn } from "@speakeasy-api/moonshine";
 import { Card } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
@@ -13,14 +10,22 @@ import { useDeleteToolset } from "./Toolset";
 import { UpdatedAt } from "@/components/updated-at";
 import { userFacingToolnames } from "@/lib/toolNames";
 
-type ToolsetForCard = Pick<ToolsetEntry, 'id' | 'name' | 'slug' | 'description' | 'updatedAt' | 'httpTools' | 'promptTemplates'>;
-
+type ToolsetForCard = Pick<
+  ToolsetEntry,
+  | "id"
+  | "name"
+  | "slug"
+  | "description"
+  | "updatedAt"
+  | "httpTools"
+  | "promptTemplates"
+>;
 
 const BoundToolsBadge = ({
   toolset,
   className,
 }: {
-  toolset: ToolsetForCard
+  toolset: ToolsetForCard;
   size?: "sm" | "md";
   variant?: "outline" | "default";
   className?: string;
@@ -28,12 +33,12 @@ const BoundToolsBadge = ({
   const names: string[] = toolset ? userFacingToolnames(toolset) : [];
 
   return (
-      <ToolsBadge
-        toolNames={names}
-        size={"md"}
-        className={className}
-        warnOnTooManyTools
-      />
+    <ToolsBadge
+      toolNames={names}
+      size={"md"}
+      className={className}
+      warnOnTooManyTools
+    />
   );
 };
 
@@ -48,19 +53,21 @@ export function ToolsetCard({
   const deleteToolset = useDeleteToolset();
 
   return (
-    <routes.toolsets.toolset.Link params={[toolset.slug]} className="hover:no-underline">
+    <routes.toolsets.toolset.Link
+      params={[toolset.slug]}
+      className="hover:no-underline"
+    >
       <Card className={cn(className)}>
         <Card.Header>
           <Card.Title>
-            <CopyableSlug slug={toolset.slug}>
-                {toolset.name}
-            </CopyableSlug>
+            <CopyableSlug slug={toolset.slug}>{toolset.name}</CopyableSlug>
           </Card.Title>
           <MoreActions
             actions={[
               {
                 label: "Add Tools",
-                onClick: () => routes.toolsets.toolset.update.goTo(toolset.slug),
+                onClick: () =>
+                  routes.toolsets.toolset.update.goTo(toolset.slug),
                 icon: "pencil",
               },
               {
@@ -95,17 +102,14 @@ export function ToolsetCard({
 export function ToolsetPlaygroundLink({
   toolset,
 }: {
-  toolset: Pick<ToolsetEntry, 'slug'>;
+  toolset: Pick<ToolsetEntry, "slug">;
 }) {
   const routes = useRoutes();
   return (
     <routes.playground.Link
       queryParams={{ ...(toolset ? { toolset: toolset.slug } : {}) }}
     >
-      <Button
-        variant="secondary"
-        className="group"
-      >
+      <Button variant="secondary" className="group">
         PLAYGROUND
         <routes.playground.Icon className="text-muted-foreground group-hover:text-foreground trans" />
       </Button>

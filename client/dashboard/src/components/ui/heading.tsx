@@ -1,9 +1,5 @@
 import { cn } from "@/lib/utils";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "./tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./tooltip";
 import { Skeleton } from "./skeleton";
 
 export function Heading({

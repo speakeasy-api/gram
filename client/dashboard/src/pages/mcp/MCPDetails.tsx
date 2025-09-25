@@ -53,7 +53,7 @@ export function MCPDetailPage() {
     toolset.data.securityVariables?.some(
       (secVar) =>
         secVar.type === "oauth2" &&
-        secVar.oauthTypes?.includes("authorization_code")
+        secVar.oauthTypes?.includes("authorization_code"),
     ) ?? false;
   const isOAuthConnected = !!(
     toolset.data.oauthProxyServer || toolset.data.externalOauthServer
@@ -83,7 +83,8 @@ export function MCPDetailPage() {
                   </Button>
                 </span>
               ) : (
-                <Button variant="secondary"
+                <Button
+                  variant="secondary"
                   size="md"
                   onClick={() =>
                     isOAuthConnected
@@ -155,16 +156,16 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
             slug: toolset.slug,
           });
           toast.success(
-            toolset.mcpEnabled ? "MCP server disabled" : "MCP server enabled"
+            toolset.mcpEnabled ? "MCP server disabled" : "MCP server enabled",
           );
         },
-      }
+      },
     );
   };
 
   return (
     <>
-      <Button 
+      <Button
         variant="secondary"
         onClick={() => setIsServerEnableDialogOpen(true)}
       >
@@ -201,7 +202,7 @@ export function useMcpUrl(
         ToolsetEntry,
         "slug" | "customDomainId" | "mcpSlug" | "defaultEnvironmentSlug"
       >
-    | undefined
+    | undefined,
 ) {
   const { domain } = useCustomDomain();
   const project = useProject();
@@ -250,7 +251,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       if (
         error.message &&
         error.message.includes(
-          "maximum number of public MCP servers for your account type"
+          "maximum number of public MCP servers for your account type",
         )
       ) {
         setIsMaxServersModalOpen(true);
@@ -279,7 +280,8 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   const linkDomainButton = domain && (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Button variant="secondary"
+        <Button
+          variant="secondary"
           size="sm"
           className="mr-2"
           disabled={updateToolsetMutation.isPending}
@@ -306,7 +308,8 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
     domain && session.gramAccountType !== "free" && !toolset.customDomainId ? (
       linkDomainButton
     ) : (
-      <Button variant="secondary"
+      <Button
+        variant="secondary"
         size="sm"
         onClick={() => {
           if (session.gramAccountType == "free") {
@@ -343,7 +346,8 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
   );
 
   const discardButton = anyChanges && (
-    <Button variant="tertiary"
+    <Button
+      variant="tertiary"
       size="sm"
       onClick={() => {
         setMcpSlug(toolset.mcpSlug || "");
@@ -375,7 +379,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       toast.success(
         !isPublic
           ? "Your MCP server is now public"
-          : "Your MCP server is now private"
+          : "Your MCP server is now private",
       );
     };
 
@@ -390,7 +394,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           size="sm"
           className={cn(
             classes.both,
-            isPublic ? classes.active : classes.inactive
+            isPublic ? classes.active : classes.inactive,
           )}
           {...(!isPublic ? { onClick: onToggle } : {})}
         >
@@ -404,7 +408,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           size="sm"
           className={cn(
             classes.both,
-            !isPublic ? classes.active : classes.inactive
+            !isPublic ? classes.active : classes.inactive,
           )}
           {...(isPublic ? { onClick: onToggle } : {})}
         >
@@ -443,7 +447,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
     <Stack
       className={cn(
         "mb-4",
-        !toolset.mcpEnabled && "blur-[2px] pointer-events-none"
+        !toolset.mcpEnabled && "blur-[2px] pointer-events-none",
       )}
     >
       <PageSection
@@ -656,21 +660,21 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
     toolset.httpTools.some((t) => t.id === tool.id)
   );
   const requiresServerURL = toolsetTools?.some(
-    (tool) => !tool.defaultServerUrl
+    (tool) => !tool.defaultServerUrl,
   );
 
   const envHeaders: string[] = [
     // Security variables (exclude token_url)
     ...(toolset.securityVariables?.flatMap((secVar) =>
       secVar.envVariables.filter(
-        (v) => !v.toLowerCase().includes("token_url") // direct token url is always a hidden option right now
-      )
+        (v) => !v.toLowerCase().includes("token_url"), // direct token url is always a hidden option right now
+      ),
     ) ?? []),
     // Server variables (filter server_url unless required)
     ...(toolset.serverVariables?.flatMap((serverVar) =>
       serverVar.envVariables.filter(
-        (v) => !v.toLowerCase().includes("server_url") || requiresServerURL
-      )
+        (v) => !v.toLowerCase().includes("server_url") || requiresServerURL,
+      ),
     ) ?? []),
   ];
 
@@ -702,13 +706,13 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
       .replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
       "args": ${argsStringIndented}${
-    !toolset.mcpIsPublic
-      ? `,
+        !toolset.mcpIsPublic
+          ? `,
       "env": {
         "GRAM_KEY": "Bearer <your-key-here>"
       }`
-      : ""
-  }
+          : ""
+      }
     }
   }
 }`;
@@ -739,7 +743,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
 
 export function useMcpSlugValidation(
   mcpSlug: string | undefined,
-  currentSlug?: string
+  currentSlug?: string,
 ) {
   const [slugError, setSlugError] = useState<string | null>(null);
   const client = useSdkClient();
@@ -854,7 +858,7 @@ function OAuthTabModal({
     toolset.securityVariables?.filter(
       (secVar) =>
         secVar.type === "oauth2" &&
-        secVar.oauthTypes?.includes("authorization_code")
+        secVar.oauthTypes?.includes("authorization_code"),
     ).length ?? 0;
 
   const hasMultipleOAuth2AuthCode = oauth2AuthCodeCount > 1;
@@ -867,7 +871,7 @@ function OAuthTabModal({
     });
     window.open(
       "https://calendly.com/d/crtj-3tk-wpd/demo-with-speakeasy",
-      "_blank"
+      "_blank",
     );
   };
 
@@ -886,7 +890,7 @@ function OAuthTabModal({
     onError: (error) => {
       console.error("Failed to configure external OAuth:", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to configure OAuth"
+        error instanceof Error ? error.message : "Failed to configure OAuth",
       );
     },
   });
@@ -913,12 +917,12 @@ function OAuthTabModal({
       "registration_endpoint",
     ];
     const missingEndpoints = requiredEndpoints.filter(
-      (endpoint) => !parsedMetadata[endpoint]
+      (endpoint) => !parsedMetadata[endpoint],
     );
 
     if (missingEndpoints.length > 0) {
       setJsonError(
-        `Missing required endpoints: ${missingEndpoints.join(", ")}`
+        `Missing required endpoints: ${missingEndpoints.join(", ")}`,
       );
       return;
     }
@@ -1042,11 +1046,12 @@ function OAuthTabModal({
                   meeting and we'll help you get started.
                 </Type>
                 <div className="mt-6 flex gap-3 justify-end items-center">
-                  <Button variant="secondary"
+                  <Button
+                    variant="secondary"
                     onClick={() =>
                       window.open(
                         "https://docs.getgram.ai/host-mcp/adding-oauth#oauth-proxy",
-                        "_blank"
+                        "_blank",
                       )
                     }
                   >
@@ -1115,7 +1120,8 @@ function OAuthDetailsModal({
             {toolset.oauthProxyServer && (
               <div className="flex items-center justify-between">
                 <Type className="font-medium">OAuth Proxy Server</Type>
-                <Button variant="tertiary"
+                <Button
+                  variant="tertiary"
                   size="sm"
                   className="hover:bg-destructive hover:text-white border-none"
                   onClick={() =>
@@ -1229,7 +1235,7 @@ function OAuthDetailsModal({
                       {JSON.stringify(
                         toolset.externalOauthServer.metadata,
                         null,
-                        2
+                        2,
                       )}
                     </CodeBlock>
                   </div>

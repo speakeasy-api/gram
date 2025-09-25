@@ -1,10 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Badge } from "./ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "./ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Type } from "./ui/type";
 
 export const HttpRoute = ({
@@ -17,7 +13,9 @@ export const HttpRoute = ({
   return (
     <div className="flex gap-2 font-mono items-start">
       <HttpMethod method={method} variant="type" />
-      <Type className="text-xs text-muted-foreground wrap-anywhere">{path}</Type>
+      <Type className="text-xs text-muted-foreground wrap-anywhere">
+        {path}
+      </Type>
     </div>
   );
 };
