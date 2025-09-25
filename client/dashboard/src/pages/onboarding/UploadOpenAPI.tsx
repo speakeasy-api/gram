@@ -32,6 +32,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import { useRoutes } from "@/routes";
 import { CheckIcon } from "lucide-react";
+import UploadAsset from "@/components/upload-asset";
 
 export default function UploadOpenAPI() {
   const navigate = useNavigate();
@@ -45,7 +46,10 @@ export default function UploadOpenAPI() {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <UploadOpenAPIContent onStepsComplete={onStepsComplete} />
+      {/* <UploadOpenAPIContent onStepsComplete={onStepsComplete} /> */}
+      <Page.Body>
+        <UploadAsset />
+      </Page.Body>
     </Page>
   );
 }
