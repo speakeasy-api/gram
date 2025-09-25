@@ -2,7 +2,7 @@ import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import this second to override certain values in moonshine.css
 
 import { MoonshineConfigProvider } from "@speakeasy-api/moonshine";
-import { TooltipProvider } from "./components/ui/tooltip.tsx";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
