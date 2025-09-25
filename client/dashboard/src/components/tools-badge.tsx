@@ -5,7 +5,7 @@ import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
-  TooltipPortal
+  TooltipPortal,
 } from "@speakeasy-api/moonshine";
 import { UrgentWarningIcon } from "./ui/urgent-warning-icon";
 import { cn } from "@/lib/utils";
@@ -86,10 +86,14 @@ export const ToolsBadge = ({
         <Badge
           size={size}
           variant={toolsWarnings ? "warning" : variant}
-          className={cn(!toolsWarnings && "bg-card", 'flex items-center py-1 gap-[1ch]',className)}
+          className={cn(
+            !toolsWarnings && "bg-card",
+            "flex items-center py-1 gap-[1ch]",
+            className,
+          )}
         >
-            {toolsWarnings && <UrgentWarningIcon className="inline-block" />}
-            {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
+          {toolsWarnings && <UrgentWarningIcon className="inline-block" />}
+          {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
         </Badge>
       </TooltipTrigger>
       <TooltipPortal>

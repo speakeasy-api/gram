@@ -1,9 +1,6 @@
 import { EditableText } from "@/components/editable-text";
 import { CopyableSlug } from "@/components/name-and-slug";
-import {
-  ToolsetPromptsBadge,
-  ToolsBadge
-} from "@/components/tools-badge";
+import { ToolsetPromptsBadge, ToolsBadge } from "@/components/tools-badge";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -23,7 +20,7 @@ export const ToolsetHeader = ({
   const { data: toolset, refetch } = useToolset(
     { slug: toolsetSlug },
     undefined,
-    { enabled: !!toolsetSlug }
+    { enabled: !!toolsetSlug },
   );
 
   const updateToolset = async (changes: Partial<Toolset>) => {
@@ -74,7 +71,11 @@ export const ToolsetHeader = ({
           </Type>
         </EditableText>
         <Stack direction="horizontal" gap={2}>
-          <ToolsBadge toolNames={toolset ? userFacingToolnames(toolset) : []} size="md" variant="secondary" />
+          <ToolsBadge
+            toolNames={toolset ? userFacingToolnames(toolset) : []}
+            size="md"
+            variant="secondary"
+          />
           <ToolsetPromptsBadge toolset={toolset} size="md" variant="outline" />
         </Stack>
       </div>
