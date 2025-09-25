@@ -298,9 +298,9 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 	// gramExtNode, _ := op.Extensions.Get("x-gram")
 	// speakeasyExtNode, _ := op.Extensions.Get("x-speakeasy-mcp")
 	// Convert doc slug hyphens to underscores for consistency with tool naming
-	sanitizedSlug := strings.ReplaceAll(tools.SanitizeName(string(docInfo.Slug)), "-", "_")
+	sanitizedSlug := strings.ReplaceAll(string(docInfo.Slug), "-", "_")
 	snakeCasedOp := strcase.ToSnake(opID)
-	untruncatedName := fmt.Sprintf("%s_%s", sanitizedSlug, snakeCasedOp)
+	untruncatedName := tools.SanitizeName(fmt.Sprintf("%s_%s", sanitizedSlug, snakeCasedOp))
 	// we limit actual tool name to 60 character by default to stay in line with common MCP client restrictions
 	name := truncateWithHash(untruncatedName, 60)
 
@@ -379,6 +379,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 	}
 
 	sanitizedName := strcase.ToSnake(tools.SanitizeName(conv.PtrValOr(customName, "")))
+	finalName := tools.SanitizeName(conv.Default(sanitizedName, name))
 
 	confirm, valid := mv.SanitizeConfirmPtr(customConfirm)
 	if !valid {
@@ -390,7 +391,7 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 	return toolDescriptor{
 		xGramFound:          xgram,
 		xSpeakeasyMCPFound:  xspeakeasy,
-		name:                conv.Default(sanitizedName, name),
+		name:                finalName,
 		untruncatedName:     untruncatedName,
 		summary:             conv.PtrValOr(customSummary, summary),
 		description:         conv.PtrValOr(customDescription, description),
