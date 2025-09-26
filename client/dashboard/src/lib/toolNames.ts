@@ -116,7 +116,6 @@ export const httpToolNames = (toolset: {
   return httpTools.map((tool) => tool.name);
 };
 
-// Quinn you better make a note of this one in the PR
 export const userFacingToolNames = (toolset: {
   httpTools: HTTPToolDefinitionEntry[];
   promptTemplates: PromptTemplateEntry[];

@@ -1,6 +1,6 @@
 import { EditableText } from "@/components/editable-text";
 import { CopyableSlug } from "@/components/name-and-slug";
-import { ToolsetPromptsBadge, ToolsBadge } from "@/components/tools-badge";
+import { ToolsetPromptsBadge, ToolCollectionBadge } from "@/components/tools-badge";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
@@ -71,7 +71,7 @@ export const ToolsetHeader = ({
           </Type>
         </EditableText>
         <Stack direction="horizontal" gap={2}>
-          <ToolsBadge
+          <ToolCollectionBadge
             toolNames={toolset ? userFacingToolNames(toolset) : []}
             size="md"
             variant="secondary"

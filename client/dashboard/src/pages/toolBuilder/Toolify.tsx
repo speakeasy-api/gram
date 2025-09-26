@@ -1,4 +1,4 @@
-import { ToolsBadge } from "@/components/tools-badge";
+import { ToolCollectionBadge } from "@/components/tools-badge";
 import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
@@ -175,7 +175,7 @@ export const ToolifyDialog = ({
                 selectedToolset={selectedToolset}
                 setSelectedToolset={(toolset) => setSelectedToolset(toolset)}
               />
-              <ToolsBadge
+              <ToolCollectionBadge
                 toolNames={toolset ? userFacingToolNames(toolset) : []}
                 size={"md"}
                 warnOnTooManyTools
