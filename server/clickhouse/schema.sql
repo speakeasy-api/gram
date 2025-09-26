@@ -1,0 +1,52 @@
+CREATE TABLE IF NOT EXISTS tool_logs
+(
+    ts              DateTime64(3, 'UTC'),
+    organization_id LowCardinality(String),
+    project_id      LowCardinality(String),
+    deployment_id   LowCardinality(String),
+    tool_type       Enum8('http'=1,'function'=2),
+    tool_id         LowCardinality(String),
+
+    trace_id        FixedString(32),
+    span_id         FixedString(16),     -- should we use UUID here?
+
+    level           Enum8('TRACE'=1,'DEBUG'=2,'INFO'=3,'WARN'=4,'ERROR'=5),
+    message         String CODEC (ZSTD), -- should this be capped?
+    attrs_json      String CODEC (ZSTD), -- can be renamed to metadata_json
+
+    ingest_time     DateTime DEFAULT now()
+) ENGINE = MergeTree
+      PARTITION BY toDate(ts)
+      ORDER BY (organization_id, project_id, deployment_id, tool_type, tool_id, ts)
+      TTL ts + toIntervalDay(30);
+
+create table http_requests_raw
+(
+    ts                  DateTime64(3, 'UTC'),
+    organization_id     LowCardinality(String),
+    project_id          LowCardinality(String),
+    deployment_id       LowCardinality(String),
+    tool_type           Enum8('http' = 1, 'function' = 2) default 'http',
+    tool_id             LowCardinality(String),
+    trace_id            FixedString(32),
+    span_id             FixedString(16),
+    request_id          UUID,
+    http_role           Enum8('server' = 1, 'client' = 2),
+    http_method         Enum8('_OTHER' = 0, 'GET' = 1, 'POST' = 2, 'PUT' = 3, 'DELETE' = 4, 'PATCH' = 5, 'HEAD' = 6, 'OPTIONS' = 7, 'TRACE' = 8, 'CONNECT' = 9),
+    http_route          LowCardinality(String),
+    status_code         UInt16,
+    duration_ms         Float64,
+    request_body        String,
+    response_body       String,
+    request_headers     String,
+    response_headers    String,
+    request_body_bytes  UInt64,
+    response_body_bytes UInt64,
+    ingest_time         DateTime DEFAULT now(),
+    success             UInt8,
+    error_type          LowCardinality(String)
+) engine = MergeTree PARTITION BY toDate(ts)
+      ORDER BY (organization_id, project_id, deployment_id, tool_type, tool_id, ts)
+      TTL ts + toIntervalDay(15)
+      SETTINGS index_granularity = 8192;
+
