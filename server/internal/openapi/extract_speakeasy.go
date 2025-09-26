@@ -63,17 +63,15 @@ func (p *ToolExtractor) doSpeakeasy(
 	tx *repo.Queries,
 	data []byte,
 	task ToolExtractorTask,
-) (*ToolExtractorResult, error) {
+) (result *ToolExtractorResult, err error) {
 	ctx, rootSpan := tracer.Start(ctx, "openapi.doSpeakeasy")
-	var spanFailed bool
 
 	failSpan := func(span trace.Span, msg string) {
 		span.SetStatus(codes.Error, msg)
-		spanFailed = true
 	}
 
 	defer func() {
-		if spanFailed {
+		if err != nil {
 			rootSpan.SetStatus(codes.Error, "one or more child operations failed")
 		}
 		rootSpan.End()
