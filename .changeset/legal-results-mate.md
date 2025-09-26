@@ -2,4 +2,4 @@
 "@gram/server": patch
 ---
 
-patch: add clickhouse dependency
+Add clickhouse dependency
