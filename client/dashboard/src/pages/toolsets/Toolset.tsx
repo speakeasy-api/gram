@@ -58,7 +58,7 @@ export function useDeleteToolset({
   return (slug: string) => {
     if (
       confirm(
-        "Are you sure you want to delete this toolset? This action cannot be undone."
+        "Are you sure you want to delete this toolset? This action cannot be undone.",
       )
     ) {
       mutation.mutate({
@@ -138,7 +138,7 @@ export function ToolsetView({
   const { data: toolset, refetch } = useToolset(
     { slug: toolsetSlug },
     undefined,
-    { enabled: !!toolsetSlug }
+    { enabled: !!toolsetSlug },
   );
 
   const toolDefinitions = useToolDefinitions(toolset);
@@ -201,12 +201,6 @@ export function ToolsetView({
 
   const actions = (
     <Stack direction="horizontal" gap={2} align="center">
-      <Button onClick={gotoAddTools} size="sm">
-        <Button.LeftIcon>
-          <Icon name="plus" className="h-4 w-4" />
-        </Button.LeftIcon>
-        <Button.Text>Add/Remove Tools</Button.Text>
-      </Button>
       <MoreActions
         actions={[
           {
@@ -231,7 +225,7 @@ export function ToolsetView({
 
   const grouped = useGroupedTools(toolDefinitions);
   const [selectedGroups, setSelectedGroups] = useState<string[]>(
-    grouped.map((group) => group.key)
+    grouped.map((group) => group.key),
   );
   const groupFilterItems = grouped.map((group) => ({
     label: group.key,
@@ -281,18 +275,30 @@ export function ToolsetView({
           <TabsTrigger value="mcp">MCP</TabsTrigger>
         </TabsList>
         <TabsContent value="tools">
-          <Cards isLoading={!toolset} noGrid={noGrid}>
-            {toolsToDisplay.map((tool) => (
-              <ToolCard
-                key={tool.canonicalName}
-                tool={tool}
-                onUpdate={onUpdate}
-              />
-            ))}
-          </Cards>
-          {toolsToDisplay.length === 0 && (
-            <ToolsetEmptyState toolsetSlug={toolsetSlug} />
-          )}
+          <Stack gap={6}>
+            <div>
+              <Button onClick={gotoAddTools} size="sm">
+                <Button.LeftIcon>
+                  <Icon name="plus" className="h-4 w-4" />
+                </Button.LeftIcon>
+                <Button.Text>Add/Remove Tools</Button.Text>
+              </Button>
+            </div>
+            {toolsToDisplay.length > 0 && (
+              <Cards isLoading={!toolset} noGrid={noGrid}>
+                {toolsToDisplay.map((tool) => (
+                  <ToolCard
+                    key={tool.canonicalName}
+                    tool={tool}
+                    onUpdate={onUpdate}
+                  />
+                ))}
+              </Cards>
+            )}
+            {toolsToDisplay.length === 0 && (
+              <ToolsetEmptyState toolsetSlug={toolsetSlug} />
+            )}
+          </Stack>
         </TabsContent>
         <TabsContent value="prompts">
           {toolset && (
