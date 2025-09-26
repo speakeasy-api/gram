@@ -5,12 +5,14 @@ go 1.25.0
 replace github.com/speakeasy-api/gram/server => ../server
 
 require (
+	github.com/BurntSushi/toml v1.5.0
 	github.com/charmbracelet/log v0.4.2
 	github.com/hashicorp/go-retryablehttp v0.7.8
 	github.com/speakeasy-api/gram/server v0.0.0-00010101000000-000000000000
 	github.com/stretchr/testify v1.11.1
 	github.com/urfave/cli/v2 v2.27.7
 	go.opentelemetry.io/otel/trace v1.38.0
+	go.yaml.in/yaml/v4 v4.0.0-rc.2
 	goa.design/goa/v3 v3.22.3
 )
 

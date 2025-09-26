@@ -4402,7 +4402,7 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
 	if body.Name != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Name != nil {
 		if utf8.RuneCountInString(*body.Name) > 40 {

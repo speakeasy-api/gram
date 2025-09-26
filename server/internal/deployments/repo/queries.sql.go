@@ -337,6 +337,44 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 	)
 }
 
+const createDeploymentFunctionsAccess = `-- name: CreateDeploymentFunctionsAccess :one
+INSERT INTO functions_access (
+    project_id
+  , deployment_id
+  , function_id
+  , encryption_key
+  , bearer_format
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+)
+RETURNING id
+`
+
+type CreateDeploymentFunctionsAccessParams struct {
+	ProjectID     uuid.UUID
+	DeploymentID  uuid.UUID
+	FunctionID    uuid.UUID
+	EncryptionKey []byte
+	BearerFormat  pgtype.Text
+}
+
+func (q *Queries) CreateDeploymentFunctionsAccess(ctx context.Context, arg CreateDeploymentFunctionsAccessParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createDeploymentFunctionsAccess,
+		arg.ProjectID,
+		arg.DeploymentID,
+		arg.FunctionID,
+		arg.EncryptionKey,
+		arg.BearerFormat,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const createFunctionsTool = `-- name: CreateFunctionsTool :one
 INSERT INTO function_tool_definitions (
     deployment_id
@@ -841,6 +879,42 @@ func (q *Queries) GetDeploymentByIdempotencyKey(ctx context.Context, arg GetDepl
 		&i.Status,
 	)
 	return i, err
+}
+
+const getDeploymentFunctionsWithoutAccess = `-- name: GetDeploymentFunctionsWithoutAccess :many
+SELECT df.id
+FROM deployments_functions df
+LEFT JOIN functions_access fm ON df.id = fm.function_id AND fm.deleted IS FALSE
+WHERE df.deployment_id = $1 
+  AND df.deployment_id IN (
+    SELECT id FROM deployments d WHERE d.project_id = $2
+  )
+  AND fm.function_id IS NULL
+`
+
+type GetDeploymentFunctionsWithoutAccessParams struct {
+	DeploymentID uuid.UUID
+	ProjectID    uuid.UUID
+}
+
+func (q *Queries) GetDeploymentFunctionsWithoutAccess(ctx context.Context, arg GetDeploymentFunctionsWithoutAccessParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, getDeploymentFunctionsWithoutAccess, arg.DeploymentID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getDeploymentLogs = `-- name: GetDeploymentLogs :many

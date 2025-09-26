@@ -101,14 +101,14 @@ func TestNewTool(t *testing.T) {
 			kind:     urn.ToolKindFunction,
 			source:   "-my-source",
 			toolName: "my-tool",
-			wantErr:  urn.ErrInvalid,
+			wantErr:  nil,
 		},
 		{
 			name:     "tool name ending with dash",
 			kind:     urn.ToolKindFunction,
 			source:   "my-source",
 			toolName: "my-tool-",
-			wantErr:  urn.ErrInvalid,
+			wantErr:  nil,
 		},
 	}
 
@@ -599,6 +599,10 @@ func TestTool_edgeCases(t *testing.T) {
 			"abc-def-ghi",
 			"abc_def_ghi",
 			"a1-b2_c3",
+			"-abc", // starts with dash
+			"_abc", // starts with underscore
+			"abc-", // ends with dash
+			"abc_", // ends with underscore
 		}
 
 		for _, validCase := range validCases {
@@ -613,14 +617,10 @@ func TestTool_edgeCases(t *testing.T) {
 		}
 
 		invalidCases := []string{
-			"-abc", // starts with dash
-			"_abc", // starts with underscore
-			"abc-", // ends with dash
-			"abc_", // ends with underscore
-			"AB",   // uppercase
-			"a b",  // space
-			"a.b",  // dot
-			"a@b",  // at symbol
+			"AB",  // uppercase
+			"a b", // space
+			"a.b", // dot
+			"a@b", // at symbol
 		}
 
 		for _, invalidCase := range invalidCases {

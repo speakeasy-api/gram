@@ -196,6 +196,20 @@ type FunctionToolDefinition struct {
 	Deleted      bool
 }
 
+type FunctionsAccess struct {
+	ID            uuid.UUID
+	Seq           int64
+	ProjectID     uuid.UUID
+	DeploymentID  uuid.UUID
+	FunctionID    uuid.UUID
+	EncryptionKey []byte
+	BearerFormat  pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
+}
+
 type HttpSecurity struct {
 	ID                  uuid.UUID
 	DeploymentID        uuid.UUID

@@ -13,7 +13,6 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/usage"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"go.opentelemetry.io/otel/codes"
@@ -45,7 +44,7 @@ func (s *StubClient) GetCustomerTier(ctx context.Context, orgID string) (*Tier, 
 	_, span := s.tracer.Start(ctx, "stub_client.get_customer")
 	defer span.End()
 
-	return conv.Ptr(TierFree), nil
+	return nil, nil
 }
 
 func (s *StubClient) ValidateAndParseWebhookEvent(ctx context.Context, payload []byte, webhookHeader http.Header) (*PolarWebhookPayload, error) {

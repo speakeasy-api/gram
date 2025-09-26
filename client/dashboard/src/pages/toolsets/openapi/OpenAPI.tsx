@@ -33,9 +33,9 @@ import {
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import {
-  OnboardingContent,
-  useOnboardingSteps,
-} from "../../onboarding/Onboarding";
+  UploadOpenAPIContent,
+  useUploadOpenAPISteps,
+} from "../../onboarding/UploadOpenAPI";
 import { ApisEmptyState } from "./ApisEmptyState";
 
 export default function OpenAPIDocuments() {
@@ -96,7 +96,7 @@ export function APIsContent() {
   };
 
   const { handleSpecUpload, createDeployment, file, undoSpecUpload } =
-    useOnboardingSteps();
+    useUploadOpenAPISteps();
 
   const deploymentIsEmpty = useDeploymentIsEmpty();
   const deploymentLogsSummary = useDeploymentLogsSummary(deployment?.id);
@@ -114,7 +114,7 @@ export function APIsContent() {
             documents.
           </Dialog.Description>
         </Dialog.Header>
-        <OnboardingContent onOnboardingComplete={finishUpload} />
+        <UploadOpenAPIContent onStepsComplete={finishUpload} />
         <Dialog.Footer>
           <Button
             variant="tertiary"

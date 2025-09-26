@@ -6,7 +6,7 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Button } from "@speakeasy-api/moonshine";
+import { Alert, Button } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
@@ -30,11 +30,13 @@ import {
 import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
+import { useRoutes } from "@/routes";
+import { CheckIcon } from "lucide-react";
 
-export default function Onboarding() {
+export default function UploadOpenAPI() {
   const navigate = useNavigate();
 
-  const onOnboardingComplete = () => {
+  const onStepsComplete = () => {
     navigate("/toolsets");
   };
 
@@ -43,12 +45,12 @@ export default function Onboarding() {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <OnboardingContent onOnboardingComplete={onOnboardingComplete} />
+      <UploadOpenAPIContent onStepsComplete={onStepsComplete} />
     </Page>
   );
 }
 
-export function useOnboardingSteps(checkDocumentSlugUnique = true) {
+export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
   const project = useProject();
   const session = useSession();
   const client = useSdkClient();
@@ -236,14 +238,14 @@ export function useOnboardingSteps(checkDocumentSlugUnique = true) {
 
 const useAssetNumtools = (
   assetId: string | undefined,
-  deployment: Deployment | undefined
+  deployment: Deployment | undefined,
 ) => {
   const { data: tools } = useListTools({
     deploymentId: deployment?.id,
   });
 
   const documentId = deployment?.openapiv3Assets.find(
-    (doc) => doc.assetId === assetId
+    (doc) => doc.assetId === assetId,
   )?.id;
 
   return documentId
@@ -251,16 +253,16 @@ const useAssetNumtools = (
         (tool) =>
           tool.openapiv3DocumentId !== undefined &&
           tool.deploymentId === deployment?.id &&
-          tool.openapiv3DocumentId === documentId
+          tool.openapiv3DocumentId === documentId,
       ).length
     : 0;
 };
 
-export function OnboardingContent({
-  onOnboardingComplete,
+export function UploadOpenAPIContent({
+  onStepsComplete,
   className,
 }: {
-  onOnboardingComplete?: (deployment: Deployment) => void;
+  onStepsComplete?: (deployment: Deployment) => void;
   className?: string;
 }) {
   const {
@@ -274,7 +276,8 @@ export function OnboardingContent({
     apiNameError,
     file,
     asset,
-  } = useOnboardingSteps();
+  } = useUploadOpenAPISteps();
+  const routes = useRoutes();
 
   const numtools = useAssetNumtools(asset?.asset.id, createdDeployment);
 
@@ -336,26 +339,47 @@ export function OnboardingContent({
           <Spinner />
         </>
       ),
-      displayComplete: (
-        <div>
-          {createdDeployment ? (
-            <Accordion type="single" collapsible className="max-w-2xl">
-              <AccordionItem value="logs">
-                <AccordionTrigger className="text-base">
-                  ✓ Created {numtools} tools
-                </AccordionTrigger>
-                <AccordionContent>
-                  <DeploymentLogs
-                    deploymentId={createdDeployment?.id}
-                    onlyErrors
-                  />
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          ) : null}
-        </div>
-      ),
+      get displayComplete() {
+        if (!createdDeployment) return null;
+
+        if (createdDeployment.status === "failed")
+          return (
+            <Alert variant="error" dismissible={false} className="text-sm">
+              The deployment failed. Check the{" "}
+              <routes.deployments.deployment.Link
+                params={[createdDeployment.id]}
+                className="text-link"
+              >
+                deployment logs
+              </routes.deployments.deployment.Link>{" "}
+              for more information.
+            </Alert>
+          );
+
+        return (
+          <div>
+            {createdDeployment ? (
+              <Accordion type="single" collapsible className="max-w-2xl">
+                <AccordionItem value="logs">
+                  <AccordionTrigger className="text-base">
+                    <div className="flex items-center gap-2">
+                      <CheckIcon className="size-4" /> Created {numtools} tools
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <DeploymentLogs
+                      deploymentId={createdDeployment?.id}
+                      onlyErrors
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            ) : null}
+          </div>
+        );
+      },
       isComplete: !!createdDeployment,
+      failed: createdDeployment?.status === "failed",
     },
   ];
 
@@ -363,7 +387,7 @@ export function OnboardingContent({
     <Page.Body className={className}>
       <Stepper
         steps={steps}
-        onComplete={() => onOnboardingComplete?.(createdDeployment!)}
+        onComplete={() => onStepsComplete?.(createdDeployment!)}
       />
     </Page.Body>
   );
@@ -404,7 +428,7 @@ export function DeploymentLogs(props: {
         key={e.id}
         className={cn(
           e.event.includes("error") && "text-destructive",
-          "py-1 px-4 dark:hover:bg-white/15 rounded hover:bg-gray-100"
+          "py-1 px-4 dark:hover:bg-white/15 rounded hover:bg-gray-100",
         )}
       >
         {e.message}

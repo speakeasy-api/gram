@@ -591,3 +591,30 @@ WHERE
   project_id = @project_id
   AND (deployment_id = @deployment_id AND deployment_id IS NOT NULL)
   AND (openapiv3_document_id = @openapiv3_document_id AND openapiv3_document_id IS NOT NULL);
+
+-- name: GetDeploymentFunctionsWithoutAccess :many
+SELECT df.id
+FROM deployments_functions df
+LEFT JOIN functions_access fm ON df.id = fm.function_id AND fm.deleted IS FALSE
+WHERE df.deployment_id = @deployment_id 
+  AND df.deployment_id IN (
+    SELECT id FROM deployments d WHERE d.project_id = @project_id
+  )
+  AND fm.function_id IS NULL;
+
+-- name: CreateDeploymentFunctionsAccess :one
+INSERT INTO functions_access (
+    project_id
+  , deployment_id
+  , function_id
+  , encryption_key
+  , bearer_format
+) VALUES (
+    @project_id
+  , @deployment_id
+  , @function_id
+  , @encryption_key
+  , @bearer_format
+)
+RETURNING id;
+

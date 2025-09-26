@@ -3664,7 +3664,7 @@ func ValidateCreateToolsetRequestBody(body *CreateToolsetRequestBody) (err error
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	if body.DefaultEnvironmentSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.DefaultEnvironmentSlug != nil {
 		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
@@ -3678,7 +3678,7 @@ func ValidateCreateToolsetRequestBody(body *CreateToolsetRequestBody) (err error
 // UpdateToolsetRequestBody
 func ValidateUpdateToolsetRequestBody(body *UpdateToolsetRequestBody) (err error) {
 	if body.DefaultEnvironmentSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.DefaultEnvironmentSlug != nil {
 		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
@@ -3686,7 +3686,7 @@ func ValidateUpdateToolsetRequestBody(body *UpdateToolsetRequestBody) (err error
 		}
 	}
 	if body.McpSlug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.McpSlug != nil {
 		if utf8.RuneCountInString(*body.McpSlug) > 40 {
@@ -3720,7 +3720,7 @@ func ValidateExternalOAuthServerFormRequestBody(body *ExternalOAuthServerFormReq
 		err = goa.MergeErrors(err, goa.MissingFieldError("metadata", "body"))
 	}
 	if body.Slug != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
 	}
 	if body.Slug != nil {
 		if utf8.RuneCountInString(*body.Slug) > 40 {
