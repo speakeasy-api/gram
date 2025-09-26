@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/tool-metrics"
 )
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
@@ -56,6 +58,32 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 
 type dbClientOptions struct {
 	enableUnsafeLogging bool
+}
+
+func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (tm.ToolMetricsClient, error) {
+	conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // too many fields
+		Auth: clickhouse.Auth{
+			Database: c.String("clickhouse-database"),
+			Username: c.String("clickhouse-username"),
+			Password: c.String("clickhouse-password"),
+		},
+		Addr:     []string{fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-port"))},
+		Protocol: clickhouse.HTTP,
+	})
+	if err != nil {
+		logger.WarnContext(ctx, "error connecting to clickhouse; falling back to stub tool call metrics client")
+		return &tm.StubToolMetricsClient{}, nil
+	}
+
+	if err = conn.Ping(ctx); err != nil {
+		logger.WarnContext(ctx, "failed to ping clickhouse; falling back to stub tool call metrics client", attr.SlogError(err))
+		return &tm.StubToolMetricsClient{}, nil
+	}
+
+	return &tm.ClickhouseClient{
+		Conn:   conn,
+		Logger: logger,
+	}, nil
 }
 
 func newDBClient(ctx context.Context, logger *slog.Logger, meterProvider metric.MeterProvider, connstring string, opts dbClientOptions) (*pgxpool.Pool, error) {

@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/tool-metrics"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -302,6 +303,36 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_CONFIG_FILE"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "clickhouse-host",
+			Usage:    "Clickhouse Host",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_HOST"},
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-database",
+			Usage:    "Clickhouse Database",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_DATABASE"},
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-username",
+			Usage:    "Clickhouse Username",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_USERNAME"},
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-password",
+			Usage:    "Clickhouse Password",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_PASSWORD"},
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-port",
+			Usage:    "Clickhouse Port",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_PORT"},
+		},
 	}
 
 	return &cli.Command{
@@ -334,6 +365,18 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			tcm, err := newToolMetricsClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
+			}
+
+			defer func(c tm.ToolMetricsClient) {
+				closeErr := c.Close()
+				if closeErr != nil {
+					logger.ErrorContext(ctx, "failed to close tool metrics client connection", attr.SlogError(closeErr))
+				}
+			}(tcm)
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
