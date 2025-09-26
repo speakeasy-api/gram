@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -43,6 +44,7 @@ func NewActivities(
 	tracerProvider trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	db *pgxpool.Pool,
+	encryption *encryption.Client,
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
@@ -63,7 +65,7 @@ func NewActivities(
 		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
 		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
 		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage),
-		provisionFunctionsAccess:      activities.NewProvisionFunctionsAccess(logger, db),
+		provisionFunctionsAccess:      activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),

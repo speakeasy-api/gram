@@ -11,23 +11,27 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 type ProvisionFunctionsAccess struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
+	logger     *slog.Logger
+	db         *pgxpool.Pool
+	encryption *encryption.Client
 }
 
 func NewProvisionFunctionsAccess(
 	logger *slog.Logger,
 	db *pgxpool.Pool,
+	encryption *encryption.Client,
 ) *ProvisionFunctionsAccess {
 	return &ProvisionFunctionsAccess{
-		logger: logger.With(attr.SlogComponent("get-all-organizations")),
-		db:     db,
+		logger:     logger.With(attr.SlogComponent("get-all-organizations")),
+		db:         db,
+		encryption: encryption,
 	}
 }
 
@@ -65,14 +69,19 @@ func (p *ProvisionFunctionsAccess) Do(ctx context.Context, projectID uuid.UUID, 
 	for _, aid := range attachments {
 		key := make([]byte, 32)
 		if _, err := rand.Read(key); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to generate encryption key").Log(ctx, logger)
+			return oops.E(oops.CodeUnexpected, err, "failed to generate encryption key").Log(ctx, logger, attr.SlogDeploymentFunctionsID(aid.String()))
+		}
+
+		sealedKey, err := p.encryption.Encrypt(key)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to encrypt functions access key").Log(ctx, logger, attr.SlogDeploymentFunctionsID(aid.String()))
 		}
 
 		_, err = deprepo.CreateDeploymentFunctionsAccess(ctx, repo.CreateDeploymentFunctionsAccessParams{
 			ProjectID:     projectID,
 			DeploymentID:  deploymentID,
 			FunctionID:    aid,
-			EncryptionKey: key,
+			EncryptionKey: []byte(sealedKey),
 			BearerFormat:  conv.ToPGText("GramV1"),
 		})
 		if err != nil {

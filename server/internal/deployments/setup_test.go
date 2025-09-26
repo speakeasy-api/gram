@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -66,10 +67,13 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
+	enc, err := encryption.New("test-encryption-key")
+	require.NoError(t, err)
+
 	f := &feature.InMemory{}
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage))
+	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()

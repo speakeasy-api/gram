@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -78,10 +79,13 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	// Create a test blob store for testing
 	assetStorage := assetstest.NewTestBlobStore(t)
 
+	enc, err := encryption.New("test-encryption-key")
+	require.NoError(t, err)
+
 	f := &feature.InMemory{}
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage))
+	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()
