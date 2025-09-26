@@ -339,9 +339,9 @@ CREATE TABLE IF NOT EXISTS functions_access (
   deleted_at timestamptz,
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
-  CONSTRAINT functions_mtls_pkey PRIMARY KEY (id),
-  CONSTRAINT functions_mtls_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
-  CONSTRAINT functions_mtls_function_id_fkey FOREIGN KEY (function_id) REFERENCES deployments_functions (id) ON DELETE CASCADE
+  CONSTRAINT functions_access_pkey PRIMARY KEY (id),
+  CONSTRAINT functions_access_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
+  CONSTRAINT functions_access_function_id_fkey FOREIGN KEY (function_id) REFERENCES deployments_functions (id) ON DELETE CASCADE
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS functions_access_project_deployment_function_seq_key ON functions_access (project_id, deployment_id, function_id, seq DESC) WHERE deleted IS FALSE;
