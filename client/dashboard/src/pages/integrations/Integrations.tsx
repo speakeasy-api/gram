@@ -3,7 +3,7 @@ import { AssetImage } from "@/components/asset-image";
 import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
-import { ToolsBadge } from "@/components/tools-badge";
+import { ToolCollectionBadge } from "@/components/tools-badge";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Card, Cards } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
@@ -319,7 +319,7 @@ export function IntegrationCard({
         </Card.Description>
       </Card.Content>
       <Card.Footer>
-        <ToolsBadge toolNames={integration.toolNames} />
+        <ToolCollectionBadge toolNames={integration.toolNames} />
         <Type variant="body" muted className="text-sm italic">
           {"Updated "}
           <HumanizeDateTime date={new Date(integration.versionCreatedAt)} />

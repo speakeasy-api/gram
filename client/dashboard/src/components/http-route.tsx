@@ -51,16 +51,11 @@ export const HttpMethodColors: Record<
   },
 };
 
-export const HttpMethod = ({
+const HttpMethod = ({
   method,
-  path,
-  variant = "badge",
 }: {
   method: string;
-  path?: string;
-  variant?: "badge" | "type";
 }) => {
-  if (variant === "type") {
     const typeStyle = HttpMethodColors[method]?.text;
 
     return (
@@ -68,34 +63,5 @@ export const HttpMethod = ({
         {method}
       </Type>
     );
-  }
 
-  if (variant === "badge") {
-    const badgeStyle = HttpMethodColors[method]?.bg;
-
-    const badge = (
-      <Badge
-        variant="secondary"
-        className={cn("text-sm capitalize", badgeStyle)}
-        size="sm"
-      >
-        {method}
-      </Badge>
-    );
-
-    if (path) {
-      return (
-        <Tooltip>
-          <TooltipTrigger asChild>{badge}</TooltipTrigger>
-          <TooltipContent>
-            <HttpRoute method={method} path={path} />
-          </TooltipContent>
-        </Tooltip>
-      );
-    }
-
-    return badge;
-  }
-
-  return null;
 };

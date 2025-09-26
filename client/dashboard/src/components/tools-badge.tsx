@@ -50,7 +50,7 @@ export const ToolsetPromptsBadge = ({
   ) : null;
 };
 
-export const ToolsBadge = ({
+export const ToolCollectionBadge = ({
   toolNames,
   size = "md",
   variant = "outline",

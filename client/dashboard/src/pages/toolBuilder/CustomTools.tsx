@@ -1,7 +1,7 @@
 import { Page } from "@/components/page-layout";
 import { Button } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
-import { ToolsBadge } from "@/components/tools-badge";
+import { ToolCollectionBadge } from "@/components/tools-badge";
 import { Badge } from "@/components/ui/badge";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
@@ -152,7 +152,7 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
         <Card.Footer>
           <Stack direction="horizontal" gap={1}>
             {inputsBadge}
-            <ToolsBadge toolNames={template.toolsHint} />
+            <ToolCollectionBadge toolNames={template.toolsHint} />
           </Stack>
           <UpdatedAt date={new Date(template.updatedAt)} />
         </Card.Footer>
