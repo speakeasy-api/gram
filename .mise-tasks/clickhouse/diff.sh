@@ -6,7 +6,7 @@
 set -e
 
 if [ "${usage_name:-}" = "" ]; then
-  echo "Usage: $0 --name <name>"
+  echo "Usage: $0 <name>"
   exit 1
 fi
 
