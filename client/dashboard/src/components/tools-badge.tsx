@@ -1,43 +1,21 @@
-import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
-import { Stack } from "@speakeasy-api/moonshine";
-import { Badge, TwoPartBadge } from "./ui/badge";
-import { UrgentWarningIcon } from "./ui/urgent-warning-icon";
+import {
+  Stack,
+  Badge,
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipPortal,
+  Icon,
+} from "@speakeasy-api/moonshine";
 import { cn } from "@/lib/utils";
-import { higherOrderToolNames, promptNames } from "@/lib/toolNames";
+import { promptNames } from "@/lib/toolNames";
 
 // Define minimal types for badge components
 type ToolsetForBadge = Pick<
   ToolsetEntry,
   "name" | "slug" | "httpTools" | "promptTemplates"
 >;
-
-export const ToolsetBadge = ({
-  toolset,
-  size = "md",
-}: {
-  toolset: ToolsetForBadge | undefined;
-  size?: "sm" | "md";
-}) => {
-  const routes = useRoutes();
-
-  if (!toolset) {
-    return <Badge size={size} variant="outline" isLoading />;
-  }
-
-  return (
-    <TwoPartBadge>
-      <routes.toolsets.toolset.Link params={[toolset.slug]}>
-        <Badge className="capitalize">{toolset.name}</Badge>
-      </routes.toolsets.toolset.Link>
-      <ToolsetToolsBadge
-        toolset={toolset}
-        variant="outline"
-        className="lowercase"
-      />
-    </TwoPartBadge>
-  );
-};
 
 export const ToolsetPromptsBadge = ({
   toolset,
@@ -61,48 +39,18 @@ export const ToolsetPromptsBadge = ({
   );
 
   return names && names.length > 0 ? (
-    <Badge size={size} variant={variant} tooltip={tooltipContent}>
-      {names.length} Prompt{names.length === 1 ? "" : "s"}
-    </Badge>
+    <Tooltip>
+      <TooltipTrigger>
+        <Badge size={size} variant={variant}>
+          {names.length} Prompt{names.length === 1 ? "" : "s"}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">{tooltipContent}</TooltipContent>
+    </Tooltip>
   ) : null;
 };
 
-function httpToolNames(toolset: ToolsetForBadge) {
-  const { httpTools } = toolset;
-
-  return httpTools.map((tool) => tool.name);
-}
-
-function toolNames(toolset: ToolsetForBadge) {
-  const { promptTemplates } = toolset;
-
-  return httpToolNames(toolset).concat(higherOrderToolNames(promptTemplates));
-}
-
-export const ToolsetToolsBadge = ({
-  toolset,
-  size = "md",
-  variant = "outline",
-  className,
-}: {
-  toolset: ToolsetForBadge | undefined;
-  size?: "sm" | "md";
-  variant?: "outline" | "default";
-  className?: string;
-}) => {
-  const names: string[] = toolset ? toolNames(toolset) : [];
-  return (
-    <ToolsBadge
-      toolNames={names}
-      size={size}
-      variant={variant}
-      className={className}
-      warnOnTooManyTools
-    />
-  );
-};
-
-export const ToolsBadge = ({
+export const ToolCollectionBadge = ({
   toolNames,
   size = "md",
   variant = "outline",
@@ -111,7 +59,7 @@ export const ToolsBadge = ({
 }: {
   toolNames: string[] | undefined;
   size?: "sm" | "md";
-  variant?: "outline" | "default";
+  variant?: React.ComponentProps<typeof Badge>["variant"];
   className?: string;
   warnOnTooManyTools?: boolean;
 }) => {
@@ -126,39 +74,39 @@ export const ToolsBadge = ({
   );
 
   const toolsWarnings =
-    warnOnTooManyTools &&
-    toolNames &&
-    toolNames.length > 40 &&
-    toolNames.length < 150;
+    warnOnTooManyTools && toolNames && toolNames.length > 40;
   if (toolsWarnings) {
-    tooltipContent =
-      "LLM tool-use performance typically degrades with toolset size. General industry standards recommend keeping MCP servers at around 40 tool or fewer";
+    tooltipContent = (
+      <>
+        LLM tool-use performance typically degrades with toolset size. General
+        industry standards recommend keeping MCP servers at around 40 tools or
+        fewer
+      </>
+    );
   }
-
-  const toolsSevere = warnOnTooManyTools && toolNames && toolNames.length > 150;
-  if (toolsSevere) {
-    tooltipContent =
-      "An LLM is unlikely to consistently perform well with a toolset of this size. General industry standards recommend keeping MCP servers at around 40 tool or fewer";
-  }
-
-  const anyWarnings = toolsWarnings || toolsSevere;
 
   return toolNames && toolNames.length > 0 ? (
-    <Badge
-      size={size}
-      variant={
-        toolsSevere ? "urgent-warning" : toolsWarnings ? "warning" : variant
-      }
-      tooltip={tooltipContent}
-      className={cn(!anyWarnings && "bg-card", className)}
-    >
-      {anyWarnings && (
-        <UrgentWarningIcon
-          className={toolsSevere ? "text-white dark:text-white" : undefined}
-        />
-      )}
-      {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
-    </Badge>
+    <Tooltip>
+      <TooltipTrigger>
+        <Badge
+          size={size}
+          variant={toolsWarnings ? "warning" : variant}
+          className={cn(
+            !toolsWarnings && "bg-card",
+            "flex items-center py-1 gap-[1ch]",
+            className,
+          )}
+        >
+          {toolsWarnings && (
+            <Icon name="triangle-alert" className="inline-block" />
+          )}
+          {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
+        </Badge>
+      </TooltipTrigger>
+      <TooltipPortal>
+        <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
+      </TooltipPortal>
+    </Tooltip>
   ) : (
     <Badge size={size} variant={variant} className={className}>
       No Tools

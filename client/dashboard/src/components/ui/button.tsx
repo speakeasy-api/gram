@@ -1,7 +1,6 @@
 import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -42,7 +41,7 @@ const buttonVariants = cva(
       variant: "default",
       size: "default",
     },
-  }
+  },
 );
 
 export function Button({
@@ -64,7 +63,7 @@ export function Button({
     caps?: boolean;
     href?: string;
   }) {
-  const Comp: React.ElementType = asChild ? Slot : (props.href ? "a" : "button");
+  const Comp: React.ElementType = asChild ? Slot : props.href ? "a" : "button";
 
   const iconColors = {
     default: "text-primary-foreground/60 group-hover:text-primary-foreground",
@@ -81,7 +80,7 @@ export function Button({
       name={iconName}
       className={cn(
         "w-4 h-4 text-muted-foreground group-hover:text-foreground",
-        iconColors
+        iconColors,
       )}
     />
   );
@@ -121,7 +120,7 @@ export function Button({
       className={cn(
         buttonVariants({ variant, size, className }),
         "cursor-pointer group trans",
-        caps && "uppercase font-mono"
+        caps && "uppercase font-mono",
       )}
       {...props}
       {...(onClick ? { onClick } : {})}
@@ -132,15 +131,13 @@ export function Button({
 
   if (tooltip) {
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {/* div is necessary to retain the tooltip when the button is disabled */}
-            <div>{base}</div>
-          </TooltipTrigger>
-          <TooltipContent>{tooltip}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          {/* div is necessary to retain the tooltip when the button is disabled */}
+          <div>{base}</div>
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
     );
   }
 

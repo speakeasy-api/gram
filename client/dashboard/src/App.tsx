@@ -1,7 +1,11 @@
 import "@speakeasy-api/moonshine/moonshine.css";
 import "./App.css"; // Import this second to override certain values in moonshine.css
 
-import { MoonshineConfigProvider } from "@speakeasy-api/moonshine";
+import {
+  MoonshineConfigProvider,
+  TooltipProvider,
+} from "@speakeasy-api/moonshine";
+import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
 import { BrowserRouter, Route, Routes } from "react-router";
 import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
@@ -23,7 +27,7 @@ export default function App() {
     // Update favicon based on theme
     const favicon = document.getElementById("favicon") as HTMLLinkElement;
     const faviconAlt = document.getElementById(
-      "favicon-alt"
+      "favicon-alt",
     ) as HTMLLinkElement;
 
     if (favicon) {
@@ -45,7 +49,7 @@ export default function App() {
       | "dark"
       | null;
     const systemPrefersDark = window.matchMedia(
-      "(prefers-color-scheme: dark)"
+      "(prefers-color-scheme: dark)",
     ).matches;
 
     const initialTheme = savedTheme || (systemPrefersDark ? "dark" : "light");
@@ -54,18 +58,22 @@ export default function App() {
 
   return (
     <MoonshineConfigProvider theme={theme} setTheme={applyTheme}>
-      <TelemetryProvider>
-        <BrowserRouter>
-          <SdkProvider>
-            <AuthProvider>
-              <ProjectProvider>
-                <RouteProvider />
-              </ProjectProvider>
-              <Toaster />
-            </AuthProvider>
-          </SdkProvider>
-        </BrowserRouter>
-      </TelemetryProvider>
+      <LocalTooltipProvider>
+        <TooltipProvider>
+          <TelemetryProvider>
+            <BrowserRouter>
+              <SdkProvider>
+                <AuthProvider>
+                  <ProjectProvider>
+                    <RouteProvider />
+                  </ProjectProvider>
+                  <Toaster />
+                </AuthProvider>
+              </SdkProvider>
+            </BrowserRouter>
+          </TelemetryProvider>
+        </TooltipProvider>
+      </LocalTooltipProvider>
     </MoonshineConfigProvider>
   );
 }
@@ -74,15 +82,16 @@ const RouteProvider = () => {
   const routes = useRoutes();
 
   const unauthenticatedRoutes = Object.values(routes).filter(
-    (route) => route.unauthenticated
+    (route) => route.unauthenticated,
   );
 
   const outsideStructureRoutes = Object.values(routes).filter(
-    (route) => route.outsideMainLayout
+    (route) => route.outsideMainLayout,
   );
 
   const authenticatedRoutes = Object.values(routes).filter(
-    (route) => !outsideStructureRoutes.includes(route) && !route.unauthenticated
+    (route) =>
+      !outsideStructureRoutes.includes(route) && !route.unauthenticated,
   );
 
   const routeElements = useMemo(
@@ -100,7 +109,7 @@ const RouteProvider = () => {
         </Route>
       </Routes>
     ),
-    [routes]
+    [routes],
   );
 
   return routeElements;
@@ -125,8 +134,8 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
               value &&
               typeof value === "object" &&
               "title" in value &&
-              "url" in value
-          ) as unknown as AppRoute[]
+              "url" in value,
+          ) as unknown as AppRoute[],
         )}
       </Route>
     ));

@@ -1,11 +1,4 @@
 import { cn } from "@/lib/utils";
-import { Badge } from "./ui/badge";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "./ui/tooltip";
 import { Type } from "./ui/type";
 
 export const HttpRoute = ({
@@ -17,8 +10,10 @@ export const HttpRoute = ({
 }) => {
   return (
     <div className="flex gap-2 font-mono items-start">
-      <HttpMethod method={method} variant="type" />
-      <Type className="text-xs text-muted-foreground wrap-anywhere">{path}</Type>
+      <HttpMethod method={method} />
+      <Type className="text-xs text-muted-foreground wrap-anywhere">
+        {path}
+      </Type>
     </div>
   );
 };
@@ -54,53 +49,12 @@ export const HttpMethodColors: Record<
   },
 };
 
-export const HttpMethod = ({
-  method,
-  path,
-  variant = "badge",
-}: {
-  method: string;
-  path?: string;
-  variant?: "badge" | "type";
-}) => {
-  if (variant === "type") {
-    const typeStyle = HttpMethodColors[method]?.text;
+const HttpMethod = ({ method }: { method: string }) => {
+  const typeStyle = HttpMethodColors[method]?.text;
 
-    return (
-      <Type className={cn("text-xs font-semibold text-nowrap", typeStyle)}>
-        {method}
-      </Type>
-    );
-  }
-
-  if (variant === "badge") {
-    const badgeStyle = HttpMethodColors[method]?.bg;
-
-    const badge = (
-      <Badge
-        variant="secondary"
-        className={cn("text-sm capitalize", badgeStyle)}
-        size="sm"
-      >
-        {method}
-      </Badge>
-    );
-
-    if (path) {
-      return (
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>{badge}</TooltipTrigger>
-            <TooltipContent>
-              <HttpRoute method={method} path={path} />
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      );
-    }
-
-    return badge;
-  }
-
-  return null;
+  return (
+    <Type className={cn("text-xs font-semibold text-nowrap", typeStyle)}>
+      {method}
+    </Type>
+  );
 };
