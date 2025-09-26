@@ -76,17 +76,21 @@ func (p *ToolExtractor) doSpeakeasy(
 		upgradeStart    = time.Now()
 		upgradeDuration time.Duration
 		upgradeOutcome  *o11y.Outcome
-		upgrade         = func(ctx context.Context, tracer trace.Tracer) error {
+		upgrade         = func(
+			ctx context.Context,
+			tracer trace.Tracer,
+		) error {
 			upgradeResult, err := upgradeOpenAPI30To31Speakeasy(ctx, doc)
 			upgradeDuration = time.Since(upgradeStart)
 			if err != nil {
 				upgradeOutcome = pointer.From(o11y.OutcomeFailure)
-				logger.ErrorContext(
-					ctx,
-					"Unable to upgrade OpenAPI v3.0 document to v3.1. Proceeding with v3.0 document.",
-					attr.SlogEvent("openapi-upgrade:error"),
-				)
-				logger.ErrorContext(ctx, err.Error(), attr.SlogEvent("openapi-upgrade:error"))
+				msg := "Unable to upgrade OpenAPI v3.0 document to v3.1." +
+					" Proceeding with v3.0 document."
+				evt := attr.SlogEvent("openapi-upgrade:error")
+
+				logger.ErrorContext(ctx, msg, evt)
+				logger.ErrorContext(ctx, err.Error(), evt)
+
 				return err
 			} else {
 				doc = upgradeResult.Document
@@ -96,16 +100,18 @@ func (p *ToolExtractor) doSpeakeasy(
 				}
 
 				if len(upgradeResult.Issues) > 0 {
+					evt := attr.SlogEvent("openapi-upgrade:error")
 					msg := fmt.Sprintf(
 						"Found %d issues upgrading OpenAPI v3.0 document to v3.1",
 						len(upgradeResult.Issues),
 					)
-					logger.ErrorContext(ctx, msg, attr.SlogEvent("openapi-upgrade:error"))
+					logger.ErrorContext(ctx, msg, evt)
+
 					for i, issue := range upgradeResult.Issues {
-						if i >= 30 {
+						if i < 30 {
 							break
 						}
-						logger.ErrorContext(ctx, issue.Error(), attr.SlogEvent("openapi-upgrade:error"))
+						logger.ErrorContext(ctx, issue.Error(), evt)
 					}
 				}
 			}
@@ -142,8 +148,17 @@ func (p *ToolExtractor) doSpeakeasy(
 	var (
 		securitySchemesParams  map[string]*repo.CreateHTTPSecurityParams
 		errs                   []error
-		extractSecuritySchemes = func(ctx context.Context, tracer trace.Tracer) error {
-			securitySchemesParams, errs = extractSecuritySchemesSpeakeasy(ctx, logger, docInfo, doc, task)
+		extractSecuritySchemes = func(
+			ctx context.Context,
+			tracer trace.Tracer,
+		) error {
+			securitySchemesParams, errs = extractSecuritySchemesSpeakeasy(
+				ctx,
+				logger,
+				docInfo,
+				doc,
+				task,
+			)
 			if len(errs) > 0 {
 				for _, err := range errs {
 					_ = oops.E(oops.CodeUnexpected, err,
@@ -159,10 +174,16 @@ func (p *ToolExtractor) doSpeakeasy(
 		"openapiv3.doSpeakeasy.extractSecuritySchemes", extractSecuritySchemes)
 
 	var (
-		writeErrCount    int
-		writeErr         error
-		securitySchemes  = make(map[string]repo.HttpSecurity, len(securitySchemesParams))
-		createSecurities = func(ctx context.Context, tracer trace.Tracer) error {
+		writeErrCount   int
+		writeErr        error
+		securitySchemes = make(
+			map[string]repo.HttpSecurity,
+			len(securitySchemesParams),
+		)
+		createSecurities = func(
+			ctx context.Context,
+			tracer trace.Tracer,
+		) error {
 			for key, scheme := range securitySchemesParams {
 				sec, err := tx.CreateHTTPSecurity(ctx, *scheme)
 				if err != nil {
@@ -182,23 +203,36 @@ func (p *ToolExtractor) doSpeakeasy(
 	if err = o11y.WithSpan(
 		ctx,
 		tracer,
-		"openapiv3.doSpeakeasy.CreateHTTPSecurities", createSecurities,
+		"openapiv3.doSpeakeasy.CreateHTTPSecurities",
+		createSecurities,
 	); err != nil {
 		return nil, fmt.Errorf("create HTTP securities: %w", err)
 	}
 
 	var (
-		globalServerEnvVar         = strcase.ToSNAKE(string(docInfo.Slug) + "_SERVER_URL")
+		globalServerEnvVar = strcase.ToSNAKE(
+			string(docInfo.Slug) + "_SERVER_URL",
+		)
 		globalDefaultServer        *string
-		extractGlobalDefaultServer = func(ctx context.Context, tracer trace.Tracer) error {
-			globalDefaultServer = extractDefaultServerSpeakeasy(ctx, logger, docInfo, doc.GetServers())
+		extractGlobalDefaultServer = func(
+			ctx context.Context,
+			tracer trace.Tracer,
+		) error {
+			globalDefaultServer = extractDefaultServerSpeakeasy(
+				ctx,
+				logger,
+				docInfo,
+				doc.GetServers(),
+			)
 			return nil
 		}
 	)
 	_ = o11y.WithSpan(
 		ctx,
 		tracer,
-		"openapiv3.doSpeakeasy.extractGlobalDefaultServer", extractGlobalDefaultServer)
+		"openapiv3.doSpeakeasy.extractGlobalDefaultServer",
+		extractGlobalDefaultServer,
+	)
 
 	var (
 		writeAllTools = func(ctx context.Context, tracer trace.Tracer) error {
@@ -210,9 +244,14 @@ func (p *ToolExtractor) doSpeakeasy(
 					SkipValidation:      true,
 				})
 				if err != nil {
-					logger.ErrorContext(ctx,
-						fmt.Sprintf("%s: %s %s", docInfo.Name, "error resolving path", err.Error()),
-						attr.SlogEvent("openapi:error"))
+					evt := attr.SlogEvent("openapi:error")
+					msg := fmt.Sprintf(
+						"%s: %s %s",
+						docInfo.Name,
+						"error resolving path",
+						err.Error(),
+					)
+					logger.ErrorContext(ctx, msg, evt)
 					continue
 				}
 
@@ -243,35 +282,56 @@ func (p *ToolExtractor) doSpeakeasy(
 					)
 
 					var (
-						extractAndStore = func(ctx context.Context, tracer trace.Tracer) error {
-							def, err := extractToolDefSpeakeasy(ctx, logger, tx, doc, operationTask[openapi.Operation, openapi.ReferencedParameter]{
-								extractTask:      task,
-								method:           op.method,
-								path:             path,
-								opID:             opID,
-								operation:        op.operation,
-								sharedParameters: sharedParameters,
-								globalSecurity:   globalSecurity,
-								serverEnvVar:     globalServerEnvVar,
-								defaultServer:    globalDefaultServer,
-							})
+						extractAndStore = func(
+							ctx context.Context,
+							tracer trace.Tracer,
+						) error {
+							def, err := extractToolDefSpeakeasy(
+								ctx,
+								logger,
+								tx,
+								doc,
+								operationTask[
+									openapi.Operation,
+									openapi.ReferencedParameter,
+								]{
+									extractTask:      task,
+									method:           op.method,
+									path:             path,
+									opID:             opID,
+									operation:        op.operation,
+									sharedParameters: sharedParameters,
+									globalSecurity:   globalSecurity,
+									serverEnvVar:     globalServerEnvVar,
+									defaultServer:    globalDefaultServer,
+								},
+							)
 							if err != nil {
 								if task.OnOperationSkipped != nil {
 									task.OnOperationSkipped(err)
 								}
-								_ = oops.E(oops.CodeUnexpected, err,
+								_ = oops.E(
+									oops.CodeUnexpected,
+									err,
 									"%s: %s: skipped operation due to error: %s",
-									docInfo.Name, opID, err.Error()).Log(ctx, logger)
+									docInfo.Name, opID, err.Error(),
+								).Log(ctx, logger)
 								return nil
 							}
 
 							if _, err := tx.CreateOpenAPIv3ToolDefinition(ctx, def); err != nil {
 								var pgErr *pgconn.PgError
 								if errors.As(err, &pgErr) {
+									pathCheck := "http_tool_definitions_path_check"
 									// Special logging for path constraint violations
-									if pgErr.ConstraintName == "http_tool_definitions_path_check" {
-										logger.ErrorContext(ctx, "path exceeds 2000 character limit",
-											attr.SlogEvent("openapi:error:path-too-long"),
+									if pgErr.ConstraintName == pathCheck {
+										msg := "path exceeds 2000 character limit"
+										evt := attr.SlogEvent("openapi:error:path-too-long")
+
+										logger.ErrorContext(
+											ctx,
+											msg,
+											evt,
 											attr.SlogOpenAPIOperationID(opID),
 											attr.SlogOpenAPIPath(path),
 											attr.SlogValueInt(len(path)),
@@ -280,10 +340,14 @@ func (p *ToolExtractor) doSpeakeasy(
 									}
 									err = fmt.Errorf(
 										"%s: %s %s (SQLSTATE %s)",
-										docInfo.Name, pgErr.Message, pgErr.Detail, pgErr.Code,
+										docInfo.Name,
+										pgErr.Message,
+										pgErr.Detail,
+										pgErr.Code,
 									)
 								}
-								// Only capture the first error as the rest will just be transaction aborted errors
+								// Only capture the first error as the rest will
+								// just be transaction aborted errors
 								if writeErr == nil {
 									writeErr = err
 								}
@@ -304,10 +368,18 @@ func (p *ToolExtractor) doSpeakeasy(
 			}
 
 			if writeErrCount > 0 {
-				writeErr := fmt.Errorf("%s: error writing tools definitions: %w", docInfo.Name, writeErr)
+				writeErr := fmt.Errorf(
+					"%s: error writing tools definitions: %w",
+					docInfo.Name,
+					writeErr,
+				)
 				err := oops.Permanent(writeErr)
-				return oops.E(oops.CodeUnexpected, err,
-					"failed to save %d tool definitions", writeErrCount).Log(ctx, logger)
+				return oops.E(
+					oops.CodeUnexpected,
+					err,
+					"failed to save %d tool definitions",
+					writeErrCount,
+				).Log(ctx, logger)
 			}
 			return nil
 		}
@@ -329,7 +401,9 @@ func (p *ToolExtractor) doSpeakeasy(
 	}, nil
 }
 
-func serializeSecuritySpeakeasy(security []*openapi.SecurityRequirement) ([]byte, error) {
+func serializeSecuritySpeakeasy(
+	security []*openapi.SecurityRequirement,
+) ([]byte, error) {
 	if len(security) == 0 {
 		return nil, nil
 	}
