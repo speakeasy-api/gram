@@ -38,8 +38,8 @@ import React, { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { onboardingStepStorageKeys } from "../home/Home";
-import { Block, BlockInner } from "../toolBuilder/components";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
+import { Block, BlockInner } from "@/components/block";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -1248,3 +1248,4 @@ function OAuthDetailsModal({
     </Dialog>
   );
 }
+
