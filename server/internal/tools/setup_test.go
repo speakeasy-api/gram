@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -77,8 +76,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	enc, err := encryption.New("test-encryption-key")
-	require.NoError(t, err)
+	enc := testenv.NewEncryptionClient(t)
 
 	f := &feature.InMemory{}
 
