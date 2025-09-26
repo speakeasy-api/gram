@@ -33,21 +33,8 @@ import {
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import { useUploadOpenAPISteps } from "../../onboarding/UploadOpenAPI";
-import AddOpenAPIDialog from "./AddOpenAPIDialog";
+import AddOpenAPIDialog, { AddOpenAPIDialogRef } from "./AddOpenAPIDialog";
 import { ApisEmptyState } from "./ApisEmptyState";
-
-export default function OpenAPIDocuments() {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <APIsContent />
-      </Page.Body>
-    </Page>
-  );
-}
 
 type NamedAsset = Asset & {
   name: string;
@@ -69,7 +56,7 @@ export function useDeploymentIsEmpty() {
   );
 }
 
-export function APIsContent() {
+export default function OpenAPIAssets() {
   const client = useSdkClient();
   const routes = useRoutes();
 
@@ -78,15 +65,15 @@ export function APIsContent() {
   const deployment = deploymentResult?.deployment;
 
   const [isDeploying, setIsDeploying] = useState(false);
-  const [newDocumentDialogOpen, setNewDocumentDialogOpen] = useState(false);
   const [changeDocumentTargetSlug, setChangeDocumentTargetSlug] = useState<
     string | null
   >(null);
 
+  const addOpenAPIDialogRef = useRef<AddOpenAPIDialogRef>(null);
   const removeApiSourceDialogRef = useRef<RemoveAPISourceDialogRef>(null);
 
   const finishUpload = () => {
-    setNewDocumentDialogOpen(false);
+    addOpenAPIDialogRef.current?.setOpen(false);
     setChangeDocumentTargetSlug(null);
     undoSpecUpload(); // Reset the file state
     refetch();
@@ -151,11 +138,10 @@ export function APIsContent() {
   if (!isLoading && deploymentIsEmpty) {
     return (
       <>
-        <ApisEmptyState onNewUpload={() => setNewDocumentDialogOpen(true)} />
-        <AddOpenAPIDialog
-          open={newDocumentDialogOpen}
-          onOpenChange={setNewDocumentDialogOpen}
+        <ApisEmptyState
+          onNewUpload={() => addOpenAPIDialogRef.current?.setOpen(true)}
         />
+        <AddOpenAPIDialog ref={addOpenAPIDialogRef} />
       </>
     );
   }
@@ -195,7 +181,7 @@ export function APIsContent() {
       {logsCta}
       <Page.Section.CTA>
         <Button
-          onClick={() => setNewDocumentDialogOpen(true)}
+          onClick={() => addOpenAPIDialogRef.current?.setOpen(true)}
           variant="secondary"
         >
           <Button.LeftIcon>
@@ -217,10 +203,10 @@ export function APIsContent() {
             />
           ))}
         </MiniCards>
-        <AddOpenAPIDialog
-          open={newDocumentDialogOpen}
-          onOpenChange={setNewDocumentDialogOpen}
-        />
+        {/* <AddOpenAPIDialog */}
+        {/*   open={newDocumentDialogOpen} */}
+        {/*   onOpenChange={setNewDocumentDialogOpen} */}
+        {/* /> */}
         <Dialog
           open={changeDocumentTargetSlug !== null}
           onOpenChange={(open) => {
@@ -274,6 +260,7 @@ export function APIsContent() {
           ref={removeApiSourceDialogRef}
           onConfirmRemoval={removeDocument}
         />
+        <AddOpenAPIDialog ref={addOpenAPIDialogRef} />
       </Page.Section.Body>
     </Page.Section>
   );

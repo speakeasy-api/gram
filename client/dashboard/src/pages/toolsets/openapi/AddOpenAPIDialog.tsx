@@ -1,25 +1,28 @@
+import { UploadAssetStepper } from "@/components/upload-asset";
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadAssetStep from "@/components/upload-asset/step";
-import UploadAssetStepper from "@/components/upload-asset/stepper";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment, useListAssets } from "@gram/client/react-query";
 import { Button, Dialog } from "@speakeasy-api/moonshine";
 import { ArrowRightIcon, RefreshCcwIcon } from "lucide-react";
+import React from "react";
 
-type UploadOpenAPIContentProps = {
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-};
+export interface AddOpenAPIDialogRef {
+  setOpen: (open: boolean) => void;
+}
 
-export default function AddOpenAPIDialog({
-  open = false,
-  onOpenChange,
-}: UploadOpenAPIContentProps) {
+const AddOpenAPIDialog = React.forwardRef<AddOpenAPIDialogRef>((_, ref) => {
+  const [open, setOpen] = React.useState(false);
+
+  React.useImperativeHandle(ref, () => ({
+    setOpen,
+  }));
+
   return (
     <UploadAssetStepper.Provider step={1}>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={setOpen}>
         <Dialog.Content className="max-w-2xl!">
           <Dialog.Header>
             <Dialog.Title>New OpenAPI Source</Dialog.Title>
@@ -63,13 +66,14 @@ export default function AddOpenAPIDialog({
             </UploadAssetStep.Root>
           </UploadAssetStepper.Frame>
           <Dialog.Footer>
-            <FooterActions onClose={() => onOpenChange?.(false)} />
+            <FooterActions onClose={() => setOpen(false)} />
           </Dialog.Footer>
         </Dialog.Content>
       </Dialog>
     </UploadAssetStepper.Provider>
   );
-}
+});
+AddOpenAPIDialog.displayName = "AddOpenAPIDialog";
 
 function FooterActions({ onClose }: { onClose?: () => void }) {
   const stepper = UploadAssetStepper.useContext();
@@ -132,3 +136,5 @@ function FooterActions({ onClose }: { onClose?: () => void }) {
       );
   }
 }
+
+export default AddOpenAPIDialog;
