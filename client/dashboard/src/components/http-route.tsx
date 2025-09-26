@@ -51,17 +51,12 @@ export const HttpMethodColors: Record<
   },
 };
 
-const HttpMethod = ({
-  method,
-}: {
-  method: string;
-}) => {
-    const typeStyle = HttpMethodColors[method]?.text;
+const HttpMethod = ({ method }: { method: string }) => {
+  const typeStyle = HttpMethodColors[method]?.text;
 
-    return (
-      <Type className={cn("text-xs font-semibold text-nowrap", typeStyle)}>
-        {method}
-      </Type>
-    );
-
+  return (
+    <Type className={cn("text-xs font-semibold text-nowrap", typeStyle)}>
+      {method}
+    </Type>
+  );
 };

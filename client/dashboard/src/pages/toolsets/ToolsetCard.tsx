@@ -1,5 +1,8 @@
 import { CopyableSlug } from "@/components/name-and-slug";
-import { ToolCollectionBadge, ToolsetPromptsBadge } from "@/components/tools-badge";
+import {
+  ToolCollectionBadge,
+  ToolsetPromptsBadge,
+} from "@/components/tools-badge";
 import { Button, cn } from "@speakeasy-api/moonshine";
 import { Card } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";

@@ -1,6 +1,9 @@
 import { EditableText } from "@/components/editable-text";
 import { CopyableSlug } from "@/components/name-and-slug";
-import { ToolsetPromptsBadge, ToolCollectionBadge } from "@/components/tools-badge";
+import {
+  ToolsetPromptsBadge,
+  ToolCollectionBadge,
+} from "@/components/tools-badge";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
