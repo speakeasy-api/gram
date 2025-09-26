@@ -28,7 +28,7 @@ export function useCustomTools() {
   const { data, isLoading } = useTemplates();
   return {
     customTools: data?.templates.filter(
-      (template) => template.kind === PromptTemplateKind.HigherOrderTool
+      (template) => template.kind === PromptTemplateKind.HigherOrderTool,
     ),
     isLoading,
   };
@@ -121,7 +121,10 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
   }
 
   return (
-    <routes.customTools.toolBuilder.Link params={[template.name]} className="hover:no-underline">
+    <routes.customTools.toolBuilder.Link
+      params={[template.name]}
+      className="hover:no-underline"
+    >
       <Card>
         <Card.Header>
           <Card.Title className="normal-case">{template.name}</Card.Title>

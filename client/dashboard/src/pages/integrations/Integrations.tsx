@@ -49,9 +49,7 @@ export default function Integrations() {
       <Page.Body>
         {isAdmin && (
           <div className="flex justify-end mb-4">
-            <AddButton
-              onClick={() => setCreateIntegrationDialogOpen(true)}
-            />
+            <AddButton onClick={() => setCreateIntegrationDialogOpen(true)} />
           </div>
         )}
         <Cards>
@@ -107,7 +105,7 @@ function CreateIntegrationDialog({
   const [summary, setSummary] = useState(existingPackage?.summary ?? "");
   const [keywords, setKeywords] = useState(existingPackage?.keywords ?? []);
   const [imageAssetId, setImageAssetId] = useState(
-    existingPackage?.imageAssetId ?? ""
+    existingPackage?.imageAssetId ?? "",
   );
   const [version, setVersion] = useState(latestVersion ?? "");
 
@@ -256,7 +254,7 @@ export function IntegrationCard({
   };
 
   const isEnabled = deployment?.deployment?.packages.some(
-    (p) => p.name === integration.packageName
+    (p) => p.name === integration.packageName,
   );
 
   const toggleEnabled = async () => {
@@ -269,7 +267,7 @@ export function IntegrationCard({
   };
 
   const firstParty = packages?.packages.find(
-    (p) => p.id === integration.packageId
+    (p) => p.id === integration.packageId,
   );
 
   return (
@@ -292,9 +290,7 @@ export function IntegrationCard({
           </Stack>
         </Card.Title>
         {firstParty ? (
-          <Button variant="secondary"
-            onClick={newVersionCallback}
-          >
+          <Button variant="secondary" onClick={newVersionCallback}>
             <Button.LeftIcon>
               <Icon name="copy-plus" className="h-4 w-4" />
             </Button.LeftIcon>
@@ -314,9 +310,7 @@ export function IntegrationCard({
         )}
       </Card.Header>
       <Card.Content>
-        <Card.Description>
-          {integration.packageSummary}
-        </Card.Description>
+        <Card.Description>{integration.packageSummary}</Card.Description>
       </Card.Content>
       <Card.Footer>
         <ToolCollectionBadge toolNames={integration.toolNames} />
