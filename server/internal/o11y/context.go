@@ -5,6 +5,7 @@ import (
 	"log/slog"
 
 	"go.opentelemetry.io/otel/baggage"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/workflow"
 
@@ -107,4 +108,21 @@ func EnrichToolCallContext(ctx context.Context, logger *slog.Logger, orgSlug, pr
 	ctx = baggage.ContextWithBaggage(ctx, bag)
 
 	return ctx, logger
+}
+
+func WithSpan(
+	ctx context.Context,
+	tracer trace.Tracer,
+	name string,
+	f func(ctx context.Context, tracer trace.Tracer) error,
+) error {
+	ctx, span := tracer.Start(ctx, name)
+	defer span.End()
+
+	err := f(ctx, tracer)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+	}
+
+	return err
 }
