@@ -2,6 +2,7 @@
 
 #MISE description="Apply pending clickhouse migrations"
 #MISE dir="{{ config_root }}/server"
+#USAGE flag "--dry" help="Enable dry run mode"
 
 set -e
 
