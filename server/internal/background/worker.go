@@ -125,6 +125,7 @@ func NewTemporalWorker(
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
 	temporalWorker.RegisterActivity(activities.TransitionDeployment)
+	temporalWorker.RegisterActivity(activities.ProvisionFunctionsAccess)
 	temporalWorker.RegisterActivity(activities.GetSlackProjectContext)
 	temporalWorker.RegisterActivity(activities.PostSlackMessage)
 	temporalWorker.RegisterActivity(activities.SlackChatCompletion)

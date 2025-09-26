@@ -22,19 +22,20 @@ import (
 )
 
 type Activities struct {
-	processDeployment             *activities.ProcessDeployment
-	transitionDeployment          *activities.TransitionDeployment
-	getSlackProjectContext        *activities.GetSlackProjectContext
-	postSlackMessage              *activities.PostSlackMessage
-	slackChatCompletion           *activities.SlackChatCompletion
-	refreshOpenRouterKey          *activities.RefreshOpenRouterKey
-	verifyCustomDomain            *activities.VerifyCustomDomain
-	customDomainIngress           *activities.CustomDomainIngress
 	collectPlatformUsageMetrics   *activities.CollectPlatformUsageMetrics
+	customDomainIngress           *activities.CustomDomainIngress
 	firePlatformUsageMetrics      *activities.FirePlatformUsageMetrics
 	freeTierReportingUsageMetrics *activities.FreeTierReportingUsageMetrics
-	refreshBillingUsage           *activities.RefreshBillingUsage
 	getAllOrganizations           *activities.GetAllOrganizations
+	getSlackProjectContext        *activities.GetSlackProjectContext
+	postSlackMessage              *activities.PostSlackMessage
+	processDeployment             *activities.ProcessDeployment
+	provisionFunctionsAccess      *activities.ProvisionFunctionsAccess
+	refreshBillingUsage           *activities.RefreshBillingUsage
+	refreshOpenRouterKey          *activities.RefreshOpenRouterKey
+	slackChatCompletion           *activities.SlackChatCompletion
+	transitionDeployment          *activities.TransitionDeployment
+	verifyCustomDomain            *activities.VerifyCustomDomain
 }
 
 func NewActivities(
@@ -54,19 +55,20 @@ func NewActivities(
 	posthogClient *posthog.Posthog,
 ) *Activities {
 	return &Activities{
-		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage),
-		transitionDeployment:          activities.NewTransitionDeployment(logger, db),
-		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
-		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
-		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
-		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouter),
-		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
-		customDomainIngress:           activities.NewCustomDomainIngress(logger, db, k8sClient),
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
+		customDomainIngress:           activities.NewCustomDomainIngress(logger, db, k8sClient),
 		firePlatformUsageMetrics:      activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		freeTierReportingUsageMetrics: activities.NewFreeTierReportingMetrics(logger, db, billingRepo, posthogClient),
-		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		getAllOrganizations:           activities.NewGetAllOrganizations(logger, db),
+		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
+		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
+		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage),
+		provisionFunctionsAccess:      activities.NewProvisionFunctionsAccess(logger, db),
+		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
+		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouter),
+		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
+		transitionDeployment:          activities.NewTransitionDeployment(logger, db),
+		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 	}
 }
 
@@ -120,4 +122,8 @@ func (a *Activities) RefreshBillingUsage(ctx context.Context, orgIDs []string) e
 
 func (a *Activities) GetAllOrganizations(ctx context.Context) ([]string, error) {
 	return a.getAllOrganizations.Do(ctx)
+}
+
+func (a *Activities) ProvisionFunctionsAccess(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID) error {
+	return a.provisionFunctionsAccess.Do(ctx, projectID, deploymentID)
 }
