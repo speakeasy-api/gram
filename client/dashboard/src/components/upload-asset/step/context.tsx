@@ -18,11 +18,16 @@ type ProviderProps = {
 
 export const Provider: React.FC<ProviderProps> = (props) => {
   const stepper = useStepperContext();
+  const [isCurrentStep, setIsCurrentStep] = React.useState(false);
   const [state, setState] = React.useState<StepState>("idle");
 
-  const isCurrentStep = React.useMemo(() => {
-    return stepper.step === props.step;
-  }, [stepper.step, props.step]);
+  React.useEffect(() => {
+    const unsubsribe = stepper.subscribe((step) => {
+      setIsCurrentStep(step === props.step);
+    });
+
+    return unsubsribe;
+  }, []);
 
   return (
     <Context.Provider

@@ -1,19 +1,20 @@
+import { cn } from "@/lib/utils";
 import { Provider, useContext } from "./context";
 
-type RootProps = {
+type FrameProps = {
   children: React.ReactNode;
-  step: number;
+  className?: string;
 };
 
-const Root: React.FC<RootProps> = ({ children, step }) => {
+/* Layout component for steps */
+const Frame = ({ children, className }: FrameProps) => {
   return (
-    <Provider step={step}>
-      <div className="flex flex-col gap-y-8">{children}</div>
-    </Provider>
+    <div className={cn("flex flex-col gap-y-8", className)}>{children}</div>
   );
 };
 
 export default {
   useContext,
-  Root,
+  Provider,
+  Frame,
 };

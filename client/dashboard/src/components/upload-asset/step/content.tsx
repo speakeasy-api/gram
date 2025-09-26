@@ -1,4 +1,3 @@
-import { Heading } from "@speakeasy-api/moonshine";
 import React from "react";
 
 type HeaderProps = {

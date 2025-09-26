@@ -1,7 +1,4 @@
-import { useSdkClient } from "@/contexts/Sdk";
-import { useTelemetry } from "@/contexts/Telemetry";
 import { slugify } from "@/lib/constants";
-import { Deployment } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
 import React from "react";
@@ -10,14 +7,12 @@ import Step from "./step";
 import Stepper from "./stepper";
 
 export default function NameDeploymentStep() {
-  const client = useSdkClient();
-  const telemetry = useTelemetry();
   const stepper = Stepper.useContext();
   const step = Step.useContext();
 
   const latestDeployment = useLatestDeployment();
+
   const [value, setValue] = React.useState("");
-  const [isPending, setIsPending] = React.useState(false);
 
   React.useEffect(() => {
     if (stepper.meta.current.file) {
@@ -44,86 +39,11 @@ export default function NameDeploymentStep() {
     return null;
   }, [value, latestDeployment.data]);
 
-  const handleCreateDeployment = async () => {
-    setIsPending(true);
-    const asset = stepper.meta.current.uploadResult;
-
-    if (!asset || !value) {
-      throw new Error("Asset or file not found");
-    }
-
-    const shouldCreateNew =
-      !latestDeployment ||
-      latestDeployment.data?.deployment?.openapiv3ToolCount === 0;
-
-    let deployment: Deployment | undefined;
-    if (shouldCreateNew) {
-      const result = await client.deployments.create({
-        idempotencyKey: crypto.randomUUID(),
-        createDeploymentRequestBody: {
-          openapiv3Assets: [
-            {
-              assetId: asset.asset.id,
-              name: value,
-              slug: slugify(value),
-            },
-          ],
-        },
-      });
-      deployment = result.deployment;
-    } else {
-      const result = await client.deployments.evolveDeployment({
-        evolveForm: {
-          upsertOpenapiv3Assets: [
-            {
-              assetId: asset.asset.id,
-              name: value,
-              slug: slugify(value),
-            },
-          ],
-        },
-      });
-      deployment = result.deployment;
-    }
-
-    if (!deployment) {
-      throw new Error("Deployment not found");
-    }
-
-    // Wait for deployment to finish
-    while (
-      deployment.status !== "completed" &&
-      deployment.status !== "failed"
-    ) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      deployment = await client.deployments.getById({
-        id: deployment.id,
-      });
-    }
-
-    stepper.meta.current.deployment = deployment;
-    stepper.next();
+  function handleNameAsset() {
+    stepper.meta.current.assetName = value;
     step.setState("completed");
-    setIsPending(false);
-
-    if (deployment.status === "failed") {
-      telemetry.capture("onboarding_event", {
-        action: "deployment_failed",
-      });
-    } else {
-      telemetry.capture("onboarding_event", {
-        action: "deployment_created",
-        num_tools: deployment?.openapiv3ToolCount,
-      });
-    }
-
-    if (deployment?.openapiv3ToolCount === 0) {
-      telemetry.capture("onboarding_event", {
-        action: "no_tools_found",
-        error: "no_tools_found",
-      });
-    }
-  };
+    stepper.next();
+  }
 
   function handleValueChange(e: React.ChangeEvent<HTMLInputElement>) {
     setValue(e.target.value);
@@ -141,13 +61,12 @@ export default function NameDeploymentStep() {
             value={value}
             onChange={handleValueChange}
             placeholder="My API"
-            disabled={isPending}
             className="h-9 py-0"
           />
           <Button
             variant="brand"
-            onClick={() => handleCreateDeployment()}
-            disabled={validation !== null || isPending}
+            onClick={() => handleNameAsset()}
+            disabled={validation !== null}
           >
             CONTINUE
           </Button>
@@ -158,7 +77,7 @@ export default function NameDeploymentStep() {
       </Stack>
     );
   } else if (step.state === "completed") {
-    return <Type>✓ Source named "{value}"</Type>;
+    return <Type>✓ Source named "{stepper.meta.current.assetName}"</Type>;
   } else if (!step.isCurrentStep) {
     return null;
   } else {

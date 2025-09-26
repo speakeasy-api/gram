@@ -20,7 +20,7 @@ import {
   useLatestDeployment,
   useListAssets,
 } from "@gram/client/react-query/index.js";
-import { Icon, Button, Alert } from "@speakeasy-api/moonshine";
+import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
 import { Loader2Icon, Plus } from "lucide-react";
 import {
   forwardRef,
@@ -32,10 +32,8 @@ import {
 } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
-import {
-  UploadOpenAPIContent,
-  useUploadOpenAPISteps,
-} from "../../onboarding/UploadOpenAPI";
+import { useUploadOpenAPISteps } from "../../onboarding/UploadOpenAPI";
+import AddOpenAPIDialog from "./AddOpenAPIDialog";
 import { ApisEmptyState } from "./ApisEmptyState";
 
 export default function OpenAPIDocuments() {
@@ -101,32 +99,6 @@ export function APIsContent() {
   const deploymentIsEmpty = useDeploymentIsEmpty();
   const deploymentLogsSummary = useDeploymentLogsSummary(deployment?.id);
 
-  const newDocumentDialog = (
-    <Dialog
-      open={newDocumentDialogOpen}
-      onOpenChange={setNewDocumentDialogOpen}
-    >
-      <Dialog.Content className="max-w-2xl!">
-        <Dialog.Header>
-          <Dialog.Title>New OpenAPI Source</Dialog.Title>
-          <Dialog.Description>
-            Upload a new OpenAPI document to use in addition to your existing
-            documents.
-          </Dialog.Description>
-        </Dialog.Header>
-        <UploadOpenAPIContent onStepsComplete={finishUpload} />
-        <Dialog.Footer>
-          <Button
-            variant="tertiary"
-            onClick={() => setNewDocumentDialogOpen(false)}
-          >
-            Back
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
-  );
-
   const logsCta = useMemo(() => {
     if (!deployment || !deploymentLogsSummary) {
       return null;
@@ -180,7 +152,10 @@ export function APIsContent() {
     return (
       <>
         <ApisEmptyState onNewUpload={() => setNewDocumentDialogOpen(true)} />
-        {newDocumentDialog}
+        <AddOpenAPIDialog
+          open={newDocumentDialogOpen}
+          onOpenChange={setNewDocumentDialogOpen}
+        />
       </>
     );
   }
@@ -242,7 +217,10 @@ export function APIsContent() {
             />
           ))}
         </MiniCards>
-        {newDocumentDialog}
+        <AddOpenAPIDialog
+          open={newDocumentDialogOpen}
+          onOpenChange={setNewDocumentDialogOpen}
+        />
         <Dialog
           open={changeDocumentTargetSlug !== null}
           onOpenChange={(open) => {
