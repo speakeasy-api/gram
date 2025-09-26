@@ -65,6 +65,13 @@ func TestCreateDeployment_OnlyFunctions(t *testing.T) {
 	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
 	require.NoError(t, err, "list deployment function tools")
 	require.NotEmpty(t, functionTools, "should have function tools")
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(dep.Deployment.ID),
+		ProjectID:    uuid.MustParse(dep.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(1), accessCount, "all functions should have access credentials")
 }
 
 func TestCreateDeployment_FunctionsWithManifestValidation(t *testing.T) {
@@ -119,6 +126,13 @@ func TestCreateDeployment_FunctionsWithManifestValidation(t *testing.T) {
 		require.NotEmpty(t, tool.Description, "tool should have a description")
 		require.Equal(t, "nodejs:22", tool.Runtime, "tool should have correct runtime")
 	}
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(dep.Deployment.ID),
+		ProjectID:    uuid.MustParse(dep.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(1), accessCount, "all functions should have access credentials")
 }
 
 func TestCreateDeployment_WithFunctions_ValidJS(t *testing.T) {
@@ -169,6 +183,13 @@ func TestCreateDeployment_WithFunctions_ValidJS(t *testing.T) {
 	for _, tool := range functionTools {
 		require.Equal(t, "nodejs:22", tool.Runtime, "tool runtime should match deployment runtime")
 	}
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(dep.Deployment.ID),
+		ProjectID:    uuid.MustParse(dep.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(1), accessCount, "all functions should have access credentials")
 }
 
 func TestCreateDeployment_WithFunctions_ValidPython(t *testing.T) {
@@ -219,6 +240,13 @@ func TestCreateDeployment_WithFunctions_ValidPython(t *testing.T) {
 	for _, tool := range functionTools {
 		require.Equal(t, "python:3.12", tool.Runtime, "tool runtime should match deployment runtime")
 	}
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(dep.Deployment.ID),
+		ProjectID:    uuid.MustParse(dep.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(1), accessCount, "all functions should have access credentials")
 }
 
 func TestCreateDeployment_WithFunctions_ValidTypeScript(t *testing.T) {
@@ -264,6 +292,13 @@ func TestCreateDeployment_WithFunctions_ValidTypeScript(t *testing.T) {
 	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
 	require.NoError(t, err, "list deployment function tools")
 	require.NotEmpty(t, functionTools, "expected function tools to be created")
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(dep.Deployment.ID),
+		ProjectID:    uuid.MustParse(dep.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(1), accessCount, "all functions should have access credentials")
 }
 
 func TestCreateDeployment_WithFunctions_MultipleFiles(t *testing.T) {
@@ -327,6 +362,13 @@ func TestCreateDeployment_WithFunctions_MultipleFiles(t *testing.T) {
 	})
 	require.Contains(t, runtimes, "nodejs:22", "expected nodejs:22 runtime tools")
 	require.Contains(t, runtimes, "python:3.12", "expected python:3.12 runtime tools")
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(dep.Deployment.ID),
+		ProjectID:    uuid.MustParse(dep.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(2), accessCount, "all functions should have access credentials")
 }
 
 func TestCreateDeployment_WithFunctions_AndOpenAPI(t *testing.T) {
