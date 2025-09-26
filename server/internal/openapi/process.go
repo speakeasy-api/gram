@@ -138,6 +138,30 @@ func (p *ToolExtractor) Do(
 		return nil, oops.E(oops.CodeInvariantViolation, oops.Permanent(err), "unable to process openapi document").Log(ctx, p.logger)
 	}
 
+	var (
+		doc     []byte
+		readErr error
+	)
+	func() {
+		rc, err := p.assetStorage.Read(ctx, docURL)
+		if err != nil {
+			readErr = oops.E(oops.CodeUnexpected, err, "error fetching openapi document").Log(ctx, p.logger)
+			return
+		}
+		defer o11y.LogDefer(ctx, p.logger, func() error {
+			return rc.Close()
+		})
+
+		doc, err = io.ReadAll(rc)
+		if err != nil {
+			readErr = oops.E(oops.CodeUnexpected, err, "error reading openapi document").Log(ctx, p.logger)
+			return
+		}
+	}()
+	if readErr != nil {
+		return nil, fmt.Errorf("failed to read openapi document: %w", readErr)
+	}
+
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error opening database transaction").Log(ctx, p.logger)
@@ -203,19 +227,6 @@ func (p *ToolExtractor) Do(
 	}
 	if deletedSecurity > 0 {
 		logger.InfoContext(ctx, "cleared http security from previous deployment attempt", attr.SlogDBDeletedRowsCount(deletedSecurity))
-	}
-
-	rc, err := p.assetStorage.Read(ctx, docURL)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching openapi document").Log(ctx, logger)
-	}
-	defer o11y.LogDefer(ctx, logger, func() error {
-		return rc.Close()
-	})
-
-	doc, err := io.ReadAll(rc)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error reading openapi document").Log(ctx, logger)
 	}
 
 	var res *ToolExtractorResult
