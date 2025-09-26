@@ -327,6 +327,12 @@ func newStartCommand() *cli.Command {
 			Required: false,
 			EnvVars:  []string{"CLICKHOUSE_PASSWORD"},
 		},
+		&cli.StringFlag{
+			Name:     "clickhouse-port",
+			Usage:    "Clickhouse Port",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_PORT"},
+		},
 	}
 
 	return &cli.Command{

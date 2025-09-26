@@ -67,7 +67,7 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 			Username: c.String("clickhouse-username"),
 			Password: c.String("clickhouse-password"),
 		},
-		Addr:     []string{c.String("clickhouse-host")},
+		Addr:     []string{fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-port"))},
 		Protocol: clickhouse.HTTP,
 	})
 	if err != nil {
