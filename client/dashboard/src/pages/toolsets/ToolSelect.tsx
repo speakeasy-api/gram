@@ -42,6 +42,8 @@ type ToggleableToolGroup = {
   key: string;
   defaultExpanded: boolean;
   toggleAll: () => void;
+  toggleEnableAll: () => void;
+  toggleDisableAll: () => void;
   tools: ToggleableTool[];
 };
 
@@ -94,25 +96,33 @@ const groupColumnsToggleable: Column<ToggleableToolGroup>[] = [
     width: "0.35fr",
     render: (row) => {
       const allEnabled = row.tools.every((t) => t.enabled);
+      const noneEnabled = row.tools.every((t) => !t.enabled);
+
+      const onEnableAll = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        row.toggleEnableAll();
+      };
+      const onDisableAll = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        row.toggleDisableAll();
+      };
 
       return (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            row.toggleAll();
-          }}
-        >
-          <Button.LeftIcon>
-            {allEnabled ? (
-              <X className="w-4 h-4" />
-            ) : (
+        <div className="flex gap-2 justify-end">
+          <Button variant="secondary" size="sm" onClick={onEnableAll} disabled={allEnabled}>
+            <Button.LeftIcon>
               <Check className="w-4 h-4" />
-            )}
-          </Button.LeftIcon>
-          <Button.Text>{allEnabled ? "Disable All" : "Enable All"}</Button.Text>
-        </Button>
+            </Button.LeftIcon>
+            <Button.Text>Enable All</Button.Text>
+          </Button>
+
+          <Button variant="secondary" size="sm" onClick={onDisableAll} disabled={noneEnabled}>
+            <Button.LeftIcon>
+              <X className="w-4 h-4" />
+            </Button.LeftIcon>
+            <Button.Text>Disable All</Button.Text>
+          </Button>
+        </div>
       );
     },
   },
@@ -195,6 +205,8 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
   const selectedToolsRef = useRef<string[]>([]);
   const [search, setSearch] = useState("");
   const [tagFilters, setTagFilters] = useState<string[]>([]);
+  const [methodFilters, setMethodFilters] = useState<string[]>([]);
+  const [enabledFilters, setEnabledFilters] = useState<string[]>([]);
 
   const updateToolsetMutation = useUpdateToolsetMutation({
     onSuccess: () => {
@@ -261,6 +273,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
 
   const groupedTools = useGroupedHttpTools(tools?.tools ?? []);
 
+
   const tagFilterOptions = groupedTools.flatMap((group) =>
     group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`))
   );
@@ -278,6 +291,36 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     />
   );
 
+  const methodOptions = useMemo(() => {
+    const methods = new Set<string>();
+    groupedTools.forEach((g) => g.tools.forEach((t) => methods.add((t.httpMethod || "OTHER").toUpperCase())));
+    return Array.from(methods).sort().map((m) => ({ label: m, value: m }));
+  }, [groupedTools]);
+
+  const methodsFilter = (
+    <MultiSelect
+      options={methodOptions}
+      onValueChange={(vals) => setMethodFilters(vals.map((v) => v.toUpperCase()))}
+      placeholder="Filter by method"
+      className="w-fit capitalize"
+    />
+  );
+
+  const enabledFilterItems = [
+    { label: "Enabled", value: "ENABLED" },
+    { label: "Disabled", value: "DISABLED" },
+  ];
+
+  const enabledFilter = (
+      <MultiSelect
+      options={enabledFilterItems}
+      onValueChange={setEnabledFilters}
+      placeholder="Filter by status"
+      className="w-fit capitalize"
+    />
+  )
+
+  // Compose filtering: tag, search, method, enabled/disabled
   const filteredGroups = useMemo(() => {
     const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
     const filteredGroups = groupedTools.map((g) => ({
@@ -289,6 +332,24 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
         ) {
           return false;
         }
+
+        // method filter
+        if (methodFilters.length > 0) {
+          const method = (t.httpMethod || "OTHER").toUpperCase();
+          if (!methodFilters.includes(method)) return false;
+        }
+
+        // enabled/disabled filter
+        const isEnabled = selectedTools.includes(t.canonicalName);
+        const wantsEnabled = enabledFilters.includes("ENABLED");
+        const wantsDisabled = enabledFilters.includes("DISABLED");
+
+        if (wantsEnabled && !wantsDisabled) {
+          if (!isEnabled) return false;
+        } else if (!wantsEnabled && wantsDisabled) {
+          if (isEnabled) return false;
+        }
+
         const tags = t.tags.join(",");
         return (
           normalize(t.name).includes(normalize(search)) ||
@@ -296,15 +357,16 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
         );
       }),
     }));
+
     return filteredGroups.filter((g) => g.tools.length > 0);
-  }, [tools, search, tagFilters]);
+  }, [tools, search, tagFilters, methodFilters, selectedTools, enabledFilters]);
 
   const toolGroups = useMemo(() => {
-    const toggleAll = (tools: ToggleableTool[]) => {
-      setToolsEnabled(
-        tools.map((t) => t.canonicalName),
-        tools.some((t) => !t.enabled) // Disable iff all are already enabled
-      );
+    const enableAll = (tools: ToggleableTool[]) => {
+      setToolsEnabled(tools.map((t) => t.canonicalName), true);
+    };
+    const disableAll = (tools: ToggleableTool[]) => {
+      setToolsEnabled(tools.map((t) => t.canonicalName), false);
     };
 
     const toolGroups = filteredGroups.map((group) => ({
@@ -319,7 +381,8 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
 
     const toolGroupsFinal = toolGroups.map((group) => ({
       ...group,
-      toggleAll: () => toggleAll(group.tools),
+      toggleEnableAll: () => enableAll(group.tools),
+      toggleDisableAll: () => disableAll(group.tools),
       defaultExpanded:
         toolGroups.length < 3 || group.tools.some((tool) => tool.enabled),
     }));
@@ -347,6 +410,8 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
         <>
           <Stack direction="horizontal" gap={2} className="h-fit">
             {tagsFilter}
+            {methodsFilter}
+            {enabledFilter}
             <SearchBar
               value={search}
               onChange={setSearch}
