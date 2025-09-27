@@ -127,6 +127,11 @@ const (
 	ToolNameKey                    = attribute.Key("gram.tool.name")
 	ToolsetIDKey                   = attribute.Key("gram.toolset.id")
 	ToolsetSlugKey                 = attribute.Key("gram.toolset.slug")
+
+	// Count-related keys
+	AttemptedCountKey = attribute.Key("gram.count.attempted")
+	InsertedCountKey  = attribute.Key("gram.count.inserted")
+	SkippedCountKey   = attribute.Key("gram.count.skipped")
 )
 
 func Error(v error) attribute.KeyValue { return ErrorMessageKey.String(v.Error()) }
@@ -505,3 +510,12 @@ func ToolCallDuration(v time.Duration) attribute.KeyValue {
 func SlogToolCallDuration(v time.Duration) slog.Attr {
 	return slog.Float64(string(ToolCallDurationKey), v.Seconds())
 }
+
+func AttemptedCount(v int) attribute.KeyValue { return AttemptedCountKey.Int(v) }
+func SlogAttemptedCount(v int) slog.Attr      { return slog.Int(string(AttemptedCountKey), v) }
+
+func InsertedCount(v int) attribute.KeyValue { return InsertedCountKey.Int(v) }
+func SlogInsertedCount(v int) slog.Attr      { return slog.Int(string(InsertedCountKey), v) }
+
+func SkippedCount(v int) attribute.KeyValue { return SkippedCountKey.Int(v) }
+func SlogSkippedCount(v int) slog.Attr      { return slog.Int(string(SkippedCountKey), v) }

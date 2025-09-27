@@ -219,6 +219,7 @@ func (p *ToolExtractor) Do(
 	}
 
 	var res *ToolExtractorResult
+	logger.InfoContext(ctx, fmt.Sprintf("Extracting tools with ehanced tracing: '%s'.", task.Parser))
 	switch task.Parser {
 	case "speakeasy":
 		res, err = p.doSpeakeasy(ctx, logger, p.tracer, tx, doc, task)

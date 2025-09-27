@@ -2,6 +2,7 @@ package openapi
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"reflect"
 	"regexp"
@@ -318,5 +319,13 @@ func (m *MockedDBTX) QueryRow(ctx context.Context, sql string, args ...interface
 }
 
 func (m *MockedDBTX) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
-	panic("not implemented")
+	var count int64
+	for rowSrc.Next() {
+		count++
+		_, _ = rowSrc.Values()
+	}
+	if err := rowSrc.Err(); err != nil {
+		return 0, fmt.Errorf("row source error: %w", err)
+	}
+	return count, nil
 }
