@@ -29,7 +29,7 @@ func NewProvisionFunctionsAccess(
 	encryption *encryption.Client,
 ) *ProvisionFunctionsAccess {
 	return &ProvisionFunctionsAccess{
-		logger:     logger.With(attr.SlogComponent("get-all-organizations")),
+		logger:     logger.With(attr.SlogComponent("provision-functions-access")),
 		db:         db,
 		encryption: encryption,
 	}
