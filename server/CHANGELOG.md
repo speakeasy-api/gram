@@ -1,5 +1,25 @@
 # @gram/server
 
+## 0.3.0
+
+### Minor Changes
+
+- f17c187: Support uploading Gram Functions as part of deployments
+- 9a93cdd: adds branding and improved install instructions to mcp install page
+
+### Patch Changes
+
+- b449904: Properly pass in user_config to dxt files
+- b96cb53: Add functions_access table
+- 155c2e1: Add gram cli v0.1.0
+- bd15d15: Fixes mobile layout for install page
+- e68386d: fix openrouter key refresh
+- 4e0646e: Allow leading and trailing underscores and dashes in tool names and slugs
+- ee7b023: Add basic validation for deployment attachments
+- 395b806: small fixes to mcp install page
+- 49a5851: support non security scheme input header parameters
+- a91a5eb: make billing stub no-op in local dev thus preserving desired state
+
 ## 0.2.0
 
 ### Minor Changes
