@@ -541,6 +541,7 @@ func newStartCommand() *cli.Command {
 				group.Go(func() {
 					temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						DB:                  db,
+						EncryptionClient:    encryptionClient,
 						FeatureProvider:     features,
 						AssetStorage:        assetStorage,
 						SlackClient:         slackClient,

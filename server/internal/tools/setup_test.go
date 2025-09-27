@@ -76,10 +76,12 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
+	enc := testenv.NewEncryptionClient(t)
+
 	f := &feature.InMemory{}
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage))
+	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()

@@ -98,6 +98,22 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 		)
 	}
 
+	err = workflow.ExecuteActivity(
+		ctx,
+		a.ProvisionFunctionsAccess,
+		params.ProjectID,
+		params.DeploymentID,
+	).Get(ctx, nil)
+	if err != nil {
+		finalStatus = "failed"
+		logger.Error(
+			"failed to provision access credentials for functions",
+			"error", err.Error(),
+			string(attr.ProjectIDKey), params.ProjectID,
+			string(attr.DeploymentIDKey), params.DeploymentID,
+		)
+	}
+
 	var finalTransition activities.TransitionDeploymentResult
 	err = workflow.ExecuteActivity(
 		ctx,

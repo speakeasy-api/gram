@@ -12,7 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -67,10 +66,7 @@ func newTestEnvironmentService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	// Create test encryption key (32 bytes for AES-256)
-	testKey := "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM=" // base64 encoded 32-byte key
-	enc, err := encryption.New(testKey)
-	require.NoError(t, err)
+	enc := testenv.NewEncryptionClient(t)
 
 	svc := environments.NewService(logger, conn, sessionManager, enc)
 
