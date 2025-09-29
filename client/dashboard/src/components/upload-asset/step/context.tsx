@@ -29,7 +29,7 @@ export const StepContextProvider: React.FC<StepContextProviderProps> = (
     });
 
     return unsubsribe;
-  }, []);
+  }, [stepper, props.step]);
 
   return (
     <StepContext.Provider

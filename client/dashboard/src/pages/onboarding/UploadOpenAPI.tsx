@@ -112,10 +112,7 @@ function FooterActions() {
       if (!deploymentId) {
         // This should never happen, but just in case
         return (
-          <Button
-            variant="primary"
-            onClick={() => alert("This button doesn't do anything yet")}
-          >
+          <Button variant="primary" onClick={stepper.reset}>
             <RefreshCcwIcon className="size-4" />
             Try Again
           </Button>

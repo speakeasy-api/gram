@@ -35,16 +35,28 @@ const AddOpenAPIDialogInternals = ({
   onOpenChange: (open: boolean) => void;
 }) => {
   const stepper = useStepper();
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+
+  // Reset the stepper when the dialog is closed and the close animation ends
+  React.useEffect(() => {
+    const cleanup = () => {
+      if (!open) stepper.reset();
+    };
+
+    dialogRef.current?.addEventListener("animationend", cleanup);
+
+    return () => {
+      dialogRef.current?.removeEventListener("animationend", cleanup);
+    };
+  }, [open]);
 
   function handleOpenChange(value: boolean) {
     onOpenChange(value);
-    // Allow close animation to finish before resetting
-    setTimeout(stepper.reset, 300);
   }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <Dialog.Content className="max-w-2xl!">
+      <Dialog.Content ref={dialogRef} className="max-w-2xl!">
         <Dialog.Header>
           <Dialog.Title>New OpenAPI Source</Dialog.Title>
           <Dialog.Description>

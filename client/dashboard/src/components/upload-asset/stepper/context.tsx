@@ -59,9 +59,17 @@ export const StepperContextProvider: React.FC<StepperContextProviderProps> = ({
   const steps = React.useRef<Set<number>>(new Set());
   const step = React.useRef(initialStep);
   const subscribers = React.useRef<Set<(step: number) => void>>(new Set());
+  const isMounted = React.useRef(true);
 
   const registerStep = React.useCallback((step: number) => {
     steps.current.add(step);
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      subscribers.current.clear();
+    };
   }, []);
 
   /**
@@ -77,6 +85,9 @@ export const StepperContextProvider: React.FC<StepperContextProviderProps> = ({
   }, []);
 
   const next = React.useCallback(() => {
+    // Prevent state updates if called after unmounted (like in lingering async operations)
+    if (!isMounted.current) return;
+
     const nextStep = step.current + 1;
     if (nextStep > Math.max(...Array.from(steps.current))) return;
     step.current = nextStep;

@@ -203,10 +203,6 @@ export default function OpenAPIAssets() {
             />
           ))}
         </MiniCards>
-        {/* <AddOpenAPIDialog */}
-        {/*   open={newDocumentDialogOpen} */}
-        {/*   onOpenChange={setNewDocumentDialogOpen} */}
-        {/* /> */}
         <Dialog
           open={changeDocumentTargetSlug !== null}
           onOpenChange={(open) => {
