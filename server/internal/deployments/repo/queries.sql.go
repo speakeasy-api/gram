@@ -24,6 +24,37 @@ type BatchLogEventsParams struct {
 	AttachmentType pgtype.Text
 }
 
+type BulkCreateOpenAPIv3ToolDefinitionsParams struct {
+	ProjectID           uuid.UUID
+	DeploymentID        uuid.UUID
+	Openapiv3DocumentID uuid.NullUUID
+	ToolUrn             urn.Tool
+	Name                string
+	UntruncatedName     pgtype.Text
+	Openapiv3Operation  pgtype.Text
+	Summary             string
+	Description         string
+	Tags                []string
+	Confirm             pgtype.Text
+	ConfirmPrompt       pgtype.Text
+	XGram               pgtype.Bool
+	OriginalName        pgtype.Text
+	OriginalSummary     pgtype.Text
+	OriginalDescription pgtype.Text
+	Security            []byte
+	HttpMethod          string
+	Path                string
+	SchemaVersion       string
+	Schema              []byte
+	HeaderSettings      []byte
+	QuerySettings       []byte
+	PathSettings        []byte
+	ServerEnvVar        string
+	DefaultServerUrl    pgtype.Text
+	RequestContentType  pgtype.Text
+	ResponseFilter      *models.ResponseFilter
+}
+
 const cloneDeployment = `-- name: CloneDeployment :one
 INSERT INTO deployments (
   cloned_from
