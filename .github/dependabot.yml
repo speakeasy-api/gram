@@ -6,7 +6,9 @@
 version: 2
 updates:
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directories:
+      - "/"
+      - "/.github/workflows/composite/build-push"
     schedule:
       interval: "weekly"
   - package-ecosystem: "gomod"
