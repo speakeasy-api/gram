@@ -22,58 +22,79 @@ const AddOpenAPIDialog = React.forwardRef<AddOpenAPIDialogRef>((_, ref) => {
 
   return (
     <UploadAssetStepper.Provider step={1}>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <Dialog.Content className="max-w-2xl!">
-          <Dialog.Header>
-            <Dialog.Title>New OpenAPI Source</Dialog.Title>
-            <Dialog.Description>
-              Upload a new OpenAPI document to use in addition to your existing
-              documents.
-            </Dialog.Description>
-          </Dialog.Header>
-          <UploadAssetStepper.Frame className="p-8 space-y-8">
-            <UploadAssetStep.Root step={1}>
-              <UploadAssetStep.Indicator />
-              <UploadAssetStep.Header
-                title="Upload OpenAPI Specification"
-                description="Upload your OpenAPI specification to get started."
-              />
-              <UploadAssetStep.Content>
-                <UploadFileStep />
-              </UploadAssetStep.Content>
-            </UploadAssetStep.Root>
-
-            <UploadAssetStep.Root step={2}>
-              <UploadAssetStep.Indicator />
-              <UploadAssetStep.Header
-                title="Name Your API"
-                description="The tools generated will be scoped under this name."
-              />
-              <UploadAssetStep.Content>
-                <NameDeploymentStep />
-              </UploadAssetStep.Content>
-            </UploadAssetStep.Root>
-
-            <UploadAssetStep.Root step={3}>
-              <UploadAssetStep.Indicator />
-              <UploadAssetStep.Header
-                title="Generate Tools"
-                description="Gram will generate tools for your API."
-              />
-              <UploadAssetStep.Content>
-                <DeployStep />
-              </UploadAssetStep.Content>
-            </UploadAssetStep.Root>
-          </UploadAssetStepper.Frame>
-          <Dialog.Footer>
-            <FooterActions onClose={() => setOpen(false)} />
-          </Dialog.Footer>
-        </Dialog.Content>
-      </Dialog>
+      <AddOpenAPIDialogInternals open={open} onOpenChange={setOpen} />
     </UploadAssetStepper.Provider>
   );
 });
-AddOpenAPIDialog.displayName = "AddOpenAPIDialog";
+
+const AddOpenAPIDialogInternals = ({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) => {
+  const stepper = UploadAssetStepper.useContext();
+
+  console.log(stepper.step);
+
+  function handleOpenChange(value: boolean) {
+    onOpenChange(value);
+    // Allow close animation to finish before resetting
+    setTimeout(stepper.reset, 300);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog.Content className="max-w-2xl!">
+        <Dialog.Header>
+          <Dialog.Title>New OpenAPI Source</Dialog.Title>
+          <Dialog.Description>
+            Upload a new OpenAPI document to use in addition to your existing
+            documents.
+          </Dialog.Description>
+        </Dialog.Header>
+        <UploadAssetStepper.Frame className="p-8 space-y-8">
+          <UploadAssetStep.Root step={1}>
+            <UploadAssetStep.Indicator />
+            <UploadAssetStep.Header
+              title="Upload OpenAPI Specification"
+              description="Upload your OpenAPI specification to get started."
+            />
+            <UploadAssetStep.Content>
+              <UploadFileStep />
+            </UploadAssetStep.Content>
+          </UploadAssetStep.Root>
+
+          <UploadAssetStep.Root step={2}>
+            <UploadAssetStep.Indicator />
+            <UploadAssetStep.Header
+              title="Name Your API"
+              description="The tools generated will be scoped under this name."
+            />
+            <UploadAssetStep.Content>
+              <NameDeploymentStep />
+            </UploadAssetStep.Content>
+          </UploadAssetStep.Root>
+
+          <UploadAssetStep.Root step={3}>
+            <UploadAssetStep.Indicator />
+            <UploadAssetStep.Header
+              title="Generate Tools"
+              description="Gram will generate tools for your API."
+            />
+            <UploadAssetStep.Content>
+              <DeployStep />
+            </UploadAssetStep.Content>
+          </UploadAssetStep.Root>
+        </UploadAssetStepper.Frame>
+        <Dialog.Footer>
+          <FooterActions onClose={() => handleOpenChange(false)} />
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
+  );
+};
 
 function FooterActions({ onClose }: { onClose?: () => void }) {
   const stepper = UploadAssetStepper.useContext();
@@ -86,7 +107,6 @@ function FooterActions({ onClose }: { onClose?: () => void }) {
 
   const handleClose = () => {
     onClose?.();
-    stepper.reset();
   };
 
   const handleContinue = () => {
