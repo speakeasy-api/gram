@@ -4,20 +4,20 @@ import type {
 } from "@gram/client/models/components";
 import React from "react";
 
-type Subscriber = (cb: (step: number) => void) => () => void;
+type StepperSubscriber = (cb: (step: number) => void) => () => void;
 
-type ContextApiMeta = {
+type StepperContextApiMeta = {
   file: File | null;
   uploadResult: UploadOpenAPIv3Result | null;
   assetName: string | null;
   deployment: Deployment | null;
 };
 
-type ContextApi = {
+type StepperContextApi = {
   /* Initial step number. */
   step: number;
   /* Subscriber for step changes */
-  subscribe: Subscriber;
+  subscribe: StepperSubscriber;
   /* Function to register a step */
   registerStep: (step: number) => void;
   /* Current state of the stepper */
@@ -31,17 +31,17 @@ type ContextApi = {
   /* Reset to initial state */
   reset: () => void;
   /* Meta information shared between steps */
-  meta: React.RefObject<ContextApiMeta>;
+  meta: React.RefObject<StepperContextApiMeta>;
 };
 
-const Context = React.createContext<ContextApi>(null!);
+const StepperContext = React.createContext<StepperContextApi>(null!);
 
-type ProviderProps = {
+type StepperContextProviderProps = {
   children: React.ReactNode;
   step: number;
 };
 
-export const Provider: React.FC<ProviderProps> = ({
+export const StepperContextProvider: React.FC<StepperContextProviderProps> = ({
   step: initialStep,
   children,
 }) => {
@@ -49,7 +49,7 @@ export const Provider: React.FC<ProviderProps> = ({
     "idle",
   );
 
-  const meta = React.useRef<ContextApiMeta>({
+  const meta = React.useRef<StepperContextApiMeta>({
     file: null,
     uploadResult: null,
     assetName: null,
@@ -68,7 +68,7 @@ export const Provider: React.FC<ProviderProps> = ({
    * Subscribe to step changes. The callback is called immediately with the
    * current step.
    */
-  const subscribe = React.useCallback<Subscriber>((cb) => {
+  const subscribe = React.useCallback<StepperSubscriber>((cb) => {
     subscribers.current.add(cb);
     cb(step.current);
     return () => {
@@ -96,7 +96,7 @@ export const Provider: React.FC<ProviderProps> = ({
   }, []);
 
   return (
-    <Context.Provider
+    <StepperContext.Provider
       value={{
         get step() {
           return step.current;
@@ -111,10 +111,12 @@ export const Provider: React.FC<ProviderProps> = ({
       }}
     >
       {children}
-    </Context.Provider>
+    </StepperContext.Provider>
   );
 };
 
-export const useContext = () => {
-  return React.useContext(Context);
+export const useStepper = () => {
+  const ctx = React.useContext(StepperContext);
+  if (!ctx) throw new Error("useStep must be used within a Stepper.Provider");
+  return React.useContext(StepperContext);
 };

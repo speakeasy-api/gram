@@ -3,14 +3,14 @@ import { getServerURL } from "@/lib/utils";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Type } from "../ui/type";
 import FileUpload from "../upload";
-import UploadAssetStep from "./step";
-import UploadAssetStepper from "./stepper";
+import { useStep } from "./step";
+import { useStepper } from "./stepper";
 
 export default function UploadFileStep() {
   const project = useProject();
   const session = useSession();
-  const stepper = UploadAssetStepper.useContext();
-  const step = UploadAssetStep.useContext();
+  const stepper = useStepper();
+  const step = useStep();
 
   const getContentType = (file: File) => {
     if (file.type) return file.type;

@@ -1,21 +1,39 @@
 import { cn } from "@/lib/utils";
-import { useContext } from "./context";
+import React from "react";
+import Step from "./index";
+import { useStep } from "./context";
 
 type FrameProps = {
   children: React.ReactNode;
 };
 
 export default function Frame({ children }: FrameProps) {
-  const step = useContext();
+  const step = useStep();
+
+  const header = React.Children.toArray(children).find(
+    (child) => React.isValidElement(child) && child.type === Step.Header,
+  );
+
+  const indicator = React.Children.toArray(children).find(
+    (child) => React.isValidElement(child) && child.type === Step.Indicator,
+  );
+
+  const content = React.Children.toArray(children).find(
+    (child) => React.isValidElement(child) && child.type === Step.Content,
+  );
 
   return (
     <div
       className={cn(
-        "grid grid-cols-[auto_1fr]  gap-4 [grid-template-areas:'indicator_header'_'indicator_content'] transition-all duration-200",
-        step.isCurrentStep ? "opacity-100" : "opacity-50",
+        "flex flex-row gap-4 p-0 flex-nowrap items-stretch justify-start trans w-full",
+        step.isCurrentStep ? "opacity-100 mb-8" : "opacity-50",
       )}
     >
-      {children}
+      {indicator}
+      <div className="flex flex-col gap-6 p-0 flex-nowrap items-stretch justify-start w-full">
+        {header}
+        {content}
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { UploadAssetStepper } from "@/components/upload-asset";
+import { UploadAssetStepper, useStepper } from "@/components/upload-asset";
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadAssetStep from "@/components/upload-asset/step";
@@ -34,7 +34,7 @@ const AddOpenAPIDialogInternals = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
-  const stepper = UploadAssetStepper.useContext();
+  const stepper = useStepper();
 
   console.log(stepper.step);
 
@@ -54,8 +54,8 @@ const AddOpenAPIDialogInternals = ({
             documents.
           </Dialog.Description>
         </Dialog.Header>
-        <UploadAssetStepper.Frame className="p-8 space-y-8">
-          <UploadAssetStep.Root step={1}>
+        <UploadAssetStepper.Frame className="p-8">
+          <UploadAssetStep step={1}>
             <UploadAssetStep.Indicator />
             <UploadAssetStep.Header
               title="Upload OpenAPI Specification"
@@ -64,9 +64,9 @@ const AddOpenAPIDialogInternals = ({
             <UploadAssetStep.Content>
               <UploadFileStep />
             </UploadAssetStep.Content>
-          </UploadAssetStep.Root>
+          </UploadAssetStep>
 
-          <UploadAssetStep.Root step={2}>
+          <UploadAssetStep step={2}>
             <UploadAssetStep.Indicator />
             <UploadAssetStep.Header
               title="Name Your API"
@@ -75,9 +75,9 @@ const AddOpenAPIDialogInternals = ({
             <UploadAssetStep.Content>
               <NameDeploymentStep />
             </UploadAssetStep.Content>
-          </UploadAssetStep.Root>
+          </UploadAssetStep>
 
-          <UploadAssetStep.Root step={3}>
+          <UploadAssetStep step={3}>
             <UploadAssetStep.Indicator />
             <UploadAssetStep.Header
               title="Generate Tools"
@@ -86,7 +86,7 @@ const AddOpenAPIDialogInternals = ({
             <UploadAssetStep.Content>
               <DeployStep />
             </UploadAssetStep.Content>
-          </UploadAssetStep.Root>
+          </UploadAssetStep>
         </UploadAssetStepper.Frame>
         <Dialog.Footer>
           <FooterActions onClose={() => handleOpenChange(false)} />
@@ -97,7 +97,7 @@ const AddOpenAPIDialogInternals = ({
 };
 
 function FooterActions({ onClose }: { onClose?: () => void }) {
-  const stepper = UploadAssetStepper.useContext();
+  const stepper = useStepper();
   const routes = useRoutes();
 
   const latestDeployment = useLatestDeployment(undefined, undefined, {

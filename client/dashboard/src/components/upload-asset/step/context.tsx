@@ -1,22 +1,24 @@
 import React from "react";
-import { useContext as useStepperContext } from "../stepper/context";
+import { useStepper as useStepperContext } from "../stepper/context";
 import { StepState } from "./types";
 
-type ContextApi = {
+type StepContextApi = {
   step: number;
   state: StepState;
   isCurrentStep: boolean;
   setState: (state: StepState) => void;
 };
 
-const Context = React.createContext<ContextApi>(null!);
+const StepContext = React.createContext<StepContextApi>(null!);
 
-type ProviderProps = {
+type StepContextProviderProps = {
   step: number;
   children: React.ReactNode;
 };
 
-export const Provider: React.FC<ProviderProps> = (props) => {
+export const StepContextProvider: React.FC<StepContextProviderProps> = (
+  props,
+) => {
   const stepper = useStepperContext();
   const [isCurrentStep, setIsCurrentStep] = React.useState(false);
   const [state, setState] = React.useState<StepState>("idle");
@@ -30,14 +32,20 @@ export const Provider: React.FC<ProviderProps> = (props) => {
   }, []);
 
   return (
-    <Context.Provider
+    <StepContext.Provider
       value={{ step: props.step, state, setState, isCurrentStep }}
     >
       {props.children}
-    </Context.Provider>
+    </StepContext.Provider>
   );
 };
 
-export const useContext = () => {
-  return React.useContext(Context);
+export const useStep = () => {
+  const ctx = React.useContext(StepContext);
+
+  if (!ctx) {
+    throw new Error("useStep must be used within a Step.Provider");
+  }
+
+  return ctx;
 };

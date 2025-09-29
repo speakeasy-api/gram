@@ -10,7 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
 import FileUpload from "@/components/upload";
-import { UploadAssetStep, UploadAssetStepper } from "@/components/upload-asset";
+import {
+  UploadAssetStep,
+  UploadAssetStepper,
+  useStepper,
+} from "@/components/upload-asset";
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
@@ -45,7 +49,7 @@ export default function UploadOpenAPI() {
       <Page.Body>
         <UploadAssetStepper.Provider step={1}>
           <UploadAssetStepper.Frame className="max-w-2xl">
-            <UploadAssetStep.Root step={1}>
+            <UploadAssetStep step={1}>
               <UploadAssetStep.Indicator />
               <UploadAssetStep.Header
                 title="Upload OpenAPI Specification"
@@ -54,9 +58,9 @@ export default function UploadOpenAPI() {
               <UploadAssetStep.Content>
                 <UploadFileStep />
               </UploadAssetStep.Content>
-            </UploadAssetStep.Root>
+            </UploadAssetStep>
 
-            <UploadAssetStep.Root step={2}>
+            <UploadAssetStep step={2}>
               <UploadAssetStep.Indicator />
               <UploadAssetStep.Header
                 title="Name Your API"
@@ -65,9 +69,9 @@ export default function UploadOpenAPI() {
               <UploadAssetStep.Content>
                 <NameDeploymentStep />
               </UploadAssetStep.Content>
-            </UploadAssetStep.Root>
+            </UploadAssetStep>
 
-            <UploadAssetStep.Root step={3}>
+            <UploadAssetStep step={3}>
               <UploadAssetStep.Indicator />
               <UploadAssetStep.Header
                 title="Generate Tools"
@@ -76,7 +80,7 @@ export default function UploadOpenAPI() {
               <UploadAssetStep.Content>
                 <DeployStep />
               </UploadAssetStep.Content>
-            </UploadAssetStep.Root>
+            </UploadAssetStep>
 
             <Stack direction="horizontal" justify="start">
               <FooterActions />
@@ -89,7 +93,7 @@ export default function UploadOpenAPI() {
 }
 
 function FooterActions() {
-  const stepper = UploadAssetStepper.useContext();
+  const stepper = useStepper();
   const routes = useRoutes();
 
   const deploymentId = stepper.meta.current.deployment?.id;

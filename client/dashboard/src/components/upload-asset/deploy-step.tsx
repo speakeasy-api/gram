@@ -12,12 +12,12 @@ import { Alert, Stack } from "@speakeasy-api/moonshine";
 import React from "react";
 import { Spinner } from "../ui/spinner";
 import { Type } from "../ui/type";
-import Step from "./step";
-import Stepper from "./stepper";
+import { useStep } from "./step";
+import { useStepper } from "./stepper";
 
 export default function DeployStep() {
-  const stepper = Stepper.useContext();
-  const step = Step.useContext();
+  const stepper = useStepper();
+  const step = useStep();
   const telemetry = useTelemetry();
 
   const toolsList = useListTools(
@@ -118,7 +118,7 @@ function DeployCompletedMessage({
   hasErrors: boolean;
 }) {
   const routes = useRoutes();
-  const stepper = Stepper.useContext();
+  const stepper = useStepper();
 
   const { deployment } = stepper.meta.current;
 
@@ -149,7 +149,7 @@ function DeployCompletedMessage({
 
 function DeploymentFailedMessage() {
   const routes = useRoutes();
-  const stepper = Stepper.useContext();
+  const stepper = useStepper();
 
   const { deployment } = stepper.meta.current;
 
@@ -181,8 +181,8 @@ function DeploymentFailedMessage() {
  */
 const useCreateDeployment = (): (() => Promise<Deployment>) => {
   const latestDeployment = useLatestDeployment();
-  const stepper = Stepper.useContext();
-  const step = Step.useContext();
+  const stepper = useStepper();
+  const step = useStep();
   const client = useSdkClient();
 
   const _do = React.useCallback(async () => {

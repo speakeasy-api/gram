@@ -3,12 +3,12 @@ import { useLatestDeployment } from "@gram/client/react-query";
 import { Button, Input, Stack } from "@speakeasy-api/moonshine";
 import React from "react";
 import { Type } from "../ui/type";
-import Step from "./step";
-import Stepper from "./stepper";
+import { useStep } from "./step";
+import { useStepper } from "./stepper";
 
 export default function NameDeploymentStep() {
-  const stepper = Stepper.useContext();
-  const step = Step.useContext();
+  const stepper = useStepper();
+  const step = useStep();
 
   const latestDeployment = useLatestDeployment();
 
