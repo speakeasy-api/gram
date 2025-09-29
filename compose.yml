@@ -115,7 +115,7 @@ services:
       - "8123:8123"
       - "9000:9000"
     environment:
-      CLICKHOUSE_DB: gram_metrics
+      CLICKHOUSE_DB: gram
       CLICKHOUSE_USER: gram
       CLICKHOUSE_PASSWORD: gram
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
