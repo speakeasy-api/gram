@@ -9,14 +9,7 @@ import {
   useListTools,
 } from "@gram/client/react-query";
 import { Alert, Stack } from "@speakeasy-api/moonshine";
-import { CheckIcon } from "lucide-react";
 import React from "react";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "../ui/accordion";
 import { Spinner } from "../ui/spinner";
 import { Type } from "../ui/type";
 import Step from "./step";
@@ -56,7 +49,7 @@ export default function DeployStep() {
   );
 
   const deployHasErrors = React.useMemo(() => {
-    if (!deploymentLogs.data) return null;
+    if (!deploymentLogs.data) return false;
     return deploymentLogs.data.events.some(({ event }) =>
       event.includes("error"),
     );
@@ -106,30 +99,24 @@ export default function DeployStep() {
         </Stack>
       );
     case "completed":
-      if (deployHasErrors) {
-        return <DeployedWithErrorsMessage />;
-      }
-
       return (
-        <Accordion type="single" collapsible className="max-w-2xl">
-          <AccordionItem value="logs">
-            <AccordionTrigger className="text-base">
-              <div className="flex items-center gap-2">
-                <CheckIcon className="size-4" /> Created {toolCount} tools
-              </div>
-            </AccordionTrigger>
-            <AccordionContent>
-              <div>:D</div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+        <DeployCompletedMessage
+          toolCount={toolCount}
+          hasErrors={deployHasErrors}
+        />
       );
     case "failed":
       return <DeploymentFailedMessage />;
   }
 }
 
-function DeployedWithErrorsMessage() {
+function DeployCompletedMessage({
+  toolCount,
+  hasErrors,
+}: {
+  toolCount: number;
+  hasErrors: boolean;
+}) {
   const routes = useRoutes();
   const stepper = Stepper.useContext();
 
@@ -138,6 +125,13 @@ function DeployedWithErrorsMessage() {
   if (!deployment) {
     throw new Error("Deployment not found");
   }
+
+  if (!hasErrors)
+    return (
+      <Alert variant="success" dismissible={false} className="text-sm">
+        The deployment succeeded! Gram generated {toolCount} tools for your API.
+      </Alert>
+    );
 
   return (
     <Alert variant="warning" dismissible={false} className="text-sm">
