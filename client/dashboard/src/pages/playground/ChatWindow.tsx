@@ -35,12 +35,13 @@ import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
 import { onboardingStepStorageKeys } from "../home/Home";
 
 const defaultModel = {
-  label: "Claude 4 Sonnet",
-  value: "anthropic/claude-sonnet-4",
+  label: "Claude 4.5 Sonnet",
+  value: "anthropic/claude-sonnet-4.5",
 };
 
 const availableModels = [
   defaultModel,
+  { label: "Claude 4 Sonnet", value: "anthropic/claude-sonnet-4" },
   { label: "GPT-4o", value: "openai/gpt-4o" },
   { label: "GPT-4o-mini", value: "openai/gpt-4o-mini" },
   { label: "GPT-5", value: "openai/gpt-5" },
