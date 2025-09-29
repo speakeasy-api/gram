@@ -66,10 +66,12 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 	conn, err := infra.CloneTestDatabase(t, "testdb")
 	require.NoError(t, err)
 
+	enc := testenv.NewEncryptionClient(t)
+
 	f := &feature.InMemory{}
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage))
+	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()

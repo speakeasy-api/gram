@@ -11,6 +11,26 @@ import (
 	"github.com/google/uuid"
 )
 
+const countFunctionsAccess = `-- name: CountFunctionsAccess :one
+SELECT count(id)
+FROM functions_access
+WHERE
+  project_id = $1
+  AND deployment_id = $2
+`
+
+type CountFunctionsAccessParams struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+}
+
+func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAccessParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countFunctionsAccess, arg.ProjectID, arg.DeploymentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const listDeploymentFunctionsTools = `-- name: ListDeploymentFunctionsTools :many
 SELECT id, tool_urn, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
 FROM function_tool_definitions

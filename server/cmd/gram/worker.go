@@ -343,6 +343,7 @@ func newWorkerCommand() *cli.Command {
 
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				DB:                  db,
+				EncryptionClient:    encryptionClient,
 				FeatureProvider:     features,
 				AssetStorage:        assetStorage,
 				SlackClient:         slackClient,

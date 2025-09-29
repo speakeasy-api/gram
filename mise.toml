@@ -37,6 +37,17 @@ DB_PORT = "5439"
 ## local development database configured above.
 GRAM_DATABASE_URL = "postgres://{{env.DB_USER}}:{{env.DB_PASSWORD}}@{{env.DB_HOST}}:{{env.DB_PORT}}/{{env.DB_NAME}}?sslmode=disable&search_path=public"
 
+##############################
+## ClickHouse configuration ##
+##############################
+CLICKHOUSE_USERNAME = "gram"
+CLICKHOUSE_PASSWORD = "gram"
+CLICKHOUSE_HOST = "127.0.0.1"
+CLICKHOUSE_PORT = "8123"
+CLICKHOUSE_NATIVE_PORT = "9000"
+CLICKHOUSE_DATABASE = "gram"
+GRAM_CLICKHOUSE_URL = "clickhouse://{{env.CLICKHOUSE_USERNAME}}:{{env.CLICKHOUSE_PASSWORD}}@{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}"
+
 ############################
 ## Temporal configuration ##
 ############################

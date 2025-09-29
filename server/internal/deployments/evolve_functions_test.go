@@ -56,6 +56,14 @@ func TestEvolve_ReplaceFunctions(t *testing.T) {
 	require.Len(t, initial.Deployment.FunctionsAssets, 1, "expected 1 functions file")
 	require.Empty(t, initial.Deployment.Packages, "should have no packages")
 
+	repo := testrepo.New(ti.conn)
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(initial.Deployment.ID),
+		ProjectID:    uuid.MustParse(initial.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "first evolve: get functions without access")
+	require.Equal(t, int64(1), accessCount, "first evolve: all functions should have access credentials")
+
 	// Evolve to add Python functions and remove JS functions (still functions-only)
 	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
 		ApikeyToken:           nil,
@@ -86,7 +94,6 @@ func TestEvolve_ReplaceFunctions(t *testing.T) {
 	require.Equal(t, "py-functions", evolved.Deployment.FunctionsAssets[0].Name, "should have Python functions")
 
 	// Verify only function tools exist, no HTTP tools
-	repo := testrepo.New(ti.conn)
 	httpTools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(evolved.Deployment.ID))
 	require.NoError(t, err, "list deployment HTTP tools")
 	require.Empty(t, httpTools, "should have no HTTP tools")
@@ -99,6 +106,13 @@ func TestEvolve_ReplaceFunctions(t *testing.T) {
 	for _, tool := range functionTools {
 		require.Equal(t, "python:3.12", tool.Runtime, "all tools should have python:3.12 runtime")
 	}
+
+	accessCount, err = repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(initial.Deployment.ID),
+		ProjectID:    uuid.MustParse(initial.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "second evolve: get functions without access")
+	require.Equal(t, int64(1), accessCount, "second evolve: all functions should have access credentials")
 }
 
 func TestEvolve_FunctionsFirst(t *testing.T) {
@@ -183,6 +197,13 @@ func TestEvolve_FunctionsFirst(t *testing.T) {
 	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(evolved.Deployment.ID))
 	require.NoError(t, err, "list deployment function tools")
 	require.NotEmpty(t, functionTools, "should have function tools")
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(initial.Deployment.ID),
+		ProjectID:    uuid.MustParse(initial.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(1), accessCount, "all functions should have access credentials")
 }
 
 func TestEvolve_UpsertFunctions_InitialDeployment(t *testing.T) {
@@ -227,6 +248,13 @@ func TestEvolve_UpsertFunctions_InitialDeployment(t *testing.T) {
 	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(result.Deployment.ID))
 	require.NoError(t, err, "list deployment function tools")
 	require.NotEmpty(t, functionTools, "expected function tools to be created")
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(result.Deployment.ID),
+		ProjectID:    uuid.MustParse(result.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(1), accessCount, "all functions should have access credentials")
 }
 
 func TestEvolve_UpsertFunctions_AddToExisting(t *testing.T) {
@@ -386,6 +414,13 @@ func TestEvolve_UpsertFunctions_UpdateExisting(t *testing.T) {
 	for _, tool := range functionTools {
 		require.Equal(t, "python:3.12", tool.Runtime, "all tools should have updated runtime")
 	}
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(evolved.Deployment.ID),
+		ProjectID:    uuid.MustParse(evolved.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(1), accessCount, "all functions should have access credentials")
 }
 
 func TestEvolve_UpsertFunctions_Multiple(t *testing.T) {
@@ -448,6 +483,13 @@ func TestEvolve_UpsertFunctions_Multiple(t *testing.T) {
 	})
 	require.Contains(t, runtimes, "nodejs:22", "expected nodejs:22 runtime tools")
 	require.Contains(t, runtimes, "python:3.12", "expected python:3.12 runtime tools")
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(result.Deployment.ID),
+		ProjectID:    uuid.MustParse(result.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(2), accessCount, "all functions should have access credentials")
 }
 
 func TestEvolve_UpsertFunctions_MixedWithOpenAPI(t *testing.T) {
@@ -584,6 +626,13 @@ func TestEvolve_ExcludeFunctions_Single(t *testing.T) {
 	for _, tool := range functionTools {
 		require.Equal(t, "python:3.12", tool.Runtime, "all remaining tools should be python:3.12")
 	}
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(evolved.Deployment.ID),
+		ProjectID:    uuid.MustParse(evolved.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(1), accessCount, "all remaining functions should have access credentials")
 }
 
 func TestEvolve_ExcludeFunctions_Multiple(t *testing.T) {
@@ -646,6 +695,14 @@ func TestEvolve_ExcludeFunctions_Multiple(t *testing.T) {
 	require.Equal(t, "completed", evolved.Deployment.Status, "deployment status is not completed")
 	require.Len(t, evolved.Deployment.FunctionsAssets, 1, "expected 1 functions file after exclusions")
 	require.Equal(t, "py-functions", evolved.Deployment.FunctionsAssets[0].Name, "wrong functions file remained")
+
+	repo := testrepo.New(ti.conn)
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(evolved.Deployment.ID),
+		ProjectID:    uuid.MustParse(evolved.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(1), accessCount, "all remaining functions should have access credentials")
 }
 
 func TestEvolve_ExcludeFunctions_All(t *testing.T) {
@@ -711,6 +768,13 @@ func TestEvolve_ExcludeFunctions_All(t *testing.T) {
 	evolvedFunctionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(evolved.Deployment.ID))
 	require.NoError(t, err, "list evolved deployment function tools")
 	require.Empty(t, evolvedFunctionTools, "expected no function tools after excluding all functions")
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(evolved.Deployment.ID),
+		ProjectID:    uuid.MustParse(evolved.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(0), accessCount, "no access credentials should exist after excluding all functions")
 }
 
 func TestEvolve_ExcludeFunctions_KeepOpenAPI(t *testing.T) {
@@ -794,6 +858,13 @@ func TestEvolve_ExcludeFunctions_KeepOpenAPI(t *testing.T) {
 	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(evolved.Deployment.ID))
 	require.NoError(t, err, "list deployment function tools")
 	require.Empty(t, functionTools, "function tools should be gone")
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(evolved.Deployment.ID),
+		ProjectID:    uuid.MustParse(evolved.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(0), accessCount, "no access credentials should exist after excluding all functions")
 }
 
 func TestEvolve_Functions_ComplexScenario(t *testing.T) {
@@ -900,6 +971,13 @@ func TestEvolve_Functions_ComplexScenario(t *testing.T) {
 	for _, tool := range functionTools {
 		require.Equal(t, "python:3.12", tool.Runtime, "all function tools should be python:3.12 after evolution")
 	}
+
+	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
+		DeploymentID: uuid.MustParse(evolved.Deployment.ID),
+		ProjectID:    uuid.MustParse(evolved.Deployment.ProjectID),
+	})
+	require.NoError(t, err, "get functions without access")
+	require.Equal(t, int64(1), accessCount, "all functions should have access credentials")
 }
 
 func TestEvolve_UpsertFunctions_InvalidAssetID(t *testing.T) {
