@@ -20,7 +20,7 @@ create table http_requests_raw
     response_body_bytes UInt64
 ) engine = MergeTree
       PARTITION BY toDate(ts)
-      ORDER BY (project_id, tool_id, ts)
+      ORDER BY (toUInt128(project_id), toUInt128(tool_id), ts)
       TTL ts + toIntervalDay(60)
       SETTINGS index_granularity = 8192
       COMMENT 'Stores raw HTTP tool call requests and responses';
