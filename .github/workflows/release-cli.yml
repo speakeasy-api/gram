@@ -56,7 +56,7 @@ jobs:
           args: --version
       - name: Generate GitHub App Token for Gram Bot
         id: bot-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.GRAM_BOT_APP_ID }}
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
