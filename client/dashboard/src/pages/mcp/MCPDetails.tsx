@@ -41,6 +41,8 @@ import { toast } from "sonner";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { Block, BlockInner } from "../toolBuilder/components";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
+import { ConfigForm } from "@/components/mcp_install_page/config_form";
+import { MinimumSuspense } from "@/components/ui/minimum-suspense";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -167,7 +169,7 @@ export function MCPEnableButton({ toolset }: { toolset: Toolset }) {
 
   return (
     <>
-      <Button 
+      <Button
         variant="secondary"
         onClick={() => setIsServerEnableDialogOpen(true)}
       >
@@ -201,9 +203,9 @@ export function useCustomDomain() {
 export function useMcpUrl(
   toolset:
     | Pick<
-        ToolsetEntry,
-        "slug" | "customDomainId" | "mcpSlug" | "defaultEnvironmentSlug"
-      >
+      ToolsetEntry,
+      "slug" | "customDomainId" | "mcpSlug" | "defaultEnvironmentSlug"
+    >
     | undefined
 ) {
   const { domain } = useCustomDomain();
@@ -220,9 +222,8 @@ export function useMcpUrl(
   const urlSuffix = toolset.mcpSlug
     ? toolset.mcpSlug
     : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
-  const mcpUrl = `${
-    toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
-  }/mcp/${urlSuffix}`;
+  const mcpUrl = `${toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
+    }/mcp/${urlSuffix}`;
 
   return {
     url: mcpUrl,
@@ -520,9 +521,10 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         <PublicToggle isPublic={mcpIsPublic ?? false} />
       </PageSection>
       <PageSection
-        heading="MCP Installation"
-        description="Use these configs to connect to this MCP server from a client like
-          Cursor or Claude Desktop."
+        heading="MCP Install Documentation"
+        description="Share this page with your users to give simple instructions
+          for gettings started with your MCP to their client like Cursor or
+          Claude Desktop."
       >
         <Stack className="mt-2" gap={1}>
           <Stack direction="horizontal" align="center" gap={2}>
@@ -546,6 +548,12 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
             A shareable page for installing your MCP server. Try it in the
             browser!
           </Type>
+          <Stack>
+            <Heading variant="h4" className="text-md">Page Setup</Heading>
+            <MinimumSuspense fallback="Loading">
+              <ConfigForm toolset={toolset} />
+            </MinimumSuspense>
+          </Stack>
         </Stack>
         <MCPJson toolset={toolset} />
       </PageSection>
@@ -706,14 +714,13 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
       .replace(/-/g, "")
       .replace(/^./, (c) => c.toUpperCase())}": {
       "command": "npx",
-      "args": ${argsStringIndented}${
-    !toolset.mcpIsPublic
+      "args": ${argsStringIndented}${!toolset.mcpIsPublic
       ? `,
       "env": {
         "GRAM_KEY": "Bearer <your-key-here>"
       }`
       : ""
-  }
+    }
     }
   }
 }`;
@@ -1004,7 +1011,7 @@ function OAuthTabModal({
                       OAuth Authorization Server Metadata
                     </Type>
                     {jsonError && (
-                      <Type className="text-red-500 text-sm mt-1 !text-red-500">
+                      <Type className="!text-red-500 text-sm mt-1">
                         {jsonError}
                       </Type>
                     )}
@@ -1218,11 +1225,9 @@ function OAuthDetailsModal({
                     </Type>
                     <CodeBlock className="mt-1">
                       {mcpUrl
-                        ? `${
-                            new URL(mcpUrl).origin
-                          }/.well-known/oauth-authorization-server/mcp/${
-                            toolset.mcpSlug
-                          }`
+                        ? `${new URL(mcpUrl).origin
+                        }/.well-known/oauth-authorization-server/mcp/${toolset.mcpSlug
+                        }`
                         : ""}
                     </CodeBlock>
                   </div>

@@ -796,6 +796,18 @@ CREATE TABLE IF NOT EXISTS toolset_prompts (
 CREATE UNIQUE INDEX IF NOT EXISTS toolset_prompts_toolset_id_prompt_name_key
 ON toolset_prompts (toolset_id, prompt_name);
 
+CREATE TABLE IF NOT EXISTS mcp_install_page_metadata (
+  id UUID NOT NULL DEFAULT generate_uuidv7(),
+  external_documentation_url TEXT,
+  logo_id UUID,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT mcp_install_page_metadata_pkey PRIMARY KEY (id),
+  CONSTRAINT mcp_install_page_metadata_asset_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT NOT NULL,
   email TEXT NOT NULL,
