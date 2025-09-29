@@ -36,8 +36,6 @@ const AddOpenAPIDialogInternals = ({
 }) => {
   const stepper = useStepper();
 
-  console.log(stepper.step);
-
   function handleOpenChange(value: boolean) {
     onOpenChange(value);
     // Allow close animation to finish before resetting

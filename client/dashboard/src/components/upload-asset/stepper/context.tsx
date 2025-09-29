@@ -93,7 +93,7 @@ export const StepperContextProvider: React.FC<StepperContextProviderProps> = ({
       deployment: null,
     };
     subscribers.current.forEach((cb) => cb(step.current));
-  }, []);
+  }, [initialStep]);
 
   return (
     <StepperContext.Provider
@@ -118,5 +118,5 @@ export const StepperContextProvider: React.FC<StepperContextProviderProps> = ({
 export const useStepper = () => {
   const ctx = React.useContext(StepperContext);
   if (!ctx) throw new Error("useStep must be used within a Stepper.Provider");
-  return React.useContext(StepperContext);
+  return ctx;
 };
