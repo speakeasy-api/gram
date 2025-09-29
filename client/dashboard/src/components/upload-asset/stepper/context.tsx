@@ -66,6 +66,7 @@ export const StepperContextProvider: React.FC<StepperContextProviderProps> = ({
   }, []);
 
   React.useEffect(() => {
+    isMounted.current = true;
     return () => {
       isMounted.current = false;
       subscribers.current.clear();
@@ -85,7 +86,7 @@ export const StepperContextProvider: React.FC<StepperContextProviderProps> = ({
   }, []);
 
   const next = React.useCallback(() => {
-    // Prevent state updates if called after unmounted (like in lingering async operations)
+    // Prevent state updates if called after unmount (eg: from a lingering async operation)
     if (!isMounted.current) return;
 
     const nextStep = step.current + 1;
