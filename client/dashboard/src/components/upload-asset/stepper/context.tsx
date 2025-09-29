@@ -38,11 +38,11 @@ const Context = React.createContext<ContextApi>(null!);
 
 type ProviderProps = {
   children: React.ReactNode;
-  step?: number;
+  step: number;
 };
 
 export const Provider: React.FC<ProviderProps> = ({
-  step: initialStep = 0,
+  step: initialStep,
   children,
 }) => {
   const [state, setState] = React.useState<"idle" | "completed" | "error">(
