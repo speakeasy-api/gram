@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ettle/strcase"
@@ -54,6 +55,32 @@ func parseSpeakeasy(ctx context.Context, tracer trace.Tracer, reader io.Reader) 
 	}
 
 	return doc, nil
+}
+
+// concurrentSchemaCache is a concurrent-safe cache for JSON schemas.
+type concurrentSchemaCache struct {
+	mu    sync.RWMutex
+	cache map[string]*oas3.JSONSchema[oas3.Referenceable]
+}
+
+func newConcurrentSchemaCache() *concurrentSchemaCache {
+	return &concurrentSchemaCache{
+		mu:    sync.RWMutex{},
+		cache: make(map[string]*oas3.JSONSchema[oas3.Referenceable]),
+	}
+}
+
+func (c *concurrentSchemaCache) get(key string) (*oas3.JSONSchema[oas3.Referenceable], bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	val, exists := c.cache[key]
+	return val, exists
+}
+
+func (c *concurrentSchemaCache) set(key string, val *oas3.JSONSchema[oas3.Referenceable]) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cache[key] = val
 }
 
 func (p *ToolExtractor) doSpeakeasy(
@@ -125,7 +152,7 @@ func (p *ToolExtractor) doSpeakeasy(
 	globalServerEnvVar := strcase.ToSNAKE(string(docInfo.Slug) + "_SERVER_URL")
 	globalDefaultServer := extractDefaultServerSpeakeasy(ctx, logger, docInfo, doc.GetServers())
 
-	schemaCache := make(map[string]*oas3.JSONSchema[oas3.Referenceable])
+	schemaCache := newConcurrentSchemaCache()
 
 	for path, pi := range doc.Paths.All() {
 		_, err := pi.Resolve(ctx, openapi.ResolveOptions{
@@ -378,7 +405,7 @@ func extractDefaultServerSpeakeasy(ctx context.Context, logger *slog.Logger, doc
 	return nil
 }
 
-func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.Queries, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], task operationTask[openapi.Operation, openapi.ReferencedParameter]) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
+func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.Queries, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, task operationTask[openapi.Operation, openapi.ReferencedParameter]) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
 	empty := repo.CreateOpenAPIv3ToolDefinitionParams{} //nolint:exhaustruct //empty struct
 
 	projectID := task.extractTask.ProjectID
@@ -612,7 +639,7 @@ type capturedRequestBodySpeakeasy struct {
 	defs        Defs
 }
 
-func captureRequestBodySpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], requestBody *openapi.RequestBody) (capturedRequestBodySpeakeasy, error) {
+func captureRequestBodySpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, requestBody *openapi.RequestBody) (capturedRequestBodySpeakeasy, error) {
 	empty := capturedRequestBodySpeakeasy{} //nolint:exhaustruct // empty struct
 
 	if requestBody == nil || requestBody.GetContent().Len() == 0 {
@@ -667,11 +694,11 @@ func generateSchemaKey(js *oas3.JSONSchema[oas3.Referenceable]) string {
 	return hashing.Hash(js)
 }
 
-func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], name string, js *oas3.JSONSchema[oas3.Referenceable]) (*oas3.JSONSchema[oas3.Referenceable], Defs, error) {
+func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, name string, js *oas3.JSONSchema[oas3.Referenceable]) (*oas3.JSONSchema[oas3.Referenceable], Defs, error) {
 	line, col := js.GetRootNodeLine(), js.GetRootNodeColumn()
 
 	cacheKey := generateSchemaKey(js)
-	if cached, exists := schemaCache[cacheKey]; exists {
+	if cached, exists := schemaCache.get(cacheKey); exists {
 		var defs *sequencedmap.Map[string, *oas3.JSONSchema[oas3.Referenceable]]
 		if cached.IsLeft() {
 			defs = cached.GetLeft().Defs
@@ -692,7 +719,7 @@ func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schem
 		return nil, nil, tagError("inline-error", "%s (%d:%d): error inlining schema: %w", name, line, col, err)
 	}
 
-	schemaCache[cacheKey] = inlined
+	schemaCache.set(cacheKey, inlined)
 
 	// Extract definitions from inlined schema as we need to bubble them up to the top-level schema
 	var defs *sequencedmap.Map[string, *oas3.JSONSchema[oas3.Referenceable]]
@@ -704,7 +731,7 @@ func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schem
 	return inlined, defs, nil
 }
 
-func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], params []*openapi.Parameter) (*oas3.JSONSchema[oas3.Referenceable], []byte, Defs, error) {
+func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, params []*openapi.Parameter) (*oas3.JSONSchema[oas3.Referenceable], []byte, Defs, error) {
 	if len(params) == 0 {
 		return nil, nil, nil, nil
 	}
