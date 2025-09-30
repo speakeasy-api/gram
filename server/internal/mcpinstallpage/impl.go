@@ -109,52 +109,34 @@ func (s *Service) SetInstallPageMetadata(ctx context.Context, payload *gen.SetIn
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset ID").Log(ctx, s.logger)
 	}
 
-	// ensure ID is passed, but allow null
-	// logoAssetId = uuid.Parse()
-
 	if err := s.ensureToolsetOwnership(ctx, *authCtx.ProjectID, toolsetID, authCtx); err != nil {
 		return nil, err
 	}
 
-	existing, err := s.repo.GetMetadataForToolset(ctx, toolsetID)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch existing MCP install page metadata").Log(ctx, s.logger, projectAttrs(authCtx)...)
+	var logoID uuid.UUID
+	if payload.LogoAssetID != nil {
+		parsedLogoID, err := uuid.Parse(*payload.LogoAssetID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset ID").Log(ctx, s.logger)
+		}
+		logoID = uuid.UUID{UUID: parsedLogoID, Valid: true}
 	}
 
-	// QA: ensure we err on non-URI formatted
-	var existingRecord *repo.McpInstallPageMetadatum
-	if err == nil {
-		existingRecord = &existing
+	externalDocURL := conv.ToPGText("")
+	if payload.ExternalDocumentationURL != nil {
+		externalDocURL = conv.ToPGText(*payload.ExternalDocumentationURL)
 	}
 
+	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
+		ToolsetID:                toolsetID,
+		ExternalDocumentationUrl: externalDocURL,
+		LogoID:                   logoID,
+	})
 	if err != nil {
-		return nil, err
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger, projectAttrs(authCtx)...)
 	}
 
-	// Convert SQL into uspert
-	switch {
-	case existingRecord == nil:
-		created, err := s.repo.CreateMetadata(ctx, repo.CreateMetadataParams{
-			ToolsetID:                toolsetID,
-			ExternalDocumentationUrl: conv.ToPGText(""),
-			LogoID:                   uuid.NullUUID{},
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to create MCP install page metadata").Log(ctx, s.logger, projectAttrs(authCtx)...)
-		}
-		return toInstallPageMetadata(created), nil
-	default:
-		updated, err := s.repo.UpdateMetadata(ctx, repo.UpdateMetadataParams{
-			ID:                       existingRecord.ID,
-			ToolsetID:                toolsetID,
-			ExternalDocumentationUrl: conv.ToPGText(""),
-			LogoID:                   uuid.NullUUID{},
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to update MCP install page metadata").Log(ctx, s.logger, projectAttrs(authCtx)...)
-		}
-		return toInstallPageMetadata(updated), nil
-	}
+	return toInstallPageMetadata(result), nil
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

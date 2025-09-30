@@ -154,11 +154,10 @@ export function FullWidthUpload({
       <div className="flex items-center justify-center w-full">
         <label
           htmlFor="dropzone-file"
-          className={`flex flex-col items-center justify-center w-full p-10 border-1 border-dashed rounded-lg cursor-pointer trans ${
-            !handlers.isValidFile
-              ? "border-destructive bg-destructive/10"
-              : "border-muted-foreground/50 hover:bg-input/20"
-          }`}
+          className={`flex flex-col items-center justify-center w-full p-10 border-1 border-dashed rounded-lg cursor-pointer trans ${!handlers.isValidFile
+            ? "border-destructive bg-destructive/10"
+            : "border-muted-foreground/50 hover:bg-input/20"
+            }`}
         >
           <Stack align={"center"} justify={"center"} gap={3}>
             <UploadIcon className="w-4 h-4" />
@@ -207,39 +206,34 @@ export function CompactUpload({
     }
   };
 
-  useEffect(() => console.log('file preview', renderFilePreview), [renderFilePreview])
-  const handlers = useFileDropZoneHandlers(onUpload, allowedExtensions);
+  const { isValidFile, ...handlers } = useFileDropZoneHandlers(onUpload, allowedExtensions);
   return (
     <label
       htmlFor="dropzone-file"
       tabIndex={0}
       className={cn(
-        "flex flex-col gap-2 items-center justify-center",
-        "p-10 border-1 border-dashed rounded-lg cursor-pointer",
-        !handlers.isValidFile
+        "inline-flex flex-col gap-2 items-center justify-center",
+        "p-8 border-1 border-dashed rounded-lg cursor-pointer",
+        !isValidFile
           ? "border-destructive bg-destructive/10"
           : "border-muted-foreground/50 hover:bg-input/20",
         className,
       )}
       {...handlers}
     >
-      {renderFilePreview ? (
-        renderFilePreview()
-      ) : (
+      {(renderFilePreview && renderFilePreview()) ?? (
         <>
           <UploadIcon className="w-4 h-4" />
           <Type small mono muted>
             {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")} (max 8MiB)
-          </Type>
-          <input
-            id="dropzone-file"
-            type="file"
-            className="hidden"
-            onChange={handleFileChange}
-            accept={allowedExtensions?.map((ext) => `.${ext}`)?.join(",")}
-          />
-        </>
-      )}
+          </Type>)</>)}
+      <input
+        id="dropzone-file"
+        type="file"
+        className="hidden"
+        onChange={handleFileChange}
+        accept={allowedExtensions?.map((ext) => `.${ext}`)?.join(",")}
+      />
     </label>
   );
 }

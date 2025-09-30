@@ -12,37 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createMetadata = `-- name: CreateMetadata :one
-INSERT INTO mcp_install_page_metadata (toolset_id, external_documentation_url, logo_id)
-VALUES ($1, $2, $3)
-RETURNING id,
-          toolset_id,
-          external_documentation_url,
-          logo_id,
-          created_at,
-          updated_at
-`
-
-type CreateMetadataParams struct {
-	ToolsetID                uuid.UUID
-	ExternalDocumentationUrl pgtype.Text
-	LogoID                   uuid.NullUUID
-}
-
-func (q *Queries) CreateMetadata(ctx context.Context, arg CreateMetadataParams) (McpInstallPageMetadatum, error) {
-	row := q.db.QueryRow(ctx, createMetadata, arg.ToolsetID, arg.ExternalDocumentationUrl, arg.LogoID)
-	var i McpInstallPageMetadatum
-	err := row.Scan(
-		&i.ID,
-		&i.ToolsetID,
-		&i.ExternalDocumentationUrl,
-		&i.LogoID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const ensureToolsetOwnership = `-- name: EnsureToolsetOwnership :one
 SELECT id
 FROM toolsets
@@ -90,13 +59,13 @@ func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID
 	return i, err
 }
 
-const updateMetadata = `-- name: UpdateMetadata :one
-UPDATE mcp_install_page_metadata
-SET toolset_id = $2,
-    external_documentation_url = $3,
-    logo_id = $4,
-    updated_at = clock_timestamp()
-WHERE id = $1
+const upsertMetadata = `-- name: UpsertMetadata :one
+INSERT INTO mcp_install_page_metadata (toolset_id, external_documentation_url, logo_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (toolset_id)
+DO UPDATE SET external_documentation_url = EXCLUDED.external_documentation_url,
+              logo_id = EXCLUDED.logo_id,
+              updated_at = clock_timestamp()
 RETURNING id,
           toolset_id,
           external_documentation_url,
@@ -105,20 +74,14 @@ RETURNING id,
           updated_at
 `
 
-type UpdateMetadataParams struct {
-	ID                       uuid.UUID
+type UpsertMetadataParams struct {
 	ToolsetID                uuid.UUID
 	ExternalDocumentationUrl pgtype.Text
 	LogoID                   uuid.NullUUID
 }
 
-func (q *Queries) UpdateMetadata(ctx context.Context, arg UpdateMetadataParams) (McpInstallPageMetadatum, error) {
-	row := q.db.QueryRow(ctx, updateMetadata,
-		arg.ID,
-		arg.ToolsetID,
-		arg.ExternalDocumentationUrl,
-		arg.LogoID,
-	)
+func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (McpInstallPageMetadatum, error) {
+	row := q.db.QueryRow(ctx, upsertMetadata, arg.ToolsetID, arg.ExternalDocumentationUrl, arg.LogoID)
 	var i McpInstallPageMetadatum
 	err := row.Scan(
 		&i.ID,
