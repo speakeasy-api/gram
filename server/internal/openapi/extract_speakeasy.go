@@ -125,6 +125,8 @@ func (p *ToolExtractor) doSpeakeasy(
 	globalServerEnvVar := strcase.ToSNAKE(string(docInfo.Slug) + "_SERVER_URL")
 	globalDefaultServer := extractDefaultServerSpeakeasy(ctx, logger, docInfo, doc.GetServers())
 
+	schemaCache := make(map[string]*oas3.JSONSchema[oas3.Referenceable])
+
 	for path, pi := range doc.Paths.All() {
 		_, err := pi.Resolve(ctx, openapi.ResolveOptions{
 			TargetLocation:      "/",
@@ -163,7 +165,7 @@ func (p *ToolExtractor) doSpeakeasy(
 				opID = fmt.Sprintf("%s_%s", op.method, path)
 			}
 
-			def, err := extractToolDefSpeakeasy(ctx, logger, tx, doc, operationTask[openapi.Operation, openapi.ReferencedParameter]{
+			def, err := extractToolDefSpeakeasy(ctx, logger, tx, doc, schemaCache, operationTask[openapi.Operation, openapi.ReferencedParameter]{
 				extractTask:      task,
 				method:           op.method,
 				path:             path,
@@ -376,7 +378,7 @@ func extractDefaultServerSpeakeasy(ctx context.Context, logger *slog.Logger, doc
 	return nil
 }
 
-func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.Queries, doc *openapi.OpenAPI, task operationTask[openapi.Operation, openapi.ReferencedParameter]) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
+func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.Queries, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], task operationTask[openapi.Operation, openapi.ReferencedParameter]) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
 	empty := repo.CreateOpenAPIv3ToolDefinitionParams{} //nolint:exhaustruct //empty struct
 
 	projectID := task.extractTask.ProjectID
@@ -440,7 +442,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 			}
 		}
 
-		bodyResult, err = captureRequestBodySpeakeasy(ctx, doc, requestBody)
+		bodyResult, err = captureRequestBodySpeakeasy(ctx, doc, schemaCache, requestBody)
 		if err != nil {
 			return empty, fmt.Errorf("error parsing request body: %w", err)
 		}
@@ -480,19 +482,19 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 		AdditionalProperties: oas3.NewJSONSchemaFromBool(false),
 	}
 
-	headerSchema, headerSettings, d, err := captureParametersSpeakeasy(ctx, logger, doc, slices.Collect(headerParams.Values()))
+	headerSchema, headerSettings, d, err := captureParametersSpeakeasy(ctx, logger, doc, schemaCache, slices.Collect(headerParams.Values()))
 	if err != nil {
 		return empty, fmt.Errorf("error collecting header parameters: %w", err)
 	}
 	mergeDefs(ctx, logger, defs, d)
 
-	querySchema, querySettings, d, err := captureParametersSpeakeasy(ctx, logger, doc, slices.Collect(queryParams.Values()))
+	querySchema, querySettings, d, err := captureParametersSpeakeasy(ctx, logger, doc, schemaCache, slices.Collect(queryParams.Values()))
 	if err != nil {
 		return empty, fmt.Errorf("error collecting query parameters: %w", err)
 	}
 	mergeDefs(ctx, logger, defs, d)
 
-	pathSchema, pathSettings, d, err := captureParametersSpeakeasy(ctx, logger, doc, slices.Collect(pathParams.Values()))
+	pathSchema, pathSettings, d, err := captureParametersSpeakeasy(ctx, logger, doc, schemaCache, slices.Collect(pathParams.Values()))
 	if err != nil {
 		return empty, fmt.Errorf("error collecting path parameters: %w", err)
 	}
@@ -517,7 +519,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 		speakeasyMCPExtension: op.GetExtensions().GetOrZero("x-speakeasy-mcp"),
 	})
 
-	responseFilter, responseFilterSchema, err := getResponseFilterSpeakeasy(ctx, logger, doc, op, descriptor.responseFilterType)
+	responseFilter, responseFilterSchema, err := getResponseFilterSpeakeasy(ctx, logger, doc, schemaCache, op, descriptor.responseFilterType)
 	if err != nil {
 		return empty, fmt.Errorf("error getting response filter: %w", err)
 	}
@@ -610,7 +612,7 @@ type capturedRequestBodySpeakeasy struct {
 	defs        Defs
 }
 
-func captureRequestBodySpeakeasy(ctx context.Context, doc *openapi.OpenAPI, requestBody *openapi.RequestBody) (capturedRequestBodySpeakeasy, error) {
+func captureRequestBodySpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], requestBody *openapi.RequestBody) (capturedRequestBodySpeakeasy, error) {
 	empty := capturedRequestBodySpeakeasy{} //nolint:exhaustruct // empty struct
 
 	if requestBody == nil || requestBody.GetContent().Len() == 0 {
@@ -647,7 +649,7 @@ func captureRequestBodySpeakeasy(ctx context.Context, doc *openapi.OpenAPI, requ
 		}, nil
 	}
 
-	schema, defs, err := extractJSONSchemaSpeakeasy(ctx, doc, "requestBody", spec.Schema)
+	schema, defs, err := extractJSONSchemaSpeakeasy(ctx, doc, schemaCache, "requestBody", spec.Schema)
 	if err != nil {
 		return empty, fmt.Errorf("failed to extract json schema: %w", err)
 	}
@@ -661,9 +663,23 @@ func captureRequestBodySpeakeasy(ctx context.Context, doc *openapi.OpenAPI, requ
 	}, nil
 }
 
-func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, name string, js *oas3.JSONSchema[oas3.Referenceable]) (*oas3.JSONSchema[oas3.Referenceable], Defs, error) {
+func generateSchemaKey(js *oas3.JSONSchema[oas3.Referenceable]) string {
+	return hashing.Hash(js)
+}
+
+func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], name string, js *oas3.JSONSchema[oas3.Referenceable]) (*oas3.JSONSchema[oas3.Referenceable], Defs, error) {
 	line, col := js.GetRootNodeLine(), js.GetRootNodeColumn()
 
+	cacheKey := generateSchemaKey(js)
+	if cached, exists := schemaCache[cacheKey]; exists {
+		var defs *sequencedmap.Map[string, *oas3.JSONSchema[oas3.Referenceable]]
+		if cached.IsLeft() {
+			defs = cached.GetLeft().Defs
+		}
+		return cached, defs, nil
+	}
+
+	// Not in cache, perform inlining
 	inlined, err := oas3.Inline(ctx, js, oas3.InlineOptions{
 		ResolveOptions: oas3.ResolveOptions{
 			TargetLocation:      "/",
@@ -676,6 +692,8 @@ func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, name 
 		return nil, nil, tagError("inline-error", "%s (%d:%d): error inlining schema: %w", name, line, col, err)
 	}
 
+	schemaCache[cacheKey] = inlined
+
 	// Extract definitions from inlined schema as we need to bubble them up to the top-level schema
 	var defs *sequencedmap.Map[string, *oas3.JSONSchema[oas3.Referenceable]]
 	if inlined.IsLeft() {
@@ -686,7 +704,7 @@ func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, name 
 	return inlined, defs, nil
 }
 
-func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, params []*openapi.Parameter) (*oas3.JSONSchema[oas3.Referenceable], []byte, Defs, error) {
+func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], params []*openapi.Parameter) (*oas3.JSONSchema[oas3.Referenceable], []byte, Defs, error) {
 	if len(params) == 0 {
 		return nil, nil, nil, nil
 	}
@@ -720,7 +738,7 @@ func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 				s.GetLeft().Description = pointer.From(param.GetDescription())
 			}
 
-			es, d, err := extractJSONSchemaSpeakeasy(ctx, doc, param.Name, param.Schema)
+			es, d, err := extractJSONSchemaSpeakeasy(ctx, doc, schemaCache, param.Name, param.Schema)
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("failed to extract json schema: %w", err)
 			}
