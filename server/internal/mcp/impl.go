@@ -27,8 +27,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -386,7 +384,7 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	}
 
 	configSnippetData := jsonSnippetData{
-		MCPName:        cases.Title(language.English).String(toolset.Name),
+		MCPName:        toolset.Name,
 		MCPSlug:        toolset.Slug,
 		MCPDescription: toolset.Description.String,
 		MCPURL:         MCPURL,
