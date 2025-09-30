@@ -37,6 +37,11 @@ func CheckMCPSlugAvailabilityToolsetsPath() string {
 	return "/rpc/toolsets.checkMCPSlugAvailability"
 }
 
+// CloneToolsetToolsetsPath returns the URL path to the toolsets service cloneToolset HTTP endpoint.
+func CloneToolsetToolsetsPath() string {
+	return "/rpc/toolsets.clone"
+}
+
 // AddExternalOAuthServerToolsetsPath returns the URL path to the toolsets service addExternalOAuthServer HTTP endpoint.
 func AddExternalOAuthServerToolsetsPath() string {
 	return "/rpc/toolsets.addExternalOAuthServer"

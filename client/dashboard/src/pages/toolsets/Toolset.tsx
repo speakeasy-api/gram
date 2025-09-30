@@ -10,9 +10,10 @@ import {
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
+import { useProject } from "@/contexts/Auth";
 import { useApiError } from "@/hooks/useApiError";
 import { useGroupedTools } from "@/lib/toolNames";
-import { cn } from "@/lib/utils";
+import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   queryKeyInstance,
@@ -21,9 +22,10 @@ import {
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
+import { toast } from "sonner";
 import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
 import { PromptsTabContent } from "./PromptsTab";
 import { ToolCard } from "./ToolCard";
@@ -67,6 +69,75 @@ export function useDeleteToolset({
         },
       });
     }
+  };
+}
+
+export function useCloneToolset({
+  onSuccess,
+}: { onSuccess?: () => void } = {}) {
+  const toolsets = useToolsets();
+  const telemetry = useTelemetry();
+  const routes = useRoutes();
+  const { handleApiError } = useApiError();
+  const project = useProject();
+
+  const mutation = useMutation({
+    mutationFn: async (slug: string) => {
+      // Use the server URL directly until SDK is regenerated
+      const serverUrl = getServerURL();
+      const response = await fetch(`${serverUrl}/rpc/toolsets.clone?slug=${encodeURIComponent(slug)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Gram-Project': project.slug,
+        },
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        let error;
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            error = await response.json();
+          } catch (e) {
+            error = { message: `HTTP ${response.status}: ${response.statusText}` };
+          }
+        } else {
+          error = { message: `HTTP ${response.status}: ${response.statusText}` };
+        }
+        throw new Error(error.message || 'Failed to clone toolset');
+      }
+
+      // Check if response has content
+      const text = await response.text();
+      if (!text) {
+        throw new Error('Empty response from server');
+      }
+
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        throw new Error(`Failed to parse response: ${e.message}`);
+      }
+    },
+    onSuccess: async (data) => {
+      telemetry.capture("toolset_event", {
+        action: "toolset_cloned",
+        toolset_slug: data.slug,
+      });
+      toast.success(`Toolset cloned successfully as "${data.name}"`);
+      await toolsets.refetch();
+      routes.toolsets.toolset.update.goTo(data.slug);
+      onSuccess?.();
+    },
+    onError: (error) => {
+      handleApiError(error, "Failed to clone toolset");
+    },
+  });
+
+  return (slug: string) => {
+    mutation.mutate(slug);
   };
 }
 

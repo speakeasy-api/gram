@@ -29,6 +29,8 @@ type Service interface {
 	GetToolset(context.Context, *GetToolsetPayload) (res *types.Toolset, err error)
 	// Check if a MCP slug is available
 	CheckMCPSlugAvailability(context.Context, *CheckMCPSlugAvailabilityPayload) (res bool, err error)
+	// Clone an existing toolset with a new name
+	CloneToolset(context.Context, *CloneToolsetPayload) (res *types.Toolset, err error)
 	// Associate an external OAuth server with a toolset
 	AddExternalOAuthServer(context.Context, *AddExternalOAuthServerPayload) (res *types.Toolset, err error)
 	// Remove OAuth server association from a toolset
@@ -55,7 +57,7 @@ const ServiceName = "toolsets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [8]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "addExternalOAuthServer", "removeOAuthServer"}
+var MethodNames = [9]string{"createToolset", "listToolsets", "updateToolset", "deleteToolset", "getToolset", "checkMCPSlugAvailability", "cloneToolset", "addExternalOAuthServer", "removeOAuthServer"}
 
 // AddExternalOAuthServerPayload is the payload type of the toolsets service
 // addExternalOAuthServer method.
@@ -72,6 +74,15 @@ type AddExternalOAuthServerPayload struct {
 // checkMCPSlugAvailability method.
 type CheckMCPSlugAvailabilityPayload struct {
 	// The slug to check
+	Slug             types.Slug
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// CloneToolsetPayload is the payload type of the toolsets service cloneToolset
+// method.
+type CloneToolsetPayload struct {
+	// The slug of the toolset to clone
 	Slug             types.Slug
 	SessionToken     *string
 	ProjectSlugInput *string
