@@ -41,6 +41,10 @@ type Client struct {
 	// the checkMCPSlugAvailability endpoint.
 	CheckMCPSlugAvailabilityDoer goahttp.Doer
 
+	// CloneToolset Doer is the HTTP client used to make requests to the
+	// cloneToolset endpoint.
+	CloneToolsetDoer goahttp.Doer
+
 	// AddExternalOAuthServer Doer is the HTTP client used to make requests to the
 	// addExternalOAuthServer endpoint.
 	AddExternalOAuthServerDoer goahttp.Doer
@@ -75,6 +79,7 @@ func NewClient(
 		DeleteToolsetDoer:            doer,
 		GetToolsetDoer:               doer,
 		CheckMCPSlugAvailabilityDoer: doer,
+		CloneToolsetDoer:             doer,
 		AddExternalOAuthServerDoer:   doer,
 		RemoveOAuthServerDoer:        doer,
 		RestoreResponseBody:          restoreBody,
@@ -224,6 +229,30 @@ func (c *Client) CheckMCPSlugAvailability() goa.Endpoint {
 		resp, err := c.CheckMCPSlugAvailabilityDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "checkMCPSlugAvailability", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CloneToolset returns an endpoint that makes HTTP requests to the toolsets
+// service cloneToolset server.
+func (c *Client) CloneToolset() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCloneToolsetRequest(c.encoder)
+		decodeResponse = DecodeCloneToolsetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCloneToolsetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CloneToolsetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("toolsets", "cloneToolset", err)
 		}
 		return decodeResponse(resp)
 	}
