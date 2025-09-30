@@ -57,7 +57,6 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 }
 
 func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (tm.ToolMetricsClient, error) {
-	logger.InfoContext(ctx, fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-http-port")))
 	conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // too many fields
 		Auth: clickhouse.Auth{
 			Database: c.String("clickhouse-database"),
