@@ -39,6 +39,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
 )
 
 func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
@@ -271,6 +273,7 @@ func newBillingProvider(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
 	redisClient *redis.Client,
+	posthogClient *posthog.Posthog,
 	c *cli.Context,
 ) (billing.Repository, billing.Tracker, error) {
 	switch {
@@ -287,7 +290,8 @@ func newBillingProvider(
 		polarAPIKey := c.String("polar-api-key")
 		polarsdk := polargo.New(polargo.WithSecurity(polarAPIKey), polargo.WithTimeout(30*time.Second)) // Shouldn't take this long, but just in case
 		pclient := polar.NewClient(polarsdk, polarAPIKey, logger, tracerProvider, redisClient, catalog, c.String("polar-webhook-secret"))
-		return pclient, pclient, nil
+		tracker := tracking.New(pclient, posthogClient)
+		return pclient, tracker, nil
 	case c.String("environment") == "local":
 		logger.WarnContext(ctx, "using stub billing client: polar not configured")
 		stub := billing.NewStubClient(logger, tracerProvider)
