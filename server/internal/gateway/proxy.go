@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"reflect"
 	"regexp"
@@ -18,6 +19,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/tool-metrics"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -106,6 +109,7 @@ type ToolProxy struct {
 	metrics *metrics
 	cache   cache.Cache
 	policy  *guardian.Policy
+	tcm     tm.ToolMetricsClient
 }
 
 func NewToolProxy(
@@ -115,6 +119,7 @@ func NewToolProxy(
 	source ToolCallSource,
 	cache cache.Cache,
 	policy *guardian.Policy,
+	tcm tm.ToolMetricsClient,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
@@ -126,6 +131,7 @@ func NewToolProxy(
 		metrics: newMetrics(meter, logger),
 		cache:   cache,
 		policy:  policy,
+		tcm:     tcm,
 	}
 }
 
@@ -368,7 +374,7 @@ func (itp *ToolProxy) Do(
 
 	req.Header.Set("X-Gram-Proxy", "1")
 
-	return reverseProxyRequest(ctx, logger, itp.tracer, tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode)
+	return reverseProxyRequest(ctx, logger, itp.tracer, tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode, itp.tcm)
 }
 
 type retryConfig struct {
@@ -435,9 +441,29 @@ func reverseProxyRequest(ctx context.Context,
 	req *http.Request,
 	policy *guardian.Policy,
 	responseStatusCodeCapture *int,
+	tcm tm.ToolMetricsClient,
 ) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
+
+	var durationMs float64
+	var resolvedIP string
+
+	spanCtx := trace.SpanContextFromContext(ctx)
+
+	var traceID, spanID string
+	if spanCtx.HasTraceID() {
+		traceID = spanCtx.TraceID().String()
+	}
+	if spanCtx.HasSpanID() {
+		spanID = spanCtx.SpanID().String()
+	}
+
+	var reqBodyBytes []byte
+	if req.Body != nil {
+		reqBodyBytes, _ = io.ReadAll(req.Body)
+		req.Body = io.NopCloser(bytes.NewReader(reqBodyBytes))
+	}
 
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
@@ -468,7 +494,30 @@ func reverseProxyRequest(ctx context.Context,
 			retryReq.Body = freshBody
 		}
 
-		return client.Do(retryReq)
+		// capture the start time of the request ip using httptrace
+		httpTrace := &httptrace.ClientTrace{
+			GotConn: func(connInfo httptrace.GotConnInfo) {
+				if len(connInfo.Conn.RemoteAddr().String()) == 0 {
+					resolvedIP = "0.0.0.0" // fallback for when the ip address is not found
+					return
+				}
+
+				resolvedIP = strings.Split(connInfo.Conn.RemoteAddr().String(), ":")[0]
+				logger.DebugContext(ctx, "IP address resolved for request", "ip", resolvedIP)
+			},
+		}
+
+		ctx = httptrace.WithClientTrace(ctx, httpTrace)
+		retryReq = retryReq.WithContext(ctx)
+		startTime := time.Now()
+
+		resp, err := client.Do(retryReq)
+		if err != nil {
+			return nil, fmt.Errorf("retry: do request: %w", err)
+		}
+
+		durationMs = time.Since(startTime).Seconds() * 1000
+		return resp, nil
 	}
 	resp, err := retryWithBackoff(ctx, retryConfig{
 		initialInterval: 500 * time.Millisecond,
@@ -494,6 +543,26 @@ func reverseProxyRequest(ctx context.Context,
 	}, executeRequest)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
+		err = tcm.Log(ctx, tm.ToolHTTPRequest{
+			OrganizationID: tool.OrganizationID,
+			ProjectID:      tool.ProjectID,
+			DeploymentID:   tool.DeploymentID,
+			ToolID:         tool.ID,
+			ToolURN:        tool.ID, // how to get the URN?
+			ToolType:       tm.ToolTypeHttp,
+			TraceID:        traceID,
+			SpanID:         spanID,
+			HTTPMethod:     req.Method,
+			HTTPRoute:      req.URL.Path,
+			StatusCode:     uint16(oops.StatusCodes[oops.CodeGatewayError]),
+			DurationMs:     durationMs,
+			UserAgent:      "Gram",
+			ClientIPv4:     resolvedIP,
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to log tool request").Log(ctx, logger)
+		}
+
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").Log(ctx, logger)
 	}
 	defer o11y.LogDefer(ctx, logger, func() error {
@@ -525,6 +594,8 @@ func reverseProxyRequest(ctx context.Context,
 	span.SetAttributes(attr.HTTPResponseExternal(true))
 	w.Header().Set(HeaderProxiedResponse, "1")
 
+	var respBodyBuffer bytes.Buffer
+
 	finalStatusCode := resp.StatusCode
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
 		w.WriteHeader(finalStatusCode)
@@ -532,11 +603,14 @@ func reverseProxyRequest(ctx context.Context,
 		// Streaming mode: flush after each chunk
 		logger.InfoContext(ctx, "streaming with flush", attr.SlogHTTPResponseHeaderContentType(resp.Header.Get("Content-Type")))
 
+		// Create a TeeReader to capture the response body
+		teeReader := io.TeeReader(resp.Body, &respBodyBuffer)
+
 		buf := make([]byte, 32*1024)
 		flusher, canFlush := w.(http.Flusher)
 
 		for {
-			n, err := resp.Body.Read(buf)
+			n, err := teeReader.Read(buf)
 			if n > 0 {
 				if _, writeErr := w.Write(buf[:n]); writeErr != nil {
 					logger.ErrorContext(ctx, "client write failed", attr.SlogError(writeErr))
@@ -566,8 +640,11 @@ func reverseProxyRequest(ctx context.Context,
 			body = result.resp
 		}
 
+		// Create a TeeReader to capture the response body
+		teeReader := io.TeeReader(body, &respBodyBuffer)
+
 		w.WriteHeader(finalStatusCode)
-		if _, err := io.Copy(w, body); err != nil {
+		if _, err = io.Copy(w, teeReader); err != nil {
 			span.SetStatus(codes.Error, err.Error())
 			logger.ErrorContext(ctx, "failed to copy response body", attr.SlogError(err))
 		}
@@ -575,6 +652,50 @@ func reverseProxyRequest(ctx context.Context,
 
 	if responseStatusCodeCapture != nil {
 		*responseStatusCodeCapture = finalStatusCode
+	}
+
+	// get the response headers
+	responseHeaders := make(map[string]string)
+	for key, values := range resp.Header {
+		for _, value := range values {
+			responseHeaders[key] = value
+		}
+	}
+
+	// get the request headers
+	requestHeaders := make(map[string]string)
+	for key, values := range req.Header {
+		for _, value := range values {
+			requestHeaders[key] = value
+		}
+	}
+
+	err = tcm.Log(ctx, tm.ToolHTTPRequest{
+		OrganizationID:    tool.OrganizationID,
+		ProjectID:         tool.ProjectID,
+		DeploymentID:      tool.DeploymentID,
+		ToolID:            tool.ID,
+		ToolURN:           tool.ID, // how to get the URN?
+		ToolType:          tm.ToolTypeHttp,
+		TraceID:           traceID,
+		SpanID:            spanID,
+		HTTPMethod:        req.Method,
+		HTTPRoute:         req.URL.Path,
+		StatusCode:        uint16(finalStatusCode),
+		DurationMs:        durationMs,
+		UserAgent:         "Gram",
+		ClientIPv4:        resolvedIP,
+		RequestHeaders:    requestHeaders,
+		RequestBody:       conv.Ptr(string(reqBodyBytes)),
+		RequestBodySkip:   nil, // when will this be set?
+		RequestBodyBytes:  uint64(len(reqBodyBytes)),
+		ResponseHeaders:   responseHeaders,
+		ResponseBody:      conv.Ptr(respBodyBuffer.String()),
+		ResponseBodySkip:  nil, // when will this be set?
+		ResponseBodyBytes: uint64(len(respBodyBuffer.Bytes())),
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to log tool http request", attr.SlogError(err))
 	}
 
 	return nil

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,6 +23,7 @@ import (
 	polargo "github.com/polarsource/polar-go"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/tool-metrics"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/otel"
@@ -52,6 +54,33 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 		cfgLoader = altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc("config-file"))
 	}
 	return cfgLoader(c)
+}
+
+func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (tm.ToolMetricsClient, error) {
+	logger.InfoContext(ctx, fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-http-port")))
+	conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // too many fields
+		Auth: clickhouse.Auth{
+			Database: c.String("clickhouse-database"),
+			Username: c.String("clickhouse-username"),
+			Password: c.String("clickhouse-password"),
+		},
+		Addr:     []string{fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-http-port"))},
+		Protocol: clickhouse.HTTP,
+	})
+	if err != nil {
+		logger.WarnContext(ctx, "error connecting to clickhouse; falling back to stub tool call metrics client")
+		return &tm.StubToolMetricsClient{}, nil
+	}
+
+	if err = conn.Ping(ctx); err != nil {
+		logger.WarnContext(ctx, "failed to ping clickhouse; falling back to stub tool call metrics client", attr.SlogError(err))
+		return &tm.StubToolMetricsClient{}, nil
+	}
+
+	return &tm.ClickhouseClient{
+		Conn:   conn,
+		Logger: logger,
+	}, nil
 }
 
 type dbClientOptions struct {

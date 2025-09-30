@@ -224,6 +224,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
+				nil, // TODO: add tool metrics client
 			)
 
 			// Create response recorder
@@ -350,6 +351,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
+				nil, // TODO: add tool metrics client
 			)
 
 			// Create response recorder
@@ -697,6 +699,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
+				nil, // TODO: add tool metrics client
 			)
 
 			// Create response recorder
@@ -914,6 +917,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
+				nil, // TODO: add tool metrics client
 			)
 
 			// Create response recorder

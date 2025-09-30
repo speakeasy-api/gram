@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/tool-metrics"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/otel"
@@ -203,6 +204,41 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_CONFIG_FILE"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "clickhouse-host",
+			Usage:    "Clickhouse Host",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_HOST"},
+			Value:    "localhost",
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-database",
+			Usage:    "Clickhouse Database",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_DATABASE"},
+			Value:    "gram",
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-username",
+			Usage:    "Clickhouse Username",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_USERNAME"},
+			Value:    "gram",
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-password",
+			Usage:    "Clickhouse Password",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_PASSWORD"},
+			Value:    "gram",
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-http-port",
+			Usage:    "Clickhouse HTTP Port",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_HTTP_PORT"},
+			Value:    "8123",
+		},
 	}
 
 	return &cli.Command{
@@ -249,6 +285,18 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			tcm, err := newToolMetricsClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
+			}
+
+			defer func(c tm.ToolMetricsClient) {
+				closeErr := c.Close()
+				if closeErr != nil {
+					logger.ErrorContext(ctx, "failed to close tool metrics client connection", attr.SlogError(closeErr))
+				}
+			}(tcm)
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
@@ -334,7 +382,7 @@ func newWorkerCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, tcm)
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, c)
 			if err != nil {
