@@ -267,6 +267,15 @@ type HttpToolDefinition struct {
 	Deleted             bool
 }
 
+type McpInstallPageMetadatum struct {
+	ID                       uuid.UUID
+	ToolsetID                uuid.UUID
+	ExternalDocumentationUrl pgtype.Text
+	LogoID                   uuid.NullUUID
+	CreatedAt                pgtype.Timestamptz
+	UpdatedAt                pgtype.Timestamptz
+}
+
 type OauthProxyClientInfo struct {
 	McpSlug                 string
 	ClientID                string

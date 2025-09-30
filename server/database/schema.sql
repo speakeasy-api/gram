@@ -798,6 +798,7 @@ ON toolset_prompts (toolset_id, prompt_name);
 
 CREATE TABLE IF NOT EXISTS mcp_install_page_metadata (
   id UUID NOT NULL DEFAULT generate_uuidv7(),
+  toolset_id UUID NOT NULL,
   external_documentation_url TEXT,
   logo_id UUID,
 
@@ -805,7 +806,9 @@ CREATE TABLE IF NOT EXISTS mcp_install_page_metadata (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT mcp_install_page_metadata_pkey PRIMARY KEY (id),
-  CONSTRAINT mcp_install_page_metadata_asset_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE CASCADE
+  CONSTRAINT mcp_install_page_metadata_asset_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_install_page_metadata_toolset_id FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_install_page_metadata_toolset_id_key UNIQUE (toolset_id)
 );
 
 CREATE TABLE IF NOT EXISTS users (
