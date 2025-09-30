@@ -462,26 +462,20 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		}
 	}
 
-	// Clone toolset version
-	toolURNs := []urn.Tool{}
-	if len(originalToolset.HttpToolNames) > 0 {
-		toolURNs, err = s.repo.GetToolUrnsByNames(ctx, repo.GetToolUrnsByNamesParams{
-			ToolNames: originalToolset.HttpToolNames,
-			ProjectID: *authCtx.ProjectID,
+	// Clone the latest toolset version
+	latestVersion, err := s.repo.GetLatestToolsetVersion(ctx, originalToolset.ID)
+	if err != nil {
+		logger.WarnContext(ctx, "failed to get latest toolset version", attr.SlogError(err))
+	} else {
+		_, err = s.repo.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
+			ToolsetID:     clonedToolset.ID,
+			Version:       1,
+			ToolUrns:      latestVersion.ToolUrns,
+			PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		})
 		if err != nil {
-			logger.WarnContext(ctx, "failed to get tool URNs for cloned toolset version", attr.SlogError(err))
+			logger.ErrorContext(ctx, "failed to create toolset version for clone", attr.SlogError(err))
 		}
-	}
-
-	_, err = s.repo.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
-		ToolsetID:     clonedToolset.ID,
-		Version:       1,
-		ToolUrns:      toolURNs,
-		PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
-	if err != nil {
-		logger.ErrorContext(ctx, "failed to create toolset version for clone", attr.SlogError(err))
 	}
 
 	// Clone prompt templates if any
