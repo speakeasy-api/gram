@@ -2,7 +2,9 @@ package tracking
 
 import (
 	"context"
+	"log/slog"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -11,21 +13,23 @@ import (
 type Composite struct {
 	polar   *polar.Client
 	posthog *posthog.Posthog
+	logger  *slog.Logger
 }
 
 var _ billing.Tracker = (*Composite)(nil)
 
-func New(polar *polar.Client, posthog *posthog.Posthog) *Composite {
+func New(polar *polar.Client, posthog *posthog.Posthog, logger *slog.Logger) *Composite {
 	return &Composite{
 		polar:   polar,
 		posthog: posthog,
+		logger:  logger.With(attr.SlogComponent("usage-tracker")),
 	}
 }
 
 func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCallUsageEvent) {
 	c.polar.TrackToolCallUsage(ctx, event)
 
-	properties := map[string]interface{}{
+	properties := map[string]any{
 		"organization_id":      event.OrganizationID,
 		"request_bytes":        event.RequestBytes,
 		"output_bytes":         event.OutputBytes,
@@ -59,13 +63,15 @@ func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCa
 		properties["toolset_id"] = *event.ToolsetID
 	}
 
-	_ = c.posthog.CaptureEvent(ctx, "tool_call", event.OrganizationID, properties)
+	if err := c.posthog.CaptureEvent(ctx, "tool_call", event.OrganizationID, properties); err != nil {
+		c.logger.ErrorContext(ctx, "failed to capture tool call usage event", attr.SlogError(err))
+	}
 }
 
 func (c *Composite) TrackPromptCallUsage(ctx context.Context, event billing.PromptCallUsageEvent) {
 	c.polar.TrackPromptCallUsage(ctx, event)
 
-	properties := map[string]interface{}{
+	properties := map[string]any{
 		"organization_id":      event.OrganizationID,
 		"request_bytes":        event.RequestBytes,
 		"output_bytes":         event.OutputBytes,
@@ -103,7 +109,9 @@ func (c *Composite) TrackPromptCallUsage(ctx context.Context, event billing.Prom
 		properties["toolset_id"] = *event.ToolsetID
 	}
 
-	_ = c.posthog.CaptureEvent(ctx, "prompt_call", event.OrganizationID, properties)
+	if err := c.posthog.CaptureEvent(ctx, "prompt_call", event.OrganizationID, properties); err != nil {
+		c.logger.ErrorContext(ctx, "failed to capture prompt call usage event", attr.SlogError(err))
+	}
 }
 
 func (c *Composite) TrackPlatformUsage(ctx context.Context, events []billing.PlatformUsageEvent) {
