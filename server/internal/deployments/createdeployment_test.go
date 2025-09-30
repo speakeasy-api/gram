@@ -76,18 +76,18 @@ func TestDeploymentsService_CreateDeployment(t *testing.T) {
 			return t.Name
 		})
 		require.ElementsMatch(t, names, []string{
-			"test_doc_get_todos",
-			"test_doc_create_todo",
-			"test_doc_get_todo_by_id",
-			"test_doc_update_todo",
-			"test_doc_delete_todo",
+			"test-doc_get_todos",
+			"test-doc_create_todo",
+			"test-doc_get_todo_by_id",
+			"test-doc_update_todo",
+			"test-doc_delete_todo",
 		}, "mismatched tool names")
 	})
 
 	t.Run("tool attributes", func(t *testing.T) {
 		t.Parallel()
 
-		name := "test_doc_get_todo_by_id"
+		name := "test-doc_get_todo_by_id"
 
 		tool, ok := lo.Find(tools, func(t testrepo.HttpToolDefinition) bool {
 			return t.Name == name
@@ -180,11 +180,11 @@ func TestDeploymentsService_CreateDeployment_Idempotency(t *testing.T) {
 		return t.Name
 	})
 	require.ElementsMatch(t, names, []string{
-		"test_doc_get_todos",
-		"test_doc_create_todo",
-		"test_doc_get_todo_by_id",
-		"test_doc_update_todo",
-		"test_doc_delete_todo",
+		"test-doc_get_todos",
+		"test-doc_create_todo",
+		"test-doc_get_todo_by_id",
+		"test-doc_update_todo",
+		"test-doc_delete_todo",
 	}, "mismatched tool names")
 }
 
@@ -260,23 +260,23 @@ func TestDeploymentsService_CreateDeployment_MultipleDocuments(t *testing.T) {
 		})
 		require.ElementsMatch(t, names, []string{
 			// Petstore tools
-			"petstore_api_list_pets",
-			"petstore_api_create_pets",
-			"petstore_api_show_pet_by_id",
-			"petstore_api_delete_pet",
+			"petstore-api_list_pets",
+			"petstore-api_create_pets",
+			"petstore-api_show_pet_by_id",
+			"petstore-api_delete_pet",
 			// Todo tools
-			"todo_api_get_todos",
-			"todo_api_create_todo",
-			"todo_api_get_todo_by_id",
-			"todo_api_update_todo",
-			"todo_api_delete_todo",
+			"todo-api_get_todos",
+			"todo-api_create_todo",
+			"todo-api_get_todo_by_id",
+			"todo-api_update_todo",
+			"todo-api_delete_todo",
 		}, "mismatched tool names")
 	})
 
 	t.Run("verify petstore tool attributes", func(t *testing.T) {
 		t.Parallel()
 
-		name := "petstore_api_show_pet_by_id"
+		name := "petstore-api_show_pet_by_id"
 
 		tool, ok := lo.Find(tools, func(t testrepo.HttpToolDefinition) bool {
 			return t.Name == name
@@ -292,7 +292,7 @@ func TestDeploymentsService_CreateDeployment_MultipleDocuments(t *testing.T) {
 	t.Run("verify todo tool attributes", func(t *testing.T) {
 		t.Parallel()
 
-		name := "todo_api_get_todo_by_id"
+		name := "todo-api_get_todo_by_id"
 
 		tool, ok := lo.Find(tools, func(t testrepo.HttpToolDefinition) bool {
 			return t.Name == name
