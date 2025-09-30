@@ -526,8 +526,8 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 
 	logger.InfoContext(ctx, "successfully cloned toolset",
 		attr.SlogToolsetSlug(string(payload.Slug)),
-		slog.String("cloned_slug", string(clonedToolset.Slug)),
-		slog.String("cloned_name", clonedToolset.Name))
+		attr.SlogToolsetSlug(clonedToolset.Slug),
+		attr.SlogToolsetName(clonedToolset.Name))
 
 	return toolsetDetails, nil
 }
