@@ -6,16 +6,23 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Alert, Button } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
 import FileUpload from "@/components/upload";
+import UploadAssetStep from "@/components/upload-asset/step";
+import UploadAssetStepper, {
+  useStepper,
+} from "@/components/upload-asset/stepper";
+import DeployStep from "@/components/upload-asset/deploy-step";
+import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
+import UploadFileStep from "@/components/upload-asset/upload-file-step";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { slugify } from "@/lib/constants";
 import { cn, getServerURL } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import {
   Deployment,
   GetDeploymentResult,
@@ -27,27 +34,102 @@ import {
   useListTools,
   useListToolsets,
 } from "@gram/client/react-query/index.js";
-import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
+import { Alert, Button, CodeSnippet, Stack } from "@speakeasy-api/moonshine";
+import { ArrowRightIcon, CheckIcon, RefreshCcwIcon } from "lucide-react";
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router";
-import { useRoutes } from "@/routes";
-import { CheckIcon } from "lucide-react";
+import { useParams } from "react-router";
 
 export default function UploadOpenAPI() {
-  const navigate = useNavigate();
-
-  const onStepsComplete = () => {
-    navigate("/toolsets");
-  };
-
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <UploadOpenAPIContent onStepsComplete={onStepsComplete} />
+      <Page.Body>
+        <UploadAssetStepper.Provider step={1}>
+          <UploadAssetStepper.Frame className="max-w-2xl">
+            <UploadAssetStep step={1}>
+              <UploadAssetStep.Indicator />
+              <UploadAssetStep.Header
+                title="Upload OpenAPI Specification"
+                description="Upload your OpenAPI specification to get started."
+              />
+              <UploadAssetStep.Content>
+                <UploadFileStep />
+              </UploadAssetStep.Content>
+            </UploadAssetStep>
+
+            <UploadAssetStep step={2}>
+              <UploadAssetStep.Indicator />
+              <UploadAssetStep.Header
+                title="Name Your API"
+                description="The tools generated will be scoped under this name."
+              />
+              <UploadAssetStep.Content>
+                <NameDeploymentStep />
+              </UploadAssetStep.Content>
+            </UploadAssetStep>
+
+            <UploadAssetStep step={3}>
+              <UploadAssetStep.Indicator />
+              <UploadAssetStep.Header
+                title="Generate Tools"
+                description="Gram will generate tools for your API."
+              />
+              <UploadAssetStep.Content>
+                <DeployStep />
+              </UploadAssetStep.Content>
+            </UploadAssetStep>
+
+            <Stack direction="horizontal" justify="start">
+              <FooterActions />
+            </Stack>
+          </UploadAssetStepper.Frame>
+        </UploadAssetStepper.Provider>
+      </Page.Body>
     </Page>
   );
+}
+
+function FooterActions() {
+  const stepper = useStepper();
+  const routes = useRoutes();
+
+  const deploymentId = stepper.meta.current.deployment?.id;
+
+  switch (stepper.state) {
+    case "idle":
+      return null;
+    case "completed":
+      return (
+        <Button variant="primary" onClick={() => routes.toolsets.goTo()}>
+          Continue
+          <ArrowRightIcon className="size-4" />
+        </Button>
+      );
+    case "error":
+      if (!deploymentId) {
+        // This should never happen, but just in case
+        return (
+          <Button variant="primary" onClick={stepper.reset}>
+            <RefreshCcwIcon className="size-4" />
+            Try Again
+          </Button>
+        );
+      }
+
+      return (
+        <>
+          <Button
+            variant="primary"
+            onClick={() => routes.deployments.deployment.goTo(deploymentId)}
+          >
+            View Logs
+            <ArrowRightIcon className="size-4" />
+          </Button>
+        </>
+      );
+  }
 }
 
 export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
@@ -238,14 +320,14 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
 
 const useAssetNumtools = (
   assetId: string | undefined,
-  deployment: Deployment | undefined,
+  deployment: Deployment | undefined
 ) => {
   const { data: tools } = useListTools({
     deploymentId: deployment?.id,
   });
 
   const documentId = deployment?.openapiv3Assets.find(
-    (doc) => doc.assetId === assetId,
+    (doc) => doc.assetId === assetId
   )?.id;
 
   return documentId
@@ -253,7 +335,7 @@ const useAssetNumtools = (
         (tool) =>
           tool.openapiv3DocumentId !== undefined &&
           tool.deploymentId === deployment?.id &&
-          tool.openapiv3DocumentId === documentId,
+          tool.openapiv3DocumentId === documentId
       ).length
     : 0;
 };
@@ -313,7 +395,6 @@ export function UploadOpenAPIContent({
           >
             <Input value={apiName} onChange={setApiName} placeholder="My API" />
             <Button
-              variant="brand"
               onClick={() => createDeployment()}
               disabled={!!apiNameError}
             >
@@ -428,7 +509,7 @@ export function DeploymentLogs(props: {
         key={e.id}
         className={cn(
           e.event.includes("error") && "text-destructive",
-          "py-1 px-4 dark:hover:bg-white/15 rounded hover:bg-gray-100",
+          "py-1 px-4 dark:hover:bg-white/15 rounded hover:bg-gray-100"
         )}
       >
         {e.message}

@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/openapi/yml"
 )
 
-func getResponseFilterSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, op *openapi.Operation, responseFilterType *models.FilterType) (*models.ResponseFilter, *oas3.JSONSchema[oas3.Referenceable], error) {
+func getResponseFilterSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], op *openapi.Operation, responseFilterType *models.FilterType) (*models.ResponseFilter, *oas3.JSONSchema[oas3.Referenceable], error) {
 	// Only JQ response filters are supported for now
 	if responseFilterType == nil || *responseFilterType != models.FilterTypeJQ {
 		return nil, nil, nil
@@ -27,7 +27,7 @@ func getResponseFilterSpeakeasy(ctx context.Context, logger *slog.Logger, doc *o
 
 	var responseFilter *models.ResponseFilter
 
-	capturedResponseBody, err := captureResponseBodySpeakeasy(ctx, logger, doc, op)
+	capturedResponseBody, err := captureResponseBodySpeakeasy(ctx, logger, doc, schemaCache, op)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error capturing response body: %w", err)
 	}
@@ -76,7 +76,7 @@ type capturedResponseBodySpeakeasy struct {
 	statusCodes  []string
 }
 
-func captureResponseBodySpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, op *openapi.Operation) (*capturedResponseBodySpeakeasy, error) {
+func captureResponseBodySpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], op *openapi.Operation) (*capturedResponseBodySpeakeasy, error) {
 	if op.Responses == nil || (op.Responses.Default == nil && op.Responses.Len() == 0) {
 		return nil, nil
 	}
@@ -89,7 +89,7 @@ func captureResponseBodySpeakeasy(ctx context.Context, logger *slog.Logger, doc 
 		return nil, nil
 	}
 
-	schema, d, err := extractJSONSchemaSpeakeasy(ctx, doc, "responseBody", selectedResponse.Schema)
+	schema, d, err := extractJSONSchemaSpeakeasy(ctx, doc, schemaCache, "responseBody", selectedResponse.Schema)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract json schema: %w", err)
 	}
