@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/tool-metrics"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -53,6 +54,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/pylon"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
+
 	"github.com/speakeasy-api/gram/server/internal/tools"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/usage"
@@ -302,6 +304,41 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_CONFIG_FILE"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "clickhouse-host",
+			Usage:    "Clickhouse Host",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_HOST"},
+			Value:    "localhost",
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-database",
+			Usage:    "Clickhouse Database",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_DATABASE"},
+			Value:    "gram",
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-username",
+			Usage:    "Clickhouse Username",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_USERNAME"},
+			Value:    "gram",
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-password",
+			Usage:    "Clickhouse Password",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_PASSWORD"},
+			Value:    "gram",
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-http-port",
+			Usage:    "Clickhouse HTTP Port",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_HTTP_PORT"},
+			Value:    "8123",
+		},
 	}
 
 	return &cli.Command{
@@ -334,6 +371,18 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("setup opentelemetry sdk: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
+
+			tcm, err := newToolMetricsClient(ctx, logger, c)
+			if err != nil {
+				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
+			}
+
+			defer func(c tm.ToolMetricsClient) {
+				closeErr := c.Close()
+				if closeErr != nil {
+					logger.ErrorContext(ctx, "failed to close tool metrics client connection", attr.SlogError(closeErr))
+				}
+			}(tcm)
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
@@ -475,7 +524,7 @@ func newStartCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, tcm)
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
@@ -503,8 +552,8 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger, db, sessionManager))
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env)
 			oauth.Attach(mux, oauthService)
-			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient, billingTracker))
-			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService, billingTracker, billingRepo))
+			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, posthogClient, billingTracker, tcm))
+			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService, billingTracker, billingRepo, tcm))
 			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter))
 			if slackClient.Enabled() {
 				slack.Attach(mux, slack.NewService(logger, db, sessionManager, encryptionClient, redisClient, slackClient, temporalClient, slack.Configurations{
