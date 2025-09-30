@@ -139,8 +139,7 @@ func (p *ToolExtractor) Do(
 		return nil, oops.E(oops.CodeInvariantViolation, oops.Permanent(err), "unable to process openapi document").Log(ctx, p.logger)
 	}
 
-	doc, readErr := readDoc(readDocParams{
-		ctx:     ctx,
+	doc, readErr := readDoc(ctx, readDocParams{
 		docURL:  docURL,
 		logger:  p.logger,
 		storage: p.assetStorage,
@@ -403,23 +402,22 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 }
 
 type readDocParams struct {
-	ctx     context.Context
 	docURL  *url.URL
 	logger  *slog.Logger
 	storage assets.BlobStore
 }
 
-func readDoc(params readDocParams) ([]byte, error) {
-	rc, err := params.storage.Read(params.ctx, params.docURL)
+func readDoc(ctx context.Context, params readDocParams) ([]byte, error) {
+	rc, err := params.storage.Read(ctx, params.docURL)
 	if err != nil {
 		return nil, oops.E(
 			oops.CodeUnexpected,
 			err,
 			"error fetching openapi document",
-		).Log(params.ctx, params.logger)
+		).Log(ctx, params.logger)
 	}
 
-	defer o11y.LogDefer(params.ctx, params.logger, func() error {
+	defer o11y.LogDefer(ctx, params.logger, func() error {
 		return rc.Close()
 	})
 
@@ -429,7 +427,7 @@ func readDoc(params readDocParams) ([]byte, error) {
 			oops.CodeUnexpected,
 			err,
 			"error reading openapi document",
-		).Log(params.ctx, params.logger)
+		).Log(ctx, params.logger)
 	}
 
 	return doc, nil
