@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/url"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -83,6 +84,21 @@ func (c *concurrentSchemaCache) set(key string, val *oas3.JSONSchema[oas3.Refere
 	c.cache[key] = val
 }
 
+// operationWorkItem represents a single operation to process
+type operationWorkItem struct {
+	path             string
+	method           string
+	opID             string
+	operation        *openapi.Operation
+	sharedParameters []*openapi.ReferencedParameter
+}
+
+// operationResult represents the result of processing a single operation
+type operationResult struct {
+	def *repo.CreateOpenAPIv3ToolDefinitionParams
+	err error
+}
+
 func (p *ToolExtractor) doSpeakeasy(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -154,6 +170,7 @@ func (p *ToolExtractor) doSpeakeasy(
 
 	schemaCache := newConcurrentSchemaCache()
 
+	var workItems []operationWorkItem
 	for path, pi := range doc.Paths.All() {
 		_, err := pi.Resolve(ctx, openapi.ResolveOptions{
 			TargetLocation:      "/",
@@ -162,7 +179,15 @@ func (p *ToolExtractor) doSpeakeasy(
 			SkipValidation:      true,
 		})
 		if err != nil {
-			logger.ErrorContext(ctx, fmt.Sprintf("%s: %s %s", docInfo.Name, "error resolving path", err.Error()), attr.SlogEvent("openapi:error"))
+			evt := attr.SlogEvent("openapi:error")
+			msg := fmt.Sprintf(
+				"%s: %s %s",
+				docInfo.Name,
+				"error resolving path",
+				err.Error(),
+			)
+
+			logger.ErrorContext(ctx, msg, evt)
 			continue
 		}
 
@@ -184,54 +209,127 @@ func (p *ToolExtractor) doSpeakeasy(
 				continue
 			}
 
-			// TODO: Currently ignoring servers at path item level until we
-			// figure out how to name env variable
-
 			opID := op.operation.GetOperationID()
 			if opID == "" {
 				opID = fmt.Sprintf("%s_%s", op.method, path)
 			}
 
-			def, err := extractToolDefSpeakeasy(ctx, logger, tx, doc, schemaCache, operationTask[openapi.Operation, openapi.ReferencedParameter]{
-				extractTask:      task,
-				method:           op.method,
+			workItems = append(workItems, operationWorkItem{
 				path:             path,
+				method:           op.method,
 				opID:             opID,
 				operation:        op.operation,
 				sharedParameters: sharedParameters,
-				globalSecurity:   globalSecurity,
-				serverEnvVar:     globalServerEnvVar,
-				defaultServer:    globalDefaultServer,
 			})
-			if err != nil {
-				if task.OnOperationSkipped != nil {
-					task.OnOperationSkipped(err)
-				}
-				_ = oops.E(oops.CodeUnexpected, err, "%s: %s: skipped operation due to error: %s", docInfo.Name, opID, err.Error()).Log(ctx, logger)
-				continue
-			}
+		}
+	}
 
-			if _, err := tx.CreateOpenAPIv3ToolDefinition(ctx, def); err != nil {
-				var pgErr *pgconn.PgError
-				if errors.As(err, &pgErr) {
-					// Special logging for path constraint violations
-					if pgErr.ConstraintName == "http_tool_definitions_path_check" {
-						logger.ErrorContext(ctx, "path exceeds 2000 character limit",
-							attr.SlogEvent("openapi:error:path-too-long"),
-							attr.SlogOpenAPIOperationID(opID),
-							attr.SlogOpenAPIPath(path),
-							attr.SlogValueInt(len(path)),
-							attr.SlogOpenAPIMethod(op.method),
-						)
+	numWorkers := runtime.GOMAXPROCS(0)
+	workChan := make(chan operationWorkItem, len(workItems))
+	resultChan := make(chan operationResult, len(workItems))
+
+	var wg sync.WaitGroup
+	for range numWorkers {
+		wg.Go(func() {
+			defer wg.Done()
+			for item := range workChan {
+				// TODO: Currently ignoring servers at path item level until we
+				// figure out how to name env variable
+
+				opTask := operationTask[
+					openapi.Operation,
+					openapi.ReferencedParameter,
+				]{
+					extractTask:      task,
+					method:           item.method,
+					path:             item.path,
+					opID:             item.opID,
+					operation:        item.operation,
+					sharedParameters: item.sharedParameters,
+					globalSecurity:   globalSecurity,
+					serverEnvVar:     globalServerEnvVar,
+					defaultServer:    globalDefaultServer,
+				}
+
+				def, err := extractToolDefSpeakeasy(
+					ctx,
+					logger,
+					tx,
+					doc,
+					schemaCache,
+					opTask,
+				)
+				if err != nil {
+					if task.OnOperationSkipped != nil {
+						task.OnOperationSkipped(err)
 					}
-					err = fmt.Errorf("%s: %s %s (SQLSTATE %s)", docInfo.Name, pgErr.Message, pgErr.Detail, pgErr.Code)
+					_ = oops.E(
+						oops.CodeUnexpected,
+						err,
+						"%s: %s: skipped operation due to error: %s",
+						docInfo.Name,
+						item.opID,
+						err.Error(),
+					).Log(ctx, logger)
+					resultChan <- operationResult{
+						def: nil,
+						err: err,
+					}
+					continue
 				}
-				// Only capture the first error as the rest will just be transaction aborted errors
-				if writeErr == nil {
-					writeErr = err
-				}
-				writeErrCount++
+
+				resultChan <- operationResult{def: &def, err: nil}
 			}
+		})
+	}
+
+	for _, item := range workItems {
+		workChan <- item
+	}
+	close(workChan)
+
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	for result := range resultChan {
+		if result.err != nil {
+			continue
+		}
+
+		if _, err := tx.CreateOpenAPIv3ToolDefinition(
+			ctx,
+			*result.def,
+		); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				// Special logging for path constraint violations
+				if pgErr.ConstraintName == "http_tool_definitions_path_check" {
+					logger.ErrorContext(
+						ctx,
+						"path exceeds 2000 character limit",
+						attr.SlogEvent("openapi:error:path-too-long"),
+						attr.SlogOpenAPIOperationID(result.def.Openapiv3Operation.String),
+						attr.SlogOpenAPIPath(result.def.Path),
+						attr.SlogValueInt(len(result.def.Path)),
+						attr.SlogOpenAPIMethod(result.def.HttpMethod),
+					)
+				}
+				err = fmt.Errorf(
+					"%s: %s %s (SQLSTATE %s)",
+					docInfo.Name,
+					pgErr.Message,
+					pgErr.Detail,
+					pgErr.Code,
+				)
+			}
+			// Only capture the first error as the rest will just be transaction
+			// aborted errors
+			if writeErr == nil {
+				writeErr = err
+			}
+			writeErrCount++
 		}
 	}
 
