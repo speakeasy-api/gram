@@ -17,15 +17,12 @@ import (
 
 // BuildGetInstallPageMetadataPayload builds the payload for the mcpInstallPage
 // getInstallPageMetadata endpoint from CLI flags.
-func BuildGetInstallPageMetadataPayload(mcpInstallPageGetInstallPageMetadataBody string, mcpInstallPageGetInstallPageMetadataSessionToken string, mcpInstallPageGetInstallPageMetadataProjectSlugInput string) (*mcpinstallpage.GetInstallPageMetadataPayload, error) {
+func BuildGetInstallPageMetadataPayload(mcpInstallPageGetInstallPageMetadataToolsetID string, mcpInstallPageGetInstallPageMetadataSessionToken string, mcpInstallPageGetInstallPageMetadataProjectSlugInput string) (*mcpinstallpage.GetInstallPageMetadataPayload, error) {
 	var err error
-	var body GetInstallPageMetadataRequestBody
+	var toolsetID string
 	{
-		err = json.Unmarshal([]byte(mcpInstallPageGetInstallPageMetadataBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"toolset_id\": \"4cefdedf-d012-4059-8d2c-f6e454a40664\"\n   }'")
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
+		toolsetID = mcpInstallPageGetInstallPageMetadataToolsetID
+		err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", toolsetID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
 		}
@@ -42,9 +39,8 @@ func BuildGetInstallPageMetadataPayload(mcpInstallPageGetInstallPageMetadataBody
 			projectSlugInput = &mcpInstallPageGetInstallPageMetadataProjectSlugInput
 		}
 	}
-	v := &mcpinstallpage.GetInstallPageMetadataPayload{
-		ToolsetID: body.ToolsetID,
-	}
+	v := &mcpinstallpage.GetInstallPageMetadataPayload{}
+	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 

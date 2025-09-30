@@ -13,13 +13,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// GetInstallPageMetadataRequestBody is the type of the "mcpInstallPage"
-// service "getInstallPageMetadata" endpoint HTTP request body.
-type GetInstallPageMetadataRequestBody struct {
-	// The toolset associated with this install page metadata
-	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
-}
-
 // SetInstallPageMetadataRequestBody is the type of the "mcpInstallPage"
 // service "setInstallPageMetadata" endpoint HTTP request body.
 type SetInstallPageMetadataRequestBody struct {
@@ -450,16 +443,6 @@ type MCPInstallPageMetadataResponseBody struct {
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// When the metadata entry was last updated
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-}
-
-// NewGetInstallPageMetadataRequestBody builds the HTTP request body from the
-// payload of the "getInstallPageMetadata" endpoint of the "mcpInstallPage"
-// service.
-func NewGetInstallPageMetadataRequestBody(p *mcpinstallpage.GetInstallPageMetadataPayload) *GetInstallPageMetadataRequestBody {
-	body := &GetInstallPageMetadataRequestBody{
-		ToolsetID: p.ToolsetID,
-	}
-	return body
 }
 
 // NewSetInstallPageMetadataRequestBody builds the HTTP request body from the

@@ -51,10 +51,9 @@ func EncodeGetInstallPageMetadataRequest(encoder func(*http.Request) goahttp.Enc
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
-		body := NewGetInstallPageMetadataRequestBody(p)
-		if err := encoder(req).Encode(&body); err != nil {
-			return goahttp.ErrEncodingError("mcpInstallPage", "getInstallPageMetadata", err)
-		}
+		values := req.URL.Query()
+		values.Add("toolset_id", p.ToolsetID)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }

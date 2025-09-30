@@ -12,6 +12,7 @@ import { Environments } from "./environments.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { Keys } from "./keys.js";
+import { McpInstallPage } from "./mcpinstallpage.js";
 import { Packages } from "./packages.js";
 import { Projects } from "./projects.js";
 import { Slack } from "./slack.js";
@@ -70,6 +71,11 @@ export class Gram extends ClientSDK {
   private _keys?: Keys;
   get keys(): Keys {
     return (this._keys ??= new Keys(this._options));
+  }
+
+  private _mcpInstallPage?: McpInstallPage;
+  get mcpInstallPage(): McpInstallPage {
+    return (this._mcpInstallPage ??= new McpInstallPage(this._options));
   }
 
   private _packages?: Packages;

@@ -59,11 +59,13 @@ var _ = Service("mcpInstallPage", func() {
 			GET("/rpc/mcp.installPageMetadata.get")
 			security.SessionHeader()
 			security.ProjectHeader()
+			Param("toolset_id")
 			Response(StatusOK)
 		})
 
 		Meta("openapi:operationId", "getInstallPageMetadata")
 		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetInstallPageMetadata"}`)
 	})
 
 	Method("setInstallPageMetadata", func() {

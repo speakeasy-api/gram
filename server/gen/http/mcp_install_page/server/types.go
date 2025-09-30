@@ -13,13 +13,6 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-// GetInstallPageMetadataRequestBody is the type of the "mcpInstallPage"
-// service "getInstallPageMetadata" endpoint HTTP request body.
-type GetInstallPageMetadataRequestBody struct {
-	// The toolset associated with this install page metadata
-	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-}
-
 // SetInstallPageMetadataRequestBody is the type of the "mcpInstallPage"
 // service "setInstallPageMetadata" endpoint HTTP request body.
 type SetInstallPageMetadataRequestBody struct {
@@ -780,10 +773,9 @@ func NewSetInstallPageMetadataGatewayErrorResponseBody(res *goa.ServiceError) *S
 
 // NewGetInstallPageMetadataPayload builds a mcpInstallPage service
 // getInstallPageMetadata endpoint payload.
-func NewGetInstallPageMetadataPayload(body *GetInstallPageMetadataRequestBody, sessionToken *string, projectSlugInput *string) *mcpinstallpage.GetInstallPageMetadataPayload {
-	v := &mcpinstallpage.GetInstallPageMetadataPayload{
-		ToolsetID: *body.ToolsetID,
-	}
+func NewGetInstallPageMetadataPayload(toolsetID string, sessionToken *string, projectSlugInput *string) *mcpinstallpage.GetInstallPageMetadataPayload {
+	v := &mcpinstallpage.GetInstallPageMetadataPayload{}
+	v.ToolsetID = toolsetID
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -802,18 +794,6 @@ func NewSetInstallPageMetadataPayload(body *SetInstallPageMetadataRequestBody, s
 	v.ProjectSlugInput = projectSlugInput
 
 	return v
-}
-
-// ValidateGetInstallPageMetadataRequestBody runs the validations defined on
-// GetInstallPageMetadataRequestBody
-func ValidateGetInstallPageMetadataRequestBody(body *GetInstallPageMetadataRequestBody) (err error) {
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
-	}
-	if body.ToolsetID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
-	}
-	return
 }
 
 // ValidateSetInstallPageMetadataRequestBody runs the validations defined on

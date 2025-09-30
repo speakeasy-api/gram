@@ -37,29 +37,16 @@ func EncodeGetInstallPageMetadataResponse(encoder func(context.Context, http.Res
 func DecodeGetInstallPageMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*mcpinstallpage.GetInstallPageMetadataPayload, error) {
 	return func(r *http.Request) (*mcpinstallpage.GetInstallPageMetadataPayload, error) {
 		var (
-			body GetInstallPageMetadataRequestBody
-			err  error
-		)
-		err = decoder(r).Decode(&body)
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				return nil, goa.MissingPayloadError()
-			}
-			var gerr *goa.ServiceError
-			if errors.As(err, &gerr) {
-				return nil, gerr
-			}
-			return nil, goa.DecodePayloadError(err.Error())
-		}
-		err = ValidateGetInstallPageMetadataRequestBody(&body)
-		if err != nil {
-			return nil, err
-		}
-
-		var (
+			toolsetID        string
 			sessionToken     *string
 			projectSlugInput *string
+			err              error
 		)
+		toolsetID = r.URL.Query().Get("toolset_id")
+		if toolsetID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", toolsetID, goa.FormatUUID))
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -68,7 +55,10 @@ func DecodeGetInstallPageMetadataRequest(mux goahttp.Muxer, decoder func(*http.R
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewGetInstallPageMetadataPayload(&body, sessionToken, projectSlugInput)
+		if err != nil {
+			return nil, err
+		}
+		payload := NewGetInstallPageMetadataPayload(toolsetID, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -77,12 +77,9 @@ bun add @tanstack/react-query react react-dom
 ### Yarn
 
 ```bash
-yarn add <UNSET> zod
+yarn add <UNSET>
 # Install optional peer dependencies if you plan to use React hooks
 yarn add @tanstack/react-query react react-dom
-
-# Note that Yarn does not install peer dependencies automatically. You will need
-# to install zod as shown above.
 ```
 
 > [!NOTE]
@@ -187,6 +184,11 @@ run();
 * [create](docs/sdks/keys/README.md#create) - createKey keys
 * [list](docs/sdks/keys/README.md#list) - listKeys keys
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+
+### [mcpInstallPage](docs/sdks/mcpinstallpage/README.md)
+
+* [get](docs/sdks/mcpinstallpage/README.md#get) - getInstallPageMetadata mcpInstallPage
+* [set](docs/sdks/mcpinstallpage/README.md#set) - setInstallPageMetadata mcpInstallPage
 
 ### [packages](docs/sdks/packages/README.md)
 
@@ -301,6 +303,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`mcpInstallPageGet`](docs/sdks/mcpinstallpage/README.md#get) - getInstallPageMetadata mcpInstallPage
+- [`mcpInstallPageSet`](docs/sdks/mcpinstallpage/README.md#set) - setInstallPageMetadata mcpInstallPage
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`packagesList`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -385,6 +389,7 @@ To learn about this feature and how to get started, check
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
+- [`useGetInstallPageMetadata`](docs/sdks/mcpinstallpage/README.md#get) - getInstallPageMetadata mcpInstallPage
 - [`useGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 - [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
@@ -405,6 +410,7 @@ To learn about this feature and how to get started, check
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
+- [`useMcpInstallPageSetMutation`](docs/sdks/mcpinstallpage/README.md#set) - setInstallPageMetadata mcpInstallPage
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains
@@ -644,7 +650,7 @@ httpClient.addHook("requestError", (error, request) => {
   console.groupEnd();
 });
 
-const sdk = new Gram({ httpClient });
+const sdk = new Gram({ httpClient: httpClient });
 ```
 <!-- End Custom HTTP Client [http-client] -->
 

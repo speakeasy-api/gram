@@ -286,7 +286,7 @@ func ParseEndpoint(
 		mcpInstallPageFlags = flag.NewFlagSet("mcp-install-page", flag.ContinueOnError)
 
 		mcpInstallPageGetInstallPageMetadataFlags                = flag.NewFlagSet("get-install-page-metadata", flag.ExitOnError)
-		mcpInstallPageGetInstallPageMetadataBodyFlag             = mcpInstallPageGetInstallPageMetadataFlags.String("body", "REQUIRED", "")
+		mcpInstallPageGetInstallPageMetadataToolsetIDFlag        = mcpInstallPageGetInstallPageMetadataFlags.String("toolset-id", "REQUIRED", "")
 		mcpInstallPageGetInstallPageMetadataSessionTokenFlag     = mcpInstallPageGetInstallPageMetadataFlags.String("session-token", "", "")
 		mcpInstallPageGetInstallPageMetadataProjectSlugInputFlag = mcpInstallPageGetInstallPageMetadataFlags.String("project-slug-input", "", "")
 
@@ -1159,7 +1159,7 @@ func ParseEndpoint(
 			switch epn {
 			case "get-install-page-metadata":
 				endpoint = c.GetInstallPageMetadata()
-				data, err = mcpinstallpagec.BuildGetInstallPageMetadataPayload(*mcpInstallPageGetInstallPageMetadataBodyFlag, *mcpInstallPageGetInstallPageMetadataSessionTokenFlag, *mcpInstallPageGetInstallPageMetadataProjectSlugInputFlag)
+				data, err = mcpinstallpagec.BuildGetInstallPageMetadataPayload(*mcpInstallPageGetInstallPageMetadataToolsetIDFlag, *mcpInstallPageGetInstallPageMetadataSessionTokenFlag, *mcpInstallPageGetInstallPageMetadataProjectSlugInputFlag)
 			case "set-install-page-metadata":
 				endpoint = c.SetInstallPageMetadata()
 				data, err = mcpinstallpagec.BuildSetInstallPageMetadataPayload(*mcpInstallPageSetInstallPageMetadataBodyFlag, *mcpInstallPageSetInstallPageMetadataSessionTokenFlag, *mcpInstallPageSetInstallPageMetadataProjectSlugInputFlag)
@@ -2468,7 +2468,7 @@ func mcpInstallPageUsage() {
 func mcpInstallPageGetInstallPageMetadataUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] mcp-install-page get-install-page-metadata", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -toolset-id STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprintln(os.Stderr)
@@ -2478,16 +2478,14 @@ func mcpInstallPageGetInstallPageMetadataUsage() {
 	fmt.Fprintln(os.Stderr, `Fetch the metadata that powers the MCP install page.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -toolset-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `mcp-install-page get-install-page-metadata --body '{
-      "toolset_id": "4cefdedf-d012-4059-8d2c-f6e454a40664"
-   }' --session-token "Illum sed." --project-slug-input "Enim voluptatem eligendi esse tempora temporibus."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `mcp-install-page get-install-page-metadata --toolset-id "4cefdedf-d012-4059-8d2c-f6e454a40664" --session-token "Illum sed." --project-slug-input "Enim voluptatem eligendi esse tempora temporibus."`)
 }
 
 func mcpInstallPageSetInstallPageMetadataUsage() {

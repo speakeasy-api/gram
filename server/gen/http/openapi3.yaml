@@ -3528,6 +3528,15 @@ paths:
             operationId: getInstallPageMetadata
             parameters:
                 - allowEmptyValue: true
+                  description: The toolset associated with this install page metadata
+                  in: query
+                  name: toolset_id
+                  required: true
+                  schema:
+                    description: The toolset associated with this install page metadata
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -3541,12 +3550,6 @@ paths:
                   schema:
                     description: project header
                     type: string
-            requestBody:
-                content:
-                    application/json:
-                        schema:
-                            $ref: '#/components/schemas/GetInstallPageMetadataRequestBody'
-                required: true
             responses:
                 "200":
                     content:
@@ -3615,6 +3618,8 @@ paths:
             tags:
                 - mcpInstallPage
             x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: GetInstallPageMetadata
     /rpc/mcp.installPageMetadata.set:
         post:
             description: Create or update the metadata that powers the MCP install page.
@@ -8341,15 +8346,6 @@ components:
                 - packages
                 - openapiv3_tool_count
                 - functions_tool_count
-        GetInstallPageMetadataRequestBody:
-            type: object
-            properties:
-                toolset_id:
-                    type: string
-                    description: The toolset associated with this install page metadata
-                    format: uuid
-            required:
-                - toolset_id
         GetInstallPageMetadataResponseBody:
             type: object
             properties:
