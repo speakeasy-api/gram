@@ -10,11 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
 import FileUpload from "@/components/upload";
-import {
-  UploadAssetStep,
-  UploadAssetStepper,
+import UploadAssetStep from "@/components/upload-asset/step";
+import UploadAssetStepper, {
   useStepper,
-} from "@/components/upload-asset";
+} from "@/components/upload-asset/stepper";
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";

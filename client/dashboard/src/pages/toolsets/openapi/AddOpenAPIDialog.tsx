@@ -1,4 +1,6 @@
-import { UploadAssetStepper, useStepper } from "@/components/upload-asset";
+import UploadAssetStepper, {
+  useStepper,
+} from "@/components/upload-asset/stepper";
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadAssetStep from "@/components/upload-asset/step";
