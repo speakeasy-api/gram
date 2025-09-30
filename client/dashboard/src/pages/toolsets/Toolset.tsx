@@ -100,7 +100,7 @@ export function useCloneToolset({
         if (contentType && contentType.includes('application/json')) {
           try {
             error = await response.json();
-          } catch (e) {
+          } catch (_e) {
             error = { message: `HTTP ${response.status}: ${response.statusText}` };
           }
         } else {
@@ -118,7 +118,7 @@ export function useCloneToolset({
       try {
         return JSON.parse(text);
       } catch (e) {
-        throw new Error(`Failed to parse response: ${e.message}`);
+        throw new Error(`Failed to parse response: ${e instanceof Error ? e.message : String(e)}`);
       }
     },
     onSuccess: async (data) => {
