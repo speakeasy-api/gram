@@ -238,14 +238,14 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
 
 const useAssetNumtools = (
   assetId: string | undefined,
-  deployment: Deployment | undefined,
+  deployment: Deployment | undefined
 ) => {
   const { data: tools } = useListTools({
     deploymentId: deployment?.id,
   });
 
   const documentId = deployment?.openapiv3Assets.find(
-    (doc) => doc.assetId === assetId,
+    (doc) => doc.assetId === assetId
   )?.id;
 
   return documentId
@@ -253,7 +253,7 @@ const useAssetNumtools = (
         (tool) =>
           tool.openapiv3DocumentId !== undefined &&
           tool.deploymentId === deployment?.id &&
-          tool.openapiv3DocumentId === documentId,
+          tool.openapiv3DocumentId === documentId
       ).length
     : 0;
 };
@@ -313,7 +313,6 @@ export function UploadOpenAPIContent({
           >
             <Input value={apiName} onChange={setApiName} placeholder="My API" />
             <Button
-              variant="brand"
               onClick={() => createDeployment()}
               disabled={!!apiNameError}
             >
@@ -428,7 +427,7 @@ export function DeploymentLogs(props: {
         key={e.id}
         className={cn(
           e.event.includes("error") && "text-destructive",
-          "py-1 px-4 dark:hover:bg-white/15 rounded hover:bg-gray-100",
+          "py-1 px-4 dark:hover:bg-white/15 rounded hover:bg-gray-100"
         )}
       >
         {e.message}
