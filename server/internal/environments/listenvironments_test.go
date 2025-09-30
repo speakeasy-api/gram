@@ -12,10 +12,10 @@ import (
 func TestEnvironmentsService_ListEnvironments(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestEnvironmentService(t)
-
 	t.Run("list environments when none exist", func(t *testing.T) {
 		t.Parallel()
+
+		ctx, ti := newTestEnvironmentService(t)
 
 		result, err := ti.service.ListEnvironments(ctx, &gen.ListEnvironmentsPayload{
 			SessionToken:     nil,
@@ -28,6 +28,8 @@ func TestEnvironmentsService_ListEnvironments(t *testing.T) {
 
 	t.Run("list environments after creating some", func(t *testing.T) {
 		t.Parallel()
+
+		ctx, ti := newTestEnvironmentService(t)
 
 		// Create first environment
 		env1, err := ti.service.CreateEnvironment(ctx, &gen.CreateEnvironmentPayload{
