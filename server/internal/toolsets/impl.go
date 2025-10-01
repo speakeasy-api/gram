@@ -537,7 +537,7 @@ func (s *Service) createToolsetVersion(ctx context.Context, urnStrings []string,
 	for _, urnStr := range urnStrings {
 		var toolUrn urn.Tool
 		if err := toolUrn.UnmarshalText([]byte(urnStr)); err != nil {
-			logger.WarnContext(ctx, "invalid tool URN", attr.SlogError(err), slog.String("urn", urnStr))
+			logger.WarnContext(ctx, "invalid tool URN", attr.SlogError(err), attr.SlogToolURN(urnStr))
 			continue
 		}
 		allToolUrns = append(allToolUrns, toolUrn)

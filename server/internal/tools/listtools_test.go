@@ -102,7 +102,7 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 	require.NotNil(t, result.HTTPTools, "http tools should not be nil")
 	require.NotNil(t, result.PromptTemplates, "prompt templates should not be nil")
 	require.GreaterOrEqual(t, len(result.HTTPTools), 1, "should have at least one http tool")
-	require.Equal(t, 2, len(result.PromptTemplates), "should have exactly 2 prompt templates")
+	require.Len(t, result.PromptTemplates, 2, "should have exactly 2 prompt templates")
 
 	// Verify HTTP tool structure
 	tool := result.HTTPTools[0]
