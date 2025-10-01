@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -285,7 +286,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 		Timeout: 10 * time.Second,
 		Transport: otelhttp.NewTransport(
 			http.DefaultTransport,
-			otelhttp.WithPropagators(gramTrackPropagator{}),
+			otelhttp.WithPropagators(propagation.TraceContext{}),
 		),
 	}
 	resp, err := client.Do(tokenReq)

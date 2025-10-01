@@ -39,24 +39,6 @@ const (
 	ToolCallSourceMCP    ToolCallSource = "mcp"
 )
 
-// gramTrackPropagator is a custom OpenTelemetry propagator that only injects X-Gram-Track-Id header
-type gramTrackPropagator struct{}
-
-func (gramTrackPropagator) Inject(ctx context.Context, carrier propagation.TextMapCarrier) {
-	spanCtx := trace.SpanContextFromContext(ctx)
-	if spanCtx.HasTraceID() {
-		carrier.Set("X-Gram-Track-Id", spanCtx.TraceID().String())
-	}
-}
-
-func (gramTrackPropagator) Extract(ctx context.Context, carrier propagation.TextMapCarrier) context.Context {
-	return ctx // Not extracting anything
-}
-
-func (gramTrackPropagator) Fields() []string {
-	return []string{"X-Gram-Track-Id"}
-}
-
 const (
 	HeaderProxiedResponse  = "X-Gram-Proxy-Response"
 	HeaderFilteredResponse = "X-Gram-Proxy-ResponseFiltered"
@@ -474,7 +456,7 @@ func reverseProxyRequest(ctx context.Context,
 		Timeout: 60 * time.Second,
 		Transport: otelhttp.NewTransport(
 			transport,
-			otelhttp.WithPropagators(gramTrackPropagator{}),
+			otelhttp.WithPropagators(propagation.TraceContext{}),
 		),
 	}
 
