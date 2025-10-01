@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { Asset, UploadImageResult } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { UploadIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { AssetImage } from "./asset-image";
 import { Type } from "./ui/type";
 
@@ -154,10 +154,11 @@ export function FullWidthUpload({
       <div className="flex items-center justify-center w-full">
         <label
           htmlFor="dropzone-file"
-          className={`flex flex-col items-center justify-center w-full p-10 border-1 border-dashed rounded-lg cursor-pointer trans ${!handlers.isValidFile
-            ? "border-destructive bg-destructive/10"
-            : "border-muted-foreground/50 hover:bg-input/20"
-            }`}
+          className={`flex flex-col items-center justify-center w-full p-10 border-1 border-dashed rounded-lg cursor-pointer trans ${
+            !handlers.isValidFile
+              ? "border-destructive bg-destructive/10"
+              : "border-muted-foreground/50 hover:bg-input/20"
+          }`}
         >
           <Stack align={"center"} justify={"center"} gap={3}>
             <UploadIcon className="w-4 h-4" />
@@ -206,14 +207,18 @@ export function CompactUpload({
     }
   };
 
-  const { isValidFile, ...handlers } = useFileDropZoneHandlers(onUpload, allowedExtensions);
+  const { isValidFile, ...handlers } = useFileDropZoneHandlers(
+    onUpload,
+    allowedExtensions,
+  );
   return (
     <label
       htmlFor="dropzone-file"
       tabIndex={0}
       className={cn(
         "inline-flex flex-col gap-2 items-center justify-center",
-        "p-8 border-1 border-dashed rounded-lg cursor-pointer",
+        "p-6 border-1 border-dashed rounded-lg cursor-pointer",
+        "aspect-square",
         !isValidFile
           ? "border-destructive bg-destructive/10"
           : "border-muted-foreground/50 hover:bg-input/20",
@@ -222,11 +227,14 @@ export function CompactUpload({
       {...handlers}
     >
       {(renderFilePreview && renderFilePreview()) ?? (
-        <>
+        <Stack align={"center"} gap={2}>
           <UploadIcon className="w-4 h-4" />
-          <Type small mono muted>
-            {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")} (max 8MiB)
-          </Type></>)}
+          <Type mono muted className="text-xs">
+            {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")}
+          </Type>
+          <Type mono muted className="text-xs">(max 8MiB)</Type>
+        </Stack>
+      )}
       <input
         id="dropzone-file"
         type="file"

@@ -80,9 +80,7 @@ function useMcpInstallPageMetadataForm(
 
   const mutation = useMcpInstallPageSetMutation({
     onSettled: () => {
-      invalidateGetInstallPageMetadata(queryClient, [
-        { toolsetSlug },
-      ]);
+      invalidateGetInstallPageMetadata(queryClient, [{ toolsetSlug }]);
     },
   });
 
@@ -170,7 +168,7 @@ function useMcpInstallPageMetadataForm(
         ) : undefined,
     },
     urlInputHandlers: {
-      value: metadataParams.externalDocumentationUrl ?? '',
+      value: metadataParams.externalDocumentationUrl ?? "",
       error:
         metadataParams.externalDocumentationUrl &&
         metadataParams.externalDocumentationUrl.length > 0
@@ -205,16 +203,14 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
     },
   );
 
-  const form = useMcpInstallPageMetadataForm(toolset.slug, result.data?.metadata);
+  const form = useMcpInstallPageMetadataForm(
+    toolset.slug,
+    result.data?.metadata,
+  );
   const isLoading = result.isLoading || form.isLoading;
 
   return (
-    <Stack
-      className={cn(
-        "gap-4 items-start",
-        isLoading && "animate-pulse",
-      )}
-    >
+    <Stack className={cn("gap-4 items-start", isLoading && "animate-pulse")}>
       <Stack direction="horizontal" align="center" gap={2}>
         <CodeBlock
           copyable={toolset.mcpIsPublic}
@@ -234,10 +230,11 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
       </Stack>
       <Heading> MCP Logo </Heading>
       <Type muted small className="max-w-2xl">
-        The logo associated with this install page
+        The logo presented on this page
       </Type>
       <div className="inline-block">
         <CompactUpload
+          allowedExtensions={["png", "jpg", "jpeg"]}
           onUpload={form.logoUploadHandlers.onUpload}
           renderFilePreview={form.logoUploadHandlers.renderFilePreview}
         />
@@ -245,7 +242,7 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
       <Heading> Documentation Link </Heading>
       <Type muted small className="max-w-2xl">
         A link to your own MCP documentation that will be featured at the top of
-        your install page
+        the page
       </Type>
       <Input
         type="text"
