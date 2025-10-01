@@ -52,7 +52,7 @@ func EncodeGetInstallPageMetadataRequest(encoder func(*http.Request) goahttp.Enc
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("toolset_id", p.ToolsetID)
+		values.Add("toolset_slug", string(p.ToolsetSlug))
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

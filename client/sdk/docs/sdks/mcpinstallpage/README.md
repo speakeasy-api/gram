@@ -24,7 +24,7 @@ const gram = new Gram();
 
 async function run() {
   const result = await gram.mcpInstallPage.get({
-    toolsetId: "b6e4ca24-e078-4ae2-8b4e-f99e8b24755c",
+    toolsetSlug: "<value>",
   });
 
   console.log(result);
@@ -47,7 +47,7 @@ const gram = new GramCore();
 
 async function run() {
   const res = await mcpInstallPageGet(gram, {
-    toolsetId: "b6e4ca24-e078-4ae2-8b4e-f99e8b24755c",
+    toolsetSlug: "<value>",
   });
   if (res.ok) {
     const { value: result } = res;
@@ -125,7 +125,7 @@ const gram = new Gram();
 async function run() {
   const result = await gram.mcpInstallPage.set({
     setInstallPageMetadataRequestBody: {
-      toolsetId: "48496784-e185-4a23-8d46-da9d55ea3647",
+      toolsetSlug: "<value>",
     },
   });
 
@@ -150,7 +150,7 @@ const gram = new GramCore();
 async function run() {
   const res = await mcpInstallPageSet(gram, {
     setInstallPageMetadataRequestBody: {
-      toolsetId: "48496784-e185-4a23-8d46-da9d55ea3647",
+      toolsetSlug: "<value>",
     },
   });
   if (res.ok) {

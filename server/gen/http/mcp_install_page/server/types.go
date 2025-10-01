@@ -8,6 +8,8 @@
 package server
 
 import (
+	"unicode/utf8"
+
 	mcpinstallpage "github.com/speakeasy-api/gram/server/gen/mcp_install_page"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
@@ -16,8 +18,8 @@ import (
 // SetInstallPageMetadataRequestBody is the type of the "mcpInstallPage"
 // service "setInstallPageMetadata" endpoint HTTP request body.
 type SetInstallPageMetadataRequestBody struct {
-	// The toolset associated with this install page metadata
-	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
+	// The slug of the toolset associated with this install page metadata
+	ToolsetSlug *string `form:"toolset_slug,omitempty" json:"toolset_slug,omitempty" xml:"toolset_slug,omitempty"`
 	// The asset ID for the MCP install page logo
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
@@ -773,9 +775,9 @@ func NewSetInstallPageMetadataGatewayErrorResponseBody(res *goa.ServiceError) *S
 
 // NewGetInstallPageMetadataPayload builds a mcpInstallPage service
 // getInstallPageMetadata endpoint payload.
-func NewGetInstallPageMetadataPayload(toolsetID string, sessionToken *string, projectSlugInput *string) *mcpinstallpage.GetInstallPageMetadataPayload {
+func NewGetInstallPageMetadataPayload(toolsetSlug string, sessionToken *string, projectSlugInput *string) *mcpinstallpage.GetInstallPageMetadataPayload {
 	v := &mcpinstallpage.GetInstallPageMetadataPayload{}
-	v.ToolsetID = toolsetID
+	v.ToolsetSlug = types.Slug(toolsetSlug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -786,7 +788,7 @@ func NewGetInstallPageMetadataPayload(toolsetID string, sessionToken *string, pr
 // setInstallPageMetadata endpoint payload.
 func NewSetInstallPageMetadataPayload(body *SetInstallPageMetadataRequestBody, sessionToken *string, projectSlugInput *string) *mcpinstallpage.SetInstallPageMetadataPayload {
 	v := &mcpinstallpage.SetInstallPageMetadataPayload{
-		ToolsetID:                *body.ToolsetID,
+		ToolsetSlug:              types.Slug(*body.ToolsetSlug),
 		LogoAssetID:              body.LogoAssetID,
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 	}
@@ -799,11 +801,16 @@ func NewSetInstallPageMetadataPayload(body *SetInstallPageMetadataRequestBody, s
 // ValidateSetInstallPageMetadataRequestBody runs the validations defined on
 // SetInstallPageMetadataRequestBody
 func ValidateSetInstallPageMetadataRequestBody(body *SetInstallPageMetadataRequestBody) (err error) {
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
+	if body.ToolsetSlug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "body"))
 	}
-	if body.ToolsetID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
+	if body.ToolsetSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", *body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.ToolsetSlug != nil {
+		if utf8.RuneCountInString(*body.ToolsetSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", *body.ToolsetSlug, utf8.RuneCountInString(*body.ToolsetSlug), 40, false))
+		}
 	}
 	return
 }

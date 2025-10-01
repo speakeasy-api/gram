@@ -7,7 +7,7 @@ import { SetInstallPageMetadataRequest } from "@gram/client/models/operations";
 
 let value: SetInstallPageMetadataRequest = {
   setInstallPageMetadataRequestBody: {
-    toolsetId: "211e5a87-8b2e-4eae-9df2-59df02ef9a61",
+    toolsetSlug: "<value>",
   },
 };
 ```

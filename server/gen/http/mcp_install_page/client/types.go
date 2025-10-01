@@ -16,8 +16,8 @@ import (
 // SetInstallPageMetadataRequestBody is the type of the "mcpInstallPage"
 // service "setInstallPageMetadata" endpoint HTTP request body.
 type SetInstallPageMetadataRequestBody struct {
-	// The toolset associated with this install page metadata
-	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
+	// The slug of the toolset associated with this install page metadata
+	ToolsetSlug string `form:"toolset_slug" json:"toolset_slug" xml:"toolset_slug"`
 	// The asset ID for the MCP install page logo
 	LogoAssetID *string `form:"logo_asset_id,omitempty" json:"logo_asset_id,omitempty" xml:"logo_asset_id,omitempty"`
 	// A link to external documentation for the MCP install page
@@ -450,7 +450,7 @@ type MCPInstallPageMetadataResponseBody struct {
 // service.
 func NewSetInstallPageMetadataRequestBody(p *mcpinstallpage.SetInstallPageMetadataPayload) *SetInstallPageMetadataRequestBody {
 	body := &SetInstallPageMetadataRequestBody{
-		ToolsetID:                p.ToolsetID,
+		ToolsetSlug:              string(p.ToolsetSlug),
 		LogoAssetID:              p.LogoAssetID,
 		ExternalDocumentationURL: p.ExternalDocumentationURL,
 	}

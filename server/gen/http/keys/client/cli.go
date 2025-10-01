@@ -23,7 +23,7 @@ func BuildCreateKeyPayload(keysCreateKeyBody string, keysCreateKeySessionToken s
 	{
 		err = json.Unmarshal([]byte(keysCreateKeyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"Et repudiandae voluptatum hic.\",\n      \"scopes\": [\n         \"Iure qui molestiae quis.\",\n         \"Occaecati asperiores est.\",\n         \"Nesciunt tempora officia.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"Facilis voluptatibus consequuntur nam sunt.\",\n      \"scopes\": [\n         \"Vero voluptate porro quis repellendus.\",\n         \"Rerum sint possimus dolore recusandae amet.\"\n      ]\n   }'")
 		}
 		if body.Scopes == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))

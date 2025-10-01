@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	mcpinstallpage "github.com/speakeasy-api/gram/server/gen/mcp_install_page"
 	types "github.com/speakeasy-api/gram/server/gen/types"
@@ -37,16 +38,19 @@ func EncodeGetInstallPageMetadataResponse(encoder func(context.Context, http.Res
 func DecodeGetInstallPageMetadataRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*mcpinstallpage.GetInstallPageMetadataPayload, error) {
 	return func(r *http.Request) (*mcpinstallpage.GetInstallPageMetadataPayload, error) {
 		var (
-			toolsetID        string
+			toolsetSlug      string
 			sessionToken     *string
 			projectSlugInput *string
 			err              error
 		)
-		toolsetID = r.URL.Query().Get("toolset_id")
-		if toolsetID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "query string"))
+		toolsetSlug = r.URL.Query().Get("toolset_slug")
+		if toolsetSlug == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "query string"))
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", toolsetID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidatePattern("toolset_slug", toolsetSlug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(toolsetSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_slug", toolsetSlug, utf8.RuneCountInString(toolsetSlug), 40, false))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -58,7 +62,7 @@ func DecodeGetInstallPageMetadataRequest(mux goahttp.Muxer, decoder func(*http.R
 		if err != nil {
 			return nil, err
 		}
-		payload := NewGetInstallPageMetadataPayload(toolsetID, sessionToken, projectSlugInput)
+		payload := NewGetInstallPageMetadataPayload(toolsetSlug, sessionToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

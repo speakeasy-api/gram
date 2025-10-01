@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: b5f4fd69eefba0622de004d4dd8e8ab7
+  docChecksum: f91236d186a5aa35234dc16f158353ff
   docVersion: 0.0.1
   speakeasyVersion: 1.633.0
   generationVersion: 2.720.1
-  releaseVersion: 0.12.69
-  configChecksum: 08e099fd365de2389ab328d053645380
+  releaseVersion: 0.12.70
+  configChecksum: 121541816818a022fc4d8fd97da5dc95
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -1554,6 +1554,7 @@ examples:
       parameters:
         query:
           toolset_id: "b6e4ca24-e078-4ae2-8b4e-f99e8b24755c"
+          toolset_slug: "<value>"
       responses:
         "200":
           application/json: {}
@@ -1564,7 +1565,7 @@ examples:
   setInstallPageMetadata:
     speakeasy-default-set-install-page-metadata:
       requestBody:
-        application/json: {"toolset_id": "48496784-e185-4a23-8d46-da9d55ea3647"}
+        application/json: {"toolset_slug": "<value>"}
       responses:
         "200":
           application/json: {"created_at": "2025-07-02T04:34:47.296Z", "id": "<id>", "toolset_id": "1e7ed99d-76d3-4eaa-a245-36fe9e5308c2", "updated_at": "2024-05-24T08:09:35.124Z"}

@@ -25,15 +25,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpinstallpage/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	repo     *repo.Queries
-	sessions *sessions.Manager
-	auth     *auth.Auth
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	repo        *repo.Queries
+	toolsetRepo *toolsets_repo.Queries
+	sessions    *sessions.Manager
+	auth        *auth.Auth
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -43,12 +45,13 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 	logger = logger.With(attr.SlogComponent("mcp_install_page"))
 
 	return &Service{
-		tracer:   otel.Tracer("github.com/speakeasy-api/gram/server/internal/mcpinstallpage"),
-		logger:   logger,
-		db:       db,
-		repo:     repo.New(db),
-		sessions: sessions,
-		auth:     auth.New(logger, db, sessions),
+		tracer:      otel.Tracer("github.com/speakeasy-api/gram/server/internal/mcpinstallpage"),
+		logger:      logger,
+		db:          db,
+		repo:        repo.New(db),
+		toolsetRepo: toolsets_repo.New(db),
+		sessions:    sessions,
+		auth:        auth.New(logger, db, sessions),
 	}
 }
 
@@ -72,21 +75,23 @@ func (s *Service) GetInstallPageMetadata(ctx context.Context, payload *gen.GetIn
 		return nil, oops.C(oops.CodeForbidden)
 	}
 
-	toolsetID, err := uuid.Parse(payload.ToolsetID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset ID").Log(ctx, s.logger)
-	}
-
-	if err := s.ensureToolsetOwnership(ctx, *authCtx.ProjectID, toolsetID, authCtx); err != nil {
-		return nil, err
-	}
-
-	record, err := s.repo.GetMetadataForToolset(ctx, toolsetID)
+	toolset, err := s.toolsetRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
+		Slug:      conv.ToLower(payload.ToolsetSlug),
+		ProjectID: *authCtx.ProjectID,
+	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "no MCP install page metadata for this toolset").Log(ctx, s.logger, projectAttrs(authCtx)...)
+		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
 	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP install page metadata").Log(ctx, s.logger, projectAttrs(authCtx)...)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+	}
+
+	record, err := s.repo.GetMetadataForToolset(ctx, toolset.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeNotFound, err, "no MCP install page metadata for this toolset").Log(ctx, s.logger, attr.SlogToolsetID(toolset.ID.String()))
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP install page metadata").Log(ctx, s.logger)
 	}
 
 	return &gen.GetInstallPageMetadataResult{
@@ -104,13 +109,15 @@ func (s *Service) SetInstallPageMetadata(ctx context.Context, payload *gen.SetIn
 		return nil, oops.C(oops.CodeForbidden)
 	}
 
-	toolsetID, err := uuid.Parse(payload.ToolsetID)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid toolset ID").Log(ctx, s.logger)
-	}
-
-	if err := s.ensureToolsetOwnership(ctx, *authCtx.ProjectID, toolsetID, authCtx); err != nil {
-		return nil, err
+	toolset, err := s.toolsetRepo.GetToolset(ctx, toolsets_repo.GetToolsetParams{
+		Slug:      conv.ToLower(payload.ToolsetSlug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, oops.E(oops.CodeBadRequest, err, "toolset not found").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch toolset").Log(ctx, s.logger, slog.String("toolset_slug", string(payload.ToolsetSlug)))
 	}
 
 	var logoID uuid.NullUUID
@@ -128,12 +135,12 @@ func (s *Service) SetInstallPageMetadata(ctx context.Context, payload *gen.SetIn
 	}
 
 	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
-		ToolsetID:                toolsetID,
+		ToolsetID:                toolset.ID,
 		ExternalDocumentationUrl: externalDocURL,
 		LogoID:                   logoID,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger, projectAttrs(authCtx)...)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
 	}
 
 	return toInstallPageMetadata(result), nil
@@ -145,43 +152,12 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 
 func toInstallPageMetadata(record repo.McpInstallPageMetadatum) *types.MCPInstallPageMetadata {
 	metadata := &types.MCPInstallPageMetadata{
-		ID:        record.ID.String(),
-		ToolsetID: record.ToolsetID.String(),
-		CreatedAt: record.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt: record.UpdatedAt.Time.Format(time.RFC3339),
+		ID:                       record.ID.String(),
+		ToolsetID:                record.ToolsetID.String(),
+		CreatedAt:                record.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                record.UpdatedAt.Time.Format(time.RFC3339),
+		ExternalDocumentationURL: conv.FromPGText[string](record.ExternalDocumentationUrl),
+		LogoAssetID:              conv.FromNullableUUID(record.LogoID),
 	}
-
-	if url := conv.FromPGText[string](record.ExternalDocumentationUrl); url != nil {
-		metadata.ExternalDocumentationURL = url
-	}
-
-	metadata.LogoAssetID = conv.FromNullableUUID(record.LogoID)
-
 	return metadata
-}
-
-func (s *Service) ensureToolsetOwnership(ctx context.Context, projectID uuid.UUID, toolsetID uuid.UUID, authCtx *contextvalues.AuthContext) error {
-	_, err := s.repo.EnsureToolsetOwnership(ctx, repo.EnsureToolsetOwnershipParams{
-		ID:        toolsetID,
-		ProjectID: projectID,
-	})
-	switch {
-	case errors.Is(err, pgx.ErrNoRows):
-		return oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, s.logger, append(projectAttrs(authCtx), attr.SlogToolsetID(toolsetID.String()))...)
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "failed to verify toolset ownership").Log(ctx, s.logger, append(projectAttrs(authCtx), attr.SlogToolsetID(toolsetID.String()))...)
-	default:
-		return nil
-	}
-}
-
-func projectAttrs(authCtx *contextvalues.AuthContext) []any {
-	attrs := make([]any, 0, 2)
-	if authCtx.ProjectSlug != nil {
-		attrs = append(attrs, attr.SlogProjectSlug(*authCtx.ProjectSlug))
-	}
-	if authCtx.ActiveOrganizationID != "" {
-		attrs = append(attrs, attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
-	}
-	return attrs
 }

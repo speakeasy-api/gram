@@ -15,9 +15,9 @@ export type GetInstallPageMetadataSecurity = {
 
 export type GetInstallPageMetadataRequest = {
   /**
-   * The toolset associated with this install page metadata
+   * The slug of the toolset associated with this install page metadata
    */
-  toolsetId: string;
+  toolsetSlug: string;
   /**
    * Session header
    */
@@ -103,12 +103,12 @@ export const GetInstallPageMetadataRequest$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  toolset_id: z.string(),
+  toolset_slug: z.string(),
   "Gram-Session": z.string().optional(),
   "Gram-Project": z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    "toolset_id": "toolsetId",
+    "toolset_slug": "toolsetSlug",
     "Gram-Session": "gramSession",
     "Gram-Project": "gramProject",
   });
@@ -116,7 +116,7 @@ export const GetInstallPageMetadataRequest$inboundSchema: z.ZodType<
 
 /** @internal */
 export type GetInstallPageMetadataRequest$Outbound = {
-  toolset_id: string;
+  toolset_slug: string;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
@@ -127,12 +127,12 @@ export const GetInstallPageMetadataRequest$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   GetInstallPageMetadataRequest
 > = z.object({
-  toolsetId: z.string(),
+  toolsetSlug: z.string(),
   gramSession: z.string().optional(),
   gramProject: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
-    toolsetId: "toolset_id",
+    toolsetSlug: "toolset_slug",
     gramSession: "Gram-Session",
     gramProject: "Gram-Project",
   });

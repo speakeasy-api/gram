@@ -24,9 +24,3 @@ RETURNING id,
           created_at,
           updated_at;
 
--- name: EnsureToolsetOwnership :one
-SELECT id
-FROM toolsets
-WHERE id = $1
-  AND project_id = $2
-  AND deleted IS FALSE;

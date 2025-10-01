@@ -3528,13 +3528,14 @@ paths:
             operationId: getInstallPageMetadata
             parameters:
                 - allowEmptyValue: true
-                  description: The toolset associated with this install page metadata
+                  description: The slug of the toolset associated with this install page metadata
                   in: query
-                  name: toolset_id
+                  name: toolset_slug
                   required: true
                   schema:
-                    description: The toolset associated with this install page metadata
-                    format: uuid
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    maxLength: 40
+                    pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -9575,12 +9576,13 @@ components:
                 logo_asset_id:
                     type: string
                     description: The asset ID for the MCP install page logo
-                toolset_id:
+                toolset_slug:
                     type: string
-                    description: The toolset associated with this install page metadata
-                    format: uuid
+                    description: The slug of the toolset associated with this install page metadata
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
             required:
-                - toolset_id
+                - toolset_slug
         SetProjectLogoForm:
             type: object
             properties:

@@ -48,8 +48,8 @@ var MethodNames = [2]string{"getInstallPageMetadata", "setInstallPageMetadata"}
 // GetInstallPageMetadataPayload is the payload type of the mcpInstallPage
 // service getInstallPageMetadata method.
 type GetInstallPageMetadataPayload struct {
-	// The toolset associated with this install page metadata
-	ToolsetID        string
+	// The slug of the toolset associated with this install page metadata
+	ToolsetSlug      types.Slug
 	SessionToken     *string
 	ProjectSlugInput *string
 }
@@ -64,8 +64,8 @@ type GetInstallPageMetadataResult struct {
 // SetInstallPageMetadataPayload is the payload type of the mcpInstallPage
 // service setInstallPageMetadata method.
 type SetInstallPageMetadataPayload struct {
-	// The toolset associated with this install page metadata
-	ToolsetID string
+	// The slug of the toolset associated with this install page metadata
+	ToolsetSlug types.Slug
 	// The asset ID for the MCP install page logo
 	LogoAssetID *string
 	// A link to external documentation for the MCP install page

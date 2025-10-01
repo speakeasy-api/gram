@@ -41,11 +41,9 @@ var _ = Service("mcpInstallPage", func() {
 		Description("Fetch the metadata that powers the MCP install page.")
 
 		Payload(func() {
-			Attribute("toolset_id", String, "The toolset associated with this install page metadata", func() {
-				Format(FormatUUID)
-			})
+			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata")
 
-			Required("toolset_id")
+			Required("toolset_slug")
 
 			security.SessionPayload()
 			security.ProjectPayload()
@@ -59,7 +57,7 @@ var _ = Service("mcpInstallPage", func() {
 			GET("/rpc/mcp.installPageMetadata.get")
 			security.SessionHeader()
 			security.ProjectHeader()
-			Param("toolset_id")
+			Param("toolset_slug")
 			Response(StatusOK)
 		})
 
@@ -72,13 +70,11 @@ var _ = Service("mcpInstallPage", func() {
 		Description("Create or update the metadata that powers the MCP install page.")
 
 		Payload(func() {
-			Attribute("toolset_id", String, "The toolset associated with this install page metadata", func() {
-				Format(FormatUUID)
-			})
+			Attribute("toolset_slug", shared.Slug, "The slug of the toolset associated with this install page metadata")
 			Attribute("logo_asset_id", String, "The asset ID for the MCP install page logo")
 			Attribute("external_documentation_url", String, "A link to external documentation for the MCP install page")
 
-			Required("toolset_id")
+			Required("toolset_slug")
 
 			security.SessionPayload()
 			security.ProjectPayload()

@@ -94,7 +94,7 @@ export function setGetInstallPageMetadataData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      toolsetId: string;
+      toolsetSlug: string;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     },
@@ -110,7 +110,7 @@ export function invalidateGetInstallPageMetadata(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      toolsetId: string;
+      toolsetSlug: string;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
     }]
@@ -146,7 +146,7 @@ export function buildGetInstallPageMetadataQuery(
 } {
   return {
     queryKey: queryKeyGetInstallPageMetadata({
-      toolsetId: request.toolsetId,
+      toolsetSlug: request.toolsetSlug,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
@@ -171,7 +171,7 @@ export function buildGetInstallPageMetadataQuery(
 
 export function queryKeyGetInstallPageMetadata(
   parameters: {
-    toolsetId: string;
+    toolsetSlug: string;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },

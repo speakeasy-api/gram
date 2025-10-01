@@ -12,26 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const ensureToolsetOwnership = `-- name: EnsureToolsetOwnership :one
-SELECT id
-FROM toolsets
-WHERE id = $1
-  AND project_id = $2
-  AND deleted IS FALSE
-`
-
-type EnsureToolsetOwnershipParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) EnsureToolsetOwnership(ctx context.Context, arg EnsureToolsetOwnershipParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, ensureToolsetOwnership, arg.ID, arg.ProjectID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const getMetadataForToolset = `-- name: GetMetadataForToolset :one
 SELECT id,
        toolset_id,

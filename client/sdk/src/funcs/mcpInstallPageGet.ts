@@ -96,7 +96,7 @@ async function $do(
   const path = pathToFunc("/rpc/mcp.installPageMetadata.get")();
 
   const query = encodeFormQuery({
-    "toolset_id": payload.toolset_id,
+    "toolset_slug": payload.toolset_slug,
   });
 
   const headers = new Headers(compactMap({

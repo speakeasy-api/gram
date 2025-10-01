@@ -18,9 +18,9 @@ export type SetInstallPageMetadataRequestBody = {
    */
   logoAssetId?: string | undefined;
   /**
-   * The toolset associated with this install page metadata
+   * The slug of the toolset associated with this install page metadata
    */
-  toolsetId: string;
+  toolsetSlug: string;
 };
 
 /** @internal */
@@ -31,12 +31,12 @@ export const SetInstallPageMetadataRequestBody$inboundSchema: z.ZodType<
 > = z.object({
   external_documentation_url: z.string().optional(),
   logo_asset_id: z.string().optional(),
-  toolset_id: z.string(),
+  toolset_slug: z.string(),
 }).transform((v) => {
   return remap$(v, {
     "external_documentation_url": "externalDocumentationUrl",
     "logo_asset_id": "logoAssetId",
-    "toolset_id": "toolsetId",
+    "toolset_slug": "toolsetSlug",
   });
 });
 
@@ -44,7 +44,7 @@ export const SetInstallPageMetadataRequestBody$inboundSchema: z.ZodType<
 export type SetInstallPageMetadataRequestBody$Outbound = {
   external_documentation_url?: string | undefined;
   logo_asset_id?: string | undefined;
-  toolset_id: string;
+  toolset_slug: string;
 };
 
 /** @internal */
@@ -55,12 +55,12 @@ export const SetInstallPageMetadataRequestBody$outboundSchema: z.ZodType<
 > = z.object({
   externalDocumentationUrl: z.string().optional(),
   logoAssetId: z.string().optional(),
-  toolsetId: z.string(),
+  toolsetSlug: z.string(),
 }).transform((v) => {
   return remap$(v, {
     externalDocumentationUrl: "external_documentation_url",
     logoAssetId: "logo_asset_id",
-    toolsetId: "toolset_id",
+    toolsetSlug: "toolset_slug",
   });
 });
 

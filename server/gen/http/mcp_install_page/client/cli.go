@@ -10,19 +10,24 @@ package client
 import (
 	"encoding/json"
 	"fmt"
+	"unicode/utf8"
 
 	mcpinstallpage "github.com/speakeasy-api/gram/server/gen/mcp_install_page"
+	types "github.com/speakeasy-api/gram/server/gen/types"
 	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildGetInstallPageMetadataPayload builds the payload for the mcpInstallPage
 // getInstallPageMetadata endpoint from CLI flags.
-func BuildGetInstallPageMetadataPayload(mcpInstallPageGetInstallPageMetadataToolsetID string, mcpInstallPageGetInstallPageMetadataSessionToken string, mcpInstallPageGetInstallPageMetadataProjectSlugInput string) (*mcpinstallpage.GetInstallPageMetadataPayload, error) {
+func BuildGetInstallPageMetadataPayload(mcpInstallPageGetInstallPageMetadataToolsetSlug string, mcpInstallPageGetInstallPageMetadataSessionToken string, mcpInstallPageGetInstallPageMetadataProjectSlugInput string) (*mcpinstallpage.GetInstallPageMetadataPayload, error) {
 	var err error
-	var toolsetID string
+	var toolsetSlug string
 	{
-		toolsetID = mcpInstallPageGetInstallPageMetadataToolsetID
-		err = goa.MergeErrors(err, goa.ValidateFormat("toolset_id", toolsetID, goa.FormatUUID))
+		toolsetSlug = mcpInstallPageGetInstallPageMetadataToolsetSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("toolset_slug", toolsetSlug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(toolsetSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_slug", toolsetSlug, utf8.RuneCountInString(toolsetSlug), 40, false))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -40,7 +45,7 @@ func BuildGetInstallPageMetadataPayload(mcpInstallPageGetInstallPageMetadataTool
 		}
 	}
 	v := &mcpinstallpage.GetInstallPageMetadataPayload{}
-	v.ToolsetID = toolsetID
+	v.ToolsetSlug = types.Slug(toolsetSlug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
@@ -55,9 +60,12 @@ func BuildSetInstallPageMetadataPayload(mcpInstallPageSetInstallPageMetadataBody
 	{
 		err = json.Unmarshal([]byte(mcpInstallPageSetInstallPageMetadataBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"Sit optio ipsam natus.\",\n      \"logo_asset_id\": \"Iste odit dolorem velit minima.\",\n      \"toolset_id\": \"9a9224c8-b231-4691-8e78-a866b653d613\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_documentation_url\": \"At in dolor consequuntur et quisquam.\",\n      \"logo_asset_id\": \"Aliquam sit error reiciendis asperiores maiores optio.\",\n      \"toolset_slug\": \"vbg\"\n   }'")
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", body.ToolsetID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.toolset_slug", body.ToolsetSlug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(body.ToolsetSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.toolset_slug", body.ToolsetSlug, utf8.RuneCountInString(body.ToolsetSlug), 40, false))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -75,7 +83,7 @@ func BuildSetInstallPageMetadataPayload(mcpInstallPageSetInstallPageMetadataBody
 		}
 	}
 	v := &mcpinstallpage.SetInstallPageMetadataPayload{
-		ToolsetID:                body.ToolsetID,
+		ToolsetSlug:              types.Slug(body.ToolsetSlug),
 		LogoAssetID:              body.LogoAssetID,
 		ExternalDocumentationURL: body.ExternalDocumentationURL,
 	}
