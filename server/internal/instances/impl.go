@@ -50,7 +50,7 @@ type Service struct {
 	environmentsRepo *environments_repo.Queries
 	env              *environments.EnvironmentEntries
 	toolProxy        *gateway.ToolProxy
-	billing          billing.Tracker
+	tracking         billing.Tracker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -64,7 +64,7 @@ func NewService(
 	env *environments.EnvironmentEntries,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
-	billing billing.Tracker,
+	tracking billing.Tracker,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
@@ -78,7 +78,7 @@ func NewService(
 		toolset:          toolsets.NewToolsets(db),
 		environmentsRepo: envRepo,
 		env:              env,
-		billing:          billing,
+		tracking:         tracking,
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			traceProvider,
@@ -321,7 +321,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	if toolset != nil {
 		toolsetID = &toolset.ID
 	}
-	go s.billing.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
+	go s.tracking.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
 		OrganizationID:   organizationID,
 		RequestBytes:     requestNumBytes,
 		OutputBytes:      outputNumBytes,
