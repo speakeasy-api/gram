@@ -417,36 +417,30 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 	newSlug := conv.ToSlug(newName)
 	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
 
-	// Create the cloned toolset
-	clonedToolset, err := s.repo.CreateToolset(ctx, repo.CreateToolsetParams{
+	// Prepare base parameters for creating the cloned toolset
+	baseParams := repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
-		Name:                   newName,
-		Slug:                   newSlug,
 		Description:            originalToolset.Description,
 		DefaultEnvironmentSlug: originalToolset.DefaultEnvironmentSlug,
 		HttpToolNames:          originalToolset.HttpToolNames,
 		McpSlug:                conv.ToPGText(mcpSlug),
 		McpEnabled:             false, // Don't auto-enable MCP for cloned toolsets
-	})
+	}
+
+	// Try to create the cloned toolset, handling name conflicts
+	var clonedToolset repo.Toolset
+	baseParams.Name = newName
+	baseParams.Slug = newSlug
+	clonedToolset, err = s.repo.CreateToolset(ctx, baseParams)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			// Try with a numbered suffix if _copy already exists
 			for i := 2; i <= 10; i++ {
-				newName = fmt.Sprintf("%s_copy%d", originalToolset.Name, i)
-				newSlug = conv.ToSlug(newName)
-				clonedToolset, err = s.repo.CreateToolset(ctx, repo.CreateToolsetParams{
-					OrganizationID:         authCtx.ActiveOrganizationID,
-					ProjectID:              *authCtx.ProjectID,
-					Name:                   newName,
-					Slug:                   newSlug,
-					Description:            originalToolset.Description,
-					DefaultEnvironmentSlug: originalToolset.DefaultEnvironmentSlug,
-					HttpToolNames:          originalToolset.HttpToolNames,
-					McpSlug:                conv.ToPGText(mcpSlug),
-					McpEnabled:             false,
-				})
+				baseParams.Name = fmt.Sprintf("%s_copy%d", originalToolset.Name, i)
+				baseParams.Slug = conv.ToSlug(baseParams.Name)
+				clonedToolset, err = s.repo.CreateToolset(ctx, baseParams)
 				if err == nil {
 					break
 				}
