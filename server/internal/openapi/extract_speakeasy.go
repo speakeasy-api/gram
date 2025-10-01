@@ -231,7 +231,6 @@ func (p *ToolExtractor) doSpeakeasy(
 	var wg sync.WaitGroup
 	for range numWorkers {
 		wg.Go(func() {
-			defer wg.Done()
 			for item := range workChan {
 				// TODO: Currently ignoring servers at path item level until we
 				// figure out how to name env variable
@@ -271,6 +270,7 @@ func (p *ToolExtractor) doSpeakeasy(
 						item.opID,
 						err.Error(),
 					).Log(ctx, logger)
+
 					resultChan <- operationResult{
 						def: nil,
 						err: err,
