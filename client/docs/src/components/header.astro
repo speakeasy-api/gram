@@ -14,7 +14,7 @@ import gramLogo from "../assets/gram-logo.png";
 const shouldRenderSearch =
   config.pagefind ||
   config.components.Search !== "@astrojs/starlight/components/Search.astro";
-const {  siteTitleHref } = Astro.locals.starlightRoute;
+const { siteTitleHref } = Astro.locals.starlightRoute;
 
 // Check if we're on a docs page (not the home page)
 const isDocsPage = Astro.url.pathname !== '/' && Astro.url.pathname !== '';
@@ -55,7 +55,7 @@ const isDocumentationSection = isDocsPage && !isGuidesSection;
           Documentation
         </a>
         <a
-          href="/clients/using-claude-code-with-gram-mcp-servers"
+          href="/guides"
           class={`px-3 py-2 text-sm transition-all duration-200 no-underline border-b-2 rounded-t-md hover:bg-neutral-50 hover:bg-opacity-60 dark:hover:bg-neutral-800 dark:hover:bg-opacity-60 cursor-pointer ${
             isGuidesSection
               ? 'font-bold text-neutral-900 dark:text-neutral-100 border-blue-500'

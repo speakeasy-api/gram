@@ -16,10 +16,7 @@ const speakeasyWordmark = await fs.readFile(
 );
 const gramLogo = await fs.readFile("./src/assets/gram-logo.png");
 
-export async function renderOGImage(
-  title: string,
-  description?: string,
-): Promise<Buffer> {
+export async function renderOGImage(title: string, description?: string) {
   const svg = await satori(
     jsxs("div", {
       style: {

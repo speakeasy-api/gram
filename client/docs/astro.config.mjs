@@ -1,8 +1,8 @@
 // @ts-check
-import starlight from "@astrojs/starlight";
-import vercel from "@astrojs/vercel";
-import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
+import starlight from "@astrojs/starlight";
+import tailwindcss from "@tailwindcss/vite";
+import vercel from "@astrojs/vercel";
 import starlightLlmsTxt from "starlight-llms-txt";
 import starlightSidebarTopics from "starlight-sidebar-topics";
 
@@ -23,7 +23,6 @@ export default defineConfig({
     "/build-mcp/deploy-mcp-servers": "/host-mcp/deploy-mcp-servers",
     "/build-mcp/public-private-servers": "/host-mcp/public-private-servers",
   },
-
   vite: {
     server: {
       allowedHosts: ["localhost", "127.0.0.1", "devbox"],
@@ -101,12 +100,29 @@ export default defineConfig({
                 label: "Productionize an MCP server",
                 autogenerate: { directory: "host-mcp" },
               },
+              {
+                label: "Command Line (beta)",
+                items: [
+                  {
+                    label: "Installation",
+                    link: "/command-line/installation",
+                  },
+                  {
+                    label: "Use",
+                    link: "/command-line/use",
+                  },
+                ],
+              },
             ],
           },
           {
             label: "Guides",
-            link: "/clients/using-claude-code-with-gram-mcp-servers",
+            link: "/guides",
             items: [
+              {
+                label: "Guides",
+                link: "/guides",
+              },
               {
                 label: "Integration Guides",
                 autogenerate: { directory: "clients" },

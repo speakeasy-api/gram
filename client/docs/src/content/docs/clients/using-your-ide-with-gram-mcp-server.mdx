@@ -9,136 +9,22 @@ The Model Context Protocol (MCP) connects your AI assistants to real-world tools
 
 [Gram](https://getgram.ai) makes setting up MCP servers simple by hosting servers in the cloud, so you don't need to handle local configurations, manage infrastructure, or deal with authentication complexity. With Gram, you can turn any OpenAPI document into a fully functional MCP server in minutes.
 
-This guide shows you how to create a Gram-hosted MCP server and use it across some of the most popular IDE-based MCP clients.
+This guide shows you how to create a Gram-hosted MCP server using Taskmaster, a full-stack CRUD application for task and project management, and use it across some of the most popular IDE-based MCP clients. Taskmaster includes a web UI for managing projects and tasks, a built-in HTTP API, OAuth 2.0 authentication, and a Neon PostgreSQL database for storing data. Try the [demo app](https://taskmaster-speakeasyapi.vercel.app/) to see it in action.
 
-Find the full code and OpenAPI document in the [Push Advisor API repository](https://github.com/ritza-co/gram-examples/tree/main/push-advisor-api).
+Find the full code and OpenAPI document in the [Taskmaster repository](https://github.com/speakeasy-api/taskmaster).
 
 ## Prerequisites
 
-To follow this guide, you'll need:
+To follow this guide, you need:
 
-- A [Gram account](https://app.getgram.ai).
-- An MCP client. This guide covers Cursor, VS Code with Copilot, Windsurf, and Amp. For Claude Desktop, see the [dedicated Claude Desktop guide](/clients/using-claude-desktop-with-gram-mcp-server).
+- A [Gram account](https://app.getgram.ai)
+- An MCP client (This guide covers Cursor, VS Code with Copilot, Windsurf, and Amp. For Claude Desktop, see the [dedicated Claude Desktop guide](/clients/using-claude-desktop-with-gram-mcp-server).)
 
-## Creating a Gram-hosted MCP server
+## Creating an MCP server
 
-If you already have a Gram-hosted MCP server configured, you can skip to the relevant section on adding it to your MCP client. For an in-depth guide on how Gram works and more details on how to create a Gram-hosted MCP server, check out the [Gram concepts guide](/blog/gram-concepts).
+Before connecting your IDE to a Taskmaster MCP server, you first need to create one. Follow our guide to [creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server).
 
-### Setting up a Gram project
-
-In the [Gram dashboard](https://app.getgram.ai), click **New Project** to start the guided setup flow for creating a toolset and MCP server.
-
-![Screenshot of the Gram dashboard showing the New Project link](/img/guides/mcp-installing-ide/gram-new-project.png)
-
-Enter a project name and click **Submit**.
-
-Gram will then guide you through the following steps.
-
-#### Step 1: Upload the OpenAPI document
-
-Upload the [Push Advisor OpenAPI document](https://github.com/ritza-co/gram-examples/blob/main/push-advisor-api/openapi.yaml), enter the name of your API, and click **Continue**.
-
-![Screenshot of the upload your OpenAPI spec dialog](/img/guides/mcp-installing-ide/upload-openapi-spec.png)
-
-#### Step 2: Create a toolset
-
-Give your toolset a name (for example, "Push Advisor") and click **Continue**.
-
-![Screenshot of the create toolset dialog](/img/guides/mcp-installing-ide/create-toolset.png)
-
-Notice that the names of the tools that will be generated from your OpenAPI document are displayed in this dialog.
-
-#### Step 3: Configure MCP
-
-Enter a URL slug for the MCP server and click **Continue**.
-
-![Screenshot of the configure MCP dialog](/img/guides/mcp-installing-ide/configure-mcp.png)
-
-Gram will create the toolset from the OpenAPI document.
-
-Click **Toolsets** in the sidebar to view the Push Advisor toolset.
-
-![Screenshot of the Gram dashboard showing the Push Advisor toolset](/img/guides/mcp-installing-ide/toolset-created.png)
-
-### Configuring environment variables
-
-[Environments](/concepts/environments) store API keys and configuration separate from your toolset logic.
-
-In the **Environments** tab, click the "Default" environment. Click the three dots in the top right corner of the environment card and then **Fill for Toolset**. Select the **Push Advisor** toolset and click **Fill Variables** to automatically populate the required variables.
-
-![Screenshot showing the fill for toolset dialog to automatically populate required variables](/img/guides/mcp-installing-ide/fill-env-vars-toolset.png)
-
-The Push Advisor API is hosted at `canpushtoprod.abdulbaaridavids04.workers.dev`, so set the `<API_name>_SERVER_URL` environment variable to `https://canpushtoprod.abdulbaaridavids04.workers.dev`. Click **Update** and then **Save**.
-
-![Screenshot showing setting the server URL environment variable](/img/guides/mcp-installing-ide/set-server-url.png)
-
-### Publishing an MCP server
-
-Let's make the toolset available as an MCP server.
-
-Go to the **MCP** tab, find the Push Advisor toolset and click on it to open the MCP details page. 
-
-
-Scroll down to the **Visibility** section and tick the **Public** checkbox.
-
-![Screenshot of the MCP details page](/img/guides/mcp-installing-ide/mcp-details.png)
-
-Next, you'll need to copy the MCP server configuration.
-
-Scroll down to the **MCP Config** section and copy the **Public Server** configuration.
-
-![Screenshot showing the MCP server config dialog for the Push Advisor toolset](/img/guides/mcp-installing-ide/copy-mcp-config.png)
-
-The configuration will look something like this:
-
-```json
-{
-  "mcpServers": {
-    "GramPushadvisor": {
-      "command": "npx",
-      "args": [
-          "mcp-remote",
-          "https://app.getgram.ai/mcp/canipushtoprod"
-        ]
-    }
-  }
-}
-```
-
-Use the **Authenticated Server** configuration if you want to use the MCP server in a private environment.
-
-You'll need an API key to use an authenticated server. [Generate an API key](/concepts/api-keys) in the **Settings** tab and copy it to the `GRAM_KEY` environment variable in place of `<your-key-here>`.
-
-The authenticated server configuration looks something like this:
-
-```json
-{
-  "mcpServers": {
-    "GramPushadvisor": {
-      "command": "npx",
-      "args": [
-        "mcp-remote",
-        "https://app.getgram.ai/mcp/canipushtoprod",
-        "--header",
-        "Authorization: ${GRAM_KEY}"
-      ],
-      "env": {
-        "GRAM_KEY": "Bearer <your-key-here>"
-      }
-    }
-  }
-}
-```
-
-Here's what these configuration options do:
-
-- `"command"` – The executable to run (in this case, `npx`).
-- `"args"` – Array of command-line arguments.
-- `"env"` – Environment variables for the server process (optional).
-- `"timeout"` – Request timeout in milliseconds (optional, defaults to `600,000ms`).
-- `"trust"` – When `true`, bypasses all tool call confirmations (optional, defaults to `false`).
-
-These configurations will work across all MCP clients. Next, we'll show you how to add MCP server configurations to the most popular IDE-based MCP clients.
+Once your Taskmaster MCP server is ready, you can connect it to your IDE. The following sections show you how to add the MCP server configuration to the most popular IDE-based MCP clients.
 
 ## Adding the Gram-hosted MCP server to Cursor
 
@@ -151,115 +37,114 @@ Cursor's built-in configuration interface makes it easy to add and manage MCP se
   </video>
 </div>
 
-### Step 1: Access the Cursor MCP configuration
+### 1. Access the Cursor MCP configuration
 
 In Cursor, navigate to **Settings -> Cursor Settings** and open **Tools & Integrations**. Look for the **MCP Tools** section and click **Add Custom MCP**.
 
-### Step 2: Add the MCP server configuration
+### 2. Add the MCP server configuration
 
-Cursor's global MCP configuration file will open. Add the Gram-hosted MCP server configuration:
+Cursor's global MCP configuration file will open. Add your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server) guide.
 
-```json
-{
-  "mcpServers": {
-    "GramPushadvisor": {
-      "command": "npx",
-      "args": [
-        "mcp-remote",
-        "https://app.getgram.ai/mcp/canipushtoprod"
-      ]
-    }
-  }
-}
-```
-
-For authenticated servers, include the environment variables:
+For a public server, the configuration looks like this:
 
 ```json
 {
   "mcpServers": {
-    "GramPushadvisor": {
+    "GramTaskmaster": {
       "command": "npx",
       "args": [
         "mcp-remote",
-        "https://app.getgram.ai/mcp/canipushtoprod",
+        "https://app.getgram.ai/mcp/your-taskmaster-slug",
         "--header",
-        "Authorization: ${GRAM_KEY}"
+        "MCP-TASK-MASTER-API-KEY:${MCP_TASK_MASTER_API_KEY}"
       ],
       "env": {
-        "GRAM_KEY": "Bearer your-api-key-here"
+        "MCP_TASK_MASTER_API_KEY": "your-api-key"
       }
     }
   }
 }
 ```
 
-### Step 3: Use the MCP server tools
+For an authenticated server, the configuration looks like this:
+
+```json
+{
+  "mcpServers": {
+    "GramTaskmaster": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://app.getgram.ai/mcp/your-taskmaster-slug",
+        "--header",
+        "Authorization: ${GRAM_KEY}"
+      ],
+      "env": {
+        "GRAM_KEY": "Bearer your-gram-api-key"
+      }
+    }
+  }
+}
+```
+
+### 3. Use the MCP server tools
 
 Open Cursor's AI chat by clicking the chat icon or pressing `Cmd/Ctrl + L`. You can now ask questions like:
 
 ```
-What's the vibe for pushing code today?
+Create a new task called "Implement user authentication" with description "Add login and registration functionality to the app"
 ```
 
 ## Adding the Gram-hosted MCP server to VS Code with GitHub Copilot
 
 VS Code supports MCP through GitHub Copilot with version 1.101 or later.
 
-### Step 1: Add the MCP server to the VS Code settings file
+### 1. Add the MCP server to the VS Code settings file
 
 Open the VS Code command palette with `Ctrl/Cmd + Shift + P` and search for `Add MCP Server`. Select the **HTTP** option.
 
 ![Screenshot showing the VS Code Add HTTP MCP Server dialog](/img/guides/mcp-installing-ide/vscode-add-http-server.png)
 
-Paste in the URL of your hosted MCP server and enter the server name. The server name is used as the server ID in the MCP configuration.
+Paste in the URL of your Taskmaster MCP server from the [Creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server) guide and enter the server name.
 
 ![Screenshot showing pasting the MCP server URL](/img/guides/mcp-installing-ide/vscode-paste-mcp-url.png)
 
 Your MCP server will now show up in the list of MCP servers in the `settings.json` file.
 
-![Screenshot showing the VS Code settings.json file with MCP server configuration](/img/guides/mcp-installing-ide/vscode-settings-json.png)
+### 2. Configure authentication
 
-### Step 2: (Optional) Add an API key to the VS Code settings file
+If you're using an **authenticated server** or you're using an environment variable, you can add the authentication details to the `settings.json` file using the configuration from your Taskmaster creation guide.
 
-If you're using an **authenticated server**, you can add an API key to the `settings.json` file:
+![Screenshot showing the VS Code settings.json file with MCP server configuration](/img/guides/mcp-installing-ide/vscode-add-mcp-config-vars.png)
 
 ```json
 {
-  "servers": {
-    "GramPushadvisor": {
+  "mcpServers": {
+    "GramTaskmaster": {
       "command": "npx",
       "args": [
         "mcp-remote",
-        "https://app.getgram.ai/mcp/canipushtoprod",
+        "https://app.getgram.ai/mcp/your-taskmaster-slug",
         "--header",
-        "Authorization: ${input:gram_token}"
+        "MCP-TASK-MASTER-API-KEY:<your-key-here>"
       ]
     }
-  },
-  "inputs": [
-    {
-      "type": "promptString",
-      "id": "gram_token",
-      "description": "Gram API Token",
-      "password": true
-    }
-  ]
+  }
 }
 ```
 
-### Step 3: Start the server
+### 3. Start the server
 
 Open the command palette (`Ctrl/Cmd + Shift + P`) and type `MCP: List Servers` to see available servers. Click on the Gram-hosted MCP server to start it.
 
-### Step 4: Use the MCP server tools with Copilot
+### 4. Use the MCP server tools with Copilot
 
-The Push Advisor tools are now available in the Copilot chat interface. You can enable and disable specific tools as needed.
+The Taskmaster tools are now available in the Copilot chat interface. You can enable and disable specific tools as needed.
 
 You can ask questions like:
 
 ```
-Should I push this code to production?
+Create a new task called "Review code changes" with description "Check the latest commits for quality and security"
 ```
 
 <div class="flex justify-center">
@@ -273,7 +158,7 @@ Should I push this code to production?
 
 Windsurf manages MCP servers through its built-in plugin interface.
 
-### Step 1: Access Windsurf plugin settings
+### 1. Access Windsurf plugin settings
 
 Click **Windsurf** in the top menu bar, then navigate to **Settings -> Windsurf Settings** to open the main configuration interface.
 
@@ -281,75 +166,90 @@ Under the **Plugins (MCP Servers)** section, click **Manage plugins** to access 
 
 ![Screenshot showing the Windsurf manage plugins interface](/img/guides/mcp-installing-ide/windsurf-manage-plugins.png)
 
-### Step 2: Add the MCP server configuration
+### 2. Add the MCP server configuration
 
-In the `mcp_config.json` file that opens, replace the contents with the MCP server configuration:
+In the `mcp_config.json` file that opens, replace the contents with your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server) guide:
 
 ```json
 {
   "mcpServers": {
-    "GramPushadvisor": {
+    "GramTaskmaster": {
       "command": "npx",
       "args": [
         "mcp-remote",
-        "https://app.getgram.ai/mcp/canipushtoprod"
+        "https://app.getgram.ai/mcp/your-taskmaster-slug",
+        "--header",
+        "MCP-TASK-MASTER-API-KEY:<your-key-here>"
       ]
     }
   }
 }
 ```
 
+
+For an authenticated server, use the following configuration instead:
+
+```json
+{
+  "mcpServers": {
+    "GramTaskmaster": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://app.getgram.ai/mcp/your-taskmaster-slug",
+        "--header",
+        "Authorization: ${GRAM_KEY}"
+      ],
+      "env": {
+        "GRAM_KEY": "Bearer your-gram-api-key"
+      }
+    }
+  }
+}
+```
+
+
+Replace `your-taskmaster-slug` with the actual slug from your Taskmaster MCP server configuration.
+
 Save the file.
 
-### Step 3: Activate the plugin
+### 3. Activate the plugin
 
-In the **Manage plugins** tab, and click **Refresh** to reload the plugin configuration. The MCP server plugin will now appear in your available plugins and is ready to use.
+In the **Manage plugins** tab, click **Refresh** to reload the plugin configuration. The MCP server plugin will now appear in your available plugins and is ready to use.
 
 ![Screenshot showing the MCP server successfully installed in Windsurf](/img/guides/mcp-installing-ide/windsurf-mcp-installed.png)
 
 ## Adding the Gram-hosted MCP server to Amp using the VS Code extension
 
-[Amp](https://ampcode.com/manual#mcp) is Sourcegraph's agentic coding tool, available as a VS Code extension and command-line tool. 
+[Amp](https://ampcode.com/manual#mcp) is Sourcegraph's agentic coding tool, available as a VS Code extension and command-line tool.
 
 The Amp VS Code extension has a GUI for adding and managing MCP servers.
 
-<div class="flex justify-center">
-  <video controls>
-    <source src="/videos/amp-installing-mcp.mp4" type="video/mp4"></source>
-    Your browser does not support the video tag.
-  </video>
-</div>
-
-### Step 1: Open Amp settings
+### 1. Open Amp settings
 
 Click the **Settings** icon in the side window. Scroll down to the **MCP Servers** section and click **Add MCP Server**.
 
-### Step 2: Add the MCP server configuration
+### 2. Add the MCP server configuration
 
-Complete the MCP server details as follows:
+Complete the MCP server details using the configuration from your Taskmaster MCP server:
 
-- **Server Name:** `pushadvisor`
+- **Server Name:** `taskmaster`
 - **Command or URL:** `npx`
-
-If you're using a public server:
-
-- **Arguments:** `mcp-remote https://app.getgram.ai/mcp/canipushtoprod` 
-
-If you're using an authenticated server:
-
-- **Arguments:** `mcp-remote https://app.getgram.ai/mcp/canipushtoprod --header "Authorization: ${GRAM_KEY}"`
-- **Environment Variables:** `GRAM_KEY=your-api-key-here` (replace `your-api-key-here` with your Gram API key from the dashboard)
-
-Find instructions for generating an API key in the [publishing an MCP server](#publishing-an-mcp-server) section.
+- **Arguments:** Use the arguments from your Taskmaster MCP server configuration
+- **Environment Variables:** Use the environment variables from your Taskmaster MCP server configuration
 
 ![Screenshot showing the Amp MCP server configuration interface](/img/guides/mcp-installing-ide/amp-mcp-server-config.png)
 
-### Step 3: Use the MCP server tools
+You can also modify the `settings.json` file directly.
 
-Amp automatically loads your Gram-hosted MCP server. You can now interact with the Push Advisor API through natural language prompts like:
+![Screenshot showing the Amp settings.json file with MCP server configuration](/img/guides/mcp-installing-ide/amp-settings-json.png)
+
+### 3. Use the MCP server tools
+
+Amp automatically loads your Gram-hosted MCP server. You can now interact with the Taskmaster API through natural language prompts like:
 
 ```
-Check if the deployment vibes are good today
+Create a new task called "Check deployment status" with description "Verify that all services are running correctly"
 ```
 
 ![Screenshot showing Amp successfully calling the deployment vibes check](/img/guides/mcp-installing-ide/amp-deployment-vibes.png)
@@ -358,7 +258,7 @@ Check if the deployment vibes are good today
 
 Amp can be configured through the `settings.json` file.
 
-### Step 1: Access the Amp CLI configuration file
+### 1. Access the Amp CLI configuration file
 
 The location of the Amp CLI configuration file varies by operating system:
 
@@ -366,58 +266,65 @@ The location of the Amp CLI configuration file varies by operating system:
 - **Windows:** `%APPDATA%\amp\settings.json`
 - **Linux:** `~/.config/amp/settings.json`
 
-### Step 2: Add the MCP server configuration
+### 2. Add the MCP server configuration
 
-Add the `amp.mcpServers` setting with your Gram-hosted MCP server details to the configuration file:
+Add the `amp.mcpServers` setting with your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server) guide to the configuration file.
 
-```json
-{
-  "amp.mcpServers": {
-    "GramPushadvisor": {
-      "command": "npx",
-      "args": [
-        "mcp-remote",
-        "https://app.getgram.ai/mcp/canipushtoprod"
-      ]
-    }
-  }
-}
-```
-
-![Screenshot showing the Amp CLI settings configuration](/img/guides/mcp-installing-ide/amp-cli-settings.png)
-
-If you're using an authenticated server, include the environment variable:
+For a public server, the configuration will look like this:
 
 ```json
 {
   "amp.mcpServers": {
-    "GramPushadvisor": {
+    "GramTaskmaster": {
       "command": "npx",
       "args": [
         "mcp-remote",
-        "https://app.getgram.ai/mcp/canipushtoprod",
+        "https://app.getgram.ai/mcp/your-taskmaster-slug",
         "--header",
-        "Authorization: ${GRAM_KEY}"
+        "MCP-TASK-MASTER-API-KEY:${MCP_TASK_MASTER_API_KEY}"
       ],
       "env": {
-        "GRAM_KEY": "Bearer your-api-key-here"
+        "MCP_TASK_MASTER_API_KEY": "your-api-key"
       }
     }
   }
 }
 ```
 
-### Step 3: Use the MCP server tools
+![Screenshot showing the Amp settings.json file with MCP server configuration](/img/guides/mcp-installing-ide/amp-settings-json.png)
 
-Amp automatically loads your Gram-hosted MCP server. You can now interact with the Push Advisor API using natural language prompts like:
+For an authenticated server, the configuration will look like this:
+
+```json
+{
+  "amp.mcpServers": {
+    "GramTaskmaster": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://app.getgram.ai/mcp/your-taskmaster-slug",
+        "--header",
+        "Authorization: ${GRAM_KEY}"
+      ],
+      "env": {
+        "GRAM_KEY": "Bearer your-gram-api-key"
+      }
+    }
+  }
+}
+```
+
+### 3. Use the MCP server tools
+
+Amp automatically loads your Gram-hosted MCP server. You can now interact with the Taskmaster API using natural language prompts like:
 
 ```
-Check if the deployment vibes are good today
+Create a new task called "Check deployment status" with description "Verify that all services are running correctly"
 ```
 
 ![Screenshot showing Amp CLI successfully calling the deployment vibes check](/img/guides/mcp-installing-ide/amp-cli-showcase.png)
 
-Amp recommends being selective with MCP tools for best performance. Too many available tools can reduce model performance, so consider disabling unused MCP tools by adding them to the `amp.tools.disable` setting.
+Amp recommends being selective with MCP tools for the best performance. Too many available tools can reduce model performance, so consider disabling unused MCP tools by adding them to the `amp.tools.disable` setting.
 
 ## Troubleshooting
 
@@ -436,7 +343,7 @@ If your MCP client can't connect to the Gram server:
 
 If you're using an authenticated server and getting authentication errors:
 
-- Verify your Gram API key in the dashboard under **Settings > API Keys**.
+- Verify your Gram API key in the dashboard under **Settings -> API Keys**.
 - Ensure the API key is correctly formatted with the `Bearer ` prefix.
 
 ### Tools not appearing
@@ -451,5 +358,4 @@ If the tools aren't showing up in your MCP client:
 ## What's next
 
 Ready to build your own MCP server? [Try Gram today](https://getgram.ai) and see how easy it is to turn any API into agent-ready tools that work across all your development environments.
-
 
