@@ -272,7 +272,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 			mcpToolset, mcpToolsetErr := tr.GetToolsetByMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
 			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
-				return nil, oops.E(oops.CodeConflict, nil, "this slug is already tken")
+				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
 			}
 			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
 		} else {
@@ -281,7 +281,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 				CustomDomainID: uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true},
 			})
 			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
-				return nil, oops.E(oops.CodeConflict, nil, "this slug is already tken")
+				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
 			}
 			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
 		}
