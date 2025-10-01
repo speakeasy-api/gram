@@ -10,19 +10,19 @@ import {
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
-import { useProject } from "@/contexts/Auth";
 import { useApiError } from "@/hooks/useApiError";
 import { useGroupedTools } from "@/lib/toolNames";
-import { cn, getServerURL } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   queryKeyInstance,
+  useCloneToolsetMutation,
   useDeleteToolsetMutation,
   useToolset,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import { Stack } from "@speakeasy-api/moonshine";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
@@ -79,48 +79,8 @@ export function useCloneToolset({
   const telemetry = useTelemetry();
   const routes = useRoutes();
   const { handleApiError } = useApiError();
-  const project = useProject();
 
-  const mutation = useMutation({
-    mutationFn: async (slug: string) => {
-      // Use the server URL directly until SDK is regenerated
-      const serverUrl = getServerURL();
-      const response = await fetch(`${serverUrl}/rpc/toolsets.clone?slug=${encodeURIComponent(slug)}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Gram-Project': project.slug,
-        },
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        let error;
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('application/json')) {
-          try {
-            error = await response.json();
-          } catch (_e) {
-            error = { message: `HTTP ${response.status}: ${response.statusText}` };
-          }
-        } else {
-          error = { message: `HTTP ${response.status}: ${response.statusText}` };
-        }
-        throw new Error(error.message || 'Failed to clone toolset');
-      }
-
-      // Check if response has content
-      const text = await response.text();
-      if (!text) {
-        throw new Error('Empty response from server');
-      }
-
-      try {
-        return JSON.parse(text);
-      } catch (e) {
-        throw new Error(`Failed to parse response: ${e instanceof Error ? e.message : String(e)}`);
-      }
-    },
+  const mutation = useCloneToolsetMutation({
     onSuccess: async (data) => {
       telemetry.capture("toolset_event", {
         action: "toolset_cloned",
@@ -137,7 +97,11 @@ export function useCloneToolset({
   });
 
   return (slug: string) => {
-    mutation.mutate(slug);
+    mutation.mutate({
+      request: {
+        slug,
+      },
+    });
   };
 }
 

@@ -127,7 +127,6 @@ const (
 	ToolURNKey                     = attribute.Key("gram.tool.urn")
 	ToolNameKey                    = attribute.Key("gram.tool.name")
 	ToolsetIDKey                   = attribute.Key("gram.toolset.id")
-	ToolsetNameKey                 = attribute.Key("gram.toolset.name")
 	ToolsetSlugKey                 = attribute.Key("gram.toolset.slug")
 )
 
@@ -494,9 +493,6 @@ func SlogToolName(v string) slog.Attr      { return slog.String(string(ToolNameK
 
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }
 func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetIDKey), v) }
-
-func ToolsetName(v string) attribute.KeyValue { return ToolsetNameKey.String(v) }
-func SlogToolsetName(v string) slog.Attr      { return slog.String(string(ToolsetNameKey), v) }
 
 func ToolsetSlug(v string) attribute.KeyValue { return ToolsetSlugKey.String(v) }
 func SlogToolsetSlug(v string) slog.Attr      { return slog.String(string(ToolsetSlugKey), v) }
