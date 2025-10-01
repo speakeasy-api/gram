@@ -65,14 +65,14 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	// Extract tool information from context
 	tool, ok := ctx.Value(ToolInfoContextKey).(*ToolInfo)
 	if !ok {
-		// If no tool context, just pass through
+		// If no tool context, we can't log this request
 		return resp, err
 	}
 
 	// Read the request body from the context
 	reqBodyBytes, ok := ctx.Value(RequestBodyContextKey).([]byte)
 	if !ok {
-		return resp, err
+		h.logger.ErrorContext(ctx, "failed to read request body from context")
 	}
 
 	// Extract trace information
@@ -89,7 +89,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	statusCode := uint16(0)
 	if resp != nil {
 		statusCode = uint16(resp.StatusCode)
-	} else if err != nil {
+	} else if err != nil { // request timeout, etc.
 		statusCode = uint16(oops.StatusCodes[oops.CodeGatewayError])
 	}
 
@@ -105,10 +105,10 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		if isStreaming {
 			// For streaming responses, we'll capture the first chunk and mark as streaming.
 			// The proxy will handle the actual streaming data
-			firstChunk := make([]byte, 1024) // Read the first 1KB to get initial data
+			firstChunk := make([]byte, 1024) // Read up to the 1KB
 			n, readErr := resp.Body.Read(firstChunk)
 			if readErr != nil && readErr != io.EOF {
-				return resp, readErr
+				h.logger.ErrorContext(ctx, "failed to read response body", attr.SlogError(readErr))
 			}
 
 			if n > 0 {
@@ -124,7 +124,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			// For non-streaming responses, read the entire body
 			respBodyBytes, err = io.ReadAll(resp.Body)
 			if err != nil {
-				return resp, err
+				h.logger.ErrorContext(ctx, "failed to read response body", attr.SlogError(err))
 			}
 
 			resp.Body = io.NopCloser(bytes.NewReader(respBodyBytes))
@@ -148,6 +148,8 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			}
 		}
 	}
+
+	var requestBodySkip *string = nil // where will this come from?
 
 	// Prepare response body data for logging
 	var responseBody *string
@@ -184,7 +186,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		ClientIPv4:        clientIP,
 		RequestHeaders:    requestHeaders,
 		RequestBody:       conv.Ptr(string(reqBodyBytes)),
-		RequestBodySkip:   nil,
+		RequestBodySkip:   requestBodySkip,
 		RequestBodyBytes:  uint64(len(reqBodyBytes)),
 		ResponseHeaders:   responseHeaders,
 		ResponseBody:      responseBody,
@@ -199,7 +201,9 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			attr.SlogHTTPRequestMethod(req.Method),
 			attr.SlogURLOriginal(req.URL.String()),
 		)
-	} else if isStreaming {
+	}
+
+	if isStreaming {
 		// Log that we handled a streaming response
 		h.logger.DebugContext(ctx, "logged streaming HTTP response to ClickHouse",
 			attr.SlogToolID(tool.ID),
@@ -211,8 +215,10 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	return resp, err
 }
 
-const ToolInfoContextKey = "tool_info_context_key"
-const RequestBodyContextKey = "request_body_context_key"
+type contextKey string
+
+const ToolInfoContextKey contextKey = "tool_info_context_key"
+const RequestBodyContextKey contextKey = "request_body_context_key"
 
 // ToolInfo represents the minimal tool information needed for logging
 type ToolInfo struct {
