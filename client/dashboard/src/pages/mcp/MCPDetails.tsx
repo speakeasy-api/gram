@@ -2,7 +2,7 @@ import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { ExternalLink, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -527,56 +527,35 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           Claude Desktop."
       >
         <Stack className="mt-2" gap={1}>
-          <Stack direction="horizontal" align="center" gap={2}>
-            <CodeBlock
-              copyable={toolset.mcpIsPublic}
-            >{`${mcpUrl}/install`}</CodeBlock>
-            <Link external to={`${mcpUrl}/install`} noIcon>
-              <Button
-                variant="secondary"
-                className="px-4"
-                disabled={!toolset.mcpIsPublic}
-              >
-                <Button.Text>View</Button.Text>
-                <Button.RightIcon>
-                  <ExternalLink className="w-4 h-4" />
-                </Button.RightIcon>
-              </Button>
-            </Link>
-          </Stack>
-          <Type muted small>
-            A shareable page for installing your MCP server. Try it in the
-            browser!
-          </Type>
-          <Stack>
-            <Heading variant="h4" className="text-md">Page Setup</Heading>
-            <MinimumSuspense fallback="Loading">
-              <ConfigForm toolset={toolset} />
-            </MinimumSuspense>
-          </Stack>
+          <ConfigForm toolset={toolset} />
         </Stack>
+      </PageSection>
+      <PageSection
+        heading="Configuration"
+        description="Configuration blocks for this server"
+      >
         <MCPJson toolset={toolset} />
       </PageSection>
-      <FeatureRequestModal
-        isOpen={isCustomDomainModalOpen}
-        onClose={() => setIsCustomDomainModalOpen(false)}
-        title="Host your MCP at a custom domain"
-        description="Custom domains require upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
-        actionType="mcp_custom_domain"
-        icon={Globe}
-        telemetryData={{ slug: toolset.slug }}
-        accountUpgrade
-      />
-      <FeatureRequestModal
-        isOpen={isMaxServersModalOpen}
-        onClose={() => setIsMaxServersModalOpen(false)}
-        title="Public MCP Server Limit Reached"
-        description={`You have reached the maximum number of public MCP servers for the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
-        actionType="max_public_mcp_servers"
-        icon={Globe}
-        telemetryData={{ slug: toolset.slug }}
-        accountUpgrade
-      />
+        <FeatureRequestModal
+          isOpen={isCustomDomainModalOpen}
+          onClose={() => setIsCustomDomainModalOpen(false)}
+          title="Host your MCP at a custom domain"
+          description="Custom domains require upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
+          actionType="mcp_custom_domain"
+          icon={Globe}
+          telemetryData={{ slug: toolset.slug }}
+          accountUpgrade
+        />
+        <FeatureRequestModal
+          isOpen={isMaxServersModalOpen}
+          onClose={() => setIsMaxServersModalOpen(false)}
+          title="Public MCP Server Limit Reached"
+          description={`You have reached the maximum number of public MCP servers for the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
+          actionType="max_public_mcp_servers"
+          icon={Globe}
+          telemetryData={{ slug: toolset.slug }}
+          accountUpgrade
+        />
     </Stack>
   );
 }

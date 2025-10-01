@@ -226,7 +226,7 @@ export function CompactUpload({
           <UploadIcon className="w-4 h-4" />
           <Type small mono muted>
             {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")} (max 8MiB)
-          </Type>)</>)}
+          </Type></>)}
       <input
         id="dropzone-file"
         type="file"
