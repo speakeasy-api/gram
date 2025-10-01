@@ -139,6 +139,16 @@ func (p *ToolExtractor) Do(
 		return nil, oops.E(oops.CodeInvariantViolation, oops.Permanent(err), "unable to process openapi document").Log(ctx, p.logger)
 	}
 
+	doc, readErr := readDoc(ctx, readDocParams{
+		docURL:  docURL,
+		logger:  p.logger,
+		storage: p.assetStorage,
+	})
+
+	if readErr != nil {
+		return nil, readErr
+	}
+
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error opening database transaction").Log(ctx, p.logger)
@@ -204,19 +214,6 @@ func (p *ToolExtractor) Do(
 	}
 	if deletedSecurity > 0 {
 		logger.InfoContext(ctx, "cleared http security from previous deployment attempt", attr.SlogDBDeletedRowsCount(deletedSecurity))
-	}
-
-	rc, err := p.assetStorage.Read(ctx, docURL)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching openapi document").Log(ctx, logger)
-	}
-	defer o11y.LogDefer(ctx, logger, func() error {
-		return rc.Close()
-	})
-
-	doc, err := io.ReadAll(rc)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error reading openapi document").Log(ctx, logger)
 	}
 
 	var res *ToolExtractorResult
@@ -402,4 +399,36 @@ func parseToolDescriptor(ctx context.Context, logger *slog.Logger, docInfo *type
 		confirmPrompt:       customConfirmPrompt,
 		responseFilterType:  responseFilterType,
 	}
+}
+
+type readDocParams struct {
+	docURL  *url.URL
+	logger  *slog.Logger
+	storage assets.BlobStore
+}
+
+func readDoc(ctx context.Context, params readDocParams) ([]byte, error) {
+	rc, err := params.storage.Read(ctx, params.docURL)
+	if err != nil {
+		return nil, oops.E(
+			oops.CodeUnexpected,
+			err,
+			"error fetching openapi document",
+		).Log(ctx, params.logger)
+	}
+
+	defer o11y.LogDefer(ctx, params.logger, func() error {
+		return rc.Close()
+	})
+
+	doc, err := io.ReadAll(rc)
+	if err != nil {
+		return nil, oops.E(
+			oops.CodeUnexpected,
+			err,
+			"error reading openapi document",
+		).Log(ctx, params.logger)
+	}
+
+	return doc, nil
 }
