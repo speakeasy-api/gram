@@ -1,0 +1,147 @@
+---
+title: "Using Mistral with Gram-hosted MCP servers"
+description: "Learn how to connect Mistral to Gram-hosted remote MCP servers, giving Mistral Le Chat access to your APIs and tools."
+sidebar:
+  order: 7
+---
+
+[Mistral AI](https://mistral.ai/) recently introduced [MCP connectors and memories in Le Chat](https://mistral.ai/news/le-chat-mcp-connectors-memories), making it incredibly easy to enhance Mistral's capabilities with external tools and data sources. This means you can integrate your existing applications directly into Mistral's chat interface.
+
+When combined with [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers hosted on [Gram](/gram-quickstart), you can give Mistral access to your APIs and tools in just a few minutes. 
+
+![Screenshot showing Acme Todo in Mistral preview](/img/guides/mistral/acme-todo-in-mistral-preview.png)
+
+This guide will walk you through connecting Mistral to a [Gram-hosted MCP server](/blog/the-easiest-way-to-host-mcp-servers) using the example Acme Todo API. You'll learn how to set up the connection, configure the custom connector, and test it with natural language prompts to manage your todos.
+
+We'll use the Acme Todo API as our example, it's a simple Python Flask REST API for managing todo items. You can find the complete OpenAPI specification here: [`acmetodo.yaml`](https://github.com/ritza-co/acme-todo/blob/main/acmetodo.yaml).
+
+## Prerequisites
+
+You'll need:
+
+- A [Gram account](https://app.getgram.ai).
+- A [Mistral account](https://mistral.ai/).
+- A deployed version of the Acme Todo API. You can fork our [Acme Todo API repository](https://github.com/ritza-co/acme-todo) and deploy it to your own infrastructure.
+
+## Creating a Gram MCP server
+
+If you already have a Gram-hosted MCP server configured, you can skip to [connecting Mistral to your Gram-hosted MCP server](#connecting-mistral-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and more details on creating a Gram-hosted MCP server, check out the [Gram concepts guide](/blog/gram-concepts).
+
+### Setting up a Gram project
+
+In the [Gram dashboard](https://app.getgram.ai), click **New Project** to start the guided setup flow for creating a toolset and MCP server.
+
+![Screenshot of the Gram dashboard showing the New Project link](/img/guides/mistral/create-new-project.png)
+
+Enter a project name and click **Submit**.
+
+Gram will then guide you through the following steps.
+
+#### Step 1: Upload the OpenAPI document
+
+Upload the Acme Todo OpenAPI document [`acmetodo.yaml`](https://github.com/ritza-co/acme-todo/blob/main/acmetodo.yaml), enter the name of your API, and click **Continue**.
+
+![Screenshot of the upload your OpenAPI spec dialog](/img/guides/mistral/uploading-openapi.png)
+
+#### Step 2: Create a toolset
+
+Give your toolset a name (for example, "Acme Todo") and click **Continue**. 
+
+![Screenshot of the create toolset dialog](/img/guides/mistral/create-toolset.png)
+
+Notice that the names of the tools that will be generated from your OpenAPI document are displayed in this dialog.
+
+#### Step 3: Configure MCP
+
+Enter a URL slug for the MCP server (for example, `acme-todo`) and click **Continue**.
+
+![Screenshot of the configure MCP dialog](/img/guides/mistral/configure-mcp-slug.png)
+
+Gram will create the toolset from the OpenAPI document.
+
+Click **Toolsets** in the sidebar to view the Acme Todo toolset.
+
+![Screenshot of the MCP details page](/img/guides/mistral/mcp-details.png)
+
+You can edit the individual tools in the toolset by clicking on the tool name and the tool description.
+
+### Configuring environment variables
+
+:::note[Server URL]
+By default, the server URL is set by the OpenAPI document. The `acme-todo` openapi document uses a base URL of `https://api.ritzademo.com` which points to our live demo todo. 
+
+If you are using your own MCP server, you will need to set the server URL to the URL of your MCP server. You can either edit the OpenAPI document and skip the step below, or set the server URL in the environment variables.
+:::
+
+[Environments](/concepts/environments) store API keys and configuration separate from your toolset logic.
+
+In the **Environments** tab, click the "Default" environment. Click the three dots in the top right corner of the environment card and then **Fill for Toolset**. Select the **Acme Todo** toolset and click **Fill Variables** to automatically populate the required variables.
+
+![Screenshot showing the fill for toolset dialog to automatically populate required variables](/img/guides/mistral/env-fill-vars.png)
+
+Set the base URL variable for your API. For example, if your Acme Todo API is deployed at `https://acme-todo.example.com`, set `ACME_TODO_SERVER_URL` to that value. Click **Update** and then **Save**.
+
+![Screenshot showing setting the server URL environment variable](/img/guides/mistral/add-server-url.png)
+
+### Publishing an MCP server
+
+Let's make the toolset available as an MCP server.
+
+Go to the **MCP** tab, find the Acme Todo toolset and click on it to open the MCP details page.
+
+Scroll down to the **Hosted URL** section and copy the URL.
+
+![Screenshot showing the MCP server config dialog for the Acme Todo toolset](/img/guides/mistral/mcp-public-server-copy-url.png)
+
+## Connecting Mistral to your Gram-hosted MCP server
+
+Mistral supports a **Custom Connector** that you can configure to connect to your Gram-hosted MCP server. See Mistral's guide for more details: [Configuring a custom connector](https://help.mistral.ai/en/articles/393572-configuring-a-custom-connector).
+
+### Add a Custom Connector in Mistral
+
+1. Open Mistral and go to **Intelligence > Connectors**.
+2. Click **Add connector** and select the **Add custom connector** tab.
+3. Fill in the details:
+   - **Name**: `AcmeTodo`
+   - **URL**: Enter the URL of your Gram-hosted MCP server that you copied in the previous step.
+
+   ![Screenshot showing the Mistral Add Custom Connector dialog](/img/guides/mistral/adding-custom-connector.png)
+
+   - For Authentication, select **API Token Authentication** and add your [Gram API key](/concepts/api-keys).
+   
+   ![Screenshot showing the Mistral Add Custom Connector dialog with API Token Authentication selected](/img/guides/mistral/mistral-auth-connector.png)
+
+4. Click **Connect**.
+
+Once saved, the connector appears under the tools dropdown in Le Chat.
+
+![Screenshot showing the Mistral connector installed](/img/guides/mistral/acme-todo-installed.png)
+
+### Using the connector in a chat
+
+Start a new chat in Mistral and ensure the custom connector is enabled for the conversation.
+
+Ask something that requires the Acme Todo API, for example:
+
+```
+Create a new task, I need to go for a hike this Saturday.
+```
+
+<video width="600" controls>
+  <source src="/videos/mistral-acme-todo.mp4" type="video/mp4" />
+  Your browser does not support the video tag.
+</video>
+
+Mistral will use the MCP tools exposed by your Acme Todo server (for example, create/list/update todo tools) and may ask for permission before calling a tool. Once approved, you'll see the result from the API call as shown in the video above.
+
+## Troubleshooting
+
+- **Connector not connecting**: Verify the MCP server URL in the connector matches the one in Gram. You can test the MCP server first in the **Gram Playground**.
+
+![Screenshot showing how to test an MCP server in the Gram Playground](/img/guides/mistral/playground-test.png)
+- **Authentication errors**: For private servers, confirm your Gram API key in **Settings > API Keys** and ensure the `Authorization: Bearer ...` header is configured in Mistral.
+- **Tools not appearing**: Confirm your toolset includes the expected tools and the environment variables are set. Re-publish the server if you updated the toolset.
+
+## What's next
+
+You now have Mistral connected to a Gram-hosted MCP server built from the Acme Todo API. Ready to build your own? [Try Gram today](https://getgram.ai) and turn any OpenAPI into agent-ready tools your models can use safely.

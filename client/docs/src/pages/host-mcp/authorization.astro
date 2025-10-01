@@ -1,0 +1,16 @@
+---
+// Import the `<StarlightPage>` component first to set up cascade layers.
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+
+// Import any other components you want to use in your custom page.
+import AnchorHeading from "@astrojs/starlight/components/AnchorHeading.astro";
+---
+
+<StarlightPage frontmatter={{ title: "My custom page" }}>
+  <p>This is a custom page with a custom component:</p>
+
+  <AnchorHeading level="2" id="learn-more">Learn more</AnchorHeading>
+  <p>
+    <a href="https://starlight.astro.build/">Read more in the Starlight docs</a>
+  </p>
+</StarlightPage>

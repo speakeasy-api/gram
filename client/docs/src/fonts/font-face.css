@@ -1,0 +1,39 @@
+@font-face {
+  font-family: "Tobias";
+  src: url("./Tobias-Thin.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Diatype";
+  src: url("./ABCDiatype-Regular.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Diatype";
+  src: url("./ABCDiatype-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Diatype Mono";
+  src: url("./ABCDiatypeMono-Regular.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Diatype Mono";
+  src: url("./ABCDiatypeMono-Light.woff2") format("woff2");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}

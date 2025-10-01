@@ -1,0 +1,539 @@
+---
+title: Add Authorization
+description: Configure authentication for MCP servers using different OAuth methods
+sidebar:
+  order: 3
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components'
+import ExternalLink from '../../../components/external-link.astro'
+
+Gram supports a variety of authentication methods for MCP servers to interact
+with underlying APIs. These methods include:
+
+1. [**Static Security Credentials**](#user-facing-oauth21-flow): Passing static,
+   pre-obtained credentials such as API keys or access tokens directly as
+   headers,
+1. **Client Credentials Flow**: For server-to-server authentication using
+   `client_id` and `client_secret`, and
+1. **User-facing OAuth2.1 Flow**: For scenarios requiring dynamic user
+    authentication.
+
+:::tip[NOTE]
+Though OAuth2.1 has been recommended by the MCP specification since March 2025,
+it should be noted that this standard is not a true requirement for MCP servers.
+Passing pre-obtained access tokens directly is a valid and often simpler
+approach.
+:::
+
+## Authentication Approaches
+
+### Static Security Credentials
+
+From a technical standpoint, the simplest approach is to have users provide a
+static security credential directly within the MCP configuration. This
+credential should be obtained through your existing systems. This approach
+avoids the complexity of implementing OAuth flows and is often sufficient for
+many use cases. Examples of static credentials include:
+
+- API Keys obtained through a developer portal
+- Access tokens fetched from an OAuth flow outside of the MCP server
+
+#### Use This Approach When:
+
+- You already have a system for obtaining access tokens or API keys
+- You want to avoid the complexity of OAuth flows in your MCP server
+- Your users can generate tokens through your existing dashboard or API
+- You're building internal tools where token management is handled elsewhere
+- Your users are capable of configuring their MCP client to connect with the
+  necessary credentials
+
+#### Implementation
+
+##### OpenAPI Specification
+
+First, your OpenAPI specification should define the security scheme for static
+credentials. Here are some examples of acceptable configurations:
+
+<Tabs>
+    <TabItem label="API Key">
+        ```yaml
+        # openapi.yaml
+        openapi: 3.1.3
+
+        # First, add a security scheme for API Key authentication
+        components:
+            securitySchemes:
+                ApiKeyAuth:
+                    type: apiKey
+                    in: header
+                    name: Authorization
+
+        # Then, apply the security scheme globally or to specific operations
+        security:
+            - ApiKeyAuth: []
+        ```
+    </TabItem>
+    <TabItem label="Bearer Token">
+        ```yaml
+        # openapi.yaml
+        openapi: 3.1.3
+
+        # First, add a security scheme for Bearer Token authentication
+        components:
+            securitySchemes:
+                BearerAuth:
+                    type: http
+                    scheme: bearer
+
+        # Then, apply the security scheme globally or to specific operations
+        security:
+            - BearerAuth: []
+        ```
+    </TabItem>
+    <TabItem label="OAuth with Access Tokens">
+        ```yaml
+        # openapi.yaml
+        openapi: 3.1.3
+
+        # First, add a security scheme for OAuth2 authentication
+        components:
+            securitySchemes:
+                OAuth2:
+                    type: oauth2
+                    flows:
+                        clientCredentials:
+                        tokenUrl: https://example.com/oauth/token
+                        scopes:
+                            read: Grants read access
+                            write: Grants write access
+
+        # Then, apply the security scheme globally or to specific operations
+        security:
+            - OAuth2: [read, write]
+        ```
+
+        :::tip[NOTE]
+        Gram always accepts Access Token as a header when an OAuth2 security
+        scheme is defined in the OpenAPI spec.
+        :::
+    </TabItem>
+</Tabs>
+
+Once your OpenAPI spec is set up, upload it to Gram to create your MCP server,
+or update an existing one.
+
+#### Usage
+
+When users configure the MCP server in a client, they should provide the static
+credential as part of the server configuration. This will vary between MCP
+clients. Here are some examples of how users might provide these credentials to
+Claude Desktop within the app's configuration file:
+
+<Tabs>
+    <TabItem label="API Key">
+        ```json
+        // claude_desktop_config.json
+        {
+          "mcpServers": {
+            "MyServer": {
+              "command": "npx",
+              "args": [
+                "mcp-remote",
+                "https://app.getgram.ai/mcp/my-mcp-server-slug",
+                "--header",
+                "MCP-MY-SERVER-API-KEY:${VALUE}"
+              ]
+            }
+          }
+        }
+        ```
+    </TabItem>
+    <TabItem label="Bearer Token">
+        ```json
+        // claude_desktop_config.json
+        {
+          "mcpServers": {
+            "MyServer": {
+              "command": "npx",
+              "args": [
+                "mcp-remote",
+                "https://app.getgram.ai/mcp/my-mcp-server-slug",
+                "--header",
+                "MCP-MY-SERVER-BEARER-AUTH:${VALUE}"
+              ]
+            }
+          }
+        }
+        ```
+    </TabItem>
+    <TabItem label="OAuth with Access Tokens">
+        ```json
+        // claude_desktop_config.json
+        {
+          "mcpServers": {
+            "MyServer": {
+              "command": "npx",
+              "args": [
+                "mcp-remote",
+                "https://app.getgram.ai/mcp/my-mcp-server-slug",
+                "--header",
+                "MCP-MY-SERVER-ACCESS-TOKEN:${VALUE}"
+              ]
+            }
+          }
+        }
+        ```
+    </TabItem>
+</Tabs>
+
+### OAuth Client Credentials
+
+Gram MCP servers can receive OAuth Client Credential pairs as headers in order
+to obtain an access token on behalf of the user. Upon initialization, Gram will
+use the credential pair to fetch an access token from your OAuth server's token
+endpoint. Subsequent requests will use the cached access token until it expires,
+at which point, Gram will automatically refresh it using the same client
+credentials.
+
+#### Use This Approach When:
+
+- Your API already implements the Client Credentials OAuth flow
+- You want to avoid the complexity of user-facing OAuth flows
+- Your users are capable of obtaining and managing client credentials
+- Your users are capable of configuring their MCP client to connect with the
+  necessary credentials
+
+#### Implementation
+
+##### OpenAPI Specification
+
+First, your OpenAPI specification should define the security scheme for OAuth
+Client Credentials. Here is an example configuration:
+
+```yaml
+openapi: 3.1.3
+
+# First, add a security scheme for OAuth2 authentication
+components:
+    securitySchemes:
+      OAuth2:
+          type: oauth2
+          flows:
+              clientCredentials:
+              tokenUrl: https://example.com/oauth/token
+              scopes:
+                  read: Grants read access
+                  write: Grants write access
+
+# Then, apply the security scheme globally or to specific operations
+security:
+    - OAuth2: [read, write]
+```
+
+Once your OpenAPI spec is set up, upload it to Gram to create your MCP server,
+or update an existing one.
+
+#### Usage
+
+When users configure the MCP server in a client, they should provide the
+`client_id` and `client_secret` as part of the server configuration. This will
+vary between MCP clients. Here is an example of how users might provide
+these credentials to Claude Desktop within the app's configuration file:
+
+```json
+// claude_desktop_config.json
+{
+  "mcpServers": {
+    "MyServer": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://app.getgram.ai/mcp/my-mcp-server-slug",
+        "--header",
+        "MCP-MY-SERVER-CLIENT-ID:${VALUE}",
+        "--header",
+        "MCP-MY-SERVER-CLIENT-SECRET:${VALUE}"
+      ]
+    }
+  }
+}
+```
+
+### User-Facing OAuth2.1 Flow
+
+The user-facing OAuth2.1 flow is the most complex to implement but is necessary
+for public-facing MCP servers that require user authentication. This approach
+allows users to authenticate interactively. That is, without the need to
+configure their MCP client manually, as demonstrated in the previous sections.
+
+export const BookOAuthConsultationLink = () => (
+    <a href="https://calendly.com/sagar-speakeasy/30min" target="_blank">
+        book a time with our team
+    </a>
+)
+
+:::tip[NOTE]
+User-facing OAuth is a **Pro and Enterprise** feature in Gram.
+
+If you would like a consultation to discuss the requirements of this
+authentication approach, or if you would like to explore custom alternatives to DCR,
+please <BookOAuthConsultationLink />.
+:::
+
+:::tip[NOTE]
+While OAuth2.1 is the official recommendation by the MCP specification, **it is
+not a strict requirement** for MCP servers. Passing pre-obtained access tokens
+directly is a valid and often simpler approach.
+:::
+
+#### Use This Approach When:
+
+- You want to provide a seamless user experience without requiring manual
+  configuration of credentials
+- Your API is public-facing and requires user consent for access
+- You are prepared to implement the necessary OAuth flows and potentially
+  Dynamic Client Registration (DCR)
+- Users need to be able to install the MCP server dynamically, without
+  pre-coordination
+
+#### Implementation
+
+##### Authorization Server
+
+This approach is unique in that it requires your OAuth server support **Dynamic
+Client Registration (DCR)**. This is because MCP clients need to be able to
+register themselves dynamically to obtain `client_id` and `client_secret`
+values. **Thus, the user is not required to register an OAuth application
+themselves.**
+
+export const StripeMcpLink = () => (
+    <a href="https://docs.stripe.com/mcp" target="_blank">
+        Stripe
+    </a>
+)
+
+export const AsanaMcpLink = () => (
+    <a href="https://developers.asana.com/docs/integrating-with-asanas-mcp-server" target="_blank">
+        Asana
+    </a>
+)
+
+DCR is the key requirment that most MCP publishers have yet to implement as part
+of their existing auth infrastructure. Companies like <StripeMcpLink /> and
+<AsanaMcpLink /> have started to support DCR in their OAuth flows to accommodate
+MCP. If you want to host an MCP server for large-scale use by external developers,
+you should plan to build out support for DCR in your API.
+
+export const McpSpecOAuthLink = () => (
+    <a href="https://modelcontextprotocol.io/specification/draft/basic/authorization#overview" target="_blank">
+        here
+    </a>
+)
+
+:::note[LEARN MORE]
+The official OAuth section of the MCP specification can be found
+<McpSpecOAuthLink />.
+:::
+
+##### OpenAPI Specification
+
+Your OpenAPI specification should define an `authorizationCode` security scheme,
+and apply it as the global security requirement
+
+```yaml
+openapi: 3.1.3
+
+# First, add a security scheme for OAuth2 authentication
+components:
+    securitySchemes:
+        oauth2Example:
+            type: oauth2
+            flows:
+                authorizationCode:
+                    authorizationUrl: /oauth/authorize
+                    tokenUrl: /oauth/token
+                    scopes:
+                        pets:read: Read pet information
+                        pets:write: Modify pet information
+
+# Then, apply the security scheme globally or to specific operations
+security:
+    - oauth2Example: [pets:read]
+```
+
+Once your OpenAPI spec is set up, upload it to Gram to create your MCP server,
+or update an existing one.
+
+#### Register The Server in Gram
+
+If your underlying API supports the necessary OAuth requirements, you can easily
+place any OAuth server in front of any Gram MCP Server with just a few clicks!
+
+
+
+
+
+...
+
+The Gram product exposes a variety of different options for OAuth that you can integrate into your Gram MCP Servers.
+Your OpenAPI spec must include OAuth as a security option for your endpoints.
+
+
+## Choosing Your Authentication Approach
+
+Before implementing OAuth, consider what kind of credentials you expect end users to provide when initializing your MCP servers:
+
+### Option 1: Pre-obtained Access Tokens (Recommended for most cases)
+- **What users provide**: A valid access token they obtained from your service
+- **How they get it**: Through your existing dashboard, API, or token generation system
+- **Best for**: Existing APIs with token generation, internal tools, controlled environments
+- **Complexity**: Low - no OAuth flow implementation needed
+
+### Option 2: Client Credentials (Server-to-Server)
+- **What users provide**: `client_id` and `client_secret`
+- **How they get it**: Register an application in your developer portal
+- **Best for**: APIs designed for server-to-server authentication
+- **Complexity**: Medium - automatic token exchange and caching
+
+### Option 3: User-facing OAuth Flow
+- **What users provide**: Nothing initially - they authenticate interactively
+- **How it works**: Dynamic OAuth flow when the MCP server is accessed
+- **Best for**: Public-facing servers requiring user consent
+- **Complexity**: High - requires DCR implementation or OAuth proxy
+
+**Gram can integrate OAuth into a server in any way that's currently possible within the MCP context.** The key is choosing the approach that best fits your existing authentication system and user experience goals.
+
+## Access Token Based Authentication
+
+**This is often the simplest and most practical approach for MCP servers.** Gram allows passing pre-obtained OAuth access tokens directly to an MCP server through headers. This is completely valid and doesn't require implementing complex OAuth flows.
+
+This approach works with access tokens from any OAuth flow:
+- `authorizationCode` - User grants permission, you exchange code for token
+- `clientCredentials` - Server-to-server authentication with client credentials
+- `implicit` - Direct token generation (less secure, not recommended)
+
+**When to use this approach:**
+- You already have a system for obtaining access tokens
+- You want to avoid the complexity of OAuth flows in your MCP server
+- Your users can generate tokens through your existing dashboard or API
+- You're building internal tools where token management is handled elsewhere
+
+## Client Credentials Flow
+
+If your API uses the `clientCredentials` flow, Gram allows you to pass a client_id and client_secret into your MCP server. The server will do the token exchange using those provided environment values. The tool call flow will automatically cache tokens received from a token exchange based on the expiration of that token. We natively support both `client_secret_post` and `client_secret_basic` flows.
+
+## Authorization Code
+
+:::tip[NOTE]
+Placing Managed OAuth in front of a server is a Pro and Enterprise feature.
+
+An MCP Server must be marked `public` to attach Managed OAuth in front of it.
+
+Please [book in time with our team](https://calendly.com/sagar-speakeasy/30min) for white-glove service with proxy setup or DCR compliance. We'll get you up and running.
+:::
+
+
+When the MCP spec refers to placing a user-facing OAuth flow in front of a server, it is typically referring to the `authorizationCode` flow.
+
+Gram fully supports registering an OAuth server in front of MCP servers for your users to interact with. Something that is important to keep in mind is that the MCP specification has very specific requirements for how a company's OAuth API needs to work.
+
+## Why DCR is Required for MCP
+
+**The main requirement is that MCP clients require OAuth2.1 and Dynamic Client Registration (DCR).** This requirement exists because the MCP spec currently does not define a standard way for an MCP client to provide an OAuth `client_id`/`client_secret` from the user.
+
+Here's the challenge DCR solves:
+- **Traditional OAuth**: Requires pre-registered client credentials (`client_id`/`client_secret`)
+- **MCP Context**: Users install MCP servers dynamically, without pre-coordination
+- **DCR Solution**: Allows MCP clients to dynamically register themselves and obtain client credentials on-the-fly
+
+The requirements for MCP OAuth can be found [here](https://modelcontextprotocol.io/specification/draft/basic/authorization#overview). Dynamic Client Registration (DCR) is typically the feature that most companies do not currently support, which is why **several companies with public-facing MCPs have implemented DCR into their OAuth capabilities** to enable the self-serve option.
+
+### Registering your own OAuth Server
+
+While this is still fairly unadopted, companies like [Stripe](https://docs.stripe.com/mcp), [Asana](https://developers.asana.com/docs/integrating-with-asanas-mcp-server) & more have started to support DCR in their OAuth flows to accommodate MCP. If you want to host an MCP server for large-scale use by external developers, you should plan to build out support for DCR in your API.
+
+If your underlying API supports the necessary OAuth requirements, you can easily place any OAuth server in front of any Gram MCP Server with just a few clicks!
+
+Only one OAuth flow can be placed in front of an MCP server, so it is very important that your MCP server only includes a single downstream API provider that takes in OAuth.
+
+The artifact you are able to produce should look something like this:
+
+```
+{
+  "issuer": "https://marketplace.stripe.com",
+  "authorization_endpoint": "https://marketplace.stripe.com/oauth/v2/authorize",
+  "token_endpoint": "https://marketplace.stripe.com/oauth/v2/token",
+  "registration_endpoint": "https://marketplace.stripe.com/oauth/v2/register/tailorapp%2AAZfBZ6Q69QAAADJI%23EhcKFWFjY3RfMVJlaTA0QUo4QktoWGxzQw",
+  "response_types_supported": [
+    "code"
+  ],
+  "grant_types_supported": [
+    "authorization_code",
+    "refresh_token"
+  ],
+  "code_challenge_methods_supported": [
+    "S256"
+  ],
+  "token_endpoint_auth_methods_supported": [
+    "none"
+  ]
+}
+```
+
+Note: An MCP Client such as Claude will use the same client_id in perpetuity unless you explicitly provide a `client_secret_expires_at` value in your `/register` response. When implementing DCR, it is extremely important that you persist the client_ids you issue. MCP clients follow the OAuth specification precisely when it comes to retaining client_ids from DCR and they will not forget them when you uninstall a server!
+
+
+### OAuth Proxy
+
+For companies whose OAuth systems do not yet support the MCP requirements, Gram offers an OAuth proxy that translates between MCP requirements and standard OAuth implementations. **This is essentially a workaround to avoid implementing the full MCP requirements of DCR**, but it comes with important caveats.
+
+How the OAuth proxy works:
+- **Frontend**: Exposes OAuth 2.1 and DCR to MCP clients on your behalf
+- **Backend**: Communicates with your OAuth APIs using a single set of credentials
+- **Translation**: Handles the complexity of MCP-compliant OAuth flows
+
+Functionally, this is very similar to solutions others might be familiar with, such as the [Cloudflare OAuth proxy](https://blog.cloudflare.com/remote-model-context-protocol-servers-mcp/#workers-oauth-provider-an-oauth-2-1-provider-library-for-cloudflare-workers).
+
+## Important Caveats and Limitations
+
+**Single Client Credentials**: Because your OAuth APIs require a specific `client_id`/`client_secret`, your MCP server stores a single set of these values to act as a shared client. This means:
+- All users share the same underlying OAuth client
+- You lose per-user client isolation
+- Rate limiting and quotas apply to the shared client
+
+**Suitability Considerations**:
+- ✅ **Good for**: Internal tools, controlled user bases, POCs and demos
+- ❌ **May not be suitable for**: Public servers serving all your customers, scenarios requiring per-user client isolation
+- ⚠️ **Consider carefully**: Whether having all users share a single OAuth client is acceptable for your use case
+
+**Our recommendation**: For an MCP server that publicly serves all users, implementing DCR or having customers pass in access tokens directly is typically the best option.
+
+### OAuth Proxy for POCs and Testing
+
+For building POCs and testing OAuth flows, we're happy to help set up an OAuth proxy with a specific `client_id`/`client_secret` pairing so you can demonstrate the OAuth flow functionality without implementing full DCR support.
+
+**Configuration Requirements**
+
+You will store the following in Gram to enable our OAuth proxy to interact with your underlying OAuth provider:
+- Authorization Endpoint
+- Token Endpoint
+- Client ID & Client Secret
+- List of Scopes (optional)
+- Token endpoint auth methods supported (optional)
+- You may need to whitelist oauth proxy redirect uris in your OAuth provider (https://\{mcp_server_domain\}.com/oauth/\{mcp_slug\}/callback)
+
+## Summary
+
+When implementing authentication for your MCP server, remember:
+
+1. **OAuth exchange is NOT required** - passing access tokens directly is completely valid
+2. **Choose the right approach** for your use case:
+   - Access tokens: Simple, works with existing systems
+   - Client credentials: Good for server-to-server auth
+   - User-facing OAuth: Best for public servers (requires DCR or proxy)
+3. **DCR is only needed** if you want MCP clients to handle OAuth flows automatically
+4. **OAuth proxy is available** as a workaround for DCR, but comes with limitations
+5. **We can help** with white-glove service for proxy setup or DCR compliance
+
+The goal is to choose the authentication method that works best with your existing infrastructure while providing the right user experience for your MCP server's intended use case.
