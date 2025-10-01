@@ -2,6 +2,7 @@ package tool_metrics
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -44,7 +45,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 
 	var clientIP string
 
-	httpTrace := &httptrace.ClientTrace{
+	httpTrace := &httptrace.ClientTrace{ //nolint:exhaustruct // only need the capture the server IP
 		GotConn: func(info httptrace.GotConnInfo) {
 			if info.Conn != nil {
 				remote := info.Conn.RemoteAddr().String()
@@ -66,7 +67,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	tool, ok := ctx.Value(ToolInfoContextKey).(*ToolInfo)
 	if !ok {
 		// If no tool context, we can't log this request
-		return resp, err
+		return resp, fmt.Errorf("no tool found: %w", err)
 	}
 
 	// Read the request body from the context
@@ -88,9 +89,9 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	// Determine status code
 	statusCode := uint16(0)
 	if resp != nil {
-		statusCode = uint16(resp.StatusCode)
+		statusCode = uint16(resp.StatusCode) //nolint:gosec // response codes aren't that large
 	} else if err != nil { // request timeout, etc.
-		statusCode = uint16(oops.StatusCodes[oops.CodeGatewayError])
+		statusCode = uint16(oops.StatusCodes[oops.CodeGatewayError]) //nolint:gosec // response codes aren't that large
 	}
 
 	// Check if this is a streaming response (SSE)
@@ -170,6 +171,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 
 	// Log this individual HTTP attempt to ClickHouse
 	logErr := h.tcm.Log(ctx, ToolHTTPRequest{
+		Ts:                time.Now(),
 		OrganizationID:    tool.OrganizationID,
 		ProjectID:         tool.ProjectID,
 		DeploymentID:      tool.DeploymentID,
@@ -212,7 +214,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		)
 	}
 
-	return resp, err
+	return resp, nil
 }
 
 type contextKey string
