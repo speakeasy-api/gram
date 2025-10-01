@@ -149,10 +149,6 @@ func (p *ToolExtractor) Do(
 		return nil, readErr
 	}
 
-	// if err := jsonschema.IsValidJSONSchema(doc); err != nil {
-	// 	return nil, fmt.Errorf("invalid tool input schema: %w", err)
-	// }
-
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error opening database transaction").Log(ctx, p.logger)

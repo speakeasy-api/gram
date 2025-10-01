@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/jsonschema"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orderedmap"
@@ -480,6 +481,11 @@ func extractToolDefLibOpenAPI(ctx context.Context, logger *slog.Logger, tx *repo
 		schemaBytes, err = json.Marshal(merged)
 		if err != nil {
 			return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("error serializing operation schema: %w", err)
+		}
+
+		// Validate the generated JSON schema
+		if err := jsonschema.IsValidJSONSchema(schemaBytes); err != nil {
+			return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("invalid tool input schema: %w", err)
 		}
 	}
 
