@@ -478,9 +478,9 @@ func newStartCommand() *cli.Command {
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
 			mux := goahttp.NewMuxer()
 
+			mux.Use(middleware.CustomDomainsMiddleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
-			mux.Use(middleware.CustomDomainsMiddleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 

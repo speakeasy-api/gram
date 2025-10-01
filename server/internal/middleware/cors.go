@@ -4,29 +4,36 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/gateway"
 )
 
 func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch env {
-			case "local":
-				origin := r.Header.Get("Origin")
-				if _, err := url.Parse(origin); err == nil {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
-				}
-			case "dev":
-				origin := r.Header.Get("Origin")
-				// support preview urls
-				if _, err := url.Parse(origin); err == nil && strings.Contains(origin, "speakeasyapi.vercel.app") {
-					w.Header().Set("Access-Control-Allow-Origin", origin)
-				} else {
+			// Check if a custom domain is in context
+			if domainCtx := gateway.DomainFromContext(r.Context()); domainCtx != nil {
+				w.Header().Set("Access-Control-Allow-Origin", "https://"+domainCtx.Domain)
+			} else {
+				switch env {
+				case "local":
+					origin := r.Header.Get("Origin")
+					if _, err := url.Parse(origin); err == nil {
+						w.Header().Set("Access-Control-Allow-Origin", origin)
+					}
+				case "dev":
+					origin := r.Header.Get("Origin")
+					// support preview urls
+					if _, err := url.Parse(origin); err == nil && strings.Contains(origin, "speakeasyapi.vercel.app") {
+						w.Header().Set("Access-Control-Allow-Origin", origin)
+					} else {
+						w.Header().Set("Access-Control-Allow-Origin", serverURL)
+					}
+				case "prod":
 					w.Header().Set("Access-Control-Allow-Origin", serverURL)
+				default:
+					// No CORS headers set for unspecified environments
 				}
-			case "prod":
-				w.Header().Set("Access-Control-Allow-Origin", serverURL)
-			default:
-				// No CORS headers set for unspecified environments
 			}
 
 			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
