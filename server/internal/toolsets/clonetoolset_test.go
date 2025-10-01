@@ -27,12 +27,17 @@ func TestToolsetsService_CloneToolset_Success(t *testing.T) {
 	require.NoError(t, err, "list deployment tools")
 	require.GreaterOrEqual(t, len(tools), 2, "expected at least 2 tools from petstore")
 
+	// Extract tool URNs
+	toolUrns := make([]string, 2)
+	toolUrns[0] = tools[0].ToolUrn.String()
+	toolUrns[1] = tools[1].ToolUrn.String()
+
 	// Create an original toolset to clone
 	original, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
 		SessionToken:           nil,
 		Name:                   "Original Toolset",
 		Description:            conv.Ptr("Original toolset description"),
-		HTTPToolNames:          []string{tools[0].Name, tools[1].Name},
+		ToolUrns:               toolUrns,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -86,7 +91,7 @@ func TestToolsetsService_CloneToolset_MultipleClones(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Original",
 		Description:            nil,
-		HTTPToolNames:          []string{tools[0].Name},
+		ToolUrns:               []string{tools[0].ToolUrn.String()},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
