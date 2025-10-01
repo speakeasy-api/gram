@@ -2,7 +2,7 @@ import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { ExternalLink, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,7 @@ import { toast } from "sonner";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
 import { Block, BlockInner } from "@/components/block";
+import { ConfigForm } from "@/components/mcp_install_page/config_form";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -199,10 +200,10 @@ export function useCustomDomain() {
 export function useMcpUrl(
   toolset:
     | Pick<
-        ToolsetEntry,
-        "slug" | "customDomainId" | "mcpSlug" | "defaultEnvironmentSlug"
-      >
-    | undefined,
+      ToolsetEntry,
+      "slug" | "customDomainId" | "mcpSlug" | "defaultEnvironmentSlug"
+    >
+    | undefined
 ) {
   const { domain } = useCustomDomain();
   const project = useProject();
@@ -218,9 +219,8 @@ export function useMcpUrl(
   const urlSuffix = toolset.mcpSlug
     ? toolset.mcpSlug
     : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
-  const mcpUrl = `${
-    toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
-  }/mcp/${urlSuffix}`;
+  const mcpUrl = `${toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
+    }/mcp/${urlSuffix}`;
 
   return {
     url: mcpUrl,
@@ -519,55 +519,41 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         <PublicToggle isPublic={mcpIsPublic ?? false} />
       </PageSection>
       <PageSection
-        heading="MCP Installation"
-        description="Use these configs to connect to this MCP server from a client like
-          Cursor or Claude Desktop."
+        heading="MCP Install Documentation"
+        description="Share this page with your users to give simple instructions
+          for gettings started with your MCP to their client like Cursor or
+          Claude Desktop."
       >
         <Stack className="mt-2" gap={1}>
-          <Stack direction="horizontal" align="center" gap={2}>
-            <CodeBlock
-              copyable={toolset.mcpIsPublic}
-            >{`${mcpUrl}/install`}</CodeBlock>
-            <Link external to={`${mcpUrl}/install`} noIcon>
-              <Button
-                variant="secondary"
-                className="px-4"
-                disabled={!toolset.mcpIsPublic}
-              >
-                <Button.Text>View</Button.Text>
-                <Button.RightIcon>
-                  <ExternalLink className="w-4 h-4" />
-                </Button.RightIcon>
-              </Button>
-            </Link>
-          </Stack>
-          <Type muted small>
-            A shareable page for installing your MCP server. Try it in the
-            browser!
-          </Type>
+          <ConfigForm toolset={toolset} />
         </Stack>
+      </PageSection>
+      <PageSection
+        heading="Configuration"
+        description="Configuration blocks for this server"
+      >
         <MCPJson toolset={toolset} />
       </PageSection>
-      <FeatureRequestModal
-        isOpen={isCustomDomainModalOpen}
-        onClose={() => setIsCustomDomainModalOpen(false)}
-        title="Host your MCP at a custom domain"
-        description="Custom domains require upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
-        actionType="mcp_custom_domain"
-        icon={Globe}
-        telemetryData={{ slug: toolset.slug }}
-        accountUpgrade
-      />
-      <FeatureRequestModal
-        isOpen={isMaxServersModalOpen}
-        onClose={() => setIsMaxServersModalOpen(false)}
-        title="Public MCP Server Limit Reached"
-        description={`You have reached the maximum number of public MCP servers for the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
-        actionType="max_public_mcp_servers"
-        icon={Globe}
-        telemetryData={{ slug: toolset.slug }}
-        accountUpgrade
-      />
+        <FeatureRequestModal
+          isOpen={isCustomDomainModalOpen}
+          onClose={() => setIsCustomDomainModalOpen(false)}
+          title="Host your MCP at a custom domain"
+          description="Custom domains require upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
+          actionType="mcp_custom_domain"
+          icon={Globe}
+          telemetryData={{ slug: toolset.slug }}
+          accountUpgrade
+        />
+        <FeatureRequestModal
+          isOpen={isMaxServersModalOpen}
+          onClose={() => setIsMaxServersModalOpen(false)}
+          title="Public MCP Server Limit Reached"
+          description={`You have reached the maximum number of public MCP servers for the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
+          actionType="max_public_mcp_servers"
+          icon={Globe}
+          telemetryData={{ slug: toolset.slug }}
+          accountUpgrade
+        />
     </Stack>
   );
 }
@@ -1003,7 +989,7 @@ function OAuthTabModal({
                       OAuth Authorization Server Metadata
                     </Type>
                     {jsonError && (
-                      <Type className="text-red-500 text-sm mt-1 !text-red-500">
+                      <Type className="!text-red-500 text-sm mt-1">
                         {jsonError}
                       </Type>
                     )}
@@ -1219,11 +1205,9 @@ function OAuthDetailsModal({
                     </Type>
                     <CodeBlock className="mt-1">
                       {mcpUrl
-                        ? `${
-                            new URL(mcpUrl).origin
-                          }/.well-known/oauth-authorization-server/mcp/${
-                            toolset.mcpSlug
-                          }`
+                        ? `${new URL(mcpUrl).origin
+                        }/.well-known/oauth-authorization-server/mcp/${toolset.mcpSlug
+                        }`
                         : ""}
                     </CodeBlock>
                   </div>

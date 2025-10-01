@@ -9,7 +9,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
-import FileUpload from "@/components/upload";
 import UploadAssetStep from "@/components/upload-asset/step";
 import UploadAssetStepper, {
   useStepper,
@@ -17,6 +16,7 @@ import UploadAssetStepper, {
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
+import {FullWidthUpload} from "@/components/upload";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -368,7 +368,7 @@ export function UploadOpenAPIContent({
       heading: "Upload OpenAPI Specification",
       description: "Upload your OpenAPI specification to get started.",
       display: (
-        <FileUpload
+        <FullWidthUpload
           onUpload={handleSpecUpload}
           allowedExtensions={["yaml", "yml", "json"]}
         />
