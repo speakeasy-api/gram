@@ -74,6 +74,10 @@ export type PromptTemplate = {
    */
   prompt: string;
   /**
+   * The URN of this prompt template
+   */
+  toolUrn: string;
+  /**
    * The suggested tool names associated with the prompt template
    */
   toolsHint: Array<string>;
@@ -139,6 +143,7 @@ export const PromptTemplate$inboundSchema: z.ZodType<
   name: z.string(),
   predecessor_id: z.string().optional(),
   prompt: z.string(),
+  tool_urn: z.string(),
   tools_hint: z.array(z.string()),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
 }).transform((v) => {
@@ -146,6 +151,7 @@ export const PromptTemplate$inboundSchema: z.ZodType<
     "created_at": "createdAt",
     "history_id": "historyId",
     "predecessor_id": "predecessorId",
+    "tool_urn": "toolUrn",
     "tools_hint": "toolsHint",
     "updated_at": "updatedAt",
   });
@@ -163,6 +169,7 @@ export type PromptTemplate$Outbound = {
   name: string;
   predecessor_id?: string | undefined;
   prompt: string;
+  tool_urn: string;
   tools_hint: Array<string>;
   updated_at: string;
 };
@@ -183,6 +190,7 @@ export const PromptTemplate$outboundSchema: z.ZodType<
   name: z.string(),
   predecessorId: z.string().optional(),
   prompt: z.string(),
+  toolUrn: z.string(),
   toolsHint: z.array(z.string()),
   updatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
@@ -190,6 +198,7 @@ export const PromptTemplate$outboundSchema: z.ZodType<
     createdAt: "created_at",
     historyId: "history_id",
     predecessorId: "predecessor_id",
+    toolUrn: "tool_urn",
     toolsHint: "tools_hint",
     updatedAt: "updated_at",
   });

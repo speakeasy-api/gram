@@ -26,6 +26,7 @@ all_deployment_ids AS (
 SELECT 
   (SELECT id FROM deployment) as deployment_id,
   htd.id,
+  htd.tool_urn,
   htd.name,
   htd.summary,
   htd.description,

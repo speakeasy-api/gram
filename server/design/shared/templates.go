@@ -5,7 +5,7 @@ import (
 )
 
 var PromptTemplate = Type("PromptTemplate", func() {
-	Required("id", "history_id", "name", "prompt", "engine", "kind", "tools_hint", "created_at", "updated_at")
+	Required("id", "history_id", "name", "prompt", "engine", "kind", "tools_hint", "tool_urn", "created_at", "updated_at")
 
 	Attribute("id", String, "The ID of the prompt template")
 	Attribute("history_id", String, "The revision tree ID for the prompt template")
@@ -39,6 +39,7 @@ var PromptTemplate = Type("PromptTemplate", func() {
 		Description("The last update date of the prompt template.")
 		Format(FormatDateTime)
 	})
+	Attribute("tool_urn", String, "The URN of this prompt template")
 
 	Meta("struct:pkg:path", "types")
 })

@@ -13,16 +13,26 @@ import {
   HTTPToolDefinition$Outbound,
   HTTPToolDefinition$outboundSchema,
 } from "./httptooldefinition.js";
+import {
+  PromptTemplate,
+  PromptTemplate$inboundSchema,
+  PromptTemplate$Outbound,
+  PromptTemplate$outboundSchema,
+} from "./prompttemplate.js";
 
 export type ListToolsResult = {
+  /**
+   * The list of HTTP tools
+   */
+  httpTools: Array<HTTPToolDefinition>;
   /**
    * The cursor to fetch results from
    */
   nextCursor?: string | undefined;
   /**
-   * The list of tools
+   * The list of prompt templates
    */
-  tools: Array<HTTPToolDefinition>;
+  promptTemplates: Array<PromptTemplate>;
 };
 
 /** @internal */
@@ -31,18 +41,22 @@ export const ListToolsResult$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  http_tools: z.array(HTTPToolDefinition$inboundSchema),
   next_cursor: z.string().optional(),
-  tools: z.array(HTTPToolDefinition$inboundSchema),
+  prompt_templates: z.array(PromptTemplate$inboundSchema),
 }).transform((v) => {
   return remap$(v, {
+    "http_tools": "httpTools",
     "next_cursor": "nextCursor",
+    "prompt_templates": "promptTemplates",
   });
 });
 
 /** @internal */
 export type ListToolsResult$Outbound = {
+  http_tools: Array<HTTPToolDefinition$Outbound>;
   next_cursor?: string | undefined;
-  tools: Array<HTTPToolDefinition$Outbound>;
+  prompt_templates: Array<PromptTemplate$Outbound>;
 };
 
 /** @internal */
@@ -51,11 +65,14 @@ export const ListToolsResult$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListToolsResult
 > = z.object({
+  httpTools: z.array(HTTPToolDefinition$outboundSchema),
   nextCursor: z.string().optional(),
-  tools: z.array(HTTPToolDefinition$outboundSchema),
+  promptTemplates: z.array(PromptTemplate$outboundSchema),
 }).transform((v) => {
   return remap$(v, {
+    httpTools: "http_tools",
     nextCursor: "next_cursor",
+    promptTemplates: "prompt_templates",
   });
 });
 

@@ -20,7 +20,7 @@ func TestToolsetsService_DeleteToolset_Success(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Toolset to Delete",
 		Description:            conv.Ptr("This toolset will be deleted"),
-		HTTPToolNames:          []string{"listPets"},
+		ToolUrns:               []string{},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -105,7 +105,7 @@ func TestToolsetsService_DeleteToolset_VerifyListAfterDelete(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "First Toolset",
 		Description:            nil,
-		HTTPToolNames:          []string{"listPets"},
+		ToolUrns:               []string{},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -115,7 +115,7 @@ func TestToolsetsService_DeleteToolset_VerifyListAfterDelete(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Second Toolset",
 		Description:            nil,
-		HTTPToolNames:          []string{"showPetById"},
+		ToolUrns:               []string{},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})

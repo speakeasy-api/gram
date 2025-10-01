@@ -7541,16 +7541,16 @@ components:
                 description:
                     type: string
                     description: Description of the toolset
-                http_tool_names:
-                    type: array
-                    items:
-                        type: string
-                    description: List of HTTP tool names to include
                 name:
                     type: string
                     description: The name of the toolset
                 project_slug_input:
                     type: string
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: List of tool URNs to include in the toolset
             required:
                 - name
         CreateToolsetRequestBody:
@@ -7564,14 +7564,14 @@ components:
                 description:
                     type: string
                     description: Description of the toolset
-                http_tool_names:
-                    type: array
-                    items:
-                        type: string
-                    description: List of HTTP tool names to include
                 name:
                     type: string
                     description: The name of the toolset
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: List of tool URNs to include in the toolset
             required:
                 - name
         CreditUsageResponseBody:
@@ -8341,6 +8341,9 @@ components:
                     type: string
                     enum:
                         - http
+                tool_urn:
+                    type: string
+                    description: The URN of this HTTP tool
                 updated_at:
                     type: string
                     description: The last update date of the tool.
@@ -8361,6 +8364,7 @@ components:
                 - http_method
                 - path
                 - schema
+                - tool_urn
                 - created_at
                 - updated_at
         HTTPToolDefinitionEntry:
@@ -8667,16 +8671,22 @@ components:
         ListToolsResult:
             type: object
             properties:
-                next_cursor:
-                    type: string
-                    description: The cursor to fetch results from
-                tools:
+                http_tools:
                     type: array
                     items:
                         $ref: '#/components/schemas/HTTPToolDefinition'
-                    description: The list of tools
+                    description: The list of HTTP tools
+                next_cursor:
+                    type: string
+                    description: The cursor to fetch results from
+                prompt_templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptTemplate'
+                    description: The list of prompt templates
             required:
-                - tools
+                - http_tools
+                - prompt_templates
         ListToolsetsResult:
             type: object
             properties:
@@ -9062,6 +9072,9 @@ components:
                 prompt:
                     type: string
                     description: The template content
+                tool_urn:
+                    type: string
+                    description: The URN of this prompt template
                 tools_hint:
                     type: array
                     items:
@@ -9080,6 +9093,7 @@ components:
                 - engine
                 - kind
                 - tools_hint
+                - tool_urn
                 - created_at
                 - updated_at
         PromptTemplateEntry:
@@ -9515,6 +9529,11 @@ components:
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: The tool URNs in this toolset
                 updated_at:
                     type: string
                     description: When the toolset was last updated.
@@ -9528,6 +9547,7 @@ components:
                 - slug
                 - http_tools
                 - prompt_templates
+                - tool_urns
                 - created_at
                 - updated_at
         ToolsetEntry:
@@ -9596,6 +9616,11 @@ components:
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: The tool URNs in this toolset
                 updated_at:
                     type: string
                     description: When the toolset was last updated.
@@ -9608,6 +9633,7 @@ components:
                 - slug
                 - http_tools
                 - prompt_templates
+                - tool_urns
                 - created_at
                 - updated_at
         UpdateEnvironmentForm:
@@ -9767,11 +9793,6 @@ components:
                 description:
                     type: string
                     description: The new description of the toolset
-                http_tool_names:
-                    type: array
-                    items:
-                        type: string
-                    description: List of HTTP tool names to include
                 mcp_enabled:
                     type: boolean
                     description: Whether the toolset is enabled for MCP
@@ -9792,12 +9813,17 @@ components:
                     type: array
                     items:
                         type: string
-                    description: List of prompt template names to include
+                    description: 'List of prompt template names to include (note: for actual prompts, not tools)'
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
                     pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: List of tool URNs to include in the toolset
             required:
                 - slug
         UpdateToolsetRequestBody:
@@ -9814,11 +9840,6 @@ components:
                 description:
                     type: string
                     description: The new description of the toolset
-                http_tool_names:
-                    type: array
-                    items:
-                        type: string
-                    description: List of HTTP tool names to include
                 mcp_enabled:
                     type: boolean
                     description: Whether the toolset is enabled for MCP
@@ -9837,7 +9858,12 @@ components:
                     type: array
                     items:
                         type: string
-                    description: List of prompt template names to include
+                    description: 'List of prompt template names to include (note: for actual prompts, not tools)'
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: List of tool URNs to include in the toolset
         UploadFunctionsForm:
             type: object
             properties:
