@@ -42,7 +42,6 @@ import { onboardingStepStorageKeys } from "../home/Home";
 import { Block, BlockInner } from "../toolBuilder/components";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
 import { ConfigForm } from "@/components/mcp_install_page/config_form";
-import { MinimumSuspense } from "@/components/ui/minimum-suspense";
 
 export function MCPDetailsRoot() {
   return <Outlet />;

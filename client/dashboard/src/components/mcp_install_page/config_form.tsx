@@ -12,7 +12,13 @@ import { Link } from "@/components/ui/link";
 import { CompactUpload, useAssetImageUploadHandler } from "../upload";
 import { Label as Heading } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
-import { ChangeEventHandler, useCallback, useEffect, useState } from "react";
+import {
+  ChangeEventHandler,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { AssetImage } from "../asset-image";
 import { GramError } from "@gram/client/models/errors";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,68 +29,166 @@ interface ConfigFormProps {
   toolset: Toolset;
 }
 
-interface ExternalDocumentationUrlInputHandlers {
-  value: string | undefined;
-  error?: boolean;
-  onChange: ChangeEventHandler<HTMLInputElement>;
-}
-
 interface MetadataParams {
   logoAssetId: string | undefined;
   externalDocumentationUrl: string | undefined;
 }
 
-function useExternalDocumentationUrlHandlers(
-  value: string | undefined,
-  setValue: (nextDocumentationUrl: string | undefined) => void,
-): ExternalDocumentationUrlInputHandlers {
-  const [valid, setValid] = useState(true);
+interface UseMcpInstallPageMetadataFormResult {
+  valid: boolean;
+  dirty: boolean;
+  isLoading: boolean;
+  metadataParams: MetadataParams;
+  logoUploadHandlers: {
+    onUpload: ReturnType<typeof useAssetImageUploadHandler>;
+    renderFilePreview: () => JSX.Element | undefined;
+  };
+  urlInputHandlers: {
+    value: string | undefined;
+    error?: boolean;
+    onChange: ChangeEventHandler<HTMLInputElement>;
+  };
+  reset: () => void;
+  save: () => void;
+}
+
+/*This is better implemented by taking a slice of the server state and running
+a true deep equals. But we don't seem to have a deep equality implementation
+available, and so we opt to implement a highly specific version instead  */
+function equalsServerState(
+  params: MetadataParams,
+  current: MCPInstallPageMetadata,
+): boolean {
+  return (Object.keys(params) as (keyof MetadataParams)[]).every((key) => {
+    return current[key] === params[key];
+  });
+}
+
+function useMcpInstallPageMetadataForm(
+  toolsetSlug: string,
+  currentMetadata?: MCPInstallPageMetadata,
+): UseMcpInstallPageMetadataFormResult {
+  const queryClient = useQueryClient();
+
+  const [metadataParams, setMetadataParams] = useState<MetadataParams>({
+    externalDocumentationUrl:
+      currentMetadata?.externalDocumentationUrl ?? undefined,
+    logoAssetId: currentMetadata?.logoAssetId ?? undefined,
+  });
+
+  const [urlValid, setUrlValid] = useState(true);
+
+  const mutation = useMcpInstallPageSetMutation({
+    onSettled: () => {
+      invalidateGetInstallPageMetadata(queryClient, [
+        { toolsetSlug },
+      ]);
+    },
+  });
 
   useEffect(() => {
-    if (!value) {
-      setValid(true);
+    if (
+      currentMetadata &&
+      !equalsServerState(metadataParams, currentMetadata)
+    ) {
+      setMetadataParams({
+        externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
+        logoAssetId: currentMetadata?.logoAssetId,
+      });
+    }
+  }, [currentMetadata]);
+
+  useEffect(() => {
+    if (!metadataParams.externalDocumentationUrl) {
+      setUrlValid(true);
       return;
     }
     try {
-      new URL(value);
-      setValid(true);
+      new URL(metadataParams.externalDocumentationUrl);
+      setUrlValid(true);
     } catch (err) {
-      setValid(false);
+      setUrlValid(false);
     }
-  }, [value]);
+  }, [metadataParams.externalDocumentationUrl]);
 
-  return {
-    value,
-    error: value && value.length > 0 ? !valid : undefined,
-    onChange: (e) =>
-      setValue(e.target.value === "" ? undefined : e.target.value),
-  };
-}
-
-function isDirty(
-  requestData: MetadataParams,
-  existingMetadata?: MCPInstallPageMetadata,
-) {
-  if (
-    !existingMetadata &&
-    (requestData.logoAssetId || requestData.externalDocumentationUrl)
-  ) {
-    return true;
-  }
-
-  if (existingMetadata) {
+  const dirty = useMemo(() => {
     if (
-      existingMetadata.logoAssetId !== requestData.logoAssetId ||
-      existingMetadata.externalDocumentationUrl !== requestData.externalDocumentationUrl
+      !currentMetadata &&
+      Object.values(metadataParams).some((val) => val !== undefined)
     ) {
       return true;
     }
-  }
-  return false;
+
+    if (
+      currentMetadata &&
+      !equalsServerState(metadataParams, currentMetadata)
+    ) {
+      return true;
+    }
+
+    return false;
+  }, [currentMetadata, metadataParams]);
+
+  const handleUpload = useAssetImageUploadHandler((assetResult) => {
+    setMetadataParams((prev) => ({
+      ...prev,
+      logoAssetId: assetResult.asset.id,
+    }));
+  });
+
+  const reset = useCallback(() => {
+    setMetadataParams({
+      logoAssetId: currentMetadata?.logoAssetId,
+      externalDocumentationUrl: currentMetadata?.externalDocumentationUrl,
+    });
+  }, [currentMetadata]);
+
+  const save = useCallback(() => {
+    mutation.mutate({
+      request: {
+        setInstallPageMetadataRequestBody: {
+          toolsetSlug,
+          ...metadataParams,
+        },
+      },
+    });
+  }, [toolsetSlug, metadataParams, mutation]);
+
+  return {
+    valid: urlValid,
+    dirty,
+    isLoading: mutation.isPending,
+    metadataParams,
+    logoUploadHandlers: {
+      onUpload: handleUpload,
+      renderFilePreview: () =>
+        metadataParams.logoAssetId ? (
+          <AssetImage
+            assetId={metadataParams.logoAssetId}
+            className="w-16 h-16"
+          />
+        ) : undefined,
+    },
+    urlInputHandlers: {
+      value: metadataParams.externalDocumentationUrl ?? '',
+      error:
+        metadataParams.externalDocumentationUrl &&
+        metadataParams.externalDocumentationUrl.length > 0
+          ? !urlValid
+          : undefined,
+      onChange: (e) =>
+        setMetadataParams((prev) => ({
+          ...prev,
+          externalDocumentationUrl:
+            e.target.value === "" ? undefined : e.target.value,
+        })),
+    },
+    reset,
+    save,
+  };
 }
 
 export function ConfigForm({ toolset }: ConfigFormProps) {
-  const queryClient = useQueryClient();
   const { url: mcpUrl } = useMcpUrl(toolset);
 
   const result = useGetInstallPageMetadata(
@@ -101,66 +205,14 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
     },
   );
 
-  const currentMetadata = result.data?.metadata
-
-  const [metadataParams, setMetadataParams] = useState<MetadataParams>({
-    externalDocumentationUrl:
-      currentMetadata?.externalDocumentationUrl ?? undefined,
-    logoAssetId: currentMetadata?.logoAssetId ?? undefined,
-  });
-
-  const mutation = useMcpInstallPageSetMutation({
-    onSettled: () => {
-      invalidateGetInstallPageMetadata(queryClient, [
-        { toolsetSlug: toolset.slug },
-      ]);
-    },
-  });
-
-  useEffect(() => {
-    if (
-      metadataParams.externalDocumentationUrl !==
-        currentMetadata?.externalDocumentationUrl ||
-      metadataParams.logoAssetId !== currentMetadata?.logoAssetId
-    ) {
-      setMetadataParams({
-        externalDocumentationUrl:
-          currentMetadata?.externalDocumentationUrl ?? undefined,
-        logoAssetId: currentMetadata?.logoAssetId ?? undefined,
-      });
-    }
-  }, [result.data?.metadata]);
-
-  const handleUpload = useAssetImageUploadHandler((assetResult) => {
-    setMetadataParams({ ...metadataParams, logoAssetId: assetResult.asset.id });
-  });
-
-  const urlInputHandlers = useExternalDocumentationUrlHandlers(
-    metadataParams.externalDocumentationUrl,
-    (value) => {
-      setMetadataParams({
-        ...metadataParams,
-        externalDocumentationUrl: value,
-      });
-    },
-  );
-
-  const save = useCallback(() => {
-    mutation.mutate({
-      request: {
-        setInstallPageMetadataRequestBody: {
-          toolsetSlug: toolset.slug,
-          ...metadataParams,
-        },
-      },
-    });
-  }, [toolset, metadataParams, mutation]);
+  const form = useMcpInstallPageMetadataForm(toolset.slug, result.data?.metadata);
+  const isLoading = result.isLoading || form.isLoading;
 
   return (
     <Stack
       className={cn(
         "gap-4 items-start",
-        mutation.status === "pending" && "animate-pulse",
+        isLoading && "animate-pulse",
       )}
     >
       <Stack direction="horizontal" align="center" gap={2}>
@@ -186,15 +238,8 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
       </Type>
       <div className="inline-block">
         <CompactUpload
-          onUpload={handleUpload}
-          renderFilePreview={() =>
-            metadataParams.logoAssetId && (
-              <AssetImage
-                assetId={metadataParams.logoAssetId}
-                className="w-16 h-16"
-              />
-            )
-          }
+          onUpload={form.logoUploadHandlers.onUpload}
+          renderFilePreview={form.logoUploadHandlers.renderFilePreview}
         />
       </div>
       <Heading> Documentation Link </Heading>
@@ -206,29 +251,15 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
         type="text"
         placeholder="https://my-documentation.link"
         className="w-full"
-        {...urlInputHandlers}
+        {...form.urlInputHandlers}
       />
       <Stack direction={"horizontal"} gap={2}>
-        <Button
-          variant="secondary"
-          disabled={!isDirty(metadataParams, currentMetadata)}
-          onClick={() => {
-            setMetadataParams({
-              logoAssetId: currentMetadata?.logoAssetId,
-              externalDocumentationUrl:
-                currentMetadata?.externalDocumentationUrl,
-            });
-          }}
-        >
+        <Button variant="tertiary" disabled={!form.dirty} onClick={form.reset}>
           <Button.Text>Discard</Button.Text>
         </Button>
         <Button
-          onClick={save}
-          disabled={
-            result.isLoading ||
-            urlInputHandlers.error ||
-            !isDirty(metadataParams, currentMetadata)
-          }
+          onClick={form.save}
+          disabled={isLoading || !form.valid || !form.dirty}
         >
           <Button.Text>Save</Button.Text>
         </Button>
