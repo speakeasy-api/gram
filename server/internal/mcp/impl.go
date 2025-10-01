@@ -22,6 +22,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
@@ -38,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	installpage_repo "github.com/speakeasy-api/gram/server/internal/mcpinstallpage/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
@@ -49,22 +51,23 @@ import (
 )
 
 type Service struct {
-	logger            *slog.Logger
-	tracer            trace.Tracer
-	metrics           *metrics
-	db                *pgxpool.Pool
-	authRepo          *auth_repo.Queries
-	toolsetsRepo      *toolsets_repo.Queries
-	orgsRepo          *organizations_repo.Queries
-	auth              *auth.Auth
-	env               gateway.EnvironmentLoader
-	serverURL         *url.URL
-	posthog           *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	toolProxy         *gateway.ToolProxy
-	oauthService      *oauth.Service
-	oauthRepo         *oauth_repo.Queries
-	billingTracker    billing.Tracker
-	billingRepository billing.Repository
+	logger             *slog.Logger
+	tracer             trace.Tracer
+	metrics            *metrics
+	db                 *pgxpool.Pool
+	authRepo           *auth_repo.Queries
+	toolsetsRepo       *toolsets_repo.Queries
+	mcpInstallPageRepo *installpage_repo.Queries
+	orgsRepo           *organizations_repo.Queries
+	auth               *auth.Auth
+	env                gateway.EnvironmentLoader
+	serverURL          *url.URL
+	posthog            *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	toolProxy          *gateway.ToolProxy
+	oauthService       *oauth.Service
+	oauthRepo          *oauth_repo.Queries
+	billingTracker     billing.Tracker
+	billingRepository  billing.Repository
 }
 
 type oauthTokenInputs struct {
@@ -108,17 +111,18 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("mcp"))
 
 	return &Service{
-		logger:       logger,
-		tracer:       tracer,
-		metrics:      newMetrics(meter, logger),
-		db:           db,
-		authRepo:     auth_repo.New(db),
-		toolsetsRepo: toolsets_repo.New(db),
-		orgsRepo:     organizations_repo.New(db),
-		auth:         auth.New(logger, db, sessions),
-		env:          env,
-		serverURL:    serverURL,
-		posthog:      posthog,
+		logger:             logger,
+		tracer:             tracer,
+		metrics:            newMetrics(meter, logger),
+		db:                 db,
+		authRepo:           auth_repo.New(db),
+		toolsetsRepo:       toolsets_repo.New(db),
+		mcpInstallPageRepo: installpage_repo.New(db),
+		orgsRepo:           organizations_repo.New(db),
+		auth:               auth.New(logger, db, sessions),
+		env:                env,
+		serverURL:          serverURL,
+		posthog:            posthog,
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
@@ -308,6 +312,8 @@ type hostedPageData struct {
 	MCPConfigURIEncoded string
 	OrganizationName    string
 	SiteURL             string
+	LogoAssetURL        string
+	DocsURL             string
 }
 
 func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error {
@@ -343,6 +349,24 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to describe toolset").Log(ctx, s.logger)
+	}
+
+	var (
+		logoAssetURL string
+		docsURL      string
+	)
+	metadataRecord, metadataErr := s.mcpInstallPageRepo.GetMetadataForToolset(ctx, toolset.ID)
+	if metadataErr != nil {
+		if !errors.Is(metadataErr, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "failed to load MCP install page metadata", attr.SlogToolsetID(toolset.ID.String()), attr.SlogError(metadataErr))
+		}
+	} else {
+		if metadataRecord.LogoID.Valid {
+			logoAssetURL = fmt.Sprintf("/rpc/assets.serveImage?id=%s", metadataRecord.LogoID.UUID.String())
+		}
+		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
+			docsURL = strings.TrimSpace(*docs)
+		}
 	}
 
 	envHeaders := []string{}
@@ -409,6 +433,8 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		MCPConfigURIEncoded: url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
 		OrganizationName:    organizationName,
 		SiteURL:             os.Getenv("GRAM_SITE_URL"),
+		LogoAssetURL:        logoAssetURL,
+		DocsURL:             docsURL,
 	}
 
 	hostedPageTmpl, err := template.New("hosted_page").Funcs(template.FuncMap{

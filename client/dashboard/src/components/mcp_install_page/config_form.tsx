@@ -6,7 +6,6 @@ import {
   useGetInstallPageMetadata,
   useMcpInstallPageSetMutation,
   invalidateGetInstallPageMetadata,
-  McpInstallPageSetMutationData,
 } from "@gram/client/react-query";
 import { Button, Stack, Input, cn, Icon } from "@speakeasy-api/moonshine";
 import { Link } from "@/components/ui/link";
@@ -15,7 +14,6 @@ import { Label as Heading } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
 import {
   ChangeEventHandler,
-  FocusEventHandler,
   useCallback,
   useEffect,
   useState,
@@ -31,51 +29,62 @@ interface ConfigFormProps {
 }
 
 interface ExternalDocumentationUrlInputHandlers {
-  value: string;
+  value: string | undefined;
   error?: boolean;
   onChange: ChangeEventHandler<HTMLInputElement>;
-  onBlur: FocusEventHandler<HTMLInputElement>;
+}
+
+interface MetadataParams {
+  logoAssetId: string | undefined;
+  externalDocumentationUrl: string | undefined;
 }
 
 function useExternalDocumentationUrlHandlers(
   value: string | undefined,
-  setValue: (nextDocumentationUrl: string) => void,
+  setValue: (nextDocumentationUrl: string | undefined) => void,
 ): ExternalDocumentationUrlInputHandlers {
-  const [urlValue, setUrlValue] = useState(value ?? "");
   const [valid, setValid] = useState(true);
 
-  useEffect(() => setUrlValue(value ?? ""), [value]);
-
   useEffect(() => {
+    if (!value) {
+      setValid(true)
+      return
+    }
     try {
-      new URL(urlValue);
+      new URL(value);
       setValid(true);
     } catch (err) {
       setValid(false);
     }
-  }, [urlValue]);
+  }, [value]);
 
   return {
-    value: urlValue,
+    value,
     error: value && value.length > 0 ? !valid : undefined,
-    onChange: (e) => setUrlValue(e.target.value),
-    onBlur: () => {
-      if (valid) {
-        setValue(urlValue);
-      }
-    },
+    onChange: (e) => setValue(e.target.value === '' ? undefined : e.target.value),
   };
 }
 
 function shouldUpdate(
-  requestData: McpInstallPageSetMutationData,
+  requestData: MetadataParams,
   metadata?: MCPInstallPageMetadata,
 ) {
+  if (
+    (!metadata && (requestData.logoAssetId || requestData.externalDocumentationUrl))) {
+    return true
+  }
+
   if (metadata) {
-    if (metadata.toolsetId !== requestData.toolsetId || metadata.externalDocumentationUrl !== requestData.externalDocumentationUrl) {
-      return true
+    if (
+      metadata.logoAssetId !== requestData.logoAssetId ||
+      metadata.externalDocumentationUrl !==
+        requestData.externalDocumentationUrl
+    ) {
+      console.log('cats')
+      return true;
     }
   }
+  return false;
 }
 
 export function ConfigForm({ toolset }: ConfigFormProps) {
@@ -96,10 +105,7 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
     },
   );
 
-  const [metadataParams, setMetadataParams] = useState<{
-    logoAssetId: string | undefined;
-    externalDocumentationUrl: string | undefined;
-  }>({
+  const [metadataParams, setMetadataParams] = useState<MetadataParams>({
     externalDocumentationUrl:
       result.data?.metadata?.externalDocumentationUrl ?? undefined,
     logoAssetId: result.data?.metadata?.logoAssetId ?? undefined,
@@ -127,18 +133,7 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
     }
   }, [result.data?.metadata]);
 
-  const save = useCallback(() => {
-    mutation.mutate({
-      request: {
-        setInstallPageMetadataRequestBody: {
-          toolsetId: toolset.id,
-          ...metadataParams,
-        },
-      },
-    });
-  }, [toolset, metadataParams, mutation]);
-
-  const uploadHandler = useAssetImageUploadHandler((assetResult) => {
+  const handleUpload = useAssetImageUploadHandler((assetResult) => {
     setMetadataParams({ ...metadataParams, logoAssetId: assetResult.asset.id });
   });
 
@@ -151,6 +146,17 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
       });
     },
   );
+
+  const save = useCallback(() => {
+    mutation.mutate({
+      request: {
+        setInstallPageMetadataRequestBody: {
+          toolsetId: toolset.id,
+          ...metadataParams,
+        },
+      },
+    });
+  }, [toolset, metadataParams, mutation]);
 
   return (
     <Stack
@@ -182,11 +188,11 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
       </Type>
       <div className="inline-block">
         <CompactUpload
-          onUpload={uploadHandler}
+          onUpload={handleUpload}
           renderFilePreview={() =>
-            result.data?.metadata?.logoAssetId && (
+            metadataParams.logoAssetId && (
               <AssetImage
-                assetId={result.data?.metadata?.logoAssetId!}
+                assetId={metadataParams.logoAssetId}
                 className="w-16 h-16"
               />
             )
@@ -205,9 +211,15 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
         {...urlInputHandlers}
       />
       <Stack direction={"horizontal"} gap={2}>
-        <Button onClick={save}> Save </Button>
+        <Button
+          onClick={save}
+          disabled={urlInputHandlers.error || !shouldUpdate(metadataParams, result.data?.metadata)}
+        >
+          <Button.Text>Save</Button.Text>{" "}
+        </Button>
         <Button
           variant="secondary"
+          disabled={!shouldUpdate(metadataParams, result.data?.metadata)}
           onClick={() => {
             setMetadataParams({
               logoAssetId: result.data?.metadata?.logoAssetId,
@@ -216,7 +228,7 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
             });
           }}
         >
-          Discard
+          <Button.Text>Discard</Button.Text>
         </Button>
       </Stack>
     </Stack>

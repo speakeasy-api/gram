@@ -113,13 +113,13 @@ func (s *Service) SetInstallPageMetadata(ctx context.Context, payload *gen.SetIn
 		return nil, err
 	}
 
-	var logoID uuid.UUID
+	var logoID uuid.NullUUID
 	if payload.LogoAssetID != nil {
 		parsedLogoID, err := uuid.Parse(*payload.LogoAssetID)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid logo asset ID").Log(ctx, s.logger)
 		}
-		logoID = uuid.UUID{UUID: parsedLogoID, Valid: true}
+		logoID = uuid.NullUUID{UUID: parsedLogoID, Valid: true}
 	}
 
 	externalDocURL := conv.ToPGText("")
