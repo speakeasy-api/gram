@@ -56,9 +56,6 @@ linters:
       - path: internal/billing/stub\.go
         linters:
           - musttag
-      - path: cmd/local/.*
-        linters:
-          - all
   settings:
     sloglint:
       no-mixed-args: true
