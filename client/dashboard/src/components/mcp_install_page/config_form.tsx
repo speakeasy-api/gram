@@ -61,21 +61,21 @@ function useExternalDocumentationUrlHandlers(
   };
 }
 
-function shouldUpdate(
+function isDirty(
   requestData: MetadataParams,
-  metadata?: MCPInstallPageMetadata,
+  existingMetadata?: MCPInstallPageMetadata,
 ) {
   if (
-    !metadata &&
+    !existingMetadata &&
     (requestData.logoAssetId || requestData.externalDocumentationUrl)
   ) {
     return true;
   }
 
-  if (metadata) {
+  if (existingMetadata) {
     if (
-      metadata.logoAssetId !== requestData.logoAssetId ||
-      metadata.externalDocumentationUrl !== requestData.externalDocumentationUrl
+      existingMetadata.logoAssetId !== requestData.logoAssetId ||
+      existingMetadata.externalDocumentationUrl !== requestData.externalDocumentationUrl
     ) {
       return true;
     }
@@ -101,10 +101,12 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
     },
   );
 
+  const currentMetadata = result.data?.metadata
+
   const [metadataParams, setMetadataParams] = useState<MetadataParams>({
     externalDocumentationUrl:
-      result.data?.metadata?.externalDocumentationUrl ?? undefined,
-    logoAssetId: result.data?.metadata?.logoAssetId ?? undefined,
+      currentMetadata?.externalDocumentationUrl ?? undefined,
+    logoAssetId: currentMetadata?.logoAssetId ?? undefined,
   });
 
   const mutation = useMcpInstallPageSetMutation({
@@ -118,13 +120,13 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
   useEffect(() => {
     if (
       metadataParams.externalDocumentationUrl !==
-        result.data?.metadata?.externalDocumentationUrl ||
-      metadataParams.logoAssetId !== result.data?.metadata?.logoAssetId
+        currentMetadata?.externalDocumentationUrl ||
+      metadataParams.logoAssetId !== currentMetadata?.logoAssetId
     ) {
       setMetadataParams({
         externalDocumentationUrl:
-          result.data?.metadata?.externalDocumentationUrl ?? undefined,
-        logoAssetId: result.data?.metadata?.logoAssetId ?? undefined,
+          currentMetadata?.externalDocumentationUrl ?? undefined,
+        logoAssetId: currentMetadata?.logoAssetId ?? undefined,
       });
     }
   }, [result.data?.metadata]);
@@ -208,26 +210,27 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
       />
       <Stack direction={"horizontal"} gap={2}>
         <Button
-          onClick={save}
-          disabled={
-            urlInputHandlers.error ||
-            !shouldUpdate(metadataParams, result.data?.metadata)
-          }
-        >
-          <Button.Text>Save</Button.Text>{" "}
-        </Button>
-        <Button
           variant="secondary"
-          disabled={!shouldUpdate(metadataParams, result.data?.metadata)}
+          disabled={!isDirty(metadataParams, currentMetadata)}
           onClick={() => {
             setMetadataParams({
-              logoAssetId: result.data?.metadata?.logoAssetId,
+              logoAssetId: currentMetadata?.logoAssetId,
               externalDocumentationUrl:
-                result.data?.metadata?.externalDocumentationUrl,
+                currentMetadata?.externalDocumentationUrl,
             });
           }}
         >
           <Button.Text>Discard</Button.Text>
+        </Button>
+        <Button
+          onClick={save}
+          disabled={
+            result.isLoading ||
+            urlInputHandlers.error ||
+            !isDirty(metadataParams, currentMetadata)
+          }
+        >
+          <Button.Text>Save</Button.Text>
         </Button>
       </Stack>
     </Stack>
