@@ -178,7 +178,7 @@ func (s *Service) SetInstallPageMetadata(ctx context.Context, payload *gen.SetIn
 		logoID = uuid.NullUUID{UUID: parsedLogoID, Valid: true}
 	}
 
-	externalDocURL := conv.ToPGText("")
+	var externalDocURL pgtype.Text
 	if payload.ExternalDocumentationURL != nil {
 		externalDocURL = conv.ToPGText(*payload.ExternalDocumentationURL)
 	}

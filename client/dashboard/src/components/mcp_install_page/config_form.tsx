@@ -104,7 +104,7 @@ function useMcpInstallPageMetadataForm(
     try {
       new URL(metadataParams.externalDocumentationUrl);
       setUrlValid(true);
-    } catch (err) {
+    } catch {
       setUrlValid(false);
     }
   }, [metadataParams.externalDocumentationUrl]);
