@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/http/httptrace"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -34,16 +37,41 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	ctx := req.Context()
 	startTime := time.Now()
 
+	base := h.rt
+	if base == nil {
+		base = http.DefaultTransport
+	}
+
+	var clientIP string
+
+	httpTrace := &httptrace.ClientTrace{
+		GotConn: func(info httptrace.GotConnInfo) {
+			if info.Conn != nil {
+				remote := info.Conn.RemoteAddr().String()
+				if host, _, err := net.SplitHostPort(remote); err == nil {
+					clientIP = host
+				}
+			}
+		},
+	}
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), httpTrace))
+
 	// Execute the request
-	resp, err := h.rt.RoundTrip(req)
+	resp, err := base.RoundTrip(req)
 
 	// Calculate duration
 	durationMs := time.Since(startTime).Seconds() * 1000
 
 	// Extract tool information from context
-	tool, ok := ctx.Value("tool").(*ToolInfo)
+	tool, ok := ctx.Value(ToolInfoContextKey).(*ToolInfo)
 	if !ok {
 		// If no tool context, just pass through
+		return resp, err
+	}
+
+	// Read the request body from the context
+	reqBodyBytes, ok := ctx.Value(RequestBodyContextKey).([]byte)
+	if !ok {
 		return resp, err
 	}
 
@@ -65,21 +93,42 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		statusCode = uint16(oops.StatusCodes[oops.CodeGatewayError])
 	}
 
-	// Read the request body for logging
-	var reqBodyBytes []byte
-	if req.Body != nil {
-		reqBodyBytes, _ = io.ReadAll(req.Body)
-		req.Body = io.NopCloser(bytes.NewReader(reqBodyBytes))
-	}
-
-	// Read the response body for logging
-	var respBodyBytes []byte
+	// Check if this is a streaming response (SSE)
+	isStreaming := false
 	var respBodyBuffer bytes.Buffer
+	var respBodyBytes []byte
+
 	if resp != nil && resp.Body != nil {
-		// Use TeeReader to capture the response body while still allowing it to be read
-		teeReader := io.TeeReader(resp.Body, &respBodyBuffer)
-		respBodyBytes, _ = io.ReadAll(teeReader)
-		resp.Body = io.NopCloser(bytes.NewReader(respBodyBytes))
+		contentType := resp.Header.Get("Content-Type")
+		isStreaming = strings.HasPrefix(contentType, "text/event-stream")
+
+		if isStreaming {
+			// For streaming responses, we'll capture the first chunk and mark as streaming.
+			// The proxy will handle the actual streaming data
+			firstChunk := make([]byte, 1024) // Read the first 1KB to get initial data
+			n, readErr := resp.Body.Read(firstChunk)
+			if readErr != nil && readErr != io.EOF {
+				return resp, readErr
+			}
+
+			if n > 0 {
+				respBodyBuffer.Write(firstChunk[:n])
+			}
+
+			// Reset the body for the proxy to handle streaming
+			resp.Body = io.NopCloser(io.MultiReader(
+				bytes.NewReader(firstChunk[:n]),
+				resp.Body,
+			))
+		} else {
+			// For non-streaming responses, read the entire body
+			respBodyBytes, err = io.ReadAll(resp.Body)
+			if err != nil {
+				return resp, err
+			}
+
+			resp.Body = io.NopCloser(bytes.NewReader(respBodyBytes))
+		}
 	}
 
 	// Get request headers
@@ -100,10 +149,21 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		}
 	}
 
-	// Extract client IP from request
-	clientIP := req.RemoteAddr
-	if clientIP == "" {
-		clientIP = "0.0.0.0"
+	// Prepare response body data for logging
+	var responseBody *string
+	var responseBodySkip *string
+	var responseBodyBytes uint64
+
+	if isStreaming {
+		// For streaming responses, mark as truncated
+		responseBody = conv.Ptr(respBodyBuffer.String())
+		responseBodySkip = nil
+		responseBodyBytes = uint64(len(respBodyBuffer.Bytes()))
+	} else {
+		// For non-streaming responses, log the full body
+		responseBody = conv.Ptr(string(respBodyBytes))
+		responseBodySkip = nil
+		responseBodyBytes = uint64(len(respBodyBytes))
 	}
 
 	// Log this individual HTTP attempt to ClickHouse
@@ -127,14 +187,21 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		RequestBodySkip:   nil,
 		RequestBodyBytes:  uint64(len(reqBodyBytes)),
 		ResponseHeaders:   responseHeaders,
-		ResponseBody:      conv.Ptr(respBodyBuffer.String()),
-		ResponseBodySkip:  nil,
-		ResponseBodyBytes: uint64(len(respBodyBytes)),
+		ResponseBody:      responseBody,
+		ResponseBodySkip:  responseBodySkip,
+		ResponseBodyBytes: responseBodyBytes,
 	})
 
 	if logErr != nil {
 		h.logger.ErrorContext(ctx, "failed to log HTTP attempt to ClickHouse",
 			attr.SlogError(logErr),
+			attr.SlogToolID(tool.ID),
+			attr.SlogHTTPRequestMethod(req.Method),
+			attr.SlogURLOriginal(req.URL.String()),
+		)
+	} else if isStreaming {
+		// Log that we handled a streaming response
+		h.logger.DebugContext(ctx, "logged streaming HTTP response to ClickHouse",
 			attr.SlogToolID(tool.ID),
 			attr.SlogHTTPRequestMethod(req.Method),
 			attr.SlogURLOriginal(req.URL.String()),
@@ -145,6 +212,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 }
 
 const ToolInfoContextKey = "tool_info_context_key"
+const RequestBodyContextKey = "request_body_context_key"
 
 // ToolInfo represents the minimal tool information needed for logging
 type ToolInfo struct {

@@ -474,6 +474,17 @@ func reverseProxyRequest(ctx context.Context,
 	}
 	ctx = context.WithValue(ctx, tm.ToolInfoContextKey, toolInfo)
 
+	// Clone the request body before it's read by the client
+	var reqBodyBytes []byte
+	if req.Body != nil {
+		reqBodyBytes, _ = io.ReadAll(req.Body)
+		req.Body = io.NopCloser(bytes.NewReader(reqBodyBytes))
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(reqBodyBytes)), nil
+		}
+	}
+	ctx = context.WithValue(ctx, tm.RequestBodyContextKey, reqBodyBytes)
+
 	executeRequest := func() (*http.Response, error) {
 		// Clone the request for each retry attempt
 		retryReq := req.Clone(ctx)
