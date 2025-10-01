@@ -12,12 +12,7 @@ import { Link } from "@/components/ui/link";
 import { CompactUpload, useAssetImageUploadHandler } from "../upload";
 import { Label as Heading } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
-import {
-  ChangeEventHandler,
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { ChangeEventHandler, useCallback, useEffect, useState } from "react";
 import { AssetImage } from "../asset-image";
 import { GramError } from "@gram/client/models/errors";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,8 +42,8 @@ function useExternalDocumentationUrlHandlers(
 
   useEffect(() => {
     if (!value) {
-      setValid(true)
-      return
+      setValid(true);
+      return;
     }
     try {
       new URL(value);
@@ -61,7 +56,8 @@ function useExternalDocumentationUrlHandlers(
   return {
     value,
     error: value && value.length > 0 ? !valid : undefined,
-    onChange: (e) => setValue(e.target.value === '' ? undefined : e.target.value),
+    onChange: (e) =>
+      setValue(e.target.value === "" ? undefined : e.target.value),
   };
 }
 
@@ -70,17 +66,17 @@ function shouldUpdate(
   metadata?: MCPInstallPageMetadata,
 ) {
   if (
-    (!metadata && (requestData.logoAssetId || requestData.externalDocumentationUrl))) {
-    return true
+    !metadata &&
+    (requestData.logoAssetId || requestData.externalDocumentationUrl)
+  ) {
+    return true;
   }
 
   if (metadata) {
     if (
       metadata.logoAssetId !== requestData.logoAssetId ||
-      metadata.externalDocumentationUrl !==
-        requestData.externalDocumentationUrl
+      metadata.externalDocumentationUrl !== requestData.externalDocumentationUrl
     ) {
-      console.log('cats')
       return true;
     }
   }
@@ -213,7 +209,10 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
       <Stack direction={"horizontal"} gap={2}>
         <Button
           onClick={save}
-          disabled={urlInputHandlers.error || !shouldUpdate(metadataParams, result.data?.metadata)}
+          disabled={
+            urlInputHandlers.error ||
+            !shouldUpdate(metadataParams, result.data?.metadata)
+          }
         >
           <Button.Text>Save</Button.Text>{" "}
         </Button>
