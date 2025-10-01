@@ -31,7 +31,7 @@ func TestToolsetsService_ListToolsets_Success(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "First Toolset",
 		Description:            conv.Ptr("First test toolset"),
-		HTTPToolNames:          []string{tools[0].Name, tools[1].Name},
+		ToolUrns:               []string{tools[0].ToolUrn.String(), tools[1].ToolUrn.String()},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -41,7 +41,7 @@ func TestToolsetsService_ListToolsets_Success(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Second Toolset",
 		Description:            conv.Ptr("Second test toolset"),
-		HTTPToolNames:          []string{tools[2].Name, tools[3].Name},
+		ToolUrns:               []string{tools[2].ToolUrn.String(), tools[3].ToolUrn.String()},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -127,7 +127,7 @@ func TestToolsetsService_ListToolsets_VerifyDetails(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Detailed Toolset",
 		Description:            conv.Ptr("A toolset with details"),
-		HTTPToolNames:          []string{"listPets", "createPets", "deletePet"},
+		ToolUrns:               []string{},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})

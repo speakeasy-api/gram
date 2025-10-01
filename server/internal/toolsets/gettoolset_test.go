@@ -34,7 +34,7 @@ func TestToolsetsService_GetToolset_Success(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
 		Description:            conv.Ptr("A test toolset"),
-		HTTPToolNames:          []string{tools[0].Name, tools[1].Name},
+		ToolUrns:               []string{tools[0].ToolUrn.String(), tools[1].ToolUrn.String()},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -90,7 +90,7 @@ func TestToolsetsService_GetToolset_WithEnvironment(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Toolset with Env",
 		Description:            conv.Ptr("A toolset with environment"),
-		HTTPToolNames:          []string{"showPetById"},
+		ToolUrns:               []string{},
 		DefaultEnvironmentSlug: (*types.Slug)(conv.Ptr("get-test-env")),
 		ProjectSlugInput:       nil,
 	})
@@ -169,7 +169,7 @@ func TestToolsetsService_GetToolset_VerifyAllFields(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Complete Toolset",
 		Description:            conv.Ptr("A complete toolset with all fields"),
-		HTTPToolNames:          []string{"listPets", "createPets", "showPetById", "deletePet"},
+		ToolUrns:               []string{},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})

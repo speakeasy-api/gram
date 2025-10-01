@@ -22,10 +22,6 @@ export type UpdateToolsetRequestBody = {
    */
   description?: string | undefined;
   /**
-   * List of HTTP tool names to include
-   */
-  httpToolNames?: Array<string> | undefined;
-  /**
    * Whether the toolset is enabled for MCP
    */
   mcpEnabled?: boolean | undefined;
@@ -42,9 +38,13 @@ export type UpdateToolsetRequestBody = {
    */
   name?: string | undefined;
   /**
-   * List of prompt template names to include
+   * List of prompt template names to include (note: for actual prompts, not tools)
    */
   promptTemplateNames?: Array<string> | undefined;
+  /**
+   * List of tool URNs to include in the toolset
+   */
+  toolUrns?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -56,21 +56,21 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
   custom_domain_id: z.string().optional(),
   default_environment_slug: z.string().optional(),
   description: z.string().optional(),
-  http_tool_names: z.array(z.string()).optional(),
   mcp_enabled: z.boolean().optional(),
   mcp_is_public: z.boolean().optional(),
   mcp_slug: z.string().optional(),
   name: z.string().optional(),
   prompt_template_names: z.array(z.string()).optional(),
+  tool_urns: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     "custom_domain_id": "customDomainId",
     "default_environment_slug": "defaultEnvironmentSlug",
-    "http_tool_names": "httpToolNames",
     "mcp_enabled": "mcpEnabled",
     "mcp_is_public": "mcpIsPublic",
     "mcp_slug": "mcpSlug",
     "prompt_template_names": "promptTemplateNames",
+    "tool_urns": "toolUrns",
   });
 });
 
@@ -79,12 +79,12 @@ export type UpdateToolsetRequestBody$Outbound = {
   custom_domain_id?: string | undefined;
   default_environment_slug?: string | undefined;
   description?: string | undefined;
-  http_tool_names?: Array<string> | undefined;
   mcp_enabled?: boolean | undefined;
   mcp_is_public?: boolean | undefined;
   mcp_slug?: string | undefined;
   name?: string | undefined;
   prompt_template_names?: Array<string> | undefined;
+  tool_urns?: Array<string> | undefined;
 };
 
 /** @internal */
@@ -96,21 +96,21 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
   customDomainId: z.string().optional(),
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
-  httpToolNames: z.array(z.string()).optional(),
   mcpEnabled: z.boolean().optional(),
   mcpIsPublic: z.boolean().optional(),
   mcpSlug: z.string().optional(),
   name: z.string().optional(),
   promptTemplateNames: z.array(z.string()).optional(),
+  toolUrns: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     customDomainId: "custom_domain_id",
     defaultEnvironmentSlug: "default_environment_slug",
-    httpToolNames: "http_tool_names",
     mcpEnabled: "mcp_enabled",
     mcpIsPublic: "mcp_is_public",
     mcpSlug: "mcp_slug",
     promptTemplateNames: "prompt_template_names",
+    toolUrns: "tool_urns",
   });
 });
 
