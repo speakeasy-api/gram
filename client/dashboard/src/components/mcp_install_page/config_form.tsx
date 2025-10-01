@@ -13,7 +13,8 @@ import { CompactUpload, useAssetImageUploadHandler } from "../upload";
 import { Label as Heading } from "@/components/ui/label";
 import { Type } from "@/components/ui/type";
 import {
-  ChangeEventHandler,
+  type ChangeEventHandler,
+  type JSX,
   useCallback,
   useEffect,
   useMemo,
