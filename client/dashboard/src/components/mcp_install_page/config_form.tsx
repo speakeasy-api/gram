@@ -88,7 +88,7 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
   const { url: mcpUrl } = useMcpUrl(toolset);
 
   const result = useGetInstallPageMetadata(
-    { toolsetId: toolset.id },
+    { toolsetSlug: toolset.slug },
     undefined,
     {
       retry: (_failCount, err) => {
@@ -112,7 +112,7 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
   const mutation = useMcpInstallPageSetMutation({
     onSettled: () => {
       invalidateGetInstallPageMetadata(queryClient, [
-        { toolsetId: toolset.id },
+        { toolsetSlug: toolset.slug },
       ]);
     },
   });
@@ -149,7 +149,7 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
     mutation.mutate({
       request: {
         setInstallPageMetadataRequestBody: {
-          toolsetId: toolset.id,
+          toolsetSlug: toolset.slug,
           ...metadataParams,
         },
       },
