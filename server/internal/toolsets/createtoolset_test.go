@@ -29,10 +29,10 @@ func TestToolsetsService_CreateToolset_Success(t *testing.T) {
 	require.NoError(t, err, "list deployment tools")
 	require.Len(t, tools, 4, "expected 4 tools from petstore")
 
-	// Extract tool names
-	toolNames := make([]string, len(tools))
+	// Extract tool URNs
+	toolUrns := make([]string, len(tools))
 	for i, tool := range tools {
-		toolNames[i] = tool.Name
+		toolUrns[i] = tool.ToolUrn.String()
 	}
 
 	// Test creating a toolset with tools from the deployment
@@ -40,7 +40,7 @@ func TestToolsetsService_CreateToolset_Success(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
 		Description:            conv.Ptr("A test toolset"),
-		HTTPToolNames:          toolNames[:2], // Use first two tools
+		ToolUrns:               toolUrns[:2], // Use first two tools
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -55,14 +55,15 @@ func TestToolsetsService_CreateToolset_Success(t *testing.T) {
 	require.NotNil(t, result.UpdatedAt)
 
 	// Verify the tools are correctly populated
-	toolSetNames := make([]string, len(result.HTTPTools))
+	toolSetUrns := make([]string, len(result.HTTPTools))
 	for i, tool := range result.HTTPTools {
-		toolSetNames[i] = tool.Name
+		toolSetUrns[i] = tool.ToolUrn
 		require.NotEmpty(t, tool.ID)
 		require.NotEmpty(t, tool.Name)
+		require.NotEmpty(t, tool.ToolUrn)
 		// Summary and Description may be empty depending on the OpenAPI spec
 	}
-	require.ElementsMatch(t, toolNames[:2], toolSetNames)
+	require.ElementsMatch(t, toolUrns[:2], toolSetUrns)
 }
 
 func TestToolsetsService_CreateToolset_WithDefaultEnvironment(t *testing.T) {
@@ -99,7 +100,7 @@ func TestToolsetsService_CreateToolset_WithDefaultEnvironment(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Test Toolset with Env",
 		Description:            conv.Ptr("A test toolset with environment"),
-		HTTPToolNames:          []string{tools[0].Name}, // Use first tool from deployment
+		ToolUrns:               []string{tools[0].ToolUrn.String()}, // Use first tool from deployment
 		DefaultEnvironmentSlug: (*types.Slug)(conv.Ptr("test-env")),
 		ProjectSlugInput:       nil,
 	})
@@ -109,7 +110,7 @@ func TestToolsetsService_CreateToolset_WithDefaultEnvironment(t *testing.T) {
 	require.Equal(t, "test-toolset-with-env", string(result.Slug))
 	require.Equal(t, "test-env", string(*result.DefaultEnvironmentSlug))
 	require.Len(t, result.HTTPTools, 1, "should have 1 HTTP tool")
-	require.Equal(t, tools[0].Name, result.HTTPTools[0].Name)
+	require.Equal(t, tools[0].ToolUrn.String(), result.HTTPTools[0].ToolUrn)
 }
 
 func TestToolsetsService_CreateToolset_DuplicateSlug(t *testing.T) {
@@ -131,7 +132,7 @@ func TestToolsetsService_CreateToolset_DuplicateSlug(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
 		Description:            nil,
-		HTTPToolNames:          []string{tools[0].Name},
+		ToolUrns:               []string{tools[0].ToolUrn.String()},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -142,7 +143,7 @@ func TestToolsetsService_CreateToolset_DuplicateSlug(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
 		Description:            nil,
-		HTTPToolNames:          []string{tools[1].Name},
+		ToolUrns:               []string{tools[1].ToolUrn.String()},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -159,7 +160,7 @@ func TestToolsetsService_CreateToolset_InvalidEnvironment(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
 		Description:            nil,
-		HTTPToolNames:          []string{"listPets"},
+		ToolUrns:               []string{},
 		DefaultEnvironmentSlug: (*types.Slug)(conv.Ptr("non-existent-env")),
 		ProjectSlugInput:       nil,
 	})
@@ -179,7 +180,7 @@ func TestToolsetsService_CreateToolset_Unauthorized(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
 		Description:            nil,
-		HTTPToolNames:          []string{"listPets"},
+		ToolUrns:               []string{},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -202,7 +203,7 @@ func TestToolsetsService_CreateToolset_NoProjectID(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Test Toolset",
 		Description:            nil,
-		HTTPToolNames:          []string{"listPets"},
+		ToolUrns:               []string{},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -210,7 +211,7 @@ func TestToolsetsService_CreateToolset_NoProjectID(t *testing.T) {
 	require.Contains(t, err.Error(), "unauthorized")
 }
 
-func TestToolsetsService_CreateToolset_EmptyHTTPToolNames(t *testing.T) {
+func TestToolsetsService_CreateToolset_EmptyToolUrns(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestToolsetsService(t)
@@ -219,7 +220,7 @@ func TestToolsetsService_CreateToolset_EmptyHTTPToolNames(t *testing.T) {
 		SessionToken:           nil,
 		Name:                   "Test Toolset Empty Tools",
 		Description:            nil,
-		HTTPToolNames:          []string{},
+		ToolUrns:               []string{},
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
