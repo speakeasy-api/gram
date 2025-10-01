@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/jsonschema"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -96,9 +97,9 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 
 		err := validateInputSchema(bytes.NewReader(args))
 		switch {
-		case errors.Is(err, errSchemaUnsupportedType) || errors.Is(err, errSchemaNotObject):
+		case errors.Is(err, jsonschema.ErrSchemaUnsupportedType) || errors.Is(err, jsonschema.ErrSchemaNotObject):
 			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema").Log(ctx, logger)
-		case errors.Is(err, errSchemaHasNoProperties):
+		case errors.Is(err, jsonschema.ErrSchemaHasNoProperties):
 			// This is allowed, it means the schema is empty, which is valid.
 		case err != nil:
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").Log(ctx, logger)
@@ -183,9 +184,9 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 
 		err := validateInputSchema(bytes.NewReader(args))
 		switch {
-		case errors.Is(err, errSchemaUnsupportedType) || errors.Is(err, errSchemaNotObject):
+		case errors.Is(err, jsonschema.ErrSchemaUnsupportedType) || errors.Is(err, jsonschema.ErrSchemaNotObject):
 			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema").Log(ctx, s.logger)
-		case errors.Is(err, errSchemaHasNoProperties):
+		case errors.Is(err, jsonschema.ErrSchemaHasNoProperties):
 			// This is allowed, it means the schema is empty, which is valid.
 		case err != nil:
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to validate arguments schema").Log(ctx, s.logger)

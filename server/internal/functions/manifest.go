@@ -1,13 +1,12 @@
 package functions
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 
-	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/jsonschema"
 )
 
 type ManifestV0 struct {
@@ -66,25 +65,10 @@ func validateManifestToolV0(tool ManifestToolV0) (err error) {
 		err = errors.Join(err, errors.New("tool description is required"))
 	}
 	if len(tool.InputSchema) > 0 {
-		if jerr := isValidJSONSchema(tool.InputSchema); jerr != nil {
+		if jerr := jsonschema.IsValidJSONSchema(tool.InputSchema); jerr != nil {
 			err = errors.Join(err, fmt.Errorf("invalid tool input schema: %w", jerr))
 		}
 	}
 
 	return
-}
-
-func isValidJSONSchema(bs []byte) error {
-	compiler := jsonschema.NewCompiler()
-	rawSchema, err := jsonschema.UnmarshalJSON(bytes.NewReader(bs))
-	if err != nil {
-		return fmt.Errorf("parse json schema bytes: %w", err)
-	}
-	if err := compiler.AddResource("file:///schema.json", rawSchema); err != nil {
-		return fmt.Errorf("add json schema resource: %w", err)
-	}
-	if _, err := compiler.Compile("file:///schema.json"); err != nil {
-		return fmt.Errorf("compile json schema: %w", err)
-	}
-	return nil
 }

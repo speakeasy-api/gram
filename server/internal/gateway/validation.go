@@ -1,33 +1,21 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 
-	"github.com/santhosh-tekuri/jsonschema/v6"
-
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/jsonschema"
 )
 
 var gramAddedFields = []string{"gram-request-summary", "environmentVariables"}
 
 func validateToolCallBody(ctx context.Context, logger *slog.Logger, bodyBytes []byte, toolSchema string) error {
-	compiler := jsonschema.NewCompiler()
-	rawSchema, err := jsonschema.UnmarshalJSON(bytes.NewReader([]byte(toolSchema)))
+	schema, err := jsonschema.CompileSchema([]byte(toolSchema))
 	if err != nil {
-		logger.InfoContext(ctx, "failed to parse tool schema not moving forward with request validation", attr.SlogError(err))
-		return nil
-	}
-	if err := compiler.AddResource("file:///schema.json", rawSchema); err != nil {
-		logger.InfoContext(ctx, "failed to get json schema for tool schema not moving forward with request validation", attr.SlogError(err))
-		return nil
-	}
-	schema, err := compiler.Compile("file:///schema.json")
-	if err != nil {
-		logger.InfoContext(ctx, "failed to get json schema for tool schema not moving forward with request validation", attr.SlogError(err))
+		logger.InfoContext(ctx, "failed to compile tool schema not moving forward with request validation", attr.SlogError(err))
 		return nil
 	}
 
@@ -42,7 +30,7 @@ func validateToolCallBody(ctx context.Context, logger *slog.Logger, bodyBytes []
 		delete(bodyMap, field)
 	}
 
-	if err := schema.Validate(bodyMap); err != nil {
+	if err := jsonschema.ValidateAgainstSchema(schema, bodyMap); err != nil {
 		return fmt.Errorf("input to toolschema validation failure: %w", err)
 	}
 
