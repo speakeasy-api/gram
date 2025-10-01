@@ -419,6 +419,8 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 
 	// Prepare base parameters for creating the cloned toolset
 	baseParams := repo.CreateToolsetParams{
+		Name:                   newName,
+		Slug:                   newSlug,
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Description:            originalToolset.Description,
@@ -430,8 +432,6 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 
 	// Try to create the cloned toolset, handling name conflicts
 	var clonedToolset repo.Toolset
-	baseParams.Name = newName
-	baseParams.Slug = newSlug
 	clonedToolset, err = s.repo.CreateToolset(ctx, baseParams)
 	if err != nil {
 		var pgErr *pgconn.PgError
