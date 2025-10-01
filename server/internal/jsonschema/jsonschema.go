@@ -8,6 +8,11 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
+const (
+	// schemaResourceURI is the internal URI used for schema compilation
+	schemaResourceURI = "file:///schema.json"
+)
+
 // ValidationError represents a JSON schema validation error type.
 type ValidationError string
 
@@ -28,10 +33,10 @@ func IsValidJSONSchema(bs []byte) error {
 	if err != nil {
 		return fmt.Errorf("parse json schema bytes: %w", err)
 	}
-	if err = compiler.AddResource("file:///schema.json", rawSchema); err != nil {
+	if err = compiler.AddResource(schemaResourceURI, rawSchema); err != nil {
 		return fmt.Errorf("add json schema resource: %w", err)
 	}
-	if _, err = compiler.Compile("file:///schema.json"); err != nil {
+	if _, err = compiler.Compile(schemaResourceURI); err != nil {
 		return fmt.Errorf("compile json schema: %w", err)
 	}
 	return nil
@@ -44,10 +49,10 @@ func CompileSchema(schemaBytes []byte) (*jsonschema.Schema, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse json schema: %w", err)
 	}
-	if err = compiler.AddResource("file:///schema.json", rawSchema); err != nil {
+	if err = compiler.AddResource(schemaResourceURI, rawSchema); err != nil {
 		return nil, fmt.Errorf("add schema resource: %w", err)
 	}
-	schema, err := compiler.Compile("file:///schema.json")
+	schema, err := compiler.Compile(schemaResourceURI)
 	if err != nil {
 		return nil, fmt.Errorf("compile schema: %w", err)
 	}
@@ -72,11 +77,11 @@ func ValidateInputSchema(rawInput io.Reader) error {
 	}
 
 	compiler := jsonschema.NewCompiler()
-	if err = compiler.AddResource("file:///schema.json", rawSchema); err != nil {
+	if err = compiler.AddResource(schemaResourceURI, rawSchema); err != nil {
 		return fmt.Errorf("add schema: %w", err)
 	}
 
-	schema, err := compiler.Compile("file:///schema.json")
+	schema, err := compiler.Compile(schemaResourceURI)
 	if err != nil {
 		return fmt.Errorf("compile schema: %w", err)
 	}
