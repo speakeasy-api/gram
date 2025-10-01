@@ -174,6 +174,7 @@ func (k *KubernetesClients) CreateCustomDomainIngressCharts(domain string) (stri
 			Annotations: map[string]string{
 				"cert-manager.io/cluster-issuer":              "gram-letsencrypt",
 				"nginx.ingress.kubernetes.io/proxy-body-size": "15m",
+				"nginx.ingress.kubernetes.io/use-regex":       "true",
 			},
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "custom-domain-chart",
