@@ -806,7 +806,7 @@ CREATE TABLE IF NOT EXISTS mcp_install_page_metadata (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT mcp_install_page_metadata_pkey PRIMARY KEY (id),
-  CONSTRAINT mcp_install_page_metadata_asset_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE CASCADE,
+  CONSTRAINT mcp_install_page_metadata_asset_id FOREIGN KEY (logo_id) REFERENCES assets (id) ON DELETE SET NULL,
   CONSTRAINT mcp_install_page_metadata_toolset_id FOREIGN KEY (toolset_id) REFERENCES toolsets (id) ON DELETE CASCADE,
   CONSTRAINT mcp_install_page_metadata_toolset_id_key UNIQUE (toolset_id)
 );
