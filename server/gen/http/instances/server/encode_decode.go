@@ -49,7 +49,7 @@ func DecodeGetInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if toolsetSlug == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("toolset_slug", "query string"))
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("toolset_slug", toolsetSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("toolset_slug", toolsetSlug, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(toolsetSlug) > 40 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("toolset_slug", toolsetSlug, utf8.RuneCountInString(toolsetSlug), 40, false))
 		}
@@ -58,7 +58,7 @@ func DecodeGetInstanceRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 			environmentSlug = &environmentSlugRaw
 		}
 		if environmentSlug != nil {
-			err = goa.MergeErrors(err, goa.ValidatePattern("environment_slug", *environmentSlug, "^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$"))
+			err = goa.MergeErrors(err, goa.ValidatePattern("environment_slug", *environmentSlug, "^[a-z0-9_-]{1,128}$"))
 		}
 		if environmentSlug != nil {
 			if utf8.RuneCountInString(*environmentSlug) > 40 {

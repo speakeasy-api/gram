@@ -5735,7 +5735,7 @@ definitions:
                 type: string
                 description: A URL-friendly string that identifies the functions file. Usually derived from the name.
                 example: 9ae
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
         example:
             asset_id: Id voluptate.
@@ -5763,7 +5763,7 @@ definitions:
                 type: string
                 description: The slug to give the document as it will be displayed in URLs.
                 example: uwo
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
         example:
             asset_id: Placeat aut autem sunt aliquid ut magnam.
@@ -13092,7 +13092,7 @@ definitions:
                 type: string
                 description: The slug to give the document as it will be displayed in URLs.
                 example: "132"
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
         example:
             asset_id: Aut cum exercitationem explicabo sint repellendus.
@@ -17822,7 +17822,7 @@ definitions:
                 type: string
                 description: The slug identifier for the environment
                 example: cr3
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             updated_at:
                 type: string
@@ -19754,7 +19754,7 @@ definitions:
                 type: string
                 description: The slug of the external OAuth server
                 example: 3mf
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             updated_at:
                 type: string
@@ -19786,7 +19786,7 @@ definitions:
                 type: string
                 description: The slug of the external OAuth server
                 example: v9v
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
         example:
             metadata: Earum quibusdam vero debitis.
@@ -26634,7 +26634,7 @@ definitions:
                 type: string
                 description: The slug of the OAuth proxy provider
                 example: ske
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             token_endpoint:
                 type: string
@@ -26782,7 +26782,7 @@ definitions:
                 type: string
                 description: The slug of the OAuth proxy server
                 example: h46
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             updated_at:
                 type: string
@@ -26898,7 +26898,7 @@ definitions:
                 type: string
                 description: The slug to give the document as it will be displayed in URLs.
                 example: r8c
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
         example:
             asset_id: Fugit sed in consectetur.
@@ -27452,7 +27452,7 @@ definitions:
                 type: string
                 description: The name of the package
                 example: j5e
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 100
             summary:
                 type: string
@@ -29505,7 +29505,7 @@ definitions:
                 type: string
                 description: The slug of the project
                 example: g5l
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             updated_at:
                 type: string
@@ -29543,7 +29543,7 @@ definitions:
                 type: string
                 description: The slug of the project
                 example: c6s
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
         example:
             id: Repudiandae quas voluptatum eius facilis ut.
@@ -30917,7 +30917,7 @@ definitions:
                 type: string
                 description: The name of the prompt template
                 example: ttw
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             predecessor_id:
                 type: string
@@ -30991,7 +30991,7 @@ definitions:
                 type: string
                 description: The name of the prompt template
                 example: wnq
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
         example:
             id: Et sint commodi et quia quaerat.
@@ -33784,7 +33784,7 @@ definitions:
                 type: string
                 description: The name of the prompt template
                 example: ugj
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             prompt:
                 type: string
@@ -37272,7 +37272,7 @@ definitions:
                 type: string
                 description: The slug of the environment to use as the default for the toolset
                 example: kyt
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             description:
                 type: string
@@ -37428,7 +37428,7 @@ definitions:
                 type: string
                 description: The slug of the MCP to use for the toolset
                 example: lz0
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             name:
                 type: string
@@ -37588,7 +37588,7 @@ definitions:
                 type: string
                 description: The slug of the toolset
                 example: 0sj
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             tool_urns:
                 type: array
@@ -38011,7 +38011,7 @@ definitions:
                 type: string
                 description: The slug of the environment to use as the default for the toolset
                 example: vb4
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             description:
                 type: string
@@ -38048,7 +38048,7 @@ definitions:
                 type: string
                 description: The slug of the MCP to use for the toolset
                 example: 1ik
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             name:
                 type: string
@@ -38272,7 +38272,7 @@ definitions:
                 type: string
                 description: The slug of the toolset
                 example: psh
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             tool_urns:
                 type: array
@@ -39622,7 +39622,7 @@ definitions:
                 type: string
                 description: The slug of the environment to use as the default for the toolset
                 example: zmg
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             description:
                 type: string
@@ -41813,7 +41813,7 @@ definitions:
                 type: string
                 description: The slug of the environment to use as the default for the toolset
                 example: 1b8
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             description:
                 type: string
@@ -41831,7 +41831,7 @@ definitions:
                 type: string
                 description: The slug of the MCP to use for the toolset
                 example: m3t
-                pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             name:
                 type: string

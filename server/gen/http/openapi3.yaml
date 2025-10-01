@@ -2677,7 +2677,7 @@ paths:
                   schema:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -2861,7 +2861,7 @@ paths:
                   schema:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -2966,7 +2966,7 @@ paths:
                   schema:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
                   description: The slug of the environment to load
@@ -2975,7 +2975,7 @@ paths:
                   schema:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -5573,7 +5573,7 @@ paths:
                   schema:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -5678,7 +5678,7 @@ paths:
                   schema:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -5872,7 +5872,7 @@ paths:
                   schema:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -5967,7 +5967,7 @@ paths:
                   schema:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -6155,7 +6155,7 @@ paths:
                   schema:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -6254,7 +6254,7 @@ paths:
                   schema:
                     description: A short url-friendly label that uniquely identifies a resource.
                     maxLength: 40
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     type: string
                 - allowEmptyValue: true
                   description: Session header
@@ -7015,7 +7015,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
             required:
                 - slug
@@ -7042,7 +7042,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
             required:
                 - asset_id
@@ -7061,7 +7061,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
             required:
                 - asset_id
@@ -7079,7 +7079,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
             required:
                 - asset_id
@@ -7421,7 +7421,7 @@ components:
                 name:
                     type: string
                     description: The name of the package
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 100
                 summary:
                     type: string
@@ -7507,7 +7507,7 @@ components:
                 name:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 prompt:
                     type: string
@@ -7536,7 +7536,7 @@ components:
                 default_environment_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 description:
                     type: string
@@ -7559,7 +7559,7 @@ components:
                 default_environment_slug:
                     type: string
                     description: The slug of the environment to use as the default for the toolset
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 description:
                     type: string
@@ -7744,7 +7744,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
             required:
                 - id
@@ -7866,7 +7866,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 updated_at:
                     type: string
@@ -8009,7 +8009,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 updated_at:
                     type: string
@@ -8030,7 +8030,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
             required:
                 - slug
@@ -8163,7 +8163,7 @@ components:
                 environment_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 project_slug_input:
                     type: string
@@ -8172,7 +8172,7 @@ components:
                 toolset_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
             required:
                 - toolset_slug
@@ -8759,7 +8759,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 token_endpoint:
                     type: string
@@ -8801,7 +8801,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 updated_at:
                     type: string
@@ -8828,7 +8828,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
             required:
                 - id
@@ -8999,7 +8999,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 updated_at:
                     type: string
@@ -9024,7 +9024,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
             required:
                 - id
@@ -9064,7 +9064,7 @@ components:
                 name:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 predecessor_id:
                     type: string
@@ -9108,7 +9108,7 @@ components:
                 name:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
             required:
                 - id
@@ -9472,7 +9472,7 @@ components:
                 default_environment_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 description:
                     type: string
@@ -9496,7 +9496,7 @@ components:
                 mcp_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 name:
                     type: string
@@ -9527,7 +9527,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 tool_urns:
                     type: array
@@ -9563,7 +9563,7 @@ components:
                 default_environment_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 description:
                     type: string
@@ -9585,7 +9585,7 @@ components:
                 mcp_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 name:
                     type: string
@@ -9614,7 +9614,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 tool_urns:
                     type: array
@@ -9658,7 +9658,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
             description: Form for updating an environment
             required:
@@ -9788,7 +9788,7 @@ components:
                 default_environment_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 description:
                     type: string
@@ -9802,7 +9802,7 @@ components:
                 mcp_slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 name:
                     type: string
@@ -9817,7 +9817,7 @@ components:
                 slug:
                     type: string
                     description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 tool_urns:
                     type: array
@@ -9835,7 +9835,7 @@ components:
                 default_environment_slug:
                     type: string
                     description: The slug of the environment to use as the default for the toolset
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 description:
                     type: string
@@ -9849,7 +9849,7 @@ components:
                 mcp_slug:
                     type: string
                     description: The slug of the MCP to use for the toolset
-                    pattern: ^[a-z0-9]+(?:[a-z0-9_-]*[a-z0-9])?$
+                    pattern: ^[a-z0-9_-]{1,128}$
                     maxLength: 40
                 name:
                     type: string
