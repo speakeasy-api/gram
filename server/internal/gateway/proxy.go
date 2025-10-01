@@ -18,8 +18,10 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -36,6 +38,24 @@ const (
 	ToolCallSourceDirect ToolCallSource = "direct"
 	ToolCallSourceMCP    ToolCallSource = "mcp"
 )
+
+// gramTrackPropagator is a custom OpenTelemetry propagator that only injects X-Gram-Track-Id header
+type gramTrackPropagator struct{}
+
+func (gramTrackPropagator) Inject(ctx context.Context, carrier propagation.TextMapCarrier) {
+	spanCtx := trace.SpanContextFromContext(ctx)
+	if spanCtx.HasTraceID() {
+		carrier.Set("X-Gram-Track-Id", spanCtx.TraceID().String())
+	}
+}
+
+func (gramTrackPropagator) Extract(ctx context.Context, carrier propagation.TextMapCarrier) context.Context {
+	return ctx // Not extracting anything
+}
+
+func (gramTrackPropagator) Fields() []string {
+	return []string{"X-Gram-Track-Id"}
+}
 
 const (
 	HeaderProxiedResponse  = "X-Gram-Proxy-Response"
@@ -451,8 +471,11 @@ func reverseProxyRequest(ctx context.Context,
 	}
 
 	client := &http.Client{
-		Timeout:   60 * time.Second,
-		Transport: transport,
+		Timeout: 60 * time.Second,
+		Transport: otelhttp.NewTransport(
+			transport,
+			otelhttp.WithPropagators(gramTrackPropagator{}),
+		),
 	}
 
 	executeRequest := func() (*http.Response, error) {
