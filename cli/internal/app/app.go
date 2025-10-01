@@ -23,6 +23,7 @@ func newApp() *cli.App {
 		Version: fmt.Sprintf("%s (%s)", Version, shortSha),
 		Commands: []*cli.Command{
 			newPushCommand(),
+			newStatusCommand(),
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{

@@ -189,6 +189,7 @@ SELECT tp.prompt_name
 FROM toolset_prompts tp
 WHERE tp.toolset_id = @toolset_id
   AND tp.project_id = @project_id
+<<<<<<< HEAD
 ORDER BY tp.prompt_name;
 
 -- name: UpdateToolsetHttpToolNames :one
@@ -198,3 +199,6 @@ SET
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;
+=======
+ORDER BY tp.prompt_name;
+>>>>>>> main

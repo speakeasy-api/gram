@@ -42,14 +42,14 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
-import { DeploymentLogs, useOnboardingSteps } from "./Onboarding";
+import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
 import { GramLogo } from "@/components/gram-logo";
 
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
 
   const [currentStep, setCurrentStep] = useState<"upload" | "toolset" | "mcp">(
-    "upload"
+    "upload",
   );
   const [toolsetName, setToolsetName] = useState<string>();
   const [mcpSlug, setMcpSlug] = useState<string>();
@@ -100,7 +100,7 @@ const Step = ({
       <span
         className={cn(
           "rounded-full bg-muted h-8 w-8 flex items-center justify-center",
-          active && "bg-success text-success-foreground"
+          active && "bg-success text-success-foreground",
         )}
       >
         {completed ? <Check className="w-4 h-4" /> : icon}
@@ -292,7 +292,7 @@ const UploadStep = ({
     setApiName,
     apiNameError,
     undoSpecUpload,
-  } = useOnboardingSteps(false);
+  } = useUploadOpenAPISteps(false);
 
   const [deploymentToShowLogsFor, setDeploymentToShowLogsFor] =
     useState<string>();

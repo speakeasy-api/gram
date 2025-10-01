@@ -20,7 +20,7 @@ WHERE organization_id = @organization_id
 
 -- name: UpdateOpenRouterKey :one
 UPDATE openrouter_api_keys
-SET monthly_credits = @monthly_credits
+SET monthly_credits = @monthly_credits, key_hash = @key_hash, key = @key
 WHERE organization_id = @organization_id
   AND deleted IS FALSE
 RETURNING *;

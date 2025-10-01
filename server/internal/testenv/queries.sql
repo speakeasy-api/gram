@@ -7,3 +7,10 @@ WHERE deployment_id = @deployment_id;
 SELECT *
 FROM function_tool_definitions
 WHERE deployment_id = @deployment_id;
+
+-- name: CountFunctionsAccess :one
+SELECT count(id)
+FROM functions_access
+WHERE
+  project_id = @project_id
+  AND deployment_id = @deployment_id;

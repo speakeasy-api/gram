@@ -20,7 +20,7 @@ import {
   useLatestDeployment,
   useListAssets,
 } from "@gram/client/react-query/index.js";
-import { Icon, Button, Alert } from "@speakeasy-api/moonshine";
+import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
 import { Loader2Icon, Plus } from "lucide-react";
 import {
   forwardRef,
@@ -32,24 +32,9 @@ import {
 } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
-import {
-  OnboardingContent,
-  useOnboardingSteps,
-} from "../../onboarding/Onboarding";
+import { useUploadOpenAPISteps } from "../../onboarding/UploadOpenAPI";
+import AddOpenAPIDialog, { AddOpenAPIDialogRef } from "./AddOpenAPIDialog";
 import { ApisEmptyState } from "./ApisEmptyState";
-
-export default function OpenAPIDocuments() {
-  return (
-    <Page>
-      <Page.Header>
-        <Page.Header.Breadcrumbs />
-      </Page.Header>
-      <Page.Body>
-        <APIsContent />
-      </Page.Body>
-    </Page>
-  );
-}
 
 type NamedAsset = Asset & {
   name: string;
@@ -71,7 +56,7 @@ export function useDeploymentIsEmpty() {
   );
 }
 
-export function APIsContent() {
+export default function OpenAPIAssets() {
   const client = useSdkClient();
   const routes = useRoutes();
 
@@ -80,15 +65,15 @@ export function APIsContent() {
   const deployment = deploymentResult?.deployment;
 
   const [isDeploying, setIsDeploying] = useState(false);
-  const [newDocumentDialogOpen, setNewDocumentDialogOpen] = useState(false);
   const [changeDocumentTargetSlug, setChangeDocumentTargetSlug] = useState<
     string | null
   >(null);
 
+  const addOpenAPIDialogRef = useRef<AddOpenAPIDialogRef>(null);
   const removeApiSourceDialogRef = useRef<RemoveAPISourceDialogRef>(null);
 
   const finishUpload = () => {
-    setNewDocumentDialogOpen(false);
+    addOpenAPIDialogRef.current?.setOpen(false);
     setChangeDocumentTargetSlug(null);
     undoSpecUpload(); // Reset the file state
     refetch();
@@ -96,36 +81,10 @@ export function APIsContent() {
   };
 
   const { handleSpecUpload, createDeployment, file, undoSpecUpload } =
-    useOnboardingSteps();
+    useUploadOpenAPISteps();
 
   const deploymentIsEmpty = useDeploymentIsEmpty();
   const deploymentLogsSummary = useDeploymentLogsSummary(deployment?.id);
-
-  const newDocumentDialog = (
-    <Dialog
-      open={newDocumentDialogOpen}
-      onOpenChange={setNewDocumentDialogOpen}
-    >
-      <Dialog.Content className="max-w-2xl!">
-        <Dialog.Header>
-          <Dialog.Title>New OpenAPI Source</Dialog.Title>
-          <Dialog.Description>
-            Upload a new OpenAPI document to use in addition to your existing
-            documents.
-          </Dialog.Description>
-        </Dialog.Header>
-        <OnboardingContent onOnboardingComplete={finishUpload} />
-        <Dialog.Footer>
-          <Button
-            variant="tertiary"
-            onClick={() => setNewDocumentDialogOpen(false)}
-          >
-            Back
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
-  );
 
   const logsCta = useMemo(() => {
     if (!deployment || !deploymentLogsSummary) {
@@ -179,8 +138,10 @@ export function APIsContent() {
   if (!isLoading && deploymentIsEmpty) {
     return (
       <>
-        <ApisEmptyState onNewUpload={() => setNewDocumentDialogOpen(true)} />
-        {newDocumentDialog}
+        <ApisEmptyState
+          onNewUpload={() => addOpenAPIDialogRef.current?.setOpen(true)}
+        />
+        <AddOpenAPIDialog ref={addOpenAPIDialogRef} />
       </>
     );
   }
@@ -220,7 +181,7 @@ export function APIsContent() {
       {logsCta}
       <Page.Section.CTA>
         <Button
-          onClick={() => setNewDocumentDialogOpen(true)}
+          onClick={() => addOpenAPIDialogRef.current?.setOpen(true)}
           variant="secondary"
         >
           <Button.LeftIcon>
@@ -242,7 +203,6 @@ export function APIsContent() {
             />
           ))}
         </MiniCards>
-        {newDocumentDialog}
         <Dialog
           open={changeDocumentTargetSlug !== null}
           onOpenChange={(open) => {
@@ -296,6 +256,7 @@ export function APIsContent() {
           ref={removeApiSourceDialogRef}
           onConfirmRemoval={removeDocument}
         />
+        <AddOpenAPIDialog ref={addOpenAPIDialogRef} />
       </Page.Section.Body>
     </Page.Section>
   );

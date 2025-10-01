@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -29,6 +30,7 @@ import (
 
 type WorkerOptions struct {
 	DB                  *pgxpool.Pool
+	EncryptionClient    *encryption.Client
 	FeatureProvider     feature.Provider
 	AssetStorage        assets.BlobStore
 	SlackClient         *slack_client.SlackClient
@@ -42,9 +44,10 @@ type WorkerOptions struct {
 	PosthogClient       *posthog.Posthog
 }
 
-func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage assets.BlobStore) *WorkerOptions {
+func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage assets.BlobStore, enc *encryption.Client) *WorkerOptions {
 	return &WorkerOptions{
 		DB:                  db,
+		EncryptionClient:    enc,
 		FeatureProvider:     f,
 		AssetStorage:        assetStorage,
 		SlackClient:         nil,
@@ -68,6 +71,7 @@ func NewTemporalWorker(
 ) worker.Worker {
 	opts := &WorkerOptions{
 		DB:                  nil,
+		EncryptionClient:    nil,
 		FeatureProvider:     nil,
 		AssetStorage:        nil,
 		SlackClient:         nil,
@@ -84,6 +88,7 @@ func NewTemporalWorker(
 	for _, o := range options {
 		opts = &WorkerOptions{
 			DB:                  conv.Default(o.DB, opts.DB),
+			EncryptionClient:    conv.Default(o.EncryptionClient, opts.EncryptionClient),
 			FeatureProvider:     conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:        conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:         conv.Default(o.SlackClient, opts.SlackClient),
@@ -111,6 +116,7 @@ func NewTemporalWorker(
 		tracerProvider,
 		meterProvider,
 		opts.DB,
+		opts.EncryptionClient,
 		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,
@@ -125,6 +131,7 @@ func NewTemporalWorker(
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
 	temporalWorker.RegisterActivity(activities.TransitionDeployment)
+	temporalWorker.RegisterActivity(activities.ProvisionFunctionsAccess)
 	temporalWorker.RegisterActivity(activities.GetSlackProjectContext)
 	temporalWorker.RegisterActivity(activities.PostSlackMessage)
 	temporalWorker.RegisterActivity(activities.SlackChatCompletion)

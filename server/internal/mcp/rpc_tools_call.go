@@ -121,7 +121,9 @@ func handleToolsCall(
 			Type:             billing.ToolCallTypeHigherOrder,
 			ProjectID:        payload.projectID.String(),
 			ToolsetSlug:      &payload.toolset,
+			ToolsetID:        &toolset.ID,
 			MCPURL:           &mcpURL,
+			MCPSessionID:     &payload.sessionID,
 			ProjectSlug:      nil, // This data is only there for debugging, but we don't have it here
 			OrganizationSlug: nil,
 			ChatID:           nil,
@@ -198,7 +200,9 @@ func handleToolsCall(
 			ProjectSlug:      &executionPlan.ProjectSlug,
 			OrganizationSlug: &executionPlan.OrganizationSlug,
 			ToolsetSlug:      &payload.toolset,
+			ToolsetID:        &toolset.ID,
 			MCPURL:           &mcpURL,
+			MCPSessionID:     &payload.sessionID,
 			ChatID:           nil,
 			Type:             billing.ToolCallTypeHTTP,
 		})

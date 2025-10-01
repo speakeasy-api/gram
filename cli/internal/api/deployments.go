@@ -74,3 +74,41 @@ func (c *DeploymentsClient) CreateDeployment(
 
 	return result, nil
 }
+
+// GetDeployment retrieves a deployment by its ID.
+func (c *DeploymentsClient) GetDeployment(
+	ctx context.Context,
+	apiKey secret.Secret,
+	projectSlug string,
+	deploymentID string,
+) (*deployments.GetDeploymentResult, error) {
+	key := apiKey.Reveal()
+	result, err := c.client.GetDeployment(ctx, &deployments.GetDeploymentPayload{
+		ApikeyToken:      &key,
+		ProjectSlugInput: &projectSlug,
+		ID:               deploymentID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetLatestDeployment retrieves the latest deployment for a project.
+func (c *DeploymentsClient) GetLatestDeployment(
+	ctx context.Context,
+	apiKey secret.Secret,
+	projectSlug string,
+) (*deployments.GetLatestDeploymentResult, error) {
+	key := apiKey.Reveal()
+	result, err := c.client.GetLatestDeployment(ctx, &deployments.GetLatestDeploymentPayload{
+		ApikeyToken:      &key,
+		ProjectSlugInput: &projectSlug,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest deployment: %w", err)
+	}
+
+	return result, nil
+}

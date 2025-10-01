@@ -6,16 +6,23 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { Button } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
 import FileUpload from "@/components/upload";
+import UploadAssetStep from "@/components/upload-asset/step";
+import UploadAssetStepper, {
+  useStepper,
+} from "@/components/upload-asset/stepper";
+import DeployStep from "@/components/upload-asset/deploy-step";
+import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
+import UploadFileStep from "@/components/upload-asset/upload-file-step";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { slugify } from "@/lib/constants";
 import { cn, getServerURL } from "@/lib/utils";
+import { useRoutes } from "@/routes";
 import {
   Deployment,
   GetDeploymentResult,
@@ -27,28 +34,105 @@ import {
   useListTools,
   useListToolsets,
 } from "@gram/client/react-query/index.js";
-import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
+import { Alert, Button, CodeSnippet, Stack } from "@speakeasy-api/moonshine";
+import { ArrowRightIcon, CheckIcon, RefreshCcwIcon } from "lucide-react";
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useParams } from "react-router";
 
-export default function Onboarding() {
-  const navigate = useNavigate();
-
-  const onOnboardingComplete = () => {
-    navigate("/toolsets");
-  };
-
+export default function UploadOpenAPI() {
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <OnboardingContent onOnboardingComplete={onOnboardingComplete} />
+      <Page.Body>
+        <UploadAssetStepper.Provider step={1}>
+          <UploadAssetStepper.Frame className="max-w-2xl">
+            <UploadAssetStep step={1}>
+              <UploadAssetStep.Indicator />
+              <UploadAssetStep.Header
+                title="Upload OpenAPI Specification"
+                description="Upload your OpenAPI specification to get started."
+              />
+              <UploadAssetStep.Content>
+                <UploadFileStep />
+              </UploadAssetStep.Content>
+            </UploadAssetStep>
+
+            <UploadAssetStep step={2}>
+              <UploadAssetStep.Indicator />
+              <UploadAssetStep.Header
+                title="Name Your API"
+                description="The tools generated will be scoped under this name."
+              />
+              <UploadAssetStep.Content>
+                <NameDeploymentStep />
+              </UploadAssetStep.Content>
+            </UploadAssetStep>
+
+            <UploadAssetStep step={3}>
+              <UploadAssetStep.Indicator />
+              <UploadAssetStep.Header
+                title="Generate Tools"
+                description="Gram will generate tools for your API."
+              />
+              <UploadAssetStep.Content>
+                <DeployStep />
+              </UploadAssetStep.Content>
+            </UploadAssetStep>
+
+            <Stack direction="horizontal" justify="start">
+              <FooterActions />
+            </Stack>
+          </UploadAssetStepper.Frame>
+        </UploadAssetStepper.Provider>
+      </Page.Body>
     </Page>
   );
 }
 
-export function useOnboardingSteps(checkDocumentSlugUnique = true) {
+function FooterActions() {
+  const stepper = useStepper();
+  const routes = useRoutes();
+
+  const deploymentId = stepper.meta.current.deployment?.id;
+
+  switch (stepper.state) {
+    case "idle":
+      return null;
+    case "completed":
+      return (
+        <Button variant="primary" onClick={() => routes.toolsets.goTo()}>
+          Continue
+          <ArrowRightIcon className="size-4" />
+        </Button>
+      );
+    case "error":
+      if (!deploymentId) {
+        // This should never happen, but just in case
+        return (
+          <Button variant="primary" onClick={stepper.reset}>
+            <RefreshCcwIcon className="size-4" />
+            Try Again
+          </Button>
+        );
+      }
+
+      return (
+        <>
+          <Button
+            variant="primary"
+            onClick={() => routes.deployments.deployment.goTo(deploymentId)}
+          >
+            View Logs
+            <ArrowRightIcon className="size-4" />
+          </Button>
+        </>
+      );
+  }
+}
+
+export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
   const project = useProject();
   const session = useSession();
   const client = useSdkClient();
@@ -256,11 +340,11 @@ const useAssetNumtools = (
     : 0;
 };
 
-export function OnboardingContent({
-  onOnboardingComplete,
+export function UploadOpenAPIContent({
+  onStepsComplete,
   className,
 }: {
-  onOnboardingComplete?: (deployment: Deployment) => void;
+  onStepsComplete?: (deployment: Deployment) => void;
   className?: string;
 }) {
   const {
@@ -274,7 +358,8 @@ export function OnboardingContent({
     apiNameError,
     file,
     asset,
-  } = useOnboardingSteps();
+  } = useUploadOpenAPISteps();
+  const routes = useRoutes();
 
   const numtools = useAssetNumtools(asset?.asset.id, createdDeployment);
 
@@ -310,7 +395,6 @@ export function OnboardingContent({
           >
             <Input value={apiName} onChange={setApiName} placeholder="My API" />
             <Button
-              variant="brand"
               onClick={() => createDeployment()}
               disabled={!!apiNameError}
             >
@@ -336,26 +420,47 @@ export function OnboardingContent({
           <Spinner />
         </>
       ),
-      displayComplete: (
-        <div>
-          {createdDeployment ? (
-            <Accordion type="single" collapsible className="max-w-2xl">
-              <AccordionItem value="logs">
-                <AccordionTrigger className="text-base">
-                  ✓ Created {numtools} tools
-                </AccordionTrigger>
-                <AccordionContent>
-                  <DeploymentLogs
-                    deploymentId={createdDeployment?.id}
-                    onlyErrors
-                  />
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          ) : null}
-        </div>
-      ),
+      get displayComplete() {
+        if (!createdDeployment) return null;
+
+        if (createdDeployment.status === "failed")
+          return (
+            <Alert variant="error" dismissible={false} className="text-sm">
+              The deployment failed. Check the{" "}
+              <routes.deployments.deployment.Link
+                params={[createdDeployment.id]}
+                className="text-link"
+              >
+                deployment logs
+              </routes.deployments.deployment.Link>{" "}
+              for more information.
+            </Alert>
+          );
+
+        return (
+          <div>
+            {createdDeployment ? (
+              <Accordion type="single" collapsible className="max-w-2xl">
+                <AccordionItem value="logs">
+                  <AccordionTrigger className="text-base">
+                    <div className="flex items-center gap-2">
+                      <CheckIcon className="size-4" /> Created {numtools} tools
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <DeploymentLogs
+                      deploymentId={createdDeployment?.id}
+                      onlyErrors
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            ) : null}
+          </div>
+        );
+      },
       isComplete: !!createdDeployment,
+      failed: createdDeployment?.status === "failed",
     },
   ];
 
@@ -363,7 +468,7 @@ export function OnboardingContent({
     <Page.Body className={className}>
       <Stepper
         steps={steps}
-        onComplete={() => onOnboardingComplete?.(createdDeployment!)}
+        onComplete={() => onStepsComplete?.(createdDeployment!)}
       />
     </Page.Body>
   );

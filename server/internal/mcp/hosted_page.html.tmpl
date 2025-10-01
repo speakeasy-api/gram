@@ -708,14 +708,7 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
               </button>
               <code class="code-snippet language-json">{
   "mcpServers": {
-    "{{ .MCPSlug }}": {
-      "command": "npx",
-      "args": ["-y", "mcp-remote", "{{ .MCPURL }}"]{{- if .Headers }},
-      "env": {
-        {{- range $i, $header := .Headers }}{{- if $i }},{{ end }}
-        "{{ $header }}": "your-{{ $header }}-value"{{- end }}
-      }{{- end }}
-    }
+    "{{ .MCPSlug }}": {{ indent 4 .MCPConfig -}}
   }
 }</code>
             </div></li>
@@ -978,10 +971,11 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
         <section class="raw-configuration container">
           <header class="section-title">Raw Configuration</header>
           <div class="section-description">
-            If you have a client that's not listed above, access the raw MCP configuration below. For more information, see the
-            <a href="https://www.speakeasy.com/mcp/using-mcp/installing-mcp-servers">
-              the linked documentation
-            </a>.
+            If you have a client that's not listed above, access the raw MCP configuration below. Check out
+            <a href="https://docs.getgram.ai/clients/troubleshooting">
+              the troubleshooting documentation
+            </a>
+            for more help.
           </div>
           <div class="code-container card">
             <button class="copy-button waiting">
@@ -994,7 +988,7 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
             </button>
             <code class="code-snippet language-json">{{- .MCPConfig -}}</code>
           </div>
-          <script id="manifest-json-blob" type="application/json">
+          <code id="manifest-json-blob" type="application/json" style="display: none;">
             {
   "dxt_version": "0.1",
   "name": "{{ .MCPName }}",
@@ -1010,14 +1004,14 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
       "command": "npx",
       "args": [
         "mcp-remote",
-        "{{ .MCPURL }}"{{- range .Headers }},
+        "{{ .MCPURL }}"{{- range $i, $header := .Headers }},
         "--header",
-        "{{ . }}:${VALUE}"{{- end }}
+        "{{ printf "%s:${user_config.%s}" $header (index $.EnvHeaders $i) }}"{{- end }}
       ]
     }
   },
   "user_config": {
-    {{- range $i, $header := .Headers }}{{- if $i }},{{ end }}
+    {{- range $i, $header := .EnvHeaders }}{{- if $i }},{{ end }}
     "{{ $header }}": {
       "type": "string",
       "title": "{{ $header }}",
@@ -1027,7 +1021,7 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
     }{{- end }}
   }
 }
-          </script>
+          </code>
         </section>
       </div>
     </main>

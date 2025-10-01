@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils.ts";
-import { useIsProjectEmpty } from "@/pages/onboarding/Onboarding.tsx";
+import { useIsProjectEmpty } from "@/pages/onboarding/UploadOpenAPI.tsx";
 import { useRoutes } from "@/routes.tsx";
 import { Stack } from "@speakeasy-api/moonshine";
 import React from "react"; // Added missing import for React
@@ -36,7 +36,7 @@ function PageBody({
         className={cn(
           "@container/main flex flex-col gap-4 p-8 pb-0 h-full w-full",
           !fullWidth && "max-w-7xl mx-auto ",
-          className
+          className,
         )}
       >
         {children}

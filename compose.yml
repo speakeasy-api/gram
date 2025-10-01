@@ -108,6 +108,23 @@ services:
       - "${PROMETHEUS_PORT}:9090"
     volumes:
       - ./local/prometheus/prometheus.yaml:/etc/prometheus.yaml
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8.3
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: gram
+      CLICKHOUSE_USER: gram
+      CLICKHOUSE_PASSWORD: gram
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
 
 volumes:
   postgres_data:
@@ -119,4 +136,6 @@ volumes:
   tempo_data:
     driver: local
   temporal_data:
+    driver: local
+  clickhouse_data:
     driver: local

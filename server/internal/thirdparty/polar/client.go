@@ -740,7 +740,7 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 				fmt.Sprintf("%d MCP %s (public or private)", proTierLimits.Servers, conv.Ternary(proTierLimits.Servers == 1, "server", "servers")),
 				fmt.Sprintf("%d tool calls / month", proTierLimits.ToolCalls),
 				fmt.Sprintf("$%d in playground credits", proIncludedCredits),
-				"Dedicated support channel (Slack or Teams)",
+				"Email support",
 			},
 			AddOnBullets: []string{
 				fmt.Sprintf("%s / month / additional MCP server", formatPrice(mcpServerPrice)),
@@ -763,8 +763,10 @@ func (p *Client) GetUsageTiers(ctx context.Context) (ut *gen.UsageTiers, err err
 				"Audit logs",
 				"SLA-backed support",
 			},
-			IncludedBullets: []string{},
-			AddOnBullets:    []string{},
+			IncludedBullets: []string{
+				"Dedicated slack channel",
+			},
+			AddOnBullets: []string{},
 		},
 	}, nil
 }

@@ -1,4 +1,4 @@
-h1:SAF6eAn4DilI2WrNgxffPBFCbsTWUQ/GnNniRpEntLA=
+h1:UFR+vsEO72n6CsaBVxs8chPoCMug2nKe5OSIaf1/G44=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -51,3 +51,4 @@ h1:SAF6eAn4DilI2WrNgxffPBFCbsTWUQ/GnNniRpEntLA=
 20250918183732_add-tool-urn-to-tables.sql h1:MARJ8WJyN1A4tEjpBP15feOJTG4hGrP19vn11S0JePE=
 20250919164533_toolset-versions-add-predecessor-id.sql h1:MRup6pJPSHnUjxLCHFBnqNmWWBFOlSxit3r1OE3Fmic=
 20250919164535_drop-toolset-versions-auto-increment.sql h1:IX4kWcu5xfJZpTPPjXOe4oA6CB7DKXhwwsb+4yJIabo=
+20250926123815_add-functions-access.sql h1:HAFMFZpcFAfutScgzW70qUokjK3irmLoNMXJYZ/e2PU=
