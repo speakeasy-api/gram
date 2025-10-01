@@ -165,6 +165,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	for i, template := range toolset.PromptTemplates {
 		promptTemplates[i] = &types.PromptTemplate{
 			ID:            template.ID,
+			ToolUrn:       template.ToolUrn,
 			Name:          template.Name,
 			HistoryID:     template.HistoryID,
 			PredecessorID: template.PredecessorID,
