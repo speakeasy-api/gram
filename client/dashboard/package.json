@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "eslint . && tsc -b --noEmit",
-    "preview": "vite preview"
+    "lint": "prettier --check . && eslint . && tsc -b --noEmit",
+    "preview": "vite preview",
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@ai-sdk/openai": "catalog:",

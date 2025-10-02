@@ -417,7 +417,7 @@ const ToolsetStep = ({
           description: `A toolset created from your OpenAPI document`,
           toolUrns: tools?.httpTools.map((tool) => tool.toolUrn) ?? [],
         },
-      });   
+      });
 
       setCreatedToolset(toolset);
       setCurrentStep("mcp");

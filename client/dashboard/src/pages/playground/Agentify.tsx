@@ -246,7 +246,9 @@ export const AgentifyButton = ({
         promptSuggestion: z.string(),
       }),
     }).then((result) => {
-      setPrompt((result.object as { promptSuggestion: string }).promptSuggestion);
+      setPrompt(
+        (result.object as { promptSuggestion: string }).promptSuggestion,
+      );
       setSuggestionNumMessages(messages.length);
     });
   }, [agentifyModalOpen]);
@@ -319,7 +321,10 @@ export const AgentifyButton = ({
             </Stack>
           </Stack>
           <Dialog.Footer>
-            <Button variant="tertiary" onClick={() => setAgentifyModalOpen(false)}>
+            <Button
+              variant="tertiary"
+              onClick={() => setAgentifyModalOpen(false)}
+            >
               Back
             </Button>
             <Button onClick={agentifyFn} disabled={!prompt || inProgress}>

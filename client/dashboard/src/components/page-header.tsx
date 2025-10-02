@@ -17,7 +17,7 @@ function PageHeaderComponent({
     <header
       className={cn(
         "flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)",
-        className
+        className,
       )}
     >
       <div className="flex w-full items-center px-3 gap-3">
@@ -41,13 +41,22 @@ function PageHeaderTitle({
 }) {
   return (
     // 1270 carefully chosen to make the header line up with the max width of the page content
-    <Heading variant="h4" className={cn("ml-1 max-w-[1270px] w-full mx-auto", className)}> 
+    <Heading
+      variant="h4"
+      className={cn("ml-1 max-w-[1270px] w-full mx-auto", className)}
+    >
       {children}
     </Heading>
   );
 }
 
-function PageHeaderBreadcrumbs({ fullWidth, className }: { fullWidth?: boolean, className?: string }) {
+function PageHeaderBreadcrumbs({
+  fullWidth,
+  className,
+}: {
+  fullWidth?: boolean;
+  className?: string;
+}) {
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
 

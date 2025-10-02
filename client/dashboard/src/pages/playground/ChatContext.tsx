@@ -37,7 +37,7 @@ export const ChatProvider = ({ children }: { children: React.ReactNode }) => {
   const [searchParams] = useSearchParams();
   const [id, setId] = useState<string>(searchParams.get("chatId") ?? uuidv7());
   const [messages, setMessages] = useState<UIMessage[]>([]);
-  
+
   const appendMessageFn = useRef<AppendFn>(() => {
     console.error("appendMessage is not set");
   });

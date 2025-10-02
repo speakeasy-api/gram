@@ -657,7 +657,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
   if (!toolset) return { public: "", internal: "" };
 
   const toolsetTools = tools?.httpTools?.filter((tool) =>
-    toolset.httpTools.some((t) => t.id === tool.id)
+    toolset.httpTools.some((t) => t.id === tool.id),
   );
   const requiresServerURL = toolsetTools?.some(
     (tool) => !tool.defaultServerUrl,
@@ -1248,4 +1248,3 @@ function OAuthDetailsModal({
     </Dialog>
   );
 }
-

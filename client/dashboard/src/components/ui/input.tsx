@@ -45,7 +45,7 @@ function Input({
   };
 
   const [error, setError] = useState<string | null>(
-    v(props.value?.toString() ?? "")
+    v(props.value?.toString() ?? ""),
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -57,9 +57,10 @@ function Input({
   };
 
   const onChange = (value: string) => {
-    const finalValue = requiredPrefix && !value.startsWith(requiredPrefix)
-      ? `${requiredPrefix}${value}`
-      : value;
+    const finalValue =
+      requiredPrefix && !value.startsWith(requiredPrefix)
+        ? `${requiredPrefix}${value}`
+        : value;
     setError(v(finalValue));
     props.onChange?.(finalValue);
   };
@@ -102,7 +103,7 @@ function Input({
           "focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]",
           "aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive",
           error && "ring-destructive/50! border-destructive!",
-          className
+          className,
         )}
         style={{
           ...(requiredPrefix ? { paddingLeft: prefixWidth + 12 } : {}),
@@ -111,7 +112,8 @@ function Input({
         onKeyDown={handleKeyDown}
         {...props}
         onChange={handleChange}
-        value={props.value?.startsWith(requiredPrefix ?? "")
+        value={
+          props.value?.startsWith(requiredPrefix ?? "")
             ? props.value.replace(requiredPrefix ?? "", "")
             : props.value
         }

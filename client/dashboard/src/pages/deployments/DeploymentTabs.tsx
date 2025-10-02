@@ -26,12 +26,12 @@ interface ParsedLogEntry {
 const SOURCE_PATTERNS = [
   /^(\w+):\s+(.*)$/,
   /^\[(\w+)\]\s*(.*)$/,
-  /^(\w+)\s*\|\s*(.*)$/
+  /^(\w+)\s*\|\s*(.*)$/,
 ];
 
 const TIMESTAMP_PATTERNS = [
   /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?)\s+(.*)$/,
-  /^(\d{1,2}:\d{2}:\d{2}\.\d{3})\s+(.*)$/
+  /^(\d{1,2}:\d{2}:\d{2}\.\d{3})\s+(.*)$/,
 ];
 
 const LEVEL_PATTERN = /^\[?(WARN|WARNING|INFO|DEBUG|ERROR|OK)\]?\s+(.*)$/i;
@@ -50,9 +50,10 @@ function parseLogMessage(message: string, event: string): ParsedLogEntry {
   }
 
   const lowerMsg = message.toLowerCase();
-  const isSkipped = lowerMsg.includes("skip") || 
-                    lowerMsg.includes("skipped") || 
-                    lowerMsg.includes("skipping");
+  const isSkipped =
+    lowerMsg.includes("skip") ||
+    lowerMsg.includes("skipped") ||
+    lowerMsg.includes("skipping");
 
   let timestamp: string | undefined;
   let parsedMessage = cleanMessage;
@@ -86,11 +87,20 @@ function parseLogMessage(message: string, event: string): ParsedLogEntry {
     else if (lowerEvent.includes("warn")) parsedLevel = "WARN";
 
     const lowerCleanMessage = cleanMessage.toLowerCase();
-    if (lowerCleanMessage.includes("error") || lowerCleanMessage.includes("failed")) {
+    if (
+      lowerCleanMessage.includes("error") ||
+      lowerCleanMessage.includes("failed")
+    ) {
       parsedLevel = "ERROR";
-    } else if (lowerCleanMessage.includes("warning") || lowerCleanMessage.includes("warn")) {
+    } else if (
+      lowerCleanMessage.includes("warning") ||
+      lowerCleanMessage.includes("warn")
+    ) {
       parsedLevel = "WARN";
-    } else if (lowerCleanMessage.includes("success") || lowerCleanMessage.includes("complete")) {
+    } else if (
+      lowerCleanMessage.includes("success") ||
+      lowerCleanMessage.includes("complete")
+    ) {
       parsedLevel = "OK";
     }
   }
@@ -114,7 +124,7 @@ export const LogsTabContents = () => {
       staleTime: Infinity,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
-    }
+    },
   );
 
   const [focus, setFocus] = useState<LogFocus>("all");
@@ -125,16 +135,16 @@ export const LogsTabContents = () => {
   const [showBottomFade, setShowBottomFade] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [searchInputFocused, setSearchInputFocused] = useState(false);
-  
+
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const logRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
   const parsedLogs = useMemo(
     () =>
       deploymentLogs.events.map((event) =>
-        parseLogMessage(event.message, event.event)
+        parseLogMessage(event.message, event.event),
       ),
-    [deploymentLogs.events]
+    [deploymentLogs.events],
   );
 
   const logStats = useMemo(() => {
@@ -165,7 +175,7 @@ export const LogsTabContents = () => {
     });
 
     return Array.from(groups.entries()).sort((a, b) =>
-      a[0].localeCompare(b[0])
+      a[0].localeCompare(b[0]),
     );
   }, [parsedLogs, groupBySource]);
 
@@ -220,7 +230,7 @@ export const LogsTabContents = () => {
         scrollToLog(targetIndex);
       }
     },
-    [currentSearchIndex, filteredIndices, scrollToLog]
+    [currentSearchIndex, filteredIndices, scrollToLog],
   );
 
   const handleFocusChange = (newFocus: LogFocus) => {
@@ -234,7 +244,7 @@ export const LogsTabContents = () => {
           (newFocus === "errors" && log.level === "ERROR") ||
           (newFocus === "skipped" && log.level === "SKIP")
             ? index
-            : -1
+            : -1,
         )
         .filter((i) => i !== -1);
 
@@ -252,7 +262,7 @@ export const LogsTabContents = () => {
 
     if (query) {
       const firstMatch = parsedLogs.findIndex((log) =>
-        log.message.toLowerCase().includes(query.toLowerCase())
+        log.message.toLowerCase().includes(query.toLowerCase()),
       );
       if (firstMatch !== -1) {
         scrollToLog(firstMatch);
@@ -270,7 +280,7 @@ export const LogsTabContents = () => {
       const isScrollable = container.scrollHeight > container.clientHeight;
       const isAtBottom =
         Math.abs(
-          container.scrollHeight - container.clientHeight - container.scrollTop
+          container.scrollHeight - container.clientHeight - container.scrollTop,
         ) < 5;
       setShowBottomFade(isScrollable && !isAtBottom);
       setIsScrolled(container.scrollTop > 0);
@@ -278,7 +288,7 @@ export const LogsTabContents = () => {
 
     // Check on mount and when logs change
     const timeoutId = setTimeout(checkScroll, 100);
-    
+
     container.addEventListener("scroll", checkScroll);
     window.addEventListener("resize", checkScroll);
 
@@ -305,7 +315,9 @@ export const LogsTabContents = () => {
 
       if ((e.metaKey || e.ctrlKey) && e.key === "f") {
         e.preventDefault();
-        const searchInput = document.querySelector<HTMLInputElement>('[data-search-input]');
+        const searchInput = document.querySelector<HTMLInputElement>(
+          "[data-search-input]",
+        );
         searchInput?.focus();
         return;
       }
@@ -315,7 +327,9 @@ export const LogsTabContents = () => {
         switch (e.key) {
           case "/": {
             e.preventDefault();
-            const searchInput = document.querySelector<HTMLInputElement>('[data-search-input]');
+            const searchInput = document.querySelector<HTMLInputElement>(
+              "[data-search-input]",
+            );
             searchInput?.focus();
             break;
           }
@@ -401,7 +415,7 @@ export const LogsTabContents = () => {
             </mark>
           ) : (
             part
-          )
+          ),
         )}
       </>
     );
@@ -418,25 +432,27 @@ export const LogsTabContents = () => {
         <div
           className={cn(
             "flex items-center gap-2 p-2 bg-surface/50 transition-all",
-            isScrolled && "border-b border-border"
+            isScrolled && "border-b border-border",
           )}
         >
           <button
             onClick={() => handleFocusChange("all")}
             className={cn(
               "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-              focus === "all" ? "bg-btn-secondary" : "hover:bg-muted/50"
+              focus === "all" ? "bg-btn-secondary" : "hover:bg-muted/50",
             )}
           >
             <Icon
               name="list"
               className={cn(
                 "size-3",
-                focus === "all" ? "" : "text-muted-foreground"
+                focus === "all" ? "" : "text-muted-foreground",
               )}
             />
             <span>All logs</span>
-            <span className="text-muted-foreground opacity-60">{parsedLogs.length}</span>
+            <span className="text-muted-foreground opacity-60">
+              {parsedLogs.length}
+            </span>
           </button>
 
           {logStats.warns > 0 && (
@@ -444,18 +460,20 @@ export const LogsTabContents = () => {
               onClick={() => handleFocusChange("warns")}
               className={cn(
                 "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-                focus === "warns" ? "bg-btn-secondary" : "hover:bg-muted/50"
+                focus === "warns" ? "bg-btn-secondary" : "hover:bg-muted/50",
               )}
             >
               <Icon
                 name="triangle-alert"
                 className={cn(
                   "size-3",
-                  focus === "warns" ? "text-warning" : "text-muted-foreground"
+                  focus === "warns" ? "text-warning" : "text-muted-foreground",
                 )}
               />
               <span>Warns</span>
-              <span className="text-muted-foreground opacity-60">{logStats.warns}</span>
+              <span className="text-muted-foreground opacity-60">
+                {logStats.warns}
+              </span>
             </button>
           )}
 
@@ -464,7 +482,7 @@ export const LogsTabContents = () => {
               onClick={() => handleFocusChange("errors")}
               className={cn(
                 "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-                focus === "errors" ? "bg-btn-secondary" : "hover:bg-muted/50"
+                focus === "errors" ? "bg-btn-secondary" : "hover:bg-muted/50",
               )}
             >
               <Icon
@@ -473,11 +491,13 @@ export const LogsTabContents = () => {
                   "size-3",
                   focus === "errors"
                     ? "text-destructive"
-                    : "text-muted-foreground"
+                    : "text-muted-foreground",
                 )}
               />
               <span>Errors</span>
-              <span className="text-muted-foreground opacity-60">{logStats.errors}</span>
+              <span className="text-muted-foreground opacity-60">
+                {logStats.errors}
+              </span>
             </button>
           )}
 
@@ -486,18 +506,20 @@ export const LogsTabContents = () => {
               onClick={() => handleFocusChange("skipped")}
               className={cn(
                 "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-                focus === "skipped" ? "bg-btn-secondary" : "hover:bg-muted/50"
+                focus === "skipped" ? "bg-btn-secondary" : "hover:bg-muted/50",
               )}
             >
               <Icon
                 name="skip-forward"
                 className={cn(
                   "size-3",
-                  focus === "skipped" ? "" : "text-muted-foreground"
+                  focus === "skipped" ? "" : "text-muted-foreground",
                 )}
               />
               <span>Skipped</span>
-              <span className="text-muted-foreground opacity-60">{logStats.skipped}</span>
+              <span className="text-muted-foreground opacity-60">
+                {logStats.skipped}
+              </span>
             </button>
           )}
 
@@ -506,14 +528,14 @@ export const LogsTabContents = () => {
               onClick={() => setGroupBySource(!groupBySource)}
               className={cn(
                 "flex items-center gap-2 p-1 text-xs font-mono uppercase rounded-sm border border-border transition-colors",
-                groupBySource ? "bg-btn-secondary" : "hover:bg-muted/50"
+                groupBySource ? "bg-btn-secondary" : "hover:bg-muted/50",
               )}
             >
               <Icon
                 name="layers"
                 className={cn(
                   "size-3",
-                  groupBySource ? "" : "text-muted-foreground"
+                  groupBySource ? "" : "text-muted-foreground",
                 )}
               />
               <span>{groupBySource ? "Grouped" : "Group"}</span>
@@ -590,136 +612,141 @@ export const LogsTabContents = () => {
               <Icon name="file-text" className="size-8 mb-3 opacity-30" />
               <p className="text-sm font-sans">No logs to display</p>
             </div>
-          ) : groupBySource && groupedLogs
-            ? // Grouped view
-              groupedLogs.map(([source, group]) => (
-                <details key={source} className="group" open>
-                  <summary className="px-3 py-3 cursor-pointer hover:bg-muted/30 flex items-center gap-2 border-b border-border">
-                    <Icon
-                      name="chevron-right"
-                      className="size-3 group-open:rotate-90 transition-transform"
-                    />
-                    <span className="font-sans font-medium">{source}</span>
-                    <span className="text-muted-foreground font-sans text-xs">
-                      ({group.logs.length})
-                    </span>
-                  </summary>
-                  <div>
-                    {group.logs.map((log, localIndex) => {
-                      const globalIndex = group.indices[localIndex];
-                      if (globalIndex === undefined) return null;
-                      
-                      const isHighlighted = globalIndex === currentLogIndex;
-                      const isError = log.level === "ERROR";
-                      const isWarn = log.level === "WARN";
-                      const isSkipped = log.level === "SKIP";
+          ) : groupBySource && groupedLogs ? (
+            // Grouped view
+            groupedLogs.map(([source, group]) => (
+              <details key={source} className="group" open>
+                <summary className="px-3 py-3 cursor-pointer hover:bg-muted/30 flex items-center gap-2 border-b border-border">
+                  <Icon
+                    name="chevron-right"
+                    className="size-3 group-open:rotate-90 transition-transform"
+                  />
+                  <span className="font-sans font-medium">{source}</span>
+                  <span className="text-muted-foreground font-sans text-xs">
+                    ({group.logs.length})
+                  </span>
+                </summary>
+                <div>
+                  {group.logs.map((log, localIndex) => {
+                    const globalIndex = group.indices[localIndex];
+                    if (globalIndex === undefined) return null;
 
-                      return (
-                        <div
-                          ref={(el) => {
-                            if (el) logRefs.current.set(globalIndex, el);
-                          }}
-                          key={deploymentLogs.events[globalIndex]?.id || `fallback-${globalIndex}`}
-                          className={cn(
-                            "px-3 py-2 transition-colors relative",
-                            "hover:bg-muted/20",
-                            isError && "bg-destructive/10 text-destructive",
-                            isWarn && "bg-warning/10 text-warning",
-                            isSkipped && "bg-muted/50 text-muted-foreground",
-                            isHighlighted &&
-                              "border-l-4 border-l-foreground pl-2"
-                          )}
-                        >
-                          <div className="flex items-start gap-4">
-                            <span
-                              className={cn(
-                                "text-muted-foreground tabular-nums",
-                                (isError || isWarn) && "text-inherit"
-                              )}
-                            >
-                              {log.timestamp ||
-                                `${String(globalIndex + 1).padStart(
-                                  2,
-                                  "0"
-                                )}:00:00.000`}
-                            </span>
-                            <span
-                              className={cn(
-                                "font-medium uppercase",
-                                isError && "text-destructive",
-                                isWarn && "text-warning",
-                                isSkipped && "text-muted-foreground",
-                                !isError &&
-                                  !isWarn &&
-                                  !isSkipped &&
-                                  "text-muted-foreground"
-                              )}
-                            >
-                              [{log.level}]
-                            </span>
-                            <span className="flex-1">
-                              {highlightMatch(log.message)}
-                            </span>
-                          </div>
+                    const isHighlighted = globalIndex === currentLogIndex;
+                    const isError = log.level === "ERROR";
+                    const isWarn = log.level === "WARN";
+                    const isSkipped = log.level === "SKIP";
+
+                    return (
+                      <div
+                        ref={(el) => {
+                          if (el) logRefs.current.set(globalIndex, el);
+                        }}
+                        key={
+                          deploymentLogs.events[globalIndex]?.id ||
+                          `fallback-${globalIndex}`
+                        }
+                        className={cn(
+                          "px-3 py-2 transition-colors relative",
+                          "hover:bg-muted/20",
+                          isError && "bg-destructive/10 text-destructive",
+                          isWarn && "bg-warning/10 text-warning",
+                          isSkipped && "bg-muted/50 text-muted-foreground",
+                          isHighlighted &&
+                            "border-l-4 border-l-foreground pl-2",
+                        )}
+                      >
+                        <div className="flex items-start gap-4">
+                          <span
+                            className={cn(
+                              "text-muted-foreground tabular-nums",
+                              (isError || isWarn) && "text-inherit",
+                            )}
+                          >
+                            {log.timestamp ||
+                              `${String(globalIndex + 1).padStart(
+                                2,
+                                "0",
+                              )}:00:00.000`}
+                          </span>
+                          <span
+                            className={cn(
+                              "font-medium uppercase",
+                              isError && "text-destructive",
+                              isWarn && "text-warning",
+                              isSkipped && "text-muted-foreground",
+                              !isError &&
+                                !isWarn &&
+                                !isSkipped &&
+                                "text-muted-foreground",
+                            )}
+                          >
+                            [{log.level}]
+                          </span>
+                          <span className="flex-1">
+                            {highlightMatch(log.message)}
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                </details>
-              ))
-            : // Flat view
-              parsedLogs.map((log, index) => {
-                const isHighlighted = index === currentLogIndex;
-                const isError = log.level === "ERROR";
-                const isWarn = log.level === "WARN";
-                const isSkipped = log.level === "SKIP";
+                      </div>
+                    );
+                  })}
+                </div>
+              </details>
+            ))
+          ) : (
+            // Flat view
+            parsedLogs.map((log, index) => {
+              const isHighlighted = index === currentLogIndex;
+              const isError = log.level === "ERROR";
+              const isWarn = log.level === "WARN";
+              const isSkipped = log.level === "SKIP";
 
-                return (
-                  <div
-                    ref={(el) => {
-                      if (el) logRefs.current.set(index, el);
-                    }}
-                    key={deploymentLogs.events[index]?.id || `fallback-${index}`}
-                    className={cn(
-                      "px-3 py-2 transition-colors relative",
-                      "hover:bg-muted/20",
-                      isError && "bg-destructive/10 text-destructive",
-                      isWarn && "bg-warning/10 text-warning",
-                      isSkipped && "bg-muted/50 text-muted-foreground",
-                      isHighlighted && "border-l-4 border-l-foreground pl-2"
-                    )}
-                  >
-                    <div className="flex items-start gap-4">
-                      <span
-                        className={cn(
-                          "text-muted-foreground tabular-nums",
-                          (isError || isWarn) && "text-inherit"
-                        )}
-                      >
-                        {log.timestamp ||
-                          `14:30:${String(index).padStart(2, "0")}.000`}
-                      </span>
-                      <span
-                        className={cn(
-                          "font-medium uppercase",
-                          isError && "text-destructive",
-                          isWarn && "text-warning",
-                          isSkipped && "text-muted-foreground",
-                          !isError &&
-                            !isWarn &&
-                            !isSkipped &&
-                            "text-muted-foreground"
-                        )}
-                      >
-                        [{log.level}]
-                      </span>
-                      <span className="flex-1">
-                        {highlightMatch(log.message)}
-                      </span>
-                    </div>
+              return (
+                <div
+                  ref={(el) => {
+                    if (el) logRefs.current.set(index, el);
+                  }}
+                  key={deploymentLogs.events[index]?.id || `fallback-${index}`}
+                  className={cn(
+                    "px-3 py-2 transition-colors relative",
+                    "hover:bg-muted/20",
+                    isError && "bg-destructive/10 text-destructive",
+                    isWarn && "bg-warning/10 text-warning",
+                    isSkipped && "bg-muted/50 text-muted-foreground",
+                    isHighlighted && "border-l-4 border-l-foreground pl-2",
+                  )}
+                >
+                  <div className="flex items-start gap-4">
+                    <span
+                      className={cn(
+                        "text-muted-foreground tabular-nums",
+                        (isError || isWarn) && "text-inherit",
+                      )}
+                    >
+                      {log.timestamp ||
+                        `14:30:${String(index).padStart(2, "0")}.000`}
+                    </span>
+                    <span
+                      className={cn(
+                        "font-medium uppercase",
+                        isError && "text-destructive",
+                        isWarn && "text-warning",
+                        isSkipped && "text-muted-foreground",
+                        !isError &&
+                          !isWarn &&
+                          !isSkipped &&
+                          "text-muted-foreground",
+                      )}
+                    >
+                      [{log.level}]
+                    </span>
+                    <span className="flex-1">
+                      {highlightMatch(log.message)}
+                    </span>
                   </div>
-                );
-              })}
+                </div>
+              );
+            })
+          )}
         </div>
 
         {showBottomFade && (
@@ -779,7 +806,7 @@ export const AssetsTabContents = () => {
       staleTime: Infinity,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
-    }
+    },
   );
 
   const handleDownload = (assetId: string, assetName: string) => {

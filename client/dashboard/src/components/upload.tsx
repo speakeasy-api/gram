@@ -18,7 +18,7 @@ export function ImageUpload({
 }) {
   const { fetch } = useFetcher();
   const [assetId, setAssetId] = useState<string | null>(
-    existingAssetId ?? null
+    existingAssetId ?? null,
   );
 
   const onImageUpload = async (file: File) => {
@@ -116,8 +116,8 @@ export default function FileUpload({
           } else {
             console.warn(
               `Invalid file type. Please upload one of the following: ${allowedExtensions?.join(
-                ", "
-              )}`
+                ", ",
+              )}`,
             );
           }
         }

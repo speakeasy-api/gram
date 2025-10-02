@@ -44,7 +44,8 @@ function SaveActionBar({
         </div>
       )}
       <div className="flex items-center gap-3 ml-auto">
-        <Button type="button"
+        <Button
+          type="button"
           variant="tertiary"
           size="sm"
           onClick={onCancel}
@@ -53,7 +54,8 @@ function SaveActionBar({
         >
           Cancel
         </Button>
-        <Button type="button"
+        <Button
+          type="button"
           size="sm"
           onClick={onSave}
           disabled={isSaving}
@@ -69,7 +71,6 @@ function SaveActionBar({
     </div>
   );
 }
-
 
 interface ToolsetDialogProps {
   open: boolean;
@@ -164,7 +165,7 @@ export function useEnvironment(slug?: string) {
   const environments = useEnvironments();
 
   const environment = environments.find(
-    (environment) => environment.slug === environmentSlug
+    (environment) => environment.slug === environmentSlug,
   );
 
   return environment
@@ -222,7 +223,7 @@ export default function EnvironmentPage() {
     onError: (error) => {
       console.error(
         "Environment variable save failed:",
-        error?.message || error
+        error?.message || error,
       );
       setSaveError("Failed to save environment variables. Please try again.");
     },
@@ -244,36 +245,43 @@ export default function EnvironmentPage() {
   const { data: selectedToolset } = useToolset(
     { slug: selectedToolsetSlug },
     undefined,
-    { enabled: !!selectedToolsetSlug }
+    { enabled: !!selectedToolsetSlug },
   );
 
   useEffect(() => {
-    if (selectedToolset && (selectedToolset.securityVariables || selectedToolset.serverVariables)) {
+    if (
+      selectedToolset &&
+      (selectedToolset.securityVariables || selectedToolset.serverVariables)
+    ) {
       const newValues = { ...envValues };
       const newEdited = new Set(editedFields);
-      
+
       // Process security variables
       selectedToolset.securityVariables?.forEach((entry) => {
         entry.envVariables.forEach((varName) => {
-          const existingEntry = environment?.entries?.find((e) => e.name === varName);
+          const existingEntry = environment?.entries?.find(
+            (e) => e.name === varName,
+          );
           if (!existingEntry) {
             newValues[varName] = "";
             newEdited.add(varName);
           }
         });
       });
-      
+
       // Process server variables
       selectedToolset.serverVariables?.forEach((entry) => {
         entry.envVariables.forEach((varName) => {
-          const existingEntry = environment?.entries?.find((e) => e.name === varName);
+          const existingEntry = environment?.entries?.find(
+            (e) => e.name === varName,
+          );
           if (!existingEntry) {
             newValues[varName] = "";
             newEdited.add(varName);
           }
         });
       });
-      
+
       setEnvValues(newValues);
       setEditedFields(newEdited);
       setHasChanges(true);
@@ -288,7 +296,7 @@ export default function EnvironmentPage() {
       setHasChanges(true);
       if (saveError) setSaveError(null);
     },
-    [saveError]
+    [saveError],
   );
 
   const handleFieldFocus = useCallback((varName: string) => {
@@ -315,12 +323,15 @@ export default function EnvironmentPage() {
     setDeleteConfirmDialog({ open: true, varName });
   }, []);
 
-  const confirmDelete = useCallback((varName: string) => {
-    setDeletedFields((prev) => new Set(prev).add(varName));
-    setHasChanges(true);
-    if (saveError) setSaveError(null);
-    setDeleteConfirmDialog({ open: false, varName: "" });
-  }, [saveError]);
+  const confirmDelete = useCallback(
+    (varName: string) => {
+      setDeletedFields((prev) => new Set(prev).add(varName));
+      setHasChanges(true);
+      if (saveError) setSaveError(null);
+      setDeleteConfirmDialog({ open: false, varName: "" });
+    },
+    [saveError],
+  );
 
   const handleSave = useCallback(() => {
     if (!environment) return;
@@ -354,7 +365,15 @@ export default function EnvironmentPage() {
     setNewEntryName("");
     setNewEntryValue("");
     setDeletedFields(new Set());
-  }, [environment, envValues, isAddingNew, newEntryName, newEntryValue, deletedFields, updateEnvironment]);
+  }, [
+    environment,
+    envValues,
+    isAddingNew,
+    newEntryName,
+    newEntryValue,
+    deletedFields,
+    updateEnvironment,
+  ]);
 
   const handleAddNewEntry = useCallback(() => {
     setIsAddingNew(true);
@@ -385,17 +404,18 @@ export default function EnvironmentPage() {
 
   const allEntries = [
     ...(environment.entries || []),
-    ...Object.keys(envValues).filter(name => 
-      !environment.entries?.find(e => e.name === name)
-    ).map(name => ({
-      name,
-      value: "",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    }))
-  ].filter(entry => !deletedFields.has(entry.name));
+    ...Object.keys(envValues)
+      .filter((name) => !environment.entries?.find((e) => e.name === name))
+      .map((name) => ({
+        name,
+        value: "",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })),
+  ].filter((entry) => !deletedFields.has(entry.name));
 
-  const hasChangesOrNewEntry = hasChanges || (isAddingNew && validateEntryName(newEntryName));
+  const hasChangesOrNewEntry =
+    hasChanges || (isAddingNew && validateEntryName(newEntryName));
 
   return (
     <Page>
@@ -436,24 +456,35 @@ export default function EnvironmentPage() {
               <div className="space-y-4">
                 {allEntries.map((entry) => {
                   const isEdited = editedFields.has(entry.name);
-                  const originalEntry = environment.entries?.find(e => e.name === entry.name);
+                  const originalEntry = environment.entries?.find(
+                    (e) => e.name === entry.name,
+                  );
                   const isNew = !originalEntry;
                   const isFocused = focusedField === entry.name;
-                  const hasExistingValue = originalEntry?.value != null && originalEntry.value.trim() !== "";
-                  
+                  const hasExistingValue =
+                    originalEntry?.value != null &&
+                    originalEntry.value.trim() !== "";
+
                   // Display logic matching ToolsetAuth:
                   // - If edited, show the edited value
-                  // - If not focused and has existing value, show the original value  
+                  // - If not focused and has existing value, show the original value
                   // - If focused, show empty (to allow typing replacement)
                   let displayValue = "";
                   if (isEdited) {
                     displayValue = envValues[entry.name] ?? "";
-                  } else if (!isFocused && hasExistingValue && originalEntry?.value) {
+                  } else if (
+                    !isFocused &&
+                    hasExistingValue &&
+                    originalEntry?.value
+                  ) {
                     displayValue = originalEntry.value;
                   }
 
                   return (
-                    <div key={entry.name} className="grid grid-cols-2 gap-4 items-center mb-2">
+                    <div
+                      key={entry.name}
+                      className="grid grid-cols-2 gap-4 items-center mb-2"
+                    >
                       <label className="text-sm font-medium text-foreground">
                         {entry.name}
                         {isNew && (
@@ -466,16 +497,23 @@ export default function EnvironmentPage() {
                         <div className="flex-1">
                           <Input
                             value={displayValue}
-                            onChange={(value) => handleValueChange(entry.name, value)}
+                            onChange={(value) =>
+                              handleValueChange(entry.name, value)
+                            }
                             onFocus={() => handleFieldFocus(entry.name)}
                             onBlur={handleFieldBlur}
-                            placeholder={hasExistingValue ? "Replace existing value" : "Enter value"}
+                            placeholder={
+                              hasExistingValue
+                                ? "Replace existing value"
+                                : "Enter value"
+                            }
                             type="text"
-                            className={`font-mono text-sm w-full ${isEdited ? 'ring-1 ring-blue-500' : ''}`}
+                            className={`font-mono text-sm w-full ${isEdited ? "ring-1 ring-blue-500" : ""}`}
                             disabled={isSaving}
                           />
                         </div>
-                        <Button variant="tertiary"
+                        <Button
+                          variant="tertiary"
                           size="sm"
                           className="h-8 w-8 flex-shrink-0 self-start mt-[1px]"
                           onClick={() => handleRemoveVariable(entry.name)}
@@ -494,9 +532,11 @@ export default function EnvironmentPage() {
                     <div className="grid grid-cols-2 gap-4 items-center mb-2">
                       <Input
                         value={newEntryName}
-                        onChange={(value) => setNewEntryName(value.toUpperCase())}
+                        onChange={(value) =>
+                          setNewEntryName(value.toUpperCase())
+                        }
                         onKeyDown={(e) => {
-                          if (e.key === 'Escape') {
+                          if (e.key === "Escape") {
                             handleCancelNewEntry();
                           }
                         }}
@@ -515,7 +555,8 @@ export default function EnvironmentPage() {
                             disabled={isSaving}
                           />
                         </div>
-                        <Button variant="tertiary"
+                        <Button
+                          variant="tertiary"
                           size="sm"
                           className="h-8 w-8 flex-shrink-0 self-start mt-[1px]"
                           onClick={handleCancelNewEntry}
@@ -526,14 +567,16 @@ export default function EnvironmentPage() {
                         </Button>
                       </div>
                     </div>
-                    {!validateEntryName(newEntryName) && newEntryName.length > 0 && (
-                      <p className="text-xs text-destructive">
-                        Variable name must start with a letter, underscore, dash, or period and contain only alphanumeric characters, underscores, dashes, or periods
-                      </p>
-                    )}
+                    {!validateEntryName(newEntryName) &&
+                      newEntryName.length > 0 && (
+                        <p className="text-xs text-destructive">
+                          Variable name must start with a letter, underscore,
+                          dash, or period and contain only alphanumeric
+                          characters, underscores, dashes, or periods
+                        </p>
+                      )}
                   </div>
                 )}
-
               </div>
 
               {hasChangesOrNewEntry && (
@@ -551,13 +594,12 @@ export default function EnvironmentPage() {
                     No environment variables defined
                   </p>
                   <div className="mt-4 flex flex-col gap-2 items-center">
-                    <Button
-                      onClick={handleAddNewEntry}
-                    >
+                    <Button onClick={handleAddNewEntry}>
                       <Plus className="h-4 w-4 mr-2" />
                       ADD YOUR FIRST VARIABLE
                     </Button>
-                    <Button variant="secondary"
+                    <Button
+                      variant="secondary"
                       onClick={() => setToolsetDialogOpen(true)}
                     >
                       FILL FOR TOOLSET
@@ -573,25 +615,32 @@ export default function EnvironmentPage() {
               onSubmit={handleToolsetSubmit}
             />
 
-            <Dialog 
-              open={deleteConfirmDialog.open} 
-              onOpenChange={(open) => !open && setDeleteConfirmDialog({ open: false, varName: "" })}
+            <Dialog
+              open={deleteConfirmDialog.open}
+              onOpenChange={(open) =>
+                !open && setDeleteConfirmDialog({ open: false, varName: "" })
+              }
             >
               <Dialog.Content>
                 <Dialog.Header>
                   <Dialog.Title>Delete Environment Variable</Dialog.Title>
                   <Dialog.Description>
-                    Are you sure you want to delete <strong>{deleteConfirmDialog.varName}</strong>? 
-                    This action will be permanent once you save your changes.
+                    Are you sure you want to delete{" "}
+                    <strong>{deleteConfirmDialog.varName}</strong>? This action
+                    will be permanent once you save your changes.
                   </Dialog.Description>
                 </Dialog.Header>
                 <Dialog.Footer>
-                  <Button variant="tertiary" 
-                    onClick={() => setDeleteConfirmDialog({ open: false, varName: "" })}
+                  <Button
+                    variant="tertiary"
+                    onClick={() =>
+                      setDeleteConfirmDialog({ open: false, varName: "" })
+                    }
                   >
                     Cancel
                   </Button>
-                  <Button variant="destructive-primary"
+                  <Button
+                    variant="destructive-primary"
                     onClick={() => confirmDelete(deleteConfirmDialog.varName)}
                   >
                     Delete

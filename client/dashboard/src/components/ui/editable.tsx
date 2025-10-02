@@ -40,7 +40,7 @@ export function Editable({
               <Type
                 className={cn(
                   "font-medium text-inherit",
-                  disabled && "text-muted-foreground"
+                  disabled && "text-muted-foreground",
                 )}
               >
                 Edit
