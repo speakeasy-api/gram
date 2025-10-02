@@ -25,6 +25,7 @@ jobs:
     outputs:
       server: ${{ steps.gates.outputs.server }}
       client: ${{ steps.gates.outputs.client }}
+      functions: ${{ steps.gates.outputs.functions }}
     steps:
       - name: Checkout source code
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
@@ -48,6 +49,13 @@ jobs:
             echo "Client jobs will run."
           else
             echo "Client jobs will be skipped."
+          fi
+
+          if [[ "${{ steps.filter.outputs.functions }}" == "true" || "${{ github.ref }}" ==  "refs/heads/main" ]]; then
+            echo "functions=true" >> $GITHUB_OUTPUT
+            echo "Functions jobs will run."
+          else
+            echo "Functions jobs will be skipped."
           fi
 
   docker-build-server:
@@ -429,3 +437,261 @@ jobs:
       - name: Check for dirty files
         if: ${{ needs.changes.outputs.client == 'true' }}
         run: mise run git:porcelain
+
+  functions-build-host:
+    runs-on: ubicloud-standard-4
+    needs: changes
+    steps:
+      - name: Skip if no functions changes exist
+        if: ${{ needs.changes.outputs.functions != 'true' }}
+        run: echo "No functions changes detected — skipping functions-build-bin."
+
+      - name: Checkout
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Mise
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        uses: jdx/mise-action@5ac50f778e26fac95da98d50503682459e86d566 # v3.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: mise run github
+
+      - name: Cache Go
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          key: ${{ env.GH_CACHE_GO_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_GO_KEY }}
+            ${{ env.GH_CACHE_GO_KEY_PARTIAL }}
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+
+      - name: Cache PNPM
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Test functions entrypoint
+        working-directory: functions
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: pnpm test
+
+      - name: Type check functions entrypoint
+        working-directory: functions
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: pnpm check
+
+      - name: Install Go tools
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: go install tool
+        working-directory: functions
+
+      - name: Lint Go server
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8.0.0
+        with:
+          install-mode: none
+          working-directory: functions
+
+      - name: Test Go server
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: mise run test:functions
+
+      - name: Build Gram Functions host
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        env:
+          MELANGE_PRIVATE_KEY: ${{ secrets.MELANGE_PRIVATE_KEY }}
+        run: |
+          KEY_DIR=$(mktemp -d)
+          KEY_FILE="$KEY_DIR/melange-signing-key.rsa"
+          echo "$MELANGE_PRIVATE_KEY" > "$KEY_FILE"
+          mise run build:functions-bin --melange-private-key "$KEY_FILE"
+          rm -rf "$KEY_DIR"
+
+      - name: Upload melange packages artifact
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: functions-packages
+          path: functions/packages
+          retention-days: 2
+
+      - name: Run "go mod tidy"
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: mise run go:tidy
+
+      - name: Check for dirty files
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: mise run git:porcelain
+
+      - name: Prune PNPM store
+        if: ${{ needs.changes.outputs.functions == 'true' && success() }}
+        run: pnpm store prune
+
+  functions-image:
+    runs-on: ubicloud-standard-4
+    needs: [changes, functions-build-host]
+    strategy:
+      matrix:
+        runtime: ["nodejs22"]
+    steps:
+      - name: Skip if no functions changes exist
+        if: ${{ needs.changes.outputs.functions != 'true' }}
+        run: echo "No functions changes detected — skipping functions-image (${{ matrix.runtime }})."
+
+      - name: Checkout
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+
+      - name: Setup Mise
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        uses: jdx/mise-action@5ac50f778e26fac95da98d50503682459e86d566 # v3.2.0
+        with:
+          install: true
+          cache: true
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: mise run github
+
+      - name: Cache PNPM
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          key: ${{ env.GH_CACHE_PNPM_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_PNPM_KEY }}
+            ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
+          path: |
+            ${{ env.PNPM_STORE_PATH }}
+
+      - name: Install dependencies
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Download melange packages artifact
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: functions-packages
+          path: functions/packages
+
+      - name: Build apko image (${{ matrix.runtime }})
+        id: apko
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        env:
+          MELANGE_PUBLIC_KEY: ${{ vars.MELANGE_PUBLIC_KEY }}
+        run: |
+          KEY_DIR=$(mktemp -d)
+          KEY_FILE="$KEY_DIR/melange-signing-key.rsa.pub"
+          echo "$MELANGE_PUBLIC_KEY" > "$KEY_FILE"
+
+          mise run build:functions-image \
+            --melange-public-key "$KEY_FILE" \
+            --apko-config ./images/${{ matrix.runtime }}-alpine3.22.yaml \
+            --image "apko-${{ matrix.runtime }}:${{ github.event.pull_request.number }}" \
+            --tarball-name ${{ matrix.runtime }} \
+            --out oci/${{ matrix.runtime }}
+
+      - name: "[DEV] Create fly app"
+        id: flyCreateDev
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+          FLY_IMAGE_PREFIX: ${{ secrets.FLY_IMAGE_PREFIX_DEV }}
+        run: |
+          mise run fly:init-runner \
+            --org ${{ secrets.FLY_ORG_DEV }} \
+            --image-prefix $FLY_IMAGE_PREFIX \
+            --name ${{ matrix.runtime }} \
+            --force
+
+      - name: "[PROD] Create fly app"
+        id: flyCreateProd
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        shell: bash
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+          FLY_IMAGE_PREFIX: ${{ secrets.FLY_IMAGE_PREFIX_PROD }}
+        run: |
+          mise run fly:init-runner \
+            --org ${{ secrets.FLY_ORG_PROD }} \
+            --image-prefix $FLY_IMAGE_PREFIX \
+            --name ${{ matrix.runtime }} \
+            --force
+
+      - name: Set up Docker Buildx
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        uses: docker/setup-buildx-action@e468171a9de216ec08956ac3ada2f0791b6bd435 # v3.11.1
+
+      - name: Extract Docker metadata
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        id: meta
+        uses: docker/metadata-action@c1e51972afc2121e065aed6d45c65596fe445f3f # v5.8.0
+        with:
+          images: |
+            ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
+            ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=ref,event=pr
+            type=schedule,pattern=nightly
+            type=sha
+            type=sha,format=long
+
+      - name: Tag images
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        working-directory: functions
+        run: |
+          set -x
+
+          echo "Loading image from tarball: ${{ steps.apko.outputs.tarball }}"
+          docker image load -i ${{ steps.apko.outputs.tarball }}
+
+          TAGS="${{ steps.meta.outputs.tags }}"
+          for TAG in $TAGS; do
+            docker tag "${{ steps.apko.outputs.image }}-amd64" "$TAG"
+          done
+
+      - name: "[DEV] Push images"
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
+        run: |
+          set -x
+          fly auth docker
+          docker push --all-tags "${{ steps.flyCreateDev.outputs.flyAppRegistry }}"
+
+      - name: "[PROD] Push images"
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
+        run: |
+          set -x
+          fly auth docker
+          docker push --all-tags "${{ steps.flyCreateProd.outputs.flyAppRegistry }}"
+
+      - name: Prune PNPM store
+        if: ${{ needs.changes.outputs.functions == 'true' && success() }}
+        run: pnpm store prune

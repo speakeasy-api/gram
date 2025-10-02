@@ -1,0 +1,72 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`catches tool calls that throw 1`] = `
+"HTTP/1.1 500 
+content-length: 72
+content-type: application/json
+gram-functions-error: gram_err_002
+
+{"name":"FunctionsError","message":"Intentional failure (gram_err_002)"}"
+`;
+
+exports[`fails when functions file does not export handleToolCall 1`] = `
+"HTTP/1.1 500 
+content-length: 128
+content-type: application/json
+gram-functions-error: gram_err_004
+
+{"name":"FunctionsError","message":"Unable to call tool (gram_err_004)","cause":"handleToolCall function not found in empty.js"}"
+`;
+
+exports[`fails when tool call does not return Response 1`] = `
+"HTTP/1.1 500 
+content-length: 153
+content-type: application/json
+gram-functions-error: gram_err_001
+
+{"name":"FunctionsError","message":"Tool call did not return a valid response (gram_err_001)","cause":"Expected instance of \`Response\` but got \`object\`"}"
+`;
+
+exports[`proxy good downstream fetch calls 1`] = `
+"HTTP/1.1 200 OK
+content-length: 28
+content-type: application/json
+
+{"name":"Finn","type":"cat"}"
+`;
+
+exports[`valid tool call adds custom headers 1`] = `
+"HTTP/1.1 200 
+content-type: application/json
+x-next-cursor: 4
+
+{"currentCursor":"1","items":[{"id":1,"name":"Product A","price":10},{"id":2,"name":"Product B","price":15.5},{"id":3,"name":"Product C","price":7.25}]}"
+`;
+
+exports[`valid tool call explicit 4XX 1`] = `
+"HTTP/1.1 400 
+content-type: application/json
+
+{"error":"Invalid amount"}"
+`;
+
+exports[`valid tool call explicit 4XX 2`] = `
+"HTTP/1.1 400 
+content-type: application/json
+
+{"error":"Invalid amount"}"
+`;
+
+exports[`valid tool call with args 1`] = `
+"HTTP/1.1 200 
+content-type: application/json
+
+{"location":"San Francisco","temperature":"20C"}"
+`;
+
+exports[`valid tool call without args 1`] = `
+"HTTP/1.1 200 
+content-type: text/plain;charset=UTF-8
+
+{"response":"pong"}"
+`;
