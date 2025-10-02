@@ -341,6 +341,27 @@ const UsageTiers = () => {
                 </ul>
               </Stack>
             )}
+            {tier.addOnBullets && tier.addOnBullets.length > 0 && (
+              <Stack gap={1}>
+                <Type
+                  mono
+                  muted
+                  small
+                  variant="subheading"
+                  className="font-medium uppercase"
+                >
+                  Extras
+                </Type>
+                <ul className="list-inside space-y-1">
+                  {tier.addOnBullets.map((bullet) => (
+                    <li>
+                      <span className="text-muted-foreground/60">✓</span>{" "}
+                      {bullet}
+                    </li>
+                  ))}
+                </ul>
+              </Stack>
+            )}
           </Stack>
         </Card.Content>
       </Card>
