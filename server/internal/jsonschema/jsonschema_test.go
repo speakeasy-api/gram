@@ -394,6 +394,372 @@ func TestValidationError_Error(t *testing.T) {
 	}
 }
 
+func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		schema      []byte
+		shouldError bool
+		errorMsg    string
+	}{
+		{
+			name: "valid nested object from OpenAPI operation",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"pathParameters": {
+						"type": "object",
+						"properties": {
+							"userId": {"type": "string"}
+						}
+					},
+					"queryParameters": {
+						"type": "object",
+						"properties": {
+							"limit": {"type": "integer"},
+							"offset": {"type": "integer"}
+						}
+					},
+					"requestBody": {
+						"type": "object",
+						"properties": {
+							"name": {"type": "string"},
+							"email": {"type": "string", "format": "email"}
+						},
+						"required": ["email"]
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "valid enum from OpenAPI parameter",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": ["pending", "active", "completed", "failed"]
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "enum with mixed types",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"status": {
+						"type": "string",
+						"enum": ["pending", 123, true]
+					}
+				}
+			}`),
+			shouldError: false, // JSON Schema allows mixed-type enums, validation happens at runtime
+			errorMsg:    "",
+		},
+		{
+			name: "valid oneOf from OpenAPI discriminator",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"payload": {
+						"oneOf": [
+							{
+								"type": "object",
+								"properties": {
+									"type": {"const": "user"},
+									"name": {"type": "string"}
+								}
+							},
+							{
+								"type": "object",
+								"properties": {
+									"type": {"const": "organization"},
+									"orgName": {"type": "string"}
+								}
+							}
+						]
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "valid anyOf from OpenAPI response",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"result": {
+						"anyOf": [
+							{"type": "string"},
+							{"type": "integer"},
+							{"type": "boolean"}
+						]
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "deeply nested schema from complex OpenAPI spec",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "object",
+						"properties": {
+							"user": {
+								"type": "object",
+								"properties": {
+									"profile": {
+										"type": "object",
+										"properties": {
+											"settings": {
+												"type": "object",
+												"properties": {
+													"notifications": {
+														"type": "object",
+														"properties": {
+															"email": {"type": "boolean"}
+														}
+													}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "array with items schema from OpenAPI",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"users": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"id": {"type": "string"},
+								"email": {"type": "string"}
+							},
+							"required": ["id", "email"]
+						}
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "pattern validation from OpenAPI",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"email": {
+						"type": "string",
+						"pattern": "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "invalid pattern - malformed regex",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"field": {
+						"type": "string",
+						"pattern": "[unclosed"
+					}
+				}
+			}`),
+			shouldError: true,
+			errorMsg:    "compile json schema",
+		},
+		{
+			name: "format validation from OpenAPI",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"createdAt": {"type": "string", "format": "date-time"},
+					"date": {"type": "string", "format": "date"},
+					"uuid": {"type": "string", "format": "uuid"},
+					"uri": {"type": "string", "format": "uri"}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "allOf composition from OpenAPI inheritance",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"entity": {
+						"allOf": [
+							{
+								"type": "object",
+								"properties": {
+									"id": {"type": "string"}
+								}
+							},
+							{
+								"type": "object",
+								"properties": {
+									"name": {"type": "string"}
+								}
+							}
+						]
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "conflicting allOf schemas",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"field": {
+						"allOf": [
+							{"type": "string"},
+							{"type": "integer"}
+						]
+					}
+				}
+			}`),
+			shouldError: false, // Schema is valid, but validation against data would fail
+			errorMsg:    "",
+		},
+		{
+			name: "additionalProperties with schema",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"metadata": {
+						"type": "object",
+						"additionalProperties": {
+							"type": "string"
+						}
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "invalid - additionalProperties with wrong type",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"metadata": {
+						"type": "object",
+						"additionalProperties": "not-a-schema"
+					}
+				}
+			}`),
+			shouldError: true,
+			errorMsg:    "compile json schema",
+		},
+		{
+			name: "nullable field from OpenAPI nullable: true",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"optionalField": {
+						"type": ["string", "null"]
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "min/max constraints from OpenAPI",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"age": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 150
+					},
+					"name": {
+						"type": "string",
+						"minLength": 1,
+						"maxLength": 100
+					},
+					"tags": {
+						"type": "array",
+						"minItems": 1,
+						"maxItems": 10
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "response filter schema with nested properties",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"responseFilter": {
+						"type": "object",
+						"properties": {
+							"filter": {"type": "string"},
+							"schema": {
+								"type": "object",
+								"properties": {
+									"result": {"type": "string"}
+								}
+							}
+						}
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+		{
+			name: "multipart form data from OpenAPI",
+			schema: []byte(`{
+				"type": "object",
+				"properties": {
+					"file": {
+						"type": "string",
+						"format": "binary"
+					},
+					"metadata": {
+						"type": "object",
+						"properties": {
+							"filename": {"type": "string"}
+						}
+					}
+				}
+			}`),
+			shouldError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := IsValidJSONSchema(tt.schema)
+			if tt.shouldError {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestHasAdditionalProperties(t *testing.T) {
 	t.Parallel()
 
