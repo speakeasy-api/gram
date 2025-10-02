@@ -200,10 +200,10 @@ export function useCustomDomain() {
 export function useMcpUrl(
   toolset:
     | Pick<
-      ToolsetEntry,
-      "slug" | "customDomainId" | "mcpSlug" | "defaultEnvironmentSlug"
-    >
-    | undefined
+        ToolsetEntry,
+        "slug" | "customDomainId" | "mcpSlug" | "defaultEnvironmentSlug"
+      >
+    | undefined,
 ) {
   const { domain } = useCustomDomain();
   const project = useProject();
@@ -219,8 +219,9 @@ export function useMcpUrl(
   const urlSuffix = toolset.mcpSlug
     ? toolset.mcpSlug
     : `${project.slug}/${toolset.slug}/${toolset.defaultEnvironmentSlug}`;
-  const mcpUrl = `${toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
-    }/mcp/${urlSuffix}`;
+  const mcpUrl = `${
+    toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
+  }/mcp/${urlSuffix}`;
 
   return {
     url: mcpUrl,
@@ -534,26 +535,26 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       >
         <MCPJson toolset={toolset} />
       </PageSection>
-        <FeatureRequestModal
-          isOpen={isCustomDomainModalOpen}
-          onClose={() => setIsCustomDomainModalOpen(false)}
-          title="Host your MCP at a custom domain"
-          description="Custom domains require upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
-          actionType="mcp_custom_domain"
-          icon={Globe}
-          telemetryData={{ slug: toolset.slug }}
-          accountUpgrade
-        />
-        <FeatureRequestModal
-          isOpen={isMaxServersModalOpen}
-          onClose={() => setIsMaxServersModalOpen(false)}
-          title="Public MCP Server Limit Reached"
-          description={`You have reached the maximum number of public MCP servers for the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
-          actionType="max_public_mcp_servers"
-          icon={Globe}
-          telemetryData={{ slug: toolset.slug }}
-          accountUpgrade
-        />
+      <FeatureRequestModal
+        isOpen={isCustomDomainModalOpen}
+        onClose={() => setIsCustomDomainModalOpen(false)}
+        title="Host your MCP at a custom domain"
+        description="Custom domains require upgrading to a pro account type. Someone should be in touch shortly, or feel free to book a meeting directly."
+        actionType="mcp_custom_domain"
+        icon={Globe}
+        telemetryData={{ slug: toolset.slug }}
+        accountUpgrade
+      />
+      <FeatureRequestModal
+        isOpen={isMaxServersModalOpen}
+        onClose={() => setIsMaxServersModalOpen(false)}
+        title="Public MCP Server Limit Reached"
+        description={`You have reached the maximum number of public MCP servers for the ${session.gramAccountType} account type. Someone should be in touch shortly, or feel free to book a meeting directly to upgrade.`}
+        actionType="max_public_mcp_servers"
+        icon={Globe}
+        telemetryData={{ slug: toolset.slug }}
+        accountUpgrade
+      />
     </Stack>
   );
 }
@@ -1205,9 +1206,11 @@ function OAuthDetailsModal({
                     </Type>
                     <CodeBlock className="mt-1">
                       {mcpUrl
-                        ? `${new URL(mcpUrl).origin
-                        }/.well-known/oauth-authorization-server/mcp/${toolset.mcpSlug
-                        }`
+                        ? `${
+                            new URL(mcpUrl).origin
+                          }/.well-known/oauth-authorization-server/mcp/${
+                            toolset.mcpSlug
+                          }`
                         : ""}
                     </CodeBlock>
                   </div>

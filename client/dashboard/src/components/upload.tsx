@@ -232,7 +232,9 @@ export function CompactUpload({
           <Type mono muted className="text-xs">
             {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")}
           </Type>
-          <Type mono muted className="text-xs">(max 8MiB)</Type>
+          <Type mono muted className="text-xs">
+            (max 8MiB)
+          </Type>
         </Stack>
       )}
       <input

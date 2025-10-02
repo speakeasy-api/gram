@@ -16,7 +16,7 @@ import UploadAssetStepper, {
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
-import {FullWidthUpload} from "@/components/upload";
+import { FullWidthUpload } from "@/components/upload";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
