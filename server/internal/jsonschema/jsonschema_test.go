@@ -432,6 +432,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "valid enum from OpenAPI parameter",
@@ -445,6 +446,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "enum with mixed types",
@@ -486,6 +488,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "valid anyOf from OpenAPI response",
@@ -502,6 +505,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "deeply nested schema from complex OpenAPI spec",
@@ -537,6 +541,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "array with items schema from OpenAPI",
@@ -557,6 +562,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "pattern validation from OpenAPI",
@@ -570,6 +576,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "invalid pattern - malformed regex",
@@ -597,6 +604,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "allOf composition from OpenAPI inheritance",
@@ -622,6 +630,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "conflicting allOf schemas",
@@ -653,6 +662,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "invalid - additionalProperties with wrong type",
@@ -679,6 +689,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "min/max constraints from OpenAPI",
@@ -703,6 +714,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "response filter schema with nested properties",
@@ -724,6 +736,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "multipart form data from OpenAPI",
@@ -743,6 +756,7 @@ func TestIsValidJSONSchema_RealWorldOpenAPIScenarios(t *testing.T) {
 				}
 			}`),
 			shouldError: false,
+			errorMsg:    "",
 		},
 	}
 
