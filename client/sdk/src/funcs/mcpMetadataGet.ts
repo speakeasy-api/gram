@@ -27,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * getInstallPageMetadata mcpInstallPage
+ * getMcpMetadata mcpMetadata
  *
  * @remarks
  * Fetch the metadata that powers the MCP install page.
  */
-export function mcpInstallPageGet(
+export function mcpMetadataGet(
   client: GramCore,
-  request: operations.GetInstallPageMetadataRequest,
-  security?: operations.GetInstallPageMetadataSecurity | undefined,
+  request: operations.GetMcpMetadataRequest,
+  security?: operations.GetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.GetInstallPageMetadataResponseBody,
+    components.GetMcpMetadataResponseBody,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +61,13 @@ export function mcpInstallPageGet(
 
 async function $do(
   client: GramCore,
-  request: operations.GetInstallPageMetadataRequest,
-  security?: operations.GetInstallPageMetadataSecurity | undefined,
+  request: operations.GetMcpMetadataRequest,
+  security?: operations.GetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.GetInstallPageMetadataResponseBody,
+      components.GetMcpMetadataResponseBody,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -83,8 +83,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      operations.GetInstallPageMetadataRequest$outboundSchema.parse(value),
+    (value) => operations.GetMcpMetadataRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -93,7 +92,7 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/mcp.installPageMetadata.get")();
+  const path = pathToFunc("/rpc/mcpMetadata.get")();
 
   const query = encodeFormQuery({
     "toolset_slug": payload.toolset_slug,
@@ -129,7 +128,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "getInstallPageMetadata",
+    operationID: "getMcpMetadata",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -185,7 +184,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.GetInstallPageMetadataResponseBody,
+    components.GetMcpMetadataResponseBody,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -196,7 +195,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.GetInstallPageMetadataResponseBody$inboundSchema),
+    M.json(200, components.GetMcpMetadataResponseBody$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

@@ -1,11 +1,8 @@
-import type {
-  MCPInstallPageMetadata,
-  Toolset,
-} from "@gram/client/models/components";
+import type { McpMetadata, Toolset } from "@gram/client/models/components";
 import {
-  useGetInstallPageMetadata,
-  useMcpInstallPageSetMutation,
-  invalidateGetInstallPageMetadata,
+  useGetMcpMetadata,
+  useMcpMetadataSetMutation,
+  invalidateGetMcpMetadata,
 } from "@gram/client/react-query";
 import { Button, Stack, Input, cn, Icon } from "@speakeasy-api/moonshine";
 import { Link } from "@/components/ui/link";
@@ -35,7 +32,7 @@ interface MetadataParams {
   externalDocumentationUrl: string | undefined;
 }
 
-interface UseMcpInstallPageMetadataFormResult {
+interface UseMcpMetadataMetadataFormResult {
   valid: boolean;
   dirty: boolean;
   isLoading: boolean;
@@ -58,17 +55,17 @@ a true deep equals. But we don't seem to have a deep equality implementation
 available, and so we opt to implement a highly specific version instead  */
 function equalsServerState(
   params: MetadataParams,
-  current: MCPInstallPageMetadata,
+  current: McpMetadata,
 ): boolean {
   return (Object.keys(params) as (keyof MetadataParams)[]).every((key) => {
     return current[key] === params[key];
   });
 }
 
-function useMcpInstallPageMetadataForm(
+function useMcpMetadataMetadataForm(
   toolsetSlug: string,
-  currentMetadata?: MCPInstallPageMetadata,
-): UseMcpInstallPageMetadataFormResult {
+  currentMetadata?: McpMetadata,
+): UseMcpMetadataMetadataFormResult {
   const queryClient = useQueryClient();
 
   const [metadataParams, setMetadataParams] = useState<MetadataParams>({
@@ -79,9 +76,9 @@ function useMcpInstallPageMetadataForm(
 
   const [urlValid, setUrlValid] = useState(true);
 
-  const mutation = useMcpInstallPageSetMutation({
+  const mutation = useMcpMetadataSetMutation({
     onSettled: () => {
-      invalidateGetInstallPageMetadata(queryClient, [{ toolsetSlug }]);
+      invalidateGetMcpMetadata(queryClient, [{ toolsetSlug }]);
     },
   });
 
@@ -145,7 +142,7 @@ function useMcpInstallPageMetadataForm(
   const save = useCallback(() => {
     mutation.mutate({
       request: {
-        setInstallPageMetadataRequestBody: {
+        setMcpMetadataRequestBody: {
           toolsetSlug,
           ...metadataParams,
         },
@@ -190,24 +187,17 @@ function useMcpInstallPageMetadataForm(
 export function ConfigForm({ toolset }: ConfigFormProps) {
   const { url: mcpUrl } = useMcpUrl(toolset);
 
-  const result = useGetInstallPageMetadata(
-    { toolsetSlug: toolset.slug },
-    undefined,
-    {
-      retry: (_failCount, err) => {
-        if (err instanceof GramError && err.statusCode === 404) {
-          return false;
-        }
-        return true;
-      },
-      throwOnError: false,
+  const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
+    retry: (_failCount, err) => {
+      if (err instanceof GramError && err.statusCode === 404) {
+        return false;
+      }
+      return true;
     },
-  );
+    throwOnError: false,
+  });
 
-  const form = useMcpInstallPageMetadataForm(
-    toolset.slug,
-    result.data?.metadata,
-  );
+  const form = useMcpMetadataMetadataForm(toolset.slug, result.data?.metadata);
   const isLoading = result.isLoading || form.isLoading;
 
   return (

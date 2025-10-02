@@ -8,12 +8,12 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type GetInstallPageMetadataSecurity = {
+export type GetMcpMetadataSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
-export type GetInstallPageMetadataRequest = {
+export type GetMcpMetadataRequest = {
   /**
    * The slug of the toolset associated with this install page metadata
    */
@@ -29,8 +29,8 @@ export type GetInstallPageMetadataRequest = {
 };
 
 /** @internal */
-export const GetInstallPageMetadataSecurity$inboundSchema: z.ZodType<
-  GetInstallPageMetadataSecurity,
+export const GetMcpMetadataSecurity$inboundSchema: z.ZodType<
+  GetMcpMetadataSecurity,
   z.ZodTypeDef,
   unknown
 > = z.object({
@@ -44,16 +44,16 @@ export const GetInstallPageMetadataSecurity$inboundSchema: z.ZodType<
 });
 
 /** @internal */
-export type GetInstallPageMetadataSecurity$Outbound = {
+export type GetMcpMetadataSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
 };
 
 /** @internal */
-export const GetInstallPageMetadataSecurity$outboundSchema: z.ZodType<
-  GetInstallPageMetadataSecurity$Outbound,
+export const GetMcpMetadataSecurity$outboundSchema: z.ZodType<
+  GetMcpMetadataSecurity$Outbound,
   z.ZodTypeDef,
-  GetInstallPageMetadataSecurity
+  GetMcpMetadataSecurity
 > = z.object({
   projectSlugHeaderGramProject: z.string().optional(),
   sessionHeaderGramSession: z.string().optional(),
@@ -68,38 +68,36 @@ export const GetInstallPageMetadataSecurity$outboundSchema: z.ZodType<
  * @internal
  * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
  */
-export namespace GetInstallPageMetadataSecurity$ {
-  /** @deprecated use `GetInstallPageMetadataSecurity$inboundSchema` instead. */
-  export const inboundSchema = GetInstallPageMetadataSecurity$inboundSchema;
-  /** @deprecated use `GetInstallPageMetadataSecurity$outboundSchema` instead. */
-  export const outboundSchema = GetInstallPageMetadataSecurity$outboundSchema;
-  /** @deprecated use `GetInstallPageMetadataSecurity$Outbound` instead. */
-  export type Outbound = GetInstallPageMetadataSecurity$Outbound;
+export namespace GetMcpMetadataSecurity$ {
+  /** @deprecated use `GetMcpMetadataSecurity$inboundSchema` instead. */
+  export const inboundSchema = GetMcpMetadataSecurity$inboundSchema;
+  /** @deprecated use `GetMcpMetadataSecurity$outboundSchema` instead. */
+  export const outboundSchema = GetMcpMetadataSecurity$outboundSchema;
+  /** @deprecated use `GetMcpMetadataSecurity$Outbound` instead. */
+  export type Outbound = GetMcpMetadataSecurity$Outbound;
 }
 
-export function getInstallPageMetadataSecurityToJSON(
-  getInstallPageMetadataSecurity: GetInstallPageMetadataSecurity,
+export function getMcpMetadataSecurityToJSON(
+  getMcpMetadataSecurity: GetMcpMetadataSecurity,
 ): string {
   return JSON.stringify(
-    GetInstallPageMetadataSecurity$outboundSchema.parse(
-      getInstallPageMetadataSecurity,
-    ),
+    GetMcpMetadataSecurity$outboundSchema.parse(getMcpMetadataSecurity),
   );
 }
 
-export function getInstallPageMetadataSecurityFromJSON(
+export function getMcpMetadataSecurityFromJSON(
   jsonString: string,
-): SafeParseResult<GetInstallPageMetadataSecurity, SDKValidationError> {
+): SafeParseResult<GetMcpMetadataSecurity, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => GetInstallPageMetadataSecurity$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'GetInstallPageMetadataSecurity' from JSON`,
+    (x) => GetMcpMetadataSecurity$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetMcpMetadataSecurity' from JSON`,
   );
 }
 
 /** @internal */
-export const GetInstallPageMetadataRequest$inboundSchema: z.ZodType<
-  GetInstallPageMetadataRequest,
+export const GetMcpMetadataRequest$inboundSchema: z.ZodType<
+  GetMcpMetadataRequest,
   z.ZodTypeDef,
   unknown
 > = z.object({
@@ -115,17 +113,17 @@ export const GetInstallPageMetadataRequest$inboundSchema: z.ZodType<
 });
 
 /** @internal */
-export type GetInstallPageMetadataRequest$Outbound = {
+export type GetMcpMetadataRequest$Outbound = {
   toolset_slug: string;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
 };
 
 /** @internal */
-export const GetInstallPageMetadataRequest$outboundSchema: z.ZodType<
-  GetInstallPageMetadataRequest$Outbound,
+export const GetMcpMetadataRequest$outboundSchema: z.ZodType<
+  GetMcpMetadataRequest$Outbound,
   z.ZodTypeDef,
-  GetInstallPageMetadataRequest
+  GetMcpMetadataRequest
 > = z.object({
   toolsetSlug: z.string(),
   gramSession: z.string().optional(),
@@ -142,31 +140,29 @@ export const GetInstallPageMetadataRequest$outboundSchema: z.ZodType<
  * @internal
  * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
  */
-export namespace GetInstallPageMetadataRequest$ {
-  /** @deprecated use `GetInstallPageMetadataRequest$inboundSchema` instead. */
-  export const inboundSchema = GetInstallPageMetadataRequest$inboundSchema;
-  /** @deprecated use `GetInstallPageMetadataRequest$outboundSchema` instead. */
-  export const outboundSchema = GetInstallPageMetadataRequest$outboundSchema;
-  /** @deprecated use `GetInstallPageMetadataRequest$Outbound` instead. */
-  export type Outbound = GetInstallPageMetadataRequest$Outbound;
+export namespace GetMcpMetadataRequest$ {
+  /** @deprecated use `GetMcpMetadataRequest$inboundSchema` instead. */
+  export const inboundSchema = GetMcpMetadataRequest$inboundSchema;
+  /** @deprecated use `GetMcpMetadataRequest$outboundSchema` instead. */
+  export const outboundSchema = GetMcpMetadataRequest$outboundSchema;
+  /** @deprecated use `GetMcpMetadataRequest$Outbound` instead. */
+  export type Outbound = GetMcpMetadataRequest$Outbound;
 }
 
-export function getInstallPageMetadataRequestToJSON(
-  getInstallPageMetadataRequest: GetInstallPageMetadataRequest,
+export function getMcpMetadataRequestToJSON(
+  getMcpMetadataRequest: GetMcpMetadataRequest,
 ): string {
   return JSON.stringify(
-    GetInstallPageMetadataRequest$outboundSchema.parse(
-      getInstallPageMetadataRequest,
-    ),
+    GetMcpMetadataRequest$outboundSchema.parse(getMcpMetadataRequest),
   );
 }
 
-export function getInstallPageMetadataRequestFromJSON(
+export function getMcpMetadataRequestFromJSON(
   jsonString: string,
-): SafeParseResult<GetInstallPageMetadataRequest, SDKValidationError> {
+): SafeParseResult<GetMcpMetadataRequest, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => GetInstallPageMetadataRequest$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'GetInstallPageMetadataRequest' from JSON`,
+    (x) => GetMcpMetadataRequest$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'GetMcpMetadataRequest' from JSON`,
   );
 }

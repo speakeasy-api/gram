@@ -1,11 +1,11 @@
-# SetInstallPageMetadataRequestBody
+# SetMcpMetadataRequestBody
 
 ## Example Usage
 
 ```typescript
-import { SetInstallPageMetadataRequestBody } from "@gram/client/models/components";
+import { SetMcpMetadataRequestBody } from "@gram/client/models/components";
 
-let value: SetInstallPageMetadataRequestBody = {
+let value: SetMcpMetadataRequestBody = {
   toolsetSlug: "<value>",
 };
 ```

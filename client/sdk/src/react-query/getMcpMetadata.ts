@@ -13,7 +13,7 @@ import {
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { mcpInstallPageGet } from "../funcs/mcpInstallPageGet.js";
+import { mcpMetadataGet } from "../funcs/mcpMetadataGet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -26,23 +26,22 @@ import {
   TupleToPrefixes,
 } from "./_types.js";
 
-export type GetInstallPageMetadataQueryData =
-  components.GetInstallPageMetadataResponseBody;
+export type GetMcpMetadataQueryData = components.GetMcpMetadataResponseBody;
 
 /**
- * getInstallPageMetadata mcpInstallPage
+ * getMcpMetadata mcpMetadata
  *
  * @remarks
  * Fetch the metadata that powers the MCP install page.
  */
-export function useGetInstallPageMetadata(
-  request: operations.GetInstallPageMetadataRequest,
-  security?: operations.GetInstallPageMetadataSecurity | undefined,
-  options?: QueryHookOptions<GetInstallPageMetadataQueryData>,
-): UseQueryResult<GetInstallPageMetadataQueryData, Error> {
+export function useGetMcpMetadata(
+  request: operations.GetMcpMetadataRequest,
+  security?: operations.GetMcpMetadataSecurity | undefined,
+  options?: QueryHookOptions<GetMcpMetadataQueryData>,
+): UseQueryResult<GetMcpMetadataQueryData, Error> {
   const client = useGramContext();
   return useQuery({
-    ...buildGetInstallPageMetadataQuery(
+    ...buildGetMcpMetadataQuery(
       client,
       request,
       security,
@@ -53,19 +52,19 @@ export function useGetInstallPageMetadata(
 }
 
 /**
- * getInstallPageMetadata mcpInstallPage
+ * getMcpMetadata mcpMetadata
  *
  * @remarks
  * Fetch the metadata that powers the MCP install page.
  */
-export function useGetInstallPageMetadataSuspense(
-  request: operations.GetInstallPageMetadataRequest,
-  security?: operations.GetInstallPageMetadataSecurity | undefined,
-  options?: SuspenseQueryHookOptions<GetInstallPageMetadataQueryData>,
-): UseSuspenseQueryResult<GetInstallPageMetadataQueryData, Error> {
+export function useGetMcpMetadataSuspense(
+  request: operations.GetMcpMetadataRequest,
+  security?: operations.GetMcpMetadataSecurity | undefined,
+  options?: SuspenseQueryHookOptions<GetMcpMetadataQueryData>,
+): UseSuspenseQueryResult<GetMcpMetadataQueryData, Error> {
   const client = useGramContext();
   return useSuspenseQuery({
-    ...buildGetInstallPageMetadataQuery(
+    ...buildGetMcpMetadataQuery(
       client,
       request,
       security,
@@ -75,14 +74,14 @@ export function useGetInstallPageMetadataSuspense(
   });
 }
 
-export function prefetchGetInstallPageMetadata(
+export function prefetchGetMcpMetadata(
   queryClient: QueryClient,
   client$: GramCore,
-  request: operations.GetInstallPageMetadataRequest,
-  security?: operations.GetInstallPageMetadataSecurity | undefined,
+  request: operations.GetMcpMetadataRequest,
+  security?: operations.GetMcpMetadataSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
-    ...buildGetInstallPageMetadataQuery(
+    ...buildGetMcpMetadataQuery(
       client$,
       request,
       security,
@@ -90,7 +89,7 @@ export function prefetchGetInstallPageMetadata(
   });
 }
 
-export function setGetInstallPageMetadataData(
+export function setGetMcpMetadataData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
@@ -99,14 +98,14 @@ export function setGetInstallPageMetadataData(
       gramProject?: string | undefined;
     },
   ],
-  data: GetInstallPageMetadataQueryData,
-): GetInstallPageMetadataQueryData | undefined {
-  const key = queryKeyGetInstallPageMetadata(...queryKeyBase);
+  data: GetMcpMetadataQueryData,
+): GetMcpMetadataQueryData | undefined {
+  const key = queryKeyGetMcpMetadata(...queryKeyBase);
 
-  return client.setQueryData<GetInstallPageMetadataQueryData>(key, data);
+  return client.setQueryData<GetMcpMetadataQueryData>(key, data);
 }
 
-export function invalidateGetInstallPageMetadata(
+export function invalidateGetMcpMetadata(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
@@ -119,47 +118,45 @@ export function invalidateGetInstallPageMetadata(
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "mcpInstallPage", "get", ...queryKeyBase],
+    queryKey: ["@gram/client", "mcpMetadata", "get", ...queryKeyBase],
   });
 }
 
-export function invalidateAllGetInstallPageMetadata(
+export function invalidateAllGetMcpMetadata(
   client: QueryClient,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
     ...filters,
-    queryKey: ["@gram/client", "mcpInstallPage", "get"],
+    queryKey: ["@gram/client", "mcpMetadata", "get"],
   });
 }
 
-export function buildGetInstallPageMetadataQuery(
+export function buildGetMcpMetadataQuery(
   client$: GramCore,
-  request: operations.GetInstallPageMetadataRequest,
-  security?: operations.GetInstallPageMetadataSecurity | undefined,
+  request: operations.GetMcpMetadataRequest,
+  security?: operations.GetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
-  queryFn: (
-    context: QueryFunctionContext,
-  ) => Promise<GetInstallPageMetadataQueryData>;
+  queryFn: (context: QueryFunctionContext) => Promise<GetMcpMetadataQueryData>;
 } {
   return {
-    queryKey: queryKeyGetInstallPageMetadata({
+    queryKey: queryKeyGetMcpMetadata({
       toolsetSlug: request.toolsetSlug,
       gramSession: request.gramSession,
       gramProject: request.gramProject,
     }),
-    queryFn: async function getInstallPageMetadataQueryFn(
+    queryFn: async function getMcpMetadataQueryFn(
       ctx,
-    ): Promise<GetInstallPageMetadataQueryData> {
+    ): Promise<GetMcpMetadataQueryData> {
       const sig = combineSignals(ctx.signal, options?.fetchOptions?.signal);
       const mergedOptions = {
         ...options,
         fetchOptions: { ...options?.fetchOptions, signal: sig },
       };
 
-      return unwrapAsync(mcpInstallPageGet(
+      return unwrapAsync(mcpMetadataGet(
         client$,
         request,
         security,
@@ -169,12 +166,12 @@ export function buildGetInstallPageMetadataQuery(
   };
 }
 
-export function queryKeyGetInstallPageMetadata(
+export function queryKeyGetMcpMetadata(
   parameters: {
     toolsetSlug: string;
     gramSession?: string | undefined;
     gramProject?: string | undefined;
   },
 ): QueryKey {
-  return ["@gram/client", "mcpInstallPage", "get", parameters];
+  return ["@gram/client", "mcpMetadata", "get", parameters];
 }

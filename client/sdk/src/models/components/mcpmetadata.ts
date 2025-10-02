@@ -11,7 +11,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 /**
  * Metadata used to configure the MCP install page.
  */
-export type MCPInstallPageMetadata = {
+export type McpMetadata = {
   /**
    * When the metadata entry was created
    */
@@ -39,8 +39,8 @@ export type MCPInstallPageMetadata = {
 };
 
 /** @internal */
-export const MCPInstallPageMetadata$inboundSchema: z.ZodType<
-  MCPInstallPageMetadata,
+export const McpMetadata$inboundSchema: z.ZodType<
+  McpMetadata,
   z.ZodTypeDef,
   unknown
 > = z.object({
@@ -61,7 +61,7 @@ export const MCPInstallPageMetadata$inboundSchema: z.ZodType<
 });
 
 /** @internal */
-export type MCPInstallPageMetadata$Outbound = {
+export type McpMetadata$Outbound = {
   created_at: string;
   external_documentation_url?: string | undefined;
   id: string;
@@ -71,10 +71,10 @@ export type MCPInstallPageMetadata$Outbound = {
 };
 
 /** @internal */
-export const MCPInstallPageMetadata$outboundSchema: z.ZodType<
-  MCPInstallPageMetadata$Outbound,
+export const McpMetadata$outboundSchema: z.ZodType<
+  McpMetadata$Outbound,
   z.ZodTypeDef,
-  MCPInstallPageMetadata
+  McpMetadata
 > = z.object({
   createdAt: z.date().transform(v => v.toISOString()),
   externalDocumentationUrl: z.string().optional(),
@@ -96,29 +96,25 @@ export const MCPInstallPageMetadata$outboundSchema: z.ZodType<
  * @internal
  * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
  */
-export namespace MCPInstallPageMetadata$ {
-  /** @deprecated use `MCPInstallPageMetadata$inboundSchema` instead. */
-  export const inboundSchema = MCPInstallPageMetadata$inboundSchema;
-  /** @deprecated use `MCPInstallPageMetadata$outboundSchema` instead. */
-  export const outboundSchema = MCPInstallPageMetadata$outboundSchema;
-  /** @deprecated use `MCPInstallPageMetadata$Outbound` instead. */
-  export type Outbound = MCPInstallPageMetadata$Outbound;
+export namespace McpMetadata$ {
+  /** @deprecated use `McpMetadata$inboundSchema` instead. */
+  export const inboundSchema = McpMetadata$inboundSchema;
+  /** @deprecated use `McpMetadata$outboundSchema` instead. */
+  export const outboundSchema = McpMetadata$outboundSchema;
+  /** @deprecated use `McpMetadata$Outbound` instead. */
+  export type Outbound = McpMetadata$Outbound;
 }
 
-export function mcpInstallPageMetadataToJSON(
-  mcpInstallPageMetadata: MCPInstallPageMetadata,
-): string {
-  return JSON.stringify(
-    MCPInstallPageMetadata$outboundSchema.parse(mcpInstallPageMetadata),
-  );
+export function mcpMetadataToJSON(mcpMetadata: McpMetadata): string {
+  return JSON.stringify(McpMetadata$outboundSchema.parse(mcpMetadata));
 }
 
-export function mcpInstallPageMetadataFromJSON(
+export function mcpMetadataFromJSON(
   jsonString: string,
-): SafeParseResult<MCPInstallPageMetadata, SDKValidationError> {
+): SafeParseResult<McpMetadata, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => MCPInstallPageMetadata$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'MCPInstallPageMetadata' from JSON`,
+    (x) => McpMetadata$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'McpMetadata' from JSON`,
   );
 }

@@ -1,11 +1,11 @@
-# GetInstallPageMetadataRequest
+# GetMcpMetadataRequest
 
 ## Example Usage
 
 ```typescript
-import { GetInstallPageMetadataRequest } from "@gram/client/models/operations";
+import { GetMcpMetadataRequest } from "@gram/client/models/operations";
 
-let value: GetInstallPageMetadataRequest = {
+let value: GetMcpMetadataRequest = {
   toolsetSlug: "<value>",
 };
 ```

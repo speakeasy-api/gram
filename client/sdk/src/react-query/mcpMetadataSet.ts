@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { mcpInstallPageSet } from "../funcs/mcpInstallPageSet.js";
+import { mcpMetadataSet } from "../funcs/mcpMetadataSet.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
@@ -17,58 +17,58 @@ import { unwrapAsync } from "../types/fp.js";
 import { useGramContext } from "./_context.js";
 import { MutationHookOptions } from "./_types.js";
 
-export type McpInstallPageSetMutationVariables = {
-  request: operations.SetInstallPageMetadataRequest;
-  security?: operations.SetInstallPageMetadataSecurity | undefined;
+export type McpMetadataSetMutationVariables = {
+  request: operations.SetMcpMetadataRequest;
+  security?: operations.SetMcpMetadataSecurity | undefined;
   options?: RequestOptions;
 };
 
-export type McpInstallPageSetMutationData = components.MCPInstallPageMetadata;
+export type McpMetadataSetMutationData = components.McpMetadata;
 
 /**
- * setInstallPageMetadata mcpInstallPage
+ * setMcpMetadata mcpMetadata
  *
  * @remarks
  * Create or update the metadata that powers the MCP install page.
  */
-export function useMcpInstallPageSetMutation(
+export function useMcpMetadataSetMutation(
   options?: MutationHookOptions<
-    McpInstallPageSetMutationData,
+    McpMetadataSetMutationData,
     Error,
-    McpInstallPageSetMutationVariables
+    McpMetadataSetMutationVariables
   >,
 ): UseMutationResult<
-  McpInstallPageSetMutationData,
+  McpMetadataSetMutationData,
   Error,
-  McpInstallPageSetMutationVariables
+  McpMetadataSetMutationVariables
 > {
   const client = useGramContext();
   return useMutation({
-    ...buildMcpInstallPageSetMutation(client, options),
+    ...buildMcpMetadataSetMutation(client, options),
     ...options,
   });
 }
 
-export function mutationKeyMcpInstallPageSet(): MutationKey {
-  return ["@gram/client", "mcpInstallPage", "set"];
+export function mutationKeyMcpMetadataSet(): MutationKey {
+  return ["@gram/client", "mcpMetadata", "set"];
 }
 
-export function buildMcpInstallPageSetMutation(
+export function buildMcpMetadataSetMutation(
   client$: GramCore,
   hookOptions?: RequestOptions,
 ): {
   mutationKey: MutationKey;
   mutationFn: (
-    variables: McpInstallPageSetMutationVariables,
-  ) => Promise<McpInstallPageSetMutationData>;
+    variables: McpMetadataSetMutationVariables,
+  ) => Promise<McpMetadataSetMutationData>;
 } {
   return {
-    mutationKey: mutationKeyMcpInstallPageSet(),
-    mutationFn: function mcpInstallPageSetMutationFn({
+    mutationKey: mutationKeyMcpMetadataSet(),
+    mutationFn: function mcpMetadataSetMutationFn({
       request,
       security,
       options,
-    }): Promise<McpInstallPageSetMutationData> {
+    }): Promise<McpMetadataSetMutationData> {
       const mergedOptions = {
         ...hookOptions,
         ...options,
@@ -81,7 +81,7 @@ export function buildMcpInstallPageSetMutation(
           ),
         },
       };
-      return unwrapAsync(mcpInstallPageSet(
+      return unwrapAsync(mcpMetadataSet(
         client$,
         request,
         security,

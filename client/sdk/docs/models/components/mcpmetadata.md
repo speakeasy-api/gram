@@ -1,17 +1,17 @@
-# MCPInstallPageMetadata
+# McpMetadata
 
 Metadata used to configure the MCP install page.
 
 ## Example Usage
 
 ```typescript
-import { MCPInstallPageMetadata } from "@gram/client/models/components";
+import { McpMetadata } from "@gram/client/models/components";
 
-let value: MCPInstallPageMetadata = {
-  createdAt: new Date("2024-12-11T08:56:00.499Z"),
+let value: McpMetadata = {
+  createdAt: new Date("2023-09-10T07:11:07.924Z"),
   id: "<id>",
-  toolsetId: "4a24e109-85e7-4e32-b029-593d9cc4b165",
-  updatedAt: new Date("2025-06-06T05:17:26.574Z"),
+  toolsetId: "d6857a14-9fe0-4abf-b801-5641a43197a3",
+  updatedAt: new Date("2024-07-05T03:59:55.214Z"),
 };
 ```
 

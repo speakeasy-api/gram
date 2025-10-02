@@ -8,7 +8,7 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export type SetInstallPageMetadataRequestBody = {
+export type SetMcpMetadataRequestBody = {
   /**
    * A link to external documentation for the MCP install page
    */
@@ -24,8 +24,8 @@ export type SetInstallPageMetadataRequestBody = {
 };
 
 /** @internal */
-export const SetInstallPageMetadataRequestBody$inboundSchema: z.ZodType<
-  SetInstallPageMetadataRequestBody,
+export const SetMcpMetadataRequestBody$inboundSchema: z.ZodType<
+  SetMcpMetadataRequestBody,
   z.ZodTypeDef,
   unknown
 > = z.object({
@@ -41,17 +41,17 @@ export const SetInstallPageMetadataRequestBody$inboundSchema: z.ZodType<
 });
 
 /** @internal */
-export type SetInstallPageMetadataRequestBody$Outbound = {
+export type SetMcpMetadataRequestBody$Outbound = {
   external_documentation_url?: string | undefined;
   logo_asset_id?: string | undefined;
   toolset_slug: string;
 };
 
 /** @internal */
-export const SetInstallPageMetadataRequestBody$outboundSchema: z.ZodType<
-  SetInstallPageMetadataRequestBody$Outbound,
+export const SetMcpMetadataRequestBody$outboundSchema: z.ZodType<
+  SetMcpMetadataRequestBody$Outbound,
   z.ZodTypeDef,
-  SetInstallPageMetadataRequestBody
+  SetMcpMetadataRequestBody
 > = z.object({
   externalDocumentationUrl: z.string().optional(),
   logoAssetId: z.string().optional(),
@@ -68,32 +68,29 @@ export const SetInstallPageMetadataRequestBody$outboundSchema: z.ZodType<
  * @internal
  * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
  */
-export namespace SetInstallPageMetadataRequestBody$ {
-  /** @deprecated use `SetInstallPageMetadataRequestBody$inboundSchema` instead. */
-  export const inboundSchema = SetInstallPageMetadataRequestBody$inboundSchema;
-  /** @deprecated use `SetInstallPageMetadataRequestBody$outboundSchema` instead. */
-  export const outboundSchema =
-    SetInstallPageMetadataRequestBody$outboundSchema;
-  /** @deprecated use `SetInstallPageMetadataRequestBody$Outbound` instead. */
-  export type Outbound = SetInstallPageMetadataRequestBody$Outbound;
+export namespace SetMcpMetadataRequestBody$ {
+  /** @deprecated use `SetMcpMetadataRequestBody$inboundSchema` instead. */
+  export const inboundSchema = SetMcpMetadataRequestBody$inboundSchema;
+  /** @deprecated use `SetMcpMetadataRequestBody$outboundSchema` instead. */
+  export const outboundSchema = SetMcpMetadataRequestBody$outboundSchema;
+  /** @deprecated use `SetMcpMetadataRequestBody$Outbound` instead. */
+  export type Outbound = SetMcpMetadataRequestBody$Outbound;
 }
 
-export function setInstallPageMetadataRequestBodyToJSON(
-  setInstallPageMetadataRequestBody: SetInstallPageMetadataRequestBody,
+export function setMcpMetadataRequestBodyToJSON(
+  setMcpMetadataRequestBody: SetMcpMetadataRequestBody,
 ): string {
   return JSON.stringify(
-    SetInstallPageMetadataRequestBody$outboundSchema.parse(
-      setInstallPageMetadataRequestBody,
-    ),
+    SetMcpMetadataRequestBody$outboundSchema.parse(setMcpMetadataRequestBody),
   );
 }
 
-export function setInstallPageMetadataRequestBodyFromJSON(
+export function setMcpMetadataRequestBodyFromJSON(
   jsonString: string,
-): SafeParseResult<SetInstallPageMetadataRequestBody, SDKValidationError> {
+): SafeParseResult<SetMcpMetadataRequestBody, SDKValidationError> {
   return safeParse(
     jsonString,
-    (x) => SetInstallPageMetadataRequestBody$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'SetInstallPageMetadataRequestBody' from JSON`,
+    (x) => SetMcpMetadataRequestBody$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'SetMcpMetadataRequestBody' from JSON`,
   );
 }

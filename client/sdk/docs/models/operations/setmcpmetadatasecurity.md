@@ -1,11 +1,11 @@
-# GetInstallPageMetadataSecurity
+# SetMcpMetadataSecurity
 
 ## Example Usage
 
 ```typescript
-import { GetInstallPageMetadataSecurity } from "@gram/client/models/operations";
+import { SetMcpMetadataSecurity } from "@gram/client/models/operations";
 
-let value: GetInstallPageMetadataSecurity = {};
+let value: SetMcpMetadataSecurity = {};
 ```
 
 ## Fields

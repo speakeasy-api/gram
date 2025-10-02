@@ -27,19 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * setInstallPageMetadata mcpInstallPage
+ * setMcpMetadata mcpMetadata
  *
  * @remarks
  * Create or update the metadata that powers the MCP install page.
  */
-export function mcpInstallPageSet(
+export function mcpMetadataSet(
   client: GramCore,
-  request: operations.SetInstallPageMetadataRequest,
-  security?: operations.SetInstallPageMetadataSecurity | undefined,
+  request: operations.SetMcpMetadataRequest,
+  security?: operations.SetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    components.MCPInstallPageMetadata,
+    components.McpMetadata,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -61,13 +61,13 @@ export function mcpInstallPageSet(
 
 async function $do(
   client: GramCore,
-  request: operations.SetInstallPageMetadataRequest,
-  security?: operations.SetInstallPageMetadataSecurity | undefined,
+  request: operations.SetMcpMetadataRequest,
+  security?: operations.SetMcpMetadataSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      components.MCPInstallPageMetadata,
+      components.McpMetadata,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -83,19 +83,18 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      operations.SetInstallPageMetadataRequest$outboundSchema.parse(value),
+    (value) => operations.SetMcpMetadataRequest$outboundSchema.parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
     return [parsed, { status: "invalid" }];
   }
   const payload = parsed.value;
-  const body = encodeJSON("body", payload.SetInstallPageMetadataRequestBody, {
+  const body = encodeJSON("body", payload.SetMcpMetadataRequestBody, {
     explode: true,
   });
 
-  const path = pathToFunc("/rpc/mcp.installPageMetadata.set")();
+  const path = pathToFunc("/rpc/mcpMetadata.set")();
 
   const headers = new Headers(compactMap({
     "Content-Type": "application/json",
@@ -128,7 +127,7 @@ async function $do(
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "setInstallPageMetadata",
+    operationID: "setMcpMetadata",
     oAuth2Scopes: null,
 
     resolvedSecurity: requestSecurity,
@@ -183,7 +182,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    components.MCPInstallPageMetadata,
+    components.McpMetadata,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -194,7 +193,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.json(200, components.MCPInstallPageMetadata$inboundSchema),
+    M.json(200, components.McpMetadata$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

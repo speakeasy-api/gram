@@ -1,5 +1,5 @@
-# McpInstallPage
-(*mcpInstallPage*)
+# McpMetadata
+(*mcpMetadata*)
 
 ## Overview
 
@@ -7,8 +7,8 @@ Manages metadata for the MCP install page shown to users.
 
 ### Available Operations
 
-* [get](#get) - getInstallPageMetadata mcpInstallPage
-* [set](#set) - setInstallPageMetadata mcpInstallPage
+* [get](#get) - getMcpMetadata mcpMetadata
+* [set](#set) - setMcpMetadata mcpMetadata
 
 ## get
 
@@ -16,14 +16,14 @@ Fetch the metadata that powers the MCP install page.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="getInstallPageMetadata" method="get" path="/rpc/mcp.installPageMetadata.get" -->
+<!-- UsageSnippet language="typescript" operationID="getMcpMetadata" method="get" path="/rpc/mcpMetadata.get" -->
 ```typescript
 import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.mcpInstallPage.get({
+  const result = await gram.mcpMetadata.get({
     toolsetSlug: "<value>",
   });
 
@@ -39,21 +39,21 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { mcpInstallPageGet } from "@gram/client/funcs/mcpInstallPageGet.js";
+import { mcpMetadataGet } from "@gram/client/funcs/mcpMetadataGet.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await mcpInstallPageGet(gram, {
+  const res = await mcpMetadataGet(gram, {
     toolsetSlug: "<value>",
   });
   if (res.ok) {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("mcpInstallPageGet failed:", res.error);
+    console.log("mcpMetadataGet failed:", res.error);
   }
 }
 
@@ -73,34 +73,34 @@ associated utilities.
 ```tsx
 import {
   // Query hooks for fetching data.
-  useGetInstallPageMetadata,
-  useGetInstallPageMetadataSuspense,
+  useGetMcpMetadata,
+  useGetMcpMetadataSuspense,
 
   // Utility for prefetching data during server-side rendering and in React
   // Server Components that will be immediately available to client components
   // using the hooks.
-  prefetchGetInstallPageMetadata,
+  prefetchGetMcpMetadata,
   
   // Utilities to invalidate the query cache for this query in response to
   // mutations and other user actions.
-  invalidateGetInstallPageMetadata,
-  invalidateAllGetInstallPageMetadata,
-} from "@gram/client/react-query/mcpInstallPageGet.js";
+  invalidateGetMcpMetadata,
+  invalidateAllGetMcpMetadata,
+} from "@gram/client/react-query/mcpMetadataGet.js";
 ```
 
 ### Parameters
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.GetInstallPageMetadataRequest](../../models/operations/getinstallpagemetadatarequest.md)                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.GetInstallPageMetadataSecurity](../../models/operations/getinstallpagemetadatasecurity.md)                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `request`                                                                                                                                                                      | [operations.GetMcpMetadataRequest](../../models/operations/getmcpmetadatarequest.md)                                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.GetMcpMetadataSecurity](../../models/operations/getmcpmetadatasecurity.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[components.GetInstallPageMetadataResponseBody](../../models/components/getinstallpagemetadataresponsebody.md)\>**
+**Promise\<[components.GetMcpMetadataResponseBody](../../models/components/getmcpmetadataresponsebody.md)\>**
 
 ### Errors
 
@@ -116,15 +116,15 @@ Create or update the metadata that powers the MCP install page.
 
 ### Example Usage
 
-<!-- UsageSnippet language="typescript" operationID="setInstallPageMetadata" method="post" path="/rpc/mcp.installPageMetadata.set" -->
+<!-- UsageSnippet language="typescript" operationID="setMcpMetadata" method="post" path="/rpc/mcpMetadata.set" -->
 ```typescript
 import { Gram } from "@gram/client";
 
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.mcpInstallPage.set({
-    setInstallPageMetadataRequestBody: {
+  const result = await gram.mcpMetadata.set({
+    setMcpMetadataRequestBody: {
       toolsetSlug: "<value>",
     },
   });
@@ -141,15 +141,15 @@ The standalone function version of this method:
 
 ```typescript
 import { GramCore } from "@gram/client/core.js";
-import { mcpInstallPageSet } from "@gram/client/funcs/mcpInstallPageSet.js";
+import { mcpMetadataSet } from "@gram/client/funcs/mcpMetadataSet.js";
 
 // Use `GramCore` for best tree-shaking performance.
 // You can create one instance of it to use across an application.
 const gram = new GramCore();
 
 async function run() {
-  const res = await mcpInstallPageSet(gram, {
-    setInstallPageMetadataRequestBody: {
+  const res = await mcpMetadataSet(gram, {
+    setMcpMetadataRequestBody: {
       toolsetSlug: "<value>",
     },
   });
@@ -157,7 +157,7 @@ async function run() {
     const { value: result } = res;
     console.log(result);
   } else {
-    console.log("mcpInstallPageSet failed:", res.error);
+    console.log("mcpMetadataSet failed:", res.error);
   }
 }
 
@@ -177,23 +177,23 @@ associated utilities.
 ```tsx
 import {
   // Mutation hook for triggering the API call.
-  useMcpInstallPageSetMutation
-} from "@gram/client/react-query/mcpInstallPageSet.js";
+  useMcpMetadataSetMutation
+} from "@gram/client/react-query/mcpMetadataSet.js";
 ```
 
 ### Parameters
 
 | Parameter                                                                                                                                                                      | Type                                                                                                                                                                           | Required                                                                                                                                                                       | Description                                                                                                                                                                    |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `request`                                                                                                                                                                      | [operations.SetInstallPageMetadataRequest](../../models/operations/setinstallpagemetadatarequest.md)                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
-| `security`                                                                                                                                                                     | [operations.SetInstallPageMetadataSecurity](../../models/operations/setinstallpagemetadatasecurity.md)                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
+| `request`                                                                                                                                                                      | [operations.SetMcpMetadataRequest](../../models/operations/setmcpmetadatarequest.md)                                                                                           | :heavy_check_mark:                                                                                                                                                             | The request object to use for the request.                                                                                                                                     |
+| `security`                                                                                                                                                                     | [operations.SetMcpMetadataSecurity](../../models/operations/setmcpmetadatasecurity.md)                                                                                         | :heavy_check_mark:                                                                                                                                                             | The security requirements to use for the request.                                                                                                                              |
 | `options`                                                                                                                                                                      | RequestOptions                                                                                                                                                                 | :heavy_minus_sign:                                                                                                                                                             | Used to set various options for making HTTP requests.                                                                                                                          |
 | `options.fetchOptions`                                                                                                                                                         | [RequestInit](https://developer.mozilla.org/en-US/docs/Web/API/Request/Request#options)                                                                                        | :heavy_minus_sign:                                                                                                                                                             | Options that are passed to the underlying HTTP request. This can be used to inject extra headers for examples. All `Request` options, except `method` and `body`, are allowed. |
 | `options.retries`                                                                                                                                                              | [RetryConfig](../../lib/utils/retryconfig.md)                                                                                                                                  | :heavy_minus_sign:                                                                                                                                                             | Enables retrying HTTP requests under certain failure conditions.                                                                                                               |
 
 ### Response
 
-**Promise\<[components.MCPInstallPageMetadata](../../models/components/mcpinstallpagemetadata.md)\>**
+**Promise\<[components.McpMetadata](../../models/components/mcpmetadata.md)\>**
 
 ### Errors
 
