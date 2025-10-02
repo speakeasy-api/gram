@@ -1,0 +1,80 @@
+input:
+  label: usage_topic
+  gcp_pubsub:
+    project: ${GCP_PROJECT_ID}
+    subscription: "${GCP_SUBSCRIPTION_POLAR_USAGE}"
+    max_outstanding_messages: 200
+    max_outstanding_bytes: 100000000
+
+pipeline:
+  processors:
+    - label: fail_invalid_events
+      try:
+        - label: validate_event
+          json_schema:
+            schema: |
+              {
+                "type": "object",
+                "properties": {
+                  "event": { "type": "string", "minLength": 1 },
+                  "organization_id": { "type": "string", "minLength": 1 },
+                  "project_id": { "type": "string", "minLength": 1 },
+                  "user_id": { "type": "string", "minLength": 1 },
+                  "data": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                },
+                "required": ["event", "organization_id", "project_id", "data"]
+              }
+        - label: transform_event
+          switch:
+            - check: this.event == "usage.tool_call"
+              processors:
+                - label: transform_tool_call_event
+                  mutation: |
+                    root = {
+                      "external_customer_id": this.organization_id,
+                      "name": "tool-call",
+                      "metadata": {
+                        "project_id": this.project_id,
+                      }.assign(this.data.with(
+                        "chat_id",
+                        "mcp_url",
+                        "organization_slug",
+                        "output_bytes",
+                        "project_slug",
+                        "request_bytes",
+                        "tool_id",
+                        "tool_name",
+                        "toolset_slug",
+                        "total_bytes",
+                        "type",
+                      )),
+                    }
+            - processors:
+              - label: ack_unrecognized_event
+                mutation: root = deleted()
+
+output:
+  label: filter_errors
+  reject_errored:
+    label: polar_events_api
+    http_client:
+      url: "${POLAR_API_URL}/v1/events/ingest"
+      verb: POST
+      headers:
+        Authorization: "Bearer ${POLAR_API_KEY}"
+        Content-Type: application/json
+      timeout: 20s
+      max_in_flight: 1
+      batching:
+        count: 50
+        period: 5s
+        processors:
+          - label: collect_events
+            archive:
+              format: json_array
+          - label: wrap_events
+            mutation: |
+              root = { "events": this }
