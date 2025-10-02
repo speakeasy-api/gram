@@ -485,7 +485,7 @@ func extractToolDefLibOpenAPI(ctx context.Context, logger *slog.Logger, tx *repo
 
 		// Validate the generated JSON schema
 		if err := jsonschema.IsValidJSONSchema(schemaBytes); err != nil {
-			return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("invalid tool input schema: %w", err)
+			return repo.CreateOpenAPIv3ToolDefinitionParams{}, fmt.Errorf("invalid tool input schema for operation %s: %w", opID, err)
 		}
 	}
 
