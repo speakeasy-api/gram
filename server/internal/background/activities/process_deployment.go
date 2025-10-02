@@ -191,7 +191,22 @@ func (p *ProcessDeployment) doOpenAPIv3(
 			return oops.E(oops.CodeBadRequest, err, "error parsing openapi asset URL").Log(ctx, logger)
 		}
 
+		logger.InfoContext(
+			ctx,
+			"Temporary log: Log firing before pool.Go",
+			attr.SlogProjectID(deployment.ProjectID),
+			attr.SlogDeploymentID(deployment.ID),
+			attr.SlogOrganizationSlug(orgSlug),
+		)
 		pool.Go(func() (err error) {
+			logger.InfoContext(
+				ctx,
+				"Temporary log: starting openapiv3.extractTools",
+				attr.SlogProjectID(deployment.ProjectID),
+				attr.SlogDeploymentID(deployment.ID),
+				attr.SlogOrganizationSlug(orgSlug),
+			)
+
 			ctx, span := p.tracer.Start(ctx, "openapiv3.extractTools", trace.WithAttributes(
 				attr.DeploymentOpenAPIParser(parser),
 				attr.OrganizationSlug(orgSlug),
@@ -203,7 +218,22 @@ func (p *ProcessDeployment) doOpenAPIv3(
 				attr.AssetID(docInfo.AssetID),
 			))
 			defer func() {
+				logger.InfoContext(
+					ctx,
+					"Temporary log: Inside defer block",
+					attr.SlogProjectID(deployment.ProjectID),
+					attr.SlogDeploymentID(deployment.ID),
+					attr.SlogOrganizationSlug(orgSlug),
+				)
 				if err != nil {
+					logger.InfoContext(
+						ctx,
+						"Temporary log: There was an error inside defer block",
+						attr.SlogError(err),
+						attr.SlogProjectID(deployment.ProjectID),
+						attr.SlogDeploymentID(deployment.ID),
+						attr.SlogOrganizationSlug(orgSlug),
+					)
 					span.SetStatus(codes.Error, err.Error())
 				}
 				span.End()
@@ -232,6 +262,24 @@ func (p *ProcessDeployment) doOpenAPIv3(
 					}
 				},
 			})
+
+			logger.InfoContext(
+				ctx,
+				"Temporary log: processor.Do has completed",
+				attr.SlogProjectID(deployment.ProjectID),
+				attr.SlogDeploymentID(deployment.ID),
+				attr.SlogOrganizationSlug(orgSlug),
+			)
+			if err != nil {
+				logger.InfoContext(
+					ctx,
+					"Temporary log: processor.Do had an error",
+					attr.SlogError(err),
+					attr.SlogProjectID(deployment.ProjectID),
+					attr.SlogDeploymentID(deployment.ID),
+					attr.SlogOrganizationSlug(orgSlug),
+				)
+			}
 
 			docVersion := "-"
 			if res != nil {
