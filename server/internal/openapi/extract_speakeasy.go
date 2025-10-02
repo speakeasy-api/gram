@@ -10,8 +10,10 @@ import (
 	"log/slog"
 	"net/url"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ettle/strcase"
@@ -54,6 +56,48 @@ func parseSpeakeasy(ctx context.Context, tracer trace.Tracer, reader io.Reader) 
 	}
 
 	return doc, nil
+}
+
+// concurrentSchemaCache is a concurrent-safe cache for JSON schemas.
+type concurrentSchemaCache struct {
+	mu    sync.RWMutex
+	cache map[string]*oas3.JSONSchema[oas3.Referenceable]
+}
+
+func newConcurrentSchemaCache() *concurrentSchemaCache {
+	return &concurrentSchemaCache{
+		mu:    sync.RWMutex{},
+		cache: make(map[string]*oas3.JSONSchema[oas3.Referenceable]),
+	}
+}
+
+func (c *concurrentSchemaCache) get(key string) (*oas3.JSONSchema[oas3.Referenceable], bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	val, exists := c.cache[key]
+	return val, exists
+}
+
+func (c *concurrentSchemaCache) set(key string, val *oas3.JSONSchema[oas3.Referenceable]) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.cache[key] = val
+}
+
+// operationWorkItem represents a single operation to process
+type operationWorkItem struct {
+	path             string
+	method           string
+	opID             string
+	operation        *openapi.Operation
+	sharedParameters []*openapi.ReferencedParameter
+}
+
+// operationResult represents the result of processing a single operation
+type operationResult struct {
+	def              *repo.CreateOpenAPIv3ToolDefinitionParams
+	err              error
+	deploymentEvents []*repo.LogDeploymentEventParams
 }
 
 func (p *ToolExtractor) doSpeakeasy(
@@ -125,8 +169,9 @@ func (p *ToolExtractor) doSpeakeasy(
 	globalServerEnvVar := strcase.ToSNAKE(string(docInfo.Slug) + "_SERVER_URL")
 	globalDefaultServer := extractDefaultServerSpeakeasy(ctx, logger, docInfo, doc.GetServers())
 
-	schemaCache := make(map[string]*oas3.JSONSchema[oas3.Referenceable])
+	schemaCache := newConcurrentSchemaCache()
 
+	var workItems []operationWorkItem
 	for path, pi := range doc.Paths.All() {
 		_, err := pi.Resolve(ctx, openapi.ResolveOptions{
 			TargetLocation:      "/",
@@ -135,7 +180,15 @@ func (p *ToolExtractor) doSpeakeasy(
 			SkipValidation:      true,
 		})
 		if err != nil {
-			logger.ErrorContext(ctx, fmt.Sprintf("%s: %s %s", docInfo.Name, "error resolving path", err.Error()), attr.SlogEvent("openapi:error"))
+			evt := attr.SlogEvent("openapi:error")
+			msg := fmt.Sprintf(
+				"%s: %s %s",
+				docInfo.Name,
+				"error resolving path",
+				err.Error(),
+			)
+
+			logger.ErrorContext(ctx, msg, evt)
 			continue
 		}
 
@@ -157,54 +210,138 @@ func (p *ToolExtractor) doSpeakeasy(
 				continue
 			}
 
-			// TODO: Currently ignoring servers at path item level until we
-			// figure out how to name env variable
-
 			opID := op.operation.GetOperationID()
 			if opID == "" {
 				opID = fmt.Sprintf("%s_%s", op.method, path)
 			}
 
-			def, err := extractToolDefSpeakeasy(ctx, logger, tx, doc, schemaCache, operationTask[openapi.Operation, openapi.ReferencedParameter]{
-				extractTask:      task,
-				method:           op.method,
+			workItems = append(workItems, operationWorkItem{
 				path:             path,
+				method:           op.method,
 				opID:             opID,
 				operation:        op.operation,
 				sharedParameters: sharedParameters,
-				globalSecurity:   globalSecurity,
-				serverEnvVar:     globalServerEnvVar,
-				defaultServer:    globalDefaultServer,
 			})
-			if err != nil {
-				if task.OnOperationSkipped != nil {
-					task.OnOperationSkipped(err)
-				}
-				_ = oops.E(oops.CodeUnexpected, err, "%s: %s: skipped operation due to error: %s", docInfo.Name, opID, err.Error()).Log(ctx, logger)
-				continue
-			}
+		}
+	}
 
-			if _, err := tx.CreateOpenAPIv3ToolDefinition(ctx, def); err != nil {
-				var pgErr *pgconn.PgError
-				if errors.As(err, &pgErr) {
-					// Special logging for path constraint violations
-					if pgErr.ConstraintName == "http_tool_definitions_path_check" {
-						logger.ErrorContext(ctx, "path exceeds 2000 character limit",
-							attr.SlogEvent("openapi:error:path-too-long"),
-							attr.SlogOpenAPIOperationID(opID),
-							attr.SlogOpenAPIPath(path),
-							attr.SlogValueInt(len(path)),
-							attr.SlogOpenAPIMethod(op.method),
-						)
+	numWorkers := runtime.GOMAXPROCS(0)
+	workChan := make(chan operationWorkItem, len(workItems))
+	resultChan := make(chan operationResult, len(workItems))
+
+	var wg sync.WaitGroup
+	for range numWorkers {
+		wg.Go(func() {
+			for item := range workChan {
+				// TODO: Currently ignoring servers at path item level until we
+				// figure out how to name env variable
+
+				opTask := operationTask[
+					openapi.Operation,
+					openapi.ReferencedParameter,
+				]{
+					extractTask:      task,
+					method:           item.method,
+					path:             item.path,
+					opID:             item.opID,
+					operation:        item.operation,
+					sharedParameters: item.sharedParameters,
+					globalSecurity:   globalSecurity,
+					serverEnvVar:     globalServerEnvVar,
+					defaultServer:    globalDefaultServer,
+				}
+
+				def, events, err := extractToolDefSpeakeasy(
+					ctx,
+					logger,
+					doc,
+					schemaCache,
+					opTask,
+				)
+				if err != nil {
+					if task.OnOperationSkipped != nil {
+						task.OnOperationSkipped(err)
 					}
-					err = fmt.Errorf("%s: %s %s (SQLSTATE %s)", docInfo.Name, pgErr.Message, pgErr.Detail, pgErr.Code)
+					_ = oops.E(
+						oops.CodeUnexpected,
+						err,
+						"%s: %s: skipped operation due to error: %s",
+						docInfo.Name,
+						item.opID,
+						err.Error(),
+					).Log(ctx, logger)
+
+					resultChan <- operationResult{
+						def:              nil,
+						err:              err,
+						deploymentEvents: events,
+					}
+					continue
 				}
-				// Only capture the first error as the rest will just be transaction aborted errors
-				if writeErr == nil {
-					writeErr = err
+
+				resultChan <- operationResult{
+					def:              &def,
+					err:              nil,
+					deploymentEvents: events,
 				}
-				writeErrCount++
 			}
+		})
+	}
+
+	for _, item := range workItems {
+		workChan <- item
+	}
+	close(workChan)
+
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	for result := range resultChan {
+		for _, event := range result.deploymentEvents {
+			if err := tx.LogDeploymentEvent(ctx, *event); err != nil {
+				msg := "failed to log deployment event"
+				logger.ErrorContext(ctx, msg, attr.SlogError(err))
+			}
+		}
+
+		if result.err != nil {
+			continue
+		}
+
+		if _, err := tx.CreateOpenAPIv3ToolDefinition(
+			ctx,
+			*result.def,
+		); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) {
+				// Special logging for path constraint violations
+				if pgErr.ConstraintName == "http_tool_definitions_path_check" {
+					logger.ErrorContext(
+						ctx,
+						"path exceeds 2000 character limit",
+						attr.SlogEvent("openapi:error:path-too-long"),
+						attr.SlogOpenAPIOperationID(result.def.Openapiv3Operation.String),
+						attr.SlogOpenAPIPath(result.def.Path),
+						attr.SlogValueInt(len(result.def.Path)),
+						attr.SlogOpenAPIMethod(result.def.HttpMethod),
+					)
+				}
+				err = fmt.Errorf(
+					"%s: %s %s (SQLSTATE %s)",
+					docInfo.Name,
+					pgErr.Message,
+					pgErr.Detail,
+					pgErr.Code,
+				)
+			}
+			// Only capture the first error as the rest will just be transaction
+			// aborted errors
+			if writeErr == nil {
+				writeErr = err
+			}
+			writeErrCount++
 		}
 	}
 
@@ -378,8 +515,10 @@ func extractDefaultServerSpeakeasy(ctx context.Context, logger *slog.Logger, doc
 	return nil
 }
 
-func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.Queries, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], task operationTask[openapi.Operation, openapi.ReferencedParameter]) (repo.CreateOpenAPIv3ToolDefinitionParams, error) {
+func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, task operationTask[openapi.Operation, openapi.ReferencedParameter]) (repo.CreateOpenAPIv3ToolDefinitionParams, []*repo.LogDeploymentEventParams, error) {
 	empty := repo.CreateOpenAPIv3ToolDefinitionParams{} //nolint:exhaustruct //empty struct
+
+	var deploymentEvents []*repo.LogDeploymentEventParams
 
 	projectID := task.extractTask.ProjectID
 	deploymentID := task.extractTask.DeploymentID
@@ -404,14 +543,14 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 		"operation set", op != nil,
 		"server env var set", serverEnvVar != "",
 	); err != nil {
-		return empty, tagError("invariants-violated", "not enough information to create tool definition: %w", err)
+		return empty, deploymentEvents, tagError("invariants-violated", "not enough information to create tool definition: %w", err)
 	}
 
 	switch {
 	case len(op.Servers) > 0:
-		return empty, tagError("op-servers", "per-operation servers are not currently supported [line: %d]", op.GetCore().Servers.GetKeyNodeOrRootLine(op.GetRootNode()))
+		return empty, deploymentEvents, tagError("op-servers", "per-operation servers are not currently supported [line: %d]", op.GetCore().Servers.GetKeyNodeOrRootLine(op.GetRootNode()))
 	case op.Deprecated != nil && *op.Deprecated:
-		return empty, tagError("deprecated-op", "operation is deprecated [line: %d]", op.GetCore().Deprecated.GetKeyNodeOrRootLine(op.GetRootNode()))
+		return empty, deploymentEvents, tagError("deprecated-op", "operation is deprecated [line: %d]", op.GetCore().Deprecated.GetKeyNodeOrRootLine(op.GetRootNode()))
 	}
 
 	defs := sequencedmap.New[string, *oas3.JSONSchema[oas3.Referenceable]]()
@@ -426,25 +565,23 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 			SkipValidation:      true,
 		})
 		if err != nil {
-			return empty, fmt.Errorf("error resolving request body: %w", err)
+			return empty, deploymentEvents, fmt.Errorf("error resolving request body: %w", err)
 		}
 		requestBody := op.GetRequestBody().GetObject()
 		if requestBody.GetContent().Len() > 1 {
-			if err := tx.LogDeploymentEvent(ctx, repo.LogDeploymentEventParams{
+			deploymentEvents = append(deploymentEvents, &repo.LogDeploymentEventParams{
 				DeploymentID:   deploymentID,
 				ProjectID:      projectID,
 				Event:          "deployment:warning",
 				Message:        fmt.Sprintf("%s: %s: only one request body content type processed for operation", docInfo.Name, opID),
 				AttachmentID:   uuid.NullUUID{UUID: openapiDocID, Valid: openapiDocID != uuid.Nil},
 				AttachmentType: conv.ToPGText("openapi"),
-			}); err != nil {
-				logger.ErrorContext(ctx, "failed to log deployment event", attr.SlogError(err))
-			}
+			})
 		}
 
 		bodyResult, err = captureRequestBodySpeakeasy(ctx, doc, schemaCache, requestBody)
 		if err != nil {
-			return empty, fmt.Errorf("error parsing request body: %w", err)
+			return empty, deploymentEvents, fmt.Errorf("error parsing request body: %w", err)
 		}
 	}
 
@@ -460,7 +597,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 			SkipValidation:      true,
 		})
 		if err != nil {
-			return empty, fmt.Errorf("error resolving parameter: %w", err)
+			return empty, deploymentEvents, fmt.Errorf("error resolving parameter: %w", err)
 		}
 		param := p.GetObject()
 
@@ -484,19 +621,19 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 
 	headerSchema, headerSettings, d, err := captureParametersSpeakeasy(ctx, logger, doc, schemaCache, slices.Collect(headerParams.Values()))
 	if err != nil {
-		return empty, fmt.Errorf("error collecting header parameters: %w", err)
+		return empty, deploymentEvents, fmt.Errorf("error collecting header parameters: %w", err)
 	}
 	mergeDefs(ctx, logger, defs, d)
 
 	querySchema, querySettings, d, err := captureParametersSpeakeasy(ctx, logger, doc, schemaCache, slices.Collect(queryParams.Values()))
 	if err != nil {
-		return empty, fmt.Errorf("error collecting query parameters: %w", err)
+		return empty, deploymentEvents, fmt.Errorf("error collecting query parameters: %w", err)
 	}
 	mergeDefs(ctx, logger, defs, d)
 
 	pathSchema, pathSettings, d, err := captureParametersSpeakeasy(ctx, logger, doc, schemaCache, slices.Collect(pathParams.Values()))
 	if err != nil {
-		return empty, fmt.Errorf("error collecting path parameters: %w", err)
+		return empty, deploymentEvents, fmt.Errorf("error collecting path parameters: %w", err)
 	}
 	mergeDefs(ctx, logger, defs, d)
 
@@ -521,7 +658,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 
 	responseFilter, responseFilterSchema, err := getResponseFilterSpeakeasy(ctx, logger, doc, schemaCache, op, descriptor.responseFilterType)
 	if err != nil {
-		return empty, fmt.Errorf("error getting response filter: %w", err)
+		return empty, deploymentEvents, fmt.Errorf("error getting response filter: %w", err)
 	}
 	if responseFilterSchema != nil {
 		schema.Properties.Set("responseFilter", responseFilterSchema)
@@ -534,7 +671,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 		})
 		err = marshaller.Marshal(ctx, oas3.NewJSONSchemaFromSchema[oas3.Referenceable](schema), &schemaBytes)
 		if err != nil {
-			return empty, fmt.Errorf("error serializing operation schema: %w", err)
+			return empty, deploymentEvents, fmt.Errorf("error serializing operation schema: %w", err)
 		}
 	}
 
@@ -546,7 +683,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 			loc = fmt.Sprintf("%d:%d", node.Line, node.Column)
 		}
 
-		return empty, fmt.Errorf("error serializing operation security [%s]: %w", loc, err)
+		return empty, deploymentEvents, fmt.Errorf("error serializing operation security [%s]: %w", loc, err)
 	}
 
 	if len(security) == 0 {
@@ -599,7 +736,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, tx *repo.
 		PathSettings:        pathSettings,
 		RequestContentType:  conv.PtrToPGText(requestContentType),
 		ResponseFilter:      responseFilter,
-	}, nil
+	}, deploymentEvents, nil
 }
 
 type Defs = *sequencedmap.Map[string, *oas3.JSONSchema[oas3.Referenceable]]
@@ -612,7 +749,7 @@ type capturedRequestBodySpeakeasy struct {
 	defs        Defs
 }
 
-func captureRequestBodySpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], requestBody *openapi.RequestBody) (capturedRequestBodySpeakeasy, error) {
+func captureRequestBodySpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, requestBody *openapi.RequestBody) (capturedRequestBodySpeakeasy, error) {
 	empty := capturedRequestBodySpeakeasy{} //nolint:exhaustruct // empty struct
 
 	if requestBody == nil || requestBody.GetContent().Len() == 0 {
@@ -667,11 +804,11 @@ func generateSchemaKey(js *oas3.JSONSchema[oas3.Referenceable]) string {
 	return hashing.Hash(js)
 }
 
-func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], name string, js *oas3.JSONSchema[oas3.Referenceable]) (*oas3.JSONSchema[oas3.Referenceable], Defs, error) {
+func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, name string, js *oas3.JSONSchema[oas3.Referenceable]) (*oas3.JSONSchema[oas3.Referenceable], Defs, error) {
 	line, col := js.GetRootNodeLine(), js.GetRootNodeColumn()
 
 	cacheKey := generateSchemaKey(js)
-	if cached, exists := schemaCache[cacheKey]; exists {
+	if cached, exists := schemaCache.get(cacheKey); exists {
 		var defs *sequencedmap.Map[string, *oas3.JSONSchema[oas3.Referenceable]]
 		if cached.IsLeft() {
 			defs = cached.GetLeft().Defs
@@ -692,7 +829,7 @@ func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schem
 		return nil, nil, tagError("inline-error", "%s (%d:%d): error inlining schema: %w", name, line, col, err)
 	}
 
-	schemaCache[cacheKey] = inlined
+	schemaCache.set(cacheKey, inlined)
 
 	// Extract definitions from inlined schema as we need to bubble them up to the top-level schema
 	var defs *sequencedmap.Map[string, *oas3.JSONSchema[oas3.Referenceable]]
@@ -704,7 +841,7 @@ func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schem
 	return inlined, defs, nil
 }
 
-func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], params []*openapi.Parameter) (*oas3.JSONSchema[oas3.Referenceable], []byte, Defs, error) {
+func captureParametersSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, params []*openapi.Parameter) (*oas3.JSONSchema[oas3.Referenceable], []byte, Defs, error) {
 	if len(params) == 0 {
 		return nil, nil, nil, nil
 	}
