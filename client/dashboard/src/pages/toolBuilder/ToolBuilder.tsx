@@ -50,16 +50,40 @@ import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { ToolDefinition, useToolDefinitions } from "../toolsets/types";
-import {
-  Block,
-  BlockInner,
-  HigherOrderTool,
-  Input,
-  instructionsPlaceholder,
-  Step,
-  toJSON,
-} from "./components";
 import { useToolifyContext } from "./Toolify";
+import { Block, BlockInner } from "@/components/block";
+
+type Input = {
+  name: string;
+  description?: string;
+};
+
+type Step = {
+  id: string;
+  tool?: string;
+  canonicalTool?: string;
+  instructions: string;
+  inputs?: string[];
+  update: (step: Step) => void;
+};
+
+function higherOrderToolToJSON(tool: HigherOrderTool): string {
+  return JSON.stringify(tool, null, 2);
+}
+
+const instructionsPlaceholder =
+  "Interpret what to do with this tool based on the <purpose />, the chat history, and the output of previous steps.";
+
+// Type for steps without the update function (used for JSON serialization)
+type SerializableStep = Omit<Step, 'update'>;
+
+// Needs to stay aligned with server/internal/templates/impl.go:CustomToolJSONV1
+type HigherOrderTool = {
+  toolName: string;
+  purpose: string;
+  inputs: Input[];
+  steps: SerializableStep[];
+};
 
 export function ToolBuilderNew() {
   const ctx = useToolifyContext();
@@ -388,7 +412,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                 updatePromptTemplateForm: {
                   id: initial.id,
                   description,
-                  prompt: toJSON(higherOrderTool),
+                  prompt: higherOrderToolToJSON(higherOrderTool),
                   arguments: JSON.stringify(argsJsonSchema),
                   toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
                 },
@@ -404,7 +428,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                 name,
                 description,
                 kind: PromptTemplateKind.HigherOrderTool,
-                prompt: toJSON(higherOrderTool),
+                prompt: higherOrderToolToJSON(higherOrderTool),
                 arguments: JSON.stringify(argsJsonSchema),
                 toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
                 engine: "mustache",
@@ -1035,7 +1059,7 @@ function ChatPanel(props: {
 
         const renderResult = await client.templates.render({
           renderTemplateRequestBody: {
-            prompt: toJSON(higherOrderTool),
+            prompt: higherOrderToolToJSON(higherOrderTool),
             arguments: inputArgs,
             engine: "mustache",
             kind: PromptTemplateKind.HigherOrderTool,

@@ -2,8 +2,9 @@ import { ToolDefinition, useToolDefinitions } from "@/pages/toolsets/types";
 import {
   HTTPToolDefinition,
   PromptTemplateKind,
+  PromptTemplateEntry,
   Toolset,
-  ToolsetEntry,
+  HTTPToolDefinitionEntry,
 } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
@@ -23,14 +24,14 @@ type HttpToolGroup = {
 };
 
 export const useGroupedToolDefinitions = (
-  toolset: Toolset | undefined
+  toolset: Toolset | undefined,
 ): ToolGroup[] => {
   const toolDefinitions = useToolDefinitions(toolset);
   return useGroupedTools(toolDefinitions);
 };
 
 export const useGroupedHttpTools = (
-  tools: HTTPToolDefinition[]
+  tools: HTTPToolDefinition[],
 ): HttpToolGroup[] => {
   const wrapped = tools.map((tool) => ({
     ...tool,
@@ -46,10 +47,13 @@ export const useGroupedTools = (tools: ToolDefinition[]): ToolGroup[] => {
   });
 
   const documentIdToSlug = useMemo(() => {
-    return deployment?.deployment?.openapiv3Assets?.reduce((acc, asset) => {
-      acc[asset.id] = asset.slug;
-      return acc;
-    }, {} as Record<string, string>);
+    return deployment?.deployment?.openapiv3Assets?.reduce(
+      (acc, asset) => {
+        acc[asset.id] = asset.slug;
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
   }, [deployment]);
 
   const toolGroups = useMemo(() => {
@@ -89,20 +93,35 @@ export const useGroupedTools = (tools: ToolDefinition[]): ToolGroup[] => {
   return toolGroups;
 };
 
-type PromptTemplate = PromptTemplates[number];
-type PromptTemplates = ToolsetEntry["promptTemplates"];
+const templateName = (template: PromptTemplateEntry) => template.name;
 
-const templateName = (template: PromptTemplate) => template.name;
-
-export const isPrompt = (template: PromptTemplate) =>
+export const isPrompt = (template: PromptTemplateEntry) =>
   template.kind === PromptTemplateKind.Prompt;
 
-export const isHigherOrderTool = (template: PromptTemplate) =>
+export const isHigherOrderTool = (template: PromptTemplateEntry) =>
   template.kind === PromptTemplateKind.HigherOrderTool;
 
-export const promptNames = (promptTemplates: PromptTemplates): string[] =>
+export const promptNames = (promptTemplates: PromptTemplateEntry[]): string[] =>
   promptTemplates.filter(isPrompt).map(templateName);
 
 export const higherOrderToolNames = (
-  promptTemplates: PromptTemplates
+  promptTemplates: PromptTemplateEntry[],
 ): string[] => promptTemplates.filter(isHigherOrderTool).map(templateName);
+
+export const httpToolNames = (toolset: {
+  httpTools: HTTPToolDefinitionEntry[];
+}) => {
+  const { httpTools } = toolset;
+
+  return httpTools.map((tool) => tool.name);
+};
+
+export const userFacingToolNames = (toolset: {
+  httpTools: HTTPToolDefinitionEntry[];
+  promptTemplates: PromptTemplateEntry[];
+}) => {
+  return [
+    ...higherOrderToolNames(toolset.promptTemplates),
+    ...httpToolNames(toolset),
+  ];
+};
