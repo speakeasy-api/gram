@@ -9,9 +9,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type McpInstallPageMetadatum struct {
+type McpMetadatum struct {
 	ID                       uuid.UUID
 	ToolsetID                uuid.UUID
+	ProjectID                uuid.UUID
 	ExternalDocumentationUrl pgtype.Text
 	LogoID                   uuid.NullUUID
 	CreatedAt                pgtype.Timestamptz

@@ -33,7 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	installpage_repo "github.com/speakeasy-api/gram/server/internal/mcpinstallpage/repo"
+	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -50,7 +50,7 @@ type Service struct {
 	db                 *pgxpool.Pool
 	authRepo           *auth_repo.Queries
 	toolsetsRepo       *toolsets_repo.Queries
-	mcpInstallPageRepo *installpage_repo.Queries
+	mcpMetadataRepo *metadata_repo.Queries
 	orgsRepo           *organizations_repo.Queries
 	auth               *auth.Auth
 	env                gateway.EnvironmentLoader
@@ -104,7 +104,7 @@ func NewService(
 		db:                 db,
 		authRepo:           auth_repo.New(db),
 		toolsetsRepo:       toolsets_repo.New(db),
-		mcpInstallPageRepo: installpage_repo.New(db),
+		mcpMetadataRepo: metadata_repo.New(db),
 		orgsRepo:           organizations_repo.New(db),
 		auth:               auth.New(logger, db, sessions),
 		env:                env,

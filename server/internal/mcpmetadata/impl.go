@@ -1,4 +1,4 @@
-package mcpinstallpage
+package mcpmetadata
 
 import (
 	"bytes"
@@ -25,8 +25,8 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
 
-	srv "github.com/speakeasy-api/gram/server/gen/http/mcp_install_page/server"
-	gen "github.com/speakeasy-api/gram/server/gen/mcp_install_page"
+	srv "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/server"
+	gen "github.com/speakeasy-api/gram/server/gen/mcp_metadata"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -34,7 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/mcpinstallpage/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -115,7 +115,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	})
 }
 
-func (s *Service) GetInstallPageMetadata(ctx context.Context, payload *gen.GetInstallPageMetadataPayload) (*gen.GetInstallPageMetadataResult, error) {
+func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadataPayload) (*gen.GetMcpMetadataResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -144,12 +144,12 @@ func (s *Service) GetInstallPageMetadata(ctx context.Context, payload *gen.GetIn
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch MCP install page metadata").Log(ctx, s.logger)
 	}
 
-	return &gen.GetInstallPageMetadataResult{
-		Metadata: toInstallPageMetadata(record),
+	return &gen.GetMcpMetadataResult{
+		Metadata: toMcpMetadata(record),
 	}, nil
 }
 
-func (s *Service) SetInstallPageMetadata(ctx context.Context, payload *gen.SetInstallPageMetadataPayload) (*types.MCPInstallPageMetadata, error) {
+func (s *Service) SetMcpMetadata(ctx context.Context, payload *gen.SetMcpMetadataPayload) (*types.McpMetadata, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.SessionID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
@@ -186,6 +186,7 @@ func (s *Service) SetInstallPageMetadata(ctx context.Context, payload *gen.SetIn
 
 	result, err := s.repo.UpsertMetadata(ctx, repo.UpsertMetadataParams{
 		ToolsetID:                toolset.ID,
+		ProjectID:                *authCtx.ProjectID,
 		ExternalDocumentationUrl: externalDocURL,
 		LogoID:                   logoID,
 	})
@@ -193,15 +194,15 @@ func (s *Service) SetInstallPageMetadata(ctx context.Context, payload *gen.SetIn
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to upsert MCP install page metadata").Log(ctx, s.logger)
 	}
 
-	return toInstallPageMetadata(result), nil
+	return toMcpMetadata(result), nil
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func toInstallPageMetadata(record repo.McpInstallPageMetadatum) *types.MCPInstallPageMetadata {
-	metadata := &types.MCPInstallPageMetadata{
+func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
+	metadata := &types.McpMetadata{
 		ID:                       record.ID.String(),
 		ToolsetID:                record.ToolsetID.String(),
 		CreatedAt:                record.CreatedAt.Time.Format(time.RFC3339),

@@ -3522,10 +3522,10 @@ paths:
             x-speakeasy-name-override: revokeById
             x-speakeasy-react-hook:
                 name: RevokeAPIKey
-    /rpc/mcp.installPageMetadata.get:
+    /rpc/mcpMetadata.get:
         get:
             description: Fetch the metadata that powers the MCP install page.
-            operationId: getInstallPageMetadata
+            operationId: getMcpMetadata
             parameters:
                 - allowEmptyValue: true
                   description: The slug of the toolset associated with this install page metadata
@@ -3556,7 +3556,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/GetInstallPageMetadataResponseBody'
+                                $ref: '#/components/schemas/GetMcpMetadataResponseBody'
                     description: OK response.
                 "400":
                     content:
@@ -3615,16 +3615,16 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: getInstallPageMetadata mcpInstallPage
+            summary: getMcpMetadata mcpMetadata
             tags:
-                - mcpInstallPage
+                - mcpMetadata
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
-                name: GetInstallPageMetadata
-    /rpc/mcp.installPageMetadata.set:
+                name: GetMcpMetadata
+    /rpc/mcpMetadata.set:
         post:
             description: Create or update the metadata that powers the MCP install page.
-            operationId: setInstallPageMetadata
+            operationId: setMcpMetadata
             parameters:
                 - allowEmptyValue: true
                   description: Session header
@@ -3644,14 +3644,14 @@ paths:
                 content:
                     application/json:
                         schema:
-                            $ref: '#/components/schemas/SetInstallPageMetadataRequestBody'
+                            $ref: '#/components/schemas/SetMcpMetadataRequestBody'
                 required: true
             responses:
                 "200":
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/MCPInstallPageMetadata'
+                                $ref: '#/components/schemas/McpMetadata'
                     description: OK response.
                 "400":
                     content:
@@ -3710,9 +3710,9 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: setInstallPageMetadata mcpInstallPage
+            summary: setMcpMetadata mcpMetadata
             tags:
-                - mcpInstallPage
+                - mcpMetadata
             x-speakeasy-name-override: set
     /rpc/packages.create:
         post:
@@ -8347,11 +8347,6 @@ components:
                 - packages
                 - openapiv3_tool_count
                 - functions_tool_count
-        GetInstallPageMetadataResponseBody:
-            type: object
-            properties:
-                metadata:
-                    $ref: '#/components/schemas/MCPInstallPageMetadata'
         GetInstanceForm:
             type: object
             properties:
@@ -8428,6 +8423,11 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        GetMcpMetadataResponseBody:
+            type: object
+            properties:
+                metadata:
+                    $ref: '#/components/schemas/McpMetadata'
         GetPromptTemplateResult:
             type: object
             properties:
@@ -8923,7 +8923,7 @@ components:
             required:
                 - package
                 - versions
-        MCPInstallPageMetadata:
+        McpMetadata:
             type: object
             properties:
                 created_at:
@@ -9567,7 +9567,7 @@ components:
             required:
                 - description
                 - env_variables
-        SetInstallPageMetadataRequestBody:
+        SetMcpMetadataRequestBody:
             type: object
             properties:
                 external_documentation_url:
@@ -10276,7 +10276,7 @@ tags:
       description: Explore third-party tools in Gram.
     - name: keys
       description: Managing system api keys.
-    - name: mcpInstallPage
+    - name: mcpMetadata
       description: Manages metadata for the MCP install page shown to users.
     - name: packages
       description: Manages packages in Gram.

@@ -23,7 +23,7 @@ import (
 	instancesc "github.com/speakeasy-api/gram/server/gen/http/instances/client"
 	integrationsc "github.com/speakeasy-api/gram/server/gen/http/integrations/client"
 	keysc "github.com/speakeasy-api/gram/server/gen/http/keys/client"
-	mcpinstallpagec "github.com/speakeasy-api/gram/server/gen/http/mcp_install_page/client"
+	mcpmetadatac "github.com/speakeasy-api/gram/server/gen/http/mcp_metadata/client"
 	packagesc "github.com/speakeasy-api/gram/server/gen/http/packages/client"
 	projectsc "github.com/speakeasy-api/gram/server/gen/http/projects/client"
 	slackc "github.com/speakeasy-api/gram/server/gen/http/slack/client"
@@ -51,7 +51,7 @@ func UsageCommands() []string {
 		"instances get-instance",
 		"integrations (get|list)",
 		"keys (create-key|list-keys|revoke-key)",
-		"mcp-install-page (get-install-page-metadata|set-install-page-metadata)",
+		"mcp-metadata (get-mcp-metadata|set-mcp-metadata)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"projects (create-project|list-projects|set-logo)",
 		"slack (callback|login|get-slack-connection|update-slack-connection|delete-slack-connection)",
@@ -283,17 +283,17 @@ func ParseEndpoint(
 		keysRevokeKeyIDFlag           = keysRevokeKeyFlags.String("id", "REQUIRED", "")
 		keysRevokeKeySessionTokenFlag = keysRevokeKeyFlags.String("session-token", "", "")
 
-		mcpInstallPageFlags = flag.NewFlagSet("mcp-install-page", flag.ContinueOnError)
+		mcpMetadataFlags = flag.NewFlagSet("mcp-metadata", flag.ContinueOnError)
 
-		mcpInstallPageGetInstallPageMetadataFlags                = flag.NewFlagSet("get-install-page-metadata", flag.ExitOnError)
-		mcpInstallPageGetInstallPageMetadataToolsetSlugFlag      = mcpInstallPageGetInstallPageMetadataFlags.String("toolset-slug", "REQUIRED", "")
-		mcpInstallPageGetInstallPageMetadataSessionTokenFlag     = mcpInstallPageGetInstallPageMetadataFlags.String("session-token", "", "")
-		mcpInstallPageGetInstallPageMetadataProjectSlugInputFlag = mcpInstallPageGetInstallPageMetadataFlags.String("project-slug-input", "", "")
+		mcpMetadataGetMcpMetadataFlags                = flag.NewFlagSet("get-mcp-metadata", flag.ExitOnError)
+		mcpMetadataGetMcpMetadataToolsetSlugFlag      = mcpMetadataGetMcpMetadataFlags.String("toolset-slug", "REQUIRED", "")
+		mcpMetadataGetMcpMetadataSessionTokenFlag     = mcpMetadataGetMcpMetadataFlags.String("session-token", "", "")
+		mcpMetadataGetMcpMetadataProjectSlugInputFlag = mcpMetadataGetMcpMetadataFlags.String("project-slug-input", "", "")
 
-		mcpInstallPageSetInstallPageMetadataFlags                = flag.NewFlagSet("set-install-page-metadata", flag.ExitOnError)
-		mcpInstallPageSetInstallPageMetadataBodyFlag             = mcpInstallPageSetInstallPageMetadataFlags.String("body", "REQUIRED", "")
-		mcpInstallPageSetInstallPageMetadataSessionTokenFlag     = mcpInstallPageSetInstallPageMetadataFlags.String("session-token", "", "")
-		mcpInstallPageSetInstallPageMetadataProjectSlugInputFlag = mcpInstallPageSetInstallPageMetadataFlags.String("project-slug-input", "", "")
+		mcpMetadataSetMcpMetadataFlags                = flag.NewFlagSet("set-mcp-metadata", flag.ExitOnError)
+		mcpMetadataSetMcpMetadataBodyFlag             = mcpMetadataSetMcpMetadataFlags.String("body", "REQUIRED", "")
+		mcpMetadataSetMcpMetadataSessionTokenFlag     = mcpMetadataSetMcpMetadataFlags.String("session-token", "", "")
+		mcpMetadataSetMcpMetadataProjectSlugInputFlag = mcpMetadataSetMcpMetadataFlags.String("project-slug-input", "", "")
 
 		packagesFlags = flag.NewFlagSet("packages", flag.ContinueOnError)
 
@@ -557,9 +557,9 @@ func ParseEndpoint(
 	keysListKeysFlags.Usage = keysListKeysUsage
 	keysRevokeKeyFlags.Usage = keysRevokeKeyUsage
 
-	mcpInstallPageFlags.Usage = mcpInstallPageUsage
-	mcpInstallPageGetInstallPageMetadataFlags.Usage = mcpInstallPageGetInstallPageMetadataUsage
-	mcpInstallPageSetInstallPageMetadataFlags.Usage = mcpInstallPageSetInstallPageMetadataUsage
+	mcpMetadataFlags.Usage = mcpMetadataUsage
+	mcpMetadataGetMcpMetadataFlags.Usage = mcpMetadataGetMcpMetadataUsage
+	mcpMetadataSetMcpMetadataFlags.Usage = mcpMetadataSetMcpMetadataUsage
 
 	packagesFlags.Usage = packagesUsage
 	packagesCreatePackageFlags.Usage = packagesCreatePackageUsage
@@ -648,8 +648,8 @@ func ParseEndpoint(
 			svcf = integrationsFlags
 		case "keys":
 			svcf = keysFlags
-		case "mcp-install-page":
-			svcf = mcpInstallPageFlags
+		case "mcp-metadata":
+			svcf = mcpMetadataFlags
 		case "packages":
 			svcf = packagesFlags
 		case "projects":
@@ -829,13 +829,13 @@ func ParseEndpoint(
 
 			}
 
-		case "mcp-install-page":
+		case "mcp-metadata":
 			switch epn {
-			case "get-install-page-metadata":
-				epf = mcpInstallPageGetInstallPageMetadataFlags
+			case "get-mcp-metadata":
+				epf = mcpMetadataGetMcpMetadataFlags
 
-			case "set-install-page-metadata":
-				epf = mcpInstallPageSetInstallPageMetadataFlags
+			case "set-mcp-metadata":
+				epf = mcpMetadataSetMcpMetadataFlags
 
 			}
 
@@ -1154,15 +1154,15 @@ func ParseEndpoint(
 				endpoint = c.RevokeKey()
 				data, err = keysc.BuildRevokeKeyPayload(*keysRevokeKeyIDFlag, *keysRevokeKeySessionTokenFlag)
 			}
-		case "mcp-install-page":
-			c := mcpinstallpagec.NewClient(scheme, host, doer, enc, dec, restore)
+		case "mcp-metadata":
+			c := mcpmetadatac.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
-			case "get-install-page-metadata":
-				endpoint = c.GetInstallPageMetadata()
-				data, err = mcpinstallpagec.BuildGetInstallPageMetadataPayload(*mcpInstallPageGetInstallPageMetadataToolsetSlugFlag, *mcpInstallPageGetInstallPageMetadataSessionTokenFlag, *mcpInstallPageGetInstallPageMetadataProjectSlugInputFlag)
-			case "set-install-page-metadata":
-				endpoint = c.SetInstallPageMetadata()
-				data, err = mcpinstallpagec.BuildSetInstallPageMetadataPayload(*mcpInstallPageSetInstallPageMetadataBodyFlag, *mcpInstallPageSetInstallPageMetadataSessionTokenFlag, *mcpInstallPageSetInstallPageMetadataProjectSlugInputFlag)
+			case "get-mcp-metadata":
+				endpoint = c.GetMcpMetadata()
+				data, err = mcpmetadatac.BuildGetMcpMetadataPayload(*mcpMetadataGetMcpMetadataToolsetSlugFlag, *mcpMetadataGetMcpMetadataSessionTokenFlag, *mcpMetadataGetMcpMetadataProjectSlugInputFlag)
+			case "set-mcp-metadata":
+				endpoint = c.SetMcpMetadata()
+				data, err = mcpmetadatac.BuildSetMcpMetadataPayload(*mcpMetadataSetMcpMetadataBodyFlag, *mcpMetadataSetMcpMetadataSessionTokenFlag, *mcpMetadataSetMcpMetadataProjectSlugInputFlag)
 			}
 		case "packages":
 			c := packagesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2446,21 +2446,21 @@ func keysRevokeKeyUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `keys revoke-key --id "Atque rerum vel dolor corporis." --session-token "Illo nulla ut necessitatibus."`)
 }
 
-// mcpInstallPageUsage displays the usage of the mcp-install-page command and
-// its subcommands.
-func mcpInstallPageUsage() {
+// mcpMetadataUsage displays the usage of the mcp-metadata command and its
+// subcommands.
+func mcpMetadataUsage() {
 	fmt.Fprintln(os.Stderr, `Manages metadata for the MCP install page shown to users.`)
-	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-install-page COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] mcp-metadata COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
-	fmt.Fprintln(os.Stderr, `    get-install-page-metadata: Fetch the metadata that powers the MCP install page.`)
-	fmt.Fprintln(os.Stderr, `    set-install-page-metadata: Create or update the metadata that powers the MCP install page.`)
+	fmt.Fprintln(os.Stderr, `    get-mcp-metadata: Fetch the metadata that powers the MCP install page.`)
+	fmt.Fprintln(os.Stderr, `    set-mcp-metadata: Create or update the metadata that powers the MCP install page.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
-	fmt.Fprintf(os.Stderr, "    %s mcp-install-page COMMAND --help\n", os.Args[0])
+	fmt.Fprintf(os.Stderr, "    %s mcp-metadata COMMAND --help\n", os.Args[0])
 }
-func mcpInstallPageGetInstallPageMetadataUsage() {
+func mcpMetadataGetMcpMetadataUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-install-page get-install-page-metadata", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-metadata get-mcp-metadata", os.Args[0])
 	fmt.Fprint(os.Stderr, " -toolset-slug STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -2478,12 +2478,12 @@ func mcpInstallPageGetInstallPageMetadataUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `mcp-install-page get-install-page-metadata --toolset-slug "8ir" --session-token "Facilis commodi dicta sunt minus reprehenderit dicta." --project-slug-input "Eum consequuntur alias et ut tenetur."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `mcp-metadata get-mcp-metadata --toolset-slug "8ir" --session-token "Facilis commodi dicta sunt minus reprehenderit dicta." --project-slug-input "Eum consequuntur alias et ut tenetur."`)
 }
 
-func mcpInstallPageSetInstallPageMetadataUsage() {
+func mcpMetadataSetMcpMetadataUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] mcp-install-page set-install-page-metadata", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-metadata set-mcp-metadata", os.Args[0])
 	fmt.Fprint(os.Stderr, " -body JSON")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -2501,7 +2501,7 @@ func mcpInstallPageSetInstallPageMetadataUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `mcp-install-page set-install-page-metadata --body '{
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `mcp-metadata set-mcp-metadata --body '{
       "external_documentation_url": "At in dolor consequuntur et quisquam.",
       "logo_asset_id": "Aliquam sit error reiciendis asperiores maiores optio.",
       "toolset_slug": "vbg"

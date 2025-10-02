@@ -2813,10 +2813,10 @@ paths:
             x-speakeasy-name-override: revokeById
             x-speakeasy-react-hook:
                 name: RevokeAPIKey
-    /rpc/mcp.installPageMetadata.get:
+    /rpc/mcpMetadata.get:
         get:
             description: Fetch the metadata that powers the MCP install page.
-            operationId: mcpInstallPage#getInstallPageMetadata
+            operationId: mcpMetadata#getMcpMetadata
             parameters:
                 - description: A short url-friendly label that uniquely identifies a resource.
                   in: query
@@ -2837,58 +2837,58 @@ paths:
                 "200":
                     description: OK response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageGetInstallPageMetadataResponseBody'
+                        $ref: '#/definitions/McpMetadataGetMcpMetadataResponseBody'
                 "400":
                     description: Bad Request response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageGetInstallPageMetadataBadRequestResponseBody'
+                        $ref: '#/definitions/McpMetadataGetMcpMetadataBadRequestResponseBody'
                 "401":
                     description: Unauthorized response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageGetInstallPageMetadataUnauthorizedResponseBody'
+                        $ref: '#/definitions/McpMetadataGetMcpMetadataUnauthorizedResponseBody'
                 "403":
                     description: Forbidden response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageGetInstallPageMetadataForbiddenResponseBody'
+                        $ref: '#/definitions/McpMetadataGetMcpMetadataForbiddenResponseBody'
                 "404":
                     description: Not Found response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageGetInstallPageMetadataNotFoundResponseBody'
+                        $ref: '#/definitions/McpMetadataGetMcpMetadataNotFoundResponseBody'
                 "409":
                     description: Conflict response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageGetInstallPageMetadataConflictResponseBody'
+                        $ref: '#/definitions/McpMetadataGetMcpMetadataConflictResponseBody'
                 "415":
                     description: Unsupported Media Type response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageGetInstallPageMetadataUnsupportedMediaResponseBody'
+                        $ref: '#/definitions/McpMetadataGetMcpMetadataUnsupportedMediaResponseBody'
                 "422":
                     description: Unprocessable Entity response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageGetInstallPageMetadataInvalidResponseBody'
+                        $ref: '#/definitions/McpMetadataGetMcpMetadataInvalidResponseBody'
                 "500":
                     description: Internal Server Error response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageGetInstallPageMetadataUnexpectedResponseBody'
+                        $ref: '#/definitions/McpMetadataGetMcpMetadataUnexpectedResponseBody'
                 "502":
                     description: Bad Gateway response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageGetInstallPageMetadataGatewayErrorResponseBody'
+                        $ref: '#/definitions/McpMetadataGetMcpMetadataGatewayErrorResponseBody'
             schemes:
                 - http
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: getInstallPageMetadata mcpInstallPage
+            summary: getMcpMetadata mcpMetadata
             tags:
-                - mcpInstallPage
+                - mcpMetadata
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
-                name: GetInstallPageMetadata
-    /rpc/mcp.installPageMetadata.set:
+                name: GetMcpMetadata
+    /rpc/mcpMetadata.set:
         post:
             description: Create or update the metadata that powers the MCP install page.
-            operationId: mcpInstallPage#setInstallPageMetadata
+            operationId: mcpMetadata#setMcpMetadata
             parameters:
                 - description: Session header
                   in: header
@@ -2901,17 +2901,17 @@ paths:
                   required: false
                   type: string
                 - in: body
-                  name: SetInstallPageMetadataRequestBody
+                  name: SetMcpMetadataRequestBody
                   required: true
                   schema:
-                    $ref: '#/definitions/McpInstallPageSetInstallPageMetadataRequestBody'
+                    $ref: '#/definitions/McpMetadataSetMcpMetadataRequestBody'
                     required:
                         - toolset_slug
             responses:
                 "200":
                     description: OK response.
                     schema:
-                        $ref: '#/definitions/MCPInstallPageMetadata'
+                        $ref: '#/definitions/McpMetadata'
                         required:
                             - id
                             - toolset_id
@@ -2920,47 +2920,47 @@ paths:
                 "400":
                     description: Bad Request response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageSetInstallPageMetadataBadRequestResponseBody'
+                        $ref: '#/definitions/McpMetadataSetMcpMetadataBadRequestResponseBody'
                 "401":
                     description: Unauthorized response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageSetInstallPageMetadataUnauthorizedResponseBody'
+                        $ref: '#/definitions/McpMetadataSetMcpMetadataUnauthorizedResponseBody'
                 "403":
                     description: Forbidden response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageSetInstallPageMetadataForbiddenResponseBody'
+                        $ref: '#/definitions/McpMetadataSetMcpMetadataForbiddenResponseBody'
                 "404":
                     description: Not Found response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageSetInstallPageMetadataNotFoundResponseBody'
+                        $ref: '#/definitions/McpMetadataSetMcpMetadataNotFoundResponseBody'
                 "409":
                     description: Conflict response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageSetInstallPageMetadataConflictResponseBody'
+                        $ref: '#/definitions/McpMetadataSetMcpMetadataConflictResponseBody'
                 "415":
                     description: Unsupported Media Type response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageSetInstallPageMetadataUnsupportedMediaResponseBody'
+                        $ref: '#/definitions/McpMetadataSetMcpMetadataUnsupportedMediaResponseBody'
                 "422":
                     description: Unprocessable Entity response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageSetInstallPageMetadataInvalidResponseBody'
+                        $ref: '#/definitions/McpMetadataSetMcpMetadataInvalidResponseBody'
                 "500":
                     description: Internal Server Error response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageSetInstallPageMetadataUnexpectedResponseBody'
+                        $ref: '#/definitions/McpMetadataSetMcpMetadataUnexpectedResponseBody'
                 "502":
                     description: Bad Gateway response.
                     schema:
-                        $ref: '#/definitions/McpInstallPageSetInstallPageMetadataGatewayErrorResponseBody'
+                        $ref: '#/definitions/McpMetadataSetMcpMetadataGatewayErrorResponseBody'
             schemes:
                 - http
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
-            summary: setInstallPageMetadata mcpInstallPage
+            summary: setMcpMetadata mcpMetadata
             tags:
-                - mcpInstallPage
+                - mcpMetadata
             x-speakeasy-name-override: set
     /rpc/packages.create:
         post:
@@ -27069,8 +27069,8 @@ definitions:
         required:
             - package
             - versions
-    MCPInstallPageMetadata:
-        title: MCPInstallPageMetadata
+    McpMetadata:
+        title: McpMetadata
         type: object
         properties:
             created_at:
@@ -27115,7 +27115,7 @@ definitions:
             - toolset_id
             - created_at
             - updated_at
-    McpInstallPageGetInstallPageMetadataBadRequestResponseBody:
+    McpMetadataGetMcpMetadataBadRequestResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27158,7 +27158,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageGetInstallPageMetadataConflictResponseBody:
+    McpMetadataGetMcpMetadataConflictResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27201,7 +27201,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageGetInstallPageMetadataForbiddenResponseBody:
+    McpMetadataGetMcpMetadataForbiddenResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27244,7 +27244,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageGetInstallPageMetadataGatewayErrorResponseBody:
+    McpMetadataGetMcpMetadataGatewayErrorResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27287,7 +27287,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageGetInstallPageMetadataInvalidResponseBody:
+    McpMetadataGetMcpMetadataInvalidResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27330,7 +27330,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageGetInstallPageMetadataInvariantViolationResponseBody:
+    McpMetadataGetMcpMetadataInvariantViolationResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27373,7 +27373,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageGetInstallPageMetadataNotFoundResponseBody:
+    McpMetadataGetMcpMetadataNotFoundResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27416,12 +27416,12 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageGetInstallPageMetadataResponseBody:
-        title: McpInstallPageGetInstallPageMetadataResponseBody
+    McpMetadataGetMcpMetadataResponseBody:
+        title: McpMetadataGetMcpMetadataResponseBody
         type: object
         properties:
             metadata:
-                $ref: '#/definitions/MCPInstallPageMetadata'
+                $ref: '#/definitions/McpMetadata'
         example:
             metadata:
                 created_at: "1972-12-03T09:15:36Z"
@@ -27430,7 +27430,7 @@ definitions:
                 logo_asset_id: b37a09bf-a272-47c7-a696-b47fad44a4dc
                 toolset_id: 4c94b833-6878-4b24-b5fe-f9cd32b4e039
                 updated_at: "2006-02-18T07:43:46Z"
-    McpInstallPageGetInstallPageMetadataUnauthorizedResponseBody:
+    McpMetadataGetMcpMetadataUnauthorizedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27473,7 +27473,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageGetInstallPageMetadataUnexpectedResponseBody:
+    McpMetadataGetMcpMetadataUnexpectedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27516,7 +27516,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageGetInstallPageMetadataUnsupportedMediaResponseBody:
+    McpMetadataGetMcpMetadataUnsupportedMediaResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27559,7 +27559,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageSetInstallPageMetadataBadRequestResponseBody:
+    McpMetadataSetMcpMetadataBadRequestResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27602,7 +27602,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageSetInstallPageMetadataConflictResponseBody:
+    McpMetadataSetMcpMetadataConflictResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27645,7 +27645,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageSetInstallPageMetadataForbiddenResponseBody:
+    McpMetadataSetMcpMetadataForbiddenResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27688,7 +27688,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageSetInstallPageMetadataGatewayErrorResponseBody:
+    McpMetadataSetMcpMetadataGatewayErrorResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27731,7 +27731,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageSetInstallPageMetadataInvalidResponseBody:
+    McpMetadataSetMcpMetadataInvalidResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27774,7 +27774,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageSetInstallPageMetadataInvariantViolationResponseBody:
+    McpMetadataSetMcpMetadataInvariantViolationResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27817,7 +27817,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageSetInstallPageMetadataNotFoundResponseBody:
+    McpMetadataSetMcpMetadataNotFoundResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27860,8 +27860,8 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageSetInstallPageMetadataRequestBody:
-        title: McpInstallPageSetInstallPageMetadataRequestBody
+    McpMetadataSetMcpMetadataRequestBody:
+        title: McpMetadataSetMcpMetadataRequestBody
         type: object
         properties:
             external_documentation_url:
@@ -27884,7 +27884,7 @@ definitions:
             toolset_slug: igs
         required:
             - toolset_slug
-    McpInstallPageSetInstallPageMetadataUnauthorizedResponseBody:
+    McpMetadataSetMcpMetadataUnauthorizedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27927,7 +27927,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageSetInstallPageMetadataUnexpectedResponseBody:
+    McpMetadataSetMcpMetadataUnexpectedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -27970,7 +27970,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    McpInstallPageSetInstallPageMetadataUnsupportedMediaResponseBody:
+    McpMetadataSetMcpMetadataUnsupportedMediaResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:

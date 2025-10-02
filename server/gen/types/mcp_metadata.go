@@ -7,9 +7,9 @@
 
 package types
 
-// MCPInstallPageMetadata is the result type of the mcpInstallPage service
-// setInstallPageMetadata method.
-type MCPInstallPageMetadata struct {
+// McpMetadata is the result type of the mcpMetadata service setMcpMetadata
+// method.
+type McpMetadata struct {
 	// The ID of the metadata record
 	ID string
 	// The toolset associated with this install page metadata

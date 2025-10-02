@@ -222,12 +222,12 @@ sql:
         omit_unused_structs: true
 
   - schema: schema.sql
-    queries: ../internal/mcpinstallpage/queries.sql
+    queries: ../internal/mcpmetadata/queries.sql
     engine: postgresql
     gen:
       go:
         package: "repo"
-        out: "../internal/mcpinstallpage/repo"
+        out: "../internal/mcpmetadata/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true
 

@@ -1,4 +1,4 @@
-package mcpinstallpage
+package mcpmetadata
 
 import (
 	"github.com/speakeasy-api/gram/server/design/security"
@@ -6,7 +6,7 @@ import (
 	. "goa.design/goa/v3/dsl"
 )
 
-var MCPInstallPageMetadata = Type("MCPInstallPageMetadata", func() {
+var McpMetadata = Type("McpMetadata", func() {
 	Meta("struct:pkg:path", "types")
 
 	Description("Metadata used to configure the MCP install page.")
@@ -31,13 +31,13 @@ var MCPInstallPageMetadata = Type("MCPInstallPageMetadata", func() {
 	Required("id", "toolset_id", "created_at", "updated_at")
 })
 
-var _ = Service("mcpInstallPage", func() {
+var _ = Service("mcpMetadata", func() {
 	Description("Manages metadata for the MCP install page shown to users.")
 
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 
-	Method("getInstallPageMetadata", func() {
+	Method("getMcpMetadata", func() {
 		Description("Fetch the metadata that powers the MCP install page.")
 
 		Payload(func() {
@@ -50,23 +50,23 @@ var _ = Service("mcpInstallPage", func() {
 		})
 
 		Result(func() {
-			Attribute("metadata", MCPInstallPageMetadata, "Metadata for the MCP install page")
+			Attribute("metadata", McpMetadata, "Metadata for the MCP install page")
 		})
 
 		HTTP(func() {
-			GET("/rpc/mcp.installPageMetadata.get")
+			GET("/rpc/mcpMetadata.get")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Param("toolset_slug")
 			Response(StatusOK)
 		})
 
-		Meta("openapi:operationId", "getInstallPageMetadata")
+		Meta("openapi:operationId", "getMcpMetadata")
 		Meta("openapi:extension:x-speakeasy-name-override", "get")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetInstallPageMetadata"}`)
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMcpMetadata"}`)
 	})
 
-	Method("setInstallPageMetadata", func() {
+	Method("setMcpMetadata", func() {
 		Description("Create or update the metadata that powers the MCP install page.")
 
 		Payload(func() {
@@ -80,15 +80,15 @@ var _ = Service("mcpInstallPage", func() {
 			security.ProjectPayload()
 		})
 
-		Result(MCPInstallPageMetadata)
+		Result(McpMetadata)
 
 		HTTP(func() {
-			POST("/rpc/mcp.installPageMetadata.set")
+			POST("/rpc/mcpMetadata.set")
 			security.SessionHeader()
 			security.ProjectHeader()
 		})
 
-		Meta("openapi:operationId", "setInstallPageMetadata")
+		Meta("openapi:operationId", "setMcpMetadata")
 		Meta("openapi:extension:x-speakeasy-name-override", "set")
 	})
 })

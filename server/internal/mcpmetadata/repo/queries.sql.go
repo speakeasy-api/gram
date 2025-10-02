@@ -15,22 +15,24 @@ import (
 const getMetadataForToolset = `-- name: GetMetadataForToolset :one
 SELECT id,
        toolset_id,
+       project_id,
        external_documentation_url,
        logo_id,
        created_at,
        updated_at
-FROM mcp_install_page_metadata
+FROM mcp_metadata
 WHERE toolset_id = $1
 ORDER BY updated_at DESC
 LIMIT 1
 `
 
-func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID) (McpInstallPageMetadatum, error) {
+func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID) (McpMetadatum, error) {
 	row := q.db.QueryRow(ctx, getMetadataForToolset, toolsetID)
-	var i McpInstallPageMetadatum
+	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,
 		&i.ToolsetID,
+		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
 		&i.LogoID,
 		&i.CreatedAt,
@@ -40,14 +42,20 @@ func (q *Queries) GetMetadataForToolset(ctx context.Context, toolsetID uuid.UUID
 }
 
 const upsertMetadata = `-- name: UpsertMetadata :one
-INSERT INTO mcp_install_page_metadata (toolset_id, external_documentation_url, logo_id)
-VALUES ($1, $2, $3)
+INSERT INTO mcp_metadata (
+    toolset_id,
+    project_id,
+    external_documentation_url,
+    logo_id
+) VALUES ($1, $2, $3, $4)
 ON CONFLICT (toolset_id)
-DO UPDATE SET external_documentation_url = EXCLUDED.external_documentation_url,
+DO UPDATE SET project_id = EXCLUDED.project_id,
+              external_documentation_url = EXCLUDED.external_documentation_url,
               logo_id = EXCLUDED.logo_id,
               updated_at = clock_timestamp()
 RETURNING id,
           toolset_id,
+          project_id,
           external_documentation_url,
           logo_id,
           created_at,
@@ -56,16 +64,23 @@ RETURNING id,
 
 type UpsertMetadataParams struct {
 	ToolsetID                uuid.UUID
+	ProjectID                uuid.UUID
 	ExternalDocumentationUrl pgtype.Text
 	LogoID                   uuid.NullUUID
 }
 
-func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (McpInstallPageMetadatum, error) {
-	row := q.db.QueryRow(ctx, upsertMetadata, arg.ToolsetID, arg.ExternalDocumentationUrl, arg.LogoID)
-	var i McpInstallPageMetadatum
+func (q *Queries) UpsertMetadata(ctx context.Context, arg UpsertMetadataParams) (McpMetadatum, error) {
+	row := q.db.QueryRow(ctx, upsertMetadata,
+		arg.ToolsetID,
+		arg.ProjectID,
+		arg.ExternalDocumentationUrl,
+		arg.LogoID,
+	)
+	var i McpMetadatum
 	err := row.Scan(
 		&i.ID,
 		&i.ToolsetID,
+		&i.ProjectID,
 		&i.ExternalDocumentationUrl,
 		&i.LogoID,
 		&i.CreatedAt,
