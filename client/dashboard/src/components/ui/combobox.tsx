@@ -120,7 +120,7 @@ export function Combobox<T extends DropdownItem>({
                           : selected?.value === item.value
                       )
                         ? "opacity-100"
-                        : "opacity-0"
+                        : "opacity-0",
                     )}
                   />
                 </CommandItem>

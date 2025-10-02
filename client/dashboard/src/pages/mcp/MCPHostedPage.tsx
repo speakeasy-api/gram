@@ -145,7 +145,7 @@ export function MCPPagePreview({
     <div
       className={cn(
         `w-full max-h-[${height}px] border-1 rounded-lg overflow-hidden pointer-events-none`,
-        className
+        className,
       )}
     >
       <iframe

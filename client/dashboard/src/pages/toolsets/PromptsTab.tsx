@@ -48,7 +48,7 @@ export function PromptsTabContent({
         slug: toolset.slug,
         updateToolsetRequestBody: {
           promptTemplateNames: currentPromptNames.filter(
-            (name) => name !== promptName
+            (name) => name !== promptName,
           ),
         },
       },

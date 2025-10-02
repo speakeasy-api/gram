@@ -6,7 +6,8 @@ export function ThemeToggle() {
   const { setTheme, theme } = useMoonshineConfig();
 
   return (
-    <Button variant="tertiary"
+    <Button
+      variant="tertiary"
       size="sm"
       onClick={() => setTheme(theme === "light" ? "dark" : "light")}
     >

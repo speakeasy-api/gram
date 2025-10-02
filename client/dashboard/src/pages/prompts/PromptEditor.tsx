@@ -15,7 +15,7 @@ const argsSchema = z.object({
     z.string(),
     z.object({
       description: z.string().optional(),
-    })
+    }),
   ),
 });
 
@@ -51,7 +51,7 @@ export function PromptEditor({
   const isPending = status === "pending";
   const [fullScreenEditor, setFullScreenEditor] = useState(false);
   const parsedArgs = argsSchema.safeParse(
-    JSON.parse(predecessor?.arguments ?? "{}")
+    JSON.parse(predecessor?.arguments ?? "{}"),
   );
   const argDefaults = parsedArgs.success ? parsedArgs.data.properties : {};
   const [args, setArgs] = useState<string[]>(Object.keys(argDefaults));
@@ -61,7 +61,7 @@ export function PromptEditor({
       const el = e.currentTarget;
       assert(
         el instanceof HTMLTextAreaElement,
-        "Event target is not a textarea"
+        "Event target is not a textarea",
       );
 
       const iter = el.value.matchAll(MUSTACHE_VAR_REGEX);
@@ -75,7 +75,7 @@ export function PromptEditor({
 
       setArgs([...new Set(names)].sort());
     },
-    []
+    [],
   );
 
   return (
@@ -92,7 +92,7 @@ export function PromptEditor({
           assert(typeof prompt === "string", "Prompt is required");
           assert(
             description == null || typeof description === "string",
-            "Description is required"
+            "Description is required",
           );
 
           let hasArgs = false;
@@ -162,7 +162,7 @@ export function PromptEditor({
                   "relative",
                   fullScreenEditor
                     ? "px-8 pb-8 pt-12 h-full w-full flex flex-col"
-                    : false
+                    : false,
                 )}
               >
                 <Label className="mb-3" htmlFor="newprompt_prompt">
@@ -178,7 +178,8 @@ export function PromptEditor({
                   onKeyUp={handleKeyUp}
                 />
                 {fullScreenEditor ? (
-                  <Button className="absolute top-4 right-4"
+                  <Button
+                    className="absolute top-4 right-4"
                     type="button"
                     variant="tertiary"
                     onClick={() => setFullScreenEditor(false)}
@@ -188,7 +189,8 @@ export function PromptEditor({
                   </Button>
                 ) : null}
                 {!fullScreenEditor ? (
-                  <Button className="absolute bottom-4 right-4"
+                  <Button
+                    className="absolute bottom-4 right-4"
                     type="button"
                     variant="tertiary"
                     onClick={() => {

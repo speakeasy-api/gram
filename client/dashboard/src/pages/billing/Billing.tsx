@@ -237,7 +237,7 @@ const UsageTiers = () => {
             const link = await client.usage.createCustomerSession();
             if (!link) {
               console.error(
-                "Failed to create customer session: received empty link"
+                "Failed to create customer session: received empty link",
               );
               telemetry.capture("customer_session_error", {
                 error: "Received empty customer session link",
@@ -418,7 +418,7 @@ const UsageProgress = ({
     <div
       className={cn(
         "h-4 bg-muted dark:bg-neutral-800 rounded-md overflow-hidden relative",
-        anyOverage && "rounded-r-none"
+        anyOverage && "rounded-r-none",
       )}
       style={{ width: `${includedWidth}%` }}
     >
@@ -493,7 +493,7 @@ const UsageProgress = ({
                   style={{ left: `${incrementPosition}%` }}
                 />
               );
-            }
+            },
           )}
         </>
       )}

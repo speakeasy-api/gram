@@ -32,7 +32,7 @@ export type ToolDefinition =
  * For full toolsets with complete tool definitions
  */
 export const useToolDefinitions = (
-  toolset: Toolset | undefined
+  toolset: Toolset | undefined,
 ): ToolDefinition[] => {
   if (!toolset) {
     return [];

@@ -27,7 +27,7 @@ export function usePrompts() {
   const { data, isLoading } = useTemplates();
   return {
     prompts: data?.templates.filter(
-      (template) => template.kind === PromptTemplateKind.Prompt
+      (template) => template.kind === PromptTemplateKind.Prompt,
     ),
     isLoading,
   };
@@ -35,7 +35,7 @@ export function usePrompts() {
 
 export function getToolsetPrompts(toolset: Toolset | undefined) {
   return toolset?.promptTemplates.filter(
-    (template) => template.kind === PromptTemplateKind.Prompt
+    (template) => template.kind === PromptTemplateKind.Prompt,
   );
 }
 
@@ -50,9 +50,7 @@ export default function Prompts() {
         Provide your users with MCP-native prompt templates
       </Page.Section.Description>
       <Page.Section.CTA>
-        <Button
-          onClick={() => routes.prompts.newPrompt.goTo()}
-        >
+        <Button onClick={() => routes.prompts.newPrompt.goTo()}>
           <Button.LeftIcon>
             <Plus className="w-4 h-4" />
           </Button.LeftIcon>
@@ -124,7 +122,7 @@ export function PromptTemplateCard({
                     onDelete();
                   } else if (
                     confirm(
-                      "Are you sure you want to delete this prompt template?"
+                      "Are you sure you want to delete this prompt template?",
                     )
                   ) {
                     deleteTemplate.mutate({ request: { name: template.name } });

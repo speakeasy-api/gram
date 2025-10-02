@@ -48,12 +48,12 @@ function togglePopover(e) {
 function closeModal() {
   const modal = document.querySelector(".modal");
   const backdrop = document.querySelector(".modal-backdrop");
-  modal.classList.add('fade-out');
-  backdrop.classList.add('fade-out');
-  modal.addEventListener('transitionend', () => {
+  modal.classList.add("fade-out");
+  backdrop.classList.add("fade-out");
+  modal.addEventListener("transitionend", () => {
     modal.remove();
     backdrop.remove();
-  })
+  });
 }
 
 function openModal(childContent) {
@@ -66,21 +66,21 @@ function openModal(childContent) {
   });
 
   document.body.appendChild(modalElement);
-  const modal = document.querySelector('.modal')
+  const modal = document.querySelector(".modal");
   const backdrop = document.querySelector(".modal-backdrop");
-  modal.addEventListener('animationend', () => {
-    modal.classList.remove('fade-in');
-    backdrop.classList.remove('fade-in');
-  })
-  modal.classList.add('fade-in')
-  backdrop.classList.add('fade-in')
+  modal.addEventListener("animationend", () => {
+    modal.classList.remove("fade-in");
+    backdrop.classList.remove("fade-in");
+  });
+  modal.classList.add("fade-in");
+  backdrop.classList.add("fade-in");
   backdrop.addEventListener("click", closeModal);
-  document.querySelector('.modal-close').addEventListener('click', closeModal)
-  document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') {
-    closeModal();
-  }
-});
+  document.querySelector(".modal-close").addEventListener("click", closeModal);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeModal();
+    }
+  });
 }
 
 function openInstallTargetModal(e) {

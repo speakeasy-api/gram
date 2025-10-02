@@ -104,7 +104,7 @@ export default function SlackApp() {
             <Button
               onClick={() => {
                 window.location.href = `${getServerURL()}/rpc/${project.slug}/slack.login?return_url=${encodeURIComponent(
-                  window.location.href
+                  window.location.href,
                 )}`;
               }}
               variant="secondary"
@@ -153,7 +153,8 @@ export default function SlackApp() {
               </Stack>
             </Card.Header>
             <Card.Footer>
-              <Button variant="secondary"
+              <Button
+                variant="secondary"
                 onClick={() => {
                   setToolset(data.defaultToolsetSlug || "");
                   setModalOpen(true);
@@ -190,7 +191,10 @@ export default function SlackApp() {
                     ))}
                   </select>
                   <div className="flex gap-2 justify-end">
-                    <Button variant="tertiary" onClick={() => setModalOpen(false)}>
+                    <Button
+                      variant="tertiary"
+                      onClick={() => setModalOpen(false)}
+                    >
                       Cancel
                     </Button>
                     <Button

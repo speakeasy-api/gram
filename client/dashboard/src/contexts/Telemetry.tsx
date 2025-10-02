@@ -40,7 +40,7 @@ const testTelemetry: Telemetry = {
   group: (
     groupType: string,
     groupKey: string,
-    properties: Record<string, unknown>
+    properties: Record<string, unknown>,
   ) => {
     console.log("POSTHOG GROUP", groupType, groupKey, properties);
   },
@@ -54,7 +54,7 @@ const testTelemetry: Telemetry = {
 };
 
 export const TelemetryContext = createContext<Telemetry>(
-  import.meta.env.DEV ? devTelemetry : nullTelemetry
+  import.meta.env.DEV ? devTelemetry : nullTelemetry,
 );
 
 export const useTelemetry = () => useContext(TelemetryContext);
@@ -66,7 +66,7 @@ export const TelemetryProvider = (props: { children: ReactNode }) => {
       api_host: "https://metrics.speakeasy.com",
       feature_flag_request_timeout_ms: 1000,
     },
-    "speakeasy"
+    "speakeasy",
   );
 
   useEffect(() => {

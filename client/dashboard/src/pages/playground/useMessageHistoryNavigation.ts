@@ -74,7 +74,7 @@ export function useMessageHistoryNavigation(messages: Message[]) {
           Object.getOwnPropertyDescriptor(input, "value") ||
           Object.getOwnPropertyDescriptor(
             HTMLTextAreaElement.prototype,
-            "value"
+            "value",
           );
         if (descriptor && descriptor.set) {
           descriptor.set.call(input, newMessage);
@@ -90,7 +90,7 @@ export function useMessageHistoryNavigation(messages: Message[]) {
         }
       }
     },
-    [historyIndex, userMessages, originalInputValue]
+    [historyIndex, userMessages, originalInputValue],
   );
 
   const handleKeyDown = useCallback(
@@ -116,7 +116,7 @@ export function useMessageHistoryNavigation(messages: Message[]) {
         setOriginalInputValue("");
       }
     },
-    [navigateHistory]
+    [navigateHistory],
   );
 
   useEffect(() => {
