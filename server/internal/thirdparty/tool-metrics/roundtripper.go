@@ -2,6 +2,7 @@ package tool_metrics
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
@@ -96,7 +97,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 
 	// Check if this is a streaming response (SSE)
 	isStreaming := false
-	var respBodyBuffer bytes.Buffer
+	var respBodyBuffer *bytes.Buffer
 	var respBodyBytes []byte
 
 	if resp != nil && resp.Body != nil {
@@ -104,23 +105,13 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		isStreaming = strings.HasPrefix(contentType, "text/event-stream")
 
 		if isStreaming {
-			// For streaming responses, we'll capture the first chunk and mark as streaming.
-			// The proxy will handle the actual streaming data
-			firstChunk := make([]byte, 1024) // Read up to the 1KB
-			n, readErr := resp.Body.Read(firstChunk)
-			if readErr != nil && readErr != io.EOF {
-				h.logger.ErrorContext(ctx, "failed to read response body", attr.SlogError(readErr))
+			resp.Body = &capturingReadCloser{
+				ReadCloser: resp.Body,
+				buffer:     respBodyBuffer,
+				onClose: func() {
+					h.logger.DebugContext(ctx, "finished reading streaming response body")
+				},
 			}
-
-			if n > 0 {
-				respBodyBuffer.Write(firstChunk[:n])
-			}
-
-			// Reset the body for the proxy to handle streaming
-			resp.Body = io.NopCloser(io.MultiReader(
-				bytes.NewReader(firstChunk[:n]),
-				resp.Body,
-			))
 		} else {
 			// For non-streaming responses, read the entire body
 			respBodyBytes, err = io.ReadAll(resp.Body)
@@ -169,8 +160,8 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		responseBodyBytes = uint64(len(respBodyBytes))
 	}
 
-	// Log this individual HTTP attempt to ClickHouse
-	logErr := h.tcm.Log(ctx, ToolHTTPRequest{
+	// Log this individual HTTP attempt to ClickHouse asynchronously
+	httpRequest := ToolHTTPRequest{
 		Ts:                time.Now(),
 		OrganizationID:    tool.OrganizationID,
 		ProjectID:         tool.ProjectID,
@@ -194,25 +185,33 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		ResponseBody:      responseBody,
 		ResponseBodySkip:  responseBodySkip,
 		ResponseBodyBytes: responseBodyBytes,
-	})
-
-	if logErr != nil {
-		h.logger.ErrorContext(ctx, "failed to log HTTP attempt to ClickHouse",
-			attr.SlogError(logErr),
-			attr.SlogToolID(tool.ID),
-			attr.SlogHTTPRequestMethod(req.Method),
-			attr.SlogURLOriginal(req.URL.String()),
-		)
 	}
 
-	if isStreaming {
-		// Log that we handled a streaming response
-		h.logger.DebugContext(ctx, "logged streaming HTTP response to ClickHouse",
-			attr.SlogToolID(tool.ID),
-			attr.SlogHTTPRequestMethod(req.Method),
-			attr.SlogURLOriginal(req.URL.String()),
-		)
-	}
+	toolID := tool.ID
+	method := req.Method
+	url := req.URL.String()
+
+	// Log asynchronously to avoid blocking the response
+	go func() {
+		// Create a detached context to prevent cancellation when request completes
+		logCtx := context.WithoutCancel(ctx)
+
+		logErr := h.tcm.Log(logCtx, httpRequest)
+		if logErr != nil {
+			h.logger.ErrorContext(logCtx, "failed to log HTTP attempt to ClickHouse",
+				attr.SlogError(logErr),
+				attr.SlogToolID(toolID),
+				attr.SlogHTTPRequestMethod(method),
+				attr.SlogURLOriginal(url),
+			)
+		} else if isStreaming {
+			h.logger.DebugContext(logCtx, "logged streaming HTTP response to ClickHouse",
+				attr.SlogToolID(toolID),
+				attr.SlogHTTPRequestMethod(method),
+				attr.SlogURLOriginal(url),
+			)
+		}
+	}()
 
 	return resp, nil
 }
