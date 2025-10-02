@@ -76,20 +76,17 @@ func handlePromptsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 	prompts := make([]*promptsListEntry, 0)
 
 	for _, prompt := range toolset.PromptTemplates {
+		// TODO: Technically this is no longer necessary--everything in PromptTemplates is an actual MCP prompt now
 		if prompt.Kind == "prompt" {
-			description := ""
-			if prompt.Description != nil {
-				description = *prompt.Description
-			}
 			args := make([]promptArgument, 0)
 
-			if prompt.Arguments != nil && len(*prompt.Arguments) > 0 {
-				args = parsePromptArgumentsFromJSONSchema(*prompt.Arguments, logger, ctx)
+			if prompt.Schema != nil && len(*prompt.Schema) > 0 {
+				args = parsePromptArgumentsFromJSONSchema(*prompt.Schema, logger, ctx)
 			}
 
 			prompts = append(prompts, &promptsListEntry{
 				Name:        string(prompt.Name),
-				Description: &description,
+				Description: &prompt.Description,
 				Arguments:   args,
 			})
 		}

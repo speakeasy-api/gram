@@ -33,13 +33,13 @@ func TestTemplatesService_CreateTemplate_Success(t *testing.T) {
 	require.NotNil(t, result, "result is nil")
 	require.NotNil(t, result.Template, "template is nil")
 	require.NotEqual(t, uuid.Nil.String(), result.Template.ID, "template ID is nil")
-	require.Equal(t, types.Slug("test-template"), result.Template.Name, "template name mismatch")
+	require.Equal(t, "test-template", result.Template.Name, "template name mismatch")
 	require.Equal(t, "Hello {{name}}!", result.Template.Prompt, "template prompt mismatch")
-	require.Equal(t, "A test template", *result.Template.Description, "template description mismatch")
+	require.Equal(t, "A test template", result.Template.Description, "template description mismatch")
 	require.Equal(t, "mustache", result.Template.Engine, "template engine mismatch")
 	require.Equal(t, "prompt", result.Template.Kind, "template kind mismatch")
 	require.ElementsMatch(t, []string{"assistant"}, result.Template.ToolsHint, "template tools hint mismatch")
-	require.JSONEq(t, `{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`, *result.Template.Arguments, "template arguments mismatch")
+	require.JSONEq(t, `{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`, *result.Template.Schema, "template arguments mismatch")
 	require.NotNil(t, result.Template.CreatedAt, "template created at is nil")
 	require.NotNil(t, result.Template.UpdatedAt, "template updated at is nil")
 }
@@ -65,13 +65,13 @@ func TestTemplatesService_CreateTemplate_MinimalPayload(t *testing.T) {
 
 	require.NotNil(t, result, "result is nil")
 	require.NotNil(t, result.Template, "template is nil")
-	require.Equal(t, types.Slug("minimal-template"), result.Template.Name, "template name mismatch")
+	require.Equal(t, "minimal-template", result.Template.Name, "template name mismatch")
 	require.Equal(t, "Simple prompt", result.Template.Prompt, "template prompt mismatch")
-	require.Nil(t, result.Template.Description, "template description should be nil")
+	require.Equal(t, "", result.Template.Description, "template description should be empty")
 	require.Empty(t, result.Template.Engine, "template engine should be empty")
 	require.Equal(t, "prompt", result.Template.Kind, "template kind should default to prompt")
 	require.Empty(t, result.Template.ToolsHint, "template tools hint should be empty")
-	require.Nil(t, result.Template.Arguments, "template arguments should be nil")
+	require.Nil(t, result.Template.Schema, "template arguments should be nil")
 }
 
 func TestTemplatesService_CreateTemplate_DuplicateName(t *testing.T) {
@@ -180,7 +180,7 @@ func TestTemplatesService_CreateTemplate_EmptyArgumentsSchema(t *testing.T) {
 	})
 	require.NoError(t, err, "create template with empty arguments schema should succeed")
 	require.NotNil(t, result, "result is nil")
-	require.Equal(t, types.Slug("empty-args-template"), result.Template.Name, "template name mismatch")
+	require.Equal(t, "empty-args-template", result.Template.Name, "template name mismatch")
 }
 
 func TestTemplatesService_CreateTemplate_ArgumentsWithoutEngine(t *testing.T) {

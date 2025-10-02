@@ -6,43 +6,25 @@
 import { ListToolsResult } from "@gram/client/models/components";
 
 let value: ListToolsResult = {
-  httpTools: [
+  tools: [
     {
       canonicalName: "<value>",
       confirm: "<value>",
-      createdAt: new Date("2024-04-12T15:22:32.769Z"),
+      createdAt: new Date("2023-11-02T08:35:12.575Z"),
       deploymentId: "<id>",
-      description: "near impassioned including abaft painfully",
+      description:
+        "gaseous quaintly corral ack astride slump fooey into disposer given",
       httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
-      path: "/home/user/dir",
+      path: "/etc",
       projectId: "<id>",
       schema: "<value>",
       summary: "<value>",
-      tags: [
-        "<value 1>",
-      ],
-      toolType: "http",
+      tags: [],
       toolUrn: "<value>",
-      updatedAt: new Date("2023-12-14T09:29:13.684Z"),
-    },
-  ],
-  promptTemplates: [
-    {
-      createdAt: new Date("2023-08-31T15:47:56.029Z"),
-      engine: "mustache",
-      historyId: "<id>",
-      id: "<id>",
-      kind: "prompt",
-      name: "<value>",
-      prompt: "<value>",
-      toolUrn: "<value>",
-      toolsHint: [
-        "<value 1>",
-        "<value 2>",
-      ],
-      updatedAt: new Date("2025-06-28T14:34:38.671Z"),
+      type: "http",
+      updatedAt: new Date("2023-08-19T15:13:57.147Z"),
     },
   ],
 };
@@ -50,8 +32,7 @@ let value: ListToolsResult = {
 
 ## Fields
 
-| Field                                                                            | Type                                                                             | Required                                                                         | Description                                                                      |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `httpTools`                                                                      | [components.HTTPToolDefinition](../../models/components/httptooldefinition.md)[] | :heavy_check_mark:                                                               | The list of HTTP tools                                                           |
-| `nextCursor`                                                                     | *string*                                                                         | :heavy_minus_sign:                                                               | The cursor to fetch results from                                                 |
-| `promptTemplates`                                                                | [components.PromptTemplate](../../models/components/prompttemplate.md)[]         | :heavy_check_mark:                                                               | The list of prompt templates                                                     |
+| Field                                                                    | Type                                                                     | Required                                                                 | Description                                                              |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `nextCursor`                                                             | *string*                                                                 | :heavy_minus_sign:                                                       | The cursor to fetch results from                                         |
+| `tools`                                                                  | *components.Tool*[]                                                      | :heavy_check_mark:                                                       | The list of tools (polymorphic union of HTTP tools and prompt templates) |

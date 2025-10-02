@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -265,148 +266,21 @@ func DecodeListToolsResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
-// unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition builds a
-// value of type *types.HTTPToolDefinition from a value of type
-// *HTTPToolDefinitionResponseBody.
-func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToolDefinitionResponseBody) *types.HTTPToolDefinition {
-	res := &types.HTTPToolDefinition{
-		ToolType:            *v.ToolType,
-		ID:                  *v.ID,
-		ProjectID:           *v.ProjectID,
-		DeploymentID:        *v.DeploymentID,
-		Name:                *v.Name,
-		CanonicalName:       *v.CanonicalName,
-		Summary:             *v.Summary,
-		Description:         *v.Description,
-		Confirm:             *v.Confirm,
-		ConfirmPrompt:       v.ConfirmPrompt,
-		Summarizer:          v.Summarizer,
-		Openapiv3DocumentID: v.Openapiv3DocumentID,
-		Openapiv3Operation:  v.Openapiv3Operation,
-		Security:            v.Security,
-		DefaultServerURL:    v.DefaultServerURL,
-		HTTPMethod:          *v.HTTPMethod,
-		Path:                *v.Path,
-		SchemaVersion:       v.SchemaVersion,
-		Schema:              *v.Schema,
-		PackageName:         v.PackageName,
-		CreatedAt:           *v.CreatedAt,
-		UpdatedAt:           *v.UpdatedAt,
-		ToolUrn:             *v.ToolUrn,
-	}
-	if v.ResponseFilter != nil {
-		res.ResponseFilter = unmarshalResponseFilterResponseBodyToTypesResponseFilter(v.ResponseFilter)
-	}
-	res.Tags = make([]string, len(v.Tags))
-	for i, val := range v.Tags {
-		res.Tags[i] = val
-	}
-	if v.Canonical != nil {
-		res.Canonical = unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v.Canonical)
-	}
-	if v.Variation != nil {
-		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
-	}
-
-	return res
-}
-
-// unmarshalResponseFilterResponseBodyToTypesResponseFilter builds a value of
-// type *types.ResponseFilter from a value of type *ResponseFilterResponseBody.
-func unmarshalResponseFilterResponseBodyToTypesResponseFilter(v *ResponseFilterResponseBody) *types.ResponseFilter {
-	if v == nil {
-		return nil
-	}
-	res := &types.ResponseFilter{
-		Type: *v.Type,
-	}
-	res.StatusCodes = make([]string, len(v.StatusCodes))
-	for i, val := range v.StatusCodes {
-		res.StatusCodes[i] = val
-	}
-	res.ContentTypes = make([]string, len(v.ContentTypes))
-	for i, val := range v.ContentTypes {
-		res.ContentTypes[i] = val
-	}
-
-	return res
-}
-
-// unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes
-// builds a value of type *types.CanonicalToolAttributes from a value of type
-// *CanonicalToolAttributesResponseBody.
-func unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v *CanonicalToolAttributesResponseBody) *types.CanonicalToolAttributes {
-	if v == nil {
-		return nil
-	}
-	res := &types.CanonicalToolAttributes{
-		VariationID:   *v.VariationID,
-		Name:          *v.Name,
-		Summary:       v.Summary,
-		Description:   v.Description,
-		Confirm:       v.Confirm,
-		ConfirmPrompt: v.ConfirmPrompt,
-		Summarizer:    v.Summarizer,
-	}
-	if v.Tags != nil {
-		res.Tags = make([]string, len(v.Tags))
-		for i, val := range v.Tags {
-			res.Tags[i] = val
+// unmarshalToolResponseBodyToTypesTool builds a value of type *types.Tool from
+// a value of type *ToolResponseBody.
+func unmarshalToolResponseBodyToTypesTool(v *ToolResponseBody) *types.Tool {
+	res := &types.Tool{}
+	if v.Tool != nil {
+		switch *v.Tool.Type {
+		case "http_tool":
+			var val *types.HTTPToolDefinition
+			json.Unmarshal([]byte(*v.Tool.Value), &val)
+			res.Tool = val
+		case "prompt_template":
+			var val *types.PromptTemplate
+			json.Unmarshal([]byte(*v.Tool.Value), &val)
+			res.Tool = val
 		}
-	}
-
-	return res
-}
-
-// unmarshalToolVariationResponseBodyToTypesToolVariation builds a value of
-// type *types.ToolVariation from a value of type *ToolVariationResponseBody.
-func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResponseBody) *types.ToolVariation {
-	if v == nil {
-		return nil
-	}
-	res := &types.ToolVariation{
-		ID:            *v.ID,
-		GroupID:       *v.GroupID,
-		SrcToolName:   *v.SrcToolName,
-		Confirm:       v.Confirm,
-		ConfirmPrompt: v.ConfirmPrompt,
-		Name:          v.Name,
-		Summary:       v.Summary,
-		Description:   v.Description,
-		Summarizer:    v.Summarizer,
-		CreatedAt:     *v.CreatedAt,
-		UpdatedAt:     *v.UpdatedAt,
-	}
-	if v.Tags != nil {
-		res.Tags = make([]string, len(v.Tags))
-		for i, val := range v.Tags {
-			res.Tags[i] = val
-		}
-	}
-
-	return res
-}
-
-// unmarshalPromptTemplateResponseBodyToTypesPromptTemplate builds a value of
-// type *types.PromptTemplate from a value of type *PromptTemplateResponseBody.
-func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateResponseBody) *types.PromptTemplate {
-	res := &types.PromptTemplate{
-		ID:            *v.ID,
-		HistoryID:     *v.HistoryID,
-		PredecessorID: v.PredecessorID,
-		Name:          types.Slug(*v.Name),
-		Prompt:        *v.Prompt,
-		Description:   v.Description,
-		Arguments:     v.Arguments,
-		Engine:        *v.Engine,
-		Kind:          *v.Kind,
-		CreatedAt:     *v.CreatedAt,
-		UpdatedAt:     *v.UpdatedAt,
-		ToolUrn:       *v.ToolUrn,
-	}
-	res.ToolsHint = make([]string, len(v.ToolsHint))
-	for i, val := range v.ToolsHint {
-		res.ToolsHint[i] = val
 	}
 
 	return res

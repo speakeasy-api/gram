@@ -194,7 +194,7 @@ function HomeContent() {
       const basicTools =
         toolsets?.toolsets?.flatMap(
           (toolset) =>
-            toolset.httpTools?.map((tool) => ({
+            toolset.tools?.map((tool) => ({   
               name: tool.name,
               method: undefined,
             })) || []
@@ -204,9 +204,9 @@ function HomeContent() {
 
     const fullTools = allFullToolsets.flatMap(
       (toolset) =>
-        toolset?.httpTools?.map((tool) => ({
+        toolset?.tools?.map((tool) => ({
           name: tool.name,
-          method: tool.httpMethod,
+          method: tool.type === "http" ? tool.httpMethod : undefined,
         })) || []
     );
 
@@ -270,7 +270,7 @@ function HomeContent() {
   const totalToolCount = useMemo(
     () =>
       toolsets?.toolsets?.reduce(
-        (acc, toolset) => acc + (toolset.httpTools?.length || 0),
+        (acc, toolset) => acc + (toolset.tools?.length || 0),
         0
       ) || 0,
     [toolsets?.toolsets]

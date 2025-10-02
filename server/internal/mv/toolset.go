@@ -13,7 +13,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -72,13 +71,13 @@ func DescribeToolsetEntry(
 		}
 	}
 
-	var httpTools []*types.HTTPToolDefinitionEntry
+	var tools []*types.ToolEntry
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
-	if len(toolset.HttpToolNames) > 0 {
-		definitions, err := toolsRepo.FindToolEntriesByName(ctx, tr.FindToolEntriesByNameParams{
+	if len(toolUrns) > 0 {
+		definitions, err := toolsRepo.FindHttpToolEntriesByUrn(ctx, tr.FindHttpToolEntriesByUrnParams{
 			ProjectID: pid,
-			Names:     toolset.HttpToolNames,
+			Urns:      toolUrns,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
@@ -89,6 +88,7 @@ func DescribeToolsetEntry(
 			names = append(names, def.Name)
 		}
 
+		// TODO variations by urns
 		allVariations, err := variationsRepo.FindGlobalVariationsByToolNames(ctx, vr.FindGlobalVariationsByToolNamesParams{
 			ProjectID: pid,
 			ToolNames: names,
@@ -107,7 +107,7 @@ func DescribeToolsetEntry(
 			nameVariations[variation.SrcToolName] = *n
 		}
 
-		httpTools = make([]*types.HTTPToolDefinitionEntry, 0, len(definitions))
+		tools = make([]*types.ToolEntry, 0, len(definitions))
 		envQueries := make([]toolEnvLookupParams, 0, len(definitions))
 		seen := make(map[string]bool, 0)
 		for _, def := range definitions {
@@ -118,10 +118,11 @@ func DescribeToolsetEntry(
 
 			name := conv.Default(nameVariations[def.Name], def.Name)
 
-			tool := &types.HTTPToolDefinitionEntry{
-				ToolType: constants.ToolTypeHTTP,
+			tool := &types.ToolEntry{
+				Type: string(urn.ToolKindHTTP),
 				ID:       def.ID.String(),
 				Name:     name,
+				ToolUrn:  def.ToolUrn.String(),
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
@@ -130,7 +131,24 @@ func DescribeToolsetEntry(
 				serverEnvVar: def.ServerEnvVar,
 			})
 
-			httpTools = append(httpTools, tool)
+			tools = append(tools, tool)
+		}
+
+		promptTools, err := templatesRepo.PeekTemplatesByUrns(ctx, templatesR.PeekTemplatesByUrnsParams{
+			ProjectID: pid,
+			Urns:      toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates").Log(ctx, logger)
+		}
+
+		for _, pt := range promptTools {
+			tools = append(tools, &types.ToolEntry{
+				Type: string(urn.ToolKindPrompt),
+				ID:       pt.ID.String(),
+				Name:     pt.Name,
+				ToolUrn:  pt.ToolUrn.String(),
+			})
 		}
 
 		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, envQueries)
@@ -156,36 +174,6 @@ func DescribeToolsetEntry(
 		})
 	}
 
-	// For backwards compatibility, also add in prompt templates that have been added to the toolset as tools
-	var ptToolNames []string
-	for _, toolURN := range latestVersion.ToolUrns {
-		// Skip if the prompt template is already in the list
-		if slices.ContainsFunc(promptTemplates, func(pt *types.PromptTemplateEntry) bool {
-			return pt.Name == types.Slug(toolURN.Name)
-		}) {
-			continue
-		}
-		if toolURN.Kind == urn.ToolKindPrompt {
-			ptToolNames = append(ptToolNames, toolURN.Name)
-		}
-	}
-
-	ptToolRows, err := templatesRepo.PeekTemplatesByNames(ctx, templatesR.PeekTemplatesByNamesParams{
-		ProjectID: pid,
-		Names:     ptToolNames,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates").Log(ctx, logger)
-	}
-
-	for _, ptRow := range ptToolRows {
-		promptTemplates = append(promptTemplates, &types.PromptTemplateEntry{
-			ID:   ptRow.ID.String(),
-			Name: types.Slug(ptRow.Name),
-			Kind: conv.Ptr("higher_order_tool"), // These are always higher order tools
-		})
-	}
-
 	return &types.ToolsetEntry{
 		ID:                     toolset.ID.String(),
 		OrganizationID:         toolset.OrganizationID,
@@ -202,7 +190,7 @@ func DescribeToolsetEntry(
 		McpIsPublic:            &toolset.McpIsPublic,
 		CreatedAt:              toolset.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:              toolset.UpdatedAt.Time.Format(time.RFC3339),
-		HTTPTools:              httpTools,
+		Tools:                  tools,
 		PromptTemplates:        promptTemplates,
 		ToolUrns:               toolUrns,
 	}, nil
@@ -253,13 +241,13 @@ func DescribeToolset(
 		}
 	}
 
-	var httpTools []*types.HTTPToolDefinition
+	var tools []*types.Tool
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
-	if len(toolset.HttpToolNames) > 0 {
-		definitions, err := toolsRepo.FindToolsByName(ctx, tr.FindToolsByNameParams{
+	if len(toolUrns) > 0 {
+		definitions, err := toolsRepo.FindHttpToolsByUrn(ctx, tr.FindHttpToolsByUrnParams{
 			ProjectID: pid,
-			Names:     toolset.HttpToolNames,
+			Urns:      toolUrns,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
@@ -270,6 +258,7 @@ func DescribeToolset(
 			names = append(names, def.HttpToolDefinition.Name)
 		}
 
+		// TODO variations by urns
 		allVariations, err := variationsRepo.FindGlobalVariationsByToolNames(ctx, vr.FindGlobalVariationsByToolNamesParams{
 			ProjectID: pid,
 			ToolNames: names,
@@ -296,7 +285,7 @@ func DescribeToolset(
 			}
 		}
 
-		httpTools = make([]*types.HTTPToolDefinition, 0, len(definitions))
+		tools = make([]*types.Tool, 0, len(definitions))
 		seen := make(map[string]bool, 0)
 		envQueries := make([]toolEnvLookupParams, 0, len(definitions))
 		for _, def := range definitions {
@@ -358,7 +347,6 @@ func DescribeToolset(
 			}
 
 			tool := &types.HTTPToolDefinition{
-				ToolType:            constants.ToolTypeHTTP,
 				ID:                  def.HttpToolDefinition.ID.String(),
 				ToolUrn:             def.HttpToolDefinition.ToolUrn.String(),
 				ProjectID:           def.HttpToolDefinition.Description,
@@ -402,7 +390,38 @@ func DescribeToolset(
 				serverEnvVar: def.HttpToolDefinition.ServerEnvVar,
 			})
 
-			httpTools = append(httpTools, tool)
+			tools = append(tools, &types.Tool{
+				Tool: tool,
+			})
+		}
+
+		promptTools, err := templatesRepo.FindPromptTemplatesByUrns(ctx, templatesR.FindPromptTemplatesByUrnsParams{
+			ProjectID: pid,
+			Urns:      toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").Log(ctx, logger)
+		}
+
+		for _, pt := range promptTools {
+			tools = append(tools, &types.Tool{
+				Tool: &types.PromptTemplate{
+					ID:            pt.ID.String(),
+					ToolUrn:       pt.ToolUrn.String(),
+					HistoryID:     pt.HistoryID.String(),
+					PredecessorID: conv.FromNullableUUID(pt.PredecessorID),
+					Name:          pt.Name,
+					Prompt:        pt.Prompt,
+					Description:   conv.PtrValOrEmpty(conv.FromPGText[string](pt.Description), ""),
+					Schema:        conv.Ptr(string(pt.Arguments)),
+					SchemaVersion: nil,
+					Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
+					Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
+					ToolsHint:     pt.ToolsHint,
+					CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
+					UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
+				},
+			})
 		}
 
 		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, envQueries)
@@ -436,51 +455,17 @@ func DescribeToolset(
 			ToolUrn:       pt.ToolUrn.String,
 			HistoryID:     pt.HistoryID.String(),
 			PredecessorID: conv.FromNullableUUID(pt.PredecessorID),
-			Name:          types.Slug(pt.Name),
+			Name:          pt.Name,
 			Prompt:        pt.Prompt,
-			Description:   conv.FromPGText[string](pt.Description),
-			Arguments:     args,
+			Description:   conv.PtrValOrEmpty(conv.FromPGText[string](pt.Description), ""),
+			Schema:        args,
+			SchemaVersion: nil,
 			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
 			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
 			ToolsHint:     hint,
 			CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
 		})
-	}
-
-	// For backwards compatibility, also add in prompt templates that have been added to the toolset as tools
-	for _, toolURN := range latestVersion.ToolUrns {
-		if toolURN.Kind == urn.ToolKindPrompt {
-			// Skip if the prompt template is already in the list
-			if slices.ContainsFunc(promptTemplates, func(pt *types.PromptTemplate) bool {
-				return pt.ToolUrn == toolURN.String()
-			}) {
-				continue
-			}
-
-			template, err := templatesRepo.GetTemplateByName(ctx, templatesR.GetTemplateByNameParams{
-				ProjectID: pid,
-				Name:      toolURN.Name,
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt template").Log(ctx, logger)
-			}
-			promptTemplates = append(promptTemplates, &types.PromptTemplate{
-				ID:            template.ID.String(),
-				ToolUrn:       template.ToolUrn.String(),
-				HistoryID:     template.HistoryID.String(),
-				PredecessorID: conv.FromNullableUUID(template.PredecessorID),
-				Name:          types.Slug(template.Name),
-				Prompt:        template.Prompt,
-				Description:   conv.FromPGText[string](template.Description),
-				Arguments:     conv.Ptr(string(template.Arguments)),
-				Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](template.Engine), "none"),
-				Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](template.Kind), "prompt"),
-				ToolsHint:     template.ToolsHint,
-				CreatedAt:     template.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:     template.UpdatedAt.Time.Format(time.RFC3339),
-			})
-		}
 	}
 
 	var externalOAuthServer *types.ExternalOAuthServer
@@ -570,7 +555,7 @@ func DescribeToolset(
 		SecurityVariables:      securityVars,
 		ServerVariables:        serverVars,
 		Description:            conv.FromPGText[string](toolset.Description),
-		HTTPTools:              httpTools,
+		Tools:                  tools,
 		PromptTemplates:        promptTemplates,
 		McpSlug:                conv.FromPGText[types.Slug](toolset.McpSlug),
 		McpEnabled:             &toolset.McpEnabled,

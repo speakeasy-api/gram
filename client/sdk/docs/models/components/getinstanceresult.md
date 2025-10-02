@@ -28,22 +28,23 @@ let value: GetInstanceResult = {
     {
       canonicalName: "<value>",
       confirm: "<value>",
-      createdAt: new Date("2023-08-05T21:57:17.116Z"),
+      createdAt: new Date("2024-02-11T10:50:18.372Z"),
       deploymentId: "<id>",
-      description: "sheepishly like to fooey why",
+      description: "which ick weep boastfully huzzah",
       httpMethod: "<value>",
       id: "<id>",
       name: "<value>",
-      path: "/etc/ppp",
+      path: "/opt/share",
       projectId: "<id>",
       schema: "<value>",
       summary: "<value>",
       tags: [
         "<value 1>",
+        "<value 2>",
       ],
-      toolType: "http",
       toolUrn: "<value>",
-      updatedAt: new Date("2025-03-13T06:28:48.216Z"),
+      type: "http",
+      updatedAt: new Date("2024-10-04T08:12:26.935Z"),
     },
   ],
 };
@@ -51,12 +52,12 @@ let value: GetInstanceResult = {
 
 ## Fields
 
-| Field                                                                            | Type                                                                             | Required                                                                         | Description                                                                      |
-| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `description`                                                                    | *string*                                                                         | :heavy_minus_sign:                                                               | The description of the toolset                                                   |
-| `environment`                                                                    | [components.Environment](../../models/components/environment.md)                 | :heavy_check_mark:                                                               | Model representing an environment                                                |
-| `name`                                                                           | *string*                                                                         | :heavy_check_mark:                                                               | The name of the toolset                                                          |
-| `promptTemplates`                                                                | [components.PromptTemplate](../../models/components/prompttemplate.md)[]         | :heavy_minus_sign:                                                               | The list of prompt templates                                                     |
-| `securityVariables`                                                              | [components.SecurityVariable](../../models/components/securityvariable.md)[]     | :heavy_minus_sign:                                                               | The security variables that are relevant to the toolset                          |
-| `serverVariables`                                                                | [components.ServerVariable](../../models/components/servervariable.md)[]         | :heavy_minus_sign:                                                               | The server variables that are relevant to the toolset                            |
-| `tools`                                                                          | [components.HTTPToolDefinition](../../models/components/httptooldefinition.md)[] | :heavy_check_mark:                                                               | The list of tools                                                                |
+| Field                                                                        | Type                                                                         | Required                                                                     | Description                                                                  |
+| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `description`                                                                | *string*                                                                     | :heavy_minus_sign:                                                           | The description of the toolset                                               |
+| `environment`                                                                | [components.Environment](../../models/components/environment.md)             | :heavy_check_mark:                                                           | Model representing an environment                                            |
+| `name`                                                                       | *string*                                                                     | :heavy_check_mark:                                                           | The name of the toolset                                                      |
+| `promptTemplates`                                                            | [components.PromptTemplate](../../models/components/prompttemplate.md)[]     | :heavy_minus_sign:                                                           | The list of prompt templates                                                 |
+| `securityVariables`                                                          | [components.SecurityVariable](../../models/components/securityvariable.md)[] | :heavy_minus_sign:                                                           | The security variables that are relevant to the toolset                      |
+| `serverVariables`                                                            | [components.ServerVariable](../../models/components/servervariable.md)[]     | :heavy_minus_sign:                                                           | The server variables that are relevant to the toolset                        |
+| `tools`                                                                      | *components.Tool*[]                                                          | :heavy_check_mark:                                                           | The list of tools                                                            |

@@ -1,21 +1,17 @@
+import { promptNames } from "@/lib/toolNames";
+import { cn } from "@/lib/utils";
 import { ToolsetEntry } from "@gram/client/models/components";
 import {
-  Stack,
   Badge,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-  TooltipPortal,
   Icon,
+  Stack,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@speakeasy-api/moonshine";
-import { cn } from "@/lib/utils";
-import { promptNames } from "@/lib/toolNames";
 
 // Define minimal types for badge components
-type ToolsetForBadge = Pick<
-  ToolsetEntry,
-  "name" | "slug" | "httpTools" | "promptTemplates"
->;
+type ToolsetForBadge = Pick<ToolsetEntry, "name" | "slug" | "promptTemplates">;
 
 export const ToolsetPromptsBadge = ({
   toolset,
@@ -94,7 +90,7 @@ export const ToolCollectionBadge = ({
           className={cn(
             !toolsWarnings && "bg-card",
             "flex items-center py-1 gap-[1ch]",
-            className,
+            className
           )}
         >
           {toolsWarnings && (
@@ -103,9 +99,7 @@ export const ToolCollectionBadge = ({
           {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
         </Badge>
       </TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
-      </TooltipPortal>
+      <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
     </Tooltip>
   ) : (
     <Badge size={size} variant={variant} className={className}>

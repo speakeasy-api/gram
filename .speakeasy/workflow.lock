@@ -22,6 +22,8 @@ workflow:
                 - location: server/gen/http/openapi3.yaml
             overlays:
                 - location: overlays/goa.yaml
+                - location: overlays/tool-types.yaml
+            output: .speakeasy/out.openapi.yaml
             registry:
                 location: registry.speakeasyapi.dev/gram/gram/gram-api-description
         Gram-Public:
@@ -29,6 +31,7 @@ workflow:
                 - location: server/gen/http/openapi3.yaml
             overlays:
                 - location: overlays/goa.yaml
+                - location: overlays/tool-types.yaml
                 - location: overlays/public-sdk.yaml
             output: .speakeasy/openapi-public.yaml
             registry:

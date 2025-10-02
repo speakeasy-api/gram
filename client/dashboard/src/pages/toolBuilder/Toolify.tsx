@@ -12,9 +12,7 @@ import { createContext, useContext, useState } from "react";
 import { z } from "zod";
 import { useMiniModel } from "../playground/Openrouter";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
-import { useToolDefinitions } from "../toolsets/types";
 import { useToolset } from "@gram/client/react-query";
-import { userFacingToolNames } from "@/lib/toolNames";
 
 const SuggestionSchema = z.object({
   name: z.string(),
@@ -81,7 +79,7 @@ export const ToolifyDialog = ({
     undefined,
     { enabled: !!selectedToolset?.slug },
   );
-  const tools = useToolDefinitions(toolset);
+  const tools = toolset?.tools ?? [];
 
   const { set } = useToolifyContext();
 
@@ -176,7 +174,7 @@ export const ToolifyDialog = ({
                 setSelectedToolset={(toolset) => setSelectedToolset(toolset)}
               />
               <ToolCollectionBadge
-                toolNames={toolset ? userFacingToolNames(toolset) : []}
+                toolNames={toolset ? toolset.tools.map((t) => t.name) : []}
                 size={"md"}
                 warnOnTooManyTools
               />

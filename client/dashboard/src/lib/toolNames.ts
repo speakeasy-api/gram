@@ -1,68 +1,57 @@
-import { ToolDefinition, useToolDefinitions } from "@/pages/toolsets/types";
 import {
   HTTPToolDefinition,
-  PromptTemplateKind,
+  PromptTemplate,
   PromptTemplateEntry,
+  PromptTemplateKind,
+  Tool,
   Toolset,
-  HTTPToolDefinitionEntry,
 } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
 
-export type Tool = ToolDefinition & {
-  displayName: string;
-};
+export type ToolWithDisplayName = Tool & { displayName: string };
+export type HttpToolWithDisplayName = HTTPToolDefinition & { displayName: string };
 
 export type ToolGroup = {
   key: string;
-  tools: Tool[];
+  tools: ToolWithDisplayName[];
 };
 
-type HttpToolGroup = {
+export type HttpToolGroup = {
   key: string;
-  tools: (HTTPToolDefinition & { displayName: string })[];
+  tools: HttpToolWithDisplayName[];
 };
 
 export const useGroupedToolDefinitions = (
-  toolset: Toolset | undefined,
+  toolset: Toolset | undefined
 ): ToolGroup[] => {
-  const toolDefinitions = useToolDefinitions(toolset);
+  const toolDefinitions = toolset?.tools ?? [];
   return useGroupedTools(toolDefinitions);
 };
 
 export const useGroupedHttpTools = (
-  tools: HTTPToolDefinition[],
+  tools: HTTPToolDefinition[]
 ): HttpToolGroup[] => {
-  const wrapped = tools.map((tool) => ({
-    ...tool,
-    type: "http",
-  }));
-
-  return useGroupedTools(wrapped as ToolDefinition[]) as HttpToolGroup[];
+  return useGroupedTools(tools) as HttpToolGroup[];
 };
 
-export const useGroupedTools = (tools: ToolDefinition[]): ToolGroup[] => {
+export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
   const { data: deployment } = useLatestDeployment(undefined, undefined, {
     staleTime: 1000 * 60 * 60,
   });
 
   const documentIdToSlug = useMemo(() => {
-    return deployment?.deployment?.openapiv3Assets?.reduce(
-      (acc, asset) => {
-        acc[asset.id] = asset.slug;
-        return acc;
-      },
-      {} as Record<string, string>,
-    );
+    return deployment?.deployment?.openapiv3Assets?.reduce((acc, asset) => {
+      acc[asset.id] = asset.slug;
+      return acc;
+    }, {} as Record<string, string>);
   }, [deployment]);
 
   const toolGroups = useMemo(() => {
     return tools?.reduce((acc, tool) => {
       let groupKey = "unknown";
 
-      if (tool.packageName) {
-        groupKey = tool.packageName;
-      } else if (tool.type === "http") {
+      if (tool.type === "http") {
         const documentSlug = tool.openapiv3DocumentId
           ? documentIdToSlug?.[tool.openapiv3DocumentId]
           : undefined;
@@ -104,24 +93,19 @@ export const isHigherOrderTool = (template: PromptTemplateEntry) =>
 export const promptNames = (promptTemplates: PromptTemplateEntry[]): string[] =>
   promptTemplates.filter(isPrompt).map(templateName);
 
-export const higherOrderToolNames = (
-  promptTemplates: PromptTemplateEntry[],
-): string[] => promptTemplates.filter(isHigherOrderTool).map(templateName);
+export const isHttpTool = (tool: Tool) => tool.type === "http";
 
-export const httpToolNames = (toolset: {
-  httpTools: HTTPToolDefinitionEntry[];
-}) => {
-  const { httpTools } = toolset;
+export const isPromptTemplate = (tool: Tool) => tool.type === "prompt_template";
 
-  return httpTools.map((tool) => tool.name);
+export const filterHttpTools = (tools: Tool[] | undefined): HTTPToolDefinition[] => {
+  return tools?.filter(isHttpTool) ?? [];
 };
 
-export const userFacingToolNames = (toolset: {
-  httpTools: HTTPToolDefinitionEntry[];
-  promptTemplates: PromptTemplateEntry[];
-}) => {
-  return [
-    ...higherOrderToolNames(toolset.promptTemplates),
-    ...httpToolNames(toolset),
-  ];
+export const filterPromptTools = (tools: Tool[] | undefined): PromptTemplate[] => {
+  return tools?.filter(isPromptTemplate) ?? [];
+};
+
+export const toolNames = (toolset: { tools: Tool[] }) => {
+  const { tools } = toolset;
+  return tools.map((tool) => tool.name);
 };

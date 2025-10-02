@@ -1,4 +1,4 @@
-import { ToolDefinition } from "@/pages/toolsets/types";
+import { Tool } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { HttpRoute } from "./http-route";
 import { Badge } from "./ui/badge";
@@ -10,7 +10,7 @@ export function ToolBadge({
   variant = "secondary",
   className,
 }: {
-  tool: ToolDefinition;
+  tool: Tool;
   variant?: "default" | "secondary" | "outline";
   className?: string;
 }) {

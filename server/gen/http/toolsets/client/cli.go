@@ -25,7 +25,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"lb2\",\n      \"description\": \"Quia numquam voluptate nulla explicabo repellendus libero.\",\n      \"name\": \"Architecto nihil veritatis libero et laudantium.\",\n      \"tool_urns\": [\n         \"Reprehenderit quia.\",\n         \"Dolorem sequi dolore iste delectus.\",\n         \"Ab dolorem pariatur dignissimos.\",\n         \"In officiis.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"p6w\",\n      \"description\": \"Qui praesentium numquam quisquam quisquam et.\",\n      \"name\": \"Cumque animi praesentium.\",\n      \"tool_urns\": [\n         \"Voluptate hic quia eius et vel eligendi.\",\n         \"Repudiandae ipsam cupiditate sunt.\",\n         \"Laudantium atque.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -101,7 +101,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Dolores asperiores consequatur qui.\",\n      \"default_environment_slug\": \"g1j\",\n      \"description\": \"Repudiandae excepturi delectus.\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": true,\n      \"mcp_slug\": \"v4c\",\n      \"name\": \"Nesciunt inventore doloremque.\",\n      \"prompt_template_names\": [\n         \"Sit soluta quisquam.\",\n         \"Vel qui.\",\n         \"Architecto at saepe quibusdam.\"\n      ],\n      \"tool_urns\": [\n         \"Iure ut consectetur quis ullam architecto enim.\",\n         \"Aut eveniet est commodi vitae et consequatur.\",\n         \"Sequi voluptatem omnis.\",\n         \"Ut libero repellat incidunt odit.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Est commodi vitae et consequatur doloremque.\",\n      \"default_environment_slug\": \"atv\",\n      \"description\": \"Porro iste excepturi perspiciatis.\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": true,\n      \"mcp_slug\": \"8hf\",\n      \"name\": \"Dolorem minima.\",\n      \"prompt_template_names\": [\n         \"Doloremque eveniet repudiandae excepturi delectus est quia.\",\n         \"Alias aut quaerat sit soluta quisquam.\",\n         \"Vel qui.\"\n      ],\n      \"tool_urns\": [\n         \"At saepe.\",\n         \"Doloremque voluptate iure ut consectetur.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -293,7 +293,7 @@ func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody strin
 	{
 		err = json.Unmarshal([]byte(toolsetsAddExternalOAuthServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Vel consequuntur et ipsum.\",\n         \"slug\": \"es2\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Libero eius fugiat voluptatem ex.\",\n         \"slug\": \"gxy\"\n      }\n   }'")
 		}
 		if body.ExternalOauthServer == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("external_oauth_server", "body"))

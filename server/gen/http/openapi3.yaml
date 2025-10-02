@@ -3003,7 +3003,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/GetInstanceResult'
+                                $ref: '#/components/schemas/GetInstanceResult2'
                     description: OK response.
                 "400":
                     content:
@@ -5495,7 +5495,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ListToolsResult'
+                                $ref: '#/components/schemas/ListToolsResult2'
                     description: OK response.
                 "400":
                     content:
@@ -5600,7 +5600,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/Toolset'
+                                $ref: '#/components/schemas/Toolset5'
                     description: OK response.
                 "400":
                     content:
@@ -5794,7 +5794,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/Toolset'
+                                $ref: '#/components/schemas/Toolset2'
                     description: OK response.
                 "400":
                     content:
@@ -5988,7 +5988,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/Toolset'
+                                $ref: '#/components/schemas/Toolset4'
                     description: OK response.
                 "400":
                     content:
@@ -6176,7 +6176,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/Toolset'
+                                $ref: '#/components/schemas/Toolset6'
                     description: OK response.
                 "400":
                     content:
@@ -6281,7 +6281,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/Toolset'
+                                $ref: '#/components/schemas/Toolset3'
                     description: OK response.
                 "400":
                     content:
@@ -7138,6 +7138,73 @@ components:
                 - sha256
                 - content_type
                 - content_length
+                - created_at
+                - updated_at
+        BaseToolAttributes:
+            type: object
+            properties:
+                canonical:
+                    $ref: '#/components/schemas/CanonicalToolAttributes'
+                canonical_name:
+                    type: string
+                    description: The canonical name of the tool. Will be the same as the name if there is no variation.
+                confirm:
+                    type: string
+                    description: Confirmation mode for the tool
+                confirm_prompt:
+                    type: string
+                    description: Prompt for the confirmation
+                created_at:
+                    type: string
+                    description: The creation date of the tool.
+                    format: date-time
+                deployment_id:
+                    type: string
+                    description: The ID of the deployment
+                description:
+                    type: string
+                    description: Description of the tool
+                id:
+                    type: string
+                    description: The ID of the tool
+                name:
+                    type: string
+                    description: The name of the tool
+                project_id:
+                    type: string
+                    description: The ID of the project
+                schema:
+                    type: string
+                    description: JSON schema for the request
+                schema_version:
+                    type: string
+                    description: Version of the schema
+                summarizer:
+                    type: string
+                    description: Summarizer for the tool
+                tool_urn:
+                    type: string
+                    description: The URN of this tool
+                type:
+                    type: string
+                    description: The type of the tool - discriminator value
+                updated_at:
+                    type: string
+                    description: The last update date of the tool.
+                    format: date-time
+                variation:
+                    $ref: '#/components/schemas/ToolVariation'
+            description: Common attributes shared by all tool types
+            required:
+                - id
+                - type
+                - project_id
+                - deployment_id
+                - name
+                - canonical_name
+                - description
+                - confirm
+                - tool_urn
                 - created_at
                 - updated_at
         CanonicalToolAttributes:
@@ -8205,7 +8272,42 @@ components:
                 tools:
                     type: array
                     items:
-                        $ref: '#/components/schemas/HTTPToolDefinition'
+                        $ref: '#/components/schemas/Tool'
+                    description: The list of tools
+            required:
+                - name
+                - tools
+                - environment
+        GetInstanceResult2:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: The description of the toolset
+                environment:
+                    $ref: '#/components/schemas/Environment'
+                name:
+                    type: string
+                    description: The name of the toolset
+                prompt_templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptTemplate'
+                    description: The list of prompt templates
+                security_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SecurityVariable'
+                    description: The security variables that are relevant to the toolset
+                server_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ServerVariable'
+                    description: The server variables that are relevant to the toolset
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Tool2'
                     description: The list of tools
             required:
                 - name
@@ -8296,7 +8398,7 @@ components:
                     description: HTTP method for the request
                 id:
                     type: string
-                    description: The ID of the HTTP tool
+                    description: The ID of the tool
                 name:
                     type: string
                     description: The name of the tool
@@ -8337,53 +8439,36 @@ components:
                     items:
                         type: string
                     description: The tags list for this http tool
-                tool_type:
-                    type: string
-                    enum:
-                        - http
                 tool_urn:
                     type: string
-                    description: The URN of this HTTP tool
+                    description: The URN of this tool
+                type:
+                    type: string
+                    description: The type of the tool - discriminator value
                 updated_at:
                     type: string
                     description: The last update date of the tool.
                     format: date-time
                 variation:
                     $ref: '#/components/schemas/ToolVariation'
+            description: An HTTP tool
             required:
-                - tool_type
-                - id
-                - project_id
-                - deployment_id
-                - name
-                - canonical_name
                 - summary
-                - description
-                - confirm
                 - tags
                 - http_method
                 - path
                 - schema
+                - id
+                - type
+                - project_id
+                - deployment_id
+                - name
+                - canonical_name
+                - description
+                - confirm
                 - tool_urn
                 - created_at
                 - updated_at
-        HTTPToolDefinitionEntry:
-            type: object
-            properties:
-                id:
-                    type: string
-                    description: The ID of the HTTP tool
-                name:
-                    type: string
-                    description: The name of the tool
-                tool_type:
-                    type: string
-                    enum:
-                        - http
-            required:
-                - tool_type
-                - id
-                - name
         InfoResponseBody:
             type: object
             properties:
@@ -8671,22 +8756,29 @@ components:
         ListToolsResult:
             type: object
             properties:
-                http_tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/HTTPToolDefinition'
-                    description: The list of HTTP tools
                 next_cursor:
                     type: string
                     description: The cursor to fetch results from
-                prompt_templates:
+                tools:
                     type: array
                     items:
-                        $ref: '#/components/schemas/PromptTemplate'
-                    description: The list of prompt templates
+                        $ref: '#/components/schemas/Tool'
+                    description: The list of tools (polymorphic union of HTTP tools and prompt templates)
             required:
-                - http_tools
-                - prompt_templates
+                - tools
+        ListToolsResult2:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: The cursor to fetch results from
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Tool3'
+                    description: The list of tools (polymorphic union of HTTP tools and prompt templates)
+            required:
+                - tools
         ListToolsetsResult:
             type: object
             properties:
@@ -9033,17 +9125,27 @@ components:
         PromptTemplate:
             type: object
             properties:
-                arguments:
+                canonical:
+                    $ref: '#/components/schemas/CanonicalToolAttributes'
+                canonical_name:
                     type: string
-                    description: The JSON Schema defining the placeholders found in the prompt template
-                    format: json
+                    description: The canonical name of the tool. Will be the same as the name if there is no variation.
+                confirm:
+                    type: string
+                    description: Confirmation mode for the tool
+                confirm_prompt:
+                    type: string
+                    description: Prompt for the confirmation
                 created_at:
                     type: string
-                    description: The creation date of the prompt template.
+                    description: The creation date of the tool.
                     format: date-time
+                deployment_id:
+                    type: string
+                    description: The ID of the deployment
                 description:
                     type: string
-                    description: The description of the prompt template
+                    description: Description of the tool
                 engine:
                     type: string
                     description: The template engine
@@ -9054,7 +9156,7 @@ components:
                     description: The revision tree ID for the prompt template
                 id:
                     type: string
-                    description: The ID of the prompt template
+                    description: The ID of the tool
                 kind:
                     type: string
                     description: The kind of prompt the template is used for
@@ -9063,28 +9165,44 @@ components:
                         - higher_order_tool
                 name:
                     type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    maxLength: 40
+                    description: The name of the tool
                 predecessor_id:
                     type: string
                     description: The previous version of the prompt template to use as predecessor
+                project_id:
+                    type: string
+                    description: The ID of the project
                 prompt:
                     type: string
                     description: The template content
+                schema:
+                    type: string
+                    description: JSON schema for the request
+                schema_version:
+                    type: string
+                    description: Version of the schema
+                summarizer:
+                    type: string
+                    description: Summarizer for the tool
                 tool_urn:
                     type: string
-                    description: The URN of this prompt template
+                    description: The URN of this tool
                 tools_hint:
                     type: array
                     items:
                         type: string
                     description: The suggested tool names associated with the prompt template
                     maxItems: 20
+                type:
+                    type: string
+                    description: The type of the tool - discriminator value
                 updated_at:
                     type: string
-                    description: The last update date of the prompt template.
+                    description: The last update date of the tool.
                     format: date-time
+                variation:
+                    $ref: '#/components/schemas/ToolVariation'
+            description: A prompt template
             required:
                 - id
                 - history_id
@@ -9096,6 +9214,12 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+                - type
+                - project_id
+                - deployment_id
+                - canonical_name
+                - description
+                - confirm
         PromptTemplateEntry:
             type: object
             properties:
@@ -9409,6 +9533,197 @@ components:
                 - price_per_additional_credit
                 - feature_bullets
                 - included_bullets
+        Tool:
+            type: object
+            properties:
+                tool:
+                    anyOf:
+                        - $ref: '#/components/schemas/HTTPToolDefinition'
+                        - $ref: '#/components/schemas/PromptTemplate'
+            description: A polymorphic tool - can be an HTTP tool or a prompt template
+        Tool2:
+            type: object
+            properties:
+                tool:
+                    type: object
+                    properties:
+                        Type:
+                            type: string
+                            description: |-
+                                Union type name, one of:
+                                - "http_tool"
+                                - "prompt_template"
+                            enum:
+                                - http_tool
+                                - prompt_template
+                        Value:
+                            type: string
+                            description: JSON encoded union value
+                            example: '{"canonical":{"confirm":"Blanditiis iste qui assumenda rerum ut.","confirm_prompt":"Neque consequuntur officia quis incidunt laborum sint.","description":"Ex libero velit est nihil aliquam.","name":"Aut quibusdam consequatur itaque iure.","summarizer":"Nostrum similique doloribus.","summary":"At id.","tags":["Aut veritatis minima.","Reiciendis in earum esse."],"variation_id":"Quo aut deserunt voluptas ipsam."},"canonical_name":"Et rerum aut.","confirm":"Reprehenderit sint.","confirm_prompt":"Sint eos vero vitae est.","created_at":"1975-03-08T18:51:09Z","default_server_url":"Nemo quaerat perferendis.","deployment_id":"Aut exercitationem in a voluptates eligendi.","description":"Quidem aspernatur repellendus sint eius nihil.","http_method":"Debitis repellendus.","id":"Molestiae reiciendis reprehenderit qui minus aut est.","name":"Voluptatem nemo suscipit quibusdam rerum.","openapiv3_document_id":"Debitis pariatur qui et.","openapiv3_operation":"Quaerat sit necessitatibus sed.","package_name":"Error minima autem unde.","path":"Accusantium delectus magni voluptas molestias.","project_id":"Ad debitis.","response_filter":{"content_types":["Velit sint perferendis dolor.","Vel consequuntur."],"status_codes":["Consequatur aut voluptatibus minima et quasi.","Alias velit perspiciatis mollitia debitis occaecati id."],"type":"Quis tempore."},"schema":"Voluptate nihil amet nemo.","schema_version":"Sit asperiores deserunt ipsa ab.","security":"Tempora neque.","summarizer":"Ut explicabo sit.","summary":"Eos quia recusandae ratione est non.","tags":["Impedit cum.","Esse dicta rerum tempora iusto corrupti.","Deleniti dolorem numquam voluptatem quo."],"tool_urn":"Quo in dolor voluptas et.","type":"Quaerat minima sit veniam velit.","updated_at":"1984-05-27T07:43:15Z","variation":{"confirm":"Id quibusdam.","confirm_prompt":"Eum nisi at rerum illum.","created_at":"Blanditiis laborum ullam.","description":"Debitis omnis velit quia distinctio pariatur.","group_id":"Cupiditate aliquid consequatur.","id":"Et corrupti.","name":"Et voluptatem quam beatae dolorem.","src_tool_name":"Et dolor.","summarizer":"Laborum accusantium est eligendi qui deleniti.","summary":"Cupiditate ut.","tags":["Minus doloremque magni numquam esse earum vitae.","Voluptas quod cumque.","Quos rerum."],"updated_at":"Placeat quod minus eaque temporibus eligendi."}}'
+                    required:
+                        - Type
+                        - Value
+            description: A polymorphic tool - can be an HTTP tool or a prompt template
+        Tool3:
+            type: object
+            properties:
+                tool:
+                    type: object
+                    properties:
+                        Type:
+                            type: string
+                            description: |-
+                                Union type name, one of:
+                                - "http_tool"
+                                - "prompt_template"
+                            enum:
+                                - http_tool
+                                - prompt_template
+                        Value:
+                            type: string
+                            description: JSON encoded union value
+                            example: '{"canonical":{"confirm":"Blanditiis iste qui assumenda rerum ut.","confirm_prompt":"Neque consequuntur officia quis incidunt laborum sint.","description":"Ex libero velit est nihil aliquam.","name":"Aut quibusdam consequatur itaque iure.","summarizer":"Nostrum similique doloribus.","summary":"At id.","tags":["Aut veritatis minima.","Reiciendis in earum esse."],"variation_id":"Quo aut deserunt voluptas ipsam."},"canonical_name":"Aut assumenda voluptas.","confirm":"Inventore magnam.","confirm_prompt":"Impedit quibusdam eligendi itaque consequatur.","created_at":"1987-10-10T06:58:34Z","deployment_id":"Illo eaque.","description":"Neque modi dignissimos iste.","engine":"mustache","history_id":"Aliquam commodi.","id":"Id aperiam.","kind":"higher_order_tool","name":"Excepturi debitis nemo et fugiat.","predecessor_id":"Deserunt ducimus tenetur.","project_id":"Nobis assumenda sint omnis.","prompt":"Consequatur consequatur consequuntur.","schema":"Neque incidunt unde ut unde.","schema_version":"Consectetur numquam iure provident.","summarizer":"Ducimus recusandae eum est non nesciunt corrupti.","tool_urn":"Rerum necessitatibus dignissimos.","tools_hint":["Cum sed voluptatum.","Deleniti optio quis ut nobis.","Autem id voluptatem voluptates."],"type":"Libero soluta.","updated_at":"2001-10-23T03:12:52Z","variation":{"confirm":"Id quibusdam.","confirm_prompt":"Eum nisi at rerum illum.","created_at":"Blanditiis laborum ullam.","description":"Debitis omnis velit quia distinctio pariatur.","group_id":"Cupiditate aliquid consequatur.","id":"Et corrupti.","name":"Et voluptatem quam beatae dolorem.","src_tool_name":"Et dolor.","summarizer":"Laborum accusantium est eligendi qui deleniti.","summary":"Cupiditate ut.","tags":["Minus doloremque magni numquam esse earum vitae.","Voluptas quod cumque.","Quos rerum."],"updated_at":"Placeat quod minus eaque temporibus eligendi."}}'
+                    required:
+                        - Type
+                        - Value
+            description: A polymorphic tool - can be an HTTP tool or a prompt template
+        Tool4:
+            type: object
+            properties:
+                tool:
+                    type: object
+                    properties:
+                        Type:
+                            type: string
+                            description: |-
+                                Union type name, one of:
+                                - "http_tool"
+                                - "prompt_template"
+                            enum:
+                                - http_tool
+                                - prompt_template
+                        Value:
+                            type: string
+                            description: JSON encoded union value
+                            example: '{"canonical":{"confirm":"Blanditiis iste qui assumenda rerum ut.","confirm_prompt":"Neque consequuntur officia quis incidunt laborum sint.","description":"Ex libero velit est nihil aliquam.","name":"Aut quibusdam consequatur itaque iure.","summarizer":"Nostrum similique doloribus.","summary":"At id.","tags":["Aut veritatis minima.","Reiciendis in earum esse."],"variation_id":"Quo aut deserunt voluptas ipsam."},"canonical_name":"Aut assumenda voluptas.","confirm":"Inventore magnam.","confirm_prompt":"Impedit quibusdam eligendi itaque consequatur.","created_at":"1987-10-10T06:58:34Z","deployment_id":"Illo eaque.","description":"Neque modi dignissimos iste.","engine":"mustache","history_id":"Aliquam commodi.","id":"Id aperiam.","kind":"higher_order_tool","name":"Excepturi debitis nemo et fugiat.","predecessor_id":"Deserunt ducimus tenetur.","project_id":"Nobis assumenda sint omnis.","prompt":"Consequatur consequatur consequuntur.","schema":"Neque incidunt unde ut unde.","schema_version":"Consectetur numquam iure provident.","summarizer":"Ducimus recusandae eum est non nesciunt corrupti.","tool_urn":"Rerum necessitatibus dignissimos.","tools_hint":["Cum sed voluptatum.","Deleniti optio quis ut nobis.","Autem id voluptatem voluptates."],"type":"Libero soluta.","updated_at":"2001-10-23T03:12:52Z","variation":{"confirm":"Id quibusdam.","confirm_prompt":"Eum nisi at rerum illum.","created_at":"Blanditiis laborum ullam.","description":"Debitis omnis velit quia distinctio pariatur.","group_id":"Cupiditate aliquid consequatur.","id":"Et corrupti.","name":"Et voluptatem quam beatae dolorem.","src_tool_name":"Et dolor.","summarizer":"Laborum accusantium est eligendi qui deleniti.","summary":"Cupiditate ut.","tags":["Minus doloremque magni numquam esse earum vitae.","Voluptas quod cumque.","Quos rerum."],"updated_at":"Placeat quod minus eaque temporibus eligendi."}}'
+                    required:
+                        - Type
+                        - Value
+            description: A polymorphic tool - can be an HTTP tool or a prompt template
+        Tool5:
+            type: object
+            properties:
+                tool:
+                    type: object
+                    properties:
+                        Type:
+                            type: string
+                            description: |-
+                                Union type name, one of:
+                                - "http_tool"
+                                - "prompt_template"
+                            enum:
+                                - http_tool
+                                - prompt_template
+                        Value:
+                            type: string
+                            description: JSON encoded union value
+                            example: '{"canonical":{"confirm":"Blanditiis iste qui assumenda rerum ut.","confirm_prompt":"Neque consequuntur officia quis incidunt laborum sint.","description":"Ex libero velit est nihil aliquam.","name":"Aut quibusdam consequatur itaque iure.","summarizer":"Nostrum similique doloribus.","summary":"At id.","tags":["Aut veritatis minima.","Reiciendis in earum esse."],"variation_id":"Quo aut deserunt voluptas ipsam."},"canonical_name":"Aut assumenda voluptas.","confirm":"Inventore magnam.","confirm_prompt":"Impedit quibusdam eligendi itaque consequatur.","created_at":"1987-10-10T06:58:34Z","deployment_id":"Illo eaque.","description":"Neque modi dignissimos iste.","engine":"mustache","history_id":"Aliquam commodi.","id":"Id aperiam.","kind":"higher_order_tool","name":"Excepturi debitis nemo et fugiat.","predecessor_id":"Deserunt ducimus tenetur.","project_id":"Nobis assumenda sint omnis.","prompt":"Consequatur consequatur consequuntur.","schema":"Neque incidunt unde ut unde.","schema_version":"Consectetur numquam iure provident.","summarizer":"Ducimus recusandae eum est non nesciunt corrupti.","tool_urn":"Rerum necessitatibus dignissimos.","tools_hint":["Cum sed voluptatum.","Deleniti optio quis ut nobis.","Autem id voluptatem voluptates."],"type":"Libero soluta.","updated_at":"2001-10-23T03:12:52Z","variation":{"confirm":"Id quibusdam.","confirm_prompt":"Eum nisi at rerum illum.","created_at":"Blanditiis laborum ullam.","description":"Debitis omnis velit quia distinctio pariatur.","group_id":"Cupiditate aliquid consequatur.","id":"Et corrupti.","name":"Et voluptatem quam beatae dolorem.","src_tool_name":"Et dolor.","summarizer":"Laborum accusantium est eligendi qui deleniti.","summary":"Cupiditate ut.","tags":["Minus doloremque magni numquam esse earum vitae.","Voluptas quod cumque.","Quos rerum."],"updated_at":"Placeat quod minus eaque temporibus eligendi."}}'
+                    required:
+                        - Type
+                        - Value
+            description: A polymorphic tool - can be an HTTP tool or a prompt template
+        Tool6:
+            type: object
+            properties:
+                tool:
+                    type: object
+                    properties:
+                        Type:
+                            type: string
+                            description: |-
+                                Union type name, one of:
+                                - "http_tool"
+                                - "prompt_template"
+                            enum:
+                                - http_tool
+                                - prompt_template
+                        Value:
+                            type: string
+                            description: JSON encoded union value
+                            example: '{"canonical":{"confirm":"Blanditiis iste qui assumenda rerum ut.","confirm_prompt":"Neque consequuntur officia quis incidunt laborum sint.","description":"Ex libero velit est nihil aliquam.","name":"Aut quibusdam consequatur itaque iure.","summarizer":"Nostrum similique doloribus.","summary":"At id.","tags":["Aut veritatis minima.","Reiciendis in earum esse."],"variation_id":"Quo aut deserunt voluptas ipsam."},"canonical_name":"Et rerum aut.","confirm":"Reprehenderit sint.","confirm_prompt":"Sint eos vero vitae est.","created_at":"1975-03-08T18:51:09Z","default_server_url":"Nemo quaerat perferendis.","deployment_id":"Aut exercitationem in a voluptates eligendi.","description":"Quidem aspernatur repellendus sint eius nihil.","http_method":"Debitis repellendus.","id":"Molestiae reiciendis reprehenderit qui minus aut est.","name":"Voluptatem nemo suscipit quibusdam rerum.","openapiv3_document_id":"Debitis pariatur qui et.","openapiv3_operation":"Quaerat sit necessitatibus sed.","package_name":"Error minima autem unde.","path":"Accusantium delectus magni voluptas molestias.","project_id":"Ad debitis.","response_filter":{"content_types":["Velit sint perferendis dolor.","Vel consequuntur."],"status_codes":["Consequatur aut voluptatibus minima et quasi.","Alias velit perspiciatis mollitia debitis occaecati id."],"type":"Quis tempore."},"schema":"Voluptate nihil amet nemo.","schema_version":"Sit asperiores deserunt ipsa ab.","security":"Tempora neque.","summarizer":"Ut explicabo sit.","summary":"Eos quia recusandae ratione est non.","tags":["Impedit cum.","Esse dicta rerum tempora iusto corrupti.","Deleniti dolorem numquam voluptatem quo."],"tool_urn":"Quo in dolor voluptas et.","type":"Quaerat minima sit veniam velit.","updated_at":"1984-05-27T07:43:15Z","variation":{"confirm":"Id quibusdam.","confirm_prompt":"Eum nisi at rerum illum.","created_at":"Blanditiis laborum ullam.","description":"Debitis omnis velit quia distinctio pariatur.","group_id":"Cupiditate aliquid consequatur.","id":"Et corrupti.","name":"Et voluptatem quam beatae dolorem.","src_tool_name":"Et dolor.","summarizer":"Laborum accusantium est eligendi qui deleniti.","summary":"Cupiditate ut.","tags":["Minus doloremque magni numquam esse earum vitae.","Voluptas quod cumque.","Quos rerum."],"updated_at":"Placeat quod minus eaque temporibus eligendi."}}'
+                    required:
+                        - Type
+                        - Value
+            description: A polymorphic tool - can be an HTTP tool or a prompt template
+        Tool7:
+            type: object
+            properties:
+                tool:
+                    type: object
+                    properties:
+                        Type:
+                            type: string
+                            description: |-
+                                Union type name, one of:
+                                - "http_tool"
+                                - "prompt_template"
+                            enum:
+                                - http_tool
+                                - prompt_template
+                        Value:
+                            type: string
+                            description: JSON encoded union value
+                            example: '{"canonical":{"confirm":"Blanditiis iste qui assumenda rerum ut.","confirm_prompt":"Neque consequuntur officia quis incidunt laborum sint.","description":"Ex libero velit est nihil aliquam.","name":"Aut quibusdam consequatur itaque iure.","summarizer":"Nostrum similique doloribus.","summary":"At id.","tags":["Aut veritatis minima.","Reiciendis in earum esse."],"variation_id":"Quo aut deserunt voluptas ipsam."},"canonical_name":"Aut assumenda voluptas.","confirm":"Inventore magnam.","confirm_prompt":"Impedit quibusdam eligendi itaque consequatur.","created_at":"1987-10-10T06:58:34Z","deployment_id":"Illo eaque.","description":"Neque modi dignissimos iste.","engine":"mustache","history_id":"Aliquam commodi.","id":"Id aperiam.","kind":"higher_order_tool","name":"Excepturi debitis nemo et fugiat.","predecessor_id":"Deserunt ducimus tenetur.","project_id":"Nobis assumenda sint omnis.","prompt":"Consequatur consequatur consequuntur.","schema":"Neque incidunt unde ut unde.","schema_version":"Consectetur numquam iure provident.","summarizer":"Ducimus recusandae eum est non nesciunt corrupti.","tool_urn":"Rerum necessitatibus dignissimos.","tools_hint":["Cum sed voluptatum.","Deleniti optio quis ut nobis.","Autem id voluptatem voluptates."],"type":"Libero soluta.","updated_at":"2001-10-23T03:12:52Z","variation":{"confirm":"Id quibusdam.","confirm_prompt":"Eum nisi at rerum illum.","created_at":"Blanditiis laborum ullam.","description":"Debitis omnis velit quia distinctio pariatur.","group_id":"Cupiditate aliquid consequatur.","id":"Et corrupti.","name":"Et voluptatem quam beatae dolorem.","src_tool_name":"Et dolor.","summarizer":"Laborum accusantium est eligendi qui deleniti.","summary":"Cupiditate ut.","tags":["Minus doloremque magni numquam esse earum vitae.","Voluptas quod cumque.","Quos rerum."],"updated_at":"Placeat quod minus eaque temporibus eligendi."}}'
+                    required:
+                        - Type
+                        - Value
+            description: A polymorphic tool - can be an HTTP tool or a prompt template
+        Tool8:
+            type: object
+            properties:
+                tool:
+                    type: object
+                    properties:
+                        Type:
+                            type: string
+                            description: |-
+                                Union type name, one of:
+                                - "http_tool"
+                                - "prompt_template"
+                            enum:
+                                - http_tool
+                                - prompt_template
+                        Value:
+                            type: string
+                            description: JSON encoded union value
+                            example: '{"canonical":{"confirm":"Blanditiis iste qui assumenda rerum ut.","confirm_prompt":"Neque consequuntur officia quis incidunt laborum sint.","description":"Ex libero velit est nihil aliquam.","name":"Aut quibusdam consequatur itaque iure.","summarizer":"Nostrum similique doloribus.","summary":"At id.","tags":["Aut veritatis minima.","Reiciendis in earum esse."],"variation_id":"Quo aut deserunt voluptas ipsam."},"canonical_name":"Et rerum aut.","confirm":"Reprehenderit sint.","confirm_prompt":"Sint eos vero vitae est.","created_at":"1975-03-08T18:51:09Z","default_server_url":"Nemo quaerat perferendis.","deployment_id":"Aut exercitationem in a voluptates eligendi.","description":"Quidem aspernatur repellendus sint eius nihil.","http_method":"Debitis repellendus.","id":"Molestiae reiciendis reprehenderit qui minus aut est.","name":"Voluptatem nemo suscipit quibusdam rerum.","openapiv3_document_id":"Debitis pariatur qui et.","openapiv3_operation":"Quaerat sit necessitatibus sed.","package_name":"Error minima autem unde.","path":"Accusantium delectus magni voluptas molestias.","project_id":"Ad debitis.","response_filter":{"content_types":["Velit sint perferendis dolor.","Vel consequuntur."],"status_codes":["Consequatur aut voluptatibus minima et quasi.","Alias velit perspiciatis mollitia debitis occaecati id."],"type":"Quis tempore."},"schema":"Voluptate nihil amet nemo.","schema_version":"Sit asperiores deserunt ipsa ab.","security":"Tempora neque.","summarizer":"Ut explicabo sit.","summary":"Eos quia recusandae ratione est non.","tags":["Impedit cum.","Esse dicta rerum tempora iusto corrupti.","Deleniti dolorem numquam voluptatem quo."],"tool_urn":"Quo in dolor voluptas et.","type":"Quaerat minima sit veniam velit.","updated_at":"1984-05-27T07:43:15Z","variation":{"confirm":"Id quibusdam.","confirm_prompt":"Eum nisi at rerum illum.","created_at":"Blanditiis laborum ullam.","description":"Debitis omnis velit quia distinctio pariatur.","group_id":"Cupiditate aliquid consequatur.","id":"Et corrupti.","name":"Et voluptatem quam beatae dolorem.","src_tool_name":"Et dolor.","summarizer":"Laborum accusantium est eligendi qui deleniti.","summary":"Cupiditate ut.","tags":["Minus doloremque magni numquam esse earum vitae.","Voluptas quod cumque.","Quos rerum."],"updated_at":"Placeat quod minus eaque temporibus eligendi."}}'
+                    required:
+                        - Type
+                        - Value
+            description: A polymorphic tool - can be an HTTP tool or a prompt template
+        ToolEntry:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the tool
+                name:
+                    type: string
+                    description: The name of the tool
+                tool_urn:
+                    type: string
+                    description: The URN of the tool
+                type:
+                    type: string
+                    enum:
+                        - http
+                        - prompt
+            required:
+                - type
+                - id
+                - name
+                - tool_urn
         ToolVariation:
             type: object
             properties:
@@ -9479,11 +9794,6 @@ components:
                     description: Description of the toolset
                 external_oauth_server:
                     $ref: '#/components/schemas/ExternalOAuthServer'
-                http_tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/HTTPToolDefinition'
-                    description: The HTTP tools in this toolset
                 id:
                     type: string
                     description: The ID of the toolset
@@ -9513,7 +9823,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/PromptTemplate'
-                    description: The prompt templates in this toolset
+                    description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
                 security_variables:
                     type: array
                     items:
@@ -9534,6 +9844,11 @@ components:
                     items:
                         type: string
                     description: The tool URNs in this toolset
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Tool'
+                    description: The tools in this toolset
                 updated_at:
                     type: string
                     description: When the toolset was last updated.
@@ -9545,7 +9860,477 @@ components:
                 - account_type
                 - name
                 - slug
-                - http_tools
+                - tools
+                - prompt_templates
+                - tool_urns
+                - created_at
+                - updated_at
+        Toolset2:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: The account type of the organization
+                created_at:
+                    type: string
+                    description: When the toolset was created.
+                    format: date-time
+                custom_domain_id:
+                    type: string
+                    description: The ID of the custom domain to use for the toolset
+                default_environment_slug:
+                    type: string
+                    description: The slug of the environment to use as the default for the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                description:
+                    type: string
+                    description: Description of the toolset
+                external_oauth_server:
+                    $ref: '#/components/schemas/ExternalOAuthServer'
+                id:
+                    type: string
+                    description: The ID of the toolset
+                mcp_enabled:
+                    type: boolean
+                    description: Whether the toolset is enabled for MCP
+                mcp_is_public:
+                    type: boolean
+                    description: Whether the toolset is public in MCP
+                mcp_slug:
+                    type: string
+                    description: The slug of the MCP to use for the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                name:
+                    type: string
+                    description: The name of the toolset
+                oauth_proxy_server:
+                    $ref: '#/components/schemas/OAuthProxyServer'
+                organization_id:
+                    type: string
+                    description: The organization ID this toolset belongs to
+                project_id:
+                    type: string
+                    description: The project ID this toolset belongs to
+                prompt_templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptTemplate'
+                    description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
+                security_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SecurityVariable'
+                    description: The security variables that are relevant to the toolset
+                server_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ServerVariable'
+                    description: The server variables that are relevant to the toolset
+                slug:
+                    type: string
+                    description: The slug of the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: The tool URNs in this toolset
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Tool4'
+                    description: The tools in this toolset
+                updated_at:
+                    type: string
+                    description: When the toolset was last updated.
+                    format: date-time
+            required:
+                - id
+                - project_id
+                - organization_id
+                - account_type
+                - name
+                - slug
+                - tools
+                - prompt_templates
+                - tool_urns
+                - created_at
+                - updated_at
+        Toolset3:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: The account type of the organization
+                created_at:
+                    type: string
+                    description: When the toolset was created.
+                    format: date-time
+                custom_domain_id:
+                    type: string
+                    description: The ID of the custom domain to use for the toolset
+                default_environment_slug:
+                    type: string
+                    description: The slug of the environment to use as the default for the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                description:
+                    type: string
+                    description: Description of the toolset
+                external_oauth_server:
+                    $ref: '#/components/schemas/ExternalOAuthServer'
+                id:
+                    type: string
+                    description: The ID of the toolset
+                mcp_enabled:
+                    type: boolean
+                    description: Whether the toolset is enabled for MCP
+                mcp_is_public:
+                    type: boolean
+                    description: Whether the toolset is public in MCP
+                mcp_slug:
+                    type: string
+                    description: The slug of the MCP to use for the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                name:
+                    type: string
+                    description: The name of the toolset
+                oauth_proxy_server:
+                    $ref: '#/components/schemas/OAuthProxyServer'
+                organization_id:
+                    type: string
+                    description: The organization ID this toolset belongs to
+                project_id:
+                    type: string
+                    description: The project ID this toolset belongs to
+                prompt_templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptTemplate'
+                    description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
+                security_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SecurityVariable'
+                    description: The security variables that are relevant to the toolset
+                server_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ServerVariable'
+                    description: The server variables that are relevant to the toolset
+                slug:
+                    type: string
+                    description: The slug of the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: The tool URNs in this toolset
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Tool5'
+                    description: The tools in this toolset
+                updated_at:
+                    type: string
+                    description: When the toolset was last updated.
+                    format: date-time
+            required:
+                - id
+                - project_id
+                - organization_id
+                - account_type
+                - name
+                - slug
+                - tools
+                - prompt_templates
+                - tool_urns
+                - created_at
+                - updated_at
+        Toolset4:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: The account type of the organization
+                created_at:
+                    type: string
+                    description: When the toolset was created.
+                    format: date-time
+                custom_domain_id:
+                    type: string
+                    description: The ID of the custom domain to use for the toolset
+                default_environment_slug:
+                    type: string
+                    description: The slug of the environment to use as the default for the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                description:
+                    type: string
+                    description: Description of the toolset
+                external_oauth_server:
+                    $ref: '#/components/schemas/ExternalOAuthServer'
+                id:
+                    type: string
+                    description: The ID of the toolset
+                mcp_enabled:
+                    type: boolean
+                    description: Whether the toolset is enabled for MCP
+                mcp_is_public:
+                    type: boolean
+                    description: Whether the toolset is public in MCP
+                mcp_slug:
+                    type: string
+                    description: The slug of the MCP to use for the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                name:
+                    type: string
+                    description: The name of the toolset
+                oauth_proxy_server:
+                    $ref: '#/components/schemas/OAuthProxyServer'
+                organization_id:
+                    type: string
+                    description: The organization ID this toolset belongs to
+                project_id:
+                    type: string
+                    description: The project ID this toolset belongs to
+                prompt_templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptTemplate'
+                    description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
+                security_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SecurityVariable'
+                    description: The security variables that are relevant to the toolset
+                server_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ServerVariable'
+                    description: The server variables that are relevant to the toolset
+                slug:
+                    type: string
+                    description: The slug of the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: The tool URNs in this toolset
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Tool6'
+                    description: The tools in this toolset
+                updated_at:
+                    type: string
+                    description: When the toolset was last updated.
+                    format: date-time
+            required:
+                - id
+                - project_id
+                - organization_id
+                - account_type
+                - name
+                - slug
+                - tools
+                - prompt_templates
+                - tool_urns
+                - created_at
+                - updated_at
+        Toolset5:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: The account type of the organization
+                created_at:
+                    type: string
+                    description: When the toolset was created.
+                    format: date-time
+                custom_domain_id:
+                    type: string
+                    description: The ID of the custom domain to use for the toolset
+                default_environment_slug:
+                    type: string
+                    description: The slug of the environment to use as the default for the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                description:
+                    type: string
+                    description: Description of the toolset
+                external_oauth_server:
+                    $ref: '#/components/schemas/ExternalOAuthServer'
+                id:
+                    type: string
+                    description: The ID of the toolset
+                mcp_enabled:
+                    type: boolean
+                    description: Whether the toolset is enabled for MCP
+                mcp_is_public:
+                    type: boolean
+                    description: Whether the toolset is public in MCP
+                mcp_slug:
+                    type: string
+                    description: The slug of the MCP to use for the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                name:
+                    type: string
+                    description: The name of the toolset
+                oauth_proxy_server:
+                    $ref: '#/components/schemas/OAuthProxyServer'
+                organization_id:
+                    type: string
+                    description: The organization ID this toolset belongs to
+                project_id:
+                    type: string
+                    description: The project ID this toolset belongs to
+                prompt_templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptTemplate'
+                    description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
+                security_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SecurityVariable'
+                    description: The security variables that are relevant to the toolset
+                server_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ServerVariable'
+                    description: The server variables that are relevant to the toolset
+                slug:
+                    type: string
+                    description: The slug of the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: The tool URNs in this toolset
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Tool7'
+                    description: The tools in this toolset
+                updated_at:
+                    type: string
+                    description: When the toolset was last updated.
+                    format: date-time
+            required:
+                - id
+                - project_id
+                - organization_id
+                - account_type
+                - name
+                - slug
+                - tools
+                - prompt_templates
+                - tool_urns
+                - created_at
+                - updated_at
+        Toolset6:
+            type: object
+            properties:
+                account_type:
+                    type: string
+                    description: The account type of the organization
+                created_at:
+                    type: string
+                    description: When the toolset was created.
+                    format: date-time
+                custom_domain_id:
+                    type: string
+                    description: The ID of the custom domain to use for the toolset
+                default_environment_slug:
+                    type: string
+                    description: The slug of the environment to use as the default for the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                description:
+                    type: string
+                    description: Description of the toolset
+                external_oauth_server:
+                    $ref: '#/components/schemas/ExternalOAuthServer'
+                id:
+                    type: string
+                    description: The ID of the toolset
+                mcp_enabled:
+                    type: boolean
+                    description: Whether the toolset is enabled for MCP
+                mcp_is_public:
+                    type: boolean
+                    description: Whether the toolset is public in MCP
+                mcp_slug:
+                    type: string
+                    description: The slug of the MCP to use for the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                name:
+                    type: string
+                    description: The name of the toolset
+                oauth_proxy_server:
+                    $ref: '#/components/schemas/OAuthProxyServer'
+                organization_id:
+                    type: string
+                    description: The organization ID this toolset belongs to
+                project_id:
+                    type: string
+                    description: The project ID this toolset belongs to
+                prompt_templates:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PromptTemplate'
+                    description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
+                security_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/SecurityVariable'
+                    description: The security variables that are relevant to the toolset
+                server_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ServerVariable'
+                    description: The server variables that are relevant to the toolset
+                slug:
+                    type: string
+                    description: The slug of the toolset
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: The tool URNs in this toolset
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Tool8'
+                    description: The tools in this toolset
+                updated_at:
+                    type: string
+                    description: When the toolset was last updated.
+                    format: date-time
+            required:
+                - id
+                - project_id
+                - organization_id
+                - account_type
+                - name
+                - slug
+                - tools
                 - prompt_templates
                 - tool_urns
                 - created_at
@@ -9568,11 +10353,6 @@ components:
                 description:
                     type: string
                     description: Description of the toolset
-                http_tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/HTTPToolDefinitionEntry'
-                    description: The HTTP tools in this toolset
                 id:
                     type: string
                     description: The ID of the toolset
@@ -9600,7 +10380,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/PromptTemplateEntry'
-                    description: The prompt templates in this toolset
+                    description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
                 security_variables:
                     type: array
                     items:
@@ -9621,6 +10401,11 @@ components:
                     items:
                         type: string
                     description: The tool URNs in this toolset
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolEntry'
+                    description: The tools in this toolset
                 updated_at:
                     type: string
                     description: When the toolset was last updated.
@@ -9631,7 +10416,7 @@ components:
                 - organization_id
                 - name
                 - slug
-                - http_tools
+                - tools
                 - prompt_templates
                 - tool_urns
                 - created_at

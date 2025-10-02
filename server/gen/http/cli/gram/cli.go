@@ -67,7 +67,7 @@ func UsageExamples() string {
 		os.Args[0] + ` assets serve-image --id "Non commodi autem." --session-token "Quidem perspiciatis molestiae." --apikey-token "Voluptas sunt sunt alias veniam aut."` + "\n" +
 		os.Args[0] + ` auth callback --code "Nostrum quo eos eaque eligendi ipsa quod."` + "\n" +
 		os.Args[0] + ` chat list-chats --session-token "Corporis aut deserunt sint autem id." --project-slug-input "Sequi ad aut praesentium."` + "\n" +
-		os.Args[0] + ` deployments get-deployment --id "Ratione aut delectus in." --apikey-token "Ratione harum porro est non." --session-token "Quaerat velit." --project-slug-input "Et corrupti."` + "\n" +
+		os.Args[0] + ` deployments get-deployment --id "Est non architecto." --apikey-token "Velit iure et corrupti quia quis." --session-token "Qui est repudiandae sint placeat sed explicabo." --project-slug-input "Esse perspiciatis totam iure."` + "\n" +
 		""
 }
 
@@ -1392,7 +1392,7 @@ func assetsUploadFunctionsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-functions --content-type "Odit voluptas deleniti doloribus harum voluptas." --content-length 9143562034439443232 --apikey-token "Odit accusantium nesciunt tenetur sed voluptas odit." --project-slug-input "Autem animi." --session-token "Culpa omnis sed est vel et." --stream "goa.png"`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-functions --content-type "Voluptas deleniti doloribus harum." --content-length 8707962306659069075 --apikey-token "Aperiam odit accusantium nesciunt tenetur." --project-slug-input "Voluptas odit sint autem." --session-token "Voluptatum culpa omnis sed est vel et." --stream "goa.png"`)
 }
 
 func assetsUploadOpenAPIv3Usage() {
@@ -1681,7 +1681,7 @@ func chatCreditUsageUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `chat credit-usage --session-token "Eaque laborum." --project-slug-input "Accusantium aliquam explicabo commodi inventore."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `chat credit-usage --session-token "Accusantium aliquam explicabo commodi inventore." --project-slug-input "Voluptatem dignissimos ut vel similique qui hic."`)
 }
 
 // deploymentsUsage displays the usage of the deployments command and its
@@ -1723,7 +1723,7 @@ func deploymentsGetDeploymentUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `deployments get-deployment --id "Ratione aut delectus in." --apikey-token "Ratione harum porro est non." --session-token "Quaerat velit." --project-slug-input "Et corrupti."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `deployments get-deployment --id "Est non architecto." --apikey-token "Velit iure et corrupti quia quis." --session-token "Qui est repudiandae sint placeat sed explicabo." --project-slug-input "Esse perspiciatis totam iure."`)
 }
 
 func deploymentsGetLatestDeploymentUsage() {
@@ -1746,7 +1746,7 @@ func deploymentsGetLatestDeploymentUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `deployments get-latest-deployment --apikey-token "Mollitia nemo ab." --session-token "Asperiores temporibus." --project-slug-input "Rem ut omnis perspiciatis omnis."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `deployments get-latest-deployment --apikey-token "Nulla asperiores." --session-token "Sint rem ut." --project-slug-input "Perspiciatis omnis fugit vitae vitae."`)
 }
 
 func deploymentsCreateDeploymentUsage() {
@@ -1775,7 +1775,7 @@ func deploymentsCreateDeploymentUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `deployments create-deployment --body '{
       "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
-      "external_url": "Aut qui in suscipit quibusdam eaque.",
+      "external_url": "Et tempora.",
       "functions": [
          {
             "asset_id": "Corporis ex doloremque fugiat.",
@@ -1795,12 +1795,12 @@ func deploymentsCreateDeploymentUsage() {
       "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161",
       "openapiv3_assets": [
          {
-            "asset_id": "Molestiae rerum error velit.",
+            "asset_id": "Error velit.",
             "name": "Occaecati ea.",
             "slug": "ulc"
          },
          {
-            "asset_id": "Molestiae rerum error velit.",
+            "asset_id": "Error velit.",
             "name": "Occaecati ea.",
             "slug": "ulc"
          }
@@ -1878,12 +1878,12 @@ func deploymentsEvolveUsage() {
       ],
       "upsert_openapiv3_assets": [
          {
-            "asset_id": "Molestiae rerum error velit.",
+            "asset_id": "Error velit.",
             "name": "Occaecati ea.",
             "slug": "ulc"
          },
          {
-            "asset_id": "Molestiae rerum error velit.",
+            "asset_id": "Error velit.",
             "name": "Occaecati ea.",
             "slug": "ulc"
          }
@@ -2038,8 +2038,8 @@ func domainsCreateDomainUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `domains create-domain --body '{
-      "domain": "Aliquam id."
-   }' --session-token "Enim accusantium nisi est enim." --project-slug-input "Quidem sint illum ut blanditiis."`)
+      "domain": "Rerum aliquam id non enim."
+   }' --session-token "Nisi est enim ipsam quidem." --project-slug-input "Illum ut blanditiis placeat itaque."`)
 }
 
 func domainsDeleteDomainUsage() {
@@ -2060,7 +2060,7 @@ func domainsDeleteDomainUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `domains delete-domain --session-token "Numquam perspiciatis alias totam non aliquam." --project-slug-input "Eum accusamus quo reiciendis aut qui qui."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `domains delete-domain --session-token "Alias totam non aliquam maxime." --project-slug-input "Accusamus quo reiciendis aut qui qui animi."`)
 }
 
 // environmentsUsage displays the usage of the environments command and its
@@ -2118,7 +2118,7 @@ func environmentsCreateEnvironmentUsage() {
          }
       ],
       "name": "Et quia natus deleniti error.",
-      "organization_id": "Rerum dignissimos veritatis quaerat."
+      "organization_id": "Dignissimos veritatis quaerat."
    }' --session-token "Ut est." --project-slug-input "Omnis ducimus ut et delectus quis voluptate."`)
 }
 
@@ -2140,7 +2140,7 @@ func environmentsListEnvironmentsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `environments list-environments --session-token "Qui voluptatem sapiente." --project-slug-input "Incidunt et eligendi qui aliquam odit impedit."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `environments list-environments --session-token "Molestiae qui voluptatem sapiente labore." --project-slug-input "Et eligendi."`)
 }
 
 func environmentsUpdateEnvironmentUsage() {
@@ -2166,10 +2166,12 @@ func environmentsUpdateEnvironmentUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `environments update-environment --body '{
-      "description": "Sed architecto fuga rerum.",
+      "description": "Optio iure nihil.",
       "entries_to_remove": [
-         "Consectetur sed perferendis soluta excepturi non.",
-         "Qui ut exercitationem."
+         "Nam dolorum similique voluptas est enim consectetur.",
+         "Perferendis soluta excepturi non.",
+         "Qui ut exercitationem.",
+         "Sunt aut voluptas nihil consequatur."
       ],
       "entries_to_update": [
          {
@@ -2179,10 +2181,14 @@ func environmentsUpdateEnvironmentUsage() {
          {
             "name": "Reiciendis quis doloremque rerum rem.",
             "value": "Ab velit illum perferendis omnis."
+         },
+         {
+            "name": "Reiciendis quis doloremque rerum rem.",
+            "value": "Ab velit illum perferendis omnis."
          }
       ],
-      "name": "Sunt blanditiis nam dolorum similique."
-   }' --slug "6h4" --session-token "Consequatur consequuntur pariatur commodi accusamus." --project-slug-input "Explicabo placeat omnis cumque."`)
+      "name": "Sed architecto fuga rerum."
+   }' --slug "gq8" --session-token "Explicabo placeat omnis cumque." --project-slug-input "Perferendis temporibus."`)
 }
 
 func environmentsDeleteEnvironmentUsage() {
@@ -2205,7 +2211,7 @@ func environmentsDeleteEnvironmentUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `environments delete-environment --slug "71h" --session-token "Sed eum eos voluptates magni nihil." --project-slug-input "Id adipisci dolorem dignissimos blanditiis et."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `environments delete-environment --slug "wcp" --session-token "Rerum id adipisci." --project-slug-input "Dignissimos blanditiis et minus modi exercitationem."`)
 }
 
 // instancesUsage displays the usage of the instances command and its
@@ -2243,7 +2249,7 @@ func instancesGetInstanceUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `instances get-instance --toolset-slug "9ks" --environment-slug "j5c" --session-token "Eum reiciendis." --project-slug-input "Harum sint nihil ad optio voluptatem." --apikey-token "Ratione reprehenderit et."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `instances get-instance --toolset-slug "ej5" --environment-slug "1t4" --session-token "Harum sint nihil ad optio voluptatem." --project-slug-input "Ratione reprehenderit et." --apikey-token "Consequatur nostrum."`)
 }
 
 // integrationsUsage displays the usage of the integrations command and its
@@ -2280,7 +2286,7 @@ func integrationsGetUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `integrations get --id "Nihil quo voluptatem." --name "Deleniti voluptas dolorem et exercitationem unde placeat." --session-token "Omnis voluptas nulla." --project-slug-input "Corporis vel."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `integrations get --id "Voluptatem sit veritatis neque aliquam." --name "Possimus et iusto." --session-token "Nulla vero voluptatem." --project-slug-input "Modi iusto quidem."`)
 }
 
 func integrationsListUsage() {
@@ -2304,10 +2310,10 @@ func integrationsListUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `integrations list --keywords '[
-      "w86",
-      "akk",
-      "wjf"
-   ]' --session-token "Quasi et ut numquam sed maxime blanditiis." --project-slug-input "Vel dolorum possimus eum eaque aut deleniti."`)
+      "z20",
+      "jgr",
+      "210"
+   ]' --session-token "Quaerat magnam nam qui autem ullam aut." --project-slug-input "Id amet."`)
 }
 
 // keysUsage displays the usage of the keys command and its subcommands.
@@ -2341,13 +2347,12 @@ func keysCreateKeyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `keys create-key --body '{
-      "name": "Voluptatibus et blanditiis rerum voluptatem veritatis cumque.",
+      "name": "Omnis consequatur iste cumque.",
       "scopes": [
-         "Dolore accusamus.",
-         "Nihil iusto velit officia ab corporis.",
-         "Soluta ut illo est exercitationem ut sapiente."
+         "Qui sequi dolorem incidunt quas.",
+         "Voluptatem et eius."
       ]
-   }' --session-token "Ut est cupiditate veniam quo non."`)
+   }' --session-token "Ea optio tempora quam."`)
 }
 
 func keysListKeysUsage() {
@@ -2366,7 +2371,7 @@ func keysListKeysUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `keys list-keys --session-token "Minus excepturi esse."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `keys list-keys --session-token "At eius repellendus eius alias harum."`)
 }
 
 func keysRevokeKeyUsage() {
@@ -2387,7 +2392,7 @@ func keysRevokeKeyUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `keys revoke-key --id "Architecto saepe et voluptas amet qui odit." --session-token "Aut dolores enim asperiores."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `keys revoke-key --id "Qui nobis expedita." --session-token "Ut nihil repellendus velit."`)
 }
 
 // packagesUsage displays the usage of the packages command and its subcommands.
@@ -2427,18 +2432,18 @@ func packagesCreatePackageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `packages create-package --body '{
-      "description": "zor",
-      "image_asset_id": "rt6",
+      "description": "3j6",
+      "image_asset_id": "www",
       "keywords": [
-         "In dolore.",
-         "Itaque minima voluptates.",
-         "Magnam ullam consequatur et ad culpa fugit."
+         "Atque tempora voluptas incidunt.",
+         "Nam assumenda molestias consequuntur deserunt debitis qui.",
+         "Quia excepturi."
       ],
-      "name": "www",
-      "summary": "5nu",
-      "title": "vhf",
-      "url": "4nz"
-   }' --apikey-token "Similique eum." --session-token "Dolore fugit quia facere quis." --project-slug-input "Aliquam corrupti sed."`)
+      "name": "jno",
+      "summary": "5hw",
+      "title": "vgw",
+      "url": "lhr"
+   }' --apikey-token "Iusto iusto quam ab sunt." --session-token "Deserunt neque et." --project-slug-input "Corrupti sunt sed deserunt necessitatibus voluptas."`)
 }
 
 func packagesUpdatePackageUsage() {
@@ -2464,18 +2469,18 @@ func packagesUpdatePackageUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `packages update-package --body '{
-      "description": "7gn",
-      "id": "fpe",
-      "image_asset_id": "msv",
+      "description": "ejw",
+      "id": "0yd",
+      "image_asset_id": "k7i",
       "keywords": [
-         "Qui facilis commodi dicta sunt minus reprehenderit.",
-         "Expedita eum consequuntur alias et.",
-         "Tenetur unde quis ipsum dolore repellendus."
+         "Rerum vel dolor corporis quis.",
+         "Nulla ut necessitatibus.",
+         "Ratione fugit."
       ],
-      "summary": "8e6",
-      "title": "euc",
-      "url": "6j8"
-   }' --apikey-token "Cupiditate sit commodi quisquam velit neque." --session-token "Ratione magni assumenda et." --project-slug-input "Et est dicta et quam laboriosam."`)
+      "summary": "zys",
+      "title": "b8r",
+      "url": "vz9"
+   }' --apikey-token "Perferendis blanditiis corporis quae." --session-token "Ut hic labore." --project-slug-input "Totam eum impedit adipisci."`)
 }
 
 func packagesListPackagesUsage() {
@@ -2498,7 +2503,7 @@ func packagesListPackagesUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `packages list-packages --apikey-token "Vitae quia nemo." --session-token "Sed aut voluptas." --project-slug-input "In fuga suscipit rerum ipsa dolor dolorem."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `packages list-packages --apikey-token "Ratione magni assumenda et." --session-token "Et est dicta et quam laboriosam." --project-slug-input "Sit nam voluptate quis excepturi facere et."`)
 }
 
 func packagesListVersionsUsage() {
@@ -2523,7 +2528,7 @@ func packagesListVersionsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `packages list-versions --name "Eum laboriosam nobis magnam." --apikey-token "Perferendis veniam veniam mollitia neque." --session-token "Minima consectetur deserunt distinctio saepe voluptatem." --project-slug-input "Consequatur odio velit qui."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `packages list-versions --name "Dolores doloremque consectetur consequatur vitae quia." --apikey-token "Facere sed aut voluptas est in." --session-token "Suscipit rerum ipsa dolor." --project-slug-input "Rem odit consequatur commodi quae unde numquam."`)
 }
 
 func packagesPublishUsage() {
@@ -2549,11 +2554,11 @@ func packagesPublishUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `packages publish --body '{
-      "deployment_id": "Nisi ipsum molestiae exercitationem quidem sunt sunt.",
-      "name": "Pariatur voluptatum aut minima.",
-      "version": "Quisquam similique eaque fuga.",
-      "visibility": "private"
-   }' --apikey-token "Sed molestiae enim voluptatem eligendi esse tempora." --session-token "Ad consequatur aperiam ut eius cupiditate." --project-slug-input "Voluptates ipsum."`)
+      "deployment_id": "Et odio.",
+      "name": "A nobis impedit sit est velit delectus.",
+      "version": "Et est magni ducimus.",
+      "visibility": "public"
+   }' --apikey-token "Hic soluta placeat facilis sunt id qui." --session-token "Libero modi fugiat." --project-slug-input "Numquam ut debitis quis cumque possimus."`)
 }
 
 // projectsUsage displays the usage of the projects command and its subcommands.
@@ -2589,9 +2594,9 @@ func projectsCreateProjectUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `projects create-project --body '{
-      "name": "qwy",
-      "organization_id": "Error reiciendis."
-   }' --apikey-token "In dolor consequuntur et." --session-token "Et ut dolorum voluptate numquam vel blanditiis."`)
+      "name": "7c7",
+      "organization_id": "Sunt sunt aliquam illum."
+   }' --apikey-token "Esse tempora temporibus ad consequatur aperiam." --session-token "Eius cupiditate commodi."`)
 }
 
 func projectsListProjectsUsage() {
@@ -2614,7 +2619,7 @@ func projectsListProjectsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `projects list-projects --organization-id "Ab similique est voluptatem sunt veritatis voluptatem." --apikey-token "Repudiandae officiis aut sed." --session-token "Sint totam nemo incidunt."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `projects list-projects --organization-id "Quia accusamus." --apikey-token "Vel commodi aliquid amet aspernatur." --session-token "Excepturi esse deserunt atque ut."`)
 }
 
 func projectsSetLogoUsage() {
@@ -2640,8 +2645,8 @@ func projectsSetLogoUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `projects set-logo --body '{
-      "asset_id": "Facere asperiores."
-   }' --apikey-token "Repellat iure." --session-token "Aliquid sint quis." --project-slug-input "Dolorem animi repellat laudantium dolorem."`)
+      "asset_id": "Natus maiores ut."
+   }' --apikey-token "Fugiat reprehenderit nobis aut ab similique est." --session-token "Sunt veritatis voluptatem." --project-slug-input "Repudiandae officiis aut sed."`)
 }
 
 // slackUsage displays the usage of the slack command and its subcommands.
@@ -2676,7 +2681,7 @@ func slackCallbackUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `slack callback --state "Dolorem id aliquam non sit veniam ut." --code "Cupiditate voluptatem quo impedit omnis."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `slack callback --state "Officia magnam aliquid quas dicta." --code "Facere asperiores."`)
 }
 
 func slackLoginUsage() {
@@ -2699,7 +2704,7 @@ func slackLoginUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `slack login --project-slug "Asperiores porro ullam sit nulla quis." --return-url "Nulla aut." --session-token "Nesciunt iste odit dolorem velit minima inventore."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `slack login --project-slug "Quia error sapiente sequi omnis." --return-url "Aut dolorem id aliquam non sit veniam." --session-token "Earum cupiditate voluptatem."`)
 }
 
 func slackGetSlackConnectionUsage() {
@@ -2720,7 +2725,7 @@ func slackGetSlackConnectionUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `slack get-slack-connection --session-token "Est aut et non adipisci id tempore." --project-slug-input "Quam ad ea quibusdam repudiandae quas."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `slack get-slack-connection --session-token "Officiis nihil iure ipsam impedit non." --project-slug-input "Porro ullam sit nulla quis omnis."`)
 }
 
 func slackUpdateSlackConnectionUsage() {
@@ -2744,8 +2749,8 @@ func slackUpdateSlackConnectionUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `slack update-slack-connection --body '{
-      "default_toolset_slug": "Architecto id possimus."
-   }' --session-token "Sit ut." --project-slug-input "Quasi magni cum sit necessitatibus ea."`)
+      "default_toolset_slug": "In molestiae et incidunt eaque."
+   }' --session-token "Numquam sit est veniam hic et sed." --project-slug-input "Optio non reiciendis."`)
 }
 
 func slackDeleteSlackConnectionUsage() {
@@ -2766,7 +2771,7 @@ func slackDeleteSlackConnectionUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `slack delete-slack-connection --session-token "Unde voluptate animi officiis inventore facere et." --project-slug-input "Odio voluptatem iure tempora aut."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `slack delete-slack-connection --session-token "Minus eos suscipit fuga porro ipsa quo." --project-slug-input "Iste labore."`)
 }
 
 // templatesUsage displays the usage of the templates command and its
@@ -2810,17 +2815,17 @@ func templatesCreateTemplateUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates create-template --body '{
       "arguments": "{\"name\":\"example\",\"email\":\"mail@example.com\"}",
-      "description": "Id natus tempora sit enim fugiat.",
+      "description": "Repudiandae porro veniam modi magni non.",
       "engine": "mustache",
       "kind": "higher_order_tool",
-      "name": "kmf",
-      "prompt": "Molestiae eligendi atque accusantium.",
+      "name": "g8c",
+      "prompt": "Voluptates et vitae.",
       "tools_hint": [
-         "Quam voluptas sed error et omnis officiis.",
-         "Quis et nostrum ea sed minus.",
-         "Illo distinctio."
+         "Enim fugiat voluptate qui minima.",
+         "Occaecati ea laboriosam natus ab fugiat.",
+         "In qui et incidunt eaque deleniti."
       ]
-   }' --apikey-token "Dignissimos saepe sapiente cumque." --session-token "Nulla nam ex provident deserunt." --project-slug-input "Eos iusto."`)
+   }' --apikey-token "Id quidem sit unde." --session-token "Sunt pariatur asperiores odit quidem." --project-slug-input "Ducimus ullam aut rerum voluptas."`)
 }
 
 func templatesUpdateTemplateUsage() {
@@ -2847,17 +2852,17 @@ func templatesUpdateTemplateUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates update-template --body '{
       "arguments": "{\"name\":\"example\",\"email\":\"mail@example.com\"}",
-      "description": "Odio et ab perferendis sint cumque.",
+      "description": "Accusamus illo distinctio voluptatem.",
       "engine": "mustache",
-      "id": "Dolorum id expedita repellat sed.",
+      "id": "Voluptas sed error et.",
       "kind": "prompt",
-      "prompt": "Perferendis ut ipsam quod labore.",
+      "prompt": "Officiis a quis et nostrum ea sed.",
       "tools_hint": [
-         "Officiis et illum in dolor porro.",
-         "Voluptas debitis iste enim alias.",
-         "Veniam consectetur omnis vel."
+         "Cumque magnam.",
+         "Qui sequi qui aut.",
+         "Sit aut magni eveniet ea qui."
       ]
-   }' --apikey-token "Eligendi ex." --session-token "Ratione repudiandae voluptas eligendi suscipit asperiores ea." --project-slug-input "Consequatur facilis quibusdam quae ex."`)
+   }' --apikey-token "Mollitia alias reiciendis voluptatem quas." --session-token "Sint doloribus ullam ut." --project-slug-input "Sapiente quia cum non."`)
 }
 
 func templatesGetTemplateUsage() {
@@ -2884,7 +2889,7 @@ func templatesGetTemplateUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates get-template --id "Alias non." --name "Aut accusantium sapiente." --apikey-token "Eligendi est voluptatibus ipsa facere." --session-token "Recusandae voluptatibus occaecati provident nostrum." --project-slug-input "Libero et aperiam."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates get-template --id "Officiis et illum in dolor porro." --name "Voluptas debitis iste enim alias." --apikey-token "Veniam consectetur omnis vel." --session-token "Eligendi ex." --project-slug-input "Ratione repudiandae voluptas eligendi suscipit asperiores ea."`)
 }
 
 func templatesListTemplatesUsage() {
@@ -2907,7 +2912,7 @@ func templatesListTemplatesUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates list-templates --apikey-token "Ex dolorem laboriosam iusto." --session-token "Fugit nesciunt saepe enim rem saepe eos." --project-slug-input "Voluptatem fuga eos sit aperiam."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates list-templates --apikey-token "Sed quo expedita." --session-token "Earum atque." --project-slug-input "Non voluptates."`)
 }
 
 func templatesDeleteTemplateUsage() {
@@ -2934,7 +2939,7 @@ func templatesDeleteTemplateUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates delete-template --id "Dolores nemo nesciunt." --name "Voluptatem incidunt pariatur omnis illum et officiis." --apikey-token "Id qui sed sed qui velit eligendi." --session-token "Quis culpa molestiae eos." --project-slug-input "Omnis sunt nesciunt impedit atque dolor dignissimos."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates delete-template --id "Sapiente et natus sit porro dolor vitae." --name "Qui dolores accusantium soluta qui." --apikey-token "Et qui ea aut ex." --session-token "Laboriosam iusto repellat fugit nesciunt saepe enim." --project-slug-input "Saepe eos sint voluptatem fuga."`)
 }
 
 func templatesRenderTemplateByIDUsage() {
@@ -2963,9 +2968,9 @@ func templatesRenderTemplateByIDUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates render-template-by-id --body '{
       "arguments": {
-         "Qui inventore ea eum.": "Inventore tempora quos sed aut."
+         "Ipsa accusantium corrupti dolores nemo.": "Quia voluptatem."
       }
-   }' --id "Iure in quis." --apikey-token "Ullam at magnam." --session-token "Et sed cumque." --project-slug-input "Expedita laborum."`)
+   }' --id "Pariatur omnis." --apikey-token "Et officiis maxime id qui sed sed." --session-token "Velit eligendi tempora." --project-slug-input "Culpa molestiae eos omnis omnis sunt nesciunt."`)
 }
 
 func templatesRenderTemplateUsage() {
@@ -2992,12 +2997,14 @@ func templatesRenderTemplateUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates render-template --body '{
       "arguments": {
-         "Sed voluptatem commodi et soluta.": "Assumenda possimus."
+         "Laborum nulla asperiores.": "Laboriosam tempora et facilis impedit deserunt.",
+         "Sed aut voluptas iure in quis harum.": "At magnam unde et sed cumque quo.",
+         "Sed voluptas pariatur error excepturi quia est.": "Quas voluptatem molestias dolore."
       },
       "engine": "mustache",
       "kind": "prompt",
-      "prompt": "Est et voluptas eveniet est vero in."
-   }' --apikey-token "Accusamus ullam est et." --session-token "Iusto dicta." --project-slug-input "Ex omnis accusantium."`)
+      "prompt": "Eum voluptas inventore."
+   }' --apikey-token "Nostrum consequuntur sit aperiam repellat voluptates earum." --session-token "Sapiente est et voluptas." --project-slug-input "Est vero in."`)
 }
 
 // toolsUsage displays the usage of the tools command and its subcommands.
@@ -3034,7 +3041,7 @@ func toolsListToolsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `tools list-tools --cursor "Ut cumque dolores odit cum delectus." --limit 12904321 --deployment-id "Et minima beatae sunt et corrupti atque." --session-token "Sed cum." --project-slug-input "Architecto officiis assumenda veritatis dolor."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `tools list-tools --cursor "Iste sint unde." --limit 325827 --deployment-id "Aut et aliquam." --session-token "Molestias impedit aut mollitia eaque." --project-slug-input "Et rerum."`)
 }
 
 // toolsetsUsage displays the usage of the toolsets command and its subcommands.
@@ -3075,16 +3082,15 @@ func toolsetsCreateToolsetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets create-toolset --body '{
-      "default_environment_slug": "lb2",
-      "description": "Quia numquam voluptate nulla explicabo repellendus libero.",
-      "name": "Architecto nihil veritatis libero et laudantium.",
+      "default_environment_slug": "p6w",
+      "description": "Qui praesentium numquam quisquam quisquam et.",
+      "name": "Cumque animi praesentium.",
       "tool_urns": [
-         "Reprehenderit quia.",
-         "Dolorem sequi dolore iste delectus.",
-         "Ab dolorem pariatur dignissimos.",
-         "In officiis."
+         "Voluptate hic quia eius et vel eligendi.",
+         "Repudiandae ipsam cupiditate sunt.",
+         "Laudantium atque."
       ]
-   }' --session-token "Ullam sed explicabo enim consequuntur dignissimos deserunt." --project-slug-input "Qui debitis ut commodi tenetur quis suscipit."`)
+   }' --session-token "Nihil veritatis libero et laudantium." --project-slug-input "Quia numquam voluptate nulla explicabo repellendus libero."`)
 }
 
 func toolsetsListToolsetsUsage() {
@@ -3105,7 +3111,7 @@ func toolsetsListToolsetsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets list-toolsets --session-token "Rem repellendus." --project-slug-input "Laboriosam natus itaque facere et."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets list-toolsets --session-token "Debitis praesentium." --project-slug-input "Quo iusto consequatur velit rerum dicta qui."`)
 }
 
 func toolsetsUpdateToolsetUsage() {
@@ -3131,25 +3137,23 @@ func toolsetsUpdateToolsetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets update-toolset --body '{
-      "custom_domain_id": "Dolores asperiores consequatur qui.",
-      "default_environment_slug": "g1j",
-      "description": "Repudiandae excepturi delectus.",
+      "custom_domain_id": "Est commodi vitae et consequatur doloremque.",
+      "default_environment_slug": "atv",
+      "description": "Porro iste excepturi perspiciatis.",
       "mcp_enabled": false,
       "mcp_is_public": true,
-      "mcp_slug": "v4c",
-      "name": "Nesciunt inventore doloremque.",
+      "mcp_slug": "8hf",
+      "name": "Dolorem minima.",
       "prompt_template_names": [
-         "Sit soluta quisquam.",
-         "Vel qui.",
-         "Architecto at saepe quibusdam."
+         "Doloremque eveniet repudiandae excepturi delectus est quia.",
+         "Alias aut quaerat sit soluta quisquam.",
+         "Vel qui."
       ],
       "tool_urns": [
-         "Iure ut consectetur quis ullam architecto enim.",
-         "Aut eveniet est commodi vitae et consequatur.",
-         "Sequi voluptatem omnis.",
-         "Ut libero repellat incidunt odit."
+         "At saepe.",
+         "Doloremque voluptate iure ut consectetur."
       ]
-   }' --slug "pas" --session-token "Totam explicabo." --project-slug-input "Est et aliquam nihil vel molestiae cumque."`)
+   }' --slug "9t0" --session-token "Libero repellat." --project-slug-input "Odit architecto."`)
 }
 
 func toolsetsDeleteToolsetUsage() {
@@ -3172,7 +3176,7 @@ func toolsetsDeleteToolsetUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets delete-toolset --slug "kzs" --session-token "Mollitia quaerat." --project-slug-input "Quam quis."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets delete-toolset --slug "ym3" --session-token "Ut quisquam accusantium." --project-slug-input "Sint cumque dolorem magni id quis."`)
 }
 
 func toolsetsGetToolsetUsage() {
@@ -3195,7 +3199,7 @@ func toolsetsGetToolsetUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets get-toolset --slug "hjc" --session-token "Cumque repellendus quam sequi." --project-slug-input "Aperiam hic."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets get-toolset --slug "hpi" --session-token "Repellendus facere consequatur et sunt harum fugit." --project-slug-input "Laborum est et accusamus molestias non deserunt."`)
 }
 
 func toolsetsCheckMCPSlugAvailabilityUsage() {
@@ -3218,7 +3222,7 @@ func toolsetsCheckMCPSlugAvailabilityUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets check-mcp-slug-availability --slug "des" --session-token "Ea ab voluptatum quis nemo fugit ut." --project-slug-input "Perferendis vitae culpa."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets check-mcp-slug-availability --slug "skr" --session-token "Rerum et provident." --project-slug-input "Deserunt quo."`)
 }
 
 func toolsetsAddExternalOAuthServerUsage() {
@@ -3245,10 +3249,10 @@ func toolsetsAddExternalOAuthServerUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets add-externaloauth-server --body '{
       "external_oauth_server": {
-         "metadata": "Vel consequuntur et ipsum.",
-         "slug": "es2"
+         "metadata": "Libero eius fugiat voluptatem ex.",
+         "slug": "gxy"
       }
-   }' --slug "87m" --session-token "Sequi expedita veritatis beatae placeat est." --project-slug-input "Quia et sunt velit."`)
+   }' --slug "uix" --session-token "Voluptatem ad debitis velit ab illo." --project-slug-input "Totam odit esse."`)
 }
 
 func toolsetsRemoveOAuthServerUsage() {
@@ -3271,7 +3275,7 @@ func toolsetsRemoveOAuthServerUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets removeoauth-server --slug "2k0" --session-token "Libero aut ipsa qui quis ea quis." --project-slug-input "Ut pariatur est iusto."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets removeoauth-server --slug "l15" --session-token "Enim tempora maiores officiis." --project-slug-input "Rem ut sed dolor provident tempore."`)
 }
 
 // usageUsage displays the usage of the usage command and its subcommands.
@@ -3305,7 +3309,7 @@ func usageGetPeriodUsageUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `usage get-period-usage --session-token "Illo voluptatem aliquid expedita debitis et occaecati." --project-slug-input "Officiis quia ratione aut in nihil in."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `usage get-period-usage --session-token "Velit cupiditate voluptas nemo asperiores." --project-slug-input "Saepe delectus veniam."`)
 }
 
 func usageGetUsageTiersUsage() {
@@ -3343,7 +3347,7 @@ func usageCreateCustomerSessionUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `usage create-customer-session --session-token "Ad reprehenderit sint explicabo aut earum." --project-slug-input "Odit illum blanditiis ea est voluptatum aliquid."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `usage create-customer-session --session-token "Debitis excepturi voluptatem quis unde enim." --project-slug-input "Error ea saepe eius aperiam dolores soluta."`)
 }
 
 func usageCreateCheckoutUsage() {
@@ -3364,7 +3368,7 @@ func usageCreateCheckoutUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `usage create-checkout --session-token "Dicta ratione et est nam illum impedit." --project-slug-input "Et magnam consectetur saepe sed libero."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `usage create-checkout --session-token "Mollitia cum aut non recusandae aut." --project-slug-input "Explicabo facilis."`)
 }
 
 // variationsUsage displays the usage of the variations command and its
@@ -3403,20 +3407,20 @@ func variationsUpsertGlobalUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations upsert-global --body '{
-      "confirm": "session",
-      "confirm_prompt": "Consequatur omnis quidem possimus.",
-      "description": "Necessitatibus a nostrum similique itaque quaerat.",
-      "name": "Quibusdam omnis repellendus reprehenderit dolor molestias.",
-      "src_tool_name": "Sint magni.",
-      "summarizer": "Fuga nisi sed temporibus.",
-      "summary": "Aspernatur necessitatibus debitis quos ut necessitatibus.",
+      "confirm": "always",
+      "confirm_prompt": "Doloribus eligendi.",
+      "description": "Voluptas sunt incidunt dolores at ullam.",
+      "name": "Ex et dolorem sit sit.",
+      "src_tool_name": "Animi expedita deleniti vero.",
+      "summarizer": "Itaque quaerat deserunt ipsa tempora.",
+      "summary": "In voluptate nesciunt ipsum mollitia.",
       "tags": [
-         "Tempora aut dolore.",
-         "Est tenetur.",
-         "Et aut qui nemo.",
-         "Ipsum quisquam aliquid."
+         "Molestiae aliquid sint magni et laborum consequatur.",
+         "Quidem possimus non quibusdam omnis repellendus reprehenderit.",
+         "Molestias beatae aspernatur necessitatibus.",
+         "Quos ut necessitatibus sunt necessitatibus a nostrum."
       ]
-   }' --session-token "Sit assumenda aut error molestias." --apikey-token "Libero qui." --project-slug-input "Facilis et."`)
+   }' --session-token "Dolore occaecati." --apikey-token "Tenetur ad et aut qui." --project-slug-input "Recusandae ipsum quisquam aliquid possimus fuga."`)
 }
 
 func variationsDeleteGlobalUsage() {
@@ -3441,7 +3445,7 @@ func variationsDeleteGlobalUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations delete-global --variation-id "Et consequuntur id quae quia eaque." --session-token "Et tempora quia sunt dolores." --apikey-token "Voluptatem omnis expedita eaque autem." --project-slug-input "Deserunt illo doloribus et voluptate aut."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations delete-global --variation-id "Corrupti et ea vel eius laboriosam." --session-token "Odio facilis nam." --apikey-token "Dolorum placeat error et et consequuntur id." --project-slug-input "Quia eaque deserunt et."`)
 }
 
 func variationsListGlobalUsage() {
@@ -3464,5 +3468,5 @@ func variationsListGlobalUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations list-global --session-token "Provident quis commodi sint alias velit." --apikey-token "Nisi sit praesentium quas et." --project-slug-input "Quia ullam."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations list-global --session-token "Ad necessitatibus aliquid corporis quasi." --apikey-token "Aut maxime ab maxime non error." --project-slug-input "Consequuntur vitae ipsum nemo consequatur."`)
 }

@@ -1,7 +1,7 @@
 package shared
 
 import (
-	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	. "goa.design/goa/v3/dsl"
 )
 
@@ -17,36 +17,30 @@ var ResponseFilter = Type("ResponseFilter", func() {
 	Required("content_types")
 })
 
-var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
+// BaseToolAttributes contains common fields shared by all tool types
+var BaseToolAttributes = Type("BaseToolAttributes", func() {
 	Meta("struct:pkg:path", "types")
+	Meta("type:generate:force")
 
-	Attribute("tool_type", String, func() {
-		Enum(constants.ToolTypeHTTP)
-	})
+	Description("Common attributes shared by all tool types")
 
-	Attribute("id", String, "The ID of the HTTP tool")
+	Attribute("type", String, "The type of the tool - discriminator value")
+
+	Attribute("id", String, "The ID of the tool")
+	Attribute("tool_urn", String, "The URN of this tool")
 	Attribute("project_id", String, "The ID of the project")
 	Attribute("deployment_id", String, "The ID of the deployment")
+
 	Attribute("name", String, "The name of the tool")
 	Attribute("canonical_name", String, "The canonical name of the tool. Will be the same as the name if there is no variation.")
-	Attribute("summary", String, "Summary of the tool")
 	Attribute("description", String, "Description of the tool")
+	Attribute("schema_version", String, "Version of the schema")
+	Attribute("schema", String, "JSON schema for the request")
 
 	Attribute("confirm", String, "Confirmation mode for the tool")
 	Attribute("confirm_prompt", String, "Prompt for the confirmation")
 	Attribute("summarizer", String, "Summarizer for the tool")
-	Attribute("response_filter", ResponseFilter, "Response filter metadata for the tool")
 
-	Attribute("openapiv3_document_id", String, "The ID of the OpenAPI v3 document")
-	Attribute("openapiv3_operation", String, "OpenAPI v3 operation")
-	Attribute("tags", ArrayOf(String), "The tags list for this http tool")
-	Attribute("security", String, "Security requirements for the underlying HTTP endpoint")
-	Attribute("default_server_url", String, "The default server URL for the tool")
-	Attribute("http_method", String, "HTTP method for the request")
-	Attribute("path", String, "Path for the request")
-	Attribute("schema_version", String, "Version of the schema")
-	Attribute("schema", String, "JSON schema for the request")
-	Attribute("package_name", String, "The name of the source package")
 
 	Attribute("created_at", String, func() {
 		Description("The creation date of the tool.")
@@ -59,20 +53,57 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 
 	Attribute("canonical", CanonicalToolAttributes, "The original details of a tool, excluding any variations")
 	Attribute("variation", ToolVariation, "The variation details of a tool. Only includes explicitly varied fields.")
-	Attribute("tool_urn", String, "The URN of this HTTP tool")
 
-	Required("tool_type", "id", "project_id", "deployment_id", "name", "canonical_name", "summary", "description", "confirm", "tags", "http_method", "path", "schema", "tool_urn", "created_at", "updated_at")
+	Required("id", "type", "project_id", "deployment_id", "name", "canonical_name", "description", "confirm", "tool_urn", "created_at", "updated_at")
 })
 
-var HTTPToolDefinitionEntry = Type("HTTPToolDefinitionEntry", func() {
-	Attribute("tool_type", String, func() {
-		Enum(constants.ToolTypeHTTP)
+// HTTPTool represents an HTTP tool with all its attributes
+var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("An HTTP tool")
+
+	Extend(BaseToolAttributes)
+
+	Attribute("summary", String, "Summary of the tool")
+	Attribute("response_filter", ResponseFilter, "Response filter metadata for the tool")
+
+	Attribute("openapiv3_document_id", String, "The ID of the OpenAPI v3 document")
+	Attribute("openapiv3_operation", String, "OpenAPI v3 operation")
+	Attribute("tags", ArrayOf(String), "The tags list for this http tool")
+	Attribute("security", String, "Security requirements for the underlying HTTP endpoint")
+	Attribute("default_server_url", String, "The default server URL for the tool")
+	Attribute("http_method", String, "HTTP method for the request")
+	Attribute("path", String, "Path for the request")
+	Attribute("package_name", String, "The name of the source package")
+
+	Required("summary", "tags", "http_method", "path", "schema")
+})
+
+// Tool is a discriminated union of HTTP tools and prompt templates.
+// Goa generates this with a custom encoding in OpenAPI (Tool/Tool2), but the
+// Go code uses a proper union interface type which is what we want.
+var Tool = Type("Tool", func() {
+	Meta("struct:pkg:path", "types")
+	Description("A polymorphic tool - can be an HTTP tool or a prompt template")
+
+	// WARNING: If you change this, you also need to change the overlay overlays/tool-types.yaml
+	OneOf("tool", func() {
+		Attribute("http_tool", HTTPToolDefinition, "HTTP tool details")
+		Attribute("prompt_template", PromptTemplate, "Prompt template details")
+	})
+})
+
+var ToolEntry = Type("ToolEntry", func() {
+	Attribute("type", String, func() {
+		Enum(string(urn.ToolKindHTTP), string(urn.ToolKindPrompt))
 	})
 
-	Attribute("id", String, "The ID of the HTTP tool")
+	Attribute("id", String, "The ID of the tool")
+	Attribute("tool_urn", String, "The URN of the tool")
 	Attribute("name", String, "The name of the tool")
 
-	Required("tool_type", "id", "name")
+	Required("type", "id", "name", "tool_urn")
 })
 
 var CanonicalToolAttributes = Type("CanonicalToolAttributes", func() {

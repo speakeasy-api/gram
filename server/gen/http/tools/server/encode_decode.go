@@ -9,6 +9,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -251,164 +252,30 @@ func EncodeListToolsError(encoder func(context.Context, http.ResponseWriter) goa
 	}
 }
 
-// marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody builds a
-// value of type *HTTPToolDefinitionResponseBody from a value of type
-// *types.HTTPToolDefinition.
-func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
-	res := &HTTPToolDefinitionResponseBody{
-		ToolType:            v.ToolType,
-		ID:                  v.ID,
-		ProjectID:           v.ProjectID,
-		DeploymentID:        v.DeploymentID,
-		Name:                v.Name,
-		CanonicalName:       v.CanonicalName,
-		Summary:             v.Summary,
-		Description:         v.Description,
-		Confirm:             v.Confirm,
-		ConfirmPrompt:       v.ConfirmPrompt,
-		Summarizer:          v.Summarizer,
-		Openapiv3DocumentID: v.Openapiv3DocumentID,
-		Openapiv3Operation:  v.Openapiv3Operation,
-		Security:            v.Security,
-		DefaultServerURL:    v.DefaultServerURL,
-		HTTPMethod:          v.HTTPMethod,
-		Path:                v.Path,
-		SchemaVersion:       v.SchemaVersion,
-		Schema:              v.Schema,
-		PackageName:         v.PackageName,
-		CreatedAt:           v.CreatedAt,
-		UpdatedAt:           v.UpdatedAt,
-		ToolUrn:             v.ToolUrn,
-	}
-	if v.ResponseFilter != nil {
-		res.ResponseFilter = marshalTypesResponseFilterToResponseFilterResponseBody(v.ResponseFilter)
-	}
-	if v.Tags != nil {
-		res.Tags = make([]string, len(v.Tags))
-		for i, val := range v.Tags {
-			res.Tags[i] = val
+// marshalTypesToolToToolResponseBody builds a value of type *ToolResponseBody
+// from a value of type *types.Tool.
+func marshalTypesToolToToolResponseBody(v *types.Tool) *ToolResponseBody {
+	res := &ToolResponseBody{}
+	if v.Tool != nil {
+		js, _ := json.Marshal(v.Tool)
+		var name string
+		switch v.Tool.(type) {
+		case *types.HTTPToolDefinition:
+			name = "http_tool"
+		case *types.PromptTemplate:
+			name = "prompt_template"
 		}
-	} else {
-		res.Tags = []string{}
-	}
-	if v.Canonical != nil {
-		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
-	}
-	if v.Variation != nil {
-		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
-	}
-
-	return res
-}
-
-// marshalTypesResponseFilterToResponseFilterResponseBody builds a value of
-// type *ResponseFilterResponseBody from a value of type *types.ResponseFilter.
-func marshalTypesResponseFilterToResponseFilterResponseBody(v *types.ResponseFilter) *ResponseFilterResponseBody {
-	if v == nil {
-		return nil
-	}
-	res := &ResponseFilterResponseBody{
-		Type: v.Type,
-	}
-	if v.StatusCodes != nil {
-		res.StatusCodes = make([]string, len(v.StatusCodes))
-		for i, val := range v.StatusCodes {
-			res.StatusCodes[i] = val
+		res.Tool = &struct {
+			// Union type name, one of:
+			// - "http_tool"
+			// - "prompt_template"
+			Type string `form:"Type" json:"Type" xml:"Type"`
+			// JSON encoded union value
+			Value string `form:"Value" json:"Value" xml:"Value"`
+		}{
+			Type:  name,
+			Value: string(js),
 		}
-	} else {
-		res.StatusCodes = []string{}
-	}
-	if v.ContentTypes != nil {
-		res.ContentTypes = make([]string, len(v.ContentTypes))
-		for i, val := range v.ContentTypes {
-			res.ContentTypes[i] = val
-		}
-	} else {
-		res.ContentTypes = []string{}
-	}
-
-	return res
-}
-
-// marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody
-// builds a value of type *CanonicalToolAttributesResponseBody from a value of
-// type *types.CanonicalToolAttributes.
-func marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v *types.CanonicalToolAttributes) *CanonicalToolAttributesResponseBody {
-	if v == nil {
-		return nil
-	}
-	res := &CanonicalToolAttributesResponseBody{
-		VariationID:   v.VariationID,
-		Name:          v.Name,
-		Summary:       v.Summary,
-		Description:   v.Description,
-		Confirm:       v.Confirm,
-		ConfirmPrompt: v.ConfirmPrompt,
-		Summarizer:    v.Summarizer,
-	}
-	if v.Tags != nil {
-		res.Tags = make([]string, len(v.Tags))
-		for i, val := range v.Tags {
-			res.Tags[i] = val
-		}
-	}
-
-	return res
-}
-
-// marshalTypesToolVariationToToolVariationResponseBody builds a value of type
-// *ToolVariationResponseBody from a value of type *types.ToolVariation.
-func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation) *ToolVariationResponseBody {
-	if v == nil {
-		return nil
-	}
-	res := &ToolVariationResponseBody{
-		ID:            v.ID,
-		GroupID:       v.GroupID,
-		SrcToolName:   v.SrcToolName,
-		Confirm:       v.Confirm,
-		ConfirmPrompt: v.ConfirmPrompt,
-		Name:          v.Name,
-		Summary:       v.Summary,
-		Description:   v.Description,
-		Summarizer:    v.Summarizer,
-		CreatedAt:     v.CreatedAt,
-		UpdatedAt:     v.UpdatedAt,
-	}
-	if v.Tags != nil {
-		res.Tags = make([]string, len(v.Tags))
-		for i, val := range v.Tags {
-			res.Tags[i] = val
-		}
-	}
-
-	return res
-}
-
-// marshalTypesPromptTemplateToPromptTemplateResponseBody builds a value of
-// type *PromptTemplateResponseBody from a value of type *types.PromptTemplate.
-func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTemplate) *PromptTemplateResponseBody {
-	res := &PromptTemplateResponseBody{
-		ID:            v.ID,
-		HistoryID:     v.HistoryID,
-		PredecessorID: v.PredecessorID,
-		Name:          string(v.Name),
-		Prompt:        v.Prompt,
-		Description:   v.Description,
-		Arguments:     v.Arguments,
-		Engine:        v.Engine,
-		Kind:          v.Kind,
-		CreatedAt:     v.CreatedAt,
-		UpdatedAt:     v.UpdatedAt,
-		ToolUrn:       v.ToolUrn,
-	}
-	if v.ToolsHint != nil {
-		res.ToolsHint = make([]string, len(v.ToolsHint))
-		for i, val := range v.ToolsHint {
-			res.ToolsHint[i] = val
-		}
-	} else {
-		res.ToolsHint = []string{}
 	}
 
 	return res

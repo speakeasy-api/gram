@@ -14,12 +14,6 @@ import {
   ExternalOAuthServer$outboundSchema,
 } from "./externaloauthserver.js";
 import {
-  HTTPToolDefinition,
-  HTTPToolDefinition$inboundSchema,
-  HTTPToolDefinition$Outbound,
-  HTTPToolDefinition$outboundSchema,
-} from "./httptooldefinition.js";
-import {
   OAuthProxyServer,
   OAuthProxyServer$inboundSchema,
   OAuthProxyServer$Outbound,
@@ -43,6 +37,12 @@ import {
   ServerVariable$Outbound,
   ServerVariable$outboundSchema,
 } from "./servervariable.js";
+import {
+  Tool,
+  Tool$inboundSchema,
+  Tool$Outbound,
+  Tool$outboundSchema,
+} from "./tool.js";
 
 export type Toolset = {
   /**
@@ -66,10 +66,6 @@ export type Toolset = {
    */
   description?: string | undefined;
   externalOauthServer?: ExternalOAuthServer | undefined;
-  /**
-   * The HTTP tools in this toolset
-   */
-  httpTools: Array<HTTPToolDefinition>;
   /**
    * The ID of the toolset
    */
@@ -100,7 +96,7 @@ export type Toolset = {
    */
   projectId: string;
   /**
-   * The prompt templates in this toolset
+   * The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts
    */
   promptTemplates: Array<PromptTemplate>;
   /**
@@ -120,6 +116,10 @@ export type Toolset = {
    */
   toolUrns: Array<string>;
   /**
+   * The tools in this toolset
+   */
+  tools: Array<Tool>;
+  /**
    * When the toolset was last updated.
    */
   updatedAt: Date;
@@ -136,7 +136,6 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     default_environment_slug: z.string().optional(),
     description: z.string().optional(),
     external_oauth_server: ExternalOAuthServer$inboundSchema.optional(),
-    http_tools: z.array(HTTPToolDefinition$inboundSchema),
     id: z.string(),
     mcp_enabled: z.boolean().optional(),
     mcp_is_public: z.boolean().optional(),
@@ -150,6 +149,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     server_variables: z.array(ServerVariable$inboundSchema).optional(),
     slug: z.string(),
     tool_urns: z.array(z.string()),
+    tools: z.array(Tool$inboundSchema),
     updated_at: z.string().datetime({ offset: true }).transform(v =>
       new Date(v)
     ),
@@ -160,7 +160,6 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
       "custom_domain_id": "customDomainId",
       "default_environment_slug": "defaultEnvironmentSlug",
       "external_oauth_server": "externalOauthServer",
-      "http_tools": "httpTools",
       "mcp_enabled": "mcpEnabled",
       "mcp_is_public": "mcpIsPublic",
       "mcp_slug": "mcpSlug",
@@ -183,7 +182,6 @@ export type Toolset$Outbound = {
   default_environment_slug?: string | undefined;
   description?: string | undefined;
   external_oauth_server?: ExternalOAuthServer$Outbound | undefined;
-  http_tools: Array<HTTPToolDefinition$Outbound>;
   id: string;
   mcp_enabled?: boolean | undefined;
   mcp_is_public?: boolean | undefined;
@@ -197,6 +195,7 @@ export type Toolset$Outbound = {
   server_variables?: Array<ServerVariable$Outbound> | undefined;
   slug: string;
   tool_urns: Array<string>;
+  tools: Array<Tool$Outbound>;
   updated_at: string;
 };
 
@@ -212,7 +211,6 @@ export const Toolset$outboundSchema: z.ZodType<
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
   externalOauthServer: ExternalOAuthServer$outboundSchema.optional(),
-  httpTools: z.array(HTTPToolDefinition$outboundSchema),
   id: z.string(),
   mcpEnabled: z.boolean().optional(),
   mcpIsPublic: z.boolean().optional(),
@@ -226,6 +224,7 @@ export const Toolset$outboundSchema: z.ZodType<
   serverVariables: z.array(ServerVariable$outboundSchema).optional(),
   slug: z.string(),
   toolUrns: z.array(z.string()),
+  tools: z.array(Tool$outboundSchema),
   updatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
   return remap$(v, {
@@ -234,7 +233,6 @@ export const Toolset$outboundSchema: z.ZodType<
     customDomainId: "custom_domain_id",
     defaultEnvironmentSlug: "default_environment_slug",
     externalOauthServer: "external_oauth_server",
-    httpTools: "http_tools",
     mcpEnabled: "mcp_enabled",
     mcpIsPublic: "mcp_is_public",
     mcpSlug: "mcp_slug",

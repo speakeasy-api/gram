@@ -64,7 +64,7 @@ type GetInstanceResult struct {
 	// The description of the toolset
 	Description *string
 	// The list of tools
-	Tools []*types.HTTPToolDefinition
+	Tools []*types.Tool
 	// The list of prompt templates
 	PromptTemplates []*types.PromptTemplate
 	// The security variables that are relevant to the toolset

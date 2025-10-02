@@ -29,6 +29,7 @@ import { capitalize, cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   PromptTemplateKind,
+  Tool,
   ToolsetEntry,
 } from "@gram/client/models/components";
 import {
@@ -49,7 +50,6 @@ import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
-import { ToolDefinition, useToolDefinitions } from "../toolsets/types";
 import { useToolifyContext } from "./Toolify";
 import { Block, BlockInner } from "@/components/block";
 
@@ -212,7 +212,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     });
   };
 
-  const tools = useToolDefinitions(toolsetData);
+  const tools = toolsetData?.tools ?? [];
 
   // Ensures that the canonical tool and update function is set for the step
   const makeStep = (step: Step) => {
@@ -225,7 +225,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
 
     const canonicalTool =
       step.canonicalTool ??
-      tools?.find((t) => t.name === step.tool)?.canonicalName;
+      tools.find((t) => t.name === step.tool)?.canonicalName;
 
     if (!canonicalTool) {
       console.error(`Tool ${step.tool} not found`);
@@ -690,7 +690,7 @@ const StepCard = ({
   moveDown,
 }: {
   step: Step;
-  tools: ToolDefinition[];
+  tools: Tool [];
   remove: () => void;
   moveUp?: () => void;
   moveDown?: () => void;
@@ -815,8 +815,8 @@ const ToolSelectPopover = ({
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
-  onSelect: (tool: ToolDefinition | "none") => void;
-  tools: ToolDefinition[];
+  onSelect: (tool: Tool | "none") => void;
+  tools: Tool[];
   children: React.ReactNode;
 }) => {
   const groupedTools = useGroupedTools(tools);

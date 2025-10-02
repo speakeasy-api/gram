@@ -59,10 +59,8 @@ type ListToolsPayload struct {
 type ListToolsResult struct {
 	// The cursor to fetch results from
 	NextCursor *string
-	// The list of HTTP tools
-	HTTPTools []*types.HTTPToolDefinition
-	// The list of prompt templates
-	PromptTemplates []*types.PromptTemplate
+	// The list of tools (polymorphic union of HTTP tools and prompt templates)
+	Tools []*types.Tool
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

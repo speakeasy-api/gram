@@ -7,31 +7,55 @@
 
 package types
 
+// A prompt template
 type PromptTemplate struct {
-	// The ID of the prompt template
-	ID string
 	// The revision tree ID for the prompt template
 	HistoryID string
 	// The previous version of the prompt template to use as predecessor
 	PredecessorID *string
-	// The name of the prompt template
-	Name Slug
 	// The template content
 	Prompt string
-	// The description of the prompt template
-	Description *string
-	// The JSON Schema defining the placeholders found in the prompt template
-	Arguments *string
 	// The template engine
 	Engine string
 	// The kind of prompt the template is used for
 	Kind string
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string
-	// The creation date of the prompt template.
-	CreatedAt string
-	// The last update date of the prompt template.
-	UpdatedAt string
-	// The URN of this prompt template
+	// The type of the tool - discriminator value
+	Type string
+	// The ID of the tool
+	ID string
+	// The URN of this tool
 	ToolUrn string
+	// The ID of the project
+	ProjectID string
+	// The ID of the deployment
+	DeploymentID string
+	// The name of the tool
+	Name string
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName string
+	// Description of the tool
+	Description string
+	// Version of the schema
+	SchemaVersion *string
+	// JSON schema for the request
+	Schema *string
+	// Confirmation mode for the tool
+	Confirm string
+	// Prompt for the confirmation
+	ConfirmPrompt *string
+	// Summarizer for the tool
+	Summarizer *string
+	// The creation date of the tool.
+	CreatedAt string
+	// The last update date of the tool.
+	UpdatedAt string
+	// The original details of a tool, excluding any variations
+	Canonical *CanonicalToolAttributes
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariation
 }
+
+func (*PromptTemplate) toolVal() {}

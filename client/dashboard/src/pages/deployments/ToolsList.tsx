@@ -1,38 +1,25 @@
 import { HttpRoute } from "@/components/http-route";
-import { Badge } from "@/components/ui/badge";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchBar } from "@/components/ui/search-bar";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import { useGroupedHttpTools } from "@/lib/toolNames";
-import { HTTPToolDefinition } from "@gram/client/models/components";
+import { ToolWithDisplayName, useGroupedTools } from "@/lib/toolNames";
 import { useListTools } from "@gram/client/react-query/listTools.js";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
 
-type Tool = HTTPToolDefinition & { displayName: string };
-
-const sourceColumn: Column<{ key: string; tools: Tool[] }> = {
+const sourceColumn: Column<{ key: string; tools: ToolWithDisplayName[] }> = {
   header: "Tool Source",
   key: "name",
   render: (row) => (
     <Stack direction={"horizontal"} gap={4} align={"center"}>
       <Type className="capitalize">{row.key}</Type>
-      {row.tools[0]?.packageName && (
-        <Badge
-          variant={"outline"}
-          size={"sm"}
-          className="text-muted-foreground"
-        >
-          Third Party
-        </Badge>
-      )}
     </Stack>
   ),
   width: "0.5fr",
 };
 
-const groupColumns: Column<{ key: string; tools: Tool[] }>[] = [
+const groupColumns: Column<{ key: string; tools: ToolWithDisplayName[] }>[] = [
   sourceColumn,
   {
     header: "# Tools",
@@ -41,7 +28,7 @@ const groupColumns: Column<{ key: string; tools: Tool[] }>[] = [
   },
 ];
 
-const columns: Column<Tool>[] = [
+const columns: Column<ToolWithDisplayName>[] = [
   {
     header: "Name",
     key: "name",
@@ -50,7 +37,9 @@ const columns: Column<Tool>[] = [
         <Type className="text-wrap break-all font-medium ">
           {row.displayName || row.name}
         </Type>
-        <HttpRoute method={row.httpMethod} path={row.path} />
+        {row.type === "http" && (
+          <HttpRoute method={row.httpMethod} path={row.path} />
+        )}
       </Stack>
     ),
     width: "0.5fr",
@@ -75,10 +64,12 @@ export function ToolsList(props: { deploymentId?: string }) {
   });
   const [search, setSearch] = useState("");
   const [tagFilters, setTagFilters] = useState<string[]>([]);
-  const groupedTools = useGroupedHttpTools(tools?.httpTools ?? []);
+  const groupedTools = useGroupedTools(tools?.tools ?? []);
 
   const tagFilterOptions = groupedTools.flatMap((group) =>
-    group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`)),
+    group.tools.flatMap((t) =>
+      t.type === "http" ? t.tags.map((tag) => `${group.key}/${tag}`) : []
+    )
   );
   const uniqueTags = [...new Set(tagFilterOptions)];
   const tagFilterItems = uniqueTags.map((tag) => ({
@@ -101,11 +92,13 @@ export function ToolsList(props: { deploymentId?: string }) {
       tools: g.tools.filter((t) => {
         if (
           tagFilters.length > 0 &&
-          !t.tags.some((tag) => tagFilters.includes(`${g.key}/${tag}`))
+          !(t.type === "http"
+            ? t.tags.some((tag) => tagFilters.includes(`${g.key}/${tag}`))
+            : false)
         ) {
           return false;
         }
-        const tags = t.tags.join(",");
+        const tags = t.type === "http" ? t.tags.join(",") : "";
         return (
           normalize(t.name).includes(normalize(search)) ||
           normalize(tags).includes(normalize(search))
@@ -123,9 +116,6 @@ export function ToolsList(props: { deploymentId?: string }) {
     }));
 
     toolGroups.sort((a, b) => {
-      // First party tools first
-      if (a.tools[0]?.packageName && !b.tools[0]?.packageName) return 1;
-      if (!a.tools[0]?.packageName && b.tools[0]?.packageName) return -1;
       // Alphabetical
       return b.key.localeCompare(a.key);
     });

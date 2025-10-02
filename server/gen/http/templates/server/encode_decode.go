@@ -1643,18 +1643,26 @@ func EncodeRenderTemplateError(encoder func(context.Context, http.ResponseWriter
 // type *PromptTemplateResponseBody from a value of type *types.PromptTemplate.
 func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTemplate) *PromptTemplateResponseBody {
 	res := &PromptTemplateResponseBody{
-		ID:            v.ID,
 		HistoryID:     v.HistoryID,
 		PredecessorID: v.PredecessorID,
-		Name:          string(v.Name),
 		Prompt:        v.Prompt,
-		Description:   v.Description,
-		Arguments:     v.Arguments,
 		Engine:        v.Engine,
 		Kind:          v.Kind,
+		Type:          v.Type,
+		ID:            v.ID,
+		ToolUrn:       v.ToolUrn,
+		ProjectID:     v.ProjectID,
+		DeploymentID:  v.DeploymentID,
+		Name:          v.Name,
+		CanonicalName: v.CanonicalName,
+		Description:   v.Description,
+		SchemaVersion: v.SchemaVersion,
+		Schema:        v.Schema,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Summarizer:    v.Summarizer,
 		CreatedAt:     v.CreatedAt,
 		UpdatedAt:     v.UpdatedAt,
-		ToolUrn:       v.ToolUrn,
 	}
 	if v.ToolsHint != nil {
 		res.ToolsHint = make([]string, len(v.ToolsHint))
@@ -1663,6 +1671,67 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 		}
 	} else {
 		res.ToolsHint = []string{}
+	}
+	if v.Canonical != nil {
+		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
+	}
+
+	return res
+}
+
+// marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody
+// builds a value of type *CanonicalToolAttributesResponseBody from a value of
+// type *types.CanonicalToolAttributes.
+func marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v *types.CanonicalToolAttributes) *CanonicalToolAttributesResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &CanonicalToolAttributesResponseBody{
+		VariationID:   v.VariationID,
+		Name:          v.Name,
+		Summary:       v.Summary,
+		Description:   v.Description,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Summarizer:    v.Summarizer,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
+	}
+
+	return res
+}
+
+// marshalTypesToolVariationToToolVariationResponseBody builds a value of type
+// *ToolVariationResponseBody from a value of type *types.ToolVariation.
+func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation) *ToolVariationResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ToolVariationResponseBody{
+		ID:            v.ID,
+		GroupID:       v.GroupID,
+		SrcToolName:   v.SrcToolName,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Name:          v.Name,
+		Summary:       v.Summary,
+		Description:   v.Description,
+		Summarizer:    v.Summarizer,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
+		}
 	}
 
 	return res

@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 0c117107352fc7840b5cc3f904251871
+  docChecksum: 890e43ede4deb78572a3b4572de7bd2e
   docVersion: 0.0.1
   speakeasyVersion: 1.613.0
   generationVersion: 2.696.0
-  releaseVersion: 0.12.68
-  configChecksum: 7b18ec35d1be4c593e1d5849a64d9923
+  releaseVersion: 0.13.9
+  configChecksum: 79dbb6a6963fa8e6e17975262de3b575
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -25,6 +25,7 @@ features:
     responseFormat: 0.2.3
     retries: 2.83.0
     sdkHooks: 0.3.0
+    unions: 2.85.11
 generatedFiles:
   - .devcontainer/README.md
   - .devcontainer/devcontainer.json
@@ -85,8 +86,7 @@ generatedFiles:
   - docs/models/components/getprompttemplateresult.md
   - docs/models/components/getslackconnectionresult.md
   - docs/models/components/httptooldefinition.md
-  - docs/models/components/httptooldefinitionentry.md
-  - docs/models/components/httptooldefinitionentrytooltype.md
+  - docs/models/components/httptooldefinitiontype.md
   - docs/models/components/inforesponsebody.md
   - docs/models/components/integration.md
   - docs/models/components/integrationentry.md
@@ -135,10 +135,13 @@ generatedFiles:
   - docs/models/components/setprojectlogoform.md
   - docs/models/components/setprojectlogoresult.md
   - docs/models/components/tierlimits.md
+  - docs/models/components/tool.md
+  - docs/models/components/toolentry.md
+  - docs/models/components/toolentrytype.md
   - docs/models/components/toolset.md
   - docs/models/components/toolsetentry.md
-  - docs/models/components/tooltype.md
   - docs/models/components/toolvariation.md
+  - docs/models/components/type.md
   - docs/models/components/updateenvironmentrequestbody.md
   - docs/models/components/updatepackageform.md
   - docs/models/components/updatepackageresult.md
@@ -523,7 +526,6 @@ generatedFiles:
   - src/models/components/getprompttemplateresult.ts
   - src/models/components/getslackconnectionresult.ts
   - src/models/components/httptooldefinition.ts
-  - src/models/components/httptooldefinitionentry.ts
   - src/models/components/index.ts
   - src/models/components/inforesponsebody.ts
   - src/models/components/integration.ts
@@ -569,6 +571,8 @@ generatedFiles:
   - src/models/components/setprojectlogoform.ts
   - src/models/components/setprojectlogoresult.ts
   - src/models/components/tierlimits.ts
+  - src/models/components/tool.ts
+  - src/models/components/toolentry.ts
   - src/models/components/toolset.ts
   - src/models/components/toolsetentry.ts
   - src/models/components/toolvariation.ts
@@ -1205,7 +1209,7 @@ examples:
         application/json: {"engine": "mustache", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>"}
       responses:
         "200":
-          application/json: {"template": {"created_at": "2023-07-18T03:17:12.882Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2024-11-12T17:29:28.662Z"}}
+          application/json: {"template": {"canonical_name": "<value>", "confirm": "<value>", "created_at": "2023-07-18T03:17:12.882Z", "deployment_id": "<id>", "description": "ugh fathom till jut cannibalise meanwhile kosher compete", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>"], "type": "prompt", "updated_at": "2024-11-12T17:29:28.662Z"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1221,7 +1225,7 @@ examples:
     speakeasy-default-get-template:
       responses:
         "200":
-          application/json: {"template": {"created_at": "2024-12-19T01:56:17.353Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-01-07T00:24:23.441Z"}}
+          application/json: {"template": {"canonical_name": "<value>", "confirm": "<value>", "created_at": "2024-12-19T01:56:17.353Z", "deployment_id": "<id>", "description": "disrespect honesty usually however brief er that fooey", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "type": "prompt", "updated_at": "2025-01-07T00:24:23.441Z"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1253,7 +1257,7 @@ examples:
     speakeasy-default-list-tools:
       responses:
         "200":
-          application/json: {"http_tools": [], "prompt_templates": [{"created_at": "2024-05-03T23:42:06.374Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-07-14T21:01:07.725Z"}]}
+          application/json: {"tools": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1264,7 +1268,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "updated_at": "2024-05-10T06:01:51.541Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2024-05-04T09:55:16.502Z", "deployment_id": "<id>", "description": "once generally morbidity blah apricot concerned", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "type": "prompt", "updated_at": "2025-03-04T14:46:42.255Z"}], "updated_at": "2024-05-10T06:01:51.541Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1286,7 +1290,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "tool_type": "http", "tool_urn": "<value>", "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "updated_at": "2025-12-20T03:22:44.412Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2025-12-20T03:22:44.412Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1309,7 +1313,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"created_at": "2025-09-02T01:42:31.498Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2024-05-27T18:01:12.846Z"}], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-08-07T19:20:12.233Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "deployment_id": "<id>", "description": "mushy comparison messy lady fly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "type": "prompt", "updated_at": "2023-07-28T22:54:49.336Z"}], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2024-01-05T14:46:48.090Z", "deployment_id": "<id>", "description": "strange times spanish at triumphantly up gah", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": [], "type": "prompt", "updated_at": "2023-07-23T19:36:46.872Z"}], "updated_at": "2025-08-07T19:20:12.233Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1352,7 +1356,7 @@ examples:
         application/json: {"id": "<id>"}
       responses:
         "200":
-          application/json: {"template": {"created_at": "2023-08-04T16:54:18.293Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": [], "updated_at": "2023-03-25T20:37:57.210Z"}}
+          application/json: {"template": {"canonical_name": "<value>", "confirm": "<value>", "created_at": "2023-08-04T16:54:18.293Z", "deployment_id": "<id>", "description": "tectonics duh fooey properly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": [], "type": "prompt", "updated_at": "2023-03-25T20:37:57.210Z"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -1443,7 +1447,7 @@ examples:
         application/json: {"external_oauth_server": {"metadata": "<value>", "slug": "<value>"}}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "updated_at": "2025-03-28T09:33:33.851Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2025-03-28T09:33:33.851Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1467,7 +1471,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "updated_at": "2023-10-21T14:21:06.001Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2023-10-21T14:21:06.001Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

@@ -27,11 +27,20 @@ import {
   ToolVariation$outboundSchema,
 } from "./toolvariation.js";
 
-export const ToolType = {
+/**
+ * The type of the tool - discriminator value
+ */
+export const HTTPToolDefinitionType = {
   Http: "http",
 } as const;
-export type ToolType = ClosedEnum<typeof ToolType>;
+/**
+ * The type of the tool - discriminator value
+ */
+export type HTTPToolDefinitionType = ClosedEnum<typeof HTTPToolDefinitionType>;
 
+/**
+ * An HTTP tool
+ */
 export type HTTPToolDefinition = {
   /**
    * The original details of a tool
@@ -70,7 +79,7 @@ export type HTTPToolDefinition = {
    */
   httpMethod: string;
   /**
-   * The ID of the HTTP tool
+   * The ID of the tool
    */
   id: string;
   /**
@@ -125,11 +134,14 @@ export type HTTPToolDefinition = {
    * The tags list for this http tool
    */
   tags: Array<string>;
-  toolType: ToolType;
   /**
-   * The URN of this HTTP tool
+   * The URN of this tool
    */
   toolUrn: string;
+  /**
+   * The type of the tool - discriminator value
+   */
+  type: HTTPToolDefinitionType;
   /**
    * The last update date of the tool.
    */
@@ -138,22 +150,24 @@ export type HTTPToolDefinition = {
 };
 
 /** @internal */
-export const ToolType$inboundSchema: z.ZodNativeEnum<typeof ToolType> = z
-  .nativeEnum(ToolType);
+export const HTTPToolDefinitionType$inboundSchema: z.ZodNativeEnum<
+  typeof HTTPToolDefinitionType
+> = z.nativeEnum(HTTPToolDefinitionType);
 
 /** @internal */
-export const ToolType$outboundSchema: z.ZodNativeEnum<typeof ToolType> =
-  ToolType$inboundSchema;
+export const HTTPToolDefinitionType$outboundSchema: z.ZodNativeEnum<
+  typeof HTTPToolDefinitionType
+> = HTTPToolDefinitionType$inboundSchema;
 
 /**
  * @internal
  * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
  */
-export namespace ToolType$ {
-  /** @deprecated use `ToolType$inboundSchema` instead. */
-  export const inboundSchema = ToolType$inboundSchema;
-  /** @deprecated use `ToolType$outboundSchema` instead. */
-  export const outboundSchema = ToolType$outboundSchema;
+export namespace HTTPToolDefinitionType$ {
+  /** @deprecated use `HTTPToolDefinitionType$inboundSchema` instead. */
+  export const inboundSchema = HTTPToolDefinitionType$inboundSchema;
+  /** @deprecated use `HTTPToolDefinitionType$outboundSchema` instead. */
+  export const outboundSchema = HTTPToolDefinitionType$outboundSchema;
 }
 
 /** @internal */
@@ -185,8 +199,8 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   summarizer: z.string().optional(),
   summary: z.string(),
   tags: z.array(z.string()),
-  tool_type: ToolType$inboundSchema,
   tool_urn: z.string(),
+  type: HTTPToolDefinitionType$inboundSchema,
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   variation: ToolVariation$inboundSchema.optional(),
 }).transform((v) => {
@@ -203,7 +217,6 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
     "project_id": "projectId",
     "response_filter": "responseFilter",
     "schema_version": "schemaVersion",
-    "tool_type": "toolType",
     "tool_urn": "toolUrn",
     "updated_at": "updatedAt",
   });
@@ -234,8 +247,8 @@ export type HTTPToolDefinition$Outbound = {
   summarizer?: string | undefined;
   summary: string;
   tags: Array<string>;
-  tool_type: string;
   tool_urn: string;
+  type: string;
   updated_at: string;
   variation?: ToolVariation$Outbound | undefined;
 };
@@ -269,8 +282,8 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   summarizer: z.string().optional(),
   summary: z.string(),
   tags: z.array(z.string()),
-  toolType: ToolType$outboundSchema,
   toolUrn: z.string(),
+  type: HTTPToolDefinitionType$outboundSchema,
   updatedAt: z.date().transform(v => v.toISOString()),
   variation: ToolVariation$outboundSchema.optional(),
 }).transform((v) => {
@@ -287,7 +300,6 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
     projectId: "project_id",
     responseFilter: "response_filter",
     schemaVersion: "schema_version",
-    toolType: "tool_type",
     toolUrn: "tool_urn",
     updatedAt: "updated_at",
   });

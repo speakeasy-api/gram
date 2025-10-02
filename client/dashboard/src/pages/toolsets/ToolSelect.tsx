@@ -14,12 +14,17 @@ import {
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
-import { useGroupedHttpTools } from "@/lib/toolNames";
+import {
+  filterHttpTools,
+  filterPromptTools,
+  ToolWithDisplayName,
+  useGroupedHttpTools,
+} from "@/lib/toolNames";
 import { useRoutes } from "@/routes";
 import {
   HTTPToolDefinition,
   PromptTemplate,
-  PromptTemplateKind,
+  Tool,
 } from "@gram/client/models/components";
 import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
@@ -31,9 +36,7 @@ import { onboardingStepStorageKeys } from "../home/Home";
 import { MustacheHighlight } from "../toolBuilder/ToolBuilder";
 import { ToolsetHeader } from "./ToolsetHeader";
 
-type Tool = HTTPToolDefinition & { displayName: string };
-
-type ToggleableTool = Tool & {
+type ToggleableTool = ToolWithDisplayName & {
   enabled: boolean;
   setEnabled: (enabled: boolean) => void;
 };
@@ -45,27 +48,18 @@ type ToggleableToolGroup = {
   tools: ToggleableTool[];
 };
 
-const sourceColumn: Column<{ key: string; tools: Tool[] }> = {
+const sourceColumn: Column<{ key: string; tools: ToolWithDisplayName[] }> = {
   header: "Tool Source",
   key: "name",
   render: (row) => (
     <Stack direction={"horizontal"} gap={4} align={"center"}>
       <Type className="capitalize">{row.key}</Type>
-      {row.tools[0]?.packageName && (
-        <Badge
-          variant={"outline"}
-          size={"sm"}
-          className="text-muted-foreground"
-        >
-          Third Party
-        </Badge>
-      )}
     </Stack>
   ),
   width: "0.5fr",
 };
 
-const groupColumns: Column<{ key: string; tools: Tool[] }>[] = [
+const groupColumns: Column<{ key: string; tools: ToolWithDisplayName[] }>[] = [
   sourceColumn,
   {
     header: "# Tools",
@@ -118,7 +112,7 @@ const groupColumnsToggleable: Column<ToggleableToolGroup>[] = [
   },
 ];
 
-const columns: Column<Tool>[] = [
+const columns: Column<ToolWithDisplayName>[] = [
   {
     header: "Name",
     key: "name",
@@ -127,7 +121,9 @@ const columns: Column<Tool>[] = [
         <Type className="text-wrap break-all font-medium ">
           {row.displayName || row.name}
         </Type>
-        <HttpRoute method={row.httpMethod} path={row.path} />
+        {row.type === "http" && (
+          <HttpRoute method={row.httpMethod} path={row.path} />
+        )}
       </Stack>
     ),
     width: "0.5fr",
@@ -189,15 +185,14 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     { enabled: !!toolsetSlug }
   );
   const {
-    data: { httpTools: tools, promptTemplates } = {
+    data: { tools } = {
       httpTools: [],
       promptTemplates: [],
     },
     isLoading: isLoadingTools,
   } = useListTools();
-  const customTools = promptTemplates.filter(
-    (t: PromptTemplate) => t.kind === PromptTemplateKind.HigherOrderTool
-  );
+  const httpTools = filterHttpTools(tools);
+  const customTools = filterPromptTools(tools);
 
   const [selectedToolUrns, setSelectedToolUrns] = useState<string[]>([]);
   const selectedToolUrnsRef = useRef<string[]>([]);
@@ -276,7 +271,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     });
   };
 
-  const groupedTools = useGroupedHttpTools(tools ?? []);
+  const groupedTools = useGroupedHttpTools(httpTools ?? []);
 
   const tagFilterOptions = groupedTools.flatMap((group) =>
     group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`))
@@ -402,8 +397,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
             {customTools?.map((template) => (
               <CustomToolCard
                 template={template}
-                currentTools={toolset?.httpTools ?? []}
-                currentTemplates={toolset?.promptTemplates ?? []}
+                currentTools={toolset?.tools ?? []}
                 toggleEnabled={() => toggleTemplateEnabled(template.toolUrn)}
               />
             ))}
@@ -422,8 +416,8 @@ export function ToolsTable({
 }: {
   tools: HTTPToolDefinition[];
   isLoading: boolean;
-  additionalColumns?: Column<Tool>[];
-  onRowClick?: (row: Tool) => void;
+  additionalColumns?: Column<ToolWithDisplayName>[];
+  onRowClick?: (row: ToolWithDisplayName) => void;
 }) {
   const toolGroups = useGroupedHttpTools(tools);
 
@@ -453,12 +447,10 @@ export function ToolsTable({
 function CustomToolCard({
   template,
   currentTools,
-  currentTemplates,
   toggleEnabled,
 }: {
   template: PromptTemplate;
-  currentTools: HTTPToolDefinition[];
-  currentTemplates: PromptTemplate[];
+  currentTools: Tool[];
   toggleEnabled: () => void;
 }) {
   const { data: tools } = useListTools();
@@ -466,8 +458,8 @@ function CustomToolCard({
   const isToolInToolset = (t: string) =>
     currentTools.some((t2) => t2.name === t);
 
-  const templateIsInToolset = currentTemplates.some(
-    (t) => t.name === template.name
+  const templateIsInToolset = currentTools.some(
+    (t) => t.toolUrn === template.toolUrn
   );
 
   const allToolsAvailable = template.toolsHint.every(isToolInToolset);
@@ -484,9 +476,7 @@ function CustomToolCard({
   );
 
   const variedNames = template.toolsHint.map(
-    (t) =>
-      tools?.httpTools.find((t2: HTTPToolDefinition) => t2.canonicalName === t)
-        ?.name ?? t
+    (t) => tools?.tools.find((t2: Tool) => t2.canonicalName === t)?.name ?? t
   );
 
   const badge = allToolsAvailable ? (

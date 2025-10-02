@@ -7,10 +7,9 @@
 
 package types
 
-type HTTPToolDefinitionEntry struct {
-	ToolType string
-	// The ID of the HTTP tool
-	ID string
-	// The name of the tool
-	Name string
+// A polymorphic tool - can be an HTTP tool or a prompt template
+type Tool struct {
+	Tool interface {
+		toolVal()
+	}
 }

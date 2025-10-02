@@ -8,14 +8,16 @@ import { Toolset } from "@gram/client/models/components";
 let value: Toolset = {
   accountType: "<value>",
   createdAt: new Date("2025-09-03T11:41:50.334Z"),
-  httpTools: [],
   id: "<id>",
   name: "<value>",
   organizationId: "<id>",
   projectId: "<id>",
   promptTemplates: [],
   slug: "<value>",
-  toolUrns: [],
+  toolUrns: [
+    "<value 1>",
+  ],
+  tools: [],
   updatedAt: new Date("2024-06-10T16:31:29.362Z"),
 };
 ```
@@ -30,7 +32,6 @@ let value: Toolset = {
 | `defaultEnvironmentSlug`                                                                      | *string*                                                                                      | :heavy_minus_sign:                                                                            | A short url-friendly label that uniquely identifies a resource.                               |
 | `description`                                                                                 | *string*                                                                                      | :heavy_minus_sign:                                                                            | Description of the toolset                                                                    |
 | `externalOauthServer`                                                                         | [components.ExternalOAuthServer](../../models/components/externaloauthserver.md)              | :heavy_minus_sign:                                                                            | N/A                                                                                           |
-| `httpTools`                                                                                   | [components.HTTPToolDefinition](../../models/components/httptooldefinition.md)[]              | :heavy_check_mark:                                                                            | The HTTP tools in this toolset                                                                |
 | `id`                                                                                          | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the toolset                                                                         |
 | `mcpEnabled`                                                                                  | *boolean*                                                                                     | :heavy_minus_sign:                                                                            | Whether the toolset is enabled for MCP                                                        |
 | `mcpIsPublic`                                                                                 | *boolean*                                                                                     | :heavy_minus_sign:                                                                            | Whether the toolset is public in MCP                                                          |
@@ -39,9 +40,10 @@ let value: Toolset = {
 | `oauthProxyServer`                                                                            | [components.OAuthProxyServer](../../models/components/oauthproxyserver.md)                    | :heavy_minus_sign:                                                                            | N/A                                                                                           |
 | `organizationId`                                                                              | *string*                                                                                      | :heavy_check_mark:                                                                            | The organization ID this toolset belongs to                                                   |
 | `projectId`                                                                                   | *string*                                                                                      | :heavy_check_mark:                                                                            | The project ID this toolset belongs to                                                        |
-| `promptTemplates`                                                                             | [components.PromptTemplate](../../models/components/prompttemplate.md)[]                      | :heavy_check_mark:                                                                            | The prompt templates in this toolset                                                          |
+| `promptTemplates`                                                                             | [components.PromptTemplate](../../models/components/prompttemplate.md)[]                      | :heavy_check_mark:                                                                            | The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts     |
 | `securityVariables`                                                                           | [components.SecurityVariable](../../models/components/securityvariable.md)[]                  | :heavy_minus_sign:                                                                            | The security variables that are relevant to the toolset                                       |
 | `serverVariables`                                                                             | [components.ServerVariable](../../models/components/servervariable.md)[]                      | :heavy_minus_sign:                                                                            | The server variables that are relevant to the toolset                                         |
 | `slug`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | A short url-friendly label that uniquely identifies a resource.                               |
 | `toolUrns`                                                                                    | *string*[]                                                                                    | :heavy_check_mark:                                                                            | The tool URNs in this toolset                                                                 |
+| `tools`                                                                                       | *components.Tool*[]                                                                           | :heavy_check_mark:                                                                            | The tools in this toolset                                                                     |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | When the toolset was last updated.                                                            |

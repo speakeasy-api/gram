@@ -8,6 +8,18 @@ import { safeParse } from "../../lib/schemas.js";
 import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  CanonicalToolAttributes,
+  CanonicalToolAttributes$inboundSchema,
+  CanonicalToolAttributes$Outbound,
+  CanonicalToolAttributes$outboundSchema,
+} from "./canonicaltoolattributes.js";
+import {
+  ToolVariation,
+  ToolVariation$inboundSchema,
+  ToolVariation$Outbound,
+  ToolVariation$outboundSchema,
+} from "./toolvariation.js";
 
 /**
  * The template engine
@@ -32,19 +44,49 @@ export const PromptTemplateKind = {
  */
 export type PromptTemplateKind = ClosedEnum<typeof PromptTemplateKind>;
 
+/**
+ * The type of the tool - discriminator value
+ */
+export const Type = {
+  Prompt: "prompt",
+} as const;
+/**
+ * The type of the tool - discriminator value
+ */
+export type Type = ClosedEnum<typeof Type>;
+
+/**
+ * A prompt template
+ */
 export type PromptTemplate = {
   /**
-   * The JSON Schema defining the placeholders found in the prompt template
+   * The original details of a tool
    */
-  arguments?: string | undefined;
+  canonical?: CanonicalToolAttributes | undefined;
   /**
-   * The creation date of the prompt template.
+   * The canonical name of the tool. Will be the same as the name if there is no variation.
+   */
+  canonicalName: string;
+  /**
+   * Confirmation mode for the tool
+   */
+  confirm: string;
+  /**
+   * Prompt for the confirmation
+   */
+  confirmPrompt?: string | undefined;
+  /**
+   * The creation date of the tool.
    */
   createdAt: Date;
   /**
-   * The description of the prompt template
+   * The ID of the deployment
    */
-  description?: string | undefined;
+  deploymentId: string;
+  /**
+   * Description of the tool
+   */
+  description: string;
   /**
    * The template engine
    */
@@ -54,7 +96,7 @@ export type PromptTemplate = {
    */
   historyId: string;
   /**
-   * The ID of the prompt template
+   * The ID of the tool
    */
   id: string;
   /**
@@ -62,7 +104,7 @@ export type PromptTemplate = {
    */
   kind: PromptTemplateKind;
   /**
-   * A short url-friendly label that uniquely identifies a resource.
+   * The name of the tool
    */
   name: string;
   /**
@@ -70,11 +112,27 @@ export type PromptTemplate = {
    */
   predecessorId?: string | undefined;
   /**
+   * The ID of the project
+   */
+  projectId: string;
+  /**
    * The template content
    */
   prompt: string;
   /**
-   * The URN of this prompt template
+   * JSON schema for the request
+   */
+  schema?: string | undefined;
+  /**
+   * Version of the schema
+   */
+  schemaVersion?: string | undefined;
+  /**
+   * Summarizer for the tool
+   */
+  summarizer?: string | undefined;
+  /**
+   * The URN of this tool
    */
   toolUrn: string;
   /**
@@ -82,9 +140,14 @@ export type PromptTemplate = {
    */
   toolsHint: Array<string>;
   /**
-   * The last update date of the prompt template.
+   * The type of the tool - discriminator value
+   */
+  type: Type;
+  /**
+   * The last update date of the tool.
    */
   updatedAt: Date;
+  variation?: ToolVariation | undefined;
 };
 
 /** @internal */
@@ -128,29 +191,64 @@ export namespace PromptTemplateKind$ {
 }
 
 /** @internal */
+export const Type$inboundSchema: z.ZodNativeEnum<typeof Type> = z.nativeEnum(
+  Type,
+);
+
+/** @internal */
+export const Type$outboundSchema: z.ZodNativeEnum<typeof Type> =
+  Type$inboundSchema;
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace Type$ {
+  /** @deprecated use `Type$inboundSchema` instead. */
+  export const inboundSchema = Type$inboundSchema;
+  /** @deprecated use `Type$outboundSchema` instead. */
+  export const outboundSchema = Type$outboundSchema;
+}
+
+/** @internal */
 export const PromptTemplate$inboundSchema: z.ZodType<
   PromptTemplate,
   z.ZodTypeDef,
   unknown
 > = z.object({
-  arguments: z.string().optional(),
+  canonical: CanonicalToolAttributes$inboundSchema.optional(),
+  canonical_name: z.string(),
+  confirm: z.string(),
+  confirm_prompt: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
-  description: z.string().optional(),
+  deployment_id: z.string(),
+  description: z.string(),
   engine: Engine$inboundSchema,
   history_id: z.string(),
   id: z.string(),
   kind: PromptTemplateKind$inboundSchema,
   name: z.string(),
   predecessor_id: z.string().optional(),
+  project_id: z.string(),
   prompt: z.string(),
+  schema: z.string().optional(),
+  schema_version: z.string().optional(),
+  summarizer: z.string().optional(),
   tool_urn: z.string(),
   tools_hint: z.array(z.string()),
+  type: Type$inboundSchema,
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
+  variation: ToolVariation$inboundSchema.optional(),
 }).transform((v) => {
   return remap$(v, {
+    "canonical_name": "canonicalName",
+    "confirm_prompt": "confirmPrompt",
     "created_at": "createdAt",
+    "deployment_id": "deploymentId",
     "history_id": "historyId",
     "predecessor_id": "predecessorId",
+    "project_id": "projectId",
+    "schema_version": "schemaVersion",
     "tool_urn": "toolUrn",
     "tools_hint": "toolsHint",
     "updated_at": "updatedAt",
@@ -159,19 +257,29 @@ export const PromptTemplate$inboundSchema: z.ZodType<
 
 /** @internal */
 export type PromptTemplate$Outbound = {
-  arguments?: string | undefined;
+  canonical?: CanonicalToolAttributes$Outbound | undefined;
+  canonical_name: string;
+  confirm: string;
+  confirm_prompt?: string | undefined;
   created_at: string;
-  description?: string | undefined;
+  deployment_id: string;
+  description: string;
   engine: string;
   history_id: string;
   id: string;
   kind: string;
   name: string;
   predecessor_id?: string | undefined;
+  project_id: string;
   prompt: string;
+  schema?: string | undefined;
+  schema_version?: string | undefined;
+  summarizer?: string | undefined;
   tool_urn: string;
   tools_hint: Array<string>;
+  type: string;
   updated_at: string;
+  variation?: ToolVariation$Outbound | undefined;
 };
 
 /** @internal */
@@ -180,24 +288,39 @@ export const PromptTemplate$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   PromptTemplate
 > = z.object({
-  arguments: z.string().optional(),
+  canonical: CanonicalToolAttributes$outboundSchema.optional(),
+  canonicalName: z.string(),
+  confirm: z.string(),
+  confirmPrompt: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),
-  description: z.string().optional(),
+  deploymentId: z.string(),
+  description: z.string(),
   engine: Engine$outboundSchema,
   historyId: z.string(),
   id: z.string(),
   kind: PromptTemplateKind$outboundSchema,
   name: z.string(),
   predecessorId: z.string().optional(),
+  projectId: z.string(),
   prompt: z.string(),
+  schema: z.string().optional(),
+  schemaVersion: z.string().optional(),
+  summarizer: z.string().optional(),
   toolUrn: z.string(),
   toolsHint: z.array(z.string()),
+  type: Type$outboundSchema,
   updatedAt: z.date().transform(v => v.toISOString()),
+  variation: ToolVariation$outboundSchema.optional(),
 }).transform((v) => {
   return remap$(v, {
+    canonicalName: "canonical_name",
+    confirmPrompt: "confirm_prompt",
     createdAt: "created_at",
+    deploymentId: "deployment_id",
     historyId: "history_id",
     predecessorId: "predecessor_id",
+    projectId: "project_id",
+    schemaVersion: "schema_version",
     toolUrn: "tool_urn",
     toolsHint: "tools_hint",
     updatedAt: "updated_at",

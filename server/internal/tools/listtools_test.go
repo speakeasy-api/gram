@@ -99,34 +99,45 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 	require.NoError(t, err, "list tools")
 
 	// Verify response structure
-	require.NotNil(t, result.HTTPTools, "http tools should not be nil")
-	require.NotNil(t, result.PromptTemplates, "prompt templates should not be nil")
-	require.GreaterOrEqual(t, len(result.HTTPTools), 1, "should have at least one http tool")
-	require.Len(t, result.PromptTemplates, 2, "should have exactly 2 prompt templates")
+	require.NotNil(t, result.Tools, "tools should not be nil")
+	require.GreaterOrEqual(t, len(result.Tools), 3, "should have at least 3 tools (1+ HTTP, 2 templates)")
 
-	// Verify HTTP tool structure
-	tool := result.HTTPTools[0]
-	require.NotEmpty(t, tool.ID, "tool ID should not be empty")
-	require.Equal(t, deployment.Deployment.ID, tool.DeploymentID, "deployment ID should match")
-	require.NotEmpty(t, tool.Name, "tool name should not be empty")
-	require.NotEmpty(t, tool.HTTPMethod, "HTTP method should not be empty")
-	require.NotEmpty(t, tool.Path, "path should not be empty")
-	require.NotEmpty(t, tool.CreatedAt, "created at should not be empty")
-	require.NotEmpty(t, tool.UpdatedAt, "updated at should not be empty")
-
-	// Verify prompt template structure
+	// Count HTTP tools and prompt templates
+	httpToolCount := 0
+	templateCount := 0
 	templateIDs := map[string]bool{
 		template1.Template.ID: true,
 		template2.Template.ID: true,
 	}
-	for _, tpl := range result.PromptTemplates {
-		require.NotEmpty(t, tpl.ID, "template ID should not be empty")
-		require.True(t, templateIDs[tpl.ID], "template ID should match one of the created templates")
-		require.NotEmpty(t, tpl.Name, "template name should not be empty")
-		require.NotEmpty(t, tpl.Prompt, "template prompt should not be empty")
-		require.NotEmpty(t, tpl.CreatedAt, "template created at should not be empty")
-		require.NotEmpty(t, tpl.UpdatedAt, "template updated at should not be empty")
+
+	for _, tool := range result.Tools {
+		require.NotNil(t, tool.Type, "tool type should not be nil")
+
+		switch toolType := tool.Type.(type) {
+		case *types.HTTPToolDefinition:
+			httpToolCount++
+			require.NotEmpty(t, toolType.ID, "tool ID should not be empty")
+			require.Equal(t, deployment.Deployment.ID, toolType.DeploymentID, "deployment ID should match")
+			require.NotEmpty(t, toolType.Name, "tool name should not be empty")
+			require.NotEmpty(t, toolType.HTTPMethod, "HTTP method should not be empty")
+			require.NotEmpty(t, toolType.Path, "path should not be empty")
+			require.NotEmpty(t, toolType.CreatedAt, "created at should not be empty")
+			require.NotEmpty(t, toolType.UpdatedAt, "updated at should not be empty")
+		case *types.PromptTemplate:
+			templateCount++
+			require.NotEmpty(t, toolType.ID, "template ID should not be empty")
+			require.True(t, templateIDs[toolType.ID], "template ID should match one of the created templates")
+			require.NotEmpty(t, toolType.Name, "template name should not be empty")
+			require.NotEmpty(t, toolType.Prompt, "template prompt should not be empty")
+			require.NotEmpty(t, toolType.CreatedAt, "template created at should not be empty")
+			require.NotEmpty(t, toolType.UpdatedAt, "template updated at should not be empty")
+		default:
+			t.Fatalf("unexpected tool type: %T", tool.Type)
+		}
 	}
+
+	require.GreaterOrEqual(t, httpToolCount, 1, "should have at least one http tool")
+	require.Equal(t, 2, templateCount, "should have exactly 2 prompt templates")
 }
 
 func TestToolsService_ListTools_EmptyList(t *testing.T) {
@@ -144,10 +155,8 @@ func TestToolsService_ListTools_EmptyList(t *testing.T) {
 		Limit:            nil,
 	})
 	require.NoError(t, err, "should not error when no tools exist")
-	require.NotNil(t, result.HTTPTools, "http tools should not be nil")
-	require.NotNil(t, result.PromptTemplates, "prompt templates should not be nil")
-	require.Empty(t, result.HTTPTools, "http tools should be empty when no tools exist")
-	require.Empty(t, result.PromptTemplates, "prompt templates should be empty when no templates exist")
+	require.NotNil(t, result.Tools, "tools should not be nil")
+	require.Empty(t, result.Tools, "tools should be empty when no tools exist")
 	require.Nil(t, result.NextCursor, "next cursor should be nil for empty results")
 }
 
@@ -207,7 +216,7 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 
 	limit := conv.Ptr[int32](4)
 
-	// Get first page - with the GitHub API fixture we should definitely get a cursor
+	// Get first page - with enough tools we should get a cursor
 	firstPage, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
 		Cursor:           nil,
 		DeploymentID:     nil,
@@ -216,8 +225,8 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 		Limit:            limit,
 	})
 	require.NoError(t, err, "get first page of tools")
-	require.NotNil(t, firstPage.HTTPTools, "first page http tools should not be nil")
-	require.Len(t, firstPage.HTTPTools, int(*limit), "should have at least %d http tools", *limit)
+	require.NotNil(t, firstPage.Tools, "first page tools should not be nil")
+	require.Len(t, firstPage.Tools, int(*limit), "should have exactly %d tools", *limit)
 	require.NotNil(t, firstPage.NextCursor, "should have a next cursor with this many tools")
 
 	// Test pagination with the cursor
@@ -229,16 +238,30 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 		Limit:            limit,
 	})
 	require.NoError(t, err, "get second page of tools")
-	require.NotNil(t, secondPage.HTTPTools, "second page http tools should not be nil")
+	require.NotNil(t, secondPage.Tools, "second page tools should not be nil")
 
 	// Verify the pages contain different tools
 	firstPageIDs := make(map[string]bool)
-	for _, tool := range firstPage.HTTPTools {
-		firstPageIDs[tool.ID] = true
+	for _, tool := range firstPage.Tools {
+		var id string
+		switch toolType := tool.Type.(type) {
+		case *types.HTTPToolDefinition:
+			id = toolType.ID
+		case *types.PromptTemplate:
+			id = toolType.ID
+		}
+		firstPageIDs[id] = true
 	}
 
-	for _, tool := range secondPage.HTTPTools {
-		require.False(t, firstPageIDs[tool.ID], "second page should not contain tools from first page")
+	for _, tool := range secondPage.Tools {
+		var id string
+		switch toolType := tool.Type.(type) {
+		case *types.HTTPToolDefinition:
+			id = toolType.ID
+		case *types.PromptTemplate:
+			id = toolType.ID
+		}
+		require.False(t, firstPageIDs[id], "second page should not contain tools from first page")
 	}
 }
 
@@ -323,13 +346,17 @@ func TestToolsService_ListTools_WithDeploymentID(t *testing.T) {
 		Limit:            nil,
 	})
 	require.NoError(t, err, "list tools for first deployment")
-	require.NotNil(t, result1.HTTPTools, "http tools should not be nil")
-	require.GreaterOrEqual(t, len(result1.HTTPTools), 1, "should have at least one http tool")
+	require.NotNil(t, result1.Tools, "tools should not be nil")
 
-	// Verify all tools belong to the first deployment
-	for _, tool := range result1.HTTPTools {
-		require.Equal(t, deployment1.Deployment.ID, tool.DeploymentID, "all http tools should belong to first deployment")
+	// Count HTTP tools and verify they belong to first deployment
+	httpToolCount := 0
+	for _, tool := range result1.Tools {
+		if httpTool, ok := tool.Type.(*types.HTTPToolDefinition); ok {
+			httpToolCount++
+			require.Equal(t, deployment1.Deployment.ID, httpTool.DeploymentID, "all http tools should belong to first deployment")
+		}
 	}
+	require.GreaterOrEqual(t, httpToolCount, 1, "should have at least one http tool")
 
 	// Test ListTools filtered by second deployment
 	result2, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
@@ -340,13 +367,17 @@ func TestToolsService_ListTools_WithDeploymentID(t *testing.T) {
 		Limit:            nil,
 	})
 	require.NoError(t, err, "list tools for second deployment")
-	require.NotNil(t, result2.HTTPTools, "http tools should not be nil")
-	require.GreaterOrEqual(t, len(result2.HTTPTools), 1, "should have at least one http tool")
+	require.NotNil(t, result2.Tools, "tools should not be nil")
 
-	// Verify all tools belong to the second deployment
-	for _, tool := range result2.HTTPTools {
-		require.Equal(t, deployment2.Deployment.ID, tool.DeploymentID, "all http tools should belong to second deployment")
+	// Count HTTP tools and verify they belong to second deployment
+	httpToolCount = 0
+	for _, tool := range result2.Tools {
+		if httpTool, ok := tool.Type.(*types.HTTPToolDefinition); ok {
+			httpToolCount++
+			require.Equal(t, deployment2.Deployment.ID, httpTool.DeploymentID, "all http tools should belong to second deployment")
+		}
 	}
+	require.GreaterOrEqual(t, httpToolCount, 1, "should have at least one http tool")
 }
 
 func TestToolsService_ListTools_InvalidCursor(t *testing.T) {
@@ -457,8 +488,7 @@ func TestToolsService_ListTools_ValidCursor(t *testing.T) {
 		Limit:            nil,
 	})
 	require.NoError(t, err, "should not error with valid cursor format")
-	require.NotNil(t, result.HTTPTools, "http tools should not be nil")
-	require.NotNil(t, result.PromptTemplates, "prompt templates should not be nil")
+	require.NotNil(t, result.Tools, "tools should not be nil")
 }
 
 func TestToolsService_ListTools_VerifyToolFields(t *testing.T) {
@@ -510,29 +540,32 @@ func TestToolsService_ListTools_VerifyToolFields(t *testing.T) {
 		Limit:            nil,
 	})
 	require.NoError(t, err, "list tools")
-	require.NotNil(t, result.HTTPTools, "http tools should not be nil")
-	require.NotNil(t, result.PromptTemplates, "prompt templates should not be nil")
-	require.GreaterOrEqual(t, len(result.HTTPTools), 1, "should have at least one http tool")
+	require.NotNil(t, result.Tools, "tools should not be nil")
 
-	// Verify detailed tool structure
-	for _, tool := range result.HTTPTools {
-		require.NotEmpty(t, tool.ID, "tool ID should not be empty")
-		require.Equal(t, deployment.Deployment.ID, tool.DeploymentID, "deployment ID should match")
-		require.NotEmpty(t, tool.ProjectID, "project ID should not be empty")
-		require.NotEmpty(t, tool.Name, "tool name should not be empty")
-		require.NotEmpty(t, tool.CanonicalName, "canonical name should not be empty")
-		require.NotEmpty(t, tool.HTTPMethod, "HTTP method should not be empty")
-		require.NotEmpty(t, tool.Path, "path should not be empty")
-		require.NotEmpty(t, tool.CreatedAt, "created at should not be empty")
-		require.NotEmpty(t, tool.UpdatedAt, "updated at should not be empty")
-		require.NotNil(t, tool.Openapiv3DocumentID, "openapi document ID should not be nil")
-		require.NotNil(t, tool.Openapiv3Operation, "openapi operation should not be nil")
-		require.NotNil(t, tool.SchemaVersion, "schema version should not be nil")
-		require.NotEmpty(t, tool.Schema, "schema should not be empty")
+	// Count and verify HTTP tools
+	httpToolCount := 0
+	for _, tool := range result.Tools {
+		if httpTool, ok := tool.Type.(*types.HTTPToolDefinition); ok {
+			httpToolCount++
+			require.NotEmpty(t, httpTool.ID, "tool ID should not be empty")
+			require.Equal(t, deployment.Deployment.ID, httpTool.DeploymentID, "deployment ID should match")
+			require.NotEmpty(t, httpTool.ProjectID, "project ID should not be empty")
+			require.NotEmpty(t, httpTool.Name, "tool name should not be empty")
+			require.NotEmpty(t, httpTool.CanonicalName, "canonical name should not be empty")
+			require.NotEmpty(t, httpTool.HTTPMethod, "HTTP method should not be empty")
+			require.NotEmpty(t, httpTool.Path, "path should not be empty")
+			require.NotEmpty(t, httpTool.CreatedAt, "created at should not be empty")
+			require.NotEmpty(t, httpTool.UpdatedAt, "updated at should not be empty")
+			require.NotNil(t, httpTool.Openapiv3DocumentID, "openapi document ID should not be nil")
+			require.NotNil(t, httpTool.Openapiv3Operation, "openapi operation should not be nil")
+			require.NotNil(t, httpTool.SchemaVersion, "schema version should not be nil")
+			require.NotEmpty(t, httpTool.Schema, "schema should not be empty")
 
-		// Verify that confirm is a valid value
-		require.Contains(t, []string{"", "never", "always", "dangerous"}, tool.Confirm, "confirm should be a valid value")
+			// Verify that confirm is a valid value
+			require.Contains(t, []string{"", "never", "always", "dangerous"}, httpTool.Confirm, "confirm should be a valid value")
+		}
 	}
+	require.GreaterOrEqual(t, httpToolCount, 1, "should have at least one http tool")
 }
 
 func TestToolsService_ListTools_MultipleDeployments(t *testing.T) {
@@ -650,12 +683,15 @@ func TestToolsService_ListTools_MultipleDeployments(t *testing.T) {
 		Limit:            nil,
 	})
 	require.NoError(t, err, "list all tools")
-	require.NotNil(t, result.HTTPTools, "http tools should not be nil")
-	require.NotNil(t, result.PromptTemplates, "prompt templates should not be nil")
-	require.GreaterOrEqual(t, len(result.HTTPTools), 3, "should have at least 3 http tools")
+	require.NotNil(t, result.Tools, "tools should not be nil")
 
-	// Verify only tools from last deployment are returned
-	for _, tool := range result.HTTPTools {
-		require.Equal(t, tool.DeploymentID, deployments[2].Deployment.ID, "all http tools should belong to the last deployment")
+	// Count HTTP tools and verify they belong to the last deployment
+	httpToolCount := 0
+	for _, tool := range result.Tools {
+		if httpTool, ok := tool.Type.(*types.HTTPToolDefinition); ok {
+			httpToolCount++
+			require.Equal(t, deployments[2].Deployment.ID, httpTool.DeploymentID, "all http tools should belong to the last deployment")
+		}
 	}
+	require.GreaterOrEqual(t, httpToolCount, 3, "should have at least 3 http tools")
 }

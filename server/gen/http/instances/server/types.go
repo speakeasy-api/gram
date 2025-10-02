@@ -21,7 +21,7 @@ type GetInstanceResponseBody struct {
 	// The description of the toolset
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// The list of tools
-	Tools []*HTTPToolDefinitionResponseBody `form:"tools" json:"tools" xml:"tools"`
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The list of prompt templates
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
 	// The security variables that are relevant to the toolset
@@ -214,12 +214,38 @@ type GetInstanceGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// HTTPToolDefinitionResponseBody is used to define fields on response body
-// types.
-type HTTPToolDefinitionResponseBody struct {
-	ToolType string `form:"tool_type" json:"tool_type" xml:"tool_type"`
-	// The ID of the HTTP tool
+// ToolResponseBody is used to define fields on response body types.
+type ToolResponseBody struct {
+	Tool *struct {
+		// Union type name, one of:
+		// - "http_tool"
+		// - "prompt_template"
+		Type string `form:"Type" json:"Type" xml:"Type"`
+		// JSON encoded union value
+		Value string `form:"Value" json:"Value" xml:"Value"`
+	} `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
+}
+
+// PromptTemplateResponseBody is used to define fields on response body types.
+type PromptTemplateResponseBody struct {
+	// The revision tree ID for the prompt template
+	HistoryID string `form:"history_id" json:"history_id" xml:"history_id"`
+	// The previous version of the prompt template to use as predecessor
+	PredecessorID *string `form:"predecessor_id,omitempty" json:"predecessor_id,omitempty" xml:"predecessor_id,omitempty"`
+	// The template content
+	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
+	// The template engine
+	Engine string `form:"engine" json:"engine" xml:"engine"`
+	// The kind of prompt the template is used for
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The suggested tool names associated with the prompt template
+	ToolsHint []string `form:"tools_hint" json:"tools_hint" xml:"tools_hint"`
+	// The type of the tool - discriminator value
+	Type string `form:"type" json:"type" xml:"type"`
+	// The ID of the tool
 	ID string `form:"id" json:"id" xml:"id"`
+	// The URN of this tool
+	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
 	// The ID of the project
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
 	// The ID of the deployment
@@ -229,38 +255,18 @@ type HTTPToolDefinitionResponseBody struct {
 	// The canonical name of the tool. Will be the same as the name if there is no
 	// variation.
 	CanonicalName string `form:"canonical_name" json:"canonical_name" xml:"canonical_name"`
-	// Summary of the tool
-	Summary string `form:"summary" json:"summary" xml:"summary"`
 	// Description of the tool
 	Description string `form:"description" json:"description" xml:"description"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// JSON schema for the request
+	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
 	// Confirmation mode for the tool
 	Confirm string `form:"confirm" json:"confirm" xml:"confirm"`
 	// Prompt for the confirmation
 	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
 	// Summarizer for the tool
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
-	// Response filter metadata for the tool
-	ResponseFilter *ResponseFilterResponseBody `form:"response_filter,omitempty" json:"response_filter,omitempty" xml:"response_filter,omitempty"`
-	// The ID of the OpenAPI v3 document
-	Openapiv3DocumentID *string `form:"openapiv3_document_id,omitempty" json:"openapiv3_document_id,omitempty" xml:"openapiv3_document_id,omitempty"`
-	// OpenAPI v3 operation
-	Openapiv3Operation *string `form:"openapiv3_operation,omitempty" json:"openapiv3_operation,omitempty" xml:"openapiv3_operation,omitempty"`
-	// The tags list for this http tool
-	Tags []string `form:"tags" json:"tags" xml:"tags"`
-	// Security requirements for the underlying HTTP endpoint
-	Security *string `form:"security,omitempty" json:"security,omitempty" xml:"security,omitempty"`
-	// The default server URL for the tool
-	DefaultServerURL *string `form:"default_server_url,omitempty" json:"default_server_url,omitempty" xml:"default_server_url,omitempty"`
-	// HTTP method for the request
-	HTTPMethod string `form:"http_method" json:"http_method" xml:"http_method"`
-	// Path for the request
-	Path string `form:"path" json:"path" xml:"path"`
-	// Version of the schema
-	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
-	// JSON schema for the request
-	Schema string `form:"schema" json:"schema" xml:"schema"`
-	// The name of the source package
-	PackageName *string `form:"package_name,omitempty" json:"package_name,omitempty" xml:"package_name,omitempty"`
 	// The creation date of the tool.
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the tool.
@@ -269,18 +275,6 @@ type HTTPToolDefinitionResponseBody struct {
 	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
 	// The variation details of a tool. Only includes explicitly varied fields.
 	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
-	// The URN of this HTTP tool
-	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
-}
-
-// ResponseFilterResponseBody is used to define fields on response body types.
-type ResponseFilterResponseBody struct {
-	// Response filter type for the tool
-	Type string `form:"type" json:"type" xml:"type"`
-	// Status codes to filter for
-	StatusCodes []string `form:"status_codes" json:"status_codes" xml:"status_codes"`
-	// Content types to filter for
-	ContentTypes []string `form:"content_types" json:"content_types" xml:"content_types"`
 }
 
 // CanonicalToolAttributesResponseBody is used to define fields on response
@@ -330,36 +324,6 @@ type ToolVariationResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the tool variation
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-}
-
-// PromptTemplateResponseBody is used to define fields on response body types.
-type PromptTemplateResponseBody struct {
-	// The ID of the prompt template
-	ID string `form:"id" json:"id" xml:"id"`
-	// The revision tree ID for the prompt template
-	HistoryID string `form:"history_id" json:"history_id" xml:"history_id"`
-	// The previous version of the prompt template to use as predecessor
-	PredecessorID *string `form:"predecessor_id,omitempty" json:"predecessor_id,omitempty" xml:"predecessor_id,omitempty"`
-	// The name of the prompt template
-	Name string `form:"name" json:"name" xml:"name"`
-	// The template content
-	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
-	// The description of the prompt template
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The JSON Schema defining the placeholders found in the prompt template
-	Arguments *string `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
-	// The template engine
-	Engine string `form:"engine" json:"engine" xml:"engine"`
-	// The kind of prompt the template is used for
-	Kind string `form:"kind" json:"kind" xml:"kind"`
-	// The suggested tool names associated with the prompt template
-	ToolsHint []string `form:"tools_hint" json:"tools_hint" xml:"tools_hint"`
-	// The creation date of the prompt template.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// The last update date of the prompt template.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// The URN of this prompt template
-	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
 }
 
 // SecurityVariableResponseBody is used to define fields on response body types.
@@ -432,12 +396,12 @@ func NewGetInstanceResponseBody(res *instances.GetInstanceResult) *GetInstanceRe
 		Description: res.Description,
 	}
 	if res.Tools != nil {
-		body.Tools = make([]*HTTPToolDefinitionResponseBody, len(res.Tools))
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
 		for i, val := range res.Tools {
-			body.Tools[i] = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
 		}
 	} else {
-		body.Tools = []*HTTPToolDefinitionResponseBody{}
+		body.Tools = []*ToolResponseBody{}
 	}
 	if res.PromptTemplates != nil {
 		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
