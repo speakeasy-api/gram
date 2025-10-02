@@ -24,7 +24,8 @@ export function Type({
   skeleton?: "word" | "phrase" | "line" | "paragraph";
   destructive?: boolean;
   as?: React.ElementType;
-} & React.ComponentProps<"p">) {
+  children?: React.ReactNode;
+} & Omit<React.ComponentProps<"p">, "children">) {
   if (children === undefined) {
     const variantHeight = {
       subheading: "h-6",
@@ -89,27 +90,31 @@ export function Type({
     baseClass += " text-sm";
   }
 
+  const El = Component as React.ComponentType<
+    React.HTMLAttributes<HTMLElement> & { children?: React.ReactNode }
+  >;
+
   switch (variant) {
     case "subheading":
       return (
-        <Component
+        <El
           {...props}
           className={`text-md font-medium ${baseClass} ${className}`}
         >
           {children}
-        </Component>
+        </El>
       );
     case "body":
       return (
-        <Component {...props} className={`text-base ${baseClass} ${className}`}>
+        <El {...props} className={`text-base ${baseClass} ${className}`}>
           {children}
-        </Component>
+        </El>
       );
     case "small":
       return (
-        <Component {...props} className={`text-sm ${baseClass} ${className}`}>
+        <El {...props} className={`text-sm ${baseClass} ${className}`}>
           {children}
-        </Component>
+        </El>
       );
   }
 }
