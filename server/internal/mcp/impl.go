@@ -549,7 +549,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	if authenticated {
 		selectedEnvironment = conv.PtrValOr(conv.FromPGText[string](toolset.DefaultEnvironmentSlug), "")
 		if passedEnv := r.Header.Get("Gram-Environment"); passedEnv != "" {
-			selectedEnvironment = passedEnv
+			selectedEnvironment = conv.ToSlug(passedEnv)
 		}
 	}
 
