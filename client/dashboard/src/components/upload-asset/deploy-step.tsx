@@ -1,12 +1,12 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useListTools } from "@/hooks/toolTypes";
 import { slugify } from "@/lib/constants";
 import { useRoutes } from "@/routes";
 import { Deployment } from "@gram/client/models/components";
 import {
   useDeploymentLogs,
   useLatestDeployment,
-  useListTools,
 } from "@gram/client/react-query";
 import { Alert, Stack } from "@speakeasy-api/moonshine";
 import React from "react";
@@ -23,7 +23,7 @@ export default function DeployStep() {
   const toolsList = useListTools(
     { deploymentId: stepper.meta.current.deployment?.id },
     undefined,
-    { enabled: step.state === "completed" },
+    { enabled: step.state === "completed" }
   );
 
   const toolCount = React.useMemo(() => {
@@ -31,11 +31,12 @@ export default function DeployStep() {
     if (!toolsList.data || !deployment || !uploadResult) return 0;
 
     const documentId = deployment!.openapiv3Assets.find(
-      (doc) => doc.assetId === uploadResult?.asset.id,
+      (doc) => doc.assetId === uploadResult?.asset.id
     )?.id;
 
-    return toolsList.data.httpTools.reduce((prev, cur) => {
-      if (cur.openapiv3DocumentId === documentId) return prev + 1;
+    return toolsList.data.tools.reduce((prev: number, cur) => {
+      if (cur.type === "http" && cur.openapiv3DocumentId === documentId)
+        return prev + 1;
       return prev;
     }, 0);
   }, [toolsList.data]);
@@ -45,13 +46,13 @@ export default function DeployStep() {
       deploymentId: stepper.meta.current.deployment?.id ?? "",
     },
     undefined,
-    { enabled: step.state === "completed" },
+    { enabled: step.state === "completed" }
   );
 
   const deployHasErrors = React.useMemo(() => {
     if (!deploymentLogs.data) return false;
     return deploymentLogs.data.events.some(({ event }) =>
-      event.includes("error"),
+      event.includes("error")
     );
   }, [deploymentLogs.data]);
 

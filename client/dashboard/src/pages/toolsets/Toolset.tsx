@@ -10,17 +10,16 @@ import {
   useTelemetry,
 } from "@/contexts/Telemetry";
 import { useApiError } from "@/hooks/useApiError";
-import { asTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
+import { Tool, useGroupedTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   queryKeyInstance,
   useDeleteToolsetMutation,
-  useToolset as useToolsetQuery,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
-import { useQueryClient, UseQueryResult } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";

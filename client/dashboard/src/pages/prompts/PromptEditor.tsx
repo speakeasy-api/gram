@@ -51,7 +51,7 @@ export function PromptEditor({
   const isPending = status === "pending";
   const [fullScreenEditor, setFullScreenEditor] = useState(false);
   const parsedArgs = argsSchema.safeParse(
-    JSON.parse(predecessor?.arguments ?? "{}")
+    JSON.parse(predecessor?.schema ?? "{}")
   );
   const argDefaults = parsedArgs.success ? parsedArgs.data.properties : {};
   const [args, setArgs] = useState<string[]>(Object.keys(argDefaults));
