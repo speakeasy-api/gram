@@ -136,7 +136,7 @@ export function Cards({
 
   if (loading) {
     children = [
-      <Grid.Item key='one' colSpan={cardSize}>
+      <Grid.Item key="one" colSpan={cardSize}>
         <CardSkeleton />
       </Grid.Item>,
       <Grid.Item key="two" colSpan={cardSize}>

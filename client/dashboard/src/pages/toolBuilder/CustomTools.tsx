@@ -1,8 +1,14 @@
 import { Page } from "@/components/page-layout";
-import { Button } from "@speakeasy-api/moonshine";
+import {
+  Button,
+  Badge,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipPortal
+} from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { ToolCollectionBadge } from "@/components/tools-badge";
-import { Badge } from "@/components/ui/badge";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { useRoutes } from "@/routes";
@@ -111,12 +117,16 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
     );
     const numInputs = Object.keys(args.properties).length;
     inputsBadge = (
-      <Badge
-        variant="outline"
-        tooltip={numInputs > 0 ? tooltipContent : undefined}
-      >
-        {numInputs > 0 ? numInputs : "No"} input{numInputs === 1 ? "" : "s"}
-      </Badge>
+      <Tooltip>
+        <TooltipTrigger>
+          <Badge variant="secondary">
+            {numInputs > 0 ? numInputs : "No"} input{numInputs === 1 ? "" : "s"}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipPortal>
+          {numInputs > 0 && <TooltipContent>{tooltipContent}</TooltipContent>}
+        </TooltipPortal>
+      </Tooltip>
     );
   }
 
@@ -145,10 +155,9 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
         </Card.Header>
         <Card.Content>
           {template.description && (
-            <Card.Description>
-              <div className="line-clamp-3">
-                <MustacheHighlight>{template.description}</MustacheHighlight>
-              </div>
+            <Card.Description className="line-clamp-3 whitespace-normal">
+              {template.description}
+              <MustacheHighlight>{template.description}</MustacheHighlight>
             </Card.Description>
           )}
         </Card.Content>
