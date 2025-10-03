@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod";
+import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
@@ -22,44 +23,46 @@ import {
 /**
  * A polymorphic tool - can be an HTTP tool or a prompt template
  */
-export type Tool =
-  | (HTTPToolDefinition & { type: "http" })
-  | (PromptTemplate & { type: "prompt" });
+export type Tool = {
+  /**
+   * An HTTP tool
+   */
+  httpToolDefinition?: HTTPToolDefinition | undefined;
+  /**
+   * A prompt template
+   */
+  promptTemplate?: PromptTemplate | undefined;
+};
 
 /** @internal */
 export const Tool$inboundSchema: z.ZodType<Tool, z.ZodTypeDef, unknown> = z
-  .union([
-    HTTPToolDefinition$inboundSchema.and(
-      z.object({ type: z.literal("http") }).transform((v) => ({
-        type: v.type,
-      })),
-    ),
-    PromptTemplate$inboundSchema.and(
-      z.object({ type: z.literal("prompt") }).transform((v) => ({
-        type: v.type,
-      })),
-    ),
-  ]);
+  .object({
+    http_tool_definition: HTTPToolDefinition$inboundSchema.optional(),
+    prompt_template: PromptTemplate$inboundSchema.optional(),
+  }).transform((v) => {
+    return remap$(v, {
+      "http_tool_definition": "httpToolDefinition",
+      "prompt_template": "promptTemplate",
+    });
+  });
 
 /** @internal */
-export type Tool$Outbound =
-  | (HTTPToolDefinition$Outbound & { type: "http" })
-  | (PromptTemplate$Outbound & { type: "prompt" });
+export type Tool$Outbound = {
+  http_tool_definition?: HTTPToolDefinition$Outbound | undefined;
+  prompt_template?: PromptTemplate$Outbound | undefined;
+};
 
 /** @internal */
 export const Tool$outboundSchema: z.ZodType<Tool$Outbound, z.ZodTypeDef, Tool> =
-  z.union([
-    HTTPToolDefinition$outboundSchema.and(
-      z.object({ type: z.literal("http") }).transform((v) => ({
-        type: v.type,
-      })),
-    ),
-    PromptTemplate$outboundSchema.and(
-      z.object({ type: z.literal("prompt") }).transform((v) => ({
-        type: v.type,
-      })),
-    ),
-  ]);
+  z.object({
+    httpToolDefinition: HTTPToolDefinition$outboundSchema.optional(),
+    promptTemplate: PromptTemplate$outboundSchema.optional(),
+  }).transform((v) => {
+    return remap$(v, {
+      httpToolDefinition: "http_tool_definition",
+      promptTemplate: "prompt_template",
+    });
+  });
 
 /**
  * @internal

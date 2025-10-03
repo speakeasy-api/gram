@@ -7,6 +7,7 @@ import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { Telemetry, useTelemetry } from "@/contexts/Telemetry";
+import { asTool, filterHttpTools, filterPromptTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import { Message, useChat } from "@ai-sdk/react";
 import { HTTPToolDefinition } from "@gram/client/models/components";
@@ -27,13 +28,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
+import { onboardingStepStorageKeys } from "../home/Home";
 import { useChatContext } from "./ChatContext";
 import { useChatHistory } from "./ChatHistory";
 import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useMiniModel, useModel } from "./Openrouter";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
-import { onboardingStepStorageKeys } from "../home/Home";
-import { filterHttpTools } from "@/lib/toolNames";
 
 const defaultModel = {
   label: "Claude 4.5 Sonnet",
@@ -190,8 +190,10 @@ function ChatInner({
     };
 
   const allTools: Toolset = useMemo(() => {
+    const baseTools = instance.data?.tools.map(asTool);
+
     const tools: Toolset = Object.fromEntries(
-      filterHttpTools(instance.data?.tools).map((tool) => {
+      filterHttpTools(baseTools).map((tool) => {
         return [
           tool.name,
           {
@@ -208,7 +210,7 @@ function ChatInner({
       }) ?? []
     );
 
-    instance.data?.promptTemplates?.forEach((pt) => {
+    filterPromptTools(baseTools).forEach((pt) => {
       tools[pt.name] = {
         description: pt.description ?? "",
         parameters: jsonSchema(JSON.parse(pt.schema ?? "{}")),

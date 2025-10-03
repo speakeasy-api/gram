@@ -9,7 +9,8 @@ package types
 
 // A polymorphic tool - can be an HTTP tool or a prompt template
 type Tool struct {
-	Tool interface {
-		toolVal()
-	}
+	// The HTTP tool definition
+	HTTPToolDefinition *HTTPToolDefinition
+	// The prompt template
+	PromptTemplate *PromptTemplate
 }

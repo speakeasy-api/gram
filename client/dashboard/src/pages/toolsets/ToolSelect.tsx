@@ -14,20 +14,20 @@ import {
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
+import { useListTools, useToolset } from "@/hooks/toolTypes";
 import {
   filterHttpTools,
   filterPromptTools,
+  Tool,
   ToolWithDisplayName,
   useGroupedHttpTools,
-} from "@/lib/toolNames";
+} from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import {
   HTTPToolDefinition,
   PromptTemplate,
-  Tool,
 } from "@gram/client/models/components";
-import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
-import { useListTools } from "@gram/client/react-query/listTools.js";
+import { useUpdateToolsetMutation } from "@gram/client/react-query";
 import { Button, Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { AlertTriangleIcon, Check, CheckCircleIcon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -179,15 +179,10 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     toolsetSlug: toolsetSlug,
   });
 
-  const { data: toolset, refetch } = useToolset(
-    { slug: toolsetSlug },
-    undefined,
-    { enabled: !!toolsetSlug }
-  );
+  const { data: toolset, refetch } = useToolset(toolsetSlug);
   const {
     data: { tools } = {
-      httpTools: [],
-      promptTemplates: [],
+      tools: [],
     },
     isLoading: isLoadingTools,
   } = useListTools();

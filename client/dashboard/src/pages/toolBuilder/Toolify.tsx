@@ -12,7 +12,7 @@ import { createContext, useContext, useState } from "react";
 import { z } from "zod";
 import { useMiniModel } from "../playground/Openrouter";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
-import { useToolset } from "@gram/client/react-query";
+import { useToolset } from "@/hooks/toolTypes";
 
 const SuggestionSchema = z.object({
   name: z.string(),
@@ -74,11 +74,7 @@ export const ToolifyDialog = ({
   const [inProgress, setInProgress] = useState(false);
   const [purpose, setPurpose] = useState("");
   const [selectedToolset, setSelectedToolset] = useState<ToolsetEntry>();
-  const { data: toolset } = useToolset(
-    { slug: selectedToolset?.slug ?? "" },
-    undefined,
-    { enabled: !!selectedToolset?.slug },
-  );
+  const { data: toolset } = useToolset(selectedToolset?.slug);
   const tools = toolset?.tools ?? [];
 
   const { set } = useToolifyContext();

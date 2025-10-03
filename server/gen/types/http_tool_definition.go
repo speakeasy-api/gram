@@ -29,8 +29,6 @@ type HTTPToolDefinition struct {
 	Path string
 	// The name of the source package
 	PackageName *string
-	// The type of the tool - discriminator value
-	Type string
 	// The ID of the tool
 	ID string
 	// The URN of this tool
@@ -65,5 +63,3 @@ type HTTPToolDefinition struct {
 	// The variation details of a tool. Only includes explicitly varied fields.
 	Variation *ToolVariation
 }
-
-func (*HTTPToolDefinition) toolVal() {}

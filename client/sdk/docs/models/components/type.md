@@ -1,17 +1,15 @@
 # Type
 
-The type of the tool - discriminator value
-
 ## Example Usage
 
 ```typescript
 import { Type } from "@gram/client/models/components";
 
-let value: Type = "prompt";
+let value: Type = "http";
 ```
 
 ## Values
 
 ```typescript
-"prompt"
+"http" | "prompt"
 ```

@@ -111,9 +111,9 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 	}
 
 	for _, tool := range result.Tools {
-		require.NotNil(t, tool.Type, "tool type should not be nil")
+		require.NotNil(t, tool.Tool, "tool type should not be nil")
 
-		switch toolType := tool.Type.(type) {
+		switch toolType := tool.Tool.(type) {
 		case *types.HTTPToolDefinition:
 			httpToolCount++
 			require.NotEmpty(t, toolType.ID, "tool ID should not be empty")
@@ -132,7 +132,7 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 			require.NotEmpty(t, toolType.CreatedAt, "template created at should not be empty")
 			require.NotEmpty(t, toolType.UpdatedAt, "template updated at should not be empty")
 		default:
-			t.Fatalf("unexpected tool type: %T", tool.Type)
+			t.Fatalf("unexpected tool type: %T", tool.Tool)
 		}
 	}
 
@@ -244,7 +244,7 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 	firstPageIDs := make(map[string]bool)
 	for _, tool := range firstPage.Tools {
 		var id string
-		switch toolType := tool.Type.(type) {
+		switch toolType := tool.Tool.(type) {
 		case *types.HTTPToolDefinition:
 			id = toolType.ID
 		case *types.PromptTemplate:
@@ -255,7 +255,7 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 
 	for _, tool := range secondPage.Tools {
 		var id string
-		switch toolType := tool.Type.(type) {
+		switch toolType := tool.Tool.(type) {
 		case *types.HTTPToolDefinition:
 			id = toolType.ID
 		case *types.PromptTemplate:
@@ -351,7 +351,7 @@ func TestToolsService_ListTools_WithDeploymentID(t *testing.T) {
 	// Count HTTP tools and verify they belong to first deployment
 	httpToolCount := 0
 	for _, tool := range result1.Tools {
-		if httpTool, ok := tool.Type.(*types.HTTPToolDefinition); ok {
+		if httpTool, ok := tool.Tool.(*types.HTTPToolDefinition); ok {
 			httpToolCount++
 			require.Equal(t, deployment1.Deployment.ID, httpTool.DeploymentID, "all http tools should belong to first deployment")
 		}
@@ -372,7 +372,7 @@ func TestToolsService_ListTools_WithDeploymentID(t *testing.T) {
 	// Count HTTP tools and verify they belong to second deployment
 	httpToolCount = 0
 	for _, tool := range result2.Tools {
-		if httpTool, ok := tool.Type.(*types.HTTPToolDefinition); ok {
+		if httpTool, ok := tool.Tool.(*types.HTTPToolDefinition); ok {
 			httpToolCount++
 			require.Equal(t, deployment2.Deployment.ID, httpTool.DeploymentID, "all http tools should belong to second deployment")
 		}
@@ -545,7 +545,7 @@ func TestToolsService_ListTools_VerifyToolFields(t *testing.T) {
 	// Count and verify HTTP tools
 	httpToolCount := 0
 	for _, tool := range result.Tools {
-		if httpTool, ok := tool.Type.(*types.HTTPToolDefinition); ok {
+		if httpTool, ok := tool.Tool.(*types.HTTPToolDefinition); ok {
 			httpToolCount++
 			require.NotEmpty(t, httpTool.ID, "tool ID should not be empty")
 			require.Equal(t, deployment.Deployment.ID, httpTool.DeploymentID, "deployment ID should match")
@@ -688,7 +688,7 @@ func TestToolsService_ListTools_MultipleDeployments(t *testing.T) {
 	// Count HTTP tools and verify they belong to the last deployment
 	httpToolCount := 0
 	for _, tool := range result.Tools {
-		if httpTool, ok := tool.Type.(*types.HTTPToolDefinition); ok {
+		if httpTool, ok := tool.Tool.(*types.HTTPToolDefinition); ok {
 			httpToolCount++
 			require.Equal(t, deployments[2].Deployment.ID, httpTool.DeploymentID, "all http tools should belong to the last deployment")
 		}

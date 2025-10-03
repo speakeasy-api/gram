@@ -1,4 +1,4 @@
-import { promptNames } from "@/lib/toolNames";
+import { promptNames } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { ToolsetEntry } from "@gram/client/models/components";
 import {

@@ -1,11 +1,11 @@
 import { Expandable } from "@/components/expandable";
+import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ProjectSelector } from "@/components/project-menu";
 import { ToolBadge } from "@/components/tool-badge";
 import { ErrorAlert } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -15,7 +15,7 @@ import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useApiError } from "@/hooks/useApiError";
 import { slugify } from "@/lib/constants";
-import { useGroupedHttpTools } from "@/lib/toolNames";
+import { filterHttpTools, useGroupedHttpTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { Toolset } from "@gram/client/models/components";
@@ -23,9 +23,8 @@ import {
   invalidateAllLatestDeployment,
   invalidateAllListToolsets,
   invalidateAllToolset,
-  useListTools,
 } from "@gram/client/react-query";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -43,13 +42,13 @@ import { useParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
-import { GramLogo } from "@/components/gram-logo";
+import { useListTools } from "@/hooks/toolTypes";
 
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
 
   const [currentStep, setCurrentStep] = useState<"upload" | "toolset" | "mcp">(
-    "upload",
+    "upload"
   );
   const [toolsetName, setToolsetName] = useState<string>();
   const [mcpSlug, setMcpSlug] = useState<string>();
@@ -100,7 +99,7 @@ const Step = ({
       <span
         className={cn(
           "rounded-full bg-muted h-8 w-8 flex items-center justify-center",
-          active && "bg-success text-success-foreground",
+          active && "bg-success text-success-foreground"
         )}
       >
         {completed ? <Check className="w-4 h-4" /> : icon}
@@ -407,7 +406,7 @@ const ToolsetStep = ({
       if (!toolsetName) {
         throw new Error("No toolset name found");
       }
-      if (!tools?.httpTools.length) {
+      if (!tools?.tools.length) {
         throw new Error("No tools found");
       }
 
@@ -415,9 +414,9 @@ const ToolsetStep = ({
         createToolsetRequestBody: {
           name: toolsetName,
           description: `A toolset created from your OpenAPI document`,
-          toolUrns: tools?.httpTools.map((tool) => tool.toolUrn) ?? [],
+          toolUrns: tools?.tools.map((tool) => tool.toolUrn) ?? [],
         },
-      });   
+      });
 
       setCreatedToolset(toolset);
       setCurrentStep("mcp");
@@ -429,7 +428,7 @@ const ToolsetStep = ({
     }
   };
 
-  const groupedTools = useGroupedHttpTools(tools?.httpTools ?? []);
+  const groupedTools = useGroupedHttpTools(filterHttpTools(tools?.tools ?? []));
   const flattened = groupedTools.flatMap((group) => group.tools);
   const toolsToShow = flattened.slice(0, 25);
   const additionalTools = flattened.slice(25);

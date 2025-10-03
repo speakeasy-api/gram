@@ -7252,9 +7252,6 @@ components:
         tool_urn:
           type: string
           description: The URN of this tool
-        type:
-          type: string
-          description: The type of the tool - discriminator value
         updated_at:
           type: string
           description: The last update date of the tool.
@@ -7264,7 +7261,6 @@ components:
       description: Common attributes shared by all tool types
       required:
         - id
-        - type
         - project_id
         - deployment_id
         - name
@@ -8475,11 +8471,6 @@ components:
         tool_urn:
           type: string
           description: The URN of this tool
-        type:
-          type: string
-          description: The type of the tool - discriminator value
-          enum:
-            - http
         updated_at:
           type: string
           description: The last update date of the tool.
@@ -8494,7 +8485,6 @@ components:
         - path
         - schema
         - id
-        - type
         - project_id
         - deployment_id
         - name
@@ -9215,11 +9205,6 @@ components:
             type: string
           description: The suggested tool names associated with the prompt template
           maxItems: 20
-        type:
-          type: string
-          description: The type of the tool - discriminator value
-          enum:
-            - prompt
         updated_at:
           type: string
           description: The last update date of the tool.
@@ -9238,7 +9223,6 @@ components:
         - tool_urn
         - created_at
         - updated_at
-        - type
         - project_id
         - deployment_id
         - canonical_name
@@ -9559,15 +9543,12 @@ components:
         - included_bullets
     Tool:
       type: object
+      properties:
+        http_tool_definition:
+          $ref: '#/components/schemas/HTTPToolDefinition'
+        prompt_template:
+          $ref: '#/components/schemas/PromptTemplate'
       description: A polymorphic tool - can be an HTTP tool or a prompt template
-      oneOf:
-        - $ref: "#/components/schemas/HTTPToolDefinition"
-        - $ref: "#/components/schemas/PromptTemplate"
-      discriminator:
-        propertyName: type
-        mapping:
-          http: "#/components/schemas/HTTPToolDefinition"
-          prompt: "#/components/schemas/PromptTemplate"
     ToolEntry:
       type: object
       properties:

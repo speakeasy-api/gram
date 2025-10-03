@@ -45,17 +45,6 @@ export const PromptTemplateKind = {
 export type PromptTemplateKind = ClosedEnum<typeof PromptTemplateKind>;
 
 /**
- * The type of the tool - discriminator value
- */
-export const Type = {
-  Prompt: "prompt",
-} as const;
-/**
- * The type of the tool - discriminator value
- */
-export type Type = ClosedEnum<typeof Type>;
-
-/**
  * A prompt template
  */
 export type PromptTemplate = {
@@ -140,10 +129,6 @@ export type PromptTemplate = {
    */
   toolsHint: Array<string>;
   /**
-   * The type of the tool - discriminator value
-   */
-  type: Type;
-  /**
    * The last update date of the tool.
    */
   updatedAt: Date;
@@ -191,26 +176,6 @@ export namespace PromptTemplateKind$ {
 }
 
 /** @internal */
-export const Type$inboundSchema: z.ZodNativeEnum<typeof Type> = z.nativeEnum(
-  Type,
-);
-
-/** @internal */
-export const Type$outboundSchema: z.ZodNativeEnum<typeof Type> =
-  Type$inboundSchema;
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace Type$ {
-  /** @deprecated use `Type$inboundSchema` instead. */
-  export const inboundSchema = Type$inboundSchema;
-  /** @deprecated use `Type$outboundSchema` instead. */
-  export const outboundSchema = Type$outboundSchema;
-}
-
-/** @internal */
 export const PromptTemplate$inboundSchema: z.ZodType<
   PromptTemplate,
   z.ZodTypeDef,
@@ -236,7 +201,6 @@ export const PromptTemplate$inboundSchema: z.ZodType<
   summarizer: z.string().optional(),
   tool_urn: z.string(),
   tools_hint: z.array(z.string()),
-  type: Type$inboundSchema,
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   variation: ToolVariation$inboundSchema.optional(),
 }).transform((v) => {
@@ -277,7 +241,6 @@ export type PromptTemplate$Outbound = {
   summarizer?: string | undefined;
   tool_urn: string;
   tools_hint: Array<string>;
-  type: string;
   updated_at: string;
   variation?: ToolVariation$Outbound | undefined;
 };
@@ -308,7 +271,6 @@ export const PromptTemplate$outboundSchema: z.ZodType<
   summarizer: z.string().optional(),
   toolUrn: z.string(),
   toolsHint: z.array(z.string()),
-  type: Type$outboundSchema,
   updatedAt: z.date().transform(v => v.toISOString()),
   variation: ToolVariation$outboundSchema.optional(),
 }).transform((v) => {

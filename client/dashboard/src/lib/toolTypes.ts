@@ -1,16 +1,26 @@
 import {
+  Tool as GeneratedTool,
+  Toolset as GeneratedToolset,
   HTTPToolDefinition,
   PromptTemplate,
   PromptTemplateEntry,
   PromptTemplateKind,
-  Tool,
-  Toolset,
 } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
 
 export type ToolWithDisplayName = Tool & { displayName: string };
-export type HttpToolWithDisplayName = HTTPToolDefinition & { displayName: string };
+export type HttpToolWithDisplayName = Tool & { type: "http" } & {
+  displayName: string;
+};
+
+export type Toolset = Omit<GeneratedToolset, "tools"> & {
+  tools: Tool[];
+};
+
+export type Tool =
+  | ({ type: "http" } & HTTPToolDefinition)
+  | ({ type: "prompt" } & PromptTemplate);
 
 export type ToolGroup = {
   key: string;
@@ -22,17 +32,29 @@ export type HttpToolGroup = {
   tools: HttpToolWithDisplayName[];
 };
 
+export const asTool = (tool: GeneratedTool): Tool => {
+  if (tool.httpToolDefinition) {
+    return { type: "http", ...tool.httpToolDefinition };
+  } else if (tool.promptTemplate) {
+    return { type: "prompt", ...tool.promptTemplate };
+  } else {
+    throw new Error("Unexpected tool type");
+  }
+};
+
 export const useGroupedToolDefinitions = (
-  toolset: Toolset | undefined
+  toolset: GeneratedToolset | undefined
 ): ToolGroup[] => {
-  const toolDefinitions = toolset?.tools ?? [];
-  return useGroupedTools(toolDefinitions);
+  const tools = toolset?.tools ?? [];
+  return useGroupedTools(tools.map(asTool));
 };
 
 export const useGroupedHttpTools = (
   tools: HTTPToolDefinition[]
 ): HttpToolGroup[] => {
-  return useGroupedTools(tools) as HttpToolGroup[];
+  return useGroupedTools(
+    tools.map((t) => asTool({ httpToolDefinition: t }))
+  ) as HttpToolGroup[];
 };
 
 export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
@@ -94,15 +116,18 @@ export const promptNames = (promptTemplates: PromptTemplateEntry[]): string[] =>
   promptTemplates.filter(isPrompt).map(templateName);
 
 export const isHttpTool = (tool: Tool) => tool.type === "http";
+export const isPromptTool = (tool: Tool) => tool.type === "prompt";
 
-export const isPromptTemplate = (tool: Tool) => tool.type === "prompt_template";
-
-export const filterHttpTools = (tools: Tool[] | undefined): HTTPToolDefinition[] => {
+export const filterHttpTools = (
+  tools: Tool[] | undefined
+): HTTPToolDefinition[] => {
   return tools?.filter(isHttpTool) ?? [];
 };
 
-export const filterPromptTools = (tools: Tool[] | undefined): PromptTemplate[] => {
-  return tools?.filter(isPromptTemplate) ?? [];
+export const filterPromptTools = (
+  tools: Tool[] | undefined
+): PromptTemplate[] => {
+  return tools?.filter(isPromptTool) ?? [];
 };
 
 export const toolNames = (toolset: { tools: Tool[] }) => {

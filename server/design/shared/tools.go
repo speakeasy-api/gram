@@ -24,8 +24,6 @@ var BaseToolAttributes = Type("BaseToolAttributes", func() {
 
 	Description("Common attributes shared by all tool types")
 
-	Attribute("type", String, "The type of the tool - discriminator value")
-
 	Attribute("id", String, "The ID of the tool")
 	Attribute("tool_urn", String, "The URN of this tool")
 	Attribute("project_id", String, "The ID of the project")
@@ -41,7 +39,6 @@ var BaseToolAttributes = Type("BaseToolAttributes", func() {
 	Attribute("confirm_prompt", String, "Prompt for the confirmation")
 	Attribute("summarizer", String, "Summarizer for the tool")
 
-
 	Attribute("created_at", String, func() {
 		Description("The creation date of the tool.")
 		Format(FormatDateTime)
@@ -54,7 +51,7 @@ var BaseToolAttributes = Type("BaseToolAttributes", func() {
 	Attribute("canonical", CanonicalToolAttributes, "The original details of a tool, excluding any variations")
 	Attribute("variation", ToolVariation, "The variation details of a tool. Only includes explicitly varied fields.")
 
-	Required("id", "type", "project_id", "deployment_id", "name", "canonical_name", "description", "confirm", "tool_urn", "created_at", "updated_at")
+	Required("id", "project_id", "deployment_id", "name", "canonical_name", "description", "confirm", "tool_urn", "created_at", "updated_at")
 })
 
 // HTTPTool represents an HTTP tool with all its attributes
@@ -81,17 +78,13 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 })
 
 // Tool is a discriminated union of HTTP tools and prompt templates.
-// Goa generates this with a custom encoding in OpenAPI (Tool/Tool2), but the
-// Go code uses a proper union interface type which is what we want.
+// Custom JSON marshaling provided in goaext.
 var Tool = Type("Tool", func() {
 	Meta("struct:pkg:path", "types")
 	Description("A polymorphic tool - can be an HTTP tool or a prompt template")
 
-	// WARNING: If you change this, you also need to change the overlay overlays/tool-types.yaml
-	OneOf("tool", func() {
-		Attribute("http_tool", HTTPToolDefinition, "HTTP tool details")
-		Attribute("prompt_template", PromptTemplate, "Prompt template details")
-	})
+	Attribute("http_tool_definition", HTTPToolDefinition, "The HTTP tool definition")
+	Attribute("prompt_template", PromptTemplate, "The prompt template")
 })
 
 var ToolEntry = Type("ToolEntry", func() {

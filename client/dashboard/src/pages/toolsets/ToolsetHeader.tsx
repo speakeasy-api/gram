@@ -7,8 +7,8 @@ import {
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
-import { Toolset } from "@gram/client/models/components";
-import { useToolset } from "@gram/client/react-query";
+import { useToolset } from "@/hooks/toolTypes";
+import { Toolset } from "@/lib/toolTypes";
 import { Stack } from "@speakeasy-api/moonshine";
 
 export const ToolsetHeader = ({
@@ -19,11 +19,7 @@ export const ToolsetHeader = ({
   actions?: React.ReactNode;
 }) => {
   const client = useSdkClient();
-  const { data: toolset, refetch } = useToolset(
-    { slug: toolsetSlug },
-    undefined,
-    { enabled: !!toolsetSlug },
-  );
+  const { data: toolset, refetch } = useToolset(toolsetSlug);
 
   const updateToolset = async (changes: Partial<Toolset>) => {
     if (!toolset) {

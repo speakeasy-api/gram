@@ -9,8 +9,6 @@ package types
 
 // Common attributes shared by all tool types
 type BaseToolAttributes struct {
-	// The type of the tool - discriminator value
-	Type string
 	// The ID of the tool
 	ID string
 	// The URN of this tool

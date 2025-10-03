@@ -20,6 +20,7 @@ type ToolsetForCard = Pick<
   | "description"
   | "updatedAt"
   | "tools"
+  | "promptTemplates"
 >;
 
 const BoundToolsBadge = ({

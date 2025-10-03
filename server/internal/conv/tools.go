@@ -8,59 +8,60 @@ import (
 func ToToolUrn(tool types.Tool) urn.Tool {
 	urn := &urn.Tool{}
 
-	switch tool.Tool.(type) {
-	case *types.HTTPToolDefinition:
-		urn.UnmarshalText([]byte(tool.Tool.(*types.HTTPToolDefinition).ToolUrn))
-	case *types.PromptTemplate:
-		urn.UnmarshalText([]byte(tool.Tool.(*types.PromptTemplate).ToolUrn))
+	if tool.HTTPToolDefinition != nil {
+		urn.UnmarshalText([]byte(tool.HTTPToolDefinition.ToolUrn))
+	}
+	if tool.PromptTemplate != nil {
+		urn.UnmarshalText([]byte(tool.PromptTemplate.ToolUrn))
 	}
 
-	return *urn
+	panic("unknown tool type")
 }
 
 func ToBaseTool(tool *types.Tool) *types.BaseToolAttributes {
-	switch tool.Tool.(type) {
-	case *types.HTTPToolDefinition:
+
+	if tool.HTTPToolDefinition != nil {
 		return &types.BaseToolAttributes{
-			Type: tool.Tool.(*types.HTTPToolDefinition).Type,
-			ID: tool.Tool.(*types.HTTPToolDefinition).ID,
-			ToolUrn: tool.Tool.(*types.HTTPToolDefinition).ToolUrn,
-			ProjectID: tool.Tool.(*types.HTTPToolDefinition).ProjectID,
-			DeploymentID: tool.Tool.(*types.HTTPToolDefinition).DeploymentID,
-			Name: tool.Tool.(*types.HTTPToolDefinition).Name,
-			CanonicalName: tool.Tool.(*types.HTTPToolDefinition).CanonicalName,
-			Description: tool.Tool.(*types.HTTPToolDefinition).Description,
-			SchemaVersion: tool.Tool.(*types.HTTPToolDefinition).SchemaVersion,
-			Schema: &tool.Tool.(*types.HTTPToolDefinition).Schema,
-			Confirm: tool.Tool.(*types.HTTPToolDefinition).Confirm,
-			ConfirmPrompt: tool.Tool.(*types.HTTPToolDefinition).ConfirmPrompt,
-			Summarizer: tool.Tool.(*types.HTTPToolDefinition).Summarizer,
-			CreatedAt: tool.Tool.(*types.HTTPToolDefinition).CreatedAt,
-			UpdatedAt: tool.Tool.(*types.HTTPToolDefinition).UpdatedAt,
-			Canonical: tool.Tool.(*types.HTTPToolDefinition).Canonical,
-			Variation: tool.Tool.(*types.HTTPToolDefinition).Variation,
+			Type: tool.HTTPToolDefinition.Type,
+			ID: tool.HTTPToolDefinition.ID,
+			ToolUrn: tool.HTTPToolDefinition.ToolUrn,
+			ProjectID: tool.HTTPToolDefinition.ProjectID,
+			DeploymentID: tool.HTTPToolDefinition.DeploymentID,
+			Name: tool.HTTPToolDefinition.Name,
+			CanonicalName: tool.HTTPToolDefinition.CanonicalName,
+			Description: tool.HTTPToolDefinition.Description,
+			SchemaVersion: tool.HTTPToolDefinition.SchemaVersion,
+			Schema: &tool.HTTPToolDefinition.Schema,
+			Confirm: tool.HTTPToolDefinition.Confirm,
+			ConfirmPrompt: tool.HTTPToolDefinition.ConfirmPrompt,
+			Summarizer: tool.HTTPToolDefinition.Summarizer,
+			CreatedAt: tool.HTTPToolDefinition.CreatedAt,
+			UpdatedAt: tool.HTTPToolDefinition.UpdatedAt,
+			Canonical: tool.HTTPToolDefinition.Canonical,
+			Variation: tool.HTTPToolDefinition.Variation,
 		}
-	case *types.PromptTemplate:
+	}	
+	if tool.PromptTemplate != nil {
 		return &types.BaseToolAttributes{
-			Type: tool.Tool.(*types.PromptTemplate).Type,
-			ID: tool.Tool.(*types.PromptTemplate).ID,
-			ToolUrn: tool.Tool.(*types.PromptTemplate).ToolUrn,
-			ProjectID: tool.Tool.(*types.PromptTemplate).ProjectID,
-			DeploymentID: tool.Tool.(*types.PromptTemplate).DeploymentID,
-			Name: tool.Tool.(*types.PromptTemplate).Name,
-			CanonicalName: tool.Tool.(*types.PromptTemplate).CanonicalName,
-			Description: tool.Tool.(*types.PromptTemplate).Description,
-			SchemaVersion: tool.Tool.(*types.PromptTemplate).SchemaVersion,
-			Schema: tool.Tool.(*types.PromptTemplate).Schema,
-			Confirm: tool.Tool.(*types.PromptTemplate).Confirm,
-			ConfirmPrompt: tool.Tool.(*types.PromptTemplate).ConfirmPrompt,
-			Summarizer: tool.Tool.(*types.PromptTemplate).Summarizer,
-			CreatedAt: tool.Tool.(*types.PromptTemplate).CreatedAt,
-			UpdatedAt: tool.Tool.(*types.PromptTemplate).UpdatedAt,
-			Canonical: tool.Tool.(*types.PromptTemplate).Canonical,
-			Variation: tool.Tool.(*types.PromptTemplate).Variation,
+			Type: tool.PromptTemplate.Type,
+			ID: tool.PromptTemplate.ID,
+			ToolUrn: tool.PromptTemplate.ToolUrn,
+			ProjectID: tool.PromptTemplate.ProjectID,
+			DeploymentID: tool.PromptTemplate.DeploymentID,
+			Name: tool.PromptTemplate.Name,
+			CanonicalName: tool.PromptTemplate.CanonicalName,
+			Description: tool.PromptTemplate.Description,
+			SchemaVersion: tool.PromptTemplate.SchemaVersion,
+			Schema: tool.PromptTemplate.Schema,
+			Confirm: tool.PromptTemplate.Confirm,
+			ConfirmPrompt: tool.PromptTemplate.ConfirmPrompt,
+			Summarizer: tool.PromptTemplate.Summarizer,
+			CreatedAt: tool.PromptTemplate.CreatedAt,
+			UpdatedAt: tool.PromptTemplate.UpdatedAt,
+			Canonical: tool.PromptTemplate.Canonical,
+			Variation: tool.PromptTemplate.Variation,
 		}
 	}
 
-	return nil
+	panic("unknown tool type")
 }

@@ -5,12 +5,13 @@ import { UrgentWarningIcon } from "@/components/ui/urgent-warning-icon";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { EnvironmentEntryInput, Toolset } from "@gram/client/models/components";
+import { EnvironmentEntryInput } from "@gram/client/models/components";
 import { invalidateAllListEnvironments, useUpdateEnvironmentMutation } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { useEnvironments } from "../environments/Environments";
 import { useState } from "react";
+import { isHttpTool, Toolset } from "@/lib/toolTypes";
 
 export const ToolsetEnvironmentBadge = ({
   toolset,
@@ -48,8 +49,8 @@ export const ToolsetEnvironmentBadge = ({
     (env) => env.slug === envSlug
   );
 
-  const requiresServerURL = toolset.httpTools?.some(
-    (tool) => !tool.defaultServerUrl
+  const requiresServerURL = toolset.tools?.some(
+    (tool) => isHttpTool(tool) && !tool.defaultServerUrl
   );
 
   const relevantEnvVars: string[] = [

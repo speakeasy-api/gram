@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { asTool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { Toolset, ToolsetEntry } from "@gram/client/models/components";
 import { useListToolsets } from "@gram/client/react-query";
@@ -194,7 +195,7 @@ function HomeContent() {
       const basicTools =
         toolsets?.toolsets?.flatMap(
           (toolset) =>
-            toolset.tools?.map((tool) => ({   
+            toolset.tools?.map((tool) => ({
               name: tool.name,
               method: undefined,
             })) || []
@@ -204,7 +205,7 @@ function HomeContent() {
 
     const fullTools = allFullToolsets.flatMap(
       (toolset) =>
-        toolset?.tools?.map((tool) => ({
+        toolset?.tools?.map(asTool).map((tool) => ({
           name: tool.name,
           method: tool.type === "http" ? tool.httpMethod : undefined,
         })) || []

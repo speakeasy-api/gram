@@ -25,7 +25,6 @@ let value: CreatePromptTemplateResult = {
       "<value 2>",
       "<value 3>",
     ],
-    type: "prompt",
     updatedAt: new Date("2025-12-12T05:35:57.442Z"),
   },
 };

@@ -4,10 +4,6 @@ info:
   title: Fix Tool discriminated union types
   version: 0.0.0
 actions:
-  # Remove ListToolsResult2 schema
-  - target: $.components.schemas.ListToolsResult2
-    remove: true
-
   # Remove default Tool schema (Goa's custom union encoding)
   - target: $.components.schemas.Tool.properties
     remove: true
@@ -25,24 +21,16 @@ actions:
           http: "#/components/schemas/HTTPToolDefinition"
           prompt: "#/components/schemas/PromptTemplate"
 
-  # Ensure listTools endpoint returns ListToolsResult (not ListToolsResult2)
-  - target: $.paths['/rpc/tools.list'].get.responses['200'].content['application/json'].schema
-    update:
-      $ref: "#/components/schemas/ListToolsResult"
-
-  # Ensure ListToolsResult references Tool (not the removed Tool2)
-  - target: $.components.schemas.ListToolsResult.properties.tools.items
-    update:
-      $ref: "#/components/schemas/Tool"
-
   # Add tool_type field to HTTPToolDefinition for discriminator
-  - target: $.components.schemas.HTTPToolDefinition.properties
+  - target: $.components.schemas.HTTPToolDefinition
     update:
-      type:
-        type: string
-        description: The type of the tool - discriminator value
-        enum:
-          - http
+      x-speakeasy-entity: HTTPToolDefinition
+      properties:
+        type:
+          type: string
+          description: The type of the tool - discriminator value
+          enum:
+            - http
 
   # Add tool_type field to PromptTemplate for discriminator
   - target: $.components.schemas.PromptTemplate.properties
@@ -52,26 +40,3 @@ actions:
         description: The type of the tool - discriminator value
         enum:
           - prompt
-
-  # Replace GetInstanceResult2 with GetInstanceResult
-  - target: $.components.schemas.GetInstanceResult2
-    remove: true
-  - target: $.paths['/rpc/instances.get'].get.responses['200'].content['application/json'].schema
-    update:
-      $ref: "#/components/schemas/GetInstanceResult"
-
-  # Remove ToolX schemas using search on key names
-  - target: $.components.schemas[?search(@~, 'Tool[0-9]+')]
-    remove: true
-
-  # Remove ToolsetX schemas using search on key names
-  - target: $.components.schemas[?search(@~, 'Toolset[0-9]+')]
-    remove: true
-
-  # Replace all references to ToolX with Tool using regex match (anchored to match exact pattern)
-  - target: $..[?match(@['$ref'], '^#/components/schemas/Tool[0-9]+$')]['$ref']
-    update: "#/components/schemas/Tool"
-
-  # Replace all references to ToolsetX with ToolsetEntry using regex match (anchored to match exact pattern)
-  - target: $..[?match(@['$ref'], '^#/components/schemas/Toolset[0-9]+$')]['$ref']
-    update: "#/components/schemas/Toolset"

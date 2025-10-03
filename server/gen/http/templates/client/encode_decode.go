@@ -1717,7 +1717,6 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 		Prompt:        *v.Prompt,
 		Engine:        *v.Engine,
 		Kind:          *v.Kind,
-		Type:          *v.Type,
 		ID:            *v.ID,
 		ToolUrn:       *v.ToolUrn,
 		ProjectID:     *v.ProjectID,

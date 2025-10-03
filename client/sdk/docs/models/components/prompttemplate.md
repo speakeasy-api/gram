@@ -10,23 +10,19 @@ import { PromptTemplate } from "@gram/client/models/components";
 let value: PromptTemplate = {
   canonicalName: "<value>",
   confirm: "<value>",
-  createdAt: new Date("2025-09-26T02:41:42.436Z"),
+  createdAt: new Date("2024-03-05T06:53:41.866Z"),
   deploymentId: "<id>",
-  description: "scratch certainly while ajar",
+  description: "as impartial into even lavish",
   engine: "mustache",
   historyId: "<id>",
   id: "<id>",
-  kind: "higher_order_tool",
+  kind: "prompt",
   name: "<value>",
   projectId: "<id>",
   prompt: "<value>",
   toolUrn: "<value>",
-  toolsHint: [
-    "<value 1>",
-    "<value 2>",
-  ],
-  type: "prompt",
-  updatedAt: new Date("2024-04-02T03:48:17.332Z"),
+  toolsHint: [],
+  updatedAt: new Date("2025-12-07T09:02:53.100Z"),
 };
 ```
 
@@ -54,6 +50,5 @@ let value: PromptTemplate = {
 | `summarizer`                                                                                  | *string*                                                                                      | :heavy_minus_sign:                                                                            | Summarizer for the tool                                                                       |
 | `toolUrn`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The URN of this tool                                                                          |
 | `toolsHint`                                                                                   | *string*[]                                                                                    | :heavy_check_mark:                                                                            | The suggested tool names associated with the prompt template                                  |
-| `type`                                                                                        | [components.Type](../../models/components/type.md)                                            | :heavy_check_mark:                                                                            | The type of the tool - discriminator value                                                    |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | The last update date of the tool.                                                             |
 | `variation`                                                                                   | [components.ToolVariation](../../models/components/toolvariation.md)                          | :heavy_minus_sign:                                                                            | N/A                                                                                           |

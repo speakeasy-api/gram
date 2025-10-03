@@ -10,24 +10,20 @@ import { HTTPToolDefinition } from "@gram/client/models/components";
 let value: HTTPToolDefinition = {
   canonicalName: "<value>",
   confirm: "<value>",
-  createdAt: new Date("2024-07-12T21:04:02.837Z"),
+  createdAt: new Date("2025-03-04T09:26:20.697Z"),
   deploymentId: "<id>",
-  description: "since character yogurt freely yet substitution essential",
+  description:
+    "winding oh burly lest notwithstanding viciously curiously swathe a atop",
   httpMethod: "<value>",
   id: "<id>",
   name: "<value>",
-  path: "/boot",
+  path: "/opt/share",
   projectId: "<id>",
   schema: "<value>",
   summary: "<value>",
-  tags: [
-    "<value 1>",
-    "<value 2>",
-    "<value 3>",
-  ],
+  tags: [],
   toolUrn: "<value>",
-  type: "http",
-  updatedAt: new Date("2025-06-27T15:50:36.598Z"),
+  updatedAt: new Date("2025-05-22T21:11:55.475Z"),
 };
 ```
 
@@ -59,6 +55,5 @@ let value: HTTPToolDefinition = {
 | `summary`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | Summary of the tool                                                                           |
 | `tags`                                                                                        | *string*[]                                                                                    | :heavy_check_mark:                                                                            | The tags list for this http tool                                                              |
 | `toolUrn`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The URN of this tool                                                                          |
-| `type`                                                                                        | [components.HTTPToolDefinitionType](../../models/components/httptooldefinitiontype.md)        | :heavy_check_mark:                                                                            | The type of the tool - discriminator value                                                    |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | The last update date of the tool.                                                             |
 | `variation`                                                                                   | [components.ToolVariation](../../models/components/toolvariation.md)                          | :heavy_minus_sign:                                                                            | N/A                                                                                           |

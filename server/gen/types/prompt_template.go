@@ -21,8 +21,6 @@ type PromptTemplate struct {
 	Kind string
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string
-	// The type of the tool - discriminator value
-	Type string
 	// The ID of the tool
 	ID string
 	// The URN of this tool
@@ -57,5 +55,3 @@ type PromptTemplate struct {
 	// The variation details of a tool. Only includes explicitly varied fields.
 	Variation *ToolVariation
 }
-
-func (*PromptTemplate) toolVal() {}

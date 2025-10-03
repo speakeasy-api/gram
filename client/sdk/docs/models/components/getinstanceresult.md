@@ -25,27 +25,7 @@ let value: GetInstanceResult = {
   },
   name: "<value>",
   tools: [
-    {
-      canonicalName: "<value>",
-      confirm: "<value>",
-      createdAt: new Date("2024-02-11T10:50:18.372Z"),
-      deploymentId: "<id>",
-      description: "which ick weep boastfully huzzah",
-      httpMethod: "<value>",
-      id: "<id>",
-      name: "<value>",
-      path: "/opt/share",
-      projectId: "<id>",
-      schema: "<value>",
-      summary: "<value>",
-      tags: [
-        "<value 1>",
-        "<value 2>",
-      ],
-      toolUrn: "<value>",
-      type: "http",
-      updatedAt: new Date("2024-10-04T08:12:26.935Z"),
-    },
+    {},
   ],
 };
 ```
@@ -60,4 +40,4 @@ let value: GetInstanceResult = {
 | `promptTemplates`                                                            | [components.PromptTemplate](../../models/components/prompttemplate.md)[]     | :heavy_minus_sign:                                                           | The list of prompt templates                                                 |
 | `securityVariables`                                                          | [components.SecurityVariable](../../models/components/securityvariable.md)[] | :heavy_minus_sign:                                                           | The security variables that are relevant to the toolset                      |
 | `serverVariables`                                                            | [components.ServerVariable](../../models/components/servervariable.md)[]     | :heavy_minus_sign:                                                           | The server variables that are relevant to the toolset                        |
-| `tools`                                                                      | *components.Tool*[]                                                          | :heavy_check_mark:                                                           | The list of tools                                                            |
+| `tools`                                                                      | [components.Tool](../../models/components/tool.md)[]                         | :heavy_check_mark:                                                           | The list of tools                                                            |

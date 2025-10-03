@@ -391,7 +391,7 @@ func DescribeToolset(
 			})
 
 			tools = append(tools, &types.Tool{
-				Tool: tool,
+				HTTPToolDefinition: tool,
 			})
 		}
 
@@ -405,7 +405,7 @@ func DescribeToolset(
 
 		for _, pt := range promptTools {
 			tools = append(tools, &types.Tool{
-				Tool: &types.PromptTemplate{
+				PromptTemplate: &types.PromptTemplate{
 					ID:            pt.ID.String(),
 					ToolUrn:       pt.ToolUrn.String(),
 					HistoryID:     pt.HistoryID.String(),

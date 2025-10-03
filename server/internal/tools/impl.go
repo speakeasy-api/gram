@@ -205,7 +205,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		}
 
 		result.Tools = append(result.Tools, &types.Tool{
-			Tool: &types.HTTPToolDefinition{
+			HTTPToolDefinition: &types.HTTPToolDefinition{
 				ID:                  tool.ID.String(),
 				ToolUrn:             tool.ToolUrn.String(),
 				DeploymentID:        tool.DeploymentID.String(),
@@ -249,7 +249,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		}
 
 		result.Tools = append(result.Tools, &types.Tool{
-			Tool: &types.PromptTemplate{
+			PromptTemplate: &types.PromptTemplate{
 				ID:            template.ID.String(),
 				HistoryID:     template.HistoryID.String(),
 				PredecessorID: conv.FromNullableUUID(template.PredecessorID),

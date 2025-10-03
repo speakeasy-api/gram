@@ -1,5 +1,4 @@
 import { Page } from "@/components/page-layout";
-import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Cards } from "@/components/ui/card";
 import { Heading } from "@/components/ui/heading";
 import { MoreActions } from "@/components/ui/more-actions";
@@ -11,17 +10,17 @@ import {
   useTelemetry,
 } from "@/contexts/Telemetry";
 import { useApiError } from "@/hooks/useApiError";
-import { useGroupedTools } from "@/lib/toolNames";
+import { asTool, Tool, Toolset, useGroupedTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   queryKeyInstance,
   useDeleteToolsetMutation,
-  useToolset,
+  useToolset as useToolsetQuery,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
-import { Stack } from "@speakeasy-api/moonshine";
-import { useQueryClient } from "@tanstack/react-query";
+import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
+import { useQueryClient, UseQueryResult } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
@@ -33,7 +32,7 @@ import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
 import { ToolsetEmptyState } from "./ToolsetEmptyState";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
-import { Tool } from "@gram/client/models/components";
+import { useToolset } from "@/hooks/toolTypes";
 
 export function useDeleteToolset({
   onSuccess,
@@ -135,11 +134,7 @@ export function ToolsetView({
   const queryClient = useQueryClient();
   const routes = useRoutes();
   const telemetry = useTelemetry();
-  const { data: toolset, refetch } = useToolset(
-    { slug: toolsetSlug },
-    undefined,
-    { enabled: !!toolsetSlug }
-  );
+  const { data: toolset, refetch } = useToolset(toolsetSlug);
 
   const [activeTab, setActiveTab] = useState<ToolsetTabs>("tools");
   const [addToolsDialogOpen, setAddToolsDialogOpen] = useState(false);

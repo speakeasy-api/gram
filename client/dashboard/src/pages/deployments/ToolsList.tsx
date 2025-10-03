@@ -3,8 +3,8 @@ import { MultiSelect } from "@/components/ui/multi-select";
 import { SearchBar } from "@/components/ui/search-bar";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { Type } from "@/components/ui/type";
-import { ToolWithDisplayName, useGroupedTools } from "@/lib/toolNames";
-import { useListTools } from "@gram/client/react-query/listTools.js";
+import { useListTools } from "@/hooks/toolTypes";
+import { ToolWithDisplayName, useGroupedTools } from "@/lib/toolTypes";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
 

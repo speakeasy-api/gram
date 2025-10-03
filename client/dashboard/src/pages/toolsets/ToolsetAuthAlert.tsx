@@ -1,13 +1,12 @@
 import { useMemo } from "react";
 import { Alert } from "@speakeasy-api/moonshine";
-
-import { Toolset } from "@gram/client/models/components";
 import { useEnvironments } from "../environments/Environments";
+import { Toolset } from "@/lib/toolTypes";
 
 function useRelevantEnvVars(toolset: Toolset) {
   return useMemo(() => {
-    const requiresServerURL = toolset.httpTools?.some(
-      (tool) => !tool.defaultServerUrl
+    const requiresServerURL = toolset.tools?.some(
+      (tool) => tool.type === "http" && !tool.defaultServerUrl
     );
 
     const securityVars = toolset?.securityVariables?.flatMap(secVar => secVar.envVariables) ?? [];

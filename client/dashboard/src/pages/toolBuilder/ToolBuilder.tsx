@@ -1,9 +1,9 @@
+import { Block, BlockInner } from "@/components/block";
 import { DeleteButton } from "@/components/delete-button";
 import { EditableText } from "@/components/editable-text";
 import { Page } from "@/components/page-layout";
 import { ToolBadge } from "@/components/tool-badge";
 import { Badge } from "@/components/ui/badge";
-import { Button, Icon } from "@speakeasy-api/moonshine";
 import {
   Command,
   CommandEmpty,
@@ -24,12 +24,11 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useApiError } from "@/hooks/useApiError";
 import { MUSTACHE_VAR_REGEX, slugify, TOOL_NAME_REGEX } from "@/lib/constants";
-import { useGroupedTools } from "@/lib/toolNames";
+import { Tool, useGroupedTools } from "@/lib/toolTypes";
 import { capitalize, cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   PromptTemplateKind,
-  Tool,
   ToolsetEntry,
 } from "@gram/client/models/components";
 import {
@@ -37,10 +36,9 @@ import {
   invalidateTemplate,
   useListToolsetsSuspense,
   useTemplateSuspense,
-  useToolset,
   useUpdateTemplateMutation,
 } from "@gram/client/react-query";
-import { ResizablePanel, Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -51,7 +49,7 @@ import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { useToolifyContext } from "./Toolify";
-import { Block, BlockInner } from "@/components/block";
+import { useToolset } from "@/hooks/toolTypes";
 
 type Input = {
   name: string;
@@ -75,7 +73,7 @@ const instructionsPlaceholder =
   "Interpret what to do with this tool based on the <purpose />, the chat history, and the output of previous steps.";
 
 // Type for steps without the update function (used for JSON serialization)
-type SerializableStep = Omit<Step, 'update'>;
+type SerializableStep = Omit<Step, "update">;
 
 // Needs to stay aligned with server/internal/templates/impl.go:CustomToolJSONV1
 type HigherOrderTool = {
@@ -190,11 +188,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     initial.toolset
   );
 
-  const { data: toolsetData } = useToolset(
-    { slug: toolsetFilter?.slug ?? "" },
-    undefined,
-    { enabled: !!toolsetFilter?.slug }
-  );
+  const { data: toolsetData } = useToolset(toolsetFilter?.slug);
 
   const parseInputs = (s: string): string[] => {
     const inputs = s.match(/(\{\{[^}]+\}\})/g);
@@ -322,7 +316,8 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
           setOpen(false);
         }}
       >
-        <Button variant="secondary"
+        <Button
+          variant="secondary"
           size="sm"
           className={
             "bg-card dark:bg-background border-stone-300 dark:border-stone-700 border-1"
@@ -355,7 +350,8 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     );
 
   const revertButton = anyChanges && (
-    <Button variant="tertiary"
+    <Button
+      variant="tertiary"
       size="sm"
       onClick={() => {
         setName(initial.name);
@@ -443,7 +439,10 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             await client.toolsets.updateBySlug({
               slug: toolsetFilter?.slug ?? "",
               updateToolsetRequestBody: {
-                toolUrns: [...(toolsetData?.toolUrns ?? []), template.template.toolUrn],
+                toolUrns: [
+                  ...(toolsetData?.toolUrns ?? []),
+                  template.template.toolUrn,
+                ],
               },
             });
 
@@ -690,7 +689,7 @@ const StepCard = ({
   moveDown,
 }: {
   step: Step;
-  tools: Tool [];
+  tools: Tool[];
   remove: () => void;
   moveUp?: () => void;
   moveDown?: () => void;
@@ -754,7 +753,8 @@ const StepCard = ({
             className="mr-[-8px] mt-[-8px] group-hover/heading:opacity-100 opacity-0 trans"
           >
             {moveUp && (
-              <Button variant="tertiary"
+              <Button
+                variant="tertiary"
                 size="xs"
                 onClick={moveUp}
                 className="mr-[-4px]"
@@ -766,7 +766,8 @@ const StepCard = ({
               </Button>
             )}
             {moveDown && (
-              <Button variant="tertiary"
+              <Button
+                variant="tertiary"
                 size="xs"
                 onClick={moveDown}
                 className="mr-[-4px]"
@@ -907,7 +908,10 @@ const parsePrompt = (
       };
     }
   } catch (error) {
-    console.error("Failed to parse template as JSON, falling back to legacy parsing:", error);
+    console.error(
+      "Failed to parse template as JSON, falling back to legacy parsing:",
+      error
+    );
   }
 
   // Legacy parsing logic (kept for backward compatibility)

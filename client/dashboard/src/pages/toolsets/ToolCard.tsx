@@ -8,11 +8,11 @@ import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
+import { isPromptTool, Tool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import {
   Confirm,
   HTTPToolDefinition,
-  Tool,
   UpsertGlobalToolVariationForm,
 } from "@gram/client/models/components";
 import { invalidateTemplate, useDeployment } from "@gram/client/react-query";
@@ -82,7 +82,7 @@ export function ToolCard({
         onSubmit={(newValue) => updateVariation({ name: newValue })}
         label={"Tool Name"}
         description={`Update the name of tool '${tool.name}'`}
-        disabled={tool.type === "prompt_template"}
+        disabled={isPromptTool(tool)}
       >
         <Stack direction="horizontal" align="center">
           {prefixTrimmed && (
@@ -119,7 +119,7 @@ export function ToolCard({
             {tag}
           </Badge>
         ))}
-      {tool.type === "prompt_template" && (
+      {isPromptTool(tool) && (
         <Badge variant="secondary" className="text-sm capitalize" tooltip={`Subtools: ${tool.toolsHint.join(", ")}`}>
           Custom Tool
         </Badge>

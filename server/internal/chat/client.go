@@ -18,7 +18,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -230,7 +229,7 @@ func (c *ChatClient) LoadToolsetTools(
 			continue
 		}
 
-		httpTool := tool.Tool.(*types.HTTPToolDefinition)
+		httpTool := tool.HTTPToolDefinition
 
 		// Capture for closure
 		name := toolURN.Name

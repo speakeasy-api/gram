@@ -1,10 +1,8 @@
 import { Page } from "@/components/page-layout";
-import { Button } from "@speakeasy-api/moonshine";
-import { Plus } from "lucide-react";
 import { ToolCollectionBadge } from "@/components/tools-badge";
-import { Badge } from "@/components/ui/badge";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
+import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import {
   PromptTemplate,
@@ -15,20 +13,20 @@ import {
   useDeleteTemplateMutation,
   useTemplates,
 } from "@gram/client/react-query";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Outlet } from "react-router";
 import { CustomToolsEmptyState } from "./CustomToolsEmptyState";
 import { MustacheHighlight } from "./ToolBuilder";
 import { ToolifyDialog, ToolifyProvider } from "./Toolify";
-import { UpdatedAt } from "@/components/updated-at";
 
 export function useCustomTools() {
   const { data, isLoading } = useTemplates();
   return {
     customTools: data?.templates.filter(
-      (template) => template.kind === PromptTemplateKind.HigherOrderTool,
+      (template) => template.kind === PromptTemplateKind.HigherOrderTool
     ),
     isLoading,
   };
@@ -99,27 +97,6 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
     },
   });
 
-  let inputsBadge = <Badge variant="secondary">No inputs</Badge>;
-  if (template.arguments) {
-    const args = JSON.parse(template.arguments);
-    const tooltipContent = (
-      <Stack gap={1} className="max-h-[300px] overflow-y-auto">
-        {Object.keys(args.properties).map((key: string, i: number) => {
-          return <p key={i}>{key}</p>;
-        })}
-      </Stack>
-    );
-    const numInputs = Object.keys(args.properties).length;
-    inputsBadge = (
-      <Badge
-        variant="outline"
-        tooltip={numInputs > 0 ? tooltipContent : undefined}
-      >
-        {numInputs > 0 ? numInputs : "No"} input{numInputs === 1 ? "" : "s"}
-      </Badge>
-    );
-  }
-
   return (
     <routes.customTools.toolBuilder.Link
       params={[template.name]}
@@ -153,10 +130,7 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
           )}
         </Card.Content>
         <Card.Footer>
-          <Stack direction="horizontal" gap={1}>
-            {inputsBadge}
-            <ToolCollectionBadge toolNames={template.toolsHint} />
-          </Stack>
+          <ToolCollectionBadge toolNames={template.toolsHint} />
           <UpdatedAt date={new Date(template.updatedAt)} />
         </Card.Footer>
       </Card>

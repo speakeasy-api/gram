@@ -9,7 +9,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
@@ -1845,69 +1844,92 @@ func marshalTypesServerVariableToServerVariableResponseBody(v *types.ServerVaria
 // from a value of type *types.Tool.
 func marshalTypesToolToToolResponseBody(v *types.Tool) *ToolResponseBody {
 	res := &ToolResponseBody{}
-	if v.Tool != nil {
-		js, _ := json.Marshal(v.Tool)
-		var name string
-		switch v.Tool.(type) {
-		case *types.HTTPToolDefinition:
-			name = "http_tool"
-		case *types.PromptTemplate:
-			name = "prompt_template"
-		}
-		res.Tool = &struct {
-			// Union type name, one of:
-			// - "http_tool"
-			// - "prompt_template"
-			Type string `form:"Type" json:"Type" xml:"Type"`
-			// JSON encoded union value
-			Value string `form:"Value" json:"Value" xml:"Value"`
-		}{
-			Type:  name,
-			Value: string(js),
-		}
+	if v.HTTPToolDefinition != nil {
+		res.HTTPToolDefinition = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v.HTTPToolDefinition)
+	}
+	if v.PromptTemplate != nil {
+		res.PromptTemplate = marshalTypesPromptTemplateToPromptTemplateResponseBody(v.PromptTemplate)
 	}
 
 	return res
 }
 
-// marshalTypesPromptTemplateToPromptTemplateResponseBody builds a value of
-// type *PromptTemplateResponseBody from a value of type *types.PromptTemplate.
-func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTemplate) *PromptTemplateResponseBody {
-	res := &PromptTemplateResponseBody{
-		HistoryID:     v.HistoryID,
-		PredecessorID: v.PredecessorID,
-		Prompt:        v.Prompt,
-		Engine:        v.Engine,
-		Kind:          v.Kind,
-		Type:          v.Type,
-		ID:            v.ID,
-		ToolUrn:       v.ToolUrn,
-		ProjectID:     v.ProjectID,
-		DeploymentID:  v.DeploymentID,
-		Name:          v.Name,
-		CanonicalName: v.CanonicalName,
-		Description:   v.Description,
-		SchemaVersion: v.SchemaVersion,
-		Schema:        v.Schema,
-		Confirm:       v.Confirm,
-		ConfirmPrompt: v.ConfirmPrompt,
-		Summarizer:    v.Summarizer,
-		CreatedAt:     v.CreatedAt,
-		UpdatedAt:     v.UpdatedAt,
+// marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody builds a
+// value of type *HTTPToolDefinitionResponseBody from a value of type
+// *types.HTTPToolDefinition.
+func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
+	if v == nil {
+		return nil
 	}
-	if v.ToolsHint != nil {
-		res.ToolsHint = make([]string, len(v.ToolsHint))
-		for i, val := range v.ToolsHint {
-			res.ToolsHint[i] = val
+	res := &HTTPToolDefinitionResponseBody{
+		Summary:             v.Summary,
+		Openapiv3DocumentID: v.Openapiv3DocumentID,
+		Openapiv3Operation:  v.Openapiv3Operation,
+		Security:            v.Security,
+		DefaultServerURL:    v.DefaultServerURL,
+		HTTPMethod:          v.HTTPMethod,
+		Path:                v.Path,
+		PackageName:         v.PackageName,
+		ID:                  v.ID,
+		ToolUrn:             v.ToolUrn,
+		ProjectID:           v.ProjectID,
+		DeploymentID:        v.DeploymentID,
+		Name:                v.Name,
+		CanonicalName:       v.CanonicalName,
+		Description:         v.Description,
+		SchemaVersion:       v.SchemaVersion,
+		Schema:              v.Schema,
+		Confirm:             v.Confirm,
+		ConfirmPrompt:       v.ConfirmPrompt,
+		Summarizer:          v.Summarizer,
+		CreatedAt:           v.CreatedAt,
+		UpdatedAt:           v.UpdatedAt,
+	}
+	if v.ResponseFilter != nil {
+		res.ResponseFilter = marshalTypesResponseFilterToResponseFilterResponseBody(v.ResponseFilter)
+	}
+	if v.Tags != nil {
+		res.Tags = make([]string, len(v.Tags))
+		for i, val := range v.Tags {
+			res.Tags[i] = val
 		}
 	} else {
-		res.ToolsHint = []string{}
+		res.Tags = []string{}
 	}
 	if v.Canonical != nil {
 		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
 	}
 	if v.Variation != nil {
 		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
+	}
+
+	return res
+}
+
+// marshalTypesResponseFilterToResponseFilterResponseBody builds a value of
+// type *ResponseFilterResponseBody from a value of type *types.ResponseFilter.
+func marshalTypesResponseFilterToResponseFilterResponseBody(v *types.ResponseFilter) *ResponseFilterResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &ResponseFilterResponseBody{
+		Type: v.Type,
+	}
+	if v.StatusCodes != nil {
+		res.StatusCodes = make([]string, len(v.StatusCodes))
+		for i, val := range v.StatusCodes {
+			res.StatusCodes[i] = val
+		}
+	} else {
+		res.StatusCodes = []string{}
+	}
+	if v.ContentTypes != nil {
+		res.ContentTypes = make([]string, len(v.ContentTypes))
+		for i, val := range v.ContentTypes {
+			res.ContentTypes[i] = val
+		}
+	} else {
+		res.ContentTypes = []string{}
 	}
 
 	return res
@@ -1963,6 +1985,51 @@ func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation
 		for i, val := range v.Tags {
 			res.Tags[i] = val
 		}
+	}
+
+	return res
+}
+
+// marshalTypesPromptTemplateToPromptTemplateResponseBody builds a value of
+// type *PromptTemplateResponseBody from a value of type *types.PromptTemplate.
+func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTemplate) *PromptTemplateResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &PromptTemplateResponseBody{
+		HistoryID:     v.HistoryID,
+		PredecessorID: v.PredecessorID,
+		Prompt:        v.Prompt,
+		Engine:        v.Engine,
+		Kind:          v.Kind,
+		ID:            v.ID,
+		ToolUrn:       v.ToolUrn,
+		ProjectID:     v.ProjectID,
+		DeploymentID:  v.DeploymentID,
+		Name:          v.Name,
+		CanonicalName: v.CanonicalName,
+		Description:   v.Description,
+		SchemaVersion: v.SchemaVersion,
+		Schema:        v.Schema,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Summarizer:    v.Summarizer,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
+	}
+	if v.ToolsHint != nil {
+		res.ToolsHint = make([]string, len(v.ToolsHint))
+		for i, val := range v.ToolsHint {
+			res.ToolsHint[i] = val
+		}
+	} else {
+		res.ToolsHint = []string{}
+	}
+	if v.Canonical != nil {
+		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
 	}
 
 	return res

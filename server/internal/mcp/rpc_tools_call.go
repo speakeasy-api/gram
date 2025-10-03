@@ -87,7 +87,7 @@ func handleToolsCall(
 	}
 
 	if conv.ToToolUrn(*tool).Kind == urn.ToolKindPrompt {
-		higherOrderTool := tool.Tool.(*types.PromptTemplate)
+		higherOrderTool := tool.PromptTemplate
 		var args map[string]any
 		if err := json.Unmarshal(params.Arguments, &args); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse higher order tool arguments").Log(ctx, logger)

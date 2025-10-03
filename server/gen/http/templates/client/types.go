@@ -1416,8 +1416,6 @@ type PromptTemplateResponseBody struct {
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string `form:"tools_hint,omitempty" json:"tools_hint,omitempty" xml:"tools_hint,omitempty"`
-	// The type of the tool - discriminator value
-	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
 	// The ID of the tool
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The URN of this tool
@@ -4473,9 +4471,6 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.Type == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
 	}
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))

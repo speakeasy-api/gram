@@ -5,7 +5,6 @@
 import * as z from "zod";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -26,17 +25,6 @@ import {
   ToolVariation$Outbound,
   ToolVariation$outboundSchema,
 } from "./toolvariation.js";
-
-/**
- * The type of the tool - discriminator value
- */
-export const HTTPToolDefinitionType = {
-  Http: "http",
-} as const;
-/**
- * The type of the tool - discriminator value
- */
-export type HTTPToolDefinitionType = ClosedEnum<typeof HTTPToolDefinitionType>;
 
 /**
  * An HTTP tool
@@ -139,36 +127,11 @@ export type HTTPToolDefinition = {
    */
   toolUrn: string;
   /**
-   * The type of the tool - discriminator value
-   */
-  type: HTTPToolDefinitionType;
-  /**
    * The last update date of the tool.
    */
   updatedAt: Date;
   variation?: ToolVariation | undefined;
 };
-
-/** @internal */
-export const HTTPToolDefinitionType$inboundSchema: z.ZodNativeEnum<
-  typeof HTTPToolDefinitionType
-> = z.nativeEnum(HTTPToolDefinitionType);
-
-/** @internal */
-export const HTTPToolDefinitionType$outboundSchema: z.ZodNativeEnum<
-  typeof HTTPToolDefinitionType
-> = HTTPToolDefinitionType$inboundSchema;
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace HTTPToolDefinitionType$ {
-  /** @deprecated use `HTTPToolDefinitionType$inboundSchema` instead. */
-  export const inboundSchema = HTTPToolDefinitionType$inboundSchema;
-  /** @deprecated use `HTTPToolDefinitionType$outboundSchema` instead. */
-  export const outboundSchema = HTTPToolDefinitionType$outboundSchema;
-}
 
 /** @internal */
 export const HTTPToolDefinition$inboundSchema: z.ZodType<
@@ -200,7 +163,6 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   summary: z.string(),
   tags: z.array(z.string()),
   tool_urn: z.string(),
-  type: HTTPToolDefinitionType$inboundSchema,
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   variation: ToolVariation$inboundSchema.optional(),
 }).transform((v) => {
@@ -248,7 +210,6 @@ export type HTTPToolDefinition$Outbound = {
   summary: string;
   tags: Array<string>;
   tool_urn: string;
-  type: string;
   updated_at: string;
   variation?: ToolVariation$Outbound | undefined;
 };
@@ -283,7 +244,6 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   summary: z.string(),
   tags: z.array(z.string()),
   toolUrn: z.string(),
-  type: HTTPToolDefinitionType$outboundSchema,
   updatedAt: z.date().transform(v => v.toISOString()),
   variation: ToolVariation$outboundSchema.optional(),
 }).transform((v) => {

@@ -1,9 +1,9 @@
-import { Tool } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
 import { HttpRoute } from "./http-route";
 import { Badge } from "./ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Type } from "./ui/type";
+import { Tool } from "@/lib/toolTypes";
 
 export function ToolBadge({
   tool,
