@@ -145,6 +145,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		}
 	}()
 
+	logger.InfoContext(ctx, "starting server", attr.SlogServerAddress(srv.Addr))
 	err = srv.ListenAndServe()
 	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return fmt.Errorf("server error: %w", err)
