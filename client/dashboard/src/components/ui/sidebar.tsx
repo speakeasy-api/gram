@@ -270,7 +270,9 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <Button.LeftIcon ><Icon name="panel-left" /></Button.LeftIcon>
+      <Button.LeftIcon>
+        <Icon name="panel-left" />
+      </Button.LeftIcon>
       <Button.Text className="sr-only">Toggle Sidebar</Button.Text>
     </Button>
   );
