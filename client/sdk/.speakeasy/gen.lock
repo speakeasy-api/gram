@@ -1,18 +1,18 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 0c117107352fc7840b5cc3f904251871
+  docChecksum: b0600ba652b467d7913749f213f17ebe
   docVersion: 0.0.1
-  speakeasyVersion: 1.613.0
-  generationVersion: 2.696.0
-  releaseVersion: 0.12.68
-  configChecksum: 7b18ec35d1be4c593e1d5849a64d9923
+  speakeasyVersion: 1.634.0
+  generationVersion: 2.721.0
+  releaseVersion: 0.12.72
+  configChecksum: cdd2788bd2f93fb3e2e1e920bf79e975
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.22
+    core: 3.21.26
     defaultEnabledRetries: 0.1.0
-    devContainers: 2.90.0
+    devContainers: 2.90.1
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
@@ -82,6 +82,7 @@ generatedFiles:
   - docs/models/components/getinstanceresult.md
   - docs/models/components/getintegrationresult.md
   - docs/models/components/getlatestdeploymentresult.md
+  - docs/models/components/getmcpmetadataresponsebody.md
   - docs/models/components/getprompttemplateresult.md
   - docs/models/components/getslackconnectionresult.md
   - docs/models/components/httptooldefinition.md
@@ -106,6 +107,7 @@ generatedFiles:
   - docs/models/components/listtoolsresult.md
   - docs/models/components/listvariationsresult.md
   - docs/models/components/listversionsresult.md
+  - docs/models/components/mcpmetadata.md
   - docs/models/components/notmodified.md
   - docs/models/components/oauthproxyprovider.md
   - docs/models/components/oauthproxyserver.md
@@ -132,6 +134,7 @@ generatedFiles:
   - docs/models/components/responsefilter.md
   - docs/models/components/securityvariable.md
   - docs/models/components/servervariable.md
+  - docs/models/components/setmcpmetadatarequestbody.md
   - docs/models/components/setprojectlogoform.md
   - docs/models/components/setprojectlogoresult.md
   - docs/models/components/tierlimits.md
@@ -227,6 +230,8 @@ generatedFiles:
   - docs/models/operations/getlatestdeploymentsecurity.md
   - docs/models/operations/getlatestdeploymentsecurityoption1.md
   - docs/models/operations/getlatestdeploymentsecurityoption2.md
+  - docs/models/operations/getmcpmetadatarequest.md
+  - docs/models/operations/getmcpmetadatasecurity.md
   - docs/models/operations/getperiodusagerequest.md
   - docs/models/operations/getperiodusagesecurity.md
   - docs/models/operations/getslackconnectionrequest.md
@@ -318,6 +323,8 @@ generatedFiles:
   - docs/models/operations/sessioninforequest.md
   - docs/models/operations/sessioninforesponse.md
   - docs/models/operations/sessioninfosecurity.md
+  - docs/models/operations/setmcpmetadatarequest.md
+  - docs/models/operations/setmcpmetadatasecurity.md
   - docs/models/operations/setprojectlogorequest.md
   - docs/models/operations/setprojectlogosecurity.md
   - docs/models/operations/setprojectlogosecurityoption1.md
@@ -371,6 +378,7 @@ generatedFiles:
   - docs/sdks/instances/README.md
   - docs/sdks/integrations/README.md
   - docs/sdks/keys/README.md
+  - docs/sdks/mcpmetadata/README.md
   - docs/sdks/packages/README.md
   - docs/sdks/projects/README.md
   - docs/sdks/slack/README.md
@@ -422,6 +430,8 @@ generatedFiles:
   - src/funcs/keysCreate.ts
   - src/funcs/keysList.ts
   - src/funcs/keysRevokeById.ts
+  - src/funcs/mcpMetadataGet.ts
+  - src/funcs/mcpMetadataSet.ts
   - src/funcs/packagesCreate.ts
   - src/funcs/packagesList.ts
   - src/funcs/packagesListVersions.ts
@@ -520,6 +530,7 @@ generatedFiles:
   - src/models/components/getinstanceresult.ts
   - src/models/components/getintegrationresult.ts
   - src/models/components/getlatestdeploymentresult.ts
+  - src/models/components/getmcpmetadataresponsebody.ts
   - src/models/components/getprompttemplateresult.ts
   - src/models/components/getslackconnectionresult.ts
   - src/models/components/httptooldefinition.ts
@@ -543,6 +554,7 @@ generatedFiles:
   - src/models/components/listtoolsresult.ts
   - src/models/components/listvariationsresult.ts
   - src/models/components/listversionsresult.ts
+  - src/models/components/mcpmetadata.ts
   - src/models/components/notmodified.ts
   - src/models/components/oauthproxyprovider.ts
   - src/models/components/oauthproxyserver.ts
@@ -566,6 +578,7 @@ generatedFiles:
   - src/models/components/responsefilter.ts
   - src/models/components/securityvariable.ts
   - src/models/components/servervariable.ts
+  - src/models/components/setmcpmetadatarequestbody.ts
   - src/models/components/setprojectlogoform.ts
   - src/models/components/setprojectlogoresult.ts
   - src/models/components/tierlimits.ts
@@ -618,6 +631,7 @@ generatedFiles:
   - src/models/operations/getdomain.ts
   - src/models/operations/getinstance.ts
   - src/models/operations/getlatestdeployment.ts
+  - src/models/operations/getmcpmetadata.ts
   - src/models/operations/getperiodusage.ts
   - src/models/operations/getslackconnection.ts
   - src/models/operations/gettemplate.ts
@@ -650,6 +664,7 @@ generatedFiles:
   - src/models/operations/serveimage.ts
   - src/models/operations/serveopenapiv3.ts
   - src/models/operations/sessioninfo.ts
+  - src/models/operations/setmcpmetadata.ts
   - src/models/operations/setprojectlogo.ts
   - src/models/operations/slackcallback.ts
   - src/models/operations/slacklogin.ts
@@ -687,6 +702,7 @@ generatedFiles:
   - src/react-query/evolveDeployment.ts
   - src/react-query/getCreditUsage.ts
   - src/react-query/getDomain.ts
+  - src/react-query/getMcpMetadata.ts
   - src/react-query/getPeriodUsage.ts
   - src/react-query/getSlackConnection.ts
   - src/react-query/getUsageTiers.ts
@@ -708,6 +724,7 @@ generatedFiles:
   - src/react-query/listVersions.ts
   - src/react-query/loadChat.ts
   - src/react-query/logout.ts
+  - src/react-query/mcpMetadataSet.ts
   - src/react-query/publishPackage.ts
   - src/react-query/redeployDeployment.ts
   - src/react-query/register.ts
@@ -743,6 +760,7 @@ generatedFiles:
   - src/sdk/instances.ts
   - src/sdk/integrations.ts
   - src/sdk/keys.ts
+  - src/sdk/mcpmetadata.ts
   - src/sdk/packages.ts
   - src/sdk/projects.ts
   - src/sdk/sdk.ts
@@ -1531,5 +1549,52 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getInstallPageMetadata:
+    speakeasy-default-get-install-page-metadata:
+      parameters:
+        query:
+          toolset_id: "b6e4ca24-e078-4ae2-8b4e-f99e8b24755c"
+          toolset_slug: "<value>"
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  setInstallPageMetadata:
+    speakeasy-default-set-install-page-metadata:
+      requestBody:
+        application/json: {"toolset_slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-07-02T04:34:47.296Z", "id": "<id>", "toolset_id": "1e7ed99d-76d3-4eaa-a245-36fe9e5308c2", "updated_at": "2024-05-24T08:09:35.124Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getMcpMetadata:
+    speakeasy-default-get-mcp-metadata:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  setMcpMetadata:
+    speakeasy-default-set-mcp-metadata:
+      requestBody:
+        application/json: {"toolset_slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-12-11T16:40:00.632Z", "id": "<id>", "toolset_id": "4a999575-d1bd-4e03-9441-727039544c9e", "updated_at": "2024-12-20T06:05:12.488Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

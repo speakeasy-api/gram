@@ -7,21 +7,12 @@ import { useState } from "react";
 import { AssetImage } from "./asset-image";
 import { Type } from "./ui/type";
 
-export function ImageUpload({
-  onUpload,
-  existingAssetId,
-  className,
-}: {
-  onUpload: (asset: Asset) => void;
-  existingAssetId?: string;
-  className?: string;
-}) {
+export function useAssetImageUploadHandler(
+  onSuccess: (res: UploadImageResult) => void,
+) {
   const { fetch } = useFetcher();
-  const [assetId, setAssetId] = useState<string | null>(
-    existingAssetId ?? null,
-  );
 
-  const onImageUpload = async (file: File) => {
+  return async (file: File) => {
     const res = await fetch("/rpc/assets.uploadImage", {
       method: "POST",
       body: file,
@@ -37,9 +28,27 @@ export function ImageUpload({
 
     const assetResult: UploadImageResult = await res.json();
 
-    setAssetId(assetResult.asset.id);
-    onUpload(assetResult.asset);
+    onSuccess(assetResult);
   };
+}
+
+export function ImageUpload({
+  onUpload,
+  existingAssetId,
+  className,
+}: {
+  onUpload: (asset: Asset) => void;
+  existingAssetId?: string;
+  className?: string;
+}) {
+  const [assetId, setAssetId] = useState<string | null>(
+    existingAssetId ?? null,
+  );
+
+  const handler = useAssetImageUploadHandler((res) => {
+    setAssetId(res.asset.id);
+    onUpload(res.asset);
+  });
 
   if (assetId) {
     return (
@@ -59,18 +68,68 @@ export function ImageUpload({
   }
 
   return (
-    <FileUpload
-      onUpload={onImageUpload}
+    <FullWidthUpload
+      onUpload={handler}
       className={className}
       allowedExtensions={["png", "jpg", "jpeg"]}
     />
   );
 }
 
-export default function FileUpload({
+interface FileDropzoneHandlers<E extends HTMLElement> {
+  isValidFile: boolean;
+  onDragOver: (e: React.DragEvent<E>) => void;
+  onDragLeave: (e: React.DragEvent<E>) => void;
+  onDrop: (e: React.DragEvent<E>) => void;
+}
+
+function useFileDropZoneHandlers<E extends HTMLElement>(
+  handleFile: (file: File) => void,
+  allowedExtensions?: string[],
+): FileDropzoneHandlers<E> {
+  const [isValidFile, setIsValidFile] = useState<boolean>(true);
+
+  return {
+    isValidFile,
+    onDragOver: (e: React.DragEvent<E>) => {
+      e.preventDefault();
+      const items = e.dataTransfer.items;
+      if (items?.[0]) {
+        const fileExtension =
+          items[0].type === "application/json" ||
+          items[0].type === "application/x-yaml" ||
+          items[0].type === "text/yaml";
+        setIsValidFile(!!fileExtension);
+      }
+    },
+    onDragLeave: () => setIsValidFile(true),
+    onDrop: (e) => {
+      e.preventDefault();
+      setIsValidFile(true);
+      const droppedFile = e.dataTransfer.files[0];
+      if (droppedFile) {
+        const fileExtension = droppedFile.name.toLowerCase().split(".").pop();
+        if (
+          !allowedExtensions ||
+          allowedExtensions.includes(fileExtension ?? "")
+        ) {
+          handleFile(droppedFile);
+        } else {
+          console.warn(
+            `Invalid file type. Please upload one of the following: ${allowedExtensions?.join(
+              ", ",
+            )}`,
+          );
+        }
+      }
+    },
+  };
+}
+
+export function FullWidthUpload({
   onUpload,
-  className,
   allowedExtensions,
+  className,
   label,
 }: {
   onUpload: (file: File) => void;
@@ -78,8 +137,6 @@ export default function FileUpload({
   label?: React.ReactNode;
   className?: string;
 }) {
-  const [isInvalidFile, setIsInvalidFile] = useState(false);
-
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -87,47 +144,18 @@ export default function FileUpload({
     }
   };
 
+  const handlers = useFileDropZoneHandlers(onUpload, allowedExtensions);
   return (
-    <form
+    <div
+      tabIndex={0}
       className={cn("grid gap-4 w-full max-w-2xl", className)}
-      onDragOver={(e) => {
-        e.preventDefault();
-        const items = e.dataTransfer.items;
-        if (items?.[0]) {
-          const fileExtension =
-            items[0].type === "application/json" ||
-            items[0].type === "application/x-yaml" ||
-            items[0].type === "text/yaml";
-          setIsInvalidFile(!fileExtension);
-        }
-      }}
-      onDragLeave={() => setIsInvalidFile(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setIsInvalidFile(false);
-        const droppedFile = e.dataTransfer.files[0];
-        if (droppedFile) {
-          const fileExtension = droppedFile.name.toLowerCase().split(".").pop();
-          if (
-            !allowedExtensions ||
-            allowedExtensions.includes(fileExtension ?? "")
-          ) {
-            onUpload(droppedFile);
-          } else {
-            console.warn(
-              `Invalid file type. Please upload one of the following: ${allowedExtensions?.join(
-                ", ",
-              )}`,
-            );
-          }
-        }
-      }}
+      {...handlers}
     >
       <div className="flex items-center justify-center w-full">
         <label
           htmlFor="dropzone-file"
           className={`flex flex-col items-center justify-center w-full p-10 border-1 border-dashed rounded-lg cursor-pointer trans ${
-            isInvalidFile
+            !handlers.isValidFile
               ? "border-destructive bg-destructive/10"
               : "border-muted-foreground/50 hover:bg-input/20"
           }`}
@@ -156,6 +184,66 @@ export default function FileUpload({
           />
         </label>
       </div>
-    </form>
+    </div>
+  );
+}
+
+export function CompactUpload({
+  onUpload,
+  allowedExtensions,
+  className,
+  renderFilePreview,
+}: {
+  onUpload: (file: File) => void;
+  allowedExtensions?: string[];
+  label?: React.ReactNode;
+  className?: string;
+  renderFilePreview?: () => React.ReactNode;
+}) {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      onUpload(file);
+    }
+  };
+
+  const { isValidFile, ...handlers } = useFileDropZoneHandlers(
+    onUpload,
+    allowedExtensions,
+  );
+  return (
+    <label
+      htmlFor="dropzone-file"
+      tabIndex={0}
+      className={cn(
+        "inline-flex flex-col gap-2 items-center justify-center",
+        "p-6 border-1 border-dashed rounded-lg cursor-pointer",
+        "aspect-square",
+        !isValidFile
+          ? "border-destructive bg-destructive/10"
+          : "border-muted-foreground/50 hover:bg-input/20",
+        className,
+      )}
+      {...handlers}
+    >
+      {(renderFilePreview && renderFilePreview()) ?? (
+        <Stack align={"center"} gap={2}>
+          <UploadIcon className="w-4 h-4" />
+          <Type mono muted className="text-xs">
+            {allowedExtensions?.map((ext) => `.${ext}`)?.join(", ")}
+          </Type>
+          <Type mono muted className="text-xs">
+            (max 8MiB)
+          </Type>
+        </Stack>
+      )}
+      <input
+        id="dropzone-file"
+        type="file"
+        className="hidden"
+        onChange={handleFileChange}
+        accept={allowedExtensions?.map((ext) => `.${ext}`)?.join(",")}
+      />
+    </label>
   );
 }

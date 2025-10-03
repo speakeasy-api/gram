@@ -2,7 +2,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Type } from "../ui/type";
-import FileUpload from "../upload";
+import { FullWidthUpload } from "../upload";
 import { useStep } from "./step";
 import { useStepper } from "./stepper";
 
@@ -60,7 +60,7 @@ export default function UploadFileStep() {
     );
   } else {
     return (
-      <FileUpload
+      <FullWidthUpload
         onUpload={handleUpload}
         allowedExtensions={["yaml", "yml", "json"]}
       />

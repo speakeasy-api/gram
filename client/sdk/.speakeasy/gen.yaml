@@ -19,13 +19,15 @@ generation:
   auth:
     oAuth2ClientCredentialsEnabled: true
     oAuth2PasswordEnabled: true
+    hoistGlobalSecurity: true
   sdkHooksConfigAccess: true
   tests:
     generateTests: true
     generateNewTests: false
     skipResponseBodyAssertions: false
 typescript:
-  version: 0.12.68
+  version: 0.12.72
+  acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}
     devDependencies:
@@ -62,6 +64,7 @@ typescript:
   jsonpath: rfc9535
   maxMethodParams: 0
   methodArguments: infer-optional-args
+  modelPropertyCasing: camel
   moduleFormat: esm
   outputModelSuffix: output
   packageName: '@gram/client'
