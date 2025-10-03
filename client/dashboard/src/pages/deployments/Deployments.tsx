@@ -95,8 +95,10 @@ function DeploymentActionsDropdown({
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <Button variant="tertiary" size="sm" className="h-8 w-8 p-0">
-          <Icon name="ellipsis" className="size-4" />
-          <span className="sr-only">Open menu</span>
+          <Button.LeftIcon>
+            <Icon name="ellipsis" className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text className="sr-only">Open menu</Button.Text>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">

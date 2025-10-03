@@ -23,15 +23,7 @@ import { useRegisterDomainMutation } from "@gram/client/react-query/registerDoma
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Column, Stack, Table } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import {
-  Check,
-  CheckCircle2,
-  Copy,
-  Globe,
-  Loader2,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Check, CheckCircle2, Copy, Globe, Loader2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useCustomDomain } from "../mcp/MCPDetails";
 
@@ -239,7 +231,9 @@ export default function Settings() {
           onClick={() => setKeyToRevoke(key)}
           className="hover:text-destructive"
         >
-          <Trash2 className="h-4 w-4" />
+          <Button.Text>
+            <Icon name="trash-2" className="h-4 w-4" />
+          </Button.Text>
         </Button>
       ),
     },
