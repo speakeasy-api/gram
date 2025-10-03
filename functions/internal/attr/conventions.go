@@ -13,8 +13,8 @@ const (
 	ExceptionStacktraceKey = semconv.ExceptionStacktraceKey
 	ErrorMessageKey        = semconv.ErrorMessageKey
 	ErrorIDKey             = attribute.Key("gram.error.id")
-
-	ProcessExitCodeKey = semconv.ProcessExitCodeKey
+	ProcessExitCodeKey     = semconv.ProcessExitCodeKey
+	ServerAddressKey       = semconv.ServerAddressKey
 
 	ComponentKey             = attribute.Key("gram.component")
 	ProjectIDKey             = attribute.Key("gram.project.id")
@@ -44,6 +44,9 @@ func SlogErrorID(v string) slog.Attr      { return slog.String(string(ErrorIDKey
 
 func ProcessExitCode(v int) attribute.KeyValue { return ProcessExitCodeKey.Int(v) }
 func SlogProcessExitCode(v int) slog.Attr      { return slog.Int(string(ProcessExitCodeKey), v) }
+
+func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
+func SlogServerAddress(v string) slog.Attr      { return slog.String(string(ServerAddressKey), v) }
 
 func Component(v string) attribute.KeyValue { return ComponentKey.String(v) }
 func SlogComponent(v string) slog.Attr      { return slog.String(string(ComponentKey), v) }

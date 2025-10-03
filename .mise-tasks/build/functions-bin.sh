@@ -7,8 +7,10 @@
 #USAGE flag "--level <level>" help="Set log level for builds" default="info"
 #USAGE flag "--arch <arch>" required=#true help="Comma-separated list of target architectures" default="x86_64"
 #USAGE flag "--melange-private-key <path>" help="Path to melange signing key"
+#USAGE flag "--apk-cache-dir <path>" required=#true help="Path to apko cache directory" default="../local/cache/apk"
 
 archs="${usage_arch:?Error: arch not provided}"
+apk_cache_dir="${usage_apk_cache_dir:?Error: apk cache dir not provided}"
 log_level="${usage_level:-info}"
 
 melange_priv_key=${usage_melange_private_key:-$MELANGE_PRIVATE_KEY}
@@ -19,6 +21,7 @@ fi
 
 rm -rf ./packages
 exec melange build \
+  --apk-cache-dir "$apk_cache_dir" \
   --cache-dir "$(go env GOMODCACHE)" \
   --arch "${archs}" \
   --runner docker \
