@@ -519,16 +519,18 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       >
         <PublicToggle isPublic={mcpIsPublic ?? false} />
       </PageSection>
-      <PageSection
-        heading="MCP Install Documentation"
-        description="Share this page with your users to give simple instructions
-          for gettings started with your MCP to their client like Cursor or
-          Claude Desktop."
-      >
-        <Stack className="mt-2" gap={1}>
-          <ConfigForm toolset={toolset} />
-        </Stack>
-      </PageSection>
+      {toolset.mcpIsPublic && (
+        <PageSection
+          heading="MCP Install Documentation"
+          description="Share this page with your users to give simple instructions
+            for gettings started with your MCP to their client like Cursor or
+            Claude Desktop."
+        >
+          <Stack className="mt-2" gap={1}>
+            <ConfigForm toolset={toolset} />
+          </Stack>
+        </PageSection>
+      )}
       <PageSection
         heading="Configuration"
         description="Configuration blocks for this server"

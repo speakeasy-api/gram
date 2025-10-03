@@ -22,6 +22,7 @@ import { GramError } from "@gram/client/models/errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { CodeBlock } from "@/components/code";
 import { useMcpUrl } from "@/pages/mcp/MCPDetails";
+import { Dialog } from "@/components/ui/dialog";
 
 interface ConfigFormProps {
   toolset: Toolset;
@@ -32,8 +33,18 @@ interface MetadataParams {
   externalDocumentationUrl: string | undefined;
 }
 
+type ValidationResult =
+  | {
+      valid: true;
+      message?: undefined;
+    }
+  | {
+      valid: false;
+      message: string;
+    };
+
 interface UseMcpMetadataMetadataFormResult {
-  valid: boolean;
+  valid: ValidationResult;
   dirty: boolean;
   isLoading: boolean;
   metadataParams: MetadataParams;
@@ -74,7 +85,7 @@ function useMcpMetadataMetadataForm(
     logoAssetId: currentMetadata?.logoAssetId ?? undefined,
   });
 
-  const [urlValid, setUrlValid] = useState(true);
+  const [urlValid, setUrlValid] = useState<ValidationResult>({ valid: true });
 
   const mutation = useMcpMetadataSetMutation({
     onSettled: () => {
@@ -96,14 +107,29 @@ function useMcpMetadataMetadataForm(
 
   useEffect(() => {
     if (!metadataParams.externalDocumentationUrl) {
-      setUrlValid(true);
+      setUrlValid({ valid: true });
       return;
     }
-    try {
-      new URL(metadataParams.externalDocumentationUrl);
-      setUrlValid(true);
-    } catch {
-      setUrlValid(false);
+
+    const value = metadataParams.externalDocumentationUrl;
+
+    if (!value.startsWith("https://") && !value.startsWith("http://")) {
+      setUrlValid({
+        valid: false,
+        message: "URLs should start with https://",
+      });
+      return;
+    }
+
+    const parsedUrl = URL.parse(value);
+
+    if (!parsedUrl) {
+      setUrlValid({
+        valid: false,
+        message: "Invalid URL format",
+      });
+    } else {
+      setUrlValid({ valid: true });
     }
   }, [metadataParams.externalDocumentationUrl]);
 
@@ -170,7 +196,7 @@ function useMcpMetadataMetadataForm(
       error:
         metadataParams.externalDocumentationUrl &&
         metadataParams.externalDocumentationUrl.length > 0
-          ? !urlValid
+          ? !urlValid.valid
           : undefined,
       onChange: (e) =>
         setMetadataParams((prev) => ({
@@ -186,9 +212,10 @@ function useMcpMetadataMetadataForm(
 
 export function ConfigForm({ toolset }: ConfigFormProps) {
   const { url: mcpUrl } = useMcpUrl(toolset);
+  const [open, setOpen] = useState(false);
 
   const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
-    retry: (_failCount, err) => {
+    retry: (_, err) => {
       if (err instanceof GramError && err.statusCode === 404) {
         return false;
       }
@@ -201,11 +228,11 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
   const isLoading = result.isLoading || form.isLoading;
 
   return (
-    <Stack className={cn("gap-4 items-start", isLoading && "animate-pulse")}>
-      <Stack direction="horizontal" align="center" gap={2}>
-        <CodeBlock
-          copyable={toolset.mcpIsPublic}
-        >{`${mcpUrl}/install`}</CodeBlock>
+    <Stack direction="vertical" justify="space-between" align="start" gap={2}>
+      <CodeBlock
+        copyable={toolset.mcpIsPublic}
+      >{`${mcpUrl}/install`}</CodeBlock>
+      <Stack direction="horizontal" gap={2}>
         <Link external to={`${mcpUrl}/install`} noIcon>
           <Button
             variant="secondary"
@@ -218,39 +245,76 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
             </Button.RightIcon>
           </Button>
         </Link>
-      </Stack>
-      <Heading> MCP Logo </Heading>
-      <Type muted small className="max-w-2xl">
-        The logo presented on this page
-      </Type>
-      <div className="inline-block">
-        <CompactUpload
-          allowedExtensions={["png", "jpg", "jpeg"]}
-          onUpload={form.logoUploadHandlers.onUpload}
-          renderFilePreview={form.logoUploadHandlers.renderFilePreview}
-        />
-      </div>
-      <Heading> Documentation Link </Heading>
-      <Type muted small className="max-w-2xl">
-        A link to your own MCP documentation that will be featured at the top of
-        the page
-      </Type>
-      <Input
-        type="text"
-        placeholder="https://my-documentation.link"
-        className="w-full"
-        {...form.urlInputHandlers}
-      />
-      <Stack direction={"horizontal"} gap={2}>
-        <Button variant="tertiary" disabled={!form.dirty} onClick={form.reset}>
-          <Button.Text>Discard</Button.Text>
-        </Button>
-        <Button
-          onClick={form.save}
-          disabled={isLoading || !form.valid || !form.dirty}
-        >
-          <Button.Text>Save</Button.Text>
-        </Button>
+        <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog.Trigger asChild>
+            <Button variant="tertiary">
+              <Button.Text>
+                <Icon name="settings" />
+              </Button.Text>
+            </Button>
+          </Dialog.Trigger>
+          <Dialog.Content>
+            <Dialog.Header>
+              <Dialog.Title>Install Page Configuration</Dialog.Title>
+              <Dialog.Description>
+                Customize your MCP install page
+              </Dialog.Description>
+            </Dialog.Header>
+            <Stack className={cn("gap-4", isLoading && "animate-pulse")}>
+              <div>
+                <Heading> MCP Logo </Heading>
+                <Type muted small className="max-w-2xl">
+                  The logo presented on this page
+                </Type>
+              </div>
+              <div className="inline-block">
+                <CompactUpload
+                  allowedExtensions={["png", "jpg", "jpeg"]}
+                  onUpload={form.logoUploadHandlers.onUpload}
+                  renderFilePreview={form.logoUploadHandlers.renderFilePreview}
+                />
+              </div>
+              <div>
+                <Heading> Documentation Link </Heading>
+                <Type muted small className="max-w-2xl">
+                  A link to your own MCP documentation that will be featured at
+                  the top of the page
+                </Type>
+              </div>
+              <div className="relative">
+                <Input
+                  type="text"
+                  placeholder="https://my-documentation.link"
+                  className="w-full"
+                  {...form.urlInputHandlers}
+                />
+                {form.valid.message && (
+                  <span className="absolute -bottom-4 left-0 text-xs text-destructive">
+                    {form.valid.message}
+                  </span>
+                )}
+              </div>
+            </Stack>
+            <Dialog.Footer>
+              <Button
+                variant="tertiary"
+                disabled={!form.dirty}
+                onClick={form.reset}
+              >
+                <Button.Text>Discard</Button.Text>
+              </Button>
+              <Button
+                onClick={() => {
+                  form.save();
+                  setOpen(false);
+                }}
+                disabled={isLoading || !form.valid.valid || !form.dirty}
+              >
+                <Button.Text>Save</Button.Text>
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog>
       </Stack>
     </Stack>
   );
