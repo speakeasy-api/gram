@@ -239,7 +239,7 @@ export default function Settings() {
           onClick={() => setKeyToRevoke(key)}
           className="hover:text-destructive"
         >
-          <Trash2 className="h-4 w-4" />
+          <Button.Text><Icon name="trash-2" className="h-4 w-4" /></Button.Text>
         </Button>
       ),
     },
