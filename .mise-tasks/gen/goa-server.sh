@@ -5,4 +5,4 @@
 #MISE outputs=["server/gen/**/*"]
 
 set -e
-goa gen github.com/speakeasy-api/gram/server/design
+exec goa gen github.com/speakeasy-api/gram/server/design
