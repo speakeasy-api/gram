@@ -5,7 +5,7 @@ import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-  TooltipPortal
+  TooltipPortal,
 } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { ToolCollectionBadge } from "@/components/tools-badge";

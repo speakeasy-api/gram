@@ -301,7 +301,6 @@ export function usePylonInAppChat(user: User | undefined) {
     const email = user.email;
     const displayName = user.displayName || random;
 
-    // @ts-expect-error global pylon object
     window.pylon = {
       chat_settings: {
         app_id: "f9cade16-8d3c-4826-9a2a-034fad495102",
@@ -312,9 +311,7 @@ export function usePylonInAppChat(user: User | undefined) {
       },
     };
 
-    // @ts-expect-error global pylon object
     if (window.Pylon) {
-      // @ts-expect-error global pylon object
       window.Pylon("setNewIssueCustomFields", { gram: true });
     }
 
