@@ -52,12 +52,13 @@ func TestToolsetsService_GetToolset_Success(t *testing.T) {
 	require.Equal(t, "Test Toolset", result.Name)
 	require.Equal(t, "test-toolset", string(result.Slug))
 	require.Equal(t, "A test toolset", *result.Description)
-	require.Len(t, result.HTTPTools, 2, "should have 2 HTTP tools")
+	require.Len(t, result.Tools, 2, "should have 2 HTTP tools")
 
 	// Verify tools are properly populated
-	for _, tool := range result.HTTPTools {
-		require.NotEmpty(t, tool.ID)
-		require.NotEmpty(t, tool.Name)
+	for _, tool := range result.Tools {
+		baseTool := conv.ToBaseTool(tool)
+		require.NotEmpty(t, baseTool.ID)
+		require.NotEmpty(t, baseTool.Name)
 		// Summary and Description may be empty depending on the OpenAPI spec
 	}
 
@@ -191,7 +192,7 @@ func TestToolsetsService_GetToolset_VerifyAllFields(t *testing.T) {
 	require.Equal(t, "A complete toolset with all fields", *result.Description)
 
 	// Verify HTTP tools
-	require.Empty(t, result.HTTPTools)
+	require.Empty(t, result.Tools)
 
 	// Verify timestamps
 	require.NotNil(t, result.CreatedAt)

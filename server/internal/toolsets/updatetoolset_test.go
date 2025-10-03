@@ -39,7 +39,7 @@ func TestToolsetsService_UpdateToolset_Success(t *testing.T) {
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
-	require.Len(t, created.HTTPTools, 1, "should start with 1 HTTP tool")
+	require.Len(t, created.Tools, 1, "should start with 1 HTTP tool")
 
 	// Update the toolset with different tools
 	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
@@ -60,13 +60,14 @@ func TestToolsetsService_UpdateToolset_Success(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, "Updated Toolset", result.Name)
 	require.Equal(t, "Updated description", *result.Description)
-	require.Len(t, result.HTTPTools, 2, "should have 2 HTTP tools after update")
+	require.Len(t, result.Tools, 2, "should have 2 HTTP tools after update")
 	require.Equal(t, string(created.Slug), string(result.Slug)) // Slug should remain the same
 
 	// Verify the tool URNs were updated
-	toolUrns := make([]string, len(result.HTTPTools))
-	for i, tool := range result.HTTPTools {
-		toolUrns[i] = tool.ToolUrn
+	toolUrns := make([]string, len(result.Tools))
+	for i, tool := range result.Tools {
+		baseTool := conv.ToBaseTool(tool)
+		toolUrns[i] = baseTool.ToolUrn
 	}
 	require.ElementsMatch(t, []string{tools[1].ToolUrn.String(), tools[2].ToolUrn.String()}, toolUrns)
 }
@@ -115,8 +116,8 @@ func TestToolsetsService_UpdateToolset_PartialUpdate(t *testing.T) {
 	require.NotNil(t, result)
 	require.Equal(t, "Updated Name Only", result.Name)
 	require.Equal(t, "Original description", *result.Description)     // Should remain unchanged
-	require.Len(t, result.HTTPTools, 1, "should still have 1 tool")  // Should remain unchanged
-	require.Equal(t, tools[0].ToolUrn.String(), result.HTTPTools[0].ToolUrn)
+	require.Len(t, result.Tools, 1, "should still have 1 tool")  // Should remain unchanged
+	require.Equal(t, tools[0].ToolUrn.String(), conv.ToBaseTool(result.Tools[0]).ToolUrn)
 }
 
 func TestToolsetsService_UpdateToolset_WithEnvironment(t *testing.T) {
@@ -307,7 +308,7 @@ func TestToolsetsService_UpdateToolset_EmptyToolUrns(t *testing.T) {
 		ProjectSlugInput:       nil,
 	})
 	require.NoError(t, err)
-	require.Len(t, created.HTTPTools, 2, "should start with 2 tools")
+	require.Len(t, created.Tools, 2, "should start with 2 tools")
 
 	// Update to have empty tool URNs (remove all tools)
 	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
@@ -326,7 +327,7 @@ func TestToolsetsService_UpdateToolset_EmptyToolUrns(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Empty(t, result.HTTPTools, "should have no tools after clearing")
+	require.Empty(t, result.Tools, "should have no tools after clearing")
 }
 
 func TestToolsetsService_UpdateToolset_McpEnabled(t *testing.T) {
