@@ -95,7 +95,7 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 	if payload.Arguments != nil {
 		args = []byte(*payload.Arguments)
 
-		err := validateInputSchema(bytes.NewReader(args))
+		err = jsonschema.ValidateInputSchema(bytes.NewReader(args))
 		switch {
 		case errors.Is(err, jsonschema.ErrSchemaUnsupportedType) || errors.Is(err, jsonschema.ErrSchemaNotObject):
 			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema").Log(ctx, logger)
@@ -182,7 +182,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	if payload.Arguments != nil {
 		args = []byte(*payload.Arguments)
 
-		err := validateInputSchema(bytes.NewReader(args))
+		err = jsonschema.ValidateInputSchema(bytes.NewReader(args))
 		switch {
 		case errors.Is(err, jsonschema.ErrSchemaUnsupportedType) || errors.Is(err, jsonschema.ErrSchemaNotObject):
 			return nil, oops.E(oops.CodeInvalid, err, "invalid arguments schema").Log(ctx, s.logger)
