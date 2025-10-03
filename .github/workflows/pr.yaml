@@ -28,7 +28,7 @@ jobs:
       functions: ${{ steps.gates.outputs.functions }}
     steps:
       - name: Checkout source code
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
       - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3.0.2
         name: Check for changed packages
         id: filter
@@ -70,7 +70,7 @@ jobs:
 
       - name: Checkout
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
       - id: "auth"
         if: ${{ needs.changes.outputs.server == 'true' }}
         name: "Authenticate to Google Cloud"
@@ -134,7 +134,7 @@ jobs:
 
       - name: Checkout
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.server == 'true' }}
@@ -201,7 +201,7 @@ jobs:
 
       - name: Checkout
         if: ${{ needs.changes.outputs.server == 'true' }}
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.server == 'true' }}
@@ -247,7 +247,7 @@ jobs:
 
       - name: Checkout
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.client == 'true' }}
@@ -330,7 +330,7 @@ jobs:
 
       - name: Checkout
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.client == 'true' }}
@@ -391,7 +391,7 @@ jobs:
 
       - name: Checkout
         if: ${{ needs.changes.outputs.client == 'true' }}
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.client == 'true' }}
@@ -448,7 +448,7 @@ jobs:
 
       - name: Checkout
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.functions == 'true' }}
@@ -559,7 +559,7 @@ jobs:
 
       - name: Checkout
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
 
       - name: Setup Mise
         if: ${{ needs.changes.outputs.functions == 'true' }}
