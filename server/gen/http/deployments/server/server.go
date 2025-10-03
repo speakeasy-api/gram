@@ -22,6 +22,7 @@ type Server struct {
 	Mounts              []*MountPoint
 	GetDeployment       http.Handler
 	GetLatestDeployment http.Handler
+	GetActiveDeployment http.Handler
 	CreateDeployment    http.Handler
 	Evolve              http.Handler
 	Redeploy            http.Handler
@@ -58,6 +59,7 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetDeployment", "GET", "/rpc/deployments.get"},
 			{"GetLatestDeployment", "GET", "/rpc/deployments.latest"},
+			{"GetActiveDeployment", "GET", "/rpc/deployments.active"},
 			{"CreateDeployment", "POST", "/rpc/deployments.create"},
 			{"Evolve", "POST", "/rpc/deployments.evolve"},
 			{"Redeploy", "POST", "/rpc/deployments.redeploy"},
@@ -66,6 +68,7 @@ func New(
 		},
 		GetDeployment:       NewGetDeploymentHandler(e.GetDeployment, mux, decoder, encoder, errhandler, formatter),
 		GetLatestDeployment: NewGetLatestDeploymentHandler(e.GetLatestDeployment, mux, decoder, encoder, errhandler, formatter),
+		GetActiveDeployment: NewGetActiveDeploymentHandler(e.GetActiveDeployment, mux, decoder, encoder, errhandler, formatter),
 		CreateDeployment:    NewCreateDeploymentHandler(e.CreateDeployment, mux, decoder, encoder, errhandler, formatter),
 		Evolve:              NewEvolveHandler(e.Evolve, mux, decoder, encoder, errhandler, formatter),
 		Redeploy:            NewRedeployHandler(e.Redeploy, mux, decoder, encoder, errhandler, formatter),
@@ -81,6 +84,7 @@ func (s *Server) Service() string { return "deployments" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetDeployment = m(s.GetDeployment)
 	s.GetLatestDeployment = m(s.GetLatestDeployment)
+	s.GetActiveDeployment = m(s.GetActiveDeployment)
 	s.CreateDeployment = m(s.CreateDeployment)
 	s.Evolve = m(s.Evolve)
 	s.Redeploy = m(s.Redeploy)
@@ -95,6 +99,7 @@ func (s *Server) MethodNames() []string { return deployments.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetDeploymentHandler(mux, h.GetDeployment)
 	MountGetLatestDeploymentHandler(mux, h.GetLatestDeployment)
+	MountGetActiveDeploymentHandler(mux, h.GetActiveDeployment)
 	MountCreateDeploymentHandler(mux, h.CreateDeployment)
 	MountEvolveHandler(mux, h.Evolve)
 	MountRedeployHandler(mux, h.Redeploy)
@@ -190,6 +195,59 @@ func NewGetLatestDeploymentHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getLatestDeployment")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "deployments")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetActiveDeploymentHandler configures the mux to serve the
+// "deployments" service "getActiveDeployment" endpoint.
+func MountGetActiveDeploymentHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/deployments.active", otelhttp.WithRouteTag("/rpc/deployments.active", f).ServeHTTP)
+}
+
+// NewGetActiveDeploymentHandler creates a HTTP handler which loads the HTTP
+// request and calls the "deployments" service "getActiveDeployment" endpoint.
+func NewGetActiveDeploymentHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetActiveDeploymentRequest(mux, decoder)
+		encodeResponse = EncodeGetActiveDeploymentResponse(encoder)
+		encodeError    = EncodeGetActiveDeploymentError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getActiveDeployment")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "deployments")
 		payload, err := decodeRequest(r)
 		if err != nil {

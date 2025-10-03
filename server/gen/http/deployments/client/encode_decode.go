@@ -499,6 +499,245 @@ func DecodeGetLatestDeploymentResponse(decoder func(*http.Response) goahttp.Deco
 	}
 }
 
+// BuildGetActiveDeploymentRequest instantiates a HTTP request object with
+// method and path set to call the "deployments" service "getActiveDeployment"
+// endpoint
+func (c *Client) BuildGetActiveDeploymentRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetActiveDeploymentDeploymentsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("deployments", "getActiveDeployment", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetActiveDeploymentRequest returns an encoder for requests sent to the
+// deployments getActiveDeployment server.
+func EncodeGetActiveDeploymentRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*deployments.GetActiveDeploymentPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("deployments", "getActiveDeployment", "*deployments.GetActiveDeploymentPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetActiveDeploymentResponse returns a decoder for responses returned
+// by the deployments getActiveDeployment endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetActiveDeploymentResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetActiveDeploymentResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetActiveDeploymentResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+			}
+			err = ValidateGetActiveDeploymentResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+			}
+			res := NewGetActiveDeploymentResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetActiveDeploymentUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+			}
+			err = ValidateGetActiveDeploymentUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+			}
+			return nil, NewGetActiveDeploymentUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetActiveDeploymentForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+			}
+			err = ValidateGetActiveDeploymentForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+			}
+			return nil, NewGetActiveDeploymentForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetActiveDeploymentBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+			}
+			err = ValidateGetActiveDeploymentBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+			}
+			return nil, NewGetActiveDeploymentBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetActiveDeploymentNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+			}
+			err = ValidateGetActiveDeploymentNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+			}
+			return nil, NewGetActiveDeploymentNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetActiveDeploymentConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+			}
+			err = ValidateGetActiveDeploymentConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+			}
+			return nil, NewGetActiveDeploymentConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetActiveDeploymentUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+			}
+			err = ValidateGetActiveDeploymentUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+			}
+			return nil, NewGetActiveDeploymentUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetActiveDeploymentInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+			}
+			err = ValidateGetActiveDeploymentInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+			}
+			return nil, NewGetActiveDeploymentInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetActiveDeploymentInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+				}
+				err = ValidateGetActiveDeploymentInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+				}
+				return nil, NewGetActiveDeploymentInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetActiveDeploymentUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+				}
+				err = ValidateGetActiveDeploymentUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+				}
+				return nil, NewGetActiveDeploymentUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deployments", "getActiveDeployment", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetActiveDeploymentGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deployments", "getActiveDeployment", err)
+			}
+			err = ValidateGetActiveDeploymentGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deployments", "getActiveDeployment", err)
+			}
+			return nil, NewGetActiveDeploymentGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("deployments", "getActiveDeployment", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildCreateDeploymentRequest instantiates a HTTP request object with method
 // and path set to call the "deployments" service "createDeployment" endpoint
 func (c *Client) BuildCreateDeploymentRequest(ctx context.Context, v any) (*http.Request, error) {

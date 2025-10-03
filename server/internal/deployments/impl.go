@@ -229,6 +229,48 @@ func (s *Service) GetLatestDeployment(ctx context.Context, _ *gen.GetLatestDeplo
 	}, nil
 }
 
+func (s *Service) GetActiveDeployment(ctx context.Context, _ *gen.GetActiveDeploymentPayload) (res *gen.GetActiveDeploymentResult, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	dbtx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error accessing deployments").Log(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error {
+		return dbtx.Rollback(ctx)
+	})
+
+	tx := s.repo.WithTx(dbtx)
+
+	id, err := tx.GetActiveDeploymentID(ctx, *authCtx.ProjectID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return &gen.GetActiveDeploymentResult{
+				Deployment: nil,
+			}, nil
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "error getting active deployment id").Log(ctx, s.logger)
+	}
+
+	if id == uuid.Nil {
+		return &gen.GetActiveDeploymentResult{
+			Deployment: nil,
+		}, nil
+	}
+
+	dep, err := mv.DescribeDeployment(ctx, s.logger, tx, mv.ProjectID(*authCtx.ProjectID), mv.DeploymentID(id))
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.GetActiveDeploymentResult{
+		Deployment: dep,
+	}, nil
+}
+
 func (s *Service) ListDeployments(ctx context.Context, form *gen.ListDeploymentsPayload) (res *gen.ListDeploymentResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

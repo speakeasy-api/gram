@@ -66,6 +66,30 @@ var _ = Service("deployments", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "LatestDeployment"}`)
 	})
 
+	Method("getActiveDeployment", func() {
+		Description("Get the active deployment for a project.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(GetActiveDeploymentResult)
+
+		HTTP(func() {
+			GET("/rpc/deployments.active")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getActiveDeployment")
+		Meta("openapi:extension:x-speakeasy-name-override", "active")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ActiveDeployment"}`)
+	})
+
 	Method("createDeployment", func() {
 		Description("Create a deployment to load tool definitions.")
 
@@ -345,6 +369,13 @@ var GetDeploymentResult = Type("GetDeploymentResult", func() {
 var GetLatestDeploymentResult = Type("GetLatestDeploymentResult", func() {
 	Attribute("deployment", shared.Deployment, func() {
 		Description("The latest deployment for a project if available.")
+		Meta("openapi:example", "false")
+	})
+})
+
+var GetActiveDeploymentResult = Type("GetActiveDeploymentResult", func() {
+	Attribute("deployment", shared.Deployment, func() {
+		Description("The active deployment for a project if available.")
 		Meta("openapi:example", "false")
 	})
 })

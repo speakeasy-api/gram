@@ -138,6 +138,16 @@ WHERE project_id = @project_id
 ORDER BY id DESC
 LIMIT 1;
 
+-- name: GetActiveDeploymentID :one
+SELECT d.id
+FROM deployments d
+INNER JOIN deployment_statuses ds
+ON d.id = ds.deployment_id
+WHERE d.project_id = @project_id
+AND ds.status = 'completed'
+ORDER BY d.id DESC
+LIMIT 1;
+
 -- name: GetDeploymentByIdempotencyKey :one
 WITH latest_status as (
     SELECT deployment_id, status

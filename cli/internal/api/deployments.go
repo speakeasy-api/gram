@@ -31,6 +31,7 @@ func NewDeploymentsClient(options *DeploymentsClientOptions) *DeploymentsClient 
 	client := deployments.NewClient(
 		h.GetDeployment(),
 		h.GetLatestDeployment(),
+		h.GetActiveDeployment(),
 		h.CreateDeployment(),
 		h.Evolve(),
 		h.Redeploy(),
@@ -87,6 +88,7 @@ func (c *DeploymentsClient) GetDeployment(
 		ApikeyToken:      &key,
 		ProjectSlugInput: &projectSlug,
 		ID:               deploymentID,
+		SessionToken:     nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
@@ -105,6 +107,7 @@ func (c *DeploymentsClient) GetLatestDeployment(
 	result, err := c.client.GetLatestDeployment(ctx, &deployments.GetLatestDeploymentPayload{
 		ApikeyToken:      &key,
 		ProjectSlugInput: &projectSlug,
+		SessionToken:     nil,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest deployment: %w", err)
