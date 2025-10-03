@@ -1,5 +1,11 @@
 # @gram/dashboard
 
+## 0.12.0
+
+### Minor Changes
+
+- 0e83d56: add new mcp configuration section for setting up install pages
+
 ## 0.11.0
 
 ### Minor Changes

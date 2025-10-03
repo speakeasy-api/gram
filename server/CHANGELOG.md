@@ -1,5 +1,25 @@
 # @gram/server
 
+## 0.4.0
+
+### Minor Changes
+
+- 7912397: Add endpoint to expose a project's active deployment
+
+### Patch Changes
+
+- 148c86f: install page reflects pure toolset name
+- 85ceb4c: Add JSON schema validation to tool schema generation
+- 6f11e8e: add ability to configure install pages and render configurations onto pages
+- ae5a041: Add clickhouse dependency
+- 094c3ee: Extract tools concurrently from incoming specs.
+- 5a32fd7: fix: ensure custom domain ingress has proper regex annotation
+- 41b5a22: feat: add consistent trace id to tool call requests
+- 4fd085a: Update sanitization logic to properly coerce into the regex
+- 8d7852e: add table for install page metadata
+- 180bfca: restore old location for install page (no /install)
+- dcd0055: feat: billing usage tracking federation
+
 ## 0.3.0
 
 ### Minor Changes
