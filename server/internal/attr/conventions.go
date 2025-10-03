@@ -13,6 +13,8 @@ type Key = attribute.Key
 
 const (
 	ErrorMessageKey                   = semconv.ErrorMessageKey
+	ContainerIDKey                    = semconv.ContainerIDKey
+	ContainerNetworkIDKey             = attribute.Key("container.network.id")
 	FilePathKey                       = semconv.FilePathKey
 	HostNameKey                       = semconv.HostNameKey
 	HTTPRequestHeaderContentTypeKey   = attribute.Key("http.request.header.content_type")
@@ -135,6 +137,14 @@ func SlogError(v error) slog.Attr      { return slog.String(string(ErrorMessageK
 
 func ErrorMessage(v string) attribute.KeyValue { return ErrorMessageKey.String(v) }
 func SlogErrorMessage(v string) slog.Attr      { return slog.String(string(ErrorMessageKey), v) }
+
+func ContainerID(v string) attribute.KeyValue { return ContainerIDKey.String(v) }
+func SlogContainerID(v string) slog.Attr      { return slog.String(string(ContainerIDKey), v) }
+
+func ContainerNetworkID(v string) attribute.KeyValue { return ContainerNetworkIDKey.String(v) }
+func SlogContainerNetworkID(v string) slog.Attr {
+	return slog.String(string(ContainerNetworkIDKey), v)
+}
 
 func FilePath(v string) attribute.KeyValue { return FilePathKey.String(v) }
 func SlogFilePath(v string) slog.Attr      { return slog.String(string(FilePathKey), v) }

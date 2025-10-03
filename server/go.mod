@@ -14,6 +14,8 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0
 	github.com/cbroglie/mustache v1.4.0
 	github.com/charmbracelet/log v0.4.2
+	github.com/docker/docker v28.3.3+incompatible
+	github.com/docker/go-connections v0.6.0
 	github.com/ettle/strcase v0.2.0
 	github.com/exaring/otelpgx v0.9.3
 	github.com/go-logr/logr v1.4.3
@@ -24,6 +26,7 @@ require (
 	github.com/itchyny/gojq v0.12.17
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/microcosm-cc/bluemonday v1.0.27
+	github.com/opencontainers/image-spec v1.1.1
 	github.com/pb33f/libopenapi v0.25.3
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
 	github.com/polarsource/polar-go v0.9.2
@@ -95,8 +98,6 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dnephin/pflag v1.0.7 // indirect
-	github.com/docker/docker v28.3.3+incompatible // indirect
-	github.com/docker/go-connections v0.6.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ebitengine/purego v0.8.4 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
@@ -148,7 +149,6 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nexus-rpc/sdk-go v0.3.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pb33f/ordered-map/v2 v2.2.0 // indirect
 	github.com/pganalyze/pg_query_go/v6 v6.1.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
