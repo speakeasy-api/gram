@@ -171,7 +171,8 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 			PredecessorID: template.PredecessorID,
 			Prompt:        template.Prompt,
 			Description:   template.Description,
-			Arguments:     template.Arguments,
+			Schema:        template.Schema,
+			SchemaVersion: template.SchemaVersion,
 			Engine:        template.Engine,
 			Kind:          template.Kind,
 			ToolsHint:     template.ToolsHint,
@@ -185,7 +186,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		Description:       toolset.Description,
 		SecurityVariables: toolset.SecurityVariables,
 		ServerVariables:   toolset.ServerVariables,
-		Tools:             toolset.HTTPTools,
+		Tools:             toolset.Tools,
 		PromptTemplates:   promptTemplates,
 		Environment:       environment,
 	}, nil

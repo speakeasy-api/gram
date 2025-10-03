@@ -81,7 +81,7 @@ func TestTemplatesService_ListTemplates_Success(t *testing.T) {
 	require.True(t, found, "first template not found in list")
 	require.Equal(t, template1.Template.ID, t1.ID, "first template ID mismatch")
 	require.Equal(t, "First template prompt", t1.Prompt, "first template prompt mismatch")
-	require.Equal(t, "First template description", *t1.Description, "first template description mismatch")
+	require.Equal(t, "First template description", t1.Description, "first template description mismatch")
 	require.Equal(t, "mustache", t1.Engine, "first template engine mismatch")
 	require.Equal(t, "prompt", t1.Kind, "first template kind mismatch")
 	require.ElementsMatch(t, []string{"assistant"}, t1.ToolsHint, "first template tools hint mismatch")
@@ -99,7 +99,7 @@ func TestTemplatesService_ListTemplates_Success(t *testing.T) {
 	require.True(t, found, "third template not found in list")
 	require.Equal(t, template3.Template.ID, t3.ID, "third template ID mismatch")
 	require.Equal(t, "Third template prompt", t3.Prompt, "third template prompt mismatch")
-	require.JSONEq(t, `{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`, *t3.Arguments, "third template arguments mismatch")
+	require.JSONEq(t, `{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`, *t3.Schema, "third template arguments mismatch")
 }
 
 func TestTemplatesService_ListTemplates_EmptyList(t *testing.T) {
@@ -154,7 +154,7 @@ func TestTemplatesService_ListTemplates_SingleTemplate(t *testing.T) {
 
 	template := result.Templates[0]
 	require.Equal(t, created.Template.ID, template.ID, "template ID mismatch")
-	require.Equal(t, types.Slug("single-list-template"), template.Name, "template name mismatch")
+	require.Equal(t, "single-list-template", template.Name, "template name mismatch")
 	require.Equal(t, "Only template in the project", template.Prompt, "template prompt mismatch")
 }
 
@@ -215,7 +215,7 @@ func TestTemplatesService_ListTemplates_DeletedTemplateNotIncluded(t *testing.T)
 	require.Len(t, result.Templates, 1, "expected exactly 1 template after deletion")
 
 	template := result.Templates[0]
-	require.Equal(t, types.Slug("keep-template"), template.Name, "wrong template remained after deletion")
+	require.Equal(t, "keep-template", template.Name, "wrong template remained after deletion")
 }
 
 func TestTemplatesService_ListTemplates_Unauthorized(t *testing.T) {

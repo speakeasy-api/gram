@@ -279,14 +279,9 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	toolNames := []string{}
 
-	for _, toolDesc := range toolsetDetails.HTTPTools {
-		toolNames = append(toolNames, toolDesc.Name)
-	}
-
-	for _, promptTpl := range toolsetDetails.PromptTemplates {
-		if promptTpl.Kind == "higher_order_tool" {
-			toolNames = append(toolNames, string(promptTpl.Name))
-		}
+	for _, toolDesc := range toolsetDetails.Tools {
+		baseTool := conv.ToBaseTool(toolDesc)
+		toolNames = append(toolNames, baseTool.Name)
 	}
 
 	baseURL := s.serverURL.String() + "/mcp"

@@ -15,6 +15,22 @@ WHERE pt.project_id = @project_id
   AND pt.deleted IS FALSE
 ORDER BY pt.project_id, pt.name, pt.id DESC;
 
+-- name: PeekTemplatesByUrns :many
+SELECT DISTINCT ON (pt.project_id, pt.tool_urn) pt.id, pt.tool_urn, pt.history_id, pt.name
+FROM prompt_templates pt
+WHERE pt.project_id = @project_id
+  AND pt.tool_urn = ANY(@urns::TEXT[])
+  AND pt.deleted IS FALSE
+ORDER BY pt.project_id, pt.tool_urn, pt.id DESC;
+
+-- name: FindPromptTemplatesByUrns :many
+SELECT DISTINCT ON (pt.project_id, pt.tool_urn) *
+FROM prompt_templates pt
+WHERE pt.project_id = @project_id
+  AND pt.tool_urn = ANY(@urns::TEXT[])
+  AND pt.deleted IS FALSE
+ORDER BY pt.project_id, pt.tool_urn, pt.id DESC;
+
 -- name: CreateTemplate :one
 INSERT INTO prompt_templates (
   project_id,
@@ -62,7 +78,7 @@ SELECT
   COALESCE(sqlc.narg(tool_urn), c.tool_urn),
   c.name,
   COALESCE(sqlc.narg(prompt), c.prompt),
-  NULLIF(sqlc.narg(description), ''),
+  COALESCE(NULLIF(sqlc.narg(description), ''), c.description),
   sqlc.narg(arguments),
   COALESCE(NULLIF(sqlc.narg(engine), ''), c.engine),
   COALESCE(NULLIF(sqlc.narg(kind), ''), c.kind),

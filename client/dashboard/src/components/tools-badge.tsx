@@ -1,21 +1,17 @@
+import { promptNames } from "@/lib/toolTypes";
+import { cn } from "@/lib/utils";
 import { ToolsetEntry } from "@gram/client/models/components";
 import {
-  Stack,
   Badge,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-  TooltipPortal,
   Icon,
+  Stack,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@speakeasy-api/moonshine";
-import { cn } from "@/lib/utils";
-import { promptNames } from "@/lib/toolNames";
 
 // Define minimal types for badge components
-type ToolsetForBadge = Pick<
-  ToolsetEntry,
-  "name" | "slug" | "httpTools" | "promptTemplates"
->;
+type ToolsetForBadge = Pick<ToolsetEntry, "name" | "slug" | "promptTemplates">;
 
 export const ToolsetPromptsBadge = ({
   toolset,
@@ -66,9 +62,7 @@ export const ToolCollectionBadge = ({
   let tooltipContent: React.ReactNode = (
     <div className="max-h-[300px] overflow-y-auto">
       <Stack gap={1}>
-        {toolNames?.map((tool, i) => (
-          <p key={i}>{tool}</p>
-        ))}
+        {toolNames?.map((tool, i) => <p key={i}>{tool}</p>)}
       </Stack>
     </div>
   );
@@ -103,9 +97,7 @@ export const ToolCollectionBadge = ({
           {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
         </Badge>
       </TooltipTrigger>
-      <TooltipPortal>
-        <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
-      </TooltipPortal>
+      <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
     </Tooltip>
   ) : (
     <Badge size={size} variant={variant} className={className}>

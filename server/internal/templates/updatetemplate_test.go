@@ -48,13 +48,13 @@ func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
 
 	require.NotNil(t, result, "result is nil")
 	require.NotNil(t, result.Template, "template is nil")
-	require.Equal(t, types.Slug("update-test-template"), result.Template.Name, "template name should not change")
+	require.Equal(t, "update-test-template", result.Template.Name, "template name should not change")
 	require.Equal(t, "Updated prompt {{name}}!", result.Template.Prompt, "template prompt mismatch")
-	require.Equal(t, "Updated description", *result.Template.Description, "template description mismatch")
+	require.Equal(t, "Updated description", result.Template.Description, "template description mismatch")
 	require.Equal(t, "mustache", result.Template.Engine, "template engine should remain unchanged when updating to empty")
 	require.Equal(t, "prompt", result.Template.Kind, "template kind mismatch")
 	require.ElementsMatch(t, []string{"user", "assistant"}, result.Template.ToolsHint, "template tools hint mismatch")
-	require.JSONEq(t, `{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`, *result.Template.Arguments, "template arguments mismatch")
+	require.JSONEq(t, `{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`, *result.Template.Schema, "template arguments mismatch")
 	require.Equal(t, created.Template.CreatedAt, result.Template.CreatedAt, "created at should not change")
 	// Note: UpdatedAt may or may not change depending on whether the update actually creates a new version
 
@@ -110,11 +110,7 @@ func TestTemplatesService_UpdateTemplate_PartialUpdate(t *testing.T) {
 
 	require.NotNil(t, result, "result is nil")
 	require.Equal(t, "Only updated prompt", result.Template.Prompt, "template prompt mismatch")
-	if result.Template.Description != nil {
-		require.Equal(t, "Original description", *result.Template.Description, "description should remain unchanged")
-	} else {
-		require.Nil(t, result.Template.Description, "description became nil during partial update")
-	}
+	require.Equal(t, "Original description", result.Template.Description, "description should remain unchanged")
 	require.Equal(t, "mustache", result.Template.Engine, "engine should remain unchanged")
 }
 

@@ -1,5 +1,7 @@
 # HTTPToolDefinition
 
+An HTTP tool
+
 ## Example Usage
 
 ```typescript
@@ -20,7 +22,6 @@ let value: HTTPToolDefinition = {
   schema: "<value>",
   summary: "<value>",
   tags: [],
-  toolType: "http",
   toolUrn: "<value>",
   updatedAt: new Date("2025-05-22T21:11:55.475Z"),
 };
@@ -39,7 +40,7 @@ let value: HTTPToolDefinition = {
 | `deploymentId`                                                                                | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the deployment                                                                      |
 | `description`                                                                                 | *string*                                                                                      | :heavy_check_mark:                                                                            | Description of the tool                                                                       |
 | `httpMethod`                                                                                  | *string*                                                                                      | :heavy_check_mark:                                                                            | HTTP method for the request                                                                   |
-| `id`                                                                                          | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the HTTP tool                                                                       |
+| `id`                                                                                          | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the tool                                                                            |
 | `name`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | The name of the tool                                                                          |
 | `openapiv3DocumentId`                                                                         | *string*                                                                                      | :heavy_minus_sign:                                                                            | The ID of the OpenAPI v3 document                                                             |
 | `openapiv3Operation`                                                                          | *string*                                                                                      | :heavy_minus_sign:                                                                            | OpenAPI v3 operation                                                                          |
@@ -53,7 +54,6 @@ let value: HTTPToolDefinition = {
 | `summarizer`                                                                                  | *string*                                                                                      | :heavy_minus_sign:                                                                            | Summarizer for the tool                                                                       |
 | `summary`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | Summary of the tool                                                                           |
 | `tags`                                                                                        | *string*[]                                                                                    | :heavy_check_mark:                                                                            | The tags list for this http tool                                                              |
-| `toolType`                                                                                    | [components.ToolType](../../models/components/tooltype.md)                                    | :heavy_check_mark:                                                                            | N/A                                                                                           |
-| `toolUrn`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The URN of this HTTP tool                                                                     |
+| `toolUrn`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The URN of this tool                                                                          |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | The last update date of the tool.                                                             |
 | `variation`                                                                                   | [components.ToolVariation](../../models/components/toolvariation.md)                          | :heavy_minus_sign:                                                                            | N/A                                                                                           |

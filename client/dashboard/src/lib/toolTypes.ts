@@ -1,47 +1,63 @@
-import { ToolDefinition, useToolDefinitions } from "@/pages/toolsets/types";
 import {
+  Tool as GeneratedTool,
+  Toolset as GeneratedToolset,
   HTTPToolDefinition,
-  PromptTemplateKind,
+  PromptTemplate,
   PromptTemplateEntry,
-  Toolset,
-  HTTPToolDefinitionEntry,
+  PromptTemplateKind,
 } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
 
-export type Tool = ToolDefinition & {
+export type ToolWithDisplayName = Tool & { displayName: string };
+export type HttpToolWithDisplayName = Tool & { type: "http" } & {
   displayName: string;
 };
 
-export type ToolGroup = {
-  key: string;
+export type Toolset = Omit<GeneratedToolset, "tools"> & {
   tools: Tool[];
 };
 
-type HttpToolGroup = {
+export type Tool =
+  | ({ type: "http" } & HTTPToolDefinition)
+  | ({ type: "prompt" } & PromptTemplate);
+
+export type ToolGroup = {
   key: string;
-  tools: (HTTPToolDefinition & { displayName: string })[];
+  tools: ToolWithDisplayName[];
+};
+
+export type HttpToolGroup = {
+  key: string;
+  tools: HttpToolWithDisplayName[];
+};
+
+export const asTool = (tool: GeneratedTool): Tool => {
+  if (tool.httpToolDefinition) {
+    return { type: "http", ...tool.httpToolDefinition };
+  } else if (tool.promptTemplate) {
+    return { type: "prompt", ...tool.promptTemplate };
+  } else {
+    throw new Error("Unexpected tool type");
+  }
 };
 
 export const useGroupedToolDefinitions = (
-  toolset: Toolset | undefined,
+  toolset: GeneratedToolset | undefined,
 ): ToolGroup[] => {
-  const toolDefinitions = useToolDefinitions(toolset);
-  return useGroupedTools(toolDefinitions);
+  const tools = toolset?.tools ?? [];
+  return useGroupedTools(tools.map(asTool));
 };
 
 export const useGroupedHttpTools = (
   tools: HTTPToolDefinition[],
 ): HttpToolGroup[] => {
-  const wrapped = tools.map((tool) => ({
-    ...tool,
-    type: "http",
-  }));
-
-  return useGroupedTools(wrapped as ToolDefinition[]) as HttpToolGroup[];
+  return useGroupedTools(
+    tools.map((t) => asTool({ httpToolDefinition: t })),
+  ) as HttpToolGroup[];
 };
 
-export const useGroupedTools = (tools: ToolDefinition[]): ToolGroup[] => {
+export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
   const { data: deployment } = useLatestDeployment(undefined, undefined, {
     staleTime: 1000 * 60 * 60,
   });
@@ -60,9 +76,7 @@ export const useGroupedTools = (tools: ToolDefinition[]): ToolGroup[] => {
     return tools?.reduce((acc, tool) => {
       let groupKey = "unknown";
 
-      if (tool.packageName) {
-        groupKey = tool.packageName;
-      } else if (tool.type === "http") {
+      if (tool.type === "http") {
         const documentSlug = tool.openapiv3DocumentId
           ? documentIdToSlug?.[tool.openapiv3DocumentId]
           : undefined;
@@ -104,24 +118,22 @@ export const isHigherOrderTool = (template: PromptTemplateEntry) =>
 export const promptNames = (promptTemplates: PromptTemplateEntry[]): string[] =>
   promptTemplates.filter(isPrompt).map(templateName);
 
-export const higherOrderToolNames = (
-  promptTemplates: PromptTemplateEntry[],
-): string[] => promptTemplates.filter(isHigherOrderTool).map(templateName);
+export const isHttpTool = (tool: Tool) => tool.type === "http";
+export const isPromptTool = (tool: Tool) => tool.type === "prompt";
 
-export const httpToolNames = (toolset: {
-  httpTools: HTTPToolDefinitionEntry[];
-}) => {
-  const { httpTools } = toolset;
-
-  return httpTools.map((tool) => tool.name);
+export const filterHttpTools = (
+  tools: Tool[] | undefined,
+): HTTPToolDefinition[] => {
+  return tools?.filter(isHttpTool) ?? [];
 };
 
-export const userFacingToolNames = (toolset: {
-  httpTools: HTTPToolDefinitionEntry[];
-  promptTemplates: PromptTemplateEntry[];
-}) => {
-  return [
-    ...higherOrderToolNames(toolset.promptTemplates),
-    ...httpToolNames(toolset),
-  ];
+export const filterPromptTools = (
+  tools: Tool[] | undefined,
+): PromptTemplate[] => {
+  return tools?.filter(isPromptTool) ?? [];
+};
+
+export const toolNames = (toolset: { tools: Tool[] }) => {
+  const { tools } = toolset;
+  return tools.map((tool) => tool.name);
 };

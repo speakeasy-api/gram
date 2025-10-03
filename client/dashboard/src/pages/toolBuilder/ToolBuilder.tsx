@@ -1,9 +1,9 @@
+import { Block, BlockInner } from "@/components/block";
 import { DeleteButton } from "@/components/delete-button";
 import { EditableText } from "@/components/editable-text";
 import { Page } from "@/components/page-layout";
 import { ToolBadge } from "@/components/tool-badge";
 import { Badge } from "@/components/ui/badge";
-import { Button, Icon } from "@speakeasy-api/moonshine";
 import {
   Command,
   CommandEmpty,
@@ -24,7 +24,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useApiError } from "@/hooks/useApiError";
 import { MUSTACHE_VAR_REGEX, slugify, TOOL_NAME_REGEX } from "@/lib/constants";
-import { useGroupedTools } from "@/lib/toolNames";
+import { Tool, useGroupedTools } from "@/lib/toolTypes";
 import { capitalize, cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
@@ -36,10 +36,9 @@ import {
   invalidateTemplate,
   useListToolsetsSuspense,
   useTemplateSuspense,
-  useToolset,
   useUpdateTemplateMutation,
 } from "@gram/client/react-query";
-import { ResizablePanel, Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import React, { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
@@ -49,9 +48,8 @@ import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
-import { ToolDefinition, useToolDefinitions } from "../toolsets/types";
 import { useToolifyContext } from "./Toolify";
-import { Block, BlockInner } from "@/components/block";
+import { useToolset } from "@/hooks/toolTypes";
 
 type Input = {
   name: string;
@@ -190,11 +188,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     initial.toolset,
   );
 
-  const { data: toolsetData } = useToolset(
-    { slug: toolsetFilter?.slug ?? "" },
-    undefined,
-    { enabled: !!toolsetFilter?.slug },
-  );
+  const { data: toolsetData } = useToolset(toolsetFilter?.slug);
 
   const parseInputs = (s: string): string[] => {
     const inputs = s.match(/(\{\{[^}]+\}\})/g);
@@ -212,7 +206,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     });
   };
 
-  const tools = useToolDefinitions(toolsetData);
+  const tools = toolsetData?.tools ?? [];
 
   // Ensures that the canonical tool and update function is set for the step
   const makeStep = (step: Step) => {
@@ -225,7 +219,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
 
     const canonicalTool =
       step.canonicalTool ??
-      tools?.find((t) => t.name === step.tool)?.canonicalName;
+      tools.find((t) => t.name === step.tool)?.canonicalName;
 
     if (!canonicalTool) {
       console.error(`Tool ${step.tool} not found`);
@@ -695,7 +689,7 @@ const StepCard = ({
   moveDown,
 }: {
   step: Step;
-  tools: ToolDefinition[];
+  tools: Tool[];
   remove: () => void;
   moveUp?: () => void;
   moveDown?: () => void;
@@ -822,8 +816,8 @@ const ToolSelectPopover = ({
 }: {
   open: boolean;
   setOpen: (open: boolean) => void;
-  onSelect: (tool: ToolDefinition | "none") => void;
-  tools: ToolDefinition[];
+  onSelect: (tool: Tool | "none") => void;
+  tools: Tool[];
   children: React.ReactNode;
 }) => {
   const groupedTools = useGroupedTools(tools);

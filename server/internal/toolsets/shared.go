@@ -14,6 +14,7 @@ import (
 	toolsRepo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/tools/security"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Shared service for aggregating toolset details
@@ -37,15 +38,30 @@ type HTTPToolExecutionInfo struct {
 	ProjectSlug      string
 }
 
-func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
-	tool, err := t.toolsRepo.GetHTTPToolDefinitionByID(ctx, toolsRepo.GetHTTPToolDefinitionByIDParams{
-		ID:        id,
+func (t *Toolsets) GetHTTPToolExecutionInfoByURN(ctx context.Context, urn urn.Tool, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
+	tool, err := t.toolsRepo.GetHTTPToolDefinitionByURN(ctx, toolsRepo.GetHTTPToolDefinitionByURNParams{
 		ProjectID: projectID,
+		Urn:       urn,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get http tool definition by id: %w", err)
 	}
 
+	return t.extractHTTPToolExecutionInfo(ctx, tool)
+}
+
+func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
+	tool, err := t.toolsRepo.GetHTTPToolDefinitionByID(ctx, toolsRepo.GetHTTPToolDefinitionByIDParams{
+		ProjectID: projectID,
+		ID:        id,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get http tool definition by id: %w", err)
+	}
+	return t.extractHTTPToolExecutionInfo(ctx, tool)
+}
+
+func (t *Toolsets) extractHTTPToolExecutionInfo(ctx context.Context, tool toolsRepo.HttpToolDefinition) (*HTTPToolExecutionInfo, error) {
 	securityKeysMap := make(map[string]bool)
 	securityKeys, securityScopes, err := security.ParseHTTPToolSecurityKeys(tool.Security)
 	if err != nil {

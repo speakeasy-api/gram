@@ -20,15 +20,13 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { Toolset, ToolsetEntry } from "@gram/client/models/components";
+import { ToolsetEntry } from "@gram/client/models/components";
 import {
   invalidateAllGetPeriodUsage,
   invalidateAllToolset,
   useAddExternalOAuthServerMutation,
   useGetDomain,
-  useListTools,
   useRemoveOAuthServerMutation,
-  useToolsetSuspense,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
 import { Grid, Stack } from "@speakeasy-api/moonshine";
@@ -40,6 +38,8 @@ import { toast } from "sonner";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
 import { Block, BlockInner } from "@/components/block";
+import { isHttpTool, Toolset } from "@/lib/toolTypes";
+import { useListTools, useToolset } from "@/hooks/toolTypes";
 import { ConfigForm } from "@/components/mcp_install_page/config_form";
 
 export function MCPDetailsRoot() {
@@ -49,15 +49,15 @@ export function MCPDetailsRoot() {
 export function MCPDetailPage() {
   const { toolsetSlug } = useParams();
 
-  const toolset = useToolsetSuspense({ slug: toolsetSlug! });
+  const { data: toolset, isLoading } = useToolset(toolsetSlug);
   const activeOAuthAuthCode =
-    toolset.data.securityVariables?.some(
+    toolset?.securityVariables?.some(
       (secVar) =>
         secVar.type === "oauth2" &&
         secVar.oauthTypes?.includes("authorization_code"),
     ) ?? false;
   const isOAuthConnected = !!(
-    toolset.data.oauthProxyServer || toolset.data.externalOauthServer
+    toolset?.oauthProxyServer || toolset?.externalOauthServer
   );
   const [isOAuthModalOpen, setIsOAuthModalOpen] = useState(false);
   const [isOAuthDetailsModalOpen, setIsOAuthDetailsModalOpen] = useState(false);
@@ -65,6 +65,11 @@ export function MCPDetailPage() {
   useEffect(() => {
     localStorage.setItem(onboardingStepStorageKeys.configure, "true");
   }, []);
+
+  // TODO: better loading state
+  if (isLoading || !toolset) {
+    return <div>Loading...</div>;
+  }
 
   return (
     <Stack>
@@ -77,7 +82,7 @@ export function MCPDetailPage() {
         <Stack direction="horizontal" gap={2}>
           <Tooltip>
             <TooltipTrigger asChild>
-              {!activeOAuthAuthCode || !toolset.data.mcpIsPublic ? (
+              {!activeOAuthAuthCode || !toolset?.mcpIsPublic ? (
                 <span className="inline-block">
                   <Button variant="secondary" size="md" disabled={true}>
                     {isOAuthConnected ? "OAuth Connected" : "Connect OAuth"}
@@ -97,7 +102,7 @@ export function MCPDetailPage() {
                 </Button>
               )}
             </TooltipTrigger>
-            {(!activeOAuthAuthCode || !toolset.data.mcpIsPublic) && (
+            {(!activeOAuthAuthCode || !toolset?.mcpIsPublic) && (
               <TooltipContent>
                 {!activeOAuthAuthCode
                   ? "This MCP server does not require the OAuth authorization code flow"
@@ -105,7 +110,7 @@ export function MCPDetailPage() {
               </TooltipContent>
             )}
           </Tooltip>
-          <MCPEnableButton toolset={toolset.data} />
+          <MCPEnableButton toolset={toolset} />
         </Stack>
       </Stack>
       <PageSection
@@ -115,19 +120,19 @@ export function MCPDetailPage() {
           below."
         className="max-w-2xl"
       >
-        <ToolsetCard toolset={toolset.data} />
+        <ToolsetCard toolset={toolset} />
       </PageSection>
-      <MCPDetails toolset={toolset.data} />
+      <MCPDetails toolset={toolset} />
       <ConnectOAuthModal
         isOpen={isOAuthModalOpen}
         onClose={() => setIsOAuthModalOpen(false)}
-        toolsetSlug={toolset.data.slug}
-        toolset={toolset.data}
+        toolsetSlug={toolset.slug}
+        toolset={toolset}
       />
       <OAuthDetailsModal
         isOpen={isOAuthDetailsModalOpen}
         onClose={() => setIsOAuthDetailsModalOpen(false)}
-        toolset={toolset.data}
+        toolset={toolset}
       />
     </Stack>
   );
@@ -645,11 +650,11 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
 
   if (!toolset) return { public: "", internal: "" };
 
-  const toolsetTools = tools?.httpTools?.filter((tool) =>
-    toolset.httpTools.some((t) => t.id === tool.id),
+  const toolsetTools = tools?.tools.filter((tool) =>
+    toolset.tools.some((t) => t.id === tool.id),
   );
   const requiresServerURL = toolsetTools?.some(
-    (tool) => !tool.defaultServerUrl,
+    (tool) => isHttpTool(tool) && !tool.defaultServerUrl,
   );
 
   const envHeaders: string[] = [

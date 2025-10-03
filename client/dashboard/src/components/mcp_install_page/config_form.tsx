@@ -1,4 +1,4 @@
-import type { McpMetadata, Toolset } from "@gram/client/models/components";
+import type { McpMetadata } from "@gram/client/models/components";
 import {
   useGetMcpMetadata,
   useMcpMetadataSetMutation,
@@ -18,11 +18,12 @@ import {
   useState,
 } from "react";
 import { AssetImage } from "../asset-image";
-import { GramError } from "@gram/client/models/errors";
 import { useQueryClient } from "@tanstack/react-query";
 import { CodeBlock } from "@/components/code";
 import { useMcpUrl } from "@/pages/mcp/MCPDetails";
 import { Dialog } from "@/components/ui/dialog";
+import { Toolset } from "@/lib/toolTypes";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 
 interface ConfigFormProps {
   toolset: Toolset;

@@ -49,18 +49,19 @@ func TestToolsetsService_CreateToolset_Success(t *testing.T) {
 	require.Equal(t, "Test Toolset", result.Name)
 	require.Equal(t, "test-toolset", string(result.Slug))
 	require.Equal(t, "A test toolset", *result.Description)
-	require.Len(t, result.HTTPTools, 2, "should have 2 HTTP tools")
+	require.Len(t, result.Tools, 2, "should have 2 HTTP tools")
 	require.NotNil(t, result.ID)
 	require.NotNil(t, result.CreatedAt)
 	require.NotNil(t, result.UpdatedAt)
 
 	// Verify the tools are correctly populated
-	toolSetUrns := make([]string, len(result.HTTPTools))
-	for i, tool := range result.HTTPTools {
-		toolSetUrns[i] = tool.ToolUrn
-		require.NotEmpty(t, tool.ID)
-		require.NotEmpty(t, tool.Name)
-		require.NotEmpty(t, tool.ToolUrn)
+	toolSetUrns := make([]string, len(result.Tools))
+	for i, tool := range result.Tools {
+		baseTool := conv.ToBaseTool(tool)
+		toolSetUrns[i] = baseTool.ToolUrn
+		require.NotEmpty(t, baseTool.ID)
+		require.NotEmpty(t, baseTool.Name)
+		require.NotEmpty(t, baseTool.ToolUrn)
 		// Summary and Description may be empty depending on the OpenAPI spec
 	}
 	require.ElementsMatch(t, toolUrns[:2], toolSetUrns)
@@ -109,8 +110,8 @@ func TestToolsetsService_CreateToolset_WithDefaultEnvironment(t *testing.T) {
 	require.Equal(t, "Test Toolset with Env", result.Name)
 	require.Equal(t, "test-toolset-with-env", string(result.Slug))
 	require.Equal(t, "test-env", string(*result.DefaultEnvironmentSlug))
-	require.Len(t, result.HTTPTools, 1, "should have 1 HTTP tool")
-	require.Equal(t, tools[0].ToolUrn.String(), result.HTTPTools[0].ToolUrn)
+	require.Len(t, result.Tools, 1, "should have 1 HTTP tool")
+	require.Equal(t, tools[0].ToolUrn.String(), conv.ToBaseTool(result.Tools[0]).ToolUrn)
 }
 
 func TestToolsetsService_CreateToolset_DuplicateSlug(t *testing.T) {
@@ -227,5 +228,5 @@ func TestToolsetsService_CreateToolset_EmptyToolUrns(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "Test Toolset Empty Tools", result.Name)
-	require.Empty(t, result.HTTPTools)
+	require.Empty(t, result.Tools)
 }

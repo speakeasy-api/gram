@@ -8,23 +8,22 @@ import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
+import { isPromptTool, Tool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import {
   Confirm,
   HTTPToolDefinition,
-  PromptTemplateKind,
   UpsertGlobalToolVariationForm,
 } from "@gram/client/models/components";
 import { invalidateTemplate, useDeployment } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { ToolDefinition } from "./types";
 
 export function ToolCard({
   tool,
   onUpdate,
 }: {
-  tool: ToolDefinition;
+  tool: Tool;
   onUpdate: () => void;
 }) {
   const queryClient = useQueryClient();
@@ -83,7 +82,7 @@ export function ToolCard({
         onSubmit={(newValue) => updateVariation({ name: newValue })}
         label={"Tool Name"}
         description={`Update the name of tool '${tool.name}'`}
-        disabled={tool.type === PromptTemplateKind.HigherOrderTool}
+        disabled={isPromptTool(tool)}
       >
         <Stack direction="horizontal" align="center">
           {prefixTrimmed && (
@@ -114,11 +113,21 @@ export function ToolCard({
       >
         {sourceName}
       </Badge>
-      {tool.tags.map((tag) => (
-        <Badge key={tag} variant="secondary" className="text-sm capitalize">
-          {tag}
+      {tool.type === "http" &&
+        tool.tags.map((tag) => (
+          <Badge key={tag} variant="secondary" className="text-sm capitalize">
+            {tag}
+          </Badge>
+        ))}
+      {isPromptTool(tool) && (
+        <Badge
+          variant="secondary"
+          className="text-sm capitalize"
+          tooltip={`Subtools: ${tool.toolsHint.join(", ")}`}
+        >
+          Custom Tool
         </Badge>
-      ))}
+      )}
     </>
   );
 
@@ -173,7 +182,7 @@ export function ToolCard({
   );
 }
 
-function useToolSourceName(tool: ToolDefinition) {
+function useToolSourceName(tool: Tool) {
   const { data: deployment } = useDeployment(
     {
       id: (tool as HTTPToolDefinition).deploymentId,
@@ -183,10 +192,6 @@ function useToolSourceName(tool: ToolDefinition) {
       enabled: tool.type === "http" && !tool.packageName,
     },
   );
-
-  if (tool.packageName) {
-    return tool.packageName;
-  }
 
   switch (tool.type) {
     case "http": {

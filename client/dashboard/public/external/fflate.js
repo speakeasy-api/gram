@@ -72,7 +72,7 @@ var _a = freb(fleb, 2),
   fl = _a.b,
   revfl = _a.r;
 // we can ignore the fact that the other numbers are wrong; they never happen anyway
-((fl[28] = 258), (revfl[258] = 28));
+(fl[28] = 258), (revfl[258] = 28);
 var _b = freb(fdeb, 0),
   fd = _b.b,
   revfd = _b.r;
@@ -280,9 +280,9 @@ var inflt = function (dat, st, buf, dict) {
         // Copy over uncompressed data
         buf.set(dat.subarray(s, t), bt);
         // Get new bitpos, update byte count
-        ((st.b = bt += l), (st.p = pos = t * 8), (st.f = final));
+        (st.b = bt += l), (st.p = pos = t * 8), (st.f = final);
         continue;
-      } else if (type == 1) ((lm = flrm), (dm = fdrm), (lbt = 9), (dbt = 5));
+      } else if (type == 1) (lm = flrm), (dm = fdrm), (lbt = 9), (dbt = 5);
       else if (type == 2) {
         //  literal                            lengths
         var hLit = bits(dat, pos, 31) + 257,
@@ -317,9 +317,9 @@ var inflt = function (dat, st, buf, dict) {
             var c = 0,
               n = 0;
             if (s == 16)
-              ((n = 3 + bits(dat, pos, 3)), (pos += 2), (c = ldt[i - 1]));
-            else if (s == 17) ((n = 3 + bits(dat, pos, 7)), (pos += 3));
-            else if (s == 18) ((n = 11 + bits(dat, pos, 127)), (pos += 7));
+              (n = 3 + bits(dat, pos, 3)), (pos += 2), (c = ldt[i - 1]);
+            else if (s == 17) (n = 3 + bits(dat, pos, 7)), (pos += 3);
+            else if (s == 18) (n = 11 + bits(dat, pos, 127)), (pos += 7);
             while (n--) ldt[i++] = c;
           }
         }
@@ -356,7 +356,7 @@ var inflt = function (dat, st, buf, dict) {
       if (!c) err(2);
       if (sym < 256) buf[bt++] = sym;
       else if (sym == 256) {
-        ((lpos = pos), (lm = null));
+        (lpos = pos), (lm = null);
         break;
       } else {
         var add = sym - 254;
@@ -376,7 +376,7 @@ var inflt = function (dat, st, buf, dict) {
         var dt = fd[dsym];
         if (dsym > 3) {
           var b = fdeb[dsym];
-          ((dt += bits16(dat, pos) & ((1 << b) - 1)), (pos += b));
+          (dt += bits16(dat, pos) & ((1 << b) - 1)), (pos += b);
         }
         if (pos > tbts) {
           if (noSt) err(0);
@@ -393,8 +393,8 @@ var inflt = function (dat, st, buf, dict) {
         for (; bt < end; ++bt) buf[bt] = buf[bt - dt];
       }
     }
-    ((st.l = lm), (st.p = lpos), (st.b = bt), (st.f = final));
-    if (lm) ((final = 1), (st.m = lbt), (st.d = dm), (st.n = dbt));
+    (st.l = lm), (st.p = lpos), (st.b = bt), (st.f = final);
+    if (lm) (final = 1), (st.m = lbt), (st.d = dm), (st.n = dbt);
   } while (!final);
   // don't reallocate for streams or user buffers
   return bt != buf.length && noBuf ? slc(buf, 0, bt) : buf.subarray(0, bt);
@@ -524,9 +524,9 @@ var lc = function (c) {
           cls = 0;
         }
       } else if (cls > 3) {
-        (w(cln), --cls);
+        w(cln), --cls;
         for (; cls > 6; cls -= 6) w(8304);
-        if (cls > 2) (w(((cls - 3) << 5) | 8208), (cls = 0));
+        if (cls > 2) w(((cls - 3) << 5) | 8208), (cls = 0);
       }
       while (cls--) w(cln);
       cls = 1;
@@ -593,12 +593,9 @@ var wblk = function (dat, out, final, syms, lf, df, eb, li, bs, bl, p) {
   if (bs >= 0 && flen <= ftlen && flen <= dtlen)
     return wfblk(out, p, dat.subarray(bs, bs + bl));
   var lm, ll, dm, dl;
-  (wbits(out, p, 1 + (dtlen < ftlen)), (p += 2));
+  wbits(out, p, 1 + (dtlen < ftlen)), (p += 2);
   if (dtlen < ftlen) {
-    ((lm = hMap(dlt, mlb, 0)),
-      (ll = dlt),
-      (dm = hMap(ddt, mdb, 0)),
-      (dl = ddt));
+    (lm = hMap(dlt, mlb, 0)), (ll = dlt), (dm = hMap(ddt, mdb, 0)), (dl = ddt);
     var llm = hMap(lct, mlcb, 0);
     wbits(out, p, nlc - 257);
     wbits(out, p + 5, ndc - 1);
@@ -611,25 +608,24 @@ var wblk = function (dat, out, final, syms, lf, df, eb, li, bs, bl, p) {
       var clct = lcts[it];
       for (var i = 0; i < clct.length; ++i) {
         var len = clct[i] & 31;
-        (wbits(out, p, llm[len]), (p += lct[len]));
-        if (len > 15)
-          (wbits(out, p, (clct[i] >> 5) & 127), (p += clct[i] >> 12));
+        wbits(out, p, llm[len]), (p += lct[len]);
+        if (len > 15) wbits(out, p, (clct[i] >> 5) & 127), (p += clct[i] >> 12);
       }
     }
   } else {
-    ((lm = flm), (ll = flt), (dm = fdm), (dl = fdt));
+    (lm = flm), (ll = flt), (dm = fdm), (dl = fdt);
   }
   for (var i = 0; i < li; ++i) {
     var sym = syms[i];
     if (sym > 255) {
       var len = (sym >> 18) & 31;
-      (wbits16(out, p, lm[len + 257]), (p += ll[len + 257]));
-      if (len > 7) (wbits(out, p, (sym >> 23) & 31), (p += fleb[len]));
+      wbits16(out, p, lm[len + 257]), (p += ll[len + 257]);
+      if (len > 7) wbits(out, p, (sym >> 23) & 31), (p += fleb[len]);
       var dst = sym & 31;
-      (wbits16(out, p, dm[dst]), (p += dl[dst]));
-      if (dst > 3) (wbits16(out, p, (sym >> 5) & 8191), (p += fdeb[dst]));
+      wbits16(out, p, dm[dst]), (p += dl[dst]);
+      if (dst > 3) wbits16(out, p, (sym >> 5) & 8191), (p += fdeb[dst]);
     } else {
-      (wbits16(out, p, lm[sym]), (p += ll[sym]));
+      wbits16(out, p, lm[sym]), (p += ll[sym]);
     }
   }
   wbits16(out, p, lm[256]);
@@ -691,7 +687,7 @@ var dflt = function (dat, lvl, plvl, pre, post, st) {
         var rem = s - i;
         if ((lc_1 > 7000 || li > 24576) && (rem > 423 || !lst)) {
           pos = wblk(dat, w, 0, syms, lf, df, eb, li, bs, i - bs, pos);
-          ((li = lc_1 = eb = 0), (bs = i));
+          (li = lc_1 = eb = 0), (bs = i);
           for (var j = 0; j < 286; ++j) lf[j] = 0;
           for (var j = 0; j < 30; ++j) df[j] = 0;
         }
@@ -711,7 +707,7 @@ var dflt = function (dat, lvl, plvl, pre, post, st) {
               var nl = 0;
               for (; nl < ml && dat[i + nl] == dat[i + nl - dif]; ++nl);
               if (nl > l) {
-                ((l = nl), (d = dif));
+                (l = nl), (d = dif);
                 // break out early when we reach "nice" (we are satisfied enough)
                 if (nl > maxn) break;
                 // now, find the rarest 2-byte sequence within this
@@ -723,12 +719,12 @@ var dflt = function (dat, lvl, plvl, pre, post, st) {
                   var ti = (i - dif + j) & 32767;
                   var pti = prev[ti];
                   var cd = (ti - pti) & 32767;
-                  if (cd > md) ((md = cd), (pimod = ti));
+                  if (cd > md) (md = cd), (pimod = ti);
                 }
               }
             }
             // check the previous match
-            ((imod = pimod), (pimod = prev[imod]));
+            (imod = pimod), (pimod = prev[imod]);
             dif += (imod - pimod) & 32767;
           }
         }
@@ -759,7 +755,7 @@ var dflt = function (dat, lvl, plvl, pre, post, st) {
       st.r = (pos & 7) | (w[(pos / 8) | 0] << 3);
       // shft(pos) now 1 less if pos & 7 != 0
       pos -= 7;
-      ((st.h = head), (st.p = prev), (st.i = i), (st.w = wi));
+      (st.h = head), (st.p = prev), (st.i = i), (st.w = wi);
     }
   } else {
     for (var i = st.w || 0; i < s + lst; i += 65535) {
@@ -816,13 +812,12 @@ var adler = function () {
       for (var i = 0; i != l; ) {
         var e = Math.min(i + 2655, l);
         for (; i < e; ++i) m += n += d[i];
-        ((n = (n & 65535) + 15 * (n >> 16)),
-          (m = (m & 65535) + 15 * (m >> 16)));
+        (n = (n & 65535) + 15 * (n >> 16)), (m = (m & 65535) + 15 * (m >> 16));
       }
-      ((a = n), (b = m));
+      (a = n), (b = m);
     },
     d: function () {
-      ((a %= 65521), (b %= 65521));
+      (a %= 65521), (b %= 65521);
       return (
         ((a & 255) << 24) | ((a & 0xff00) << 8) | ((b & 255) << 8) | (b >> 8)
       );
@@ -1048,7 +1043,7 @@ var astrm = function (strm) {
 var astrmify = function (fns, strm, opts, init, id, flush, ext) {
   var t;
   var w = wrkr(fns, init, id, function (err, dat) {
-    if (err) (w.terminate(), strm.ondata.call(strm, err));
+    if (err) w.terminate(), strm.ondata.call(strm, err);
     else if (!Array.isArray(dat)) ext(dat);
     else if (dat.length == 1) {
       strm.queuedSize -= dat[0];
@@ -1088,16 +1083,16 @@ var b8 = function (d, b) {
 };
 // write bytes
 var wbytes = function (d, b, v) {
-  for (; v; ++b) ((d[b] = v), (v >>>= 8));
+  for (; v; ++b) (d[b] = v), (v >>>= 8);
 };
 // gzip header
 var gzh = function (c, o) {
   var fn = o.filename;
-  ((c[0] = 31),
+  (c[0] = 31),
     (c[1] = 139),
     (c[2] = 8),
     (c[8] = o.level < 2 ? 4 : o.level == 9 ? 2 : 0),
-    (c[9] = 3)); // assume Unix
+    (c[9] = 3); // assume Unix
   if (o.mtime != 0)
     wbytes(c, 4, Math.floor(new Date(o.mtime || Date.now()) / 1000));
   if (fn) {
@@ -1130,7 +1125,7 @@ var gzhl = function (o) {
 var zlh = function (c, o) {
   var lv = o.level,
     fl = lv == 0 ? 0 : lv < 6 ? 1 : lv == 9 ? 3 : 2;
-  ((c[0] = 120), (c[1] = (fl << 6) | (o.dictionary && 32)));
+  (c[0] = 120), (c[1] = (fl << 6) | (o.dictionary && 32));
   c[1] |= 31 - (((c[0] << 8) | c[1]) % 31);
   if (o.dictionary) {
     var h = adler();
@@ -1152,7 +1147,7 @@ var zls = function (d, dict) {
   return ((d[1] >> 3) & 4) + 2;
 };
 function StrmOpt(opts, cb) {
-  if (typeof opts == "function") ((cb = opts), (opts = {}));
+  if (typeof opts == "function") (cb = opts), (opts = {});
   this.ondata = cb;
   return opts;
 }
@@ -1161,7 +1156,7 @@ function StrmOpt(opts, cb) {
  */
 var Deflate = /*#__PURE__*/ (function () {
   function Deflate(opts, cb) {
-    if (typeof opts == "function") ((cb = opts), (opts = {}));
+    if (typeof opts == "function") (cb = opts), (opts = {});
     this.ondata = cb;
     this.o = opts || {};
     this.s = { l: 0, i: 32768, w: 32768, z: 32768 };
@@ -1199,7 +1194,7 @@ var Deflate = /*#__PURE__*/ (function () {
       this.b.set(this.b.subarray(-32768));
       this.b.set(chunk.subarray(split), 32768);
       this.s.z = chunk.length - split + 32768;
-      ((this.s.i = 32766), (this.s.w = 32768));
+      (this.s.i = 32766), (this.s.w = 32768);
     } else {
       this.b.set(chunk, this.s.z);
       this.s.z += chunk.length;
@@ -1207,7 +1202,7 @@ var Deflate = /*#__PURE__*/ (function () {
     this.s.l = final & 1;
     if (this.s.z > this.s.w + 8191 || final) {
       this.p(this.b, final || false);
-      ((this.s.w = this.s.i), (this.s.i -= 2));
+      (this.s.w = this.s.i), (this.s.i -= 2);
     }
   };
   /**
@@ -1218,7 +1213,7 @@ var Deflate = /*#__PURE__*/ (function () {
     if (!this.ondata) err(5);
     if (this.s.l) err(4);
     this.p(this.b, false);
-    ((this.s.w = this.s.i), (this.s.i -= 2));
+    (this.s.w = this.s.i), (this.s.i -= 2);
   };
   return Deflate;
 })();
@@ -1249,7 +1244,7 @@ var AsyncDeflate = /*#__PURE__*/ (function () {
 })();
 export { AsyncDeflate };
 export function deflate(data, opts, cb) {
-  if (!cb) ((cb = opts), (opts = {}));
+  if (!cb) (cb = opts), (opts = {});
   if (typeof cb != "function") err(7);
   return cbify(
     data,
@@ -1277,7 +1272,7 @@ export function deflateSync(data, opts) {
 var Inflate = /*#__PURE__*/ (function () {
   function Inflate(opts, cb) {
     // no StrmOpt here to avoid adding to workerizer
-    if (typeof opts == "function") ((cb = opts), (opts = {}));
+    if (typeof opts == "function") (cb = opts), (opts = {});
     this.ondata = cb;
     var dict = opts && opts.dictionary && opts.dictionary.subarray(-32768);
     this.s = { i: 0, b: dict ? dict.length : 0 };
@@ -1291,7 +1286,7 @@ var Inflate = /*#__PURE__*/ (function () {
     if (!this.p.length) this.p = c;
     else if (c.length) {
       var n = new u8(this.p.length + c.length);
-      (n.set(this.p), n.set(c, this.p.length), (this.p = n));
+      n.set(this.p), n.set(c, this.p.length), (this.p = n);
     }
   };
   Inflate.prototype.c = function (final) {
@@ -1299,8 +1294,8 @@ var Inflate = /*#__PURE__*/ (function () {
     var bts = this.s.b;
     var dt = inflt(this.p, this.s, this.o);
     this.ondata(slc(dt, bts, this.s.b), this.d);
-    ((this.o = slc(dt, this.s.b - 32768)), (this.s.b = this.o.length));
-    ((this.p = slc(this.p, (this.s.p / 8) | 0)), (this.s.p &= 7));
+    (this.o = slc(dt, this.s.b - 32768)), (this.s.b = this.o.length);
+    (this.p = slc(this.p, (this.s.p / 8) | 0)), (this.s.p &= 7);
   };
   /**
    * Pushes a chunk to be inflated
@@ -1308,7 +1303,7 @@ var Inflate = /*#__PURE__*/ (function () {
    * @param final Whether this is the final chunk
    */
   Inflate.prototype.push = function (chunk, final) {
-    (this.e(chunk), this.c(final));
+    this.e(chunk), this.c(final);
   };
   return Inflate;
 })();
@@ -1339,7 +1334,7 @@ var AsyncInflate = /*#__PURE__*/ (function () {
 })();
 export { AsyncInflate };
 export function inflate(data, opts, cb) {
-  if (!cb) ((cb = opts), (opts = {}));
+  if (!cb) (cb = opts), (opts = {});
   if (typeof cb != "function") err(7);
   return cbify(
     data,
@@ -1384,10 +1379,10 @@ var Gzip = /*#__PURE__*/ (function () {
   };
   Gzip.prototype.p = function (c, f) {
     var raw = dopt(c, this.o, this.v && gzhl(this.o), f && 8, this.s);
-    if (this.v) (gzh(raw, this.o), (this.v = 0));
+    if (this.v) gzh(raw, this.o), (this.v = 0);
     if (f)
-      (wbytes(raw, raw.length - 8, this.c.d()),
-        wbytes(raw, raw.length - 4, this.l));
+      wbytes(raw, raw.length - 8, this.c.d()),
+        wbytes(raw, raw.length - 4, this.l);
     this.ondata(raw, f);
   };
   /**
@@ -1427,7 +1422,7 @@ var AsyncGzip = /*#__PURE__*/ (function () {
 })();
 export { AsyncGzip };
 export function gzip(data, opts, cb) {
-  if (!cb) ((cb = opts), (opts = {}));
+  if (!cb) (cb = opts), (opts = {});
   if (typeof cb != "function") err(7);
   return cbify(
     data,
@@ -1459,7 +1454,7 @@ export function gzipSync(data, opts) {
   c.p(data);
   var d = dopt(data, opts, gzhl(opts), 8),
     s = d.length;
-  return (gzh(d, opts), wbytes(d, s - 8, c.d()), wbytes(d, s - 4, l), d);
+  return gzh(d, opts), wbytes(d, s - 8, c.d()), wbytes(d, s - 4, l), d;
 }
 /**
  * Streaming single or multi-member GZIP decompression
@@ -1486,7 +1481,7 @@ var Gunzip = /*#__PURE__*/ (function () {
       } else if (this.v > 1 && this.onmember) {
         this.onmember(this.r - p.length);
       }
-      ((this.p = p.subarray(s)), (this.v = 0));
+      (this.p = p.subarray(s)), (this.v = 0);
     }
     // necessary to prevent TS from using the closure value
     // This allows for workerization to function correctly
@@ -1536,7 +1531,7 @@ var AsyncGunzip = /*#__PURE__*/ (function () {
 })();
 export { AsyncGunzip };
 export function gunzip(data, opts, cb) {
-  if (!cb) ((cb = opts), (opts = {}));
+  if (!cb) (cb = opts), (opts = {});
   if (typeof cb != "function") err(7);
   return cbify(
     data,
@@ -1597,7 +1592,7 @@ var Zlib = /*#__PURE__*/ (function () {
       f && 4,
       this.s,
     );
-    if (this.v) (zlh(raw, this.o), (this.v = 0));
+    if (this.v) zlh(raw, this.o), (this.v = 0);
     if (f) wbytes(raw, raw.length - 4, this.c.d());
     this.ondata(raw, f);
   };
@@ -1638,7 +1633,7 @@ var AsyncZlib = /*#__PURE__*/ (function () {
 })();
 export { AsyncZlib };
 export function zlib(data, opts, cb) {
-  if (!cb) ((cb = opts), (opts = {}));
+  if (!cb) (cb = opts), (opts = {});
   if (typeof cb != "function") err(7);
   return cbify(
     data,
@@ -1668,7 +1663,7 @@ export function zlibSync(data, opts) {
   var a = adler();
   a.p(data);
   var d = dopt(data, opts, opts.dictionary ? 6 : 2, 4);
-  return (zlh(d, opts), wbytes(d, d.length - 4, a.d()), d);
+  return zlh(d, opts), wbytes(d, d.length - 4, a.d()), d;
 }
 /**
  * Streaming Zlib decompression
@@ -1687,7 +1682,7 @@ var Unzlib = /*#__PURE__*/ (function () {
     Inflate.prototype.e.call(this, chunk);
     if (this.v) {
       if (this.p.length < 6 && !final) return;
-      ((this.p = this.p.subarray(zls(this.p, this.v - 1))), (this.v = 0));
+      (this.p = this.p.subarray(zls(this.p, this.v - 1))), (this.v = 0);
     }
     if (final) {
       if (this.p.length < 4) err(6, "invalid zlib data");
@@ -1727,7 +1722,7 @@ var AsyncUnzlib = /*#__PURE__*/ (function () {
 })();
 export { AsyncUnzlib };
 export function unzlib(data, opts, cb) {
-  if (!cb) ((cb = opts), (opts = {}));
+  if (!cb) (cb = opts), (opts = {});
   if (typeof cb != "function") err(7);
   return cbify(
     data,
@@ -1791,7 +1786,7 @@ var Decompress = /*#__PURE__*/ (function () {
     if (!this.s) {
       if (this.p && this.p.length) {
         var n = new u8(this.p.length + chunk.length);
-        (n.set(this.p), n.set(chunk, this.p.length));
+        n.set(this.p), n.set(chunk, this.p.length);
       } else this.p = chunk;
       if (this.p.length > 2) {
         this.s =
@@ -1845,7 +1840,7 @@ var AsyncDecompress = /*#__PURE__*/ (function () {
 })();
 export { AsyncDecompress };
 export function decompress(data, opts, cb) {
-  if (!cb) ((cb = opts), (opts = {}));
+  if (!cb) (cb = opts), (opts = {});
   if (typeof cb != "function") err(7);
   return data[0] == 31 && data[1] == 139 && data[2] == 8
     ? gunzip(data, opts, cb)
@@ -1872,7 +1867,7 @@ var fltn = function (d, p, t, o) {
     var val = d[k],
       n = p + k,
       op = o;
-    if (Array.isArray(val)) ((op = mrg(o, val[1])), (val = val[0]));
+    if (Array.isArray(val)) (op = mrg(o, val[1])), (val = val[0]);
     if (val instanceof u8) t[n] = [val, op];
     else {
       t[(n += "/")] = [new u8(0), op];
@@ -1898,13 +1893,13 @@ var dutf8 = function (d) {
     if (i + eb > d.length) return { s: r, r: slc(d, i - 1) };
     if (!eb) r += String.fromCharCode(c);
     else if (eb == 3) {
-      ((c =
+      (c =
         (((c & 15) << 18) |
           ((d[i++] & 63) << 12) |
           ((d[i++] & 63) << 6) |
           (d[i++] & 63)) -
         65536),
-        (r += String.fromCharCode(55296 | (c >> 10), 56320 | (c & 1023))));
+        (r += String.fromCharCode(55296 | (c >> 10), 56320 | (c & 1023)));
     } else if (eb & 1)
       r += String.fromCharCode(((c & 31) << 6) | (d[i++] & 63));
     else
@@ -2010,14 +2005,14 @@ export function strToU8(str, latin1) {
     }
     var c = str.charCodeAt(i);
     if (c < 128 || latin1) w(c);
-    else if (c < 2048) (w(192 | (c >> 6)), w(128 | (c & 63)));
+    else if (c < 2048) w(192 | (c >> 6)), w(128 | (c & 63));
     else if (c > 55295 && c < 57344)
-      ((c = (65536 + (c & (1023 << 10))) | (str.charCodeAt(++i) & 1023)),
+      (c = (65536 + (c & (1023 << 10))) | (str.charCodeAt(++i) & 1023)),
         w(240 | (c >> 18)),
         w(128 | ((c >> 12) & 63)),
         w(128 | ((c >> 6) & 63)),
-        w(128 | (c & 63)));
-    else (w(224 | (c >> 12)), w(128 | ((c >> 6) & 63)), w(128 | (c & 63)));
+        w(128 | (c & 63));
+    else w(224 | (c >> 12)), w(128 | ((c >> 6) & 63)), w(128 | (c & 63));
   }
   return slc(ar, 0, ai);
 }
@@ -2088,15 +2083,15 @@ var wzh = function (d, b, f, fn, u, c, ce, co) {
     ex = f.extra,
     col = co && co.length;
   var exl = exfl(ex);
-  (wbytes(d, b, ce != null ? 0x2014b50 : 0x4034b50), (b += 4));
-  if (ce != null) ((d[b++] = 20), (d[b++] = f.os));
-  ((d[b] = 20), (b += 2)); // spec compliance? what's that?
-  ((d[b++] = (f.flag << 1) | (c < 0 && 8)), (d[b++] = u && 8));
-  ((d[b++] = f.compression & 255), (d[b++] = f.compression >> 8));
+  wbytes(d, b, ce != null ? 0x2014b50 : 0x4034b50), (b += 4);
+  if (ce != null) (d[b++] = 20), (d[b++] = f.os);
+  (d[b] = 20), (b += 2); // spec compliance? what's that?
+  (d[b++] = (f.flag << 1) | (c < 0 && 8)), (d[b++] = u && 8);
+  (d[b++] = f.compression & 255), (d[b++] = f.compression >> 8);
   var dt = new Date(f.mtime == null ? Date.now() : f.mtime),
     y = dt.getFullYear() - 1980;
   if (y < 0 || y > 119) err(10);
-  (wbytes(
+  wbytes(
     d,
     b,
     (y << 25) |
@@ -2106,18 +2101,18 @@ var wzh = function (d, b, f, fn, u, c, ce, co) {
       (dt.getMinutes() << 5) |
       (dt.getSeconds() >> 1),
   ),
-    (b += 4));
+    (b += 4);
   if (c != -1) {
     wbytes(d, b, f.crc);
     wbytes(d, b + 4, c < 0 ? -c - 2 : c);
     wbytes(d, b + 8, f.size);
   }
   wbytes(d, b + 12, fl);
-  (wbytes(d, b + 14, exl), (b += 16));
+  wbytes(d, b + 14, exl), (b += 16);
   if (ce != null) {
     wbytes(d, b, col);
     wbytes(d, b + 6, f.attrs);
-    (wbytes(d, b + 10, ce), (b += 14));
+    wbytes(d, b + 10, ce), (b += 14);
   }
   d.set(fn, b);
   b += fl;
@@ -2127,10 +2122,10 @@ var wzh = function (d, b, f, fn, u, c, ce, co) {
         l = exf.length;
       wbytes(d, b, +k);
       wbytes(d, b + 2, l);
-      (d.set(exf, b + 4), (b += 4 + l));
+      d.set(exf, b + 4), (b += 4 + l);
     }
   }
-  if (col) (d.set(co, b), (b += col));
+  if (col) d.set(co, b), (b += col);
   return b;
 };
 // write zip footer (end of central directory)
@@ -2333,10 +2328,10 @@ var Zip = /*#__PURE__*/ (function () {
             wbytes(dd, 8, cl_1);
             wbytes(dd, 12, file.size);
             chks_1.push(dd);
-            ((uf_1.c = cl_1),
+            (uf_1.c = cl_1),
               (uf_1.b = hl_1 + cl_1 + 16),
               (uf_1.crc = file.crc),
-              (uf_1.size = file.size));
+              (uf_1.size = file.size);
             if (tr_1) uf_1.r();
             tr_1 = 1;
           } else if (tr_1) pAll_1();
@@ -2380,8 +2375,8 @@ var Zip = /*#__PURE__*/ (function () {
     for (var _b = 0, _c = this.u; _b < _c.length; _b++) {
       var f = _c[_b];
       wzh(out, bt, f, f.f, f.u, -f.c - 2, l, f.o);
-      ((bt += 46 + f.f.length + exfl(f.extra) + (f.o ? f.o.length : 0)),
-        (l += f.b));
+      (bt += 46 + f.f.length + exfl(f.extra) + (f.o ? f.o.length : 0)),
+        (l += f.b);
     }
     wzf(out, bt, this.u.length, tl, l);
     this.ondata(null, out, true);
@@ -2402,7 +2397,7 @@ var Zip = /*#__PURE__*/ (function () {
 })();
 export { Zip };
 export function zip(data, opts, cb) {
-  if (!cb) ((cb = opts), (opts = {}));
+  if (!cb) (cb = opts), (opts = {});
   if (typeof cb != "function") err(7);
   var r = {};
   fltn(data, "", r, opts);
@@ -2437,9 +2432,9 @@ export function zip(data, opts, cb) {
         var badd = 30 + f.f.length + exfl(f.extra);
         var loc = tot + badd;
         out.set(f.c, loc);
-        (wzh(out, o, f, f.f, f.u, l, tot, f.m),
+        wzh(out, o, f, f.f, f.u, l, tot, f.m),
           (o += 16 + badd + (f.m ? f.m.length : 0)),
-          (tot = loc + l));
+          (tot = loc + l);
       } catch (e) {
         return cbd(e, null);
       }
@@ -2552,8 +2547,8 @@ export function zipSync(data, opts) {
     wzh(out, f.o, f, f.f, f.u, f.c.length);
     var badd = 30 + f.f.length + exfl(f.extra);
     out.set(f.c, f.o + badd);
-    (wzh(out, o, f, f.f, f.u, f.c.length, f.o, f.m),
-      (o += 16 + badd + (f.m ? f.m.length : 0)));
+    wzh(out, o, f, f.f, f.u, f.c.length, f.o, f.m),
+      (o += 16 + badd + (f.m ? f.m.length : 0));
   }
   wzf(out, o, files.length, cdl, oe);
   return out;
@@ -2665,7 +2660,7 @@ var Unzip = /*#__PURE__*/ (function () {
       else if (!chunk.length) buf = this.p;
       else {
         buf = new u8(this.p.length + chunk.length);
-        (buf.set(this.p), buf.set(chunk, this.p.length));
+        buf.set(this.p), buf.set(chunk, this.p.length);
       }
       var l = buf.length,
         oc = this.c,
@@ -2674,7 +2669,7 @@ var Unzip = /*#__PURE__*/ (function () {
         var _a;
         var sig = b4(buf, i);
         if (sig == 0x4034b50) {
-          ((f = 1), (is = i));
+          (f = 1), (is = i);
           this_1.d = null;
           this_1.c = 0;
           var bf = b2(buf, i + 6),
@@ -2691,7 +2686,7 @@ var Unzip = /*#__PURE__*/ (function () {
               su_1 = b4(buf, i + 22);
             var fn_1 = strFromU8(buf.subarray(i + 30, (i += 30 + fnl)), !u);
             if (sc_1 == 4294967295) {
-              ((_a = dd ? [-2] : z64e(buf, i)), (sc_1 = _a[0]), (su_1 = _a[1]));
+              (_a = dd ? [-2] : z64e(buf, i)), (sc_1 = _a[0]), (su_1 = _a[1]);
             } else if (dd) sc_1 = -1;
             i += es;
             this_1.c = sc_1;
@@ -2726,16 +2721,16 @@ var Unzip = /*#__PURE__*/ (function () {
                 if (d_1 && d_1.terminate) d_1.terminate();
               },
             };
-            if (sc_1 >= 0) ((file_1.size = sc_1), (file_1.originalSize = su_1));
+            if (sc_1 >= 0) (file_1.size = sc_1), (file_1.originalSize = su_1);
             this_1.onfile(file_1);
           }
           return "break";
         } else if (oc) {
           if (sig == 0x8074b50) {
-            ((is = i += 12 + (oc == -2 && 8)), (f = 3), (this_1.c = 0));
+            (is = i += 12 + (oc == -2 && 8)), (f = 3), (this_1.c = 0);
             return "break";
           } else if (sig == 0x2014b50) {
-            ((is = i -= 4), (f = 3), (this_1.c = 0));
+            (is = i -= 4), (f = 3), (this_1.c = 0);
             return "break";
           }
         }
@@ -2784,7 +2779,7 @@ var mt =
           fn();
         };
 export function unzip(data, opts, cb) {
-  if (!cb) ((cb = opts), (opts = {}));
+  if (!cb) (cb = opts), (opts = {});
   if (typeof cb != "function") err(7);
   var term = [];
   var tAll = function () {

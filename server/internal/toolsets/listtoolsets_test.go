@@ -60,8 +60,8 @@ func TestToolsetsService_ListToolsets_Success(t *testing.T) {
 	toolsetIDs := make(map[string]bool)
 	for _, ts := range result.Toolsets {
 		toolsetIDs[ts.ID] = true
-		require.NotEmpty(t, ts.HTTPTools, "HTTP tools should be populated")
-		require.Len(t, ts.HTTPTools, 2, "each toolset should have 2 tools")
+		require.NotEmpty(t, ts.Tools, "HTTP tools should be populated")
+		require.Len(t, ts.Tools, 2, "each toolset should have 2 tools")
 	}
 	require.True(t, toolsetIDs[toolset1.ID])
 	require.True(t, toolsetIDs[toolset2.ID])
@@ -146,7 +146,7 @@ func TestToolsetsService_ListToolsets_VerifyDetails(t *testing.T) {
 	require.Equal(t, "Detailed Toolset", toolset.Name)
 	require.Equal(t, "detailed-toolset", string(toolset.Slug))
 	require.Equal(t, "A toolset with details", *toolset.Description)
-	require.Empty(t, toolset.HTTPTools)
+	require.Empty(t, toolset.Tools)
 	require.NotNil(t, toolset.CreatedAt)
 	require.NotNil(t, toolset.UpdatedAt)
 }

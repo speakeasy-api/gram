@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { asTool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { Toolset, ToolsetEntry } from "@gram/client/models/components";
 import { useListToolsets } from "@gram/client/react-query";
@@ -194,7 +195,7 @@ function HomeContent() {
       const basicTools =
         toolsets?.toolsets?.flatMap(
           (toolset) =>
-            toolset.httpTools?.map((tool) => ({
+            toolset.tools?.map((tool) => ({
               name: tool.name,
               method: undefined,
             })) || [],
@@ -204,9 +205,9 @@ function HomeContent() {
 
     const fullTools = allFullToolsets.flatMap(
       (toolset) =>
-        toolset?.httpTools?.map((tool) => ({
+        toolset?.tools?.map(asTool).map((tool) => ({
           name: tool.name,
-          method: tool.httpMethod,
+          method: tool.type === "http" ? tool.httpMethod : undefined,
         })) || [],
     );
 
@@ -270,7 +271,7 @@ function HomeContent() {
   const totalToolCount = useMemo(
     () =>
       toolsets?.toolsets?.reduce(
-        (acc, toolset) => acc + (toolset.httpTools?.length || 0),
+        (acc, toolset) => acc + (toolset.tools?.length || 0),
         0,
       ) || 0,
     [toolsets?.toolsets],

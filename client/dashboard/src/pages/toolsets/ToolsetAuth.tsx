@@ -1,18 +1,16 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Plus } from "lucide-react";
-
 import { Button } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
-
-import { Toolset, EnvironmentEntryInput } from "@gram/client/models/components";
+import { EnvironmentEntryInput } from "@gram/client/models/components";
 import {
   invalidateAllListEnvironments,
   useUpdateEnvironmentMutation,
 } from "@gram/client/react-query";
-
+import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { useEnvironments } from "../environments/Environments";
 import { EnvironmentSelector } from "./EnvironmentSelector";
 
@@ -145,8 +143,8 @@ export function ToolsetAuth({
     setSaveError(null);
   }, []);
 
-  const requiresServerURL = toolset.httpTools?.some(
-    (tool) => !tool.defaultServerUrl,
+  const requiresServerURL = toolset.tools?.some(
+    (tool) => isHttpTool(tool) && !tool.defaultServerUrl,
   );
 
   const relevantEnvVars = useMemo(() => {

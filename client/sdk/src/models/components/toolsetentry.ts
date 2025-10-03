@@ -8,12 +8,6 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  HTTPToolDefinitionEntry,
-  HTTPToolDefinitionEntry$inboundSchema,
-  HTTPToolDefinitionEntry$Outbound,
-  HTTPToolDefinitionEntry$outboundSchema,
-} from "./httptooldefinitionentry.js";
-import {
   PromptTemplateEntry,
   PromptTemplateEntry$inboundSchema,
   PromptTemplateEntry$Outbound,
@@ -31,6 +25,12 @@ import {
   ServerVariable$Outbound,
   ServerVariable$outboundSchema,
 } from "./servervariable.js";
+import {
+  ToolEntry,
+  ToolEntry$inboundSchema,
+  ToolEntry$Outbound,
+  ToolEntry$outboundSchema,
+} from "./toolentry.js";
 
 export type ToolsetEntry = {
   /**
@@ -49,10 +49,6 @@ export type ToolsetEntry = {
    * Description of the toolset
    */
   description?: string | undefined;
-  /**
-   * The HTTP tools in this toolset
-   */
-  httpTools: Array<HTTPToolDefinitionEntry>;
   /**
    * The ID of the toolset
    */
@@ -82,7 +78,7 @@ export type ToolsetEntry = {
    */
   projectId: string;
   /**
-   * The prompt templates in this toolset
+   * The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts
    */
   promptTemplates: Array<PromptTemplateEntry>;
   /**
@@ -102,6 +98,10 @@ export type ToolsetEntry = {
    */
   toolUrns: Array<string>;
   /**
+   * The tools in this toolset
+   */
+  tools: Array<ToolEntry>;
+  /**
    * When the toolset was last updated.
    */
   updatedAt: Date;
@@ -117,7 +117,6 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
   custom_domain_id: z.string().optional(),
   default_environment_slug: z.string().optional(),
   description: z.string().optional(),
-  http_tools: z.array(HTTPToolDefinitionEntry$inboundSchema),
   id: z.string(),
   mcp_enabled: z.boolean().optional(),
   mcp_is_public: z.boolean().optional(),
@@ -130,13 +129,13 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
   server_variables: z.array(ServerVariable$inboundSchema).optional(),
   slug: z.string(),
   tool_urns: z.array(z.string()),
+  tools: z.array(ToolEntry$inboundSchema),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
 }).transform((v) => {
   return remap$(v, {
     "created_at": "createdAt",
     "custom_domain_id": "customDomainId",
     "default_environment_slug": "defaultEnvironmentSlug",
-    "http_tools": "httpTools",
     "mcp_enabled": "mcpEnabled",
     "mcp_is_public": "mcpIsPublic",
     "mcp_slug": "mcpSlug",
@@ -156,7 +155,6 @@ export type ToolsetEntry$Outbound = {
   custom_domain_id?: string | undefined;
   default_environment_slug?: string | undefined;
   description?: string | undefined;
-  http_tools: Array<HTTPToolDefinitionEntry$Outbound>;
   id: string;
   mcp_enabled?: boolean | undefined;
   mcp_is_public?: boolean | undefined;
@@ -169,6 +167,7 @@ export type ToolsetEntry$Outbound = {
   server_variables?: Array<ServerVariable$Outbound> | undefined;
   slug: string;
   tool_urns: Array<string>;
+  tools: Array<ToolEntry$Outbound>;
   updated_at: string;
 };
 
@@ -182,7 +181,6 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
   customDomainId: z.string().optional(),
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
-  httpTools: z.array(HTTPToolDefinitionEntry$outboundSchema),
   id: z.string(),
   mcpEnabled: z.boolean().optional(),
   mcpIsPublic: z.boolean().optional(),
@@ -195,13 +193,13 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
   serverVariables: z.array(ServerVariable$outboundSchema).optional(),
   slug: z.string(),
   toolUrns: z.array(z.string()),
+  tools: z.array(ToolEntry$outboundSchema),
   updatedAt: z.date().transform(v => v.toISOString()),
 }).transform((v) => {
   return remap$(v, {
     createdAt: "created_at",
     customDomainId: "custom_domain_id",
     defaultEnvironmentSlug: "default_environment_slug",
-    httpTools: "http_tools",
     mcpEnabled: "mcp_enabled",
     mcpIsPublic: "mcp_is_public",
     mcpSlug: "mcp_slug",

@@ -50,7 +50,7 @@ var GetInstanceForm = Type("GetInstanceForm", func() {
 var GetInstanceResult = Type("GetInstanceResult", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("description", String, "The description of the toolset")
-	Attribute("tools", ArrayOf(shared.HTTPToolDefinition), "The list of tools")
+	Attribute("tools", ArrayOf(shared.Tool), "The list of tools")
 	Attribute("prompt_templates", ArrayOf(shared.PromptTemplate), "The list of prompt templates")
 	Attribute("security_variables", ArrayOf(shared.SecurityVariable), "The security variables that are relevant to the toolset")
 	Attribute("server_variables", ArrayOf(shared.ServerVariable), "The server variables that are relevant to the toolset")
