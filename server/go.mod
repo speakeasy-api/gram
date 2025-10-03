@@ -28,8 +28,8 @@ require (
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
 	github.com/polarsource/polar-go v0.9.2
 	github.com/posthog/posthog-go v1.6.10
-	github.com/redis/go-redis/extra/redisotel/v9 v9.15.1
-	github.com/redis/go-redis/v9 v9.15.1
+	github.com/redis/go-redis/extra/redisotel/v9 v9.14.0
+	github.com/redis/go-redis/v9 v9.14.0
 	github.com/samber/lo v1.51.0
 	github.com/samber/slog-multi v1.5.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
@@ -154,7 +154,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
-	github.com/redis/go-redis/extra/rediscmd/v9 v9.15.1 // indirect
+	github.com/redis/go-redis/extra/rediscmd/v9 v9.14.0 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/samber/slog-common v0.19.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.6 // indirect
