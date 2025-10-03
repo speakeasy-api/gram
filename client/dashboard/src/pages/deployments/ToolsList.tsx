@@ -68,8 +68,8 @@ export function ToolsList(props: { deploymentId?: string }) {
 
   const tagFilterOptions = groupedTools.flatMap((group) =>
     group.tools.flatMap((t) =>
-      t.type === "http" ? t.tags.map((tag) => `${group.key}/${tag}`) : []
-    )
+      t.type === "http" ? t.tags.map((tag) => `${group.key}/${tag}`) : [],
+    ),
   );
   const uniqueTags = [...new Set(tagFilterOptions)];
   const tagFilterItems = uniqueTags.map((tag) => ({

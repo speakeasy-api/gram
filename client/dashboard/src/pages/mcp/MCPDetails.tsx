@@ -53,7 +53,7 @@ export function MCPDetailPage() {
   const activeOAuthAuthCode =
     toolset?.securityVariables?.some(
       (secVar) =>
-        secVar.type === "oauth2" && 
+        secVar.type === "oauth2" &&
         secVar.oauthTypes?.includes("authorization_code"),
     ) ?? false;
   const isOAuthConnected = !!(
@@ -651,7 +651,7 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
   if (!toolset) return { public: "", internal: "" };
 
   const toolsetTools = tools?.tools.filter((tool) =>
-    toolset.tools.some((t) => t.id === tool.id)
+    toolset.tools.some((t) => t.id === tool.id),
   );
   const requiresServerURL = toolsetTools?.some(
     (tool) => isHttpTool(tool) && !tool.defaultServerUrl,

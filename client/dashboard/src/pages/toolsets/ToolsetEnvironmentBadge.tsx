@@ -6,7 +6,10 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { EnvironmentEntryInput } from "@gram/client/models/components";
-import { invalidateAllListEnvironments, useUpdateEnvironmentMutation } from "@gram/client/react-query";
+import {
+  invalidateAllListEnvironments,
+  useUpdateEnvironmentMutation,
+} from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { useEnvironments } from "../environments/Environments";
@@ -50,7 +53,7 @@ export const ToolsetEnvironmentBadge = ({
   const environment = environments.find((env) => env.slug === envSlug);
 
   const requiresServerURL = toolset.tools?.some(
-    (tool) => isHttpTool(tool) && !tool.defaultServerUrl
+    (tool) => isHttpTool(tool) && !tool.defaultServerUrl,
   );
 
   const relevantEnvVars: string[] = [

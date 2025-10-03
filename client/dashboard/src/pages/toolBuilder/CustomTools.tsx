@@ -26,7 +26,7 @@ export function useCustomTools() {
   const { data, isLoading } = useTemplates();
   return {
     customTools: data?.templates.filter(
-      (template) => template.kind === PromptTemplateKind.HigherOrderTool
+      (template) => template.kind === PromptTemplateKind.HigherOrderTool,
     ),
     isLoading,
   };

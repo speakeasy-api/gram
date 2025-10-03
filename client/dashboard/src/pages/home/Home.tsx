@@ -208,7 +208,7 @@ function HomeContent() {
         toolset?.tools?.map(asTool).map((tool) => ({
           name: tool.name,
           method: tool.type === "http" ? tool.httpMethod : undefined,
-        })) || []
+        })) || [],
     );
 
     // Create R-G-B-Y color pattern by grouping tools by HTTP method
@@ -272,7 +272,7 @@ function HomeContent() {
     () =>
       toolsets?.toolsets?.reduce(
         (acc, toolset) => acc + (toolset.tools?.length || 0),
-        0
+        0,
       ) || 0,
     [toolsets?.toolsets],
   );

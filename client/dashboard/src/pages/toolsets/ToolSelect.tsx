@@ -454,7 +454,7 @@ function CustomToolCard({
     currentTools.some((t2) => t2.name === t);
 
   const templateIsInToolset = currentTools.some(
-    (t) => t.toolUrn === template.toolUrn
+    (t) => t.toolUrn === template.toolUrn,
   );
 
   const allToolsAvailable = template.toolsHint.every(isToolInToolset);
@@ -471,7 +471,7 @@ function CustomToolCard({
   );
 
   const variedNames = template.toolsHint.map(
-    (t) => tools?.tools.find((t2: Tool) => t2.canonicalName === t)?.name ?? t
+    (t) => tools?.tools.find((t2: Tool) => t2.canonicalName === t)?.name ?? t,
   );
 
   const badge = allToolsAvailable ? (

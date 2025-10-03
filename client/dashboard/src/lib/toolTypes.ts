@@ -43,17 +43,17 @@ export const asTool = (tool: GeneratedTool): Tool => {
 };
 
 export const useGroupedToolDefinitions = (
-  toolset: GeneratedToolset | undefined
+  toolset: GeneratedToolset | undefined,
 ): ToolGroup[] => {
   const tools = toolset?.tools ?? [];
   return useGroupedTools(tools.map(asTool));
 };
 
 export const useGroupedHttpTools = (
-  tools: HTTPToolDefinition[]
+  tools: HTTPToolDefinition[],
 ): HttpToolGroup[] => {
   return useGroupedTools(
-    tools.map((t) => asTool({ httpToolDefinition: t }))
+    tools.map((t) => asTool({ httpToolDefinition: t })),
   ) as HttpToolGroup[];
 };
 
@@ -63,10 +63,13 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
   });
 
   const documentIdToSlug = useMemo(() => {
-    return deployment?.deployment?.openapiv3Assets?.reduce((acc, asset) => {
-      acc[asset.id] = asset.slug;
-      return acc;
-    }, {} as Record<string, string>);
+    return deployment?.deployment?.openapiv3Assets?.reduce(
+      (acc, asset) => {
+        acc[asset.id] = asset.slug;
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
   }, [deployment]);
 
   const toolGroups = useMemo(() => {
@@ -119,13 +122,13 @@ export const isHttpTool = (tool: Tool) => tool.type === "http";
 export const isPromptTool = (tool: Tool) => tool.type === "prompt";
 
 export const filterHttpTools = (
-  tools: Tool[] | undefined
+  tools: Tool[] | undefined,
 ): HTTPToolDefinition[] => {
   return tools?.filter(isHttpTool) ?? [];
 };
 
 export const filterPromptTools = (
-  tools: Tool[] | undefined
+  tools: Tool[] | undefined,
 ): PromptTemplate[] => {
   return tools?.filter(isPromptTool) ?? [];
 };

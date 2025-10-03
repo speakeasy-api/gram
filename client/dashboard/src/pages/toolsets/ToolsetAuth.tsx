@@ -144,7 +144,7 @@ export function ToolsetAuth({
   }, []);
 
   const requiresServerURL = toolset.tools?.some(
-    (tool) => isHttpTool(tool) && !tool.defaultServerUrl
+    (tool) => isHttpTool(tool) && !tool.defaultServerUrl,
   );
 
   const relevantEnvVars = useMemo(() => {

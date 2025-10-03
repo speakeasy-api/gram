@@ -120,7 +120,11 @@ export function ToolCard({
           </Badge>
         ))}
       {isPromptTool(tool) && (
-        <Badge variant="secondary" className="text-sm capitalize" tooltip={`Subtools: ${tool.toolsHint.join(", ")}`}>
+        <Badge
+          variant="secondary"
+          className="text-sm capitalize"
+          tooltip={`Subtools: ${tool.toolsHint.join(", ")}`}
+        >
           Custom Tool
         </Badge>
       )}

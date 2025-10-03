@@ -910,7 +910,7 @@ const parsePrompt = (
   } catch (error) {
     console.error(
       "Failed to parse template as JSON, falling back to legacy parsing:",
-      error
+      error,
     );
   }
 

@@ -29,7 +29,7 @@ export function useToolset(toolsetSlug: string | undefined) {
 export function useListTools(
   request?: ListToolsRequest,
   security?: ListToolsSecurity,
-  options?: QueryHookOptions<ListToolsQueryData>
+  options?: QueryHookOptions<ListToolsQueryData>,
 ) {
   const result = useListToolsQuery(request, security, options);
 

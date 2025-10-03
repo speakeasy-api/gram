@@ -6,7 +6,7 @@ import { Toolset } from "@/lib/toolTypes";
 function useRelevantEnvVars(toolset: Toolset) {
   return useMemo(() => {
     const requiresServerURL = toolset.tools?.some(
-      (tool) => tool.type === "http" && !tool.defaultServerUrl
+      (tool) => tool.type === "http" && !tool.defaultServerUrl,
     );
 
     const securityVars =

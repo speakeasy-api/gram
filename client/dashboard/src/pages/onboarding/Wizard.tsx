@@ -48,7 +48,7 @@ export function OnboardingWizard() {
   const { orgSlug } = useParams();
 
   const [currentStep, setCurrentStep] = useState<"upload" | "toolset" | "mcp">(
-    "upload"
+    "upload",
   );
   const [toolsetName, setToolsetName] = useState<string>();
   const [mcpSlug, setMcpSlug] = useState<string>();
@@ -99,7 +99,7 @@ const Step = ({
       <span
         className={cn(
           "rounded-full bg-muted h-8 w-8 flex items-center justify-center",
-          active && "bg-success text-success-foreground"
+          active && "bg-success text-success-foreground",
         )}
       >
         {completed ? <Check className="w-4 h-4" /> : icon}

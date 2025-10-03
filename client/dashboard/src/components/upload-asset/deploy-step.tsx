@@ -23,7 +23,7 @@ export default function DeployStep() {
   const toolsList = useListTools(
     { deploymentId: stepper.meta.current.deployment?.id },
     undefined,
-    { enabled: step.state === "completed" }
+    { enabled: step.state === "completed" },
   );
 
   const toolCount = React.useMemo(() => {
@@ -31,7 +31,7 @@ export default function DeployStep() {
     if (!toolsList.data || !deployment || !uploadResult) return 0;
 
     const documentId = deployment!.openapiv3Assets.find(
-      (doc) => doc.assetId === uploadResult?.asset.id
+      (doc) => doc.assetId === uploadResult?.asset.id,
     )?.id;
 
     return toolsList.data.tools.reduce((prev: number, cur) => {
@@ -46,13 +46,13 @@ export default function DeployStep() {
       deploymentId: stepper.meta.current.deployment?.id ?? "",
     },
     undefined,
-    { enabled: step.state === "completed" }
+    { enabled: step.state === "completed" },
   );
 
   const deployHasErrors = React.useMemo(() => {
     if (!deploymentLogs.data) return false;
     return deploymentLogs.data.events.some(({ event }) =>
-      event.includes("error")
+      event.includes("error"),
     );
   }, [deploymentLogs.data]);
 
