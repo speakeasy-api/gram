@@ -21,6 +21,8 @@ type Service interface {
 	GetDeployment(context.Context, *GetDeploymentPayload) (res *GetDeploymentResult, err error)
 	// Get the latest deployment for a project.
 	GetLatestDeployment(context.Context, *GetLatestDeploymentPayload) (res *GetLatestDeploymentResult, err error)
+	// Get the active deployment for a project.
+	GetActiveDeployment(context.Context, *GetActiveDeploymentPayload) (res *GetActiveDeploymentResult, err error)
 	// Create a deployment to load tool definitions.
 	CreateDeployment(context.Context, *CreateDeploymentPayload) (res *CreateDeploymentResult, err error)
 	// Create a new deployment with additional or updated tool sources.
@@ -53,7 +55,7 @@ const ServiceName = "deployments"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [7]string{"getDeployment", "getLatestDeployment", "createDeployment", "evolve", "redeploy", "listDeployments", "getDeploymentLogs"}
+var MethodNames = [8]string{"getDeployment", "getLatestDeployment", "getActiveDeployment", "createDeployment", "evolve", "redeploy", "listDeployments", "getDeploymentLogs"}
 
 type AddDeploymentPackageForm struct {
 	// The name of the package.
@@ -186,6 +188,21 @@ type EvolvePayload struct {
 // EvolveResult is the result type of the deployments service evolve method.
 type EvolveResult struct {
 	// A deployment that was successfully created.
+	Deployment *types.Deployment
+}
+
+// GetActiveDeploymentPayload is the payload type of the deployments service
+// getActiveDeployment method.
+type GetActiveDeploymentPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+}
+
+// GetActiveDeploymentResult is the result type of the deployments service
+// getActiveDeployment method.
+type GetActiveDeploymentResult struct {
+	// The active deployment for a project if available.
 	Deployment *types.Deployment
 }
 

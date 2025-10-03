@@ -25,6 +25,10 @@ type Client struct {
 	// getLatestDeployment endpoint.
 	GetLatestDeploymentDoer goahttp.Doer
 
+	// GetActiveDeployment Doer is the HTTP client used to make requests to the
+	// getActiveDeployment endpoint.
+	GetActiveDeploymentDoer goahttp.Doer
+
 	// CreateDeployment Doer is the HTTP client used to make requests to the
 	// createDeployment endpoint.
 	CreateDeploymentDoer goahttp.Doer
@@ -66,6 +70,7 @@ func NewClient(
 	return &Client{
 		GetDeploymentDoer:       doer,
 		GetLatestDeploymentDoer: doer,
+		GetActiveDeploymentDoer: doer,
 		CreateDeploymentDoer:    doer,
 		EvolveDoer:              doer,
 		RedeployDoer:            doer,
@@ -122,6 +127,30 @@ func (c *Client) GetLatestDeployment() goa.Endpoint {
 		resp, err := c.GetLatestDeploymentDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("deployments", "getLatestDeployment", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetActiveDeployment returns an endpoint that makes HTTP requests to the
+// deployments service getActiveDeployment server.
+func (c *Client) GetActiveDeployment() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetActiveDeploymentRequest(c.encoder)
+		decodeResponse = DecodeGetActiveDeploymentResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetActiveDeploymentRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetActiveDeploymentDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("deployments", "getActiveDeployment", err)
 		}
 		return decodeResponse(resp)
 	}
