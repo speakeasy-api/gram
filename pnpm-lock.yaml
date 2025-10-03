@@ -10675,7 +10675,7 @@ snapshots:
   astro-eslint-parser@1.2.2:
     dependencies:
       '@astrojs/compiler': 2.13.0
-      '@typescript-eslint/scope-manager': 8.45.0
+      '@typescript-eslint/scope-manager': 8.43.0
       '@typescript-eslint/types': 8.45.0
       astrojs-compiler-sync: 1.1.1(@astrojs/compiler@2.13.0)
       debug: 4.4.3

@@ -5,7 +5,7 @@ import tseslint from "typescript-eslint";
 import astroPlugin from "eslint-plugin-astro";
 
 export default defineConfig([
-  { ignores: ["dist", ".astro"] },
+  { ignores: ["dist", ".astro", ".vercel"] },
   {
     files: ["**/*.{js,mjs,cjs,ts,mts,cts}"],
     plugins: { js },
