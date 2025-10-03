@@ -51,7 +51,7 @@ var BaseToolAttributes = Type("BaseToolAttributes", func() {
 	Attribute("canonical", CanonicalToolAttributes, "The original details of a tool, excluding any variations")
 	Attribute("variation", ToolVariation, "The variation details of a tool. Only includes explicitly varied fields.")
 
-	Required("id", "project_id", "deployment_id", "name", "canonical_name", "description", "confirm", "tool_urn", "created_at", "updated_at")
+	Required("id", "project_id", "deployment_id", "name", "canonical_name", "description", "schema", "confirm", "tool_urn", "created_at", "updated_at")
 })
 
 // HTTPTool represents an HTTP tool with all its attributes

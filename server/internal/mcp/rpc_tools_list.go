@@ -58,22 +58,8 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 		tools = append(tools, &toolListEntry{
 			Name:        baseTool.Name,
 			Description: baseTool.Description,
-			InputSchema: json.RawMessage(*baseTool.Schema),
+			InputSchema: json.RawMessage(baseTool.Schema),
 		})
-	}
-
-	for _, prompt := range toolset.PromptTemplates {
-		promptArgs := mv.DefaultEmptyToolSchema
-		if prompt.Schema != nil {
-			promptArgs = *prompt.Schema
-		}
-		if prompt.Kind == "higher_order_tool" {
-			tools = append(tools, &toolListEntry{
-				Name:        string(prompt.Name),
-				Description: prompt.Description,
-				InputSchema: json.RawMessage(promptArgs),
-			})
-		}
 	}
 
 	result := &result[toolsListResult]{

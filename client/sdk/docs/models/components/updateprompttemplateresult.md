@@ -19,6 +19,7 @@ let value: UpdatePromptTemplateResult = {
     name: "<value>",
     projectId: "<id>",
     prompt: "<value>",
+    schema: "<value>",
     toolUrn: "<value>",
     toolsHint: [
       "<value 1>",

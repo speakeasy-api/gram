@@ -2,6 +2,7 @@ package conv
 
 import (
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -18,10 +19,15 @@ func ToToolUrn(tool types.Tool) urn.Tool {
 	panic("unknown tool type")
 }
 
-func ToBaseTool(tool *types.Tool) *types.BaseToolAttributes {
-
+func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
+	schema := constants.DefaultEmptyToolSchema
+	
 	if tool.HTTPToolDefinition != nil {
-		return &types.BaseToolAttributes{
+		if len(tool.HTTPToolDefinition.Schema) > 0 {
+			schema = tool.HTTPToolDefinition.Schema
+		}
+
+		return types.BaseToolAttributes{
 			ID: tool.HTTPToolDefinition.ID,
 			ToolUrn: tool.HTTPToolDefinition.ToolUrn,
 			ProjectID: tool.HTTPToolDefinition.ProjectID,
@@ -30,7 +36,7 @@ func ToBaseTool(tool *types.Tool) *types.BaseToolAttributes {
 			CanonicalName: tool.HTTPToolDefinition.CanonicalName,
 			Description: tool.HTTPToolDefinition.Description,
 			SchemaVersion: tool.HTTPToolDefinition.SchemaVersion,
-			Schema: &tool.HTTPToolDefinition.Schema,
+			Schema: schema,
 			Confirm: tool.HTTPToolDefinition.Confirm,
 			ConfirmPrompt: tool.HTTPToolDefinition.ConfirmPrompt,
 			Summarizer: tool.HTTPToolDefinition.Summarizer,
@@ -41,7 +47,11 @@ func ToBaseTool(tool *types.Tool) *types.BaseToolAttributes {
 		}
 	}	
 	if tool.PromptTemplate != nil {
-		return &types.BaseToolAttributes{
+		if len(tool.PromptTemplate.Schema) > 0 {
+			schema = tool.PromptTemplate.Schema
+		}
+
+		return types.BaseToolAttributes{
 			ID: tool.PromptTemplate.ID,
 			ToolUrn: tool.PromptTemplate.ToolUrn,
 			ProjectID: tool.PromptTemplate.ProjectID,
@@ -50,7 +60,7 @@ func ToBaseTool(tool *types.Tool) *types.BaseToolAttributes {
 			CanonicalName: tool.PromptTemplate.CanonicalName,
 			Description: tool.PromptTemplate.Description,
 			SchemaVersion: tool.PromptTemplate.SchemaVersion,
-			Schema: tool.PromptTemplate.Schema,
+			Schema: schema,
 			Confirm: tool.PromptTemplate.Confirm,
 			ConfirmPrompt: tool.PromptTemplate.ConfirmPrompt,
 			Summarizer: tool.PromptTemplate.Summarizer,

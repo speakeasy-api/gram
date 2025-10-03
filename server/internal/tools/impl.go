@@ -238,11 +238,6 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 
 	// Process prompt templates
 	for _, template := range templates {
-		var args *string
-		if len(template.Arguments) > 0 {
-			args = conv.PtrEmpty(string(template.Arguments))
-		}
-
 		hint := template.ToolsHint
 		if hint == nil {
 			hint = []string{}
@@ -257,7 +252,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				Name:          template.Name,
 				Prompt:        template.Prompt,
 				Description:   conv.PtrValOrEmpty(conv.FromPGText[string](template.Description), ""),
-				Schema:        args,
+				Schema:        string(template.Arguments),
 				SchemaVersion: nil,
 				Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](template.Engine), "none"),
 				Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](template.Kind), "prompt"),

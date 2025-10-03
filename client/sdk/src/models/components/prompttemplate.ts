@@ -111,7 +111,7 @@ export type PromptTemplate = {
   /**
    * JSON schema for the request
    */
-  schema?: string | undefined;
+  schema: string;
   /**
    * Version of the schema
    */
@@ -196,7 +196,7 @@ export const PromptTemplate$inboundSchema: z.ZodType<
   predecessor_id: z.string().optional(),
   project_id: z.string(),
   prompt: z.string(),
-  schema: z.string().optional(),
+  schema: z.string(),
   schema_version: z.string().optional(),
   summarizer: z.string().optional(),
   tool_urn: z.string(),
@@ -236,7 +236,7 @@ export type PromptTemplate$Outbound = {
   predecessor_id?: string | undefined;
   project_id: string;
   prompt: string;
-  schema?: string | undefined;
+  schema: string;
   schema_version?: string | undefined;
   summarizer?: string | undefined;
   tool_urn: string;
@@ -266,7 +266,7 @@ export const PromptTemplate$outboundSchema: z.ZodType<
   predecessorId: z.string().optional(),
   projectId: z.string(),
   prompt: z.string(),
-  schema: z.string().optional(),
+  schema: z.string(),
   schemaVersion: z.string().optional(),
   summarizer: z.string().optional(),
   toolUrn: z.string(),

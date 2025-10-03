@@ -80,8 +80,8 @@ func handlePromptsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 		if prompt.Kind == "prompt" {
 			args := make([]promptArgument, 0)
 
-			if prompt.Schema != nil && len(*prompt.Schema) > 0 {
-				args = parsePromptArgumentsFromJSONSchema(*prompt.Schema, logger, ctx)
+			if len(prompt.Schema) > 0 {
+				args = parsePromptArgumentsFromJSONSchema(prompt.Schema, logger, ctx)
 			}
 
 			prompts = append(prompts, &promptsListEntry{

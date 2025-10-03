@@ -4484,6 +4484,9 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
+	if body.Schema == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
+	}
 	if body.Confirm == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("confirm", "body"))
 	}

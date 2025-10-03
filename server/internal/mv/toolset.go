@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -25,8 +26,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	vr "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
-
-const DefaultEmptyToolSchema = `{"type":"object","properties":{}}`
 
 func DescribeToolsetEntry(
 	ctx context.Context,
@@ -381,7 +380,7 @@ func DescribeToolset(
 
 			// models like claude expect schema to never be empty but be a valid json schema
 			if tool.Schema == "" {
-				tool.Schema = DefaultEmptyToolSchema
+				tool.Schema = constants.DefaultEmptyToolSchema
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
@@ -413,7 +412,7 @@ func DescribeToolset(
 					Name:          pt.Name,
 					Prompt:        pt.Prompt,
 					Description:   conv.PtrValOrEmpty(conv.FromPGText[string](pt.Description), ""),
-					Schema:        conv.Ptr(string(pt.Arguments)),
+					Schema:        string(pt.Arguments),
 					SchemaVersion: nil,
 					Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
 					Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
@@ -440,11 +439,6 @@ func DescribeToolset(
 
 	promptTemplates := make([]*types.PromptTemplate, 0, len(ptrows))
 	for _, pt := range ptrows {
-		var args *string
-		if len(pt.Arguments) > 0 {
-			args = conv.PtrEmpty(string(pt.Arguments))
-		}
-
 		hint := pt.ToolsHint
 		if hint == nil {
 			hint = []string{}
@@ -458,7 +452,7 @@ func DescribeToolset(
 			Name:          pt.Name,
 			Prompt:        pt.Prompt,
 			Description:   conv.PtrValOrEmpty(conv.FromPGText[string](pt.Description), ""),
-			Schema:        args,
+			Schema:        string(pt.Arguments),
 			SchemaVersion: nil,
 			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
 			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),

@@ -20,6 +20,7 @@ let value: PromptTemplate = {
   name: "<value>",
   projectId: "<id>",
   prompt: "<value>",
+  schema: "<value>",
   toolUrn: "<value>",
   toolsHint: [],
   updatedAt: new Date("2025-12-07T09:02:53.100Z"),
@@ -45,7 +46,7 @@ let value: PromptTemplate = {
 | `predecessorId`                                                                               | *string*                                                                                      | :heavy_minus_sign:                                                                            | The previous version of the prompt template to use as predecessor                             |
 | `projectId`                                                                                   | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the project                                                                         |
 | `prompt`                                                                                      | *string*                                                                                      | :heavy_check_mark:                                                                            | The template content                                                                          |
-| `schema`                                                                                      | *string*                                                                                      | :heavy_minus_sign:                                                                            | JSON schema for the request                                                                   |
+| `schema`                                                                                      | *string*                                                                                      | :heavy_check_mark:                                                                            | JSON schema for the request                                                                   |
 | `schemaVersion`                                                                               | *string*                                                                                      | :heavy_minus_sign:                                                                            | Version of the schema                                                                         |
 | `summarizer`                                                                                  | *string*                                                                                      | :heavy_minus_sign:                                                                            | Summarizer for the tool                                                                       |
 | `toolUrn`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The URN of this tool                                                                          |

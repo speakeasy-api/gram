@@ -7460,6 +7460,7 @@ components:
         - name
         - canonical_name
         - description
+        - schema
         - confirm
         - tool_urn
         - created_at
@@ -9458,6 +9459,7 @@ components:
         - deployment_id
         - canonical_name
         - description
+        - schema
         - confirm
     PromptTemplateEntry:
       type: object

@@ -33583,6 +33583,7 @@ definitions:
             - deployment_id
             - canonical_name
             - description
+            - schema
             - confirm
     PromptTemplateEntry:
         title: PromptTemplateEntry

@@ -423,7 +423,7 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 		CanonicalName: *v.CanonicalName,
 		Description:   *v.Description,
 		SchemaVersion: v.SchemaVersion,
-		Schema:        v.Schema,
+		Schema:        *v.Schema,
 		Confirm:       *v.Confirm,
 		ConfirmPrompt: v.ConfirmPrompt,
 		Summarizer:    v.Summarizer,

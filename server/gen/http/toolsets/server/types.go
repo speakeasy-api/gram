@@ -1966,7 +1966,7 @@ type PromptTemplateResponseBody struct {
 	// Version of the schema
 	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
 	// JSON schema for the request
-	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
+	Schema string `form:"schema" json:"schema" xml:"schema"`
 	// Confirmation mode for the tool
 	Confirm string `form:"confirm" json:"confirm" xml:"confirm"`
 	// Prompt for the confirmation

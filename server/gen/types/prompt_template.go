@@ -39,7 +39,7 @@ type PromptTemplate struct {
 	// Version of the schema
 	SchemaVersion *string
 	// JSON schema for the request
-	Schema *string
+	Schema string
 	// Confirmation mode for the tool
 	Confirm string
 	// Prompt for the confirmation

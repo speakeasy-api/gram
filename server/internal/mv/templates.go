@@ -84,13 +84,6 @@ func DescribePromptTemplates(
 }
 
 func fromPromptTemplateRow(row repo.PromptTemplate) *types.PromptTemplate {
-	var args *string
-	if len(row.Arguments) == 0 {
-		args = nil
-	} else {
-		args = conv.Ptr(string(row.Arguments))
-	}
-
 	var tools []string
 	if len(row.ToolsHint) > 0 {
 		tools = row.ToolsHint
@@ -104,7 +97,7 @@ func fromPromptTemplateRow(row repo.PromptTemplate) *types.PromptTemplate {
 		Name:          row.Name,
 		Prompt:        row.Prompt,
 		Description:   conv.PtrValOrEmpty(conv.FromPGText[string](row.Description), ""),
-		Schema:        args,
+		Schema:        string(row.Arguments),
 		SchemaVersion: nil,
 		Engine:        conv.PtrValOr(conv.FromPGText[string](row.Engine), ""),
 		Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](row.Kind), "prompt"),
