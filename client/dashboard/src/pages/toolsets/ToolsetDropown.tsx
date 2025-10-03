@@ -30,7 +30,7 @@ export function ToolsetDropdown({
     })) ?? [];
 
   toolsetDropdownItems.sort(
-    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
+    (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime(),
   );
 
   // Set the default selection if no selection is made
@@ -49,7 +49,7 @@ export function ToolsetDropdown({
       label={noLabel ? undefined : "Toolset"}
       items={toolsetDropdownItems}
       selected={toolsetDropdownItems.find(
-        (item) => item.value === selectedToolset?.slug
+        (item) => item.value === selectedToolset?.slug,
       )}
       onSelectionChange={setSelectedToolset}
       disabledMessage={disabledMessage}

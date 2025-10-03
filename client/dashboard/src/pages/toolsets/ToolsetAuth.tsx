@@ -42,7 +42,8 @@ function SaveActionBar({
         </div>
       )}
       <div className="flex items-center gap-3 ml-auto">
-        <Button type="button"
+        <Button
+          type="button"
           variant="tertiary"
           size="sm"
           onClick={onCancel}
@@ -51,7 +52,8 @@ function SaveActionBar({
         >
           Cancel
         </Button>
-        <Button type="button"
+        <Button
+          type="button"
           size="sm"
           onClick={onSave}
           disabled={isSaving}
@@ -107,7 +109,7 @@ export function ToolsetAuth({
     onError: (error) => {
       console.error(
         "Environment variable save failed:",
-        error?.message || error
+        error?.message || error,
       );
       setSaveError("Failed to save environment variables. Please try again.");
     },
@@ -123,7 +125,7 @@ export function ToolsetAuth({
       setHasChanges(true);
       if (saveError) setSaveError(null);
     },
-    [saveError]
+    [saveError],
   );
 
   const handleFieldFocus = useCallback((varName: string) => {
@@ -152,8 +154,8 @@ export function ToolsetAuth({
     const serverVars =
       toolset?.serverVariables?.flatMap((serverVar) =>
         serverVar.envVariables.filter(
-          (v) => !v.toLowerCase().includes("server_url") || requiresServerURL
-        )
+          (v) => !v.toLowerCase().includes("server_url") || requiresServerURL,
+        ),
       ) ?? [];
 
     return [...securityVars, ...serverVars];
@@ -164,7 +166,7 @@ export function ToolsetAuth({
       const entry =
         environment?.entries?.find((e) => e.name === varName) ?? null;
       const isSecret = SECRET_FIELD_INDICATORS.some((indicator) =>
-        varName.includes(indicator)
+        varName.includes(indicator),
       );
       const inputValue = envValues[varName] ?? "";
       const hasExistingValue =
@@ -220,7 +222,7 @@ export function ToolsetAuth({
     if (environmentEntries) {
       relevantEnvVars.forEach((varName) => {
         const currentValue = environmentEntries.find(
-          (e) => e.name === varName
+          (e) => e.name === varName,
         )?.value;
         const newValue = envValues[varName] ?? "";
 
@@ -253,7 +255,7 @@ export function ToolsetAuth({
         e.currentTarget.blur();
       }
     },
-    [hasChanges, handleSave]
+    [hasChanges, handleSave],
   );
 
   return (
@@ -262,10 +264,12 @@ export function ToolsetAuth({
         <div className="space-y-1">
           <h2 className="text-heading-xs">Environment Variables</h2>
           <p className="text-sm text-muted-foreground">
-            Configure required API credentials for this toolset to use in the Gram dashboard
+            Configure required API credentials for this toolset to use in the
+            Gram dashboard
           </p>
           <p className="text-sm text-muted-foreground">
-            View the MCP page for options on how to provide relevant credentials to an MCP server
+            View the MCP page for options on how to provide relevant credentials
+            to an MCP server
           </p>
         </div>
         <div className="flex-shrink-0 flex items-center gap-2">
@@ -278,7 +282,8 @@ export function ToolsetAuth({
             }}
             className="h-8"
           />
-          <Button type="button"
+          <Button
+            type="button"
             variant="secondary"
             size="sm"
             onClick={() => routes.environments.goTo()}
@@ -323,7 +328,7 @@ export function ToolsetAuth({
                     autoComplete={isSecret ? "new-password" : "off"}
                   />
                 </div>
-              )
+              ),
             )}
           </div>
 

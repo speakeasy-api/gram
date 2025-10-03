@@ -2,7 +2,7 @@ import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
 import { Button, Icon } from "@speakeasy-api/moonshine";
-import { ExternalLink, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,7 @@ import { ToolsetCard } from "../toolsets/ToolsetCard";
 import { Block, BlockInner } from "@/components/block";
 import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
+import { ConfigForm } from "@/components/mcp_install_page/config_form";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -523,34 +524,22 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       >
         <PublicToggle isPublic={mcpIsPublic ?? false} />
       </PageSection>
-      <PageSection
-        heading="MCP Installation"
-        description="Use these configs to connect to this MCP server from a client like
-          Cursor or Claude Desktop."
-      >
-        <Stack className="mt-2" gap={1}>
-          <Stack direction="horizontal" align="center" gap={2}>
-            <CodeBlock
-              copyable={toolset.mcpIsPublic}
-            >{`${mcpUrl}/install`}</CodeBlock>
-            <Link external to={`${mcpUrl}/install`} noIcon>
-              <Button
-                variant="secondary"
-                className="px-4"
-                disabled={!toolset.mcpIsPublic}
-              >
-                <Button.Text>View</Button.Text>
-                <Button.RightIcon>
-                  <ExternalLink className="w-4 h-4" />
-                </Button.RightIcon>
-              </Button>
-            </Link>
+      {toolset.mcpIsPublic && (
+        <PageSection
+          heading="MCP Install Documentation"
+          description="Share this page with your users to give simple instructions
+            for gettings started with your MCP to their client like Cursor or
+            Claude Desktop."
+        >
+          <Stack className="mt-2" gap={1}>
+            <ConfigForm toolset={toolset} />
           </Stack>
-          <Type muted small>
-            A shareable page for installing your MCP server. Try it in the
-            browser!
-          </Type>
-        </Stack>
+        </PageSection>
+      )}
+      <PageSection
+        heading="Configuration"
+        description="Configuration blocks for this server"
+      >
         <MCPJson toolset={toolset} />
       </PageSection>
       <FeatureRequestModal
@@ -1008,7 +997,7 @@ function OAuthTabModal({
                       OAuth Authorization Server Metadata
                     </Type>
                     {jsonError && (
-                      <Type className="text-red-500 text-sm mt-1 !text-red-500">
+                      <Type className="!text-red-500 text-sm mt-1">
                         {jsonError}
                       </Type>
                     )}
@@ -1253,4 +1242,3 @@ function OAuthDetailsModal({
     </Dialog>
   );
 }
-

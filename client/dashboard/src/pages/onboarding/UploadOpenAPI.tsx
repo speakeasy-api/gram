@@ -9,7 +9,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
-import FileUpload from "@/components/upload";
 import UploadAssetStep from "@/components/upload-asset/step";
 import UploadAssetStepper, {
   useStepper,
@@ -17,6 +16,7 @@ import UploadAssetStepper, {
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
+import { FullWidthUpload } from "@/components/upload";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -320,14 +320,14 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
 
 const useAssetNumtools = (
   assetId: string | undefined,
-  deployment: Deployment | undefined
+  deployment: Deployment | undefined,
 ) => {
   const { data: tools } = useListTools({
     deploymentId: deployment?.id,
   });
 
   const documentId = deployment?.openapiv3Assets.find(
-    (doc) => doc.assetId === assetId
+    (doc) => doc.assetId === assetId,
   )?.id;
 
   return documentId
@@ -336,7 +336,7 @@ const useAssetNumtools = (
           tool.type === "http" &&
           tool.openapiv3DocumentId !== undefined &&
           tool.deploymentId === deployment?.id &&
-          tool.openapiv3DocumentId === documentId
+          tool.openapiv3DocumentId === documentId,
       ).length
     : 0;
 };
@@ -369,7 +369,7 @@ export function UploadOpenAPIContent({
       heading: "Upload OpenAPI Specification",
       description: "Upload your OpenAPI specification to get started.",
       display: (
-        <FileUpload
+        <FullWidthUpload
           onUpload={handleSpecUpload}
           allowedExtensions={["yaml", "yml", "json"]}
         />
@@ -510,7 +510,7 @@ export function DeploymentLogs(props: {
         key={e.id}
         className={cn(
           e.event.includes("error") && "text-destructive",
-          "py-1 px-4 dark:hover:bg-white/15 rounded hover:bg-gray-100"
+          "py-1 px-4 dark:hover:bg-white/15 rounded hover:bg-gray-100",
         )}
       >
         {e.message}

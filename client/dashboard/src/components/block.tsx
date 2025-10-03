@@ -33,10 +33,13 @@ export const Block = ({
           className={cn(
             "px-2 pt-1 rounded-sm rounded-b-none",
             blockBackground,
-            labelRHS && "w-full"
+            labelRHS && "w-full",
           )}
         >
-          <Type small className={cn("z-1", error && "text-destructive! text-nowrap")}>
+          <Type
+            small
+            className={cn("z-1", error && "text-destructive! text-nowrap")}
+          >
             {label}
           </Type>
           {labelRHS && (
@@ -56,7 +59,7 @@ export const Block = ({
         className={cn(
           "h-full w-full p-1 rounded-md rounded-tl-none",
           blockBackground,
-          labelRHS && "rounded-tr-none"
+          labelRHS && "rounded-tr-none",
         )}
       >
         {children}
@@ -76,11 +79,10 @@ export const BlockInner = ({
     <div
       className={cn(
         "bg-card dark:bg-background rounded-sm p-2 border-1 border-stone-300 dark:border-stone-700",
-        className
+        className,
       )}
     >
       {children}
     </div>
   );
 };
-

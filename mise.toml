@@ -11,9 +11,12 @@
 "ubi:sbdchd/squawk" = "1.6.1"
 "ubi:speakeasy-api/speakeasy" = "1.606.9"
 "ubi:FiloSottile/mkcert" = "1.4.4"
+apko = "0.30.13"
+flyctl = "0.3.189"
 go = "1.25.0"
 golangci-lint = "2.4.0"
 jq = "1.7.1"
+melange = "0.30.6"
 nodejs = "22.14.0"
 watchexec = "2.3.0"
 gum = "0.16.0"
@@ -118,3 +121,12 @@ OTLP_GRPC_PORT = "4317"
 ## an example of the format.
 ## For a list of feature flags, check `server/internal/feature/flags.go`.
 # GRAM_LOCAL_FEATURE_FLAGS_CSV = "{{config_root}}/flags.csv"
+
+#####################
+## Fly.io settings ##
+#####################
+## Fly.io app names must be globally unique. Apps also act as docker image
+## registries where Gram Functions runner images are pushed to. This config
+## variable acts as a prefix for those image names and correspoding fly apps.
+## IT MUST MATCH SET BOTH IN GITHUB ACTIONS AND IN PRODUCTION. 
+# FLY_IMAGE_PREFIX = "gram-46mq43kl"

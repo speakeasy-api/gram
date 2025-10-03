@@ -14,7 +14,7 @@ const shareFocusAndHoverClasses = cn(
   // Focus
   "focus-visible:ring-1 focus-visible:ring-offset-3 focus-visible:ring-[#979797] dark:focus-visible:ring-[#DCDCDC] focus-visible:ring-offset-background",
   // Disabled
-  "disabled:opacity-50"
+  "disabled:opacity-50",
 );
 
 const buttonVariants = cva(
@@ -30,7 +30,7 @@ const buttonVariants = cva(
           // Active
           "active:bg-[#242424] active:shadow-[0px_5px_1px_0px_#1a1a1a_inset,0px_-2px_1px_0px_rgba(21,21,21,1)_inset]",
           // Focus && Disabled
-          shareFocusAndHoverClasses
+          shareFocusAndHoverClasses,
         ),
       },
       size: {
@@ -41,7 +41,7 @@ const buttonVariants = cva(
       variant: "primary",
       size: "lg",
     },
-  }
+  },
 );
 
 type Attributes = Pick<
@@ -63,7 +63,7 @@ const Button = ({ asChild = false, className, ...props }: ButtonProps) => {
     <Comp
       className={cn(
         buttonVariants({ variant: "primary", size: "lg" }),
-        className
+        className,
       )}
       {...props}
     />

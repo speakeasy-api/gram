@@ -188,6 +188,11 @@ run();
 * [list](docs/sdks/keys/README.md#list) - listKeys keys
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
 
+### [mcpMetadata](docs/sdks/mcpmetadata/README.md)
+
+* [get](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
+* [set](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
+
 ### [packages](docs/sdks/packages/README.md)
 
 * [create](docs/sdks/packages/README.md#create) - createPackage packages
@@ -301,6 +306,8 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
+- [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
 - [`packagesList`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`packagesListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
@@ -385,6 +392,7 @@ To learn about this feature and how to get started, check
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
+- [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`useGetPeriodUsage`](docs/sdks/usage/README.md#getperiodusage) - getPeriodUsage usage
 - [`useGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 - [`useGetUsageTiers`](docs/sdks/usage/README.md#getusagetiers) - getUsageTiers usage
@@ -405,6 +413,7 @@ To learn about this feature and how to get started, check
 - [`useListVersions`](docs/sdks/packages/README.md#listversions) - listVersions packages
 - [`useLoadChat`](docs/sdks/chat/README.md#load) - loadChat chat
 - [`useLogoutMutation`](docs/sdks/auth/README.md#logout) - logout auth
+- [`useMcpMetadataSetMutation`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`usePublishPackageMutation`](docs/sdks/packages/README.md#publish) - publish packages
 - [`useRedeployDeploymentMutation`](docs/sdks/deployments/README.md#redeploydeployment) - redeploy deployments
 - [`useRegisterDomainMutation`](docs/sdks/domains/README.md#registerdomain) - createDomain domains

@@ -43,11 +43,11 @@ export const ToolsetEnvironmentBadge = ({
     return <Badge size={size} isLoading />;
   }
 
-  const envSlug = environmentSlug ? environmentSlug : toolset.defaultEnvironmentSlug;
+  const envSlug = environmentSlug
+    ? environmentSlug
+    : toolset.defaultEnvironmentSlug;
 
-  const environment = environments.find(
-    (env) => env.slug === envSlug
-  );
+  const environment = environments.find((env) => env.slug === envSlug);
 
   const requiresServerURL = toolset.tools?.some(
     (tool) => isHttpTool(tool) && !tool.defaultServerUrl
@@ -55,13 +55,14 @@ export const ToolsetEnvironmentBadge = ({
 
   const relevantEnvVars: string[] = [
     // Security variables (no filtering)
-    ...(toolset.securityVariables?.flatMap(secVar => secVar.envVariables) ?? []),
+    ...(toolset.securityVariables?.flatMap((secVar) => secVar.envVariables) ??
+      []),
     // Server variables (filter server_url unless required)
-    ...(toolset.serverVariables?.flatMap(serverVar => 
-      serverVar.envVariables.filter(v => 
-        !v.toLowerCase().includes("server_url") || requiresServerURL
-      )
-    ) ?? [])
+    ...(toolset.serverVariables?.flatMap((serverVar) =>
+      serverVar.envVariables.filter(
+        (v) => !v.toLowerCase().includes("server_url") || requiresServerURL,
+      ),
+    ) ?? []),
   ];
 
   const missingEnvVars =
@@ -71,7 +72,7 @@ export const ToolsetEnvironmentBadge = ({
           const entryPrefix = entry.name.split("_")[0];
           const varPrefix = varName.split("_")[0];
           return entryPrefix === varPrefix;
-        })
+        }),
     ) || [];
   const needsEnvVars = missingEnvVars.length > 0;
 
@@ -114,7 +115,7 @@ export const ToolsetEnvironmentBadge = ({
             onError: (error) => {
               console.error("Failed to update environment variables:", error);
             },
-          }
+          },
         );
       }
     };
@@ -136,7 +137,9 @@ export const ToolsetEnvironmentBadge = ({
           onChange: (value) => {
             setEnvVars({ ...envVars, [envVar]: value });
           },
-          optional: (envVar.includes("SERVER_URL") && !requiresServerURL) || envVar.includes("TOKEN_URL"), // Generally not required unless tools have no server url
+          optional:
+            (envVar.includes("SERVER_URL") && !requiresServerURL) ||
+            envVar.includes("TOKEN_URL"), // Generally not required unless tools have no server url
         }))}
       />
     );
@@ -161,9 +164,7 @@ export const ToolsetEnvironmentBadge = ({
 
   return (
     envSlug && (
-      <routes.environments.environment.Link
-        params={[envSlug]}
-      >
+      <routes.environments.environment.Link params={[envSlug]}>
         <SimpleTooltip tooltip="The environment for this toolset is fully configured.">
           <Badge size={size} variant={variant}>
             <Check className={cn("w-4 h-4 stroke-3", colors.success)} />

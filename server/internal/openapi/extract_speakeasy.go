@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/jsonschema"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orderedmap"
@@ -672,6 +673,11 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 		err = marshaller.Marshal(ctx, oas3.NewJSONSchemaFromSchema[oas3.Referenceable](schema), &schemaBytes)
 		if err != nil {
 			return empty, deploymentEvents, fmt.Errorf("error serializing operation schema: %w", err)
+		}
+
+		// Validate the generated JSON schema
+		if err := jsonschema.IsValidJSONSchema(schemaBytes.Bytes()); err != nil {
+			return empty, deploymentEvents, fmt.Errorf("invalid tool input schema for operation %s: %w", opID, err)
 		}
 	}
 

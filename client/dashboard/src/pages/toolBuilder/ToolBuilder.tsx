@@ -130,7 +130,7 @@ export function ToolBuilderPage() {
 
   const toolset =
     toolsets?.toolsets.find((t) =>
-      t.promptTemplates.some((pt) => pt.name === toolName)
+      t.promptTemplates.some((pt) => pt.name === toolName),
     ) ?? undefined;
 
   const { data: template } = useTemplateSuspense({
@@ -185,7 +185,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   const [purpose, setPurpose] = useState(initial.purpose);
   const [inputs, setInputs] = useState<Input[]>(initial.inputs);
   const [toolsetFilter, setToolset] = useState<ToolsetEntry | undefined>(
-    initial.toolset
+    initial.toolset,
   );
 
   const { data: toolsetData } = useToolset(toolsetFilter?.slug);
@@ -243,7 +243,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   }, [initial]);
 
   const insertTool = (
-    tool: { name: string; canonicalName: string } | "none"
+    tool: { name: string; canonicalName: string } | "none",
   ) => {
     if (steps.length >= 10) {
       return;
@@ -279,10 +279,10 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     const currentInputs = inputs.map((input) => input.name);
 
     const curFiltered = inputs.filter((input) =>
-      allInputs.includes(input.name)
+      allInputs.includes(input.name),
     );
     const toInsert = allInputs.filter(
-      (input) => !currentInputs.includes(input)
+      (input) => !currentInputs.includes(input),
     );
     setInputs([...curFiltered, ...toInsert.map((input) => ({ name: input }))]);
   }, [steps, purpose]);
@@ -341,12 +341,12 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     inputs.some(
       (input) =>
         input.description !==
-        initial.inputs.find((i) => i.name === input.name)?.description
+        initial.inputs.find((i) => i.name === input.name)?.description,
     ) ||
     steps.some(
       (step) =>
         step.instructions !==
-        initial.steps.find((s) => s.id === step.id)?.instructions
+        initial.steps.find((s) => s.id === step.id)?.instructions,
     );
 
   const revertButton = anyChanges && (
@@ -390,7 +390,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                     description: input.description,
                   }),
                 },
-              ])
+              ]),
             ),
             required: inputs.map((input) => input.name),
           };
@@ -558,8 +558,8 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                     onSubmit={(description) => {
                       setInputs(
                         inputs.map((i) =>
-                          i.name === input.name ? { ...i, description } : i
-                        )
+                          i.name === input.name ? { ...i, description } : i,
+                        ),
                       );
                     }}
                   >
@@ -670,7 +670,7 @@ export const MustacheHighlight = ({
     chunks.push(
       <span key={`var-${start}`} className={inputStyles}>
         {part[0].slice(2, -2)}
-      </span>
+      </span>,
     );
 
     start = part.index + part[0].length;
@@ -795,7 +795,7 @@ const StepCard = ({
               small
               className={cn(
                 step.instructions === instructionsPlaceholder &&
-                  "italic text-muted-foreground!"
+                  "italic text-muted-foreground!",
               )}
             >
               <MustacheHighlight>{step.instructions}</MustacheHighlight>
@@ -878,7 +878,7 @@ const StepSeparator = () => {
 };
 
 const parsePrompt = (
-  prompt: string
+  prompt: string,
 ): { purpose: string; inputs: Input[]; steps: Step[] } => {
   // First try to parse as JSON
   try {
@@ -920,14 +920,14 @@ const parsePrompt = (
 
 // Keep this around until important "old" templates have been migrated
 const parsePromptLegacy = (
-  prompt: string
+  prompt: string,
 ): { purpose: string; inputs: Input[]; steps: Step[] } => {
   // Remove markdown backticks and xml tag if present
   const cleanPrompt = prompt.replace(/```xml\n|\n```/g, "").trim();
 
   // Extract purpose
   const purposeMatch = cleanPrompt.match(
-    /<Purpose>\s*<Instruction>.*?<\/Instruction>\s*<Purpose>\s*(.*?)\s*<\/Purpose>\s*<\/Purpose>/s
+    /<Purpose>\s*<Instruction>.*?<\/Instruction>\s*<Purpose>\s*(.*?)\s*<\/Purpose>\s*<\/Purpose>/s,
   );
   const purpose = purposeMatch?.[1]?.trim() || "";
 
@@ -935,7 +935,7 @@ const parsePromptLegacy = (
   const inputsSection = cleanPrompt.match(/<Inputs>.*?<\/Inputs>/s)?.[0] || "";
   const inputMatches = [
     ...inputsSection.matchAll(
-      /<Input name="([^"]+)"(?:\s+description="([^"]*)")?\s*\/>/g
+      /<Input name="([^"]+)"(?:\s+description="([^"]*)")?\s*\/>/g,
     ),
   ];
   const inputs: Input[] = [];
@@ -954,7 +954,7 @@ const parsePromptLegacy = (
   const planSection = cleanPrompt.match(/<Plan>(.*?)<\/Plan>/s)?.[0] || "";
   const stepMatches = [
     ...planSection.matchAll(
-      /<CallTool tool_name="([^"]+)">\s*<Instruction>(.*?)<\/Instruction>(.*?)<\/CallTool>/gs
+      /<CallTool tool_name="([^"]+)">\s*<Instruction>(.*?)<\/Instruction>(.*?)<\/CallTool>/gs,
     ),
   ];
   const steps: Step[] = [];
@@ -1007,7 +1007,7 @@ function ChatPanel(props: {
   const chat = useChatContext();
   const telemetry = useTelemetry();
   const [selectedEnvironment, setSelectedEnvironment] = useState(
-    defaultEnvironmentSlug ?? null
+    defaultEnvironmentSlug ?? null,
   );
 
   const chatConfigRef: ChatConfig = useRef({
@@ -1051,7 +1051,7 @@ function ChatPanel(props: {
         });
 
         const inputArgs = Object.fromEntries(
-          inputs.map((input) => [input.name, `{{${input.name}}}`])
+          inputs.map((input) => [input.name, `{{${input.name}}}`]),
         );
 
         const higherOrderTool: HigherOrderTool = {

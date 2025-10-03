@@ -9,13 +9,16 @@ function useRelevantEnvVars(toolset: Toolset) {
       (tool) => tool.type === "http" && !tool.defaultServerUrl
     );
 
-    const securityVars = toolset?.securityVariables?.flatMap(secVar => secVar.envVariables) ?? [];
-    const serverVars = toolset?.serverVariables?.flatMap(serverVar => 
-      serverVar.envVariables.filter(v => 
-        !v.toLowerCase().includes("server_url") || requiresServerURL
-      )
-    ) ?? [];
-    
+    const securityVars =
+      toolset?.securityVariables?.flatMap((secVar) => secVar.envVariables) ??
+      [];
+    const serverVars =
+      toolset?.serverVariables?.flatMap((serverVar) =>
+        serverVar.envVariables.filter(
+          (v) => !v.toLowerCase().includes("server_url") || requiresServerURL,
+        ),
+      ) ?? [];
+
     return [...securityVars, ...serverVars];
   }, [toolset]);
 }
@@ -28,7 +31,7 @@ interface EnvironmentEntry {
 
 function hasRequiredVars(
   relevantEnvVars: string[],
-  entries?: EnvironmentEntry[]
+  entries?: EnvironmentEntry[],
 ): boolean {
   if (relevantEnvVars.length === 0 || !entries) return true;
 
@@ -132,7 +135,7 @@ function ToolsetPageAuthAlert({
     if (relevantEnvVars.length === 0) return true;
 
     return environments.some((env) =>
-      hasRequiredVars(relevantEnvVars, env.entries)
+      hasRequiredVars(relevantEnvVars, env.entries),
     );
   }, [relevantEnvVars, environments]);
 
@@ -141,7 +144,8 @@ function ToolsetPageAuthAlert({
   return (
     <Alert variant="warning" dismissible={true} className="rounded-xs">
       <span className="text-sm">
-        Set environment variables to test this toolset in the Playground or to manage authentication with a GRAM_KEY.{" "}
+        Set environment variables to test this toolset in the Playground or to
+        manage authentication with a GRAM_KEY.{" "}
         <button
           type="button"
           onClick={onConfigureClick}

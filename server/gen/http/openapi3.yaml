@@ -3522,6 +3522,198 @@ paths:
             x-speakeasy-name-override: revokeById
             x-speakeasy-react-hook:
                 name: RevokeAPIKey
+    /rpc/mcpMetadata.get:
+        get:
+            description: Fetch the metadata that powers the MCP install page.
+            operationId: getMcpMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: The slug of the toolset associated with this install page metadata
+                  in: query
+                  name: toolset_slug
+                  required: true
+                  schema:
+                    description: A short url-friendly label that uniquely identifies a resource.
+                    maxLength: 40
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetMcpMetadataResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getMcpMetadata mcpMetadata
+            tags:
+                - mcpMetadata
+            x-speakeasy-name-override: get
+            x-speakeasy-react-hook:
+                name: GetMcpMetadata
+    /rpc/mcpMetadata.set:
+        post:
+            description: Create or update the metadata that powers the MCP install page.
+            operationId: setMcpMetadata
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetMcpMetadataRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/McpMetadata'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: setMcpMetadata mcpMetadata
+            tags:
+                - mcpMetadata
+            x-speakeasy-name-override: set
     /rpc/packages.create:
         post:
             description: Create a new package for a project.
@@ -8294,6 +8486,11 @@ components:
             properties:
                 deployment:
                     $ref: '#/components/schemas/Deployment'
+        GetMcpMetadataResponseBody:
+            type: object
+            properties:
+                metadata:
+                    $ref: '#/components/schemas/McpMetadata'
         GetPromptTemplateResult:
             type: object
             properties:
@@ -8762,6 +8959,38 @@ components:
             required:
                 - package
                 - versions
+        McpMetadata:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the metadata entry was created
+                    format: date-time
+                external_documentation_url:
+                    type: string
+                    description: A link to external documentation for the MCP install page
+                    format: uri
+                id:
+                    type: string
+                    description: The ID of the metadata record
+                logo_asset_id:
+                    type: string
+                    description: The asset ID for the MCP install page logo
+                    format: uuid
+                toolset_id:
+                    type: string
+                    description: The toolset associated with this install page metadata
+                    format: uuid
+                updated_at:
+                    type: string
+                    description: When the metadata entry was last updated
+                    format: date-time
+            description: Metadata used to configure the MCP install page.
+            required:
+                - id
+                - toolset_id
+                - created_at
+                - updated_at
         NotModified:
             type: object
             properties:
@@ -9402,6 +9631,22 @@ components:
             required:
                 - description
                 - env_variables
+        SetMcpMetadataRequestBody:
+            type: object
+            properties:
+                external_documentation_url:
+                    type: string
+                    description: A link to external documentation for the MCP install page
+                logo_asset_id:
+                    type: string
+                    description: The asset ID for the MCP install page logo
+                toolset_slug:
+                    type: string
+                    description: The slug of the toolset associated with this install page metadata
+                    pattern: ^[a-z0-9_-]{1,128}$
+                    maxLength: 40
+            required:
+                - toolset_slug
         SetProjectLogoForm:
             type: object
             properties:
@@ -10125,6 +10370,8 @@ tags:
       description: Explore third-party tools in Gram.
     - name: keys
       description: Managing system api keys.
+    - name: mcpMetadata
+      description: Manages metadata for the MCP install page shown to users.
     - name: packages
       description: Manages packages in Gram.
     - name: projects

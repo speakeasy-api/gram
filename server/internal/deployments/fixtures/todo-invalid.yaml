@@ -1,0 +1,344 @@
+openapi: 3.1.0
+info:
+  title: Todo API
+  description: A simple API for managing todo items
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@example.com
+
+servers:
+  - url: https://api.example.com/v1
+    description: Production server
+  - url: https://staging-api.example.com/v1
+    description: Staging server
+
+paths:
+  /todos:
+    get:
+      summary: Get all todos
+      description: Retrieve a list of all todo items
+      operationId: getTodos
+      parameters:
+        - name: completed
+          in: query
+          description: Filter todos by completion status
+          required: false
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          description: Maximum number of todos to return
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          description: Number of todos to skip
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  todos:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Todo'
+                  total:
+                    type: integer
+                    description: Total number of todos
+                  limit:
+                    type: integer
+                    description: Number of todos per page
+                  offset:
+                    type: integer
+                    description: Number of todos skipped
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      summary: Create a new todo
+      description: Create a new todo item
+      operationId: createTodo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTodoRequest'
+      responses:
+        '201':
+          description: Todo created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /todos/{id}:
+    get:
+      summary: Get a todo by ID
+      description: Retrieve a specific todo item by its ID
+      operationId: getTodoById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the todo to retrieve
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      summary: Update a todo
+      description: Update an existing todo item
+      operationId: updateTodo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the todo to update
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTodoRequest'
+      responses:
+        '200':
+          description: Todo updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Todo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Delete a todo
+      description: Delete a specific todo item
+      operationId: deleteTodo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The ID of the todo to delete
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Todo deleted successfully
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  schemas:
+    Todo:
+      type: object
+      required:
+        - id
+        - title
+        - completed
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the todo
+          readOnly: true
+        title:
+          type: string
+          description: The title of the todo
+          minLength: 1
+          maxLength: 200
+          pattern: "[unclosed-bracket" # invalid regex
+        description:
+          type: string
+          description: Optional description of the todo
+          maxLength: 1000
+        completed:
+          type: boolean
+          description: Whether the todo is completed
+          default: false
+        priority:
+          type: string
+          enum: [low, medium, high]
+          description: Priority level of the todo
+          default: medium
+        dueDate:
+          type: string
+          format: date-time
+          description: Optional due date for the todo
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags associated with the todo
+          maxItems: 10
+        createdAt:
+          type: string
+          format: date-time
+          description: When the todo was created
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          description: When the todo was last updated
+          readOnly: true
+
+    CreateTodoRequest:
+      type: object
+      required:
+        - title
+      properties:
+        title:
+          type: string
+          description: The title of the todo
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          description: Optional description of the todo
+          maxLength: 1000
+          pattern: "[unclosed-bracket" # invalid regex
+        priority:
+          type: string
+          enum: [low, medium, high]
+          description: Priority level of the todo
+          default: medium
+        dueDate:
+          type: string
+          format: date-time
+          description: Optional due date for the todo
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags associated with the todo
+          maxItems: 10
+
+    UpdateTodoRequest:
+      type: object
+      properties:
+        title:
+          type: string
+          description: The title of the todo
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          description: Optional description of the todo
+          maxLength: 1000
+        completed:
+          type: boolean
+          description: Whether the todo is completed
+        priority:
+          type: string
+          enum: [low, medium, high]
+          description: Priority level of the todo
+        dueDate:
+          type: string
+          format: date-time
+          description: Optional due date for the todo
+        tags:
+          type: array
+          items:
+            type: string
+          description: Tags associated with the todo
+          maxItems: 10
+
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Error message
+        details:
+          type: object
+          description: Additional error details
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "BAD_REQUEST"
+            message: "Invalid request parameters"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "NOT_FOUND"
+            message: "Todo not found"
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "INTERNAL_ERROR"
+            message: "An unexpected error occurred"
+
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - ApiKeyAuth: []
+  - BearerAuth: []

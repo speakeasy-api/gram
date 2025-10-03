@@ -54,7 +54,7 @@ export function Type({
               key={index}
               className={cn(
                 variantHeight,
-                index !== lines - 1 ? "w-full" : "w-[200px]"
+                index !== lines - 1 ? "w-full" : "w-[200px]",
               )}
             />
           ))}
@@ -90,15 +90,24 @@ export function Type({
   switch (variant) {
     case "subheading":
       return (
-        <p {...props} className={`text-md font-medium ${baseClass} ${className}`} >
+        <p
+          {...props}
+          className={`text-md font-medium ${baseClass} ${className}`}
+        >
           {children}
         </p>
       );
     case "body":
       return (
-        <p {...props} className={`text-base ${baseClass} ${className}`}>{children}</p>
+        <p {...props} className={`text-base ${baseClass} ${className}`}>
+          {children}
+        </p>
       );
     case "small":
-      return <p {...props} className={`text-sm ${baseClass} ${className}`}>{children}</p>;
+      return (
+        <p {...props} className={`text-sm ${baseClass} ${className}`}>
+          {children}
+        </p>
+      );
   }
 }

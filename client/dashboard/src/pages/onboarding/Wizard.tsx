@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
-import FileUpload from "@/components/upload";
+import { FullWidthUpload } from "@/components/upload";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useApiError } from "@/hooks/useApiError";
@@ -329,7 +329,7 @@ const UploadStep = ({
       )}
     </Stack>
   ) : (
-    <FileUpload
+    <FullWidthUpload
       label={<span className="text-body-sm">Drop your OpenAPI spec here</span>}
       onUpload={handleSpecUpload}
       allowedExtensions={["yaml", "yml", "json"]}

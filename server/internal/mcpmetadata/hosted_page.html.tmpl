@@ -176,6 +176,12 @@
         width: 100%;
         height: 100%;
       }
+
+      & img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
     }
 
     .mcp-name {
@@ -192,19 +198,29 @@
 
     .popover {
       position: relative;
-      font-weight: 400;
     }
 
     .action-button {
-      text-transform: uppercase;
       background: var(--fill-neutral-default);
       color: var(--text-default-inverse);
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 0.5rem;
+      font-weight: 400;
+      font-size: calc(1rem - 2px);
+      text-transform: uppercase;
+    }
+
+    .header-action {
+      border-radius: 6px;
+      padding: 0.5rem 1rem;
       display: flex;
       align-items: center;
-      border-radius: 0.5rem;
       gap: 0.75rem;
-      padding: 0.75rem 1rem;
       transition: background-color 300ms var(--ease-in-out-quad);
+      text-transform: uppercase;
     }
 
     .action-button:hover {
@@ -238,6 +254,13 @@
 
     .popover-button:hover {
       background: var(--fill-neutral-highlight);
+    }
+
+    .external-docs {
+      background: var(--color-neutral-200);
+      text-transform: uppercase;
+      color: var(--color-neutral-900);
+      box-shadow: rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 2px 1px 0px inset, rgba(0, 0, 0, 0.15) 0px -2px 1px 0px inset;
     }
 
     /***********/
@@ -811,6 +834,9 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
         <div class="header container">
           <div class="mcp-meta">
             <div class="logo-container">
+              {{- if .LogoAssetURL }}
+              <img src="{{ .LogoAssetURL }}" alt="{{ .MCPName }} logo" />
+              {{- else }}
               <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <g clip-path="url(#clip0_2142_1883)">
                   <path fill-rule="evenodd" clip-rule="evenodd" d="M31.3759 4.68693C30.4096 3.74646 29.1144 3.22023 27.7659 3.22023C26.4175 3.22023 25.1223 3.74646 24.1559 4.68693L4.90394 23.5669C4.58178 23.8801 4.15021 24.0552 3.70094 24.0552C3.25167 24.0552 2.82011 23.8801 2.49794 23.5669C2.34022 23.4135 2.21484 23.2301 2.12923 23.0274C2.04362 22.8247 1.99951 22.607 1.99951 22.3869C1.99951 22.1669 2.04362 21.9491 2.12923 21.7465C2.21484 21.5438 2.34022 21.3603 2.49794 21.2069L21.7499 2.32693C23.3604 0.75972 25.5188 -0.117187 27.7659 -0.117188C30.0131 -0.117187 32.1715 0.75972 33.7819 2.32693C34.7138 3.23314 35.4178 4.34713 35.8363 5.57771C36.2548 6.8083 36.376 8.12051 36.1899 9.40693C37.4934 9.22154 38.8221 9.33791 40.0735 9.74708C41.325 10.1562 42.4657 10.8473 43.4079 11.7669L43.5079 11.8669C44.2966 12.6339 44.9234 13.5512 45.3515 14.5646C45.7795 15.5779 46.0001 16.6669 46.0001 17.7669C46.0001 18.867 45.7795 19.9559 45.3515 20.9693C44.9234 21.9827 44.2966 22.9 43.5079 23.6669L26.0959 40.7409C26.0434 40.792 26.0016 40.8531 25.9731 40.9206C25.9446 40.9881 25.9299 41.0606 25.9299 41.1339C25.9299 41.2072 25.9446 41.2798 25.9731 41.3473C26.0016 41.4148 26.0434 41.4759 26.0959 41.5269L29.6719 45.0349C29.8297 45.1883 29.955 45.3718 30.0407 45.5745C30.1263 45.7771 30.1704 45.9949 30.1704 46.2149C30.1704 46.435 30.1263 46.6527 30.0407 46.8554C29.955 47.0581 29.8297 47.2415 29.6719 47.3949C29.3498 47.7081 28.9182 47.8832 28.4689 47.8832C28.0197 47.8832 27.5881 47.7081 27.2659 47.3949L23.6899 43.8889C23.3216 43.531 23.0288 43.1029 22.8289 42.6299C22.629 42.1568 22.526 41.6485 22.526 41.1349C22.526 40.6214 22.629 40.113 22.8289 39.64C23.0288 39.167 23.3216 38.7388 23.6899 38.3809L41.1019 21.3049C41.5749 20.8446 41.9508 20.2942 42.2075 19.6862C42.4641 19.0782 42.5964 18.4249 42.5964 17.7649C42.5964 17.105 42.4641 16.4517 42.2075 15.8437C41.9508 15.2357 41.5749 14.6853 41.1019 14.2249L41.0019 14.1269C40.0367 13.1874 38.7432 12.6613 37.3962 12.6601C36.0492 12.659 34.7548 13.1831 33.7879 14.1209L19.4439 28.1889L19.4399 28.1929L19.2439 28.3869C18.9217 28.7007 18.4897 28.8762 18.0399 28.8762C17.5902 28.8762 17.1582 28.7007 16.8359 28.3869C16.6782 28.2335 16.5528 28.0501 16.4672 27.8474C16.3816 27.6447 16.3375 27.427 16.3375 27.2069C16.3375 26.9869 16.3816 26.7691 16.4672 26.5665C16.5528 26.3638 16.6782 26.1803 16.8359 26.0269L31.3819 11.7609C31.8536 11.3003 32.2282 10.7499 32.4838 10.1423C32.7395 9.5346 32.8708 8.88191 32.8703 8.22267C32.8697 7.56343 32.7372 6.91096 32.4806 6.30372C32.2239 5.69649 31.8483 5.14676 31.3759 4.68693Z" fill="black"/>
@@ -822,35 +848,43 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
                   </clipPath>
                 </defs>
               </svg>
+              {{- end }}
             </div>
             <div class="header-content">
               <div class="mcp-name">{{ .MCPName }}</div>
               <div class="mcp-description">{{ .MCPDescription }}</div>
             </div>
           </div>
-          <div class="popover">
-            <button class="action-button" id="action-button">
-              Add to Client
-              <svg class="chevron-down" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M4.00049 6L8.00049 10L12.0005 6" stroke="currentColor" stroke-width="1.3334" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-            </button>
-            <div class="popover-menu hidden">
-              <a class="popover-button install-link" href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}" data-install-target="cursor">
-                Cursor
-              </a>
-              <button class="popover-button" data-install-method="modal" data-install-target="claude-code">
-                Claude Code
+          <div class="header-actions">
+            {{- if .DocsURL }}
+            <a class="external-docs header-action" href="{{ .DocsURL }}" target="_blank" rel="noopener noreferrer">
+              View Docs
+            </a>
+            {{- end }}
+            <div class="popover">
+              <button class="action-button header-action" id="action-button">
+                Add to Client
+                <svg class="chevron-down" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M4.00049 6L8.00049 10L12.0005 6" stroke="currentColor" stroke-width="1.3334" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
               </button>
-              <button class="popover-button" data-install-method="dxt-download" data-install-target="claude-desktop">
-                Claude Desktop
-              </button>
-              <button class="popover-button" data-install-method="modal" data-install-target="gemini-cli">
-                Gemini CLI
-              </button>
-              <button class="popover-button" data-install-method="modal" data-install-target="codex-cli">
-                Codex CLI
-              </button>
+              <div class="popover-menu hidden">
+                <a class="popover-button install-link" href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}" data-install-target="cursor">
+                  Cursor
+                </a>
+                <button class="popover-button" data-install-method="modal" data-install-target="claude-code">
+                  Claude Code
+                </button>
+                <button class="popover-button" data-install-method="dxt-download" data-install-target="claude-desktop">
+                  Claude Desktop
+                </button>
+                <button class="popover-button" data-install-method="modal" data-install-target="gemini-cli">
+                  Gemini CLI
+                </button>
+                <button class="popover-button" data-install-method="modal" data-install-target="codex-cli">
+                  Codex CLI
+                </button>
+              </div>
             </div>
           </div>
         </div>

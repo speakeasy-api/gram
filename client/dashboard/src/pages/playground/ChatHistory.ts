@@ -7,7 +7,7 @@ export const useChatHistory = (chatId: string) => {
       id: chatId,
     },
     undefined,
-    { retry: false, throwOnError: false } // Expected to fail (404) if it's a new chat
+    { retry: false, throwOnError: false }, // Expected to fail (404) if it's a new chat
   );
 
   type ToolInvocationPart = {
@@ -49,7 +49,7 @@ export const useChatHistory = (chatId: string) => {
               toolName: toolCall.function.name,
               result: getToolInvocation(toolCall.id)?.content ?? "",
             },
-          })
+          }),
         ),
       });
     } else {

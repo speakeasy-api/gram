@@ -66,14 +66,14 @@ const useAllToolsets = (toolsetSlugs: string[]) => {
     const fetchAllToolsets = async () => {
       try {
         const promises = toolsetSlugs.map((slug) =>
-          client.toolsets.getBySlug({ slug })
+          client.toolsets.getBySlug({ slug }),
         );
 
         const results = await Promise.allSettled(promises);
         const successfulResults = results
           .filter(
             (result): result is PromiseFulfilledResult<Toolset> =>
-              result.status === "fulfilled"
+              result.status === "fulfilled",
           )
           .map((result) => result.value);
 
@@ -166,13 +166,13 @@ function HomeContent() {
 
   const selectedToolsetData = useMemo(
     () => toolsets?.toolsets?.find((t) => t.slug === selectedToolset),
-    [toolsets?.toolsets, selectedToolset]
+    [toolsets?.toolsets, selectedToolset],
   );
   const { url: mcpUrl } = useMcpUrl(selectedToolsetData);
 
   const toolsetSlugs = useMemo(
     () => toolsets?.toolsets?.map((t) => t.slug) || [],
-    [toolsets?.toolsets]
+    [toolsets?.toolsets],
   );
   const { toolsets: allFullToolsets } = useAllToolsets(toolsetSlugs);
 
@@ -198,7 +198,7 @@ function HomeContent() {
             toolset.tools?.map((tool) => ({
               name: tool.name,
               method: undefined,
-            })) || []
+            })) || [],
         ) || [];
       return basicTools;
     }
@@ -229,8 +229,8 @@ function HomeContent() {
         .filter(
           (t) =>
             !["DELETE", "PUT", "PATCH", "POST", "GET"].includes(
-              t.method?.toUpperCase() || ""
-            )
+              t.method?.toUpperCase() || "",
+            ),
         )
         .sort((a, b) => a.name.localeCompare(b.name)),
     };
@@ -241,7 +241,7 @@ function HomeContent() {
       methodGroups.PUT_PATCH.length,
       methodGroups.POST.length,
       methodGroups.GET.length,
-      methodGroups.OTHER.length
+      methodGroups.OTHER.length,
     );
 
     for (let i = 0; i < maxLength; i++) {
@@ -274,7 +274,7 @@ function HomeContent() {
         (acc, toolset) => acc + (toolset.tools?.length || 0),
         0
       ) || 0,
-    [toolsets?.toolsets]
+    [toolsets?.toolsets],
   );
 
   const shouldAnimate = !isInputHovered && !isInputFocused;

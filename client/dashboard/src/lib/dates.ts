@@ -4,7 +4,13 @@ import React, { useEffect, useReducer } from "react";
 import { formatDistance } from "date-fns";
 
 export const HumanizeDateTime = React.memo(
-  ({ date, includeTime = true }: { date: Date, includeTime?: boolean }): string => {
+  ({
+    date,
+    includeTime = true,
+  }: {
+    date: Date;
+    includeTime?: boolean;
+  }): string => {
     const forceRender = useReducer((s) => !s, false)[1];
 
     useEffect(() => {
@@ -26,7 +32,11 @@ export const HumanizeDateTime = React.memo(
 export const dateTimeFormatters = {
   humanize: function humanize(
     date: Date,
-    { referenceDate = new Date(), includeSuffix = true, includeTime = true } = {},
+    {
+      referenceDate = new Date(),
+      includeSuffix = true,
+      includeTime = true,
+    } = {},
   ) {
     const delta = referenceDate.valueOf() - date.valueOf();
     const suffix = includeSuffix ? "ago" : "";
@@ -37,14 +47,20 @@ export const dateTimeFormatters = {
     }
     // If today: show "Today, {{localeTimeFormat}}"
     if (date.toDateString() === referenceDate.toDateString()) {
-      return "Today" + (includeTime ? `, ${dateTimeFormatters.time.format(date)}` : "");
+      return (
+        "Today" +
+        (includeTime ? `, ${dateTimeFormatters.time.format(date)}` : "")
+      );
     }
     // If yesterday: show "Yesterday, {{localeTimeFormat}}"
     if (
       date.toDateString() ===
       new Date(referenceDate.valueOf() - 24 * 60 * 60 * 1000).toDateString()
     ) {
-      return "Yesterday" + (includeTime ? `, ${dateTimeFormatters.time.format(date)}` : "");
+      return (
+        "Yesterday" +
+        (includeTime ? `, ${dateTimeFormatters.time.format(date)}` : "")
+      );
     }
 
     // If same year: display in full without year

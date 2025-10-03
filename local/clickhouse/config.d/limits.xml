@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<!-- Server-level limits for low-memory development -->
+<clickhouse>
+    <!-- Hard total server memory cap (bytes) -->
+    <max_server_memory_usage>1073741824</max_server_memory_usage> <!-- 1 GB -->
+
+    <!-- Reduce cache sizes relative to available RAM -->
+    <cache_size_to_ram_max_ratio>0.20</cache_size_to_ram_max_ratio>
+
+    <!-- Reduce background thread pools so ClickHouse doesn't spawn too many workers -->
+    <background_pool_size>20</background_pool_size>
+    <background_schedule_pool_size>2</background_schedule_pool_size>
+</clickhouse>

@@ -219,7 +219,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     (toolUrns: string[], enabled: boolean) => {
       // Calculate the updated URNs
       const excludedUrns = selectedToolUrnsRef.current.filter(
-        (urn) => !toolUrns.includes(urn)
+        (urn) => !toolUrns.includes(urn),
       );
       const updatedUrns = enabled
         ? [...excludedUrns, ...toolUrns]
@@ -239,7 +239,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
         },
       });
     },
-    [toolsetSlug, tools, updateToolsetMutation]
+    [toolsetSlug, tools, updateToolsetMutation],
   );
 
   const toggleTemplateEnabled = (templateUrn: string) => {
@@ -269,7 +269,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
   const groupedTools = useGroupedHttpTools(httpTools ?? []);
 
   const tagFilterOptions = groupedTools.flatMap((group) =>
-    group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`))
+    group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`)),
   );
   const uniqueTags = [...new Set(tagFilterOptions)];
   const tagFilterItems = uniqueTags.map((tag) => ({
@@ -310,7 +310,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     const toggleAll = (tools: ToggleableTool[]) => {
       setToolsEnabled(
         tools.map((t) => t.toolUrn),
-        tools.some((t) => !t.enabled) // Disable iff all are already enabled
+        tools.some((t) => !t.enabled), // Disable iff all are already enabled
       );
     };
 

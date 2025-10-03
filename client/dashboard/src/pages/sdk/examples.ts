@@ -36,7 +36,7 @@ export const CODE_SAMPLES = {
     [VERCEL_AI_SDK]: (
       project: string,
       toolset: string,
-      environment: string
+      environment: string,
     ) => `import { generateText } from 'ai';
 import { VercelAdapter } from "@gram-ai/sdk/vercel";
 import { createOpenAI } from "@ai-sdk/openai";
@@ -65,7 +65,7 @@ console.log(result.text);`,
     [LANGCHAIN]: (
       project: string,
       toolset: string,
-      environment: string
+      environment: string,
     ) => `import { LangchainAdapter } from "@gram-ai/sdk/langchain";
 import { ChatOpenAI } from "@langchain/openai";
 import { createOpenAIFunctionsAgent, AgentExecutor } from "langchain/agents";
@@ -111,7 +111,7 @@ console.log(result.output);`,
     [FUNCTION_CALLING]: (
       project: string,
       toolset: string,
-      environment: string
+      environment: string,
     ) => `import { FunctionCallingAdapter } from "@gram-ai/sdk/functioncalling";
 
 const key = process.env.GRAM_API_KEY ?? "";
@@ -135,7 +135,7 @@ console.log(tools[0].execute)`,
     [OPENAI_AGENTS_SDK]: (
       project: string,
       toolset: string,
-      environment: string
+      environment: string,
     ) => `import asyncio
 import os
 from agents import Agent, Runner, set_default_openai_key
@@ -172,7 +172,7 @@ if __name__ == "__main__":
     [LANGCHAIN]: (
       project: string,
       toolset: string,
-      environment: string
+      environment: string,
     ) => `import asyncio
 import os
 from langchain import hub
@@ -213,7 +213,7 @@ if __name__ == "__main__":
     [FUNCTION_CALLING]: (
       project: string,
       toolset: string,
-      environment: string
+      environment: string,
     ) => `import os
 from gram_ai.function_calling import GramFunctionCalling
 

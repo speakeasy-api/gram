@@ -111,7 +111,7 @@ export function PromptTemplateCard({
                     onDelete();
                   } else if (
                     confirm(
-                      "Are you sure you want to delete this prompt template?"
+                      "Are you sure you want to delete this prompt template?",
                     )
                   ) {
                     deleteTemplate.mutate({ request: { name: template.name } });

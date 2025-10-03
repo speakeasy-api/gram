@@ -1,0 +1,124 @@
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+
+version: "2"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+run:
+  relative-path-mode: wd
+
+linters:
+  enable:
+    - bodyclose
+    - containedctx
+    - depguard
+    - durationcheck
+    - errcheck
+    - errname
+    - errorlint
+    - exhaustive
+    - exhaustruct
+    - exptostd
+    - forcetypeassert
+    - gochecksumtype
+    - gocritic
+    - gosec
+    - govet
+    - iface
+    - importas
+    - ineffassign
+    - loggercheck
+    - mirror
+    - musttag
+    - nolintlint
+    - paralleltest
+    - predeclared
+    - reassign
+    - sloglint
+    - spancheck
+    - sqlclosecheck
+    - staticcheck
+    - testifylint
+    - thelper
+    - tparallel
+    - unconvert
+    - unused
+    - usetesting
+    - wrapcheck
+
+  exclusions:
+    rules:
+      - path: internal/o11y/setup\.go
+        linters:
+          - wrapcheck
+      - path: internal/billing/stub\.go
+        linters:
+          - musttag
+  settings:
+    sloglint:
+      no-mixed-args: true
+      attr-only: true
+      no-global: all
+      context: all
+      no-raw-keys: true
+      forbidden-keys:
+        - err
+        - org
+        - project
+    staticcheck:
+      dot-import-whitelist:
+        - goa.design/goa/v3/dsl
+    spancheck:
+      checks:
+        - end
+        - set-status
+      ignore-check-signatures:
+        - '\(\*github\.com/speakeasy-api/gram/server/internal/oops\.ShareableError\)\.Log\('
+    gocritic:
+      disabled-checks:
+        - ifElseChain
+    exhaustruct:
+      exclude:
+        - '^log/slog\.HandlerOptions$'
+        - '^crypto/tls\.Config$'
+        - '^net\.Dialer$'
+        - '^net/url\.URL$'
+        - '^net/http\.Server$'
+        - '^net/http\.Client$'
+        - '^net/http\.Transport$'
+    exhaustive:
+      check:
+        - switch
+        - map
+      default-signifies-exhaustive: true
+    errcheck:
+      exclude-functions:
+        - "github.com/speakeasy-api/gram/functions/internal/o11y.LogDefer"
+        - "github.com/speakeasy-api/gram/functions/internal/o11y.NoLogDefer"
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          deny:
+            - pkg: "math/rand$"
+              desc: use math/rand/v2
+            - pkg: "go.uber.org/zap"
+              desc: Use log/slog
+            - pkg: "github.com/jackc/pgx/v4"
+              desc: Use github.com/jackc/pgx/v5
+            - pkg: "gopkg.in/yaml.v2"
+              desc: Use gopkg.in/yaml.v3
+            - pkg: "github.com/urfave/cli/v3"
+              desc: V3 is not ready yet use github.com/urfave/cli/v2
+            - pkg: "github.com/pkg/errors"
+              desc: Should be replaced by standard lib errors package
+    nolintlint:
+      require-specific: true
+      require-explanation: true
+    wrapcheck:
+      ignore-sigs:
+        - "errors.New("
+        - "errors.Join("
+        - "fmt.Errorf("
