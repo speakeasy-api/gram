@@ -85,7 +85,11 @@ function DeploymentActionsDropdown({
 
   const isRedeploying = redeployMutation.isPending;
   const actionText = latest ? "Retry Deployment" : "Rollback";
-  const buttonText = isRedeploying ? (latest ? "Retrying Deployment..." : "Rolling Back...") : actionText;
+  const buttonText = isRedeploying
+    ? latest
+      ? "Retrying Deployment..."
+      : "Rolling Back..."
+    : actionText;
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
