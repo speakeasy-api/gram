@@ -122,10 +122,9 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
         </Card.Header>
         <Card.Content>
           {template.description && (
-            <Card.Description>
-              <div className="line-clamp-3">
-                <MustacheHighlight>{template.description}</MustacheHighlight>
-              </div>
+            <Card.Description className="line-clamp-3 whitespace-normal">
+              {template.description}
+              <MustacheHighlight>{template.description}</MustacheHighlight>
             </Card.Description>
           )}
         </Card.Content>
