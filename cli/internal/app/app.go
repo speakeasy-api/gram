@@ -23,6 +23,7 @@ func newApp() *cli.App {
 		Version: fmt.Sprintf("%s (%s)", Version, shortSha),
 		Commands: []*cli.Command{
 			newPushCommand(),
+			newUploadCommand(),
 			newStatusCommand(),
 		},
 		Flags: []cli.Flag{
@@ -48,7 +49,7 @@ func newApp() *cli.App {
 		Before: func(c *cli.Context) error {
 			logger := slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
 				RawLevel:    c.String("log-level"),
-				Pretty:      c.Bool("pretty"),
+				Pretty:      c.Bool("log-pretty"),
 				DataDogAttr: true,
 			}))
 

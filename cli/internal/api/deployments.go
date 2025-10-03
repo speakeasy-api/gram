@@ -55,7 +55,7 @@ func (c *DeploymentsClient) CreateDeployment(
 	req CreateDeploymentRequest,
 ) (*deployments.CreateDeploymentResult, error) {
 	key := req.APIKey.Reveal()
-	result, err := c.client.CreateDeployment(ctx, &deployments.CreateDeploymentPayload{
+	payload := &deployments.CreateDeploymentPayload{
 		ApikeyToken:      &key,
 		ProjectSlugInput: &req.ProjectSlug,
 		IdempotencyKey:   req.IdempotencyKey,
@@ -68,7 +68,8 @@ func (c *DeploymentsClient) CreateDeployment(
 		ExternalID:       nil,
 		ExternalURL:      nil,
 		Packages:         nil,
-	})
+	}
+	result, err := c.client.CreateDeployment(ctx, payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create deployment: %w", err)
 	}
@@ -104,13 +105,71 @@ func (c *DeploymentsClient) GetLatestDeployment(
 	projectSlug string,
 ) (*deployments.GetLatestDeploymentResult, error) {
 	key := apiKey.Reveal()
-	result, err := c.client.GetLatestDeployment(ctx, &deployments.GetLatestDeploymentPayload{
-		ApikeyToken:      &key,
-		ProjectSlugInput: &projectSlug,
-		SessionToken:     nil,
-	})
+	result, err := c.client.GetLatestDeployment(
+		ctx,
+		&deployments.GetLatestDeploymentPayload{
+			ApikeyToken:      &key,
+			ProjectSlugInput: &projectSlug,
+			SessionToken:     nil,
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest deployment: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetActiveDeployment retrieves the active deployment for a project.
+func (c *DeploymentsClient) GetActiveDeployment(
+	ctx context.Context,
+	apiKey secret.Secret,
+	projectSlug string,
+) (*deployments.GetActiveDeploymentResult, error) {
+	key := apiKey.Reveal()
+	result, err := c.client.GetActiveDeployment(
+		ctx,
+		&deployments.GetActiveDeploymentPayload{
+			ApikeyToken:      &key,
+			ProjectSlugInput: &projectSlug,
+			SessionToken:     nil,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active deployment: %w", err)
+	}
+
+	return result, nil
+}
+
+// EvolveRequest lists the assets to add to a deployment.
+type EvolveRequest struct {
+	APIKey       secret.Secret
+	ProjectSlug  string
+	DeploymentID string
+	Assets       []*deployments.AddOpenAPIv3DeploymentAssetForm
+}
+
+// Evolve adds assets to an existing deployment.
+func (c *DeploymentsClient) Evolve(
+	ctx context.Context,
+	req EvolveRequest,
+) (*deployments.EvolveResult, error) {
+	key := req.APIKey.Reveal()
+	result, err := c.client.Evolve(ctx, &deployments.EvolvePayload{
+		ApikeyToken:            &key,
+		ProjectSlugInput:       &req.ProjectSlug,
+		DeploymentID:           &req.DeploymentID,
+		UpsertOpenapiv3Assets:  req.Assets,
+		UpsertFunctions:        []*deployments.AddFunctionsForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+		UpsertPackages:         []*deployments.AddPackageForm{},
+		SessionToken:           nil,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to evolve deployment: %w", err)
 	}
 
 	return result, nil

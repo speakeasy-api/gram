@@ -14,7 +14,7 @@ import (
 
 // readLocal reads a source from a local file path.
 func (sr *SourceReader) readLocal() (io.ReadCloser, int64, error) {
-	f, err := os.Open(sr.source.Location)
+	f, err := os.Open(sr.Source.Location)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to read local file: %w", err)
 	}
@@ -32,7 +32,7 @@ func (sr *SourceReader) readRemote(ctx context.Context) (io.ReadCloser, int64, e
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", sr.source.Location, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", sr.Source.Location, nil)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create request: %w", err)
 	}

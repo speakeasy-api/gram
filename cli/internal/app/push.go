@@ -48,6 +48,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				Usage:   "The base URL to use for API calls.",
 				EnvVars: []string{"GRAM_API_URL"},
 				Value:   "https://app.getgram.ai",
+				Hidden:  true,
 			},
 			&cli.StringFlag{
 				Name:     "api-key",

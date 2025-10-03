@@ -16,43 +16,43 @@ func isSupportedSourceType(source Source) bool {
 	return source.Type == SourceTypeOpenAPIV3
 }
 
-type uploadRequest struct {
-	apiKey       secret.Secret
-	projectSlug  string
-	sourceReader *SourceReader
+type UploadRequest struct {
+	APIKey       secret.Secret
+	ProjectSlug  string
+	SourceReader *SourceReader
 }
 
-func (ur *uploadRequest) Read(ctx context.Context) (io.ReadCloser, int64, error) {
-	reader, size, err := ur.sourceReader.Read(ctx)
+func (ur *UploadRequest) Read(ctx context.Context) (io.ReadCloser, int64, error) {
+	reader, size, err := ur.SourceReader.Read(ctx)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to read source: %w", err)
 	}
 	return reader, size, nil
 }
 
-func uploadFromSource(
+func Upload(
 	ctx context.Context,
 	logger *slog.Logger,
 	assetsClient *api.AssetsClient,
-	req *uploadRequest,
+	req *UploadRequest,
 ) (*deployments.AddOpenAPIv3DeploymentAssetForm, error) {
-	rc, length, err := req.sourceReader.Read(ctx)
+	rc, length, err := req.SourceReader.Read(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read source: %w", err)
 	}
 
-	source := req.sourceReader.source
+	source := req.SourceReader.Source
 
 	uploadRes, err := assetsClient.UploadOpenAPIv3(ctx, logger, &api.UploadOpenAPIv3Request{
-		APIKey:        req.apiKey.Reveal(),
-		ProjectSlug:   req.projectSlug,
+		APIKey:        req.APIKey.Reveal(),
+		ProjectSlug:   req.ProjectSlug,
 		Reader:        rc,
-		ContentType:   req.sourceReader.GetContentType(),
+		ContentType:   req.SourceReader.GetContentType(),
 		ContentLength: length,
 	})
 	if err != nil {
 		msg := "failed to upload asset in project '%s' for source %s: %w"
-		return nil, fmt.Errorf(msg, req.projectSlug, source.Location, err)
+		return nil, fmt.Errorf(msg, req.ProjectSlug, source.Location, err)
 	}
 
 	return &deployments.AddOpenAPIv3DeploymentAssetForm{
@@ -61,6 +61,52 @@ func uploadFromSource(
 		Slug:    types.Slug(source.Slug),
 	}, nil
 
+}
+
+// AddAssetsRequest lists the assets to add to a deployment.
+type AddAssetsRequest struct {
+	APIKey       secret.Secret
+	ProjectSlug  string
+	DeploymentID string
+	Sources      []Source
+}
+
+// AddAssets uploads assets and adds them to an existing deployment.
+func AddAssets(
+	ctx context.Context,
+	logger *slog.Logger,
+	assetsClient *api.AssetsClient,
+	deploymentsClient *api.DeploymentsClient,
+	req AddAssetsRequest,
+) (*deployments.EvolveResult, error) {
+	newAssets := make(
+		[]*deployments.AddOpenAPIv3DeploymentAssetForm,
+		len(req.Sources),
+	)
+	for idx, source := range req.Sources {
+		asset, err := Upload(ctx, logger, assetsClient, &UploadRequest{
+			APIKey:       req.APIKey,
+			ProjectSlug:  req.ProjectSlug,
+			SourceReader: NewSourceReader(source),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to upload asset: %w", err)
+		}
+
+		newAssets[idx] = asset
+	}
+
+	result, err := deploymentsClient.Evolve(ctx, api.EvolveRequest{
+		Assets:       newAssets,
+		APIKey:       req.APIKey,
+		ProjectSlug:  req.ProjectSlug,
+		DeploymentID: req.DeploymentID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to evolve deployment: %w", err)
+	}
+
+	return result, nil
 }
 
 // createAssetsForDeployment creates remote assets out of each incoming source.
@@ -82,10 +128,10 @@ func createAssetsForDeployment(
 			continue
 		}
 
-		asset, err := uploadFromSource(ctx, logger, assetsClient, &uploadRequest{
-			apiKey:       req.APIKey,
-			projectSlug:  project,
-			sourceReader: NewSourceReader(source),
+		asset, err := Upload(ctx, logger, assetsClient, &UploadRequest{
+			APIKey:       req.APIKey,
+			ProjectSlug:  project,
+			SourceReader: NewSourceReader(source),
 		})
 		if err != nil {
 			return nil, err

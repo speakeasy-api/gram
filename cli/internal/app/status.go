@@ -29,6 +29,7 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 				Usage:   "The base URL to use for API calls.",
 				EnvVars: []string{"GRAM_API_URL"},
 				Value:   "https://app.getgram.ai",
+				Hidden:  true,
 			},
 			&cli.StringFlag{
 				Name:     "api-key",
@@ -78,7 +79,7 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 
 			var deployment *types.Deployment
 			if deploymentID != "" {
-				logger.InfoContext(ctx, "Getting deployment status", slog.String("deployment_id", deploymentID))
+				logger.DebugContext(ctx, "Getting deployment status", slog.String("deployment_id", deploymentID))
 				result, err := deploymentsClient.GetDeployment(ctx, apiKey, projectSlug, deploymentID)
 				if err != nil {
 					return fmt.Errorf("failed to get deployment: %w", err)
