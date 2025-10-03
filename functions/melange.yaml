@@ -1,0 +1,24 @@
+package:
+  name: gram-runner
+  version: 0.0.0
+  epoch: 0
+  description: 'Gram Functions runner'
+  url: https://github.com/speakeasy-api/gram
+  copyright:
+    - attestation: Copyright 2025 Speakeasy Development, Inc.
+      license: AGPL-3.0-or-later
+
+environment:
+  contents:
+    keyring:
+      - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
+    repositories:
+      - https://packages.wolfi.dev/os
+  environment:
+    GOMODCACHE: '/var/cache/melange' 
+
+pipeline:
+  - uses: go/build
+    with:
+      packages: cmd/runner/main.go
+      output: gram-runner

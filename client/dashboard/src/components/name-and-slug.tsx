@@ -20,7 +20,7 @@ export const CopyableSlug = ({
         tooltip="Copy slug"
         className={cn(
           "text-muted-foreground/80 hover:text-foreground",
-          hidden && "opacity-0 group-hover:opacity-100"
+          hidden && "opacity-0 group-hover:opacity-100",
         )}
       />
     </Stack>

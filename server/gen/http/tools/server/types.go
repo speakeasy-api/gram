@@ -17,8 +17,10 @@ import (
 type ListToolsResponseBody struct {
 	// The cursor to fetch results from
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
-	// The list of tools
-	Tools []*HTTPToolDefinitionResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The list of HTTP tools
+	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools" json:"http_tools" xml:"http_tools"`
+	// The list of prompt templates
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
 }
 
 // ListToolsUnauthorizedResponseBody is the type of the "tools" service
@@ -256,6 +258,8 @@ type HTTPToolDefinitionResponseBody struct {
 	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
 	// The variation details of a tool. Only includes explicitly varied fields.
 	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
+	// The URN of this HTTP tool
+	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
 }
 
 // ResponseFilterResponseBody is used to define fields on response body types.
@@ -317,19 +321,57 @@ type ToolVariationResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// PromptTemplateResponseBody is used to define fields on response body types.
+type PromptTemplateResponseBody struct {
+	// The ID of the prompt template
+	ID string `form:"id" json:"id" xml:"id"`
+	// The revision tree ID for the prompt template
+	HistoryID string `form:"history_id" json:"history_id" xml:"history_id"`
+	// The previous version of the prompt template to use as predecessor
+	PredecessorID *string `form:"predecessor_id,omitempty" json:"predecessor_id,omitempty" xml:"predecessor_id,omitempty"`
+	// The name of the prompt template
+	Name string `form:"name" json:"name" xml:"name"`
+	// The template content
+	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
+	// The description of the prompt template
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The JSON Schema defining the placeholders found in the prompt template
+	Arguments *string `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
+	// The template engine
+	Engine string `form:"engine" json:"engine" xml:"engine"`
+	// The kind of prompt the template is used for
+	Kind string `form:"kind" json:"kind" xml:"kind"`
+	// The suggested tool names associated with the prompt template
+	ToolsHint []string `form:"tools_hint" json:"tools_hint" xml:"tools_hint"`
+	// The creation date of the prompt template.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the prompt template.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The URN of this prompt template
+	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
+}
+
 // NewListToolsResponseBody builds the HTTP response body from the result of
 // the "listTools" endpoint of the "tools" service.
 func NewListToolsResponseBody(res *tools.ListToolsResult) *ListToolsResponseBody {
 	body := &ListToolsResponseBody{
 		NextCursor: res.NextCursor,
 	}
-	if res.Tools != nil {
-		body.Tools = make([]*HTTPToolDefinitionResponseBody, len(res.Tools))
-		for i, val := range res.Tools {
-			body.Tools[i] = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
+	if res.HTTPTools != nil {
+		body.HTTPTools = make([]*HTTPToolDefinitionResponseBody, len(res.HTTPTools))
+		for i, val := range res.HTTPTools {
+			body.HTTPTools[i] = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(val)
 		}
 	} else {
-		body.Tools = []*HTTPToolDefinitionResponseBody{}
+		body.HTTPTools = []*HTTPToolDefinitionResponseBody{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
 	}
 	return body
 }

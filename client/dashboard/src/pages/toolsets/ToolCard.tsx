@@ -33,7 +33,7 @@ export function ToolCard({
   const telemetry = useTelemetry();
 
   const updateVariation = async (
-    vals: Partial<UpsertGlobalToolVariationForm>
+    vals: Partial<UpsertGlobalToolVariationForm>,
   ) => {
     if (tool.type === "http") {
       await client.variations.upsertGlobal({
@@ -161,7 +161,7 @@ export function ToolCard({
             <Type
               className={cn(
                 "line-clamp-3 text-muted-foreground wrap-anywhere!",
-                !tool.description && "italic"
+                !tool.description && "italic",
               )}
             >
               {tool.description || "No description provided"}
@@ -181,7 +181,7 @@ function useToolSourceName(tool: ToolDefinition) {
     undefined,
     {
       enabled: tool.type === "http" && !tool.packageName,
-    }
+    },
   );
 
   if (tool.packageName) {

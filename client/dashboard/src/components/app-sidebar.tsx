@@ -159,7 +159,10 @@ const FreeTierExceededNotification = () => {
             </span>
             .
           </Type>
-          <Type small>Your MCP server will be disabled soon. Upgrade to continue using Gram.</Type>
+          <Type small>
+            Your MCP server will be disabled soon. Upgrade to continue using
+            Gram.
+          </Type>
           <routes.billing.Link className="w-full mt-auto">
             <Button size="sm" className="w-full">
               Billing →

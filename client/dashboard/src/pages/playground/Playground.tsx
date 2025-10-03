@@ -43,13 +43,13 @@ function PlaygroundInner() {
   const telemetry = useTelemetry();
 
   const [selectedToolset, setSelectedToolset] = useState<string | null>(
-    searchParams.get("toolset") ?? null
+    searchParams.get("toolset") ?? null,
   );
   const [selectedEnvironment, setSelectedEnvironment] = useState<string | null>(
-    searchParams.get("environment") ?? null
+    searchParams.get("environment") ?? null,
   );
   const [dynamicToolset, setDynamicToolset] = useState(false);
-  
+
   // Get prompt from URL params if available
   const initialPrompt = searchParams.get("prompt");
 
@@ -253,9 +253,14 @@ export function ToolsetPanel({
                   onClick={() => setDynamicToolset(!dynamicToolset)}
                 >
                   <MoonshineButton.LeftIcon>
-                    <Icon name={dynamicToolset ? "sparkles" : "lock"} className="h-4 w-4" />
+                    <Icon
+                      name={dynamicToolset ? "sparkles" : "lock"}
+                      className="h-4 w-4"
+                    />
                   </MoonshineButton.LeftIcon>
-                  <MoonshineButton.Text>{dynamicToolset ? "Dynamic" : "Static"}</MoonshineButton.Text>
+                  <MoonshineButton.Text>
+                    {dynamicToolset ? "Dynamic" : "Static"}
+                  </MoonshineButton.Text>
                 </MoonshineButton>
               </Stack>
             )}
@@ -279,7 +284,7 @@ export const PanelHeader = ({
       className={cn(
         "sticky top-0 bg-stone-100 dark:bg-card py-3 px-8 border-b z-10 h-[61px]",
         side === "left" && "dark:border-l-2 dark:border-l-background",
-        side === "right" && "dark:border-r-2 dark:border-r-background"
+        side === "right" && "dark:border-r-2 dark:border-r-background",
       )}
     >
       {children}

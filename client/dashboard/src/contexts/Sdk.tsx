@@ -46,7 +46,7 @@ export const SdkProvider = ({ children }: { children: React.ReactNode }) => {
           },
         },
       }),
-    [handleError]
+    [handleError],
   );
 
   const previousProjectSlug = useRef(projectSlug);

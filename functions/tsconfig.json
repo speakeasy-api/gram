@@ -1,0 +1,28 @@
+{
+  "extends": "../tsconfig.strict.json",
+  "exclude": ["node_modules"],
+  "compilerOptions": {
+    "incremental": true,
+    "composite": true,
+    "target": "ES2024",
+    "lib": ["DOM", "DOM.Iterable", "DOM.AsyncIterable", "ES2024"],
+
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowImportingTsExtensions": true /* Allow imports to include TypeScript file extensions. Requires '--moduleResolution bundler' and either '--noEmit' or '--emitDeclarationOnly' to be set. */,
+
+    "allowJs": true,
+    "checkJs": true,
+
+    "noEmit": true,
+    "stripInternal": true,
+
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "skipLibCheck": true
+  }
+}

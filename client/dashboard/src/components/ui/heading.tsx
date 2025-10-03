@@ -1,10 +1,5 @@
 import { cn } from "@/lib/utils";
-import {
-  TooltipProvider,
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "./tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent } from "./tooltip";
 import { Skeleton } from "./skeleton";
 
 export function Heading({
@@ -58,12 +53,10 @@ export function Heading({
 
   if (tooltip) {
     return (
-      <TooltipProvider>
-        <Tooltip>
-          <TooltipTrigger asChild>{base}</TooltipTrigger>
-          <TooltipContent>{tooltip}</TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{base}</TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
     );
   }
 

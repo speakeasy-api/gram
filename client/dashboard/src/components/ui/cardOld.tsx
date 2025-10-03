@@ -15,7 +15,7 @@ const CardComponent = ({
       className={cn(
         "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6 group/card",
         size === "sm" && "gap-4 py-4",
-        className
+        className,
       )}
       {...props}
     />
@@ -28,7 +28,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="card-header"
       className={cn(
         "@container/card-header flex flex-wrap items-center justify-between gap-1 px-6 [.border-b]:pb-6",
-        className
+        className,
       )}
       {...props}
     />
@@ -69,7 +69,7 @@ function CardInfo({ className, ...props }: React.ComponentProps<"div">) {
       className={cn(
         "gap-2 flex justify-start",
         "group-hover/card:has([data-slot=card-action]):opacity-0", // Only hide info when card has an action and is hovered
-        className
+        className,
       )}
       {...props}
     />
@@ -82,7 +82,7 @@ function CardActions({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="card-action"
       className={cn(
         "absolute top-[-8px] right-4 bg-card opacity-0 group-hover/card:opacity-100 trans flex",
-        className
+        className,
       )}
       {...props}
     />
@@ -108,7 +108,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="card-footer"
       className={cn(
         "flex items-center justify-end gap-2 px-6 [.border-t]:pt-6",
-        className
+        className,
       )}
       {...props}
     />

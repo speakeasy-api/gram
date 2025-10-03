@@ -86,8 +86,8 @@ export function ServerEnableDialog({
                   ? "Disabling..."
                   : "Enabling..."
                 : currentlyEnabled
-                ? "Disable Server"
-                : "Enable Server"}
+                  ? "Disable Server"
+                  : "Enable Server"}
             </Button>
           )}
         </Dialog.Footer>

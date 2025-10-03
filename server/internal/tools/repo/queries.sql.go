@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const findToolEntriesByName = `-- name: FindToolEntriesByName :many
@@ -277,6 +278,7 @@ all_deployment_ids AS (
 SELECT 
   (SELECT id FROM deployment) as deployment_id,
   htd.id,
+  htd.tool_urn,
   htd.name,
   htd.summary,
   htd.description,
@@ -320,6 +322,7 @@ type ListToolsParams struct {
 type ListToolsRow struct {
 	DeploymentID        uuid.UUID
 	ID                  uuid.UUID
+	ToolUrn             urn.Tool
 	Name                string
 	Summary             string
 	Description         string
@@ -361,6 +364,7 @@ func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToo
 		if err := rows.Scan(
 			&i.DeploymentID,
 			&i.ID,
+			&i.ToolUrn,
 			&i.Name,
 			&i.Summary,
 			&i.Description,

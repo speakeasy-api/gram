@@ -50,7 +50,8 @@ export function ServerCard({
   const { url: mcpUrl, pageUrl } = useMcpUrl(toolset);
   const updateToolsetMutation = useUpdateToolsetMutation();
   const queryClient = useQueryClient();
-  const [isServerEnableDialogOpen, setIsServerEnableDialogOpen] = useState(false);
+  const [isServerEnableDialogOpen, setIsServerEnableDialogOpen] =
+    useState(false);
 
   if (!toolset) return null;
 
@@ -82,7 +83,7 @@ export function ServerCard({
             newState: isPublic ? "public" : "private",
           });
         },
-      }
+      },
     );
   };
 
@@ -107,7 +108,7 @@ export function ServerCard({
             newState: !toolset.mcpEnabled ? "enabled" : "disabled",
           });
         },
-      }
+      },
     );
   };
 
@@ -380,7 +381,7 @@ export function ServerCard({
           )}
         </Stack>
       </Card.Footer>
-      
+
       <ServerEnableDialog
         isOpen={isServerEnableDialogOpen}
         onClose={() => setIsServerEnableDialogOpen(false)}

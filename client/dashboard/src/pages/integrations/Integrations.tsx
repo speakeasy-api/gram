@@ -3,7 +3,7 @@ import { AssetImage } from "@/components/asset-image";
 import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
-import { ToolsBadge } from "@/components/tools-badge";
+import { ToolCollectionBadge } from "@/components/tools-badge";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Card, Cards } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
@@ -49,9 +49,7 @@ export default function Integrations() {
       <Page.Body>
         {isAdmin && (
           <div className="flex justify-end mb-4">
-            <AddButton
-              onClick={() => setCreateIntegrationDialogOpen(true)}
-            />
+            <AddButton onClick={() => setCreateIntegrationDialogOpen(true)} />
           </div>
         )}
         <Cards>
@@ -107,7 +105,7 @@ function CreateIntegrationDialog({
   const [summary, setSummary] = useState(existingPackage?.summary ?? "");
   const [keywords, setKeywords] = useState(existingPackage?.keywords ?? []);
   const [imageAssetId, setImageAssetId] = useState(
-    existingPackage?.imageAssetId ?? ""
+    existingPackage?.imageAssetId ?? "",
   );
   const [version, setVersion] = useState(latestVersion ?? "");
 
@@ -256,7 +254,7 @@ export function IntegrationCard({
   };
 
   const isEnabled = deployment?.deployment?.packages.some(
-    (p) => p.name === integration.packageName
+    (p) => p.name === integration.packageName,
   );
 
   const toggleEnabled = async () => {
@@ -269,7 +267,7 @@ export function IntegrationCard({
   };
 
   const firstParty = packages?.packages.find(
-    (p) => p.id === integration.packageId
+    (p) => p.id === integration.packageId,
   );
 
   return (
@@ -292,9 +290,7 @@ export function IntegrationCard({
           </Stack>
         </Card.Title>
         {firstParty ? (
-          <Button variant="secondary"
-            onClick={newVersionCallback}
-          >
+          <Button variant="secondary" onClick={newVersionCallback}>
             <Button.LeftIcon>
               <Icon name="copy-plus" className="h-4 w-4" />
             </Button.LeftIcon>
@@ -314,12 +310,10 @@ export function IntegrationCard({
         )}
       </Card.Header>
       <Card.Content>
-        <Card.Description>
-          {integration.packageSummary}
-        </Card.Description>
+        <Card.Description>{integration.packageSummary}</Card.Description>
       </Card.Content>
       <Card.Footer>
-        <ToolsBadge toolNames={integration.toolNames} />
+        <ToolCollectionBadge toolNames={integration.toolNames} />
         <Type variant="body" muted className="text-sm italic">
           {"Updated "}
           <HumanizeDateTime date={new Date(integration.versionCreatedAt)} />

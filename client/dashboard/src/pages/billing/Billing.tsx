@@ -237,7 +237,7 @@ const UsageTiers = () => {
             const link = await client.usage.createCustomerSession();
             if (!link) {
               console.error(
-                "Failed to create customer session: received empty link"
+                "Failed to create customer session: received empty link",
               );
               telemetry.capture("customer_session_error", {
                 error: "Received empty customer session link",
@@ -341,6 +341,27 @@ const UsageTiers = () => {
                 </ul>
               </Stack>
             )}
+            {tier.addOnBullets && tier.addOnBullets.length > 0 && (
+              <Stack gap={1}>
+                <Type
+                  mono
+                  muted
+                  small
+                  variant="subheading"
+                  className="font-medium uppercase"
+                >
+                  Extras
+                </Type>
+                <ul className="list-inside space-y-1">
+                  {tier.addOnBullets.map((bullet) => (
+                    <li>
+                      <span className="text-muted-foreground/60">✓</span>{" "}
+                      {bullet}
+                    </li>
+                  ))}
+                </ul>
+              </Stack>
+            )}
           </Stack>
         </Card.Content>
       </Card>
@@ -418,7 +439,7 @@ const UsageProgress = ({
     <div
       className={cn(
         "h-4 bg-muted dark:bg-neutral-800 rounded-md overflow-hidden relative",
-        anyOverage && "rounded-r-none"
+        anyOverage && "rounded-r-none",
       )}
       style={{ width: `${includedWidth}%` }}
     >
@@ -493,7 +514,7 @@ const UsageProgress = ({
                   style={{ left: `${incrementPosition}%` }}
                 />
               );
-            }
+            },
           )}
         </>
       )}

@@ -1,4 +1,4 @@
-import { ToolsetToolsBadge } from "@/components/tools-badge";
+import { ToolCollectionBadge } from "@/components/tools-badge";
 import { Button } from "@speakeasy-api/moonshine";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
@@ -14,6 +14,7 @@ import { useMiniModel } from "../playground/Openrouter";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { useToolDefinitions } from "../toolsets/types";
 import { useToolset } from "@gram/client/react-query";
+import { userFacingToolNames } from "@/lib/toolNames";
 
 const SuggestionSchema = z.object({
   name: z.string(),
@@ -22,13 +23,13 @@ const SuggestionSchema = z.object({
     z.object({
       name: z.string(),
       description: z.string(),
-    })
+    }),
   ),
   steps: z.array(
     z.object({
       tool: z.string(),
       instructions: z.string(),
-    })
+    }),
   ),
 });
 
@@ -78,7 +79,7 @@ export const ToolifyDialog = ({
   const { data: toolset } = useToolset(
     { slug: selectedToolset?.slug ?? "" },
     undefined,
-    { enabled: !!selectedToolset?.slug }
+    { enabled: !!selectedToolset?.slug },
   );
   const tools = useToolDefinitions(toolset);
 
@@ -133,7 +134,7 @@ export const ToolifyDialog = ({
             description: t.description,
             schema: t.schema,
           };
-        })
+        }),
       )}
                   `,
       schema: SuggestionSchema,
@@ -174,7 +175,11 @@ export const ToolifyDialog = ({
                 selectedToolset={selectedToolset}
                 setSelectedToolset={(toolset) => setSelectedToolset(toolset)}
               />
-              <ToolsetToolsBadge toolset={selectedToolset} />
+              <ToolCollectionBadge
+                toolNames={toolset ? userFacingToolNames(toolset) : []}
+                size={"md"}
+                warnOnTooManyTools
+              />
             </Stack>
           </Stack>
           <Stack gap={1}>
@@ -195,7 +200,8 @@ export const ToolifyDialog = ({
             Back
           </Button>
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="tertiary"
+            <Button
+              variant="tertiary"
               onClick={() => routes.customTools.toolBuilderNew.goTo()}
             >
               Skip

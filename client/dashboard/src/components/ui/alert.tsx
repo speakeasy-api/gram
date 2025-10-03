@@ -13,14 +13,13 @@ const alertVariants = cva(
           "border-destructive/50 text-destructive dark:border-destructive [&>svg]:text-destructive",
         warning:
           "border-yellow-500/50 text-yellow-600 dark:border-yellow-500 dark:text-yellow-400 [&>svg]:text-yellow-600 dark:[&>svg]:text-yellow-400",
-        info:
-          "border-blue-500/50 text-blue-600 dark:border-blue-500 dark:text-blue-400 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400",
+        info: "border-blue-500/50 text-blue-600 dark:border-blue-500 dark:text-blue-400 [&>svg]:text-blue-600 dark:[&>svg]:text-blue-400",
       },
     },
     defaultVariants: {
       variant: "default",
     },
-  }
+  },
 );
 
 const Alert = React.forwardRef<
@@ -67,9 +66,14 @@ interface ErrorAlertProps {
   className?: string;
 }
 
-const ErrorAlert = ({ error, title = "Error", onDismiss, className }: ErrorAlertProps) => {
+const ErrorAlert = ({
+  error,
+  title = "Error",
+  onDismiss,
+  className,
+}: ErrorAlertProps) => {
   const errorMessage = typeof error === "string" ? error : error.message;
-  
+
   return (
     <Alert variant="destructive" className={cn("relative", className)}>
       <Icon name="circle-alert" className="h-4 w-4" />

@@ -152,7 +152,7 @@ export default function Settings() {
         onSuccess: () => {
           formEl.reset();
         },
-      }
+      },
     );
   };
 
@@ -233,7 +233,8 @@ export default function Settings() {
       header: "",
       width: "80px",
       render: (key: Key) => (
-        <Button variant="tertiary"
+        <Button
+          variant="tertiary"
           size="sm"
           onClick={() => setKeyToRevoke(key)}
           className="hover:text-destructive"
@@ -278,7 +279,8 @@ export default function Settings() {
               justify="center"
             >
               <Type variant="body">No API keys yet</Type>
-              <Button size="sm"
+              <Button
+                size="sm"
                 variant="secondary"
                 onClick={() => setIsCreateDialogOpen(true)}
               >
@@ -311,7 +313,8 @@ export default function Settings() {
                   <code className="flex-1 break-all">
                     {newlyCreatedKey.key}
                   </code>
-                  <Button variant="tertiary"
+                  <Button
+                    variant="tertiary"
                     size="sm"
                     onClick={handleCopyToken}
                     className="shrink-0"
@@ -365,7 +368,8 @@ export default function Settings() {
                   }}
                 />
                 <div className="flex justify-end space-x-2">
-                  <Button type="button"
+                  <Button
+                    type="button"
                     variant="secondary"
                     onClick={handleCloseCreateDialog}
                   >
@@ -395,12 +399,14 @@ export default function Settings() {
                 This action cannot be undone.
               </Type>
               <div className="flex justify-end space-x-2">
-                <Button variant="secondary"
+                <Button
+                  variant="secondary"
                   onClick={() => setKeyToRevoke(null)}
                 >
                   Cancel
                 </Button>
-                <Button variant="destructive-primary"
+                <Button
+                  variant="destructive-primary"
                   onClick={handleRevokeKey}
                   disabled={revokeKeyMutation.isPending}
                 >
@@ -451,7 +457,8 @@ export default function Settings() {
               justify="center"
             >
               <Type variant="body">No custom domains yet</Type>
-              <Button size="sm"
+              <Button
+                size="sm"
                 variant="secondary"
                 onClick={() => {
                   if (session.gramAccountType === "free") {
@@ -534,7 +541,8 @@ export default function Settings() {
                 </Type>
                 <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
                   <code className="flex-1 break-all">{CNAME_VALUE}</code>
-                  <Button variant="tertiary"
+                  <Button
+                    variant="tertiary"
                     size="sm"
                     onClick={handleCopyCname}
                     className="shrink-0"
@@ -561,7 +569,8 @@ export default function Settings() {
                 </Type>
                 <div className="flex items-center space-x-2 bg-muted p-3 rounded-md mt-2">
                   <code className="flex-1 break-all">{txtValue}</code>
-                  <Button variant="tertiary"
+                  <Button
+                    variant="tertiary"
                     size="sm"
                     onClick={handleCopyTxt}
                     className="shrink-0"
@@ -592,7 +601,7 @@ export default function Settings() {
                     className={cn(
                       domainError && "border-red-500",
                       domain?.domain &&
-                        "bg-muted text-muted-foreground cursor-not-allowed"
+                        "bg-muted text-muted-foreground cursor-not-allowed",
                     )}
                     readOnly={!!domain?.domain}
                   />
@@ -614,8 +623,8 @@ export default function Settings() {
                     {registerDomainMutation.isPending
                       ? "Registering..."
                       : domain?.domain
-                      ? "Verify"
-                      : "Register"}
+                        ? "Verify"
+                        : "Register"}
                   </Button>
                 </div>
               </div>

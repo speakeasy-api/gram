@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <profiles>
+        <default>
+            <!-- Disable query logging for development -->
+            <log_queries>0</log_queries>
+            <log_query_threads>0</log_query_threads>
+
+            <!-- Limit concurrent queries per user -->
+            <max_concurrent_queries_for_user>2</max_concurrent_queries_for_user>
+
+            <!-- Limit concurrent queries for all users combined -->
+            <max_concurrent_queries_for_all_users>4</max_concurrent_queries_for_all_users>
+
+            <!-- Memory limits per query and per user -->
+            <max_memory_usage>536870912</max_memory_usage>
+            <max_memory_usage_for_user>1073741824</max_memory_usage_for_user>
+        </default>
+    </profiles>
+</clickhouse>

@@ -1,16 +1,16 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 60f7bf8366967f5c922819630bb17c1c
+  docChecksum: b0600ba652b467d7913749f213f17ebe
   docVersion: 0.0.1
-  speakeasyVersion: 1.620.0
-  generationVersion: 2.706.1
-  releaseVersion: 0.12.65
-  configChecksum: a69153550c52412f2150c76fdaf4352a
+  speakeasyVersion: 1.634.0
+  generationVersion: 2.721.0
+  releaseVersion: 0.12.72
+  configChecksum: cdd2788bd2f93fb3e2e1e920bf79e975
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.22
+    core: 3.21.26
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
@@ -82,6 +82,7 @@ generatedFiles:
   - docs/models/components/getinstanceresult.md
   - docs/models/components/getintegrationresult.md
   - docs/models/components/getlatestdeploymentresult.md
+  - docs/models/components/getmcpmetadataresponsebody.md
   - docs/models/components/getprompttemplateresult.md
   - docs/models/components/getslackconnectionresult.md
   - docs/models/components/httptooldefinition.md
@@ -106,6 +107,7 @@ generatedFiles:
   - docs/models/components/listtoolsresult.md
   - docs/models/components/listvariationsresult.md
   - docs/models/components/listversionsresult.md
+  - docs/models/components/mcpmetadata.md
   - docs/models/components/notmodified.md
   - docs/models/components/oauthproxyprovider.md
   - docs/models/components/oauthproxyserver.md
@@ -132,6 +134,7 @@ generatedFiles:
   - docs/models/components/responsefilter.md
   - docs/models/components/securityvariable.md
   - docs/models/components/servervariable.md
+  - docs/models/components/setmcpmetadatarequestbody.md
   - docs/models/components/setprojectlogoform.md
   - docs/models/components/setprojectlogoresult.md
   - docs/models/components/tierlimits.md
@@ -227,6 +230,8 @@ generatedFiles:
   - docs/models/operations/getlatestdeploymentsecurity.md
   - docs/models/operations/getlatestdeploymentsecurityoption1.md
   - docs/models/operations/getlatestdeploymentsecurityoption2.md
+  - docs/models/operations/getmcpmetadatarequest.md
+  - docs/models/operations/getmcpmetadatasecurity.md
   - docs/models/operations/getperiodusagerequest.md
   - docs/models/operations/getperiodusagesecurity.md
   - docs/models/operations/getslackconnectionrequest.md
@@ -318,6 +323,8 @@ generatedFiles:
   - docs/models/operations/sessioninforequest.md
   - docs/models/operations/sessioninforesponse.md
   - docs/models/operations/sessioninfosecurity.md
+  - docs/models/operations/setmcpmetadatarequest.md
+  - docs/models/operations/setmcpmetadatasecurity.md
   - docs/models/operations/setprojectlogorequest.md
   - docs/models/operations/setprojectlogosecurity.md
   - docs/models/operations/setprojectlogosecurityoption1.md
@@ -371,6 +378,7 @@ generatedFiles:
   - docs/sdks/instances/README.md
   - docs/sdks/integrations/README.md
   - docs/sdks/keys/README.md
+  - docs/sdks/mcpmetadata/README.md
   - docs/sdks/packages/README.md
   - docs/sdks/projects/README.md
   - docs/sdks/slack/README.md
@@ -422,6 +430,8 @@ generatedFiles:
   - src/funcs/keysCreate.ts
   - src/funcs/keysList.ts
   - src/funcs/keysRevokeById.ts
+  - src/funcs/mcpMetadataGet.ts
+  - src/funcs/mcpMetadataSet.ts
   - src/funcs/packagesCreate.ts
   - src/funcs/packagesList.ts
   - src/funcs/packagesListVersions.ts
@@ -520,6 +530,7 @@ generatedFiles:
   - src/models/components/getinstanceresult.ts
   - src/models/components/getintegrationresult.ts
   - src/models/components/getlatestdeploymentresult.ts
+  - src/models/components/getmcpmetadataresponsebody.ts
   - src/models/components/getprompttemplateresult.ts
   - src/models/components/getslackconnectionresult.ts
   - src/models/components/httptooldefinition.ts
@@ -543,6 +554,7 @@ generatedFiles:
   - src/models/components/listtoolsresult.ts
   - src/models/components/listvariationsresult.ts
   - src/models/components/listversionsresult.ts
+  - src/models/components/mcpmetadata.ts
   - src/models/components/notmodified.ts
   - src/models/components/oauthproxyprovider.ts
   - src/models/components/oauthproxyserver.ts
@@ -566,6 +578,7 @@ generatedFiles:
   - src/models/components/responsefilter.ts
   - src/models/components/securityvariable.ts
   - src/models/components/servervariable.ts
+  - src/models/components/setmcpmetadatarequestbody.ts
   - src/models/components/setprojectlogoform.ts
   - src/models/components/setprojectlogoresult.ts
   - src/models/components/tierlimits.ts
@@ -618,6 +631,7 @@ generatedFiles:
   - src/models/operations/getdomain.ts
   - src/models/operations/getinstance.ts
   - src/models/operations/getlatestdeployment.ts
+  - src/models/operations/getmcpmetadata.ts
   - src/models/operations/getperiodusage.ts
   - src/models/operations/getslackconnection.ts
   - src/models/operations/gettemplate.ts
@@ -650,6 +664,7 @@ generatedFiles:
   - src/models/operations/serveimage.ts
   - src/models/operations/serveopenapiv3.ts
   - src/models/operations/sessioninfo.ts
+  - src/models/operations/setmcpmetadata.ts
   - src/models/operations/setprojectlogo.ts
   - src/models/operations/slackcallback.ts
   - src/models/operations/slacklogin.ts
@@ -687,6 +702,7 @@ generatedFiles:
   - src/react-query/evolveDeployment.ts
   - src/react-query/getCreditUsage.ts
   - src/react-query/getDomain.ts
+  - src/react-query/getMcpMetadata.ts
   - src/react-query/getPeriodUsage.ts
   - src/react-query/getSlackConnection.ts
   - src/react-query/getUsageTiers.ts
@@ -708,6 +724,7 @@ generatedFiles:
   - src/react-query/listVersions.ts
   - src/react-query/loadChat.ts
   - src/react-query/logout.ts
+  - src/react-query/mcpMetadataSet.ts
   - src/react-query/publishPackage.ts
   - src/react-query/redeployDeployment.ts
   - src/react-query/register.ts
@@ -743,6 +760,7 @@ generatedFiles:
   - src/sdk/instances.ts
   - src/sdk/integrations.ts
   - src/sdk/keys.ts
+  - src/sdk/mcpmetadata.ts
   - src/sdk/packages.ts
   - src/sdk/projects.ts
   - src/sdk/sdk.ts
@@ -1205,7 +1223,7 @@ examples:
         application/json: {"engine": "mustache", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>"}
       responses:
         "200":
-          application/json: {"template": {"created_at": "2023-07-18T03:17:12.882Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2024-11-12T17:29:28.662Z"}}
+          application/json: {"template": {"created_at": "2023-07-18T03:17:12.882Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2024-11-12T17:29:28.662Z"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1221,7 +1239,7 @@ examples:
     speakeasy-default-get-template:
       responses:
         "200":
-          application/json: {"template": {"created_at": "2024-12-19T01:56:17.353Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-01-07T00:24:23.441Z"}}
+          application/json: {"template": {"created_at": "2024-12-19T01:56:17.353Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-01-07T00:24:23.441Z"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1253,7 +1271,7 @@ examples:
     speakeasy-default-list-tools:
       responses:
         "200":
-          application/json: {"tools": []}
+          application/json: {"http_tools": [], "prompt_templates": [{"created_at": "2024-05-03T23:42:06.374Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-07-14T21:01:07.725Z"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1264,7 +1282,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2024-05-10T06:01:51.541Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "updated_at": "2024-05-10T06:01:51.541Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1286,7 +1304,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "tool_type": "http", "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2025-12-20T03:22:44.412Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "tool_type": "http", "tool_urn": "<value>", "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "updated_at": "2025-12-20T03:22:44.412Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1309,7 +1327,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"created_at": "2025-09-02T01:42:31.498Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2024-05-27T18:01:12.846Z"}], "slug": "<value>", "updated_at": "2025-08-07T19:20:12.233Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"created_at": "2025-09-02T01:42:31.498Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2024-05-27T18:01:12.846Z"}], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-08-07T19:20:12.233Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1352,7 +1370,7 @@ examples:
         application/json: {"id": "<id>"}
       responses:
         "200":
-          application/json: {"template": {"created_at": "2023-08-04T16:54:18.293Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tools_hint": [], "updated_at": "2023-03-25T20:37:57.210Z"}}
+          application/json: {"template": {"created_at": "2023-08-04T16:54:18.293Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": [], "updated_at": "2023-03-25T20:37:57.210Z"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -1443,7 +1461,7 @@ examples:
         application/json: {"external_oauth_server": {"metadata": "<value>", "slug": "<value>"}}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2025-03-28T09:33:33.851Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "updated_at": "2025-03-28T09:33:33.851Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1467,7 +1485,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "updated_at": "2023-10-21T14:21:06.001Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "updated_at": "2023-10-21T14:21:06.001Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1531,5 +1549,52 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getInstallPageMetadata:
+    speakeasy-default-get-install-page-metadata:
+      parameters:
+        query:
+          toolset_id: "b6e4ca24-e078-4ae2-8b4e-f99e8b24755c"
+          toolset_slug: "<value>"
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  setInstallPageMetadata:
+    speakeasy-default-set-install-page-metadata:
+      requestBody:
+        application/json: {"toolset_slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2025-07-02T04:34:47.296Z", "id": "<id>", "toolset_id": "1e7ed99d-76d3-4eaa-a245-36fe9e5308c2", "updated_at": "2024-05-24T08:09:35.124Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getMcpMetadata:
+    speakeasy-default-get-mcp-metadata:
+      parameters:
+        query:
+          toolset_slug: "<value>"
+      responses:
+        "200":
+          application/json: {}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  setMcpMetadata:
+    speakeasy-default-set-mcp-metadata:
+      requestBody:
+        application/json: {"toolset_slug": "<value>"}
+      responses:
+        "200":
+          application/json: {"created_at": "2024-12-11T16:40:00.632Z", "id": "<id>", "toolset_id": "4a999575-d1bd-4e03-9441-727039544c9e", "updated_at": "2024-12-20T06:05:12.488Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
 examplesVersion: 1.0.2
 generatedTests: {}

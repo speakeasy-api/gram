@@ -119,7 +119,7 @@ function ChatInner({
   const chat = useChatContext();
   const { setMessages } = chat;
   const { chatHistory, isLoading: isChatHistoryLoading } = useChatHistory(
-    chat.id
+    chat.id,
   );
 
   const [displayOnlyMessages, setDisplayOnlyMessages] = useState<Message[]>([]);
@@ -134,7 +134,7 @@ function ChatInner({
     {
       enabled:
         !!configRef.current.toolsetSlug && !!configRef.current.environmentSlug,
-    }
+    },
   );
 
   const appendDisplayOnlyMessage = useCallback(
@@ -154,7 +154,7 @@ function ChatInner({
           createdAt: new Date(),
         },
       ]),
-    []
+    [],
   );
 
   const executeHttpToolFn =
@@ -173,7 +173,7 @@ function ChatInner({
             "gram-project": project.slug,
           },
           body: JSON.stringify(args),
-        }
+        },
       );
 
       const result = await response.text();
@@ -200,11 +200,11 @@ function ChatInner({
             parameters: jsonSchema(tool.schema ? JSON.parse(tool.schema) : {}),
             execute: executeHttpToolFn(
               tool,
-              configRef.current.toolsetSlug || ""
+              configRef.current.toolsetSlug || "",
             ),
           },
         ];
-      }) ?? []
+      }) ?? [],
     );
 
     instance.data?.promptTemplates?.forEach((pt) => {
@@ -280,7 +280,7 @@ function ChatInner({
     appendDisplayOnlyMessage(
       `**Updated tool list:** *${(
         result.object as { tools: string[] }
-      ).tools.join(", ")}*`
+      ).tools.join(", ")}*`,
     );
   };
 
@@ -302,8 +302,8 @@ function ChatInner({
     if (dynamicToolset) {
       tools = Object.fromEntries(
         Object.entries(allTools).filter(([tool]) =>
-          selectedTools.current.includes(tool)
-        )
+          selectedTools.current.includes(tool),
+        ),
       );
     }
 
@@ -328,7 +328,7 @@ function ChatInner({
             parameters: tool.parameters,
             // Remove execute function - we handle execution in onToolCall
           },
-        ])
+        ]),
       ),
       temperature: 0.5,
       system: systemPrompt,
@@ -364,7 +364,7 @@ function ChatInner({
   };
 
   const initialMessagesInner: Message[] =
-    chatHistory.length > 0 ? chatHistory : initialMessages ?? [];
+    chatHistory.length > 0 ? chatHistory : (initialMessages ?? []);
 
   const toolCallApproval = useToolCallApproval({
     // Disclaimer: this is a bit weird, because the tool's execute function actually seems to be called by the useChat hook
@@ -450,7 +450,7 @@ function ChatInner({
         content: msg,
       });
     },
-    [append, chatMessages, telemetry, model]
+    [append, chatMessages, telemetry, model],
   );
 
   // This needs to be set so that the chat provider can append messages
@@ -576,7 +576,7 @@ const toolCallComponents = (tools: Toolset, telemetry: Telemetry) => {
             variant="small"
             className={cn(
               "font-medium",
-              validationError && "line-through text-muted-foreground"
+              validationError && "line-through text-muted-foreground",
             )}
           >
             {toolName}
@@ -625,7 +625,7 @@ const toolCallComponents = (tools: Toolset, telemetry: Telemetry) => {
     }) => {
       const tool = tools[props.toolName];
       const hasSummary = JSON.stringify(props.args)?.includes(
-        "gram-request-summary"
+        "gram-request-summary",
       );
 
       return (

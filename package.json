@@ -20,6 +20,7 @@
     "@datadog/datadog-ci": "^3.20.0",
     "@types/fs-extra": "^11.0.4",
     "@types/node": "^24.5.2",
+    "prettier": "^3.6.2",
     "typescript": "catalog:",
     "zx": "^8.8.1"
   },

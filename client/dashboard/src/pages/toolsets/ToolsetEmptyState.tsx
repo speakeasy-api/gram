@@ -8,9 +8,7 @@ export function ToolsetEmptyState({ toolsetSlug }: { toolsetSlug: string }) {
 
   const cta = (
     <routes.toolsets.toolset.update.Link params={[toolsetSlug]}>
-      <Button size="sm">
-        ADD TOOLS
-      </Button>
+      <Button size="sm">ADD TOOLS</Button>
     </routes.toolsets.toolset.update.Link>
   );
 

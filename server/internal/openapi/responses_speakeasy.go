@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/openapi/yml"
 )
 
-func getResponseFilterSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], op *openapi.Operation, responseFilterType *models.FilterType) (*models.ResponseFilter, *oas3.JSONSchema[oas3.Referenceable], error) {
+func getResponseFilterSpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, op *openapi.Operation, responseFilterType *models.FilterType) (*models.ResponseFilter, *oas3.JSONSchema[oas3.Referenceable], error) {
 	// Only JQ response filters are supported for now
 	if responseFilterType == nil || *responseFilterType != models.FilterTypeJQ {
 		return nil, nil, nil
@@ -76,7 +76,7 @@ type capturedResponseBodySpeakeasy struct {
 	statusCodes  []string
 }
 
-func captureResponseBodySpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache map[string]*oas3.JSONSchema[oas3.Referenceable], op *openapi.Operation) (*capturedResponseBodySpeakeasy, error) {
+func captureResponseBodySpeakeasy(ctx context.Context, logger *slog.Logger, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, op *openapi.Operation) (*capturedResponseBodySpeakeasy, error) {
 	if op.Responses == nil || (op.Responses.Default == nil && op.Responses.Len() == 0) {
 		return nil, nil
 	}
