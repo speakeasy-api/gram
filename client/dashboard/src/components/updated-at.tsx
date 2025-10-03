@@ -14,12 +14,12 @@ export function UpdatedAt({
 }) {
   return (
     <Type
+      as="span"
       variant="body"
       muted
-      className={cn("text-sm", italic && "italic", className)}
+      className={cn("text-sm inline", italic && "italic", className)}
     >
-      {"Updated "}
-      <HumanizeDateTime date={date} includeTime={false} />
+      Updated <HumanizeDateTime date={date} includeTime={false} />
     </Type>
   );
 }
