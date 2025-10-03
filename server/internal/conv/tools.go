@@ -22,7 +22,6 @@ func ToBaseTool(tool *types.Tool) *types.BaseToolAttributes {
 
 	if tool.HTTPToolDefinition != nil {
 		return &types.BaseToolAttributes{
-			Type: tool.HTTPToolDefinition.Type,
 			ID: tool.HTTPToolDefinition.ID,
 			ToolUrn: tool.HTTPToolDefinition.ToolUrn,
 			ProjectID: tool.HTTPToolDefinition.ProjectID,
@@ -43,7 +42,6 @@ func ToBaseTool(tool *types.Tool) *types.BaseToolAttributes {
 	}	
 	if tool.PromptTemplate != nil {
 		return &types.BaseToolAttributes{
-			Type: tool.PromptTemplate.Type,
 			ID: tool.PromptTemplate.ID,
 			ToolUrn: tool.PromptTemplate.ToolUrn,
 			ProjectID: tool.PromptTemplate.ProjectID,
