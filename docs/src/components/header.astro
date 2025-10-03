@@ -1,0 +1,94 @@
+---
+import config from "virtual:starlight/user-config";
+
+import LanguageSelect from "@astrojs/starlight/components/LanguageSelect.astro";
+import Search from "@astrojs/starlight/components/Search.astro";
+import SocialIcons from "@astrojs/starlight/components/SocialIcons.astro";
+import ThemeSelect from "@astrojs/starlight/components/ThemeSelect.astro";
+import { LinkButton } from "@astrojs/starlight/components";
+import gramLogo from "../assets/gram-logo.png";
+
+/**
+ * Render the `Search` component if Pagefind is enabled or the default search component has been overridden.
+ */
+const shouldRenderSearch =
+  config.pagefind ||
+  config.components.Search !== "@astrojs/starlight/components/Search.astro";
+const { siteTitleHref } = Astro.locals.starlightRoute;
+
+// Check if we're on a docs page (not the home page)
+const isDocsPage = Astro.url.pathname !== '/' && Astro.url.pathname !== '';
+
+// Check which section is currently active
+const pathname = Astro.url.pathname;
+const isGuidesSection = pathname.startsWith('/guides') || 
+                       pathname.startsWith('/clients') || 
+                       pathname.startsWith('/api-clients');
+const isDocumentationSection = isDocsPage && !isGuidesSection;
+---
+
+<div
+  class="flex h-full items-center justify-between gap-4 text-xl md:grid md:grid-cols-[1fr_1fr_1fr] md:content-center"
+>
+  <div class="flex items-center gap-6">
+    <a
+      href={siteTitleHref}
+      class="flex items-center no-underline"
+    >
+      <img
+        src={gramLogo.src}
+        alt="Gram"
+        height="26"
+        class="transition-all duration-200 ease-in-out dark:invert mt-1"
+      />
+    </a>
+    {isDocsPage && (
+      <nav class="hidden md:flex items-center gap-6">
+        <a
+          href="/introduction"
+          class={`px-3 py-2 text-sm transition-all duration-200 no-underline border-b-2 rounded-t-md hover:bg-neutral-50 hover:bg-opacity-60 dark:hover:bg-neutral-800 dark:hover:bg-opacity-60 cursor-pointer ${
+            isDocumentationSection 
+              ? 'font-bold text-neutral-900 dark:text-neutral-100 border-blue-500' 
+              : 'font-medium text-neutral-600 dark:text-neutral-400 border-transparent hover:text-neutral-900 dark:hover:text-neutral-100 hover:border-neutral-300 dark:hover:border-neutral-600'
+          }`}
+        >
+          Documentation
+        </a>
+        <a
+          href="/guides"
+          class={`px-3 py-2 text-sm transition-all duration-200 no-underline border-b-2 rounded-t-md hover:bg-neutral-50 hover:bg-opacity-60 dark:hover:bg-neutral-800 dark:hover:bg-opacity-60 cursor-pointer ${
+            isGuidesSection
+              ? 'font-bold text-neutral-900 dark:text-neutral-100 border-blue-500'
+              : 'font-medium text-neutral-600 dark:text-neutral-400 border-transparent hover:text-neutral-900 dark:hover:text-neutral-100 hover:border-neutral-300 dark:hover:border-neutral-600'
+          }`}
+        >
+          Guides
+        </a>
+      </nav>
+    )}
+  </div>
+  <div class="flex print:hidden">
+    {shouldRenderSearch && <Search />}
+  </div>
+  <div
+    class="hidden items-center gap-4 md:flex md:justify-self-end print:hidden"
+  >
+    <div
+      class="after:height-[2rem] flex gap-4 after:border-e after:border-e-neutral-300 after:content-[''] after:dark:border-e-neutral-700"
+    >
+      <LinkButton
+        class="p-0"
+        href="https://app.getgram.ai"
+        variant="minimal"
+        icon="external">Go to app</LinkButton
+      >
+    </div>
+    <div
+      class="after:height-[2rem] flex gap-4 after:border-e after:border-e-neutral-300 after:content-[''] after:dark:border-e-neutral-700"
+    >
+      <SocialIcons />
+    </div>
+    <ThemeSelect />
+    <LanguageSelect />
+  </div>
+</div>

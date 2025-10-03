@@ -1,0 +1,210 @@
+@layer base, starlight, theme, components, utilities;
+
+@import "@astrojs/starlight-tailwind";
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@theme {
+  --font-serif: "Tobias", ui-serif, serif;
+  --font-sans: "Diatype", ui-serif, sans-serif;
+  --font-mono: "Diatype Mono", ui-monospace, monospace;
+
+  --breakpoint-md: 50rem;
+
+  --color-content: var(--text-foreground);
+
+  --color-neutral-50: #f0f0f0;
+  --color-neutral-100: #fafafa;
+  --color-neutral-200: #ebebeb;
+  --color-neutral-300: #dcdcdc;
+  --color-neutral-400: #bcbcbc;
+  --color-neutral-500: #979797;
+  --color-neutral-600: #6b6b6b;
+  --color-neutral-700: #383838;
+  --color-neutral-800: #232323;
+  --color-neutral-900: #111111;
+  --color-neutral-950: #010101;
+
+  --color-blue-50: #9bc3ff;
+  --color-blue-100: #9bc3ff;
+  --color-blue-200: #7eaff5;
+  --color-blue-300: #629beb;
+  --color-blue-400: #4587e1;
+  --color-blue-500: #2873d7;
+  --color-blue-600: #1e5bb0;
+  --color-blue-700: #144489;
+  --color-blue-800: #0a2c63;
+  --color-blue-900: #00143c;
+  --color-blue-950: #00143c;
+
+  --color-info-100: #e3f0ff;
+  --color-info-200: #b9d8ff;
+  --color-info-300: #8abdff;
+  --color-info-400: #5ea0f6;
+  --color-info-500: #2873d7;
+  --color-info-600: #1f5cb0;
+  --color-info-700: #17468a;
+  --color-info-800: #103165;
+  --color-info-900: #0a1e40;
+}
+
+@theme inline {
+  /* --color-accent-* — used for links and current item highlighting */
+  --color-accent-50: var(--color-neutral-50);
+  --color-accent-100: var(--color-neutral-100);
+  --color-accent-200: var(--color-neutral-200);
+  --color-accent-300: var(--color-neutral-300);
+  --color-accent-400: var(--color-neutral-400);
+  --color-accent-500: var(--color-neutral-500);
+  --color-accent-600: var(--color-neutral-600);
+  --color-accent-700: var(--color-neutral-700);
+  --color-accent-800: var(--color-neutral-800);
+  --color-accent-900: var(--color-neutral-900);
+  --color-accent-950: var(--color-neutral-950);
+
+  /* --color-gray-* — used for background colors and borders */
+  --color-gray-50: var(--color-zinc-50);
+  --color-gray-100: var(--color-zinc-100);
+  --color-gray-200: var(--color-zinc-200);
+  --color-gray-300: var(--color-zinc-300);
+  --color-gray-400: var(--color-zinc-400);
+  --color-gray-500: var(--color-zinc-500);
+  --color-gray-600: var(--color-zinc-600);
+  --color-gray-700: var(--color-zinc-700);
+  --color-gray-800: var(--color-zinc-800);
+  --color-gray-900: var(--color-zinc-900);
+  --color-gray-950: var(--color-zinc-950);
+}
+
+@layer theme {
+  :root {
+    --sl-color-bg-sidebar: var(--color-neutral-100);
+    --sl-color-hairline-shade: var(--color-neutral-300);
+  }
+  :root:where([data-theme='dark'], [data-theme='dark'] *) {
+    --sl-color-bg-sidebar: var(--color-neutral-900);
+    --sl-color-hairline-shade: var(--color-neutral-700);
+  }
+
+  body {
+    @apply bg-neutral-100 dark:bg-neutral-900;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-light;
+  }
+
+  header.header {
+    @apply border-neutral-300 bg-white dark:border-neutral-700 dark:bg-black;
+
+    &::before {
+      content: "";
+      display: block;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 4px;
+      background: linear-gradient(
+        90deg,
+        #320f1e 0%,
+        #c83228 12.56%,
+        #fb873f 25.06%,
+        #d2dc91 37.56%,
+        #5a8250 50.06%,
+        #002314 62.06%,
+        #00143c 74.06%,
+        #2873d7 86.06%,
+        #9bc3ff 97.06%
+      );
+    }
+  }
+
+  site-search {
+    & > button {
+      border-color: var(--color-neutral-300);
+
+      &:hover {
+        border-color: var(--color-neutral-400);
+      }
+    }
+
+    &:where([data-theme='dark'], [data-theme='dark'] *) {
+      & > button {
+        border-color: var(--color-neutral-700);
+  
+        &:hover {
+          border-color: var(--color-neutral-600);
+        }
+      }
+    }
+  }
+
+  .sidebar { /* global sidebar styles */
+    details {
+      & > summary > .group-label > .large {
+        @apply font-mono font-normal text-sm text-neutral-500 dark:text-neutral-400 uppercase;
+      }
+  
+      & > summary > .caret {
+        @apply text-neutral-500 dark:text-neutral-400;
+      }
+  
+      & > ul > li {
+        @apply border-0;
+      }
+  
+      & > ul > li > a {
+        @apply text-base;
+      }
+  
+      & > ul > li > [aria-current=page] {
+        @apply bg-[unset] text-[unset];
+      }
+    }
+  }
+
+  .starlight-aside--tip {
+    --sl-color-asides-text-accent: var(--color-info-500);
+    --sl-color-asides-border: var(--color-info-400);
+    background-color: var(--color-info-100);
+  }
+
+  &:where([data-theme='dark'], [data-theme='dark'] *) {
+    .starlight-aside--tip {
+      --sl-color-asides-text-accent: var(--color-info-100);
+      --sl-color-asides-border: var(--color-info-400);
+      background-color: var(--color-info-500);
+    }
+  }
+
+  /* Hide the topic switcher on desktop since we have header navigation, but show on mobile */
+  @media (min-width: 50rem) {
+    .starlight-sidebar-topics {
+      display: none;
+    }
+  }
+}
+
+@layer utilities {
+  :root {
+    --text-foreground: var(--color-neutral-700);
+  }
+
+  :root:where([data-theme='light'], [data-theme='light'] *) {
+    --text-foreground: var(--color-neutral-700);
+    --sl-color-text: var(--text-foreground);
+    --sl-color-white: var(--text-foreground);
+  }
+
+  :root:where([data-theme='dark'], [data-theme='dark'] *) {
+    --text-foreground: var(--color-neutral-300);
+    --sl-color-text: var(--text-foreground);
+    --sl-color-white: var(--text-foreground);
+}
+}

@@ -1,0 +1,4 @@
+Contact: mailto:security@speakeasy.com
+Expires: 2027-01-01T00:00:00.000Z
+Preferred-Languages: en
+Policy: https://www.speakeasy.com/legal/security-policy
