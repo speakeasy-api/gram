@@ -2,7 +2,7 @@ package:
   name: gram-runner
   version: 0.0.0
   epoch: 0
-  description: "Gram Functions runner"
+  description: 'Gram Functions runner'
   url: https://github.com/speakeasy-api/gram
   copyright:
     - attestation: Copyright 2025 Speakeasy Development, Inc.
