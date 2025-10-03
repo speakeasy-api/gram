@@ -12,6 +12,9 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/propagation"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 )
@@ -279,7 +282,13 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// Make the token request
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: otelhttp.NewTransport(
+			http.DefaultTransport,
+			otelhttp.WithPropagators(propagation.TraceContext{}),
+		),
+	}
 	resp, err := client.Do(tokenReq)
 	if err != nil {
 		return fmt.Errorf("failed to make client credentials token request: %w", err)
@@ -300,7 +309,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 				logger.ErrorContext(ctx, "failed to close original response body", attr.SlogError(closeErr))
 			}
 
-			retryResp, retryErr := retryTokenRequestWithBasicAuth(ctx, tokenURL, clientID, clientSecret, requestedScopes)
+			retryResp, retryErr := retryTokenRequestWithBasicAuth(ctx, client, tokenURL, clientID, clientSecret, requestedScopes)
 			if retryErr != nil {
 				return fmt.Errorf("failed to make client credentials token request: %w", retryErr)
 			}
@@ -377,7 +386,7 @@ func parseClientCredentialsTokenResponse(body []byte) (string, int, error) {
 	return accessToken, expiresIn, nil
 }
 
-func retryTokenRequestWithBasicAuth(ctx context.Context, tokenURL, clientID, clientSecret string, requestedScopes []string) (*http.Response, error) {
+func retryTokenRequestWithBasicAuth(ctx context.Context, client *http.Client, tokenURL, clientID, clientSecret string, requestedScopes []string) (*http.Response, error) {
 	values := url.Values{}
 	values.Set("grant_type", "client_credentials")
 	if len(requestedScopes) > 0 {
@@ -394,7 +403,6 @@ func retryTokenRequestWithBasicAuth(ctx context.Context, tokenURL, clientID, cli
 	retryReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	retryReq.SetBasicAuth(clientID, clientSecret)
 
-	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(retryReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make retry token request: %w", err)

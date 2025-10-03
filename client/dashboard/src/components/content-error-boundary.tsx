@@ -37,9 +37,7 @@ function ContentErrorFallback({ error }: ContentErrorFallbackProps) {
         </div>
       </Card.Content>
       <Card.Footer className="justify-start">
-        <Button variant="secondary"
-          onClick={() => window.location.reload()}
-        >
+        <Button variant="secondary" onClick={() => window.location.reload()}>
           <Button.LeftIcon>
             <Icon name="rotate-ccw" className="h-4 w-4" />
           </Button.LeftIcon>
@@ -72,7 +70,7 @@ export function ContentErrorBoundary({
         console.error(
           "Content Error Boundary caught an error:",
           error,
-          errorInfo
+          errorInfo,
         );
       }}
     >

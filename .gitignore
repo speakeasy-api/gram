@@ -13,10 +13,12 @@ junit-report.xml
 /server/goa*
 /server/gram
 scratch/
+/local/cache
 /local/ssl
 /local/keys
 .speakeasy/temp
 mprocs.log
+melange.log
 __debug_bin*
 go.work
 go.work.sum

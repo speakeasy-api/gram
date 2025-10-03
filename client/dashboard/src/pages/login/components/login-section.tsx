@@ -133,7 +133,9 @@ export function LoginSection() {
       )}
 
       <div className="relative z-10">
-        <Button variant="brand" onClick={handleLogin}>Login</Button>
+        <Button variant="brand" onClick={handleLogin}>
+          Login
+        </Button>
       </div>
     </AuthLayout>
   );
@@ -157,7 +159,7 @@ export function RegisterSection() {
       }
 
       const org = info.value.result.organizations.find(
-        (org) => org.id === info.value.result.activeOrganizationId
+        (org) => org.id === info.value.result.activeOrganizationId,
       );
       if (!org) {
         throw new Error("Organization not found");
@@ -186,7 +188,7 @@ export function RegisterSection() {
       const validOrgNameRegex = /^[a-zA-Z0-9\s-_]+$/;
       if (!validOrgNameRegex.test(value)) {
         setValidationError(
-          "Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed."
+          "Company name contains invalid characters. Only letters, numbers, spaces, hyphens, and underscores are allowed.",
         );
       }
     }

@@ -84,9 +84,7 @@ export default function Environments() {
             authentication for you
           </Page.Section.Description>
           <Page.Section.CTA>
-            <Button
-              onClick={() => setCreateEnvironmentDialogOpen(true)}
-            >
+            <Button onClick={() => setCreateEnvironmentDialogOpen(true)}>
               <Button.LeftIcon>
                 <Plus className="w-4 h-4" />
               </Button.LeftIcon>
@@ -127,7 +125,10 @@ function EnvironmentCard({ environment }: { environment: Environment }) {
   const routes = useRoutes();
 
   return (
-    <routes.environments.environment.Link params={[environment.slug]} className="hover:no-underline">
+    <routes.environments.environment.Link
+      params={[environment.slug]}
+      className="hover:no-underline"
+    >
       <Card>
         <Card.Header>
           <Card.Title>{environment.name}</Card.Title>

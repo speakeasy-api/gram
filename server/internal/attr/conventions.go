@@ -124,6 +124,7 @@ const (
 	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
 	ToolHTTPResponseContentTypeKey = attribute.Key("gram.tool.http.response.content_type")
 	ToolIDKey                      = attribute.Key("gram.tool.id")
+	ToolURNKey                     = attribute.Key("gram.tool.urn")
 	ToolNameKey                    = attribute.Key("gram.tool.name")
 	ToolsetIDKey                   = attribute.Key("gram.toolset.id")
 	ToolsetSlugKey                 = attribute.Key("gram.toolset.slug")
@@ -483,6 +484,9 @@ func SlogToolCallSource(v string) slog.Attr      { return slog.String(string(Too
 
 func ToolID(v string) attribute.KeyValue { return ToolIDKey.String(v) }
 func SlogToolID(v string) slog.Attr      { return slog.String(string(ToolIDKey), v) }
+
+func ToolURN(v string) attribute.KeyValue { return ToolURNKey.String(v) }
+func SlogToolURN(v string) slog.Attr      { return slog.String(string(ToolURNKey), v) }
 
 func ToolName(v string) attribute.KeyValue { return ToolNameKey.String(v) }
 func SlogToolName(v string) slog.Attr      { return slog.String(string(ToolNameKey), v) }

@@ -104,10 +104,10 @@ function OpenapiGraphic() {
                         tool.color === "blue"
                           ? "bg-brand-blue-500"
                           : tool.color === "green"
-                          ? "bg-brand-green-500"
-                          : tool.color === "red"
-                          ? "bg-brand-red-500"
-                          : ""
+                            ? "bg-brand-green-500"
+                            : tool.color === "red"
+                              ? "bg-brand-red-500"
+                              : ""
                       }`}
                     />
                     <div className="flex-1">

@@ -2,9 +2,11 @@ package openapi
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -76,8 +78,8 @@ func TestDoProcess_Equal(t *testing.T) {
 	assert.Equal(t, libOpenAPIResult.DocumentUpgrade, speakeasyResult.DocumentUpgrade)
 	assert.Equal(t, libOpenAPIResult.DocumentVersion, speakeasyResult.DocumentVersion)
 
-	assertRecordedCalls(t, libopenapiMockedDBTX.recordedExec, speakeasyMockedDBTX.recordedExec, "recordedExec should match")
-	assertRecordedCalls(t, libopenapiMockedDBTX.recordedQueryRows, speakeasyMockedDBTX.recordedQueryRows, "recordedQueryRows should match")
+	assertRecordedCallsUnordered(t, libopenapiMockedDBTX.recordedExec, speakeasyMockedDBTX.recordedExec, "recordedExec should match")
+	assertRecordedCallsUnordered(t, libopenapiMockedDBTX.recordedQueryRows, speakeasyMockedDBTX.recordedQueryRows, "recordedQueryRows should match")
 }
 
 // compareJSONWithResponseSchema compares JSON strings that may contain <ResponseSchema> tags
@@ -144,17 +146,55 @@ func compareJSONWithResponseSchema(t *testing.T, expectedJSON, actualJSON string
 	return assert.JSONEq(t, expectedWithoutSchemas, actualWithoutSchemas, msgAndArgs...)
 }
 
-// assertRecordedCalls compares two recorded call slices (recordedExec or recordedQueryRows)
-// and uses JSONEq for []byte fields to properly compare JSON content, recursively handling nested structures
-func assertRecordedCalls(t *testing.T, expected, actual [][]any, msgAndArgs ...interface{}) bool {
+// callSortKey generates a sort key from a recorded call's arguments.
+// It concatenates string representations of the arguments to create a stable sort key.
+func callSortKey(call []any) string {
+	var key string
+	for _, arg := range call {
+		switch v := arg.(type) {
+		case string:
+			key += v
+		case fmt.Stringer:
+			key += v.String()
+		case []byte:
+			key += string(v)
+		default:
+			key += fmt.Sprintf("%v", v)
+		}
+		key += "|"
+	}
+	return key
+}
+
+// assertRecordedCallsUnordered compares two recorded call slices (recordedExec
+// or recordedQueryRows) and uses JSONEq for []byte fields to properly compare
+// JSON content, recursively handling nested structures. Calls are sorted before
+// comparison to handle parallel execution order variations.
+func assertRecordedCallsUnordered(
+	t *testing.T,
+	expected,
+	actual [][]any, msgAndArgs ...any,
+) bool {
 	t.Helper()
 
 	if !assert.Len(t, actual, len(expected), msgAndArgs...) {
 		return false
 	}
 
-	for i, expectedCall := range expected {
-		actualCall := actual[i]
+	// Sort both slices by their sort keys to handle parallel execution
+	expectedSorted := slices.Clone(expected)
+	actualSorted := slices.Clone(actual)
+
+	slices.SortFunc(expectedSorted, func(a, b []any) int {
+		return cmpString(callSortKey(a), callSortKey(b))
+	})
+
+	slices.SortFunc(actualSorted, func(a, b []any) int {
+		return cmpString(callSortKey(a), callSortKey(b))
+	})
+
+	for i, expectedCall := range expectedSorted {
+		actualCall := actualSorted[i]
 		if !assert.Len(t, actualCall, len(expectedCall), "call %d has different number of arguments", i) {
 			return false
 		}
@@ -169,6 +209,17 @@ func assertRecordedCalls(t *testing.T, expected, actual [][]any, msgAndArgs ...i
 	}
 
 	return true
+}
+
+// cmpString compares two strings for sorting.
+func cmpString(a, b string) int {
+	if a < b {
+		return -1
+	}
+	if a > b {
+		return 1
+	}
+	return 0
 }
 
 // compareRecursively compares two values recursively, handling []byte fields with JSON comparison

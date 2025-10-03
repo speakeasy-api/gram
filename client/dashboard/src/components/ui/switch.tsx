@@ -30,13 +30,13 @@ export function Switch({
       className={cn(
         "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
         checked ? "bg-primary" : "bg-input",
-        className
+        className,
       )}
     >
       <span
         className={cn(
           "pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform",
-          checked ? "translate-x-4" : "translate-x-0.5"
+          checked ? "translate-x-4" : "translate-x-0.5",
         )}
       />
     </button>

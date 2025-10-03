@@ -38,7 +38,7 @@ const MiniCardComponent = ({
       className={cn(
         "bg-card max-w-sm max-h-fit text-card-foreground flex justify-between items-center rounded-md border px-3 py-4 group/card",
         size === "sm" && "gap-4 py-4",
-        className
+        className,
       )}
       {...props}
     >

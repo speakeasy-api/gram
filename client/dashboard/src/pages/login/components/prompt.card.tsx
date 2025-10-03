@@ -1,15 +1,21 @@
-"use client"
+"use client";
 
-import type { HTMLAttributes } from "react"
-import { cn } from "@/lib/utils"
+import type { HTMLAttributes } from "react";
+import { cn } from "@/lib/utils";
 
 interface PromptCardProps extends HTMLAttributes<HTMLDivElement> {
-  service: string
-  prompt: string
-  borderColor?: string
+  service: string;
+  prompt: string;
+  borderColor?: string;
 }
 
-export function PromptCard({ service, prompt, borderColor = "#D1D1D1", className, ...props }: PromptCardProps) {
+export function PromptCard({
+  service,
+  prompt,
+  borderColor = "#D1D1D1",
+  className,
+  ...props
+}: PromptCardProps) {
   return (
     <div
       className={cn(
@@ -26,5 +32,5 @@ export function PromptCard({ service, prompt, borderColor = "#D1D1D1", className
         <span className="text-gray-700 truncate">{prompt}</span>
       </div>
     </div>
-  )
+  );
 }

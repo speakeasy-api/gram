@@ -11,6 +11,7 @@ import (
 
 	agen "github.com/speakeasy-api/gram/server/gen/assets"
 	dgen "github.com/speakeasy-api/gram/server/gen/deployments"
+	tgen "github.com/speakeasy-api/gram/server/gen/templates"
 	gen "github.com/speakeasy-api/gram/server/gen/tools"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
@@ -58,6 +59,35 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 	})
 	require.NoError(t, err, "create deployment")
 
+	// Create prompt templates
+	template1, err := ti.templates.CreateTemplate(ctx, &tgen.CreateTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             types.Slug("test-template-1"),
+		Prompt:           "Hello {{name}}!",
+		Description:      conv.Ptr("A test greeting template"),
+		Engine:           "mustache",
+		Kind:             "prompt",
+		ToolsHint:        []string{"assistant"},
+		Arguments:        conv.Ptr(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`),
+	})
+	require.NoError(t, err, "create first template")
+
+	template2, err := ti.templates.CreateTemplate(ctx, &tgen.CreateTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             types.Slug("test-template-2"),
+		Prompt:           "Summarize: {{text}}",
+		Description:      conv.Ptr("A summarization template"),
+		Engine:           "mustache",
+		Kind:             "prompt",
+		ToolsHint:        nil,
+		Arguments:        conv.Ptr(`{"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}`),
+	})
+	require.NoError(t, err, "create second template")
+
 	// Test ListTools
 	result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
 		Cursor:           nil,
@@ -69,11 +99,13 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 	require.NoError(t, err, "list tools")
 
 	// Verify response structure
-	require.NotNil(t, result.Tools, "tools should not be nil")
-	require.GreaterOrEqual(t, len(result.Tools), 1, "should have at least one tool")
+	require.NotNil(t, result.HTTPTools, "http tools should not be nil")
+	require.NotNil(t, result.PromptTemplates, "prompt templates should not be nil")
+	require.GreaterOrEqual(t, len(result.HTTPTools), 1, "should have at least one http tool")
+	require.Len(t, result.PromptTemplates, 2, "should have exactly 2 prompt templates")
 
-	// Verify tool structure
-	tool := result.Tools[0]
+	// Verify HTTP tool structure
+	tool := result.HTTPTools[0]
 	require.NotEmpty(t, tool.ID, "tool ID should not be empty")
 	require.Equal(t, deployment.Deployment.ID, tool.DeploymentID, "deployment ID should match")
 	require.NotEmpty(t, tool.Name, "tool name should not be empty")
@@ -81,6 +113,20 @@ func TestToolsService_ListTools_Success(t *testing.T) {
 	require.NotEmpty(t, tool.Path, "path should not be empty")
 	require.NotEmpty(t, tool.CreatedAt, "created at should not be empty")
 	require.NotEmpty(t, tool.UpdatedAt, "updated at should not be empty")
+
+	// Verify prompt template structure
+	templateIDs := map[string]bool{
+		template1.Template.ID: true,
+		template2.Template.ID: true,
+	}
+	for _, tpl := range result.PromptTemplates {
+		require.NotEmpty(t, tpl.ID, "template ID should not be empty")
+		require.True(t, templateIDs[tpl.ID], "template ID should match one of the created templates")
+		require.NotEmpty(t, tpl.Name, "template name should not be empty")
+		require.NotEmpty(t, tpl.Prompt, "template prompt should not be empty")
+		require.NotEmpty(t, tpl.CreatedAt, "template created at should not be empty")
+		require.NotEmpty(t, tpl.UpdatedAt, "template updated at should not be empty")
+	}
 }
 
 func TestToolsService_ListTools_EmptyList(t *testing.T) {
@@ -98,8 +144,10 @@ func TestToolsService_ListTools_EmptyList(t *testing.T) {
 		Limit:            nil,
 	})
 	require.NoError(t, err, "should not error when no tools exist")
-	require.NotNil(t, result.Tools, "tools should not be nil")
-	require.Empty(t, result.Tools, "tools should be empty when no tools exist")
+	require.NotNil(t, result.HTTPTools, "http tools should not be nil")
+	require.NotNil(t, result.PromptTemplates, "prompt templates should not be nil")
+	require.Empty(t, result.HTTPTools, "http tools should be empty when no tools exist")
+	require.Empty(t, result.PromptTemplates, "prompt templates should be empty when no templates exist")
 	require.Nil(t, result.NextCursor, "next cursor should be nil for empty results")
 }
 
@@ -168,8 +216,8 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 		Limit:            limit,
 	})
 	require.NoError(t, err, "get first page of tools")
-	require.NotNil(t, firstPage.Tools, "first page tools should not be nil")
-	require.Len(t, firstPage.Tools, int(*limit), "should have at least %d tools", *limit)
+	require.NotNil(t, firstPage.HTTPTools, "first page http tools should not be nil")
+	require.Len(t, firstPage.HTTPTools, int(*limit), "should have at least %d http tools", *limit)
 	require.NotNil(t, firstPage.NextCursor, "should have a next cursor with this many tools")
 
 	// Test pagination with the cursor
@@ -181,15 +229,15 @@ func TestToolsService_ListTools_WithCursor(t *testing.T) {
 		Limit:            limit,
 	})
 	require.NoError(t, err, "get second page of tools")
-	require.NotNil(t, secondPage.Tools, "second page tools should not be nil")
+	require.NotNil(t, secondPage.HTTPTools, "second page http tools should not be nil")
 
 	// Verify the pages contain different tools
 	firstPageIDs := make(map[string]bool)
-	for _, tool := range firstPage.Tools {
+	for _, tool := range firstPage.HTTPTools {
 		firstPageIDs[tool.ID] = true
 	}
 
-	for _, tool := range secondPage.Tools {
+	for _, tool := range secondPage.HTTPTools {
 		require.False(t, firstPageIDs[tool.ID], "second page should not contain tools from first page")
 	}
 }
@@ -275,12 +323,12 @@ func TestToolsService_ListTools_WithDeploymentID(t *testing.T) {
 		Limit:            nil,
 	})
 	require.NoError(t, err, "list tools for first deployment")
-	require.NotNil(t, result1.Tools, "tools should not be nil")
-	require.GreaterOrEqual(t, len(result1.Tools), 1, "should have at least one tool")
+	require.NotNil(t, result1.HTTPTools, "http tools should not be nil")
+	require.GreaterOrEqual(t, len(result1.HTTPTools), 1, "should have at least one http tool")
 
 	// Verify all tools belong to the first deployment
-	for _, tool := range result1.Tools {
-		require.Equal(t, deployment1.Deployment.ID, tool.DeploymentID, "all tools should belong to first deployment")
+	for _, tool := range result1.HTTPTools {
+		require.Equal(t, deployment1.Deployment.ID, tool.DeploymentID, "all http tools should belong to first deployment")
 	}
 
 	// Test ListTools filtered by second deployment
@@ -292,12 +340,12 @@ func TestToolsService_ListTools_WithDeploymentID(t *testing.T) {
 		Limit:            nil,
 	})
 	require.NoError(t, err, "list tools for second deployment")
-	require.NotNil(t, result2.Tools, "tools should not be nil")
-	require.GreaterOrEqual(t, len(result2.Tools), 1, "should have at least one tool")
+	require.NotNil(t, result2.HTTPTools, "http tools should not be nil")
+	require.GreaterOrEqual(t, len(result2.HTTPTools), 1, "should have at least one http tool")
 
 	// Verify all tools belong to the second deployment
-	for _, tool := range result2.Tools {
-		require.Equal(t, deployment2.Deployment.ID, tool.DeploymentID, "all tools should belong to second deployment")
+	for _, tool := range result2.HTTPTools {
+		require.Equal(t, deployment2.Deployment.ID, tool.DeploymentID, "all http tools should belong to second deployment")
 	}
 }
 
@@ -409,7 +457,8 @@ func TestToolsService_ListTools_ValidCursor(t *testing.T) {
 		Limit:            nil,
 	})
 	require.NoError(t, err, "should not error with valid cursor format")
-	require.NotNil(t, result.Tools, "tools should not be nil")
+	require.NotNil(t, result.HTTPTools, "http tools should not be nil")
+	require.NotNil(t, result.PromptTemplates, "prompt templates should not be nil")
 }
 
 func TestToolsService_ListTools_VerifyToolFields(t *testing.T) {
@@ -461,11 +510,12 @@ func TestToolsService_ListTools_VerifyToolFields(t *testing.T) {
 		Limit:            nil,
 	})
 	require.NoError(t, err, "list tools")
-	require.NotNil(t, result.Tools, "tools should not be nil")
-	require.GreaterOrEqual(t, len(result.Tools), 1, "should have at least one tool")
+	require.NotNil(t, result.HTTPTools, "http tools should not be nil")
+	require.NotNil(t, result.PromptTemplates, "prompt templates should not be nil")
+	require.GreaterOrEqual(t, len(result.HTTPTools), 1, "should have at least one http tool")
 
 	// Verify detailed tool structure
-	for _, tool := range result.Tools {
+	for _, tool := range result.HTTPTools {
 		require.NotEmpty(t, tool.ID, "tool ID should not be empty")
 		require.Equal(t, deployment.Deployment.ID, tool.DeploymentID, "deployment ID should match")
 		require.NotEmpty(t, tool.ProjectID, "project ID should not be empty")
@@ -600,11 +650,12 @@ func TestToolsService_ListTools_MultipleDeployments(t *testing.T) {
 		Limit:            nil,
 	})
 	require.NoError(t, err, "list all tools")
-	require.NotNil(t, result.Tools, "tools should not be nil")
-	require.GreaterOrEqual(t, len(result.Tools), 3, "should have at least 3 tools")
+	require.NotNil(t, result.HTTPTools, "http tools should not be nil")
+	require.NotNil(t, result.PromptTemplates, "prompt templates should not be nil")
+	require.GreaterOrEqual(t, len(result.HTTPTools), 3, "should have at least 3 http tools")
 
 	// Verify only tools from last deployment are returned
-	for _, tool := range result.Tools {
-		require.Equal(t, tool.DeploymentID, deployments[2].Deployment.ID, "all tools should belong to the last deployment")
+	for _, tool := range result.HTTPTools {
+		require.Equal(t, tool.DeploymentID, deployments[2].Deployment.ID, "all http tools should belong to the last deployment")
 	}
 }

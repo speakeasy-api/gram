@@ -19,6 +19,7 @@ import { useRoutes } from "@/routes";
 import {
   HTTPToolDefinition,
   PromptTemplate,
+  PromptTemplateKind,
 } from "@gram/client/models/components";
 import { useToolset, useUpdateToolsetMutation } from "@gram/client/react-query";
 import { useListTools } from "@gram/client/react-query/listTools.js";
@@ -27,7 +28,6 @@ import { AlertTriangleIcon, Check, CheckCircleIcon, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { onboardingStepStorageKeys } from "../home/Home";
-import { useCustomTools } from "../toolBuilder/CustomTools";
 import { MustacheHighlight } from "../toolBuilder/ToolBuilder";
 import { ToolsetHeader } from "./ToolsetHeader";
 
@@ -186,13 +186,21 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
   const { data: toolset, refetch } = useToolset(
     { slug: toolsetSlug },
     undefined,
-    { enabled: !!toolsetSlug }
+    { enabled: !!toolsetSlug },
   );
-  const { data: tools, isLoading: isLoadingTools } = useListTools();
-  const { customTools } = useCustomTools();
+  const {
+    data: { httpTools: tools, promptTemplates } = {
+      httpTools: [],
+      promptTemplates: [],
+    },
+    isLoading: isLoadingTools,
+  } = useListTools();
+  const customTools = promptTemplates.filter(
+    (t: PromptTemplate) => t.kind === PromptTemplateKind.HigherOrderTool,
+  );
 
-  const [selectedTools, setSelectedTools] = useState<string[]>([]);
-  const selectedToolsRef = useRef<string[]>([]);
+  const [selectedToolUrns, setSelectedToolUrns] = useState<string[]>([]);
+  const selectedToolUrnsRef = useRef<string[]>([]);
   const [search, setSearch] = useState("");
   const [tagFilters, setTagFilters] = useState<string[]>([]);
 
@@ -210,59 +218,68 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
   }, []);
 
   useEffect(() => {
-    const tools = toolset?.httpTools.map((t) => t.canonicalName) ?? [];
-    setSelectedTools(tools);
-    selectedToolsRef.current = tools;
+    if (toolset?.toolUrns) {
+      // Use the tool URNs directly from the toolset
+      setSelectedToolUrns(toolset.toolUrns);
+      selectedToolUrnsRef.current = toolset.toolUrns;
+    }
   }, [toolset]);
 
   const setToolsEnabled = useCallback(
-    (tools: string[], enabled: boolean) => {
-      // Calculate the updated tools first using the ref
-      const excluded = selectedToolsRef.current.filter(
-        (t) => !tools.includes(t)
+    (toolUrns: string[], enabled: boolean) => {
+      // Calculate the updated URNs
+      const excludedUrns = selectedToolUrnsRef.current.filter(
+        (urn) => !toolUrns.includes(urn),
       );
-      const updatedTools = enabled ? [...excluded, ...tools] : excluded;
+      const updatedUrns = enabled
+        ? [...excludedUrns, ...toolUrns]
+        : excludedUrns;
 
       // Update state and ref
-      setSelectedTools(updatedTools);
-      selectedToolsRef.current = updatedTools;
+      setSelectedToolUrns(updatedUrns);
+      selectedToolUrnsRef.current = updatedUrns;
 
-      // Call mutation
+      // Call mutation with tool URNs
       updateToolsetMutation.mutate({
         request: {
           slug: toolsetSlug,
           updateToolsetRequestBody: {
-            httpToolNames: updatedTools,
-            promptTemplateNames:
-              toolset?.promptTemplates.map((t) => t.name) ?? [],
+            toolUrns: updatedUrns,
           },
         },
       });
     },
-    [toolsetSlug, toolset?.promptTemplates, updateToolsetMutation]
+    [toolsetSlug, tools, updateToolsetMutation],
   );
 
-  const toggleTemplateEnabled = (template: string) => {
-    const cur = toolset?.promptTemplates.map((t) => t.name) ?? [];
-    const updated = cur.includes(template)
-      ? cur.filter((t) => t !== template)
-      : [...cur, template];
+  const toggleTemplateEnabled = (templateUrn: string) => {
+    // Check if template is currently enabled
+    const isCurrentlyEnabled =
+      selectedToolUrnsRef.current.includes(templateUrn);
+
+    // Calculate updated URNs
+    const updatedUrns = isCurrentlyEnabled
+      ? selectedToolUrnsRef.current.filter((urn) => urn !== templateUrn)
+      : [...selectedToolUrnsRef.current, templateUrn];
+
+    // Update state and ref
+    setSelectedToolUrns(updatedUrns);
+    selectedToolUrnsRef.current = updatedUrns;
 
     updateToolsetMutation.mutate({
       request: {
         slug: toolsetSlug,
         updateToolsetRequestBody: {
-          httpToolNames: selectedToolsRef.current,
-          promptTemplateNames: updated,
+          toolUrns: updatedUrns,
         },
       },
     });
   };
 
-  const groupedTools = useGroupedHttpTools(tools?.tools ?? []);
+  const groupedTools = useGroupedHttpTools(tools ?? []);
 
   const tagFilterOptions = groupedTools.flatMap((group) =>
-    group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`))
+    group.tools.flatMap((t) => t.tags.map((tag) => `${group.key}/${tag}`)),
   );
   const uniqueTags = [...new Set(tagFilterOptions)];
   const tagFilterItems = uniqueTags.map((tag) => ({
@@ -302,8 +319,8 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
   const toolGroups = useMemo(() => {
     const toggleAll = (tools: ToggleableTool[]) => {
       setToolsEnabled(
-        tools.map((t) => t.canonicalName),
-        tools.some((t) => !t.enabled) // Disable iff all are already enabled
+        tools.map((t) => t.toolUrn),
+        tools.some((t) => !t.enabled), // Disable iff all are already enabled
       );
     };
 
@@ -311,9 +328,9 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
       ...group,
       tools: group.tools.map((tool) => ({
         ...tool,
-        enabled: selectedTools.includes(tool.canonicalName),
+        enabled: selectedToolUrns.includes(tool.toolUrn),
         setEnabled: (enabled: boolean) =>
-          setToolsEnabled([tool.canonicalName], enabled),
+          setToolsEnabled([tool.toolUrn], enabled),
       })),
     }));
 
@@ -339,7 +356,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
     });
 
     return toolGroupsFinal;
-  }, [filteredGroups, selectedTools, setToolsEnabled]);
+  }, [filteredGroups, selectedToolUrns, setToolsEnabled]);
 
   return (
     <Stack gap={4} className="mb-8">
@@ -387,7 +404,7 @@ export function ToolSelector({ toolsetSlug }: { toolsetSlug: string }) {
                 template={template}
                 currentTools={toolset?.httpTools ?? []}
                 currentTemplates={toolset?.promptTemplates ?? []}
-                toggleEnabled={() => toggleTemplateEnabled(template.name)}
+                toggleEnabled={() => toggleTemplateEnabled(template.toolUrn)}
               />
             ))}
           </Cards>
@@ -450,7 +467,7 @@ function CustomToolCard({
     currentTools.some((t2) => t2.name === t);
 
   const templateIsInToolset = currentTemplates.some(
-    (t) => t.name === template.name
+    (t) => t.name === template.name,
   );
 
   const allToolsAvailable = template.toolsHint.every(isToolInToolset);
@@ -467,7 +484,9 @@ function CustomToolCard({
   );
 
   const variedNames = template.toolsHint.map(
-    (t) => tools?.tools.find((t2) => t2.canonicalName === t)?.name ?? t
+    (t) =>
+      tools?.httpTools.find((t2: HTTPToolDefinition) => t2.canonicalName === t)
+        ?.name ?? t,
   );
 
   const badge = allToolsAvailable ? (

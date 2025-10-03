@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { UpdatedAt } from "@/components/updated-at";
-import FileUpload from "@/components/upload";
+import { FullWidthUpload } from "@/components/upload";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
@@ -221,7 +221,7 @@ export default function OpenAPIAssets() {
               </Dialog.Description>
             </Dialog.Header>
             {!file ? (
-              <FileUpload
+              <FullWidthUpload
                 onUpload={handleSpecUpload}
                 allowedExtensions={["yaml", "yml", "json"]}
               />

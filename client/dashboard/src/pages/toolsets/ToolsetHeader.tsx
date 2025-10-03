@@ -2,11 +2,12 @@ import { EditableText } from "@/components/editable-text";
 import { CopyableSlug } from "@/components/name-and-slug";
 import {
   ToolsetPromptsBadge,
-  ToolsetToolsBadge,
+  ToolCollectionBadge,
 } from "@/components/tools-badge";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
+import { userFacingToolNames } from "@/lib/toolNames";
 import { Toolset } from "@gram/client/models/components";
 import { useToolset } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
@@ -22,7 +23,7 @@ export const ToolsetHeader = ({
   const { data: toolset, refetch } = useToolset(
     { slug: toolsetSlug },
     undefined,
-    { enabled: !!toolsetSlug }
+    { enabled: !!toolsetSlug },
   );
 
   const updateToolset = async (changes: Partial<Toolset>) => {
@@ -73,7 +74,12 @@ export const ToolsetHeader = ({
           </Type>
         </EditableText>
         <Stack direction="horizontal" gap={2}>
-          <ToolsetToolsBadge toolset={toolset} size="md" variant="outline" />
+          <ToolCollectionBadge
+            toolNames={toolset ? userFacingToolNames(toolset) : []}
+            size="md"
+            variant="secondary"
+            warnOnTooManyTools
+          />
           <ToolsetPromptsBadge toolset={toolset} size="md" variant="outline" />
         </Stack>
       </div>

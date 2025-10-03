@@ -34,7 +34,7 @@ export default function DeployStep() {
       (doc) => doc.assetId === uploadResult?.asset.id,
     )?.id;
 
-    return toolsList.data.tools.reduce((prev, cur) => {
+    return toolsList.data.httpTools.reduce((prev, cur) => {
       if (cur.openapiv3DocumentId === documentId) return prev + 1;
       return prev;
     }, 0);

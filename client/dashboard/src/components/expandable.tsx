@@ -38,7 +38,7 @@ function ExpandableTrigger({
     <AccordionTrigger
       className={cn(
         "text-base border-1 px-4 py-2 w-full [&[data-state=open]]:rounded-b-none items-center",
-        className
+        className,
       )}
     >
       {children}
@@ -57,7 +57,7 @@ function ExpandableContent({
     <AccordionContent
       className={cn(
         "p-4 bg-background h-48 overflow-y-auto border-1 border-t-0 rounded-b-md",
-        className
+        className,
       )}
     >
       {children}

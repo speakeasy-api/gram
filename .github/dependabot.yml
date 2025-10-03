@@ -15,6 +15,7 @@ updates:
     directories:
       - /server
       - /cli
+      - /functions
     schedule:
       interval: "weekly"
     groups:

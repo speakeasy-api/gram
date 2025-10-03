@@ -18,8 +18,10 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -451,8 +453,11 @@ func reverseProxyRequest(ctx context.Context,
 	}
 
 	client := &http.Client{
-		Timeout:   60 * time.Second,
-		Transport: transport,
+		Timeout: 60 * time.Second,
+		Transport: otelhttp.NewTransport(
+			transport,
+			otelhttp.WithPropagators(propagation.TraceContext{}),
+		),
 	}
 
 	executeRequest := func() (*http.Response, error) {

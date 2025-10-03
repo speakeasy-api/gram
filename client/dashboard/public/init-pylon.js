@@ -15,7 +15,7 @@
     e.setAttribute("async", "true");
     e.setAttribute(
       "src",
-      "https://widget.usepylon.com/widget/f9cade16-8d3c-4826-9a2a-034fad495102"
+      "https://widget.usepylon.com/widget/f9cade16-8d3c-4826-9a2a-034fad495102",
     );
     var n = t.getElementsByTagName("script")[0];
     n.parentNode.insertBefore(e, n);
