@@ -608,7 +608,7 @@ jobs:
           mise run build:functions-image \
             --melange-public-key "$KEY_FILE" \
             --apko-config ./images/${{ matrix.runtime }}-alpine3.22.yaml \
-            --image "apko-${{ matrix.runtime }}:${{ github.event.pull_request.number }}" \
+            --image "apko-${{ matrix.runtime }}:${{ github.sha }}" \
             --tarball-name ${{ matrix.runtime }} \
             --out oci/${{ matrix.runtime }}
 
