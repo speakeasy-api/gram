@@ -2,9 +2,12 @@ package jsonschema
 
 import (
 	"bytes"
+	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestIsValidJSONSchema_ValidSchemas(t *testing.T) {
@@ -824,6 +827,79 @@ func TestHasAdditionalProperties(t *testing.T) {
 			compiled, err := CompileSchema([]byte(tt.schema))
 			require.NoError(t, err)
 			require.Equal(t, tt.expected, hasAdditionalProperties(compiled))
+		})
+	}
+}
+
+func TestIsValidJSONSchema_FromOpenAPIFixture(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		fixtureFile    string
+		invalidSchemas []string
+	}{
+		{
+			name:           "valid fixture",
+			fixtureFile:    "../deployments/fixtures/todo-valid.yaml",
+			invalidSchemas: []string{},
+		},
+		{
+			name:           "invalid fixture",
+			fixtureFile:    "../deployments/fixtures/todo-invalid.yaml",
+			invalidSchemas: []string{"Todo", "CreateTodoRequest"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Read the OpenAPI fixture
+			data, err := os.ReadFile(tt.fixtureFile)
+			require.NoError(t, err)
+
+			// Parse the YAML to extract schemas from components/schemas
+			var doc struct {
+				Components struct {
+					Schemas map[string]interface{} `yaml:"schemas"`
+				} `yaml:"components"`
+			}
+
+			err = yaml.Unmarshal(data, &doc)
+			require.NoError(t, err)
+
+			// Validate each schema in components/schemas
+			require.NotEmpty(t, doc.Components.Schemas, "expected to find schemas in components/schemas")
+
+			for schemaName, schemaObj := range doc.Components.Schemas {
+				t.Run("schema_"+schemaName, func(t *testing.T) {
+					t.Parallel()
+
+					// Convert the schema object to JSON bytes
+					schemaBytes, err := json.Marshal(schemaObj)
+					require.NoError(t, err)
+
+					// Validate the JSON schema
+					err = IsValidJSONSchema(schemaBytes)
+
+					// Check if this schema is expected to be invalid
+					shouldBeInvalid := false
+					for _, invalid := range tt.invalidSchemas {
+						if invalid == schemaName {
+							shouldBeInvalid = true
+							break
+						}
+					}
+
+					if shouldBeInvalid {
+						require.Error(t, err, "schema %s should be invalid", schemaName)
+						require.Contains(t, err.Error(), "compile json schema")
+					} else {
+						require.NoError(t, err, "schema %s should be valid", schemaName)
+					}
+				})
+			}
 		})
 	}
 }
