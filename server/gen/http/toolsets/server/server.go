@@ -26,6 +26,7 @@ type Server struct {
 	DeleteToolset            http.Handler
 	GetToolset               http.Handler
 	CheckMCPSlugAvailability http.Handler
+	CloneToolset             http.Handler
 	AddExternalOAuthServer   http.Handler
 	RemoveOAuthServer        http.Handler
 }
@@ -63,6 +64,7 @@ func New(
 			{"DeleteToolset", "DELETE", "/rpc/toolsets.delete"},
 			{"GetToolset", "GET", "/rpc/toolsets.get"},
 			{"CheckMCPSlugAvailability", "GET", "/rpc/toolsets.checkMCPSlugAvailability"},
+			{"CloneToolset", "POST", "/rpc/toolsets.clone"},
 			{"AddExternalOAuthServer", "POST", "/rpc/toolsets.addExternalOAuthServer"},
 			{"RemoveOAuthServer", "POST", "/rpc/toolsets.removeOAuthServer"},
 		},
@@ -72,6 +74,7 @@ func New(
 		DeleteToolset:            NewDeleteToolsetHandler(e.DeleteToolset, mux, decoder, encoder, errhandler, formatter),
 		GetToolset:               NewGetToolsetHandler(e.GetToolset, mux, decoder, encoder, errhandler, formatter),
 		CheckMCPSlugAvailability: NewCheckMCPSlugAvailabilityHandler(e.CheckMCPSlugAvailability, mux, decoder, encoder, errhandler, formatter),
+		CloneToolset:             NewCloneToolsetHandler(e.CloneToolset, mux, decoder, encoder, errhandler, formatter),
 		AddExternalOAuthServer:   NewAddExternalOAuthServerHandler(e.AddExternalOAuthServer, mux, decoder, encoder, errhandler, formatter),
 		RemoveOAuthServer:        NewRemoveOAuthServerHandler(e.RemoveOAuthServer, mux, decoder, encoder, errhandler, formatter),
 	}
@@ -88,6 +91,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DeleteToolset = m(s.DeleteToolset)
 	s.GetToolset = m(s.GetToolset)
 	s.CheckMCPSlugAvailability = m(s.CheckMCPSlugAvailability)
+	s.CloneToolset = m(s.CloneToolset)
 	s.AddExternalOAuthServer = m(s.AddExternalOAuthServer)
 	s.RemoveOAuthServer = m(s.RemoveOAuthServer)
 }
@@ -103,6 +107,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDeleteToolsetHandler(mux, h.DeleteToolset)
 	MountGetToolsetHandler(mux, h.GetToolset)
 	MountCheckMCPSlugAvailabilityHandler(mux, h.CheckMCPSlugAvailability)
+	MountCloneToolsetHandler(mux, h.CloneToolset)
 	MountAddExternalOAuthServerHandler(mux, h.AddExternalOAuthServer)
 	MountRemoveOAuthServerHandler(mux, h.RemoveOAuthServer)
 }
@@ -408,6 +413,59 @@ func NewCheckMCPSlugAvailabilityHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "checkMCPSlugAvailability")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCloneToolsetHandler configures the mux to serve the "toolsets" service
+// "cloneToolset" endpoint.
+func MountCloneToolsetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/toolsets.clone", otelhttp.WithRouteTag("/rpc/toolsets.clone", f).ServeHTTP)
+}
+
+// NewCloneToolsetHandler creates a HTTP handler which loads the HTTP request
+// and calls the "toolsets" service "cloneToolset" endpoint.
+func NewCloneToolsetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCloneToolsetRequest(mux, decoder)
+		encodeResponse = EncodeCloneToolsetResponse(encoder)
+		encodeError    = EncodeCloneToolsetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "cloneToolset")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "toolsets")
 		payload, err := decodeRequest(r)
 		if err != nil {

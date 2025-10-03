@@ -1426,6 +1426,243 @@ func DecodeCheckMCPSlugAvailabilityResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildCloneToolsetRequest instantiates a HTTP request object with method and
+// path set to call the "toolsets" service "cloneToolset" endpoint
+func (c *Client) BuildCloneToolsetRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CloneToolsetToolsetsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("toolsets", "cloneToolset", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCloneToolsetRequest returns an encoder for requests sent to the
+// toolsets cloneToolset server.
+func EncodeCloneToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*toolsets.CloneToolsetPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("toolsets", "cloneToolset", "*toolsets.CloneToolsetPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("slug", string(p.Slug))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeCloneToolsetResponse returns a decoder for responses returned by the
+// toolsets cloneToolset endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeCloneToolsetResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCloneToolsetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CloneToolsetResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+			}
+			err = ValidateCloneToolsetResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+			}
+			res := NewCloneToolsetToolsetOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CloneToolsetUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+			}
+			err = ValidateCloneToolsetUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+			}
+			return nil, NewCloneToolsetUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CloneToolsetForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+			}
+			err = ValidateCloneToolsetForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+			}
+			return nil, NewCloneToolsetForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CloneToolsetBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+			}
+			err = ValidateCloneToolsetBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+			}
+			return nil, NewCloneToolsetBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CloneToolsetNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+			}
+			err = ValidateCloneToolsetNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+			}
+			return nil, NewCloneToolsetNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CloneToolsetConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+			}
+			err = ValidateCloneToolsetConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+			}
+			return nil, NewCloneToolsetConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CloneToolsetUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+			}
+			err = ValidateCloneToolsetUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+			}
+			return nil, NewCloneToolsetUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CloneToolsetInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+			}
+			err = ValidateCloneToolsetInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+			}
+			return nil, NewCloneToolsetInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CloneToolsetInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+				}
+				err = ValidateCloneToolsetInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+				}
+				return nil, NewCloneToolsetInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CloneToolsetUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+				}
+				err = ValidateCloneToolsetUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+				}
+				return nil, NewCloneToolsetUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("toolsets", "cloneToolset", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CloneToolsetGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("toolsets", "cloneToolset", err)
+			}
+			err = ValidateCloneToolsetGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("toolsets", "cloneToolset", err)
+			}
+			return nil, NewCloneToolsetGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("toolsets", "cloneToolset", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildAddExternalOAuthServerRequest instantiates a HTTP request object with
 // method and path set to call the "toolsets" service "addExternalOAuthServer"
 // endpoint
