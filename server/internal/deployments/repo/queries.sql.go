@@ -754,6 +754,24 @@ func (q *Queries) DescribeDeploymentPackages(ctx context.Context, deploymentID u
 	return items, nil
 }
 
+const getActiveDeploymentID = `-- name: GetActiveDeploymentID :one
+SELECT d.id
+FROM deployments d
+INNER JOIN deployment_statuses ds
+ON d.id = ds.deployment_id
+WHERE d.project_id = $1
+AND ds.status = 'completed'
+ORDER BY d.id DESC
+LIMIT 1
+`
+
+func (q *Queries) GetActiveDeploymentID(ctx context.Context, projectID uuid.UUID) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getActiveDeploymentID, projectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getDeployment = `-- name: GetDeployment :one
 WITH latest_status as (
     SELECT deployment_id, status

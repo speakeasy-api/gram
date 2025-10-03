@@ -78,6 +78,35 @@ func BuildGetLatestDeploymentPayload(deploymentsGetLatestDeploymentApikeyToken s
 	return v, nil
 }
 
+// BuildGetActiveDeploymentPayload builds the payload for the deployments
+// getActiveDeployment endpoint from CLI flags.
+func BuildGetActiveDeploymentPayload(deploymentsGetActiveDeploymentApikeyToken string, deploymentsGetActiveDeploymentSessionToken string, deploymentsGetActiveDeploymentProjectSlugInput string) (*deployments.GetActiveDeploymentPayload, error) {
+	var apikeyToken *string
+	{
+		if deploymentsGetActiveDeploymentApikeyToken != "" {
+			apikeyToken = &deploymentsGetActiveDeploymentApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if deploymentsGetActiveDeploymentSessionToken != "" {
+			sessionToken = &deploymentsGetActiveDeploymentSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if deploymentsGetActiveDeploymentProjectSlugInput != "" {
+			projectSlugInput = &deploymentsGetActiveDeploymentProjectSlugInput
+		}
+	}
+	v := &deployments.GetActiveDeploymentPayload{}
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCreateDeploymentPayload builds the payload for the deployments
 // createDeployment endpoint from CLI flags.
 func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploymentsCreateDeploymentApikeyToken string, deploymentsCreateDeploymentSessionToken string, deploymentsCreateDeploymentProjectSlugInput string, deploymentsCreateDeploymentIdempotencyKey string) (*deployments.CreateDeploymentPayload, error) {
@@ -86,7 +115,7 @@ func BuildCreateDeploymentPayload(deploymentsCreateDeploymentBody string, deploy
 	{
 		err = json.Unmarshal([]byte(deploymentsCreateDeploymentBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"Quia quam temporibus iure.\",\n      \"functions\": [\n         {\n            \"asset_id\": \"Laudantium voluptatum qui est.\",\n            \"name\": \"Veritatis rerum et qui sunt distinctio quidem.\",\n            \"runtime\": \"Est itaque.\",\n            \"slug\": \"pxb\"\n         },\n         {\n            \"asset_id\": \"Laudantium voluptatum qui est.\",\n            \"name\": \"Veritatis rerum et qui sunt distinctio quidem.\",\n            \"runtime\": \"Est itaque.\",\n            \"slug\": \"pxb\"\n         },\n         {\n            \"asset_id\": \"Laudantium voluptatum qui est.\",\n            \"name\": \"Veritatis rerum et qui sunt distinctio quidem.\",\n            \"runtime\": \"Est itaque.\",\n            \"slug\": \"pxb\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Esse modi reiciendis harum consequatur voluptate.\",\n            \"name\": \"Consequuntur non dolor iure dolor iste voluptas.\",\n            \"slug\": \"nxd\"\n         },\n         {\n            \"asset_id\": \"Esse modi reiciendis harum consequatur voluptate.\",\n            \"name\": \"Consequuntur non dolor iure dolor iste voluptas.\",\n            \"slug\": \"nxd\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"Explicabo et est.\",\n            \"version\": \"Cumque alias.\"\n         },\n         {\n            \"name\": \"Explicabo et est.\",\n            \"version\": \"Cumque alias.\"\n         },\n         {\n            \"name\": \"Explicabo et est.\",\n            \"version\": \"Cumque alias.\"\n         },\n         {\n            \"name\": \"Explicabo et est.\",\n            \"version\": \"Cumque alias.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"In veniam explicabo et est aut cumque.\",\n      \"functions\": [\n         {\n            \"asset_id\": \"Nobis blanditiis omnis.\",\n            \"name\": \"Cumque qui laboriosam vel.\",\n            \"runtime\": \"Ipsa quo dolorem enim.\",\n            \"slug\": \"ycy\"\n         },\n         {\n            \"asset_id\": \"Nobis blanditiis omnis.\",\n            \"name\": \"Cumque qui laboriosam vel.\",\n            \"runtime\": \"Ipsa quo dolorem enim.\",\n            \"slug\": \"ycy\"\n         },\n         {\n            \"asset_id\": \"Nobis blanditiis omnis.\",\n            \"name\": \"Cumque qui laboriosam vel.\",\n            \"runtime\": \"Ipsa quo dolorem enim.\",\n            \"slug\": \"ycy\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"Et blanditiis et.\",\n            \"name\": \"Et minima libero omnis voluptatem.\",\n            \"slug\": \"79m\"\n         },\n         {\n            \"asset_id\": \"Et blanditiis et.\",\n            \"name\": \"Et minima libero omnis voluptatem.\",\n            \"slug\": \"79m\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"Recusandae recusandae.\",\n            \"version\": \"Omnis praesentium beatae in dolor aut.\"\n         },\n         {\n            \"name\": \"Recusandae recusandae.\",\n            \"version\": \"Omnis praesentium beatae in dolor aut.\"\n         },\n         {\n            \"name\": \"Recusandae recusandae.\",\n            \"version\": \"Omnis praesentium beatae in dolor aut.\"\n         },\n         {\n            \"name\": \"Recusandae recusandae.\",\n            \"version\": \"Omnis praesentium beatae in dolor aut.\"\n         }\n      ]\n   }'")
 		}
 		for _, e := range body.Openapiv3Assets {
 			if e != nil {
@@ -169,7 +198,7 @@ func BuildEvolvePayload(deploymentsEvolveBody string, deploymentsEvolveApikeyTok
 	{
 		err = json.Unmarshal([]byte(deploymentsEvolveBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Asperiores necessitatibus accusamus repudiandae iste non.\",\n      \"exclude_functions\": [\n         \"Dolore consequuntur eum necessitatibus.\",\n         \"Quisquam non.\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"Sint quam voluptatum nisi.\",\n         \"Aut distinctio quo sunt velit aut.\"\n      ],\n      \"exclude_packages\": [\n         \"Harum dignissimos aspernatur.\",\n         \"Ab soluta aperiam sit quaerat.\",\n         \"Tempore est nihil.\",\n         \"Voluptatem sint enim.\"\n      ],\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"Laudantium voluptatum qui est.\",\n            \"name\": \"Veritatis rerum et qui sunt distinctio quidem.\",\n            \"runtime\": \"Est itaque.\",\n            \"slug\": \"pxb\"\n         },\n         {\n            \"asset_id\": \"Laudantium voluptatum qui est.\",\n            \"name\": \"Veritatis rerum et qui sunt distinctio quidem.\",\n            \"runtime\": \"Est itaque.\",\n            \"slug\": \"pxb\"\n         },\n         {\n            \"asset_id\": \"Laudantium voluptatum qui est.\",\n            \"name\": \"Veritatis rerum et qui sunt distinctio quidem.\",\n            \"runtime\": \"Est itaque.\",\n            \"slug\": \"pxb\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"Esse modi reiciendis harum consequatur voluptate.\",\n            \"name\": \"Consequuntur non dolor iure dolor iste voluptas.\",\n            \"slug\": \"nxd\"\n         },\n         {\n            \"asset_id\": \"Esse modi reiciendis harum consequatur voluptate.\",\n            \"name\": \"Consequuntur non dolor iure dolor iste voluptas.\",\n            \"slug\": \"nxd\"\n         },\n         {\n            \"asset_id\": \"Esse modi reiciendis harum consequatur voluptate.\",\n            \"name\": \"Consequuntur non dolor iure dolor iste voluptas.\",\n            \"slug\": \"nxd\"\n         },\n         {\n            \"asset_id\": \"Esse modi reiciendis harum consequatur voluptate.\",\n            \"name\": \"Consequuntur non dolor iure dolor iste voluptas.\",\n            \"slug\": \"nxd\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"Natus exercitationem est expedita non.\",\n            \"version\": \"Laudantium eligendi quia sed.\"\n         },\n         {\n            \"name\": \"Natus exercitationem est expedita non.\",\n            \"version\": \"Laudantium eligendi quia sed.\"\n         },\n         {\n            \"name\": \"Natus exercitationem est expedita non.\",\n            \"version\": \"Laudantium eligendi quia sed.\"\n         }\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Dolorem tempore est.\",\n      \"exclude_functions\": [\n         \"Sapiente illum deleniti laudantium ipsum non.\",\n         \"Molestiae veniam at cumque.\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"Quibusdam quia ea consequuntur.\",\n         \"Non quaerat consequuntur quam exercitationem molestiae maiores.\"\n      ],\n      \"exclude_packages\": [\n         \"Cum vel aliquid rerum at repellendus est.\",\n         \"Accusantium est dolor sit.\",\n         \"Consequuntur error suscipit optio sunt eum.\"\n      ],\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"Nobis blanditiis omnis.\",\n            \"name\": \"Cumque qui laboriosam vel.\",\n            \"runtime\": \"Ipsa quo dolorem enim.\",\n            \"slug\": \"ycy\"\n         },\n         {\n            \"asset_id\": \"Nobis blanditiis omnis.\",\n            \"name\": \"Cumque qui laboriosam vel.\",\n            \"runtime\": \"Ipsa quo dolorem enim.\",\n            \"slug\": \"ycy\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"Et blanditiis et.\",\n            \"name\": \"Et minima libero omnis voluptatem.\",\n            \"slug\": \"79m\"\n         },\n         {\n            \"asset_id\": \"Et blanditiis et.\",\n            \"name\": \"Et minima libero omnis voluptatem.\",\n            \"slug\": \"79m\"\n         },\n         {\n            \"asset_id\": \"Et blanditiis et.\",\n            \"name\": \"Et minima libero omnis voluptatem.\",\n            \"slug\": \"79m\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"Sint enim quisquam.\",\n            \"version\": \"Dolore consequuntur eum necessitatibus.\"\n         },\n         {\n            \"name\": \"Sint enim quisquam.\",\n            \"version\": \"Dolore consequuntur eum necessitatibus.\"\n         },\n         {\n            \"name\": \"Sint enim quisquam.\",\n            \"version\": \"Dolore consequuntur eum necessitatibus.\"\n         }\n      ]\n   }'")
 		}
 	}
 	var apikeyToken *string
@@ -244,7 +273,7 @@ func BuildRedeployPayload(deploymentsRedeployBody string, deploymentsRedeployApi
 	{
 		err = json.Unmarshal([]byte(deploymentsRedeployBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Molestiae veniam at cumque.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"deployment_id\": \"Hic rerum laborum.\"\n   }'")
 		}
 	}
 	var apikeyToken *string
