@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
+	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/o11y"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
@@ -82,7 +83,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
 			defer cancel()
 
-			logger := PullLogger(ctx)
+			logger := logging.PullLogger(ctx)
 			projectSlug := c.String("project")
 
 			apiURLArg := c.String("api-url")

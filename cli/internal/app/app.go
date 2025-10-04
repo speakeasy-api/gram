@@ -8,6 +8,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/speakeasy-api/gram/cli/internal/app/logging"
+	"github.com/speakeasy-api/gram/cli/internal/app/upload"
 	"github.com/speakeasy-api/gram/cli/internal/o11y"
 )
 
@@ -23,7 +25,7 @@ func newApp() *cli.App {
 		Version: fmt.Sprintf("%s (%s)", Version, shortSha),
 		Commands: []*cli.Command{
 			newPushCommand(),
-			newUploadCommand(),
+			upload.NewCommand(),
 			newStatusCommand(),
 		},
 		Flags: []cli.Flag{
@@ -53,7 +55,7 @@ func newApp() *cli.App {
 				DataDogAttr: true,
 			}))
 
-			ctx := PushLogger(c.Context, logger)
+			ctx := logging.PushLogger(c.Context, logger)
 			c.Context = ctx
 			return nil
 		},

@@ -63,52 +63,6 @@ func Upload(
 
 }
 
-// AddAssetsRequest lists the assets to add to a deployment.
-type AddAssetsRequest struct {
-	APIKey       secret.Secret
-	ProjectSlug  string
-	DeploymentID string
-	Sources      []Source
-}
-
-// AddAssets uploads assets and adds them to an existing deployment.
-func AddAssets(
-	ctx context.Context,
-	logger *slog.Logger,
-	assetsClient *api.AssetsClient,
-	deploymentsClient *api.DeploymentsClient,
-	req AddAssetsRequest,
-) (*deployments.EvolveResult, error) {
-	newAssets := make(
-		[]*deployments.AddOpenAPIv3DeploymentAssetForm,
-		len(req.Sources),
-	)
-	for idx, source := range req.Sources {
-		asset, err := Upload(ctx, logger, assetsClient, &UploadRequest{
-			APIKey:       req.APIKey,
-			ProjectSlug:  req.ProjectSlug,
-			SourceReader: NewSourceReader(source),
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to upload asset: %w", err)
-		}
-
-		newAssets[idx] = asset
-	}
-
-	result, err := deploymentsClient.Evolve(ctx, api.EvolveRequest{
-		Assets:       newAssets,
-		APIKey:       req.APIKey,
-		ProjectSlug:  req.ProjectSlug,
-		DeploymentID: req.DeploymentID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to evolve deployment: %w", err)
-	}
-
-	return result, nil
-}
-
 // createAssetsForDeployment creates remote assets out of each incoming source.
 // The returned forms can be submitted to create a deployment.
 func createAssetsForDeployment(

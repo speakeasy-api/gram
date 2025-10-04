@@ -144,10 +144,10 @@ func (c *DeploymentsClient) GetActiveDeployment(
 
 // EvolveRequest lists the assets to add to a deployment.
 type EvolveRequest struct {
-	APIKey       secret.Secret
-	ProjectSlug  string
-	DeploymentID string
 	Assets       []*deployments.AddOpenAPIv3DeploymentAssetForm
+	APIKey       secret.Secret
+	DeploymentID string
+	ProjectSlug  string
 }
 
 // Evolve adds assets to an existing deployment.

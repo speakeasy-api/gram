@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
+	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/urfave/cli/v2"
@@ -56,7 +57,7 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
 			defer cancel()
 
-			logger := PullLogger(ctx)
+			logger := logging.PullLogger(ctx)
 			projectSlug := c.String("project")
 			deploymentID := c.String("id")
 			jsonOutput := c.Bool("json")
