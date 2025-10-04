@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/url"
@@ -9,13 +8,11 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
-	"time"
 
-	"github.com/speakeasy-api/gram/cli/internal/api"
+	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/o11y"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
-	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/urfave/cli/v2"
 )
 
@@ -48,6 +45,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				Usage:   "The base URL to use for API calls.",
 				EnvVars: []string{"GRAM_API_URL"},
 				Value:   "https://app.getgram.ai",
+				Hidden:  true,
 			},
 			&cli.StringFlag{
 				Name:     "api-key",
@@ -81,7 +79,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
 			defer cancel()
 
-			logger := PullLogger(ctx)
+			logger := logging.PullLogger(ctx)
 			projectSlug := c.String("project")
 
 			apiURLArg := c.String("api-url")
@@ -92,15 +90,6 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			if apiURL.Scheme == "" || apiURL.Host == "" {
 				return fmt.Errorf("API URL '%s' must include scheme and host", apiURLArg)
 			}
-
-			assetsClient := api.NewAssetsClient(&api.AssetsClientOptions{
-				Scheme: apiURL.Scheme,
-				Host:   apiURL.Host,
-			})
-			deploymentsClient := api.NewDeploymentsClient(&api.DeploymentsClientOptions{
-				Scheme: apiURL.Scheme,
-				Host:   apiURL.Host,
-			})
 
 			configFilename, err := filepath.Abs(c.String("config"))
 			if err != nil {
@@ -120,34 +109,42 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				return fmt.Errorf("failed to parseread deployment config: %w", err)
 			}
 
-			logger.InfoContext(ctx, "Deploying to project", slog.String("project", projectSlug), slog.String("config", c.String("config")))
+			logger.InfoContext(
+				ctx,
+				"Deploying to project",
+				slog.String("project", projectSlug),
+				slog.String("config", c.String("config")),
+			)
 
-			req := deploy.CreateDeploymentRequest{
-				Config:         config,
-				APIKey:         secret.Secret(c.String("api-key")),
-				ProjectSlug:    projectSlug,
-				IdempotencyKey: c.String("idempotency-key"),
+			params := deploy.WorkflowParams{
+				APIKey:      secret.Secret(c.String("api-key")),
+				APIURL:      apiURL,
+				ProjectSlug: projectSlug,
 			}
-			result, err := deploy.CreateDeployment(ctx, logger, assetsClient, deploymentsClient, req)
-			if err != nil {
-				return fmt.Errorf("deployment failed: %w", err)
-			}
+			result := deploy.NewWorkflow(ctx, params).
+				UploadAssets(ctx, config.Sources).
+				CreateDeployment(ctx, c.String("idempotency-key"))
 
-			logger.InfoContext(ctx, "Deployment has begun processing", slog.Any("id", result.Deployment.ID))
-
-			if c.Bool("skip-poll") {
-				logger.InfoContext(ctx, "Skipping deployment status polling", slog.String("deployment_id", result.Deployment.ID))
-				logger.InfoContext(ctx, "You can check deployment status with", slog.String("command", fmt.Sprintf("gram status --id %s", result.Deployment.ID)))
-				return nil
-			}
-
-			deploymentResult, err := pollDeploymentStatus(ctx, logger, deploymentsClient, req.APIKey, req.ProjectSlug, result.Deployment.ID)
-			if err != nil {
-				logger.WarnContext(ctx, "Failed to poll deployment status", slog.String("error", err.Error()))
-				logger.InfoContext(ctx, "You can check deployment status with", slog.String("command", fmt.Sprintf("gram status %s", result.Deployment.ID)))
-				return nil
+			if !c.Bool("skip-poll") {
+				result.Poll(ctx)
 			}
 
+			if result.Err != nil {
+				if result.Deployment != nil {
+					helpCmd := slog.String("command",
+						fmt.Sprintf("gram status %s", result.Deployment.ID),
+					)
+					result.Logger.InfoContext(
+						ctx,
+						"You can check deployment status with",
+						helpCmd,
+					)
+				}
+
+				return fmt.Errorf("failed to push deploy: %w", result.Err)
+			}
+
+			deploymentResult := result.Deployment
 			switch deploymentResult.Status {
 			case "completed":
 				logger.InfoContext(ctx, "Deployment completed successfully", slog.String("deployment_id", deploymentResult.ID))
@@ -160,75 +157,5 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 
 			return nil
 		},
-	}
-}
-
-// pollDeploymentStatus polls for deployment status until it reaches a terminal
-// state or times out
-func pollDeploymentStatus(
-	ctx context.Context,
-	logger *slog.Logger,
-	client *api.DeploymentsClient,
-	apiKey secret.Secret,
-	projectSlug string,
-	deploymentID string,
-) (*types.Deployment, error) {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	logger.InfoContext(ctx, "Polling deployment status...", slog.String("deployment_id", deploymentID))
-
-	for {
-		select {
-		case <-ctx.Done():
-			if ctx.Err() == context.DeadlineExceeded {
-				return nil, fmt.Errorf("deployment polling timed out after 2 minutes")
-			}
-			return nil, fmt.Errorf("deployment polling cancelled: %w", ctx.Err())
-
-		case <-ticker.C:
-			result, err := client.GetDeployment(ctx, apiKey, projectSlug, deploymentID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get deployment status: %w", err)
-			}
-
-			deployment := &types.Deployment{
-				ID:                 result.ID,
-				OrganizationID:     result.OrganizationID,
-				ProjectID:          result.ProjectID,
-				UserID:             result.UserID,
-				CreatedAt:          result.CreatedAt,
-				Status:             result.Status,
-				IdempotencyKey:     result.IdempotencyKey,
-				GithubRepo:         result.GithubRepo,
-				GithubPr:           result.GithubPr,
-				GithubSha:          result.GithubSha,
-				ExternalID:         result.ExternalID,
-				ExternalURL:        result.ExternalURL,
-				ClonedFrom:         result.ClonedFrom,
-				Openapiv3ToolCount: result.Openapiv3ToolCount,
-				Openapiv3Assets:    result.Openapiv3Assets,
-				FunctionsToolCount: result.FunctionsToolCount,
-				FunctionsAssets:    result.FunctionsAssets,
-				Packages:           result.Packages,
-			}
-
-			logger.DebugContext(ctx, "Deployment status check",
-				slog.String("deployment_id", deploymentID),
-				slog.String("status", deployment.Status))
-
-			switch deployment.Status {
-			case "completed", "failed":
-				return deployment, nil
-			case "pending":
-				continue
-			default:
-				logger.WarnContext(ctx, "Unknown deployment status", slog.String("status", deployment.Status))
-				continue
-			}
-		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
+	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/urfave/cli/v2"
@@ -29,6 +30,7 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 				Usage:   "The base URL to use for API calls.",
 				EnvVars: []string{"GRAM_API_URL"},
 				Value:   "https://app.getgram.ai",
+				Hidden:  true,
 			},
 			&cli.StringFlag{
 				Name:     "api-key",
@@ -55,7 +57,7 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
 			defer cancel()
 
-			logger := PullLogger(ctx)
+			logger := logging.PullLogger(ctx)
 			projectSlug := c.String("project")
 			deploymentID := c.String("id")
 			jsonOutput := c.Bool("json")
@@ -78,38 +80,19 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 
 			var deployment *types.Deployment
 			if deploymentID != "" {
-				logger.InfoContext(ctx, "Getting deployment status", slog.String("deployment_id", deploymentID))
+				logger.DebugContext(ctx, "Getting deployment status", slog.String("deployment_id", deploymentID))
 				result, err := deploymentsClient.GetDeployment(ctx, apiKey, projectSlug, deploymentID)
 				if err != nil {
 					return fmt.Errorf("failed to get deployment: %w", err)
 				}
-				deployment = &types.Deployment{
-					ID:                 result.ID,
-					OrganizationID:     result.OrganizationID,
-					ProjectID:          result.ProjectID,
-					UserID:             result.UserID,
-					CreatedAt:          result.CreatedAt,
-					Status:             result.Status,
-					IdempotencyKey:     result.IdempotencyKey,
-					GithubRepo:         result.GithubRepo,
-					GithubPr:           result.GithubPr,
-					GithubSha:          result.GithubSha,
-					ExternalID:         result.ExternalID,
-					ExternalURL:        result.ExternalURL,
-					ClonedFrom:         result.ClonedFrom,
-					Openapiv3ToolCount: result.Openapiv3ToolCount,
-					Openapiv3Assets:    result.Openapiv3Assets,
-					FunctionsToolCount: result.FunctionsToolCount,
-					FunctionsAssets:    result.FunctionsAssets,
-					Packages:           result.Packages,
-				}
+				deployment = result
 			} else {
 				logger.InfoContext(ctx, "Getting latest deployment status")
 				result, err := deploymentsClient.GetLatestDeployment(ctx, apiKey, projectSlug)
 				if err != nil {
 					return fmt.Errorf("failed to get latest deployment: %w", err)
 				}
-				if result.Deployment == nil {
+				if result == nil {
 					if jsonOutput {
 						fmt.Println("{}")
 					} else {
@@ -117,7 +100,7 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 					}
 					return nil
 				}
-				deployment = result.Deployment
+				deployment = result
 			}
 
 			if jsonOutput {
