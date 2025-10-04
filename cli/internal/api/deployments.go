@@ -7,6 +7,7 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	depl_client "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -83,7 +84,7 @@ func (c *DeploymentsClient) GetDeployment(
 	apiKey secret.Secret,
 	projectSlug string,
 	deploymentID string,
-) (*deployments.GetDeploymentResult, error) {
+) (*types.Deployment, error) {
 	key := apiKey.Reveal()
 	result, err := c.client.GetDeployment(ctx, &deployments.GetDeploymentPayload{
 		ApikeyToken:      &key,
@@ -95,7 +96,26 @@ func (c *DeploymentsClient) GetDeployment(
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
 
-	return result, nil
+	return &types.Deployment{
+		ID:                 result.ID,
+		OrganizationID:     result.OrganizationID,
+		ProjectID:          result.ProjectID,
+		UserID:             result.UserID,
+		CreatedAt:          result.CreatedAt,
+		Status:             result.Status,
+		IdempotencyKey:     result.IdempotencyKey,
+		GithubRepo:         result.GithubRepo,
+		GithubPr:           result.GithubPr,
+		GithubSha:          result.GithubSha,
+		ExternalID:         result.ExternalID,
+		ExternalURL:        result.ExternalURL,
+		ClonedFrom:         result.ClonedFrom,
+		Openapiv3ToolCount: result.Openapiv3ToolCount,
+		Openapiv3Assets:    result.Openapiv3Assets,
+		FunctionsToolCount: result.FunctionsToolCount,
+		FunctionsAssets:    result.FunctionsAssets,
+		Packages:           result.Packages,
+	}, nil
 }
 
 // GetLatestDeployment retrieves the latest deployment for a project.
@@ -103,7 +123,7 @@ func (c *DeploymentsClient) GetLatestDeployment(
 	ctx context.Context,
 	apiKey secret.Secret,
 	projectSlug string,
-) (*deployments.GetLatestDeploymentResult, error) {
+) (*types.Deployment, error) {
 	key := apiKey.Reveal()
 	result, err := c.client.GetLatestDeployment(
 		ctx,
@@ -117,7 +137,7 @@ func (c *DeploymentsClient) GetLatestDeployment(
 		return nil, fmt.Errorf("failed to get latest deployment: %w", err)
 	}
 
-	return result, nil
+	return result.Deployment, nil
 }
 
 // GetActiveDeployment retrieves the active deployment for a project.
@@ -125,7 +145,7 @@ func (c *DeploymentsClient) GetActiveDeployment(
 	ctx context.Context,
 	apiKey secret.Secret,
 	projectSlug string,
-) (*deployments.GetActiveDeploymentResult, error) {
+) (*types.Deployment, error) {
 	key := apiKey.Reveal()
 	result, err := c.client.GetActiveDeployment(
 		ctx,
@@ -139,7 +159,7 @@ func (c *DeploymentsClient) GetActiveDeployment(
 		return nil, fmt.Errorf("failed to get active deployment: %w", err)
 	}
 
-	return result, nil
+	return result.Deployment, nil
 }
 
 // EvolveRequest lists the assets to add to a deployment.

@@ -4,17 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
-
-func isSupportedSourceType(source Source) bool {
-	return source.Type == SourceTypeOpenAPIV3
-}
 
 type UploadRequest struct {
 	APIKey       secret.Secret
@@ -32,7 +27,6 @@ func (ur *UploadRequest) Read(ctx context.Context) (io.ReadCloser, int64, error)
 
 func Upload(
 	ctx context.Context,
-	logger *slog.Logger,
 	assetsClient *api.AssetsClient,
 	req *UploadRequest,
 ) (*deployments.AddOpenAPIv3DeploymentAssetForm, error) {
@@ -43,7 +37,7 @@ func Upload(
 
 	source := req.SourceReader.Source
 
-	uploadRes, err := assetsClient.UploadOpenAPIv3(ctx, logger, &api.UploadOpenAPIv3Request{
+	uploadRes, err := assetsClient.UploadOpenAPIv3(ctx, &api.UploadOpenAPIv3Request{
 		APIKey:        req.APIKey.Reveal(),
 		ProjectSlug:   req.ProjectSlug,
 		Reader:        rc,
@@ -61,41 +55,4 @@ func Upload(
 		Slug:    types.Slug(source.Slug),
 	}, nil
 
-}
-
-// createAssetsForDeployment creates remote assets out of each incoming source.
-// The returned forms can be submitted to create a deployment.
-func createAssetsForDeployment(
-	ctx context.Context,
-	logger *slog.Logger,
-	assetsClient *api.AssetsClient,
-	req *CreateDeploymentRequest,
-) ([]*deployments.AddOpenAPIv3DeploymentAssetForm, error) {
-	sources := req.Config.Sources
-	project := req.ProjectSlug
-	assets := make([]*deployments.AddOpenAPIv3DeploymentAssetForm, 0, len(sources))
-
-	for _, source := range sources {
-		if !isSupportedSourceType(source) {
-			msg := "skipping unsupported source type"
-			logger.WarnContext(ctx, msg, slog.String("type", string(source.Type)), slog.String("location", source.Location))
-			continue
-		}
-
-		asset, err := Upload(ctx, logger, assetsClient, &UploadRequest{
-			APIKey:       req.APIKey,
-			ProjectSlug:  project,
-			SourceReader: NewSourceReader(source),
-		})
-		if err != nil {
-			return nil, err
-		}
-		assets = append(assets, asset)
-	}
-
-	if len(assets) == 0 {
-		return nil, fmt.Errorf("no valid sources found")
-	}
-
-	return assets, nil
 }

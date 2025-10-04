@@ -85,33 +85,14 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 				if err != nil {
 					return fmt.Errorf("failed to get deployment: %w", err)
 				}
-				deployment = &types.Deployment{
-					ID:                 result.ID,
-					OrganizationID:     result.OrganizationID,
-					ProjectID:          result.ProjectID,
-					UserID:             result.UserID,
-					CreatedAt:          result.CreatedAt,
-					Status:             result.Status,
-					IdempotencyKey:     result.IdempotencyKey,
-					GithubRepo:         result.GithubRepo,
-					GithubPr:           result.GithubPr,
-					GithubSha:          result.GithubSha,
-					ExternalID:         result.ExternalID,
-					ExternalURL:        result.ExternalURL,
-					ClonedFrom:         result.ClonedFrom,
-					Openapiv3ToolCount: result.Openapiv3ToolCount,
-					Openapiv3Assets:    result.Openapiv3Assets,
-					FunctionsToolCount: result.FunctionsToolCount,
-					FunctionsAssets:    result.FunctionsAssets,
-					Packages:           result.Packages,
-				}
+				deployment = result
 			} else {
 				logger.InfoContext(ctx, "Getting latest deployment status")
 				result, err := deploymentsClient.GetLatestDeployment(ctx, apiKey, projectSlug)
 				if err != nil {
 					return fmt.Errorf("failed to get latest deployment: %w", err)
 				}
-				if result.Deployment == nil {
+				if result == nil {
 					if jsonOutput {
 						fmt.Println("{}")
 					} else {
@@ -119,7 +100,7 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 					}
 					return nil
 				}
-				deployment = result.Deployment
+				deployment = result
 			}
 
 			if jsonOutput {

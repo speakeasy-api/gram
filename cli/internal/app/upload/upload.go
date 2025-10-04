@@ -14,9 +14,8 @@ import (
 
 func NewCommand() *cli.Command {
 	return &cli.Command{
-		Name:   "upload",
-		Action: doUpload,
-		Usage:  "Upload an asset to Gram",
+		Name:  "upload",
+		Usage: "Upload an asset to Gram",
 		Description: `
 Example:
   gram upload --type openapiv3 \
@@ -64,40 +63,48 @@ Example:
 				Required: true,
 			},
 		},
+		Action: func(c *cli.Context) error {
+			ctx, cancel := signal.NotifyContext(
+				c.Context,
+				os.Interrupt,
+				syscall.SIGTERM,
+			)
+			defer cancel()
+
+			apiURLStr := c.String("api-url")
+			apiURL, err := url.Parse(apiURLStr)
+			if err != nil || apiURL.Scheme == "" || apiURL.Host == "" {
+				return fmt.Errorf(
+					"API URL must include scheme and host: '%s'",
+					apiURLStr,
+				)
+			}
+
+			params := deploy.WorkflowParams{
+				APIKey:      secret.Secret(c.String("api-key")),
+				APIURL:      apiURL,
+				ProjectSlug: c.String("project"),
+			}
+
+			result := deploy.NewWorkflow(ctx, params).
+				UploadAssets(ctx, []deploy.Source{parseSource(c)}).
+				EvolveActiveDeployment(ctx).
+				OrCreateDeployment(ctx)
+
+			if result.Err != nil {
+				return fmt.Errorf("failed to upload: %w", result.Err)
+			}
+
+			return nil
+		},
 	}
 }
 
-func doUpload(c *cli.Context) error {
-	ctx, cancel := signal.NotifyContext(
-		c.Context,
-		os.Interrupt,
-		syscall.SIGTERM,
-	)
-	defer cancel()
-
-	apiURLStr := c.String("api-url")
-	apiURL, err := url.Parse(apiURLStr)
-	if err != nil {
-		return fmt.Errorf("failed to parse API URL '%s': %w", apiURLStr, err)
+func parseSource(c *cli.Context) deploy.Source {
+	return deploy.Source{
+		Type:     deploy.SourceType(c.String("type")),
+		Location: c.String("location"),
+		Name:     c.String("name"),
+		Slug:     c.String("slug"),
 	}
-	if apiURL.Scheme == "" || apiURL.Host == "" {
-		return fmt.Errorf("API URL '%s' must include scheme and host", apiURLStr)
-	}
-
-	params := workflowParams{
-		apiKey:      secret.Secret(c.String("api-key")),
-		apiURL:      apiURL,
-		projectSlug: c.String("project"),
-	}
-
-	state := newWorkflow(ctx, params).
-		UploadAssets(ctx, []deploy.Source{parseSource(c)}).
-		EvolveActiveDeployment(ctx).
-		OrCreateDeployment(ctx)
-
-	if state.Err != nil {
-		return fmt.Errorf("failed to upload: %w", state.Err)
-	}
-
-	return nil
 }
