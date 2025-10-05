@@ -57,7 +57,7 @@ func UsageCommands() []string {
 		"slack (callback|login|get-slack-connection|update-slack-connection|delete-slack-connection)",
 		"templates (create-template|update-template|get-template|list-templates|delete-template|render-template-by-id|render-template)",
 		"tools list-tools",
-		"toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|add-externaloauth-server|removeoauth-server)",
+		"toolsets (create-toolset|list-toolsets|update-toolset|delete-toolset|get-toolset|check-mcp-slug-availability|clone-toolset|add-externaloauth-server|removeoauth-server)",
 		"usage (get-period-usage|get-usage-tiers|create-customer-session|create-checkout)",
 		"variations (upsert-global|delete-global|list-global)",
 	}
@@ -460,6 +460,11 @@ func ParseEndpoint(
 		toolsetsCheckMCPSlugAvailabilitySessionTokenFlag     = toolsetsCheckMCPSlugAvailabilityFlags.String("session-token", "", "")
 		toolsetsCheckMCPSlugAvailabilityProjectSlugInputFlag = toolsetsCheckMCPSlugAvailabilityFlags.String("project-slug-input", "", "")
 
+		toolsetsCloneToolsetFlags                = flag.NewFlagSet("clone-toolset", flag.ExitOnError)
+		toolsetsCloneToolsetSlugFlag             = toolsetsCloneToolsetFlags.String("slug", "REQUIRED", "")
+		toolsetsCloneToolsetSessionTokenFlag     = toolsetsCloneToolsetFlags.String("session-token", "", "")
+		toolsetsCloneToolsetProjectSlugInputFlag = toolsetsCloneToolsetFlags.String("project-slug-input", "", "")
+
 		toolsetsAddExternalOAuthServerFlags                = flag.NewFlagSet("add-externaloauth-server", flag.ExitOnError)
 		toolsetsAddExternalOAuthServerBodyFlag             = toolsetsAddExternalOAuthServerFlags.String("body", "REQUIRED", "")
 		toolsetsAddExternalOAuthServerSlugFlag             = toolsetsAddExternalOAuthServerFlags.String("slug", "REQUIRED", "")
@@ -605,6 +610,7 @@ func ParseEndpoint(
 	toolsetsDeleteToolsetFlags.Usage = toolsetsDeleteToolsetUsage
 	toolsetsGetToolsetFlags.Usage = toolsetsGetToolsetUsage
 	toolsetsCheckMCPSlugAvailabilityFlags.Usage = toolsetsCheckMCPSlugAvailabilityUsage
+	toolsetsCloneToolsetFlags.Usage = toolsetsCloneToolsetUsage
 	toolsetsAddExternalOAuthServerFlags.Usage = toolsetsAddExternalOAuthServerUsage
 	toolsetsRemoveOAuthServerFlags.Usage = toolsetsRemoveOAuthServerUsage
 
@@ -951,6 +957,9 @@ func ParseEndpoint(
 			case "check-mcp-slug-availability":
 				epf = toolsetsCheckMCPSlugAvailabilityFlags
 
+			case "clone-toolset":
+				epf = toolsetsCloneToolsetFlags
+
 			case "add-externaloauth-server":
 				epf = toolsetsAddExternalOAuthServerFlags
 
@@ -1280,6 +1289,9 @@ func ParseEndpoint(
 			case "check-mcp-slug-availability":
 				endpoint = c.CheckMCPSlugAvailability()
 				data, err = toolsetsc.BuildCheckMCPSlugAvailabilityPayload(*toolsetsCheckMCPSlugAvailabilitySlugFlag, *toolsetsCheckMCPSlugAvailabilitySessionTokenFlag, *toolsetsCheckMCPSlugAvailabilityProjectSlugInputFlag)
+			case "clone-toolset":
+				endpoint = c.CloneToolset()
+				data, err = toolsetsc.BuildCloneToolsetPayload(*toolsetsCloneToolsetSlugFlag, *toolsetsCloneToolsetSessionTokenFlag, *toolsetsCloneToolsetProjectSlugInputFlag)
 			case "add-externaloauth-server":
 				endpoint = c.AddExternalOAuthServer()
 				data, err = toolsetsc.BuildAddExternalOAuthServerPayload(*toolsetsAddExternalOAuthServerBodyFlag, *toolsetsAddExternalOAuthServerSlugFlag, *toolsetsAddExternalOAuthServerSessionTokenFlag, *toolsetsAddExternalOAuthServerProjectSlugInputFlag)
@@ -3203,6 +3215,7 @@ func toolsetsUsage() {
 	fmt.Fprintln(os.Stderr, `    delete-toolset: Delete a toolset by its ID`)
 	fmt.Fprintln(os.Stderr, `    get-toolset: Get detailed information about a toolset including full HTTP tool definitions`)
 	fmt.Fprintln(os.Stderr, `    check-mcp-slug-availability: Check if a MCP slug is available`)
+	fmt.Fprintln(os.Stderr, `    clone-toolset: Clone an existing toolset with a new name`)
 	fmt.Fprintln(os.Stderr, `    add-externaloauth-server: Associate an external OAuth server with a toolset`)
 	fmt.Fprintln(os.Stderr, `    removeoauth-server: Remove OAuth server association from a toolset`)
 	fmt.Fprintln(os.Stderr)
@@ -3375,6 +3388,29 @@ func toolsetsCheckMCPSlugAvailabilityUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets check-mcp-slug-availability --slug "uv0" --session-token "Sit quia eos et id atque omnis." --project-slug-input "Facere animi dolorum est."`)
 }
 
+func toolsetsCloneToolsetUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] toolsets clone-toolset", os.Args[0])
+	fmt.Fprint(os.Stderr, " -slug STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Clone an existing toolset with a new name`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	// Example block: pass example as parameter to avoid format parsing of % characters
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets clone-toolset --slug "lav" --session-token "Reiciendis quis eveniet cupiditate non sed rerum." --project-slug-input "Impedit id."`)
+}
+
 func toolsetsAddExternalOAuthServerUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] toolsets add-externaloauth-server", os.Args[0])
@@ -3399,10 +3435,10 @@ func toolsetsAddExternalOAuthServerUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets add-externaloauth-server --body '{
       "external_oauth_server": {
-         "metadata": "Reiciendis quis eveniet cupiditate non sed rerum.",
-         "slug": "lav"
+         "metadata": "Hic corrupti voluptate accusamus sunt ut.",
+         "slug": "gpq"
       }
-   }' --slug "b7p" --session-token "Numquam neque suscipit error voluptatem." --project-slug-input "Sapiente accusamus fuga asperiores."`)
+   }' --slug "81v" --session-token "Sunt voluptas harum id ut rerum aut." --project-slug-input "Ducimus ut blanditiis rerum."`)
 }
 
 func toolsetsRemoveOAuthServerUsage() {
@@ -3425,7 +3461,7 @@ func toolsetsRemoveOAuthServerUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets removeoauth-server --slug "gpq" --session-token "Hic corrupti voluptate accusamus sunt ut." --project-slug-input "Iusto accusamus sed dolor sunt voluptas."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets removeoauth-server --slug "cb0" --session-token "Soluta culpa." --project-slug-input "Incidunt voluptatum voluptate ex."`)
 }
 
 // usageUsage displays the usage of the usage command and its subcommands.
@@ -3459,7 +3495,7 @@ func usageGetPeriodUsageUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `usage get-period-usage --session-token "Beatae quaerat numquam aperiam iste exercitationem saepe." --project-slug-input "Culpa eum incidunt."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `usage get-period-usage --session-token "Animi est totam id." --project-slug-input "Asperiores molestiae."`)
 }
 
 func usageGetUsageTiersUsage() {
@@ -3497,7 +3533,7 @@ func usageCreateCustomerSessionUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `usage create-customer-session --session-token "Illum est aut perspiciatis modi reiciendis earum." --project-slug-input "Suscipit fugit explicabo."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `usage create-customer-session --session-token "Minus et quod accusantium." --project-slug-input "Molestiae expedita repudiandae."`)
 }
 
 func usageCreateCheckoutUsage() {
@@ -3518,7 +3554,7 @@ func usageCreateCheckoutUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `usage create-checkout --session-token "Recusandae commodi." --project-slug-input "Est itaque perferendis laudantium."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `usage create-checkout --session-token "Occaecati dolore modi." --project-slug-input "Repellat reprehenderit quaerat omnis."`)
 }
 
 // variationsUsage displays the usage of the variations command and its
@@ -3557,20 +3593,20 @@ func variationsUpsertGlobalUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations upsert-global --body '{
-      "confirm": "always",
-      "confirm_prompt": "Tempora aut.",
-      "description": "Inventore tempora delectus suscipit.",
-      "name": "Fugiat quis voluptatum.",
-      "src_tool_name": "Minima doloremque quas ullam corporis.",
-      "summarizer": "Blanditiis veniam in.",
-      "summary": "Sed dolorem unde quia incidunt eligendi adipisci.",
+      "confirm": "session",
+      "confirm_prompt": "Occaecati quia qui.",
+      "description": "Fugiat tempora in est eos quam blanditiis.",
+      "name": "Tempora minima ipsa facere officia eos reiciendis.",
+      "src_tool_name": "Ut eos rerum.",
+      "summarizer": "Voluptas at consectetur neque voluptatem.",
+      "summary": "Repellendus doloribus consequatur.",
       "tags": [
-         "Animi est totam id.",
-         "Asperiores molestiae.",
-         "Est quia beatae.",
-         "Et blanditiis sit provident perferendis ut."
+         "Quis repellendus numquam eligendi.",
+         "Ipsum ipsum.",
+         "Perspiciatis aliquam voluptas necessitatibus dolorum magnam.",
+         "Consequatur dolor non aperiam."
       ]
-   }' --session-token "Aspernatur aut itaque totam." --apikey-token "Eius est dolore sit suscipit omnis." --project-slug-input "Ut quia enim sed."`)
+   }' --session-token "Sed optio." --apikey-token "Eos enim et quo." --project-slug-input "Natus eum saepe dolore ut reprehenderit."`)
 }
 
 func variationsDeleteGlobalUsage() {
@@ -3595,7 +3631,7 @@ func variationsDeleteGlobalUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations delete-global --variation-id "Cupiditate ad quae tempora tenetur accusamus omnis." --session-token "Nam quisquam unde velit aut nihil sapiente." --apikey-token "Dolores expedita dicta qui rerum." --project-slug-input "Rerum porro recusandae excepturi amet."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations delete-global --variation-id "Omnis iusto voluptates." --session-token "Ut ut voluptates similique." --apikey-token "Deleniti sapiente rerum facere dolorem sequi dolor." --project-slug-input "Quia dolorum ut quo voluptates sint laboriosam."`)
 }
 
 func variationsListGlobalUsage() {
@@ -3618,5 +3654,5 @@ func variationsListGlobalUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations list-global --session-token "Dolores possimus et qui eligendi inventore." --apikey-token "Repellat qui omnis ea." --project-slug-input "Autem quia voluptatem dolor quod est est."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations list-global --session-token "Asperiores consequatur adipisci veniam non." --apikey-token "Reprehenderit mollitia nostrum et voluptas beatae veniam." --project-slug-input "Temporibus deserunt."`)
 }
