@@ -48,7 +48,7 @@ func (s *WorkflowState) Fail(err error) *WorkflowState {
 	return s
 }
 
-func (s *WorkflowState) shouldHalt() bool {
+func (s *WorkflowState) Failed() bool {
 	return s.Err != nil
 }
 
@@ -88,7 +88,7 @@ func (s *WorkflowState) UploadAssets(
 	ctx context.Context,
 	sources []Source,
 ) *WorkflowState {
-	if s.shouldHalt() {
+	if s.Failed() {
 		return s
 	}
 
@@ -122,7 +122,7 @@ func (s *WorkflowState) UploadAssets(
 func (s *WorkflowState) EvolveActiveDeployment(
 	ctx context.Context,
 ) *WorkflowState {
-	if s.shouldHalt() {
+	if s.Failed() {
 		return s
 	}
 
@@ -162,7 +162,7 @@ func (s *WorkflowState) EvolveActiveDeployment(
 }
 
 func (s *WorkflowState) OrCreateDeployment(ctx context.Context) *WorkflowState {
-	if s.shouldHalt() {
+	if s.Failed() {
 		return s
 	}
 
@@ -177,7 +177,7 @@ func (s *WorkflowState) CreateDeployment(
 	ctx context.Context,
 	idem string,
 ) *WorkflowState {
-	if s.shouldHalt() {
+	if s.Failed() {
 		return s
 	}
 
@@ -203,8 +203,44 @@ func (s *WorkflowState) CreateDeployment(
 	return s
 }
 
+func (s *WorkflowState) LoadDeploymentByID(
+	ctx context.Context,
+	deploymentID string,
+) *WorkflowState {
+	result, err := s.DeploymentsClient.GetDeployment(
+		ctx,
+		s.Params.APIKey,
+		s.Params.ProjectSlug,
+		deploymentID,
+	)
+	if err != nil {
+		return s.Fail(
+			fmt.Errorf("failed to get deployment '%s': %w", deploymentID, err),
+		)
+	}
+
+	s.Deployment = result
+	return s
+}
+
+func (s *WorkflowState) LoadLatestDeployment(
+	ctx context.Context,
+) *WorkflowState {
+	result, err := s.DeploymentsClient.GetLatestDeployment(
+		ctx,
+		s.Params.APIKey,
+		s.Params.ProjectSlug,
+	)
+	if err != nil {
+		return s.Fail(fmt.Errorf("failed to get latest deployment: %w", err))
+	}
+
+	s.Deployment = result
+	return s
+}
+
 func (s *WorkflowState) Poll(ctx context.Context) *WorkflowState {
-	if s.shouldHalt() {
+	if s.Failed() {
 		return s
 	}
 
@@ -237,19 +273,7 @@ func (s *WorkflowState) Poll(ctx context.Context) *WorkflowState {
 			)
 
 		case <-ticker.C:
-			deployment, err := s.DeploymentsClient.GetDeployment(
-				ctx,
-				s.Params.APIKey,
-				s.Params.ProjectSlug,
-				s.Deployment.ID,
-			)
-			if err != nil {
-				return s.Fail(
-					fmt.Errorf("deployment polling failed: %w", err),
-				)
-			}
-			s.Deployment = deployment
-
+			s.LoadDeploymentByID(ctx, s.Deployment.ID)
 			s.Logger.DebugContext(ctx, "Deployment status check",
 				slog.String("deployment_id", s.Deployment.ID),
 				slog.String("status", s.Deployment.Status),

@@ -3,14 +3,12 @@ package app
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/speakeasy-api/gram/cli/internal/api"
-	"github.com/speakeasy-api/gram/cli/internal/app/logging"
+	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/urfave/cli/v2"
@@ -57,63 +55,52 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
 			defer cancel()
 
-			logger := logging.PullLogger(ctx)
 			projectSlug := c.String("project")
 			deploymentID := c.String("id")
 			jsonOutput := c.Bool("json")
 
-			apiURLArg := c.String("api-url")
-			apiURL, err := url.Parse(apiURLArg)
+			apiURL, err := url.Parse(c.String("api-url"))
 			if err != nil {
-				return fmt.Errorf("failed to parse API URL '%s': %w", apiURLArg, err)
+				return fmt.Errorf(
+					"failed to parse API URL '%s': %w",
+					c.String("api-url"),
+					err,
+				)
 			}
-			if apiURL.Scheme == "" || apiURL.Host == "" {
-				return fmt.Errorf("API URL '%s' must include scheme and host", apiURLArg)
+
+			params := deploy.WorkflowParams{
+				APIKey:      secret.Secret(c.String("api-key")),
+				APIURL:      apiURL,
+				ProjectSlug: projectSlug,
 			}
+			result := deploy.NewWorkflow(ctx, params)
 
-			deploymentsClient := api.NewDeploymentsClient(&api.DeploymentsClientOptions{
-				Scheme: apiURL.Scheme,
-				Host:   apiURL.Host,
-			})
-
-			apiKey := secret.Secret(c.String("api-key"))
-
-			var deployment *types.Deployment
 			if deploymentID != "" {
-				logger.DebugContext(ctx, "Getting deployment status", slog.String("deployment_id", deploymentID))
-				result, err := deploymentsClient.GetDeployment(ctx, apiKey, projectSlug, deploymentID)
-				if err != nil {
-					return fmt.Errorf("failed to get deployment: %w", err)
-				}
-				deployment = result
+				result.LoadDeploymentByID(ctx, deploymentID)
 			} else {
-				logger.InfoContext(ctx, "Getting latest deployment status")
-				result, err := deploymentsClient.GetLatestDeployment(ctx, apiKey, projectSlug)
-				if err != nil {
-					return fmt.Errorf("failed to get latest deployment: %w", err)
-				}
-				if result == nil {
-					if jsonOutput {
-						fmt.Println("{}")
-					} else {
-						fmt.Println("No deployments found for this project")
-					}
-					return nil
-				}
-				deployment = result
+				result.LoadLatestDeployment(ctx)
+			}
+			if result.Failed() {
+				return fmt.Errorf("failed to get status: %w", result.Err)
 			}
 
 			if jsonOutput {
-				return printDeploymentStatusJSON(deployment)
+				return printDeploymentStatusJSON(result.Deployment)
 			} else {
-				printDeploymentStatus(deployment)
+				printDeploymentStatus(result.Deployment)
 			}
+
 			return nil
 		},
 	}
 }
 
 func printDeploymentStatus(deployment *types.Deployment) {
+	if deployment == nil {
+		fmt.Println("No deployments found for this project")
+		return
+	}
+
 	fmt.Printf("Deployment Status\n")
 	fmt.Printf("=================\n\n")
 
@@ -161,6 +148,11 @@ func printDeploymentStatus(deployment *types.Deployment) {
 }
 
 func printDeploymentStatusJSON(deployment *types.Deployment) error {
+	if deployment == nil {
+		fmt.Println("{}")
+		return nil
+	}
+
 	jsonData, err := json.MarshalIndent(deployment, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal deployment to JSON: %w", err)

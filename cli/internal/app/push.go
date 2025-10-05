@@ -82,13 +82,13 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			logger := logging.PullLogger(ctx)
 			projectSlug := c.String("project")
 
-			apiURLArg := c.String("api-url")
-			apiURL, err := url.Parse(apiURLArg)
+			apiURL, err := url.Parse(c.String("api-url"))
 			if err != nil {
-				return fmt.Errorf("failed to parse API URL '%s': %w", apiURLArg, err)
-			}
-			if apiURL.Scheme == "" || apiURL.Host == "" {
-				return fmt.Errorf("API URL '%s' must include scheme and host", apiURLArg)
+				return fmt.Errorf(
+					"failed to parse API URL '%s': %w",
+					c.String("api-url"),
+					err,
+				)
 			}
 
 			configFilename, err := filepath.Abs(c.String("config"))
@@ -129,30 +129,42 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				result.Poll(ctx)
 			}
 
-			if result.Err != nil {
+			if result.Failed() {
 				if result.Deployment != nil {
-					helpCmd := slog.String("command",
-						fmt.Sprintf("gram status %s", result.Deployment.ID),
+					statusCommand := fmt.Sprintf(
+						"gram status --id %s",
+						result.Deployment.ID,
 					)
-					result.Logger.InfoContext(
+
+					result.Logger.WarnContext(
 						ctx,
-						"You can check deployment status with",
-						helpCmd,
+						"Poll failed.",
+						slog.String("command", statusCommand),
+						slog.String("error", result.Err.Error()),
 					)
+					return nil
 				}
 
 				return fmt.Errorf("failed to push deploy: %w", result.Err)
 			}
 
-			deploymentResult := result.Deployment
-			switch deploymentResult.Status {
+			slogID := slog.String("deployment_id", result.Deployment.ID)
+			status := result.Deployment.Status
+
+			switch status {
 			case "completed":
-				logger.InfoContext(ctx, "Deployment completed successfully", slog.String("deployment_id", deploymentResult.ID))
+				logger.InfoContext(ctx, "Deployment succeeded", slogID)
+				return nil
 			case "failed":
-				logger.ErrorContext(ctx, "Deployment failed", slog.String("deployment_id", deploymentResult.ID))
+				logger.ErrorContext(ctx, "Deployment failed", slogID)
 				return fmt.Errorf("deployment failed")
 			default:
-				logger.InfoContext(ctx, "Deployment is still in progress", slog.String("status", deploymentResult.Status), slog.String("deployment_id", deploymentResult.ID))
+				logger.InfoContext(
+					ctx,
+					"Deployment is still in progress",
+					slogID,
+					slog.String("status", status),
+				)
 			}
 
 			return nil

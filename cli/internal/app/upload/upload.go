@@ -71,15 +71,14 @@ Example:
 			)
 			defer cancel()
 
-			apiURLStr := c.String("api-url")
-			apiURL, err := url.Parse(apiURLStr)
-			if err != nil || apiURL.Scheme == "" || apiURL.Host == "" {
+			apiURL, err := url.Parse(c.String("api-url"))
+			if err != nil {
 				return fmt.Errorf(
-					"API URL must include scheme and host: '%s'",
-					apiURLStr,
+					"failed to parse API URL '%s': %w",
+					c.String("api-url"),
+					err,
 				)
 			}
-
 			params := deploy.WorkflowParams{
 				APIKey:      secret.Secret(c.String("api-key")),
 				APIURL:      apiURL,
