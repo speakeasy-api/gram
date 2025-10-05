@@ -390,6 +390,135 @@ func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload
 	return mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug))
 }
 
+func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPayload) (*types.Toolset, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
+
+	// Get the original toolset
+	originalToolset, err := s.repo.GetToolset(ctx, repo.GetToolsetParams{
+		Slug:      conv.ToLower(payload.Slug),
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").Log(ctx, logger)
+	}
+
+	// Generate new slug with _copy suffix
+	slugSuffix, err := conv.GenerateRandomSlug(5)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to generate random slug").Log(ctx, logger)
+	}
+
+	newName := originalToolset.Name + "_copy"
+	newSlug := conv.ToSlug(newName)
+	mcpSlug := authCtx.OrganizationSlug + "-" + slugSuffix
+
+	// Prepare base parameters for creating the cloned toolset
+	baseParams := repo.CreateToolsetParams{
+		Name:                   newName,
+		Slug:                   newSlug,
+		OrganizationID:         authCtx.ActiveOrganizationID,
+		ProjectID:              *authCtx.ProjectID,
+		Description:            originalToolset.Description,
+		DefaultEnvironmentSlug: originalToolset.DefaultEnvironmentSlug,
+		HttpToolNames:          originalToolset.HttpToolNames,
+		McpSlug:                conv.ToPGText(mcpSlug),
+		McpEnabled:             false, // Don't auto-enable MCP for cloned toolsets
+	}
+
+	// Try to create the cloned toolset, handling name conflicts
+	var clonedToolset repo.Toolset
+	clonedToolset, err = s.repo.CreateToolset(ctx, baseParams)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			// Try with a numbered suffix if _copy already exists
+			for i := 2; i <= 10; i++ {
+				baseParams.Name = fmt.Sprintf("%s_copy%d", originalToolset.Name, i)
+				baseParams.Slug = conv.ToSlug(baseParams.Name)
+				clonedToolset, err = s.repo.CreateToolset(ctx, baseParams)
+				if err == nil {
+					break
+				}
+				if !errors.As(err, &pgErr) || pgErr.Code != pgerrcode.UniqueViolation {
+					return nil, oops.E(oops.CodeUnexpected, err, "failed to clone toolset").Log(ctx, logger)
+				}
+			}
+			if err != nil {
+				return nil, oops.E(oops.CodeConflict, nil, "could not create unique toolset name").Log(ctx, logger)
+			}
+		} else {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to clone toolset").Log(ctx, logger)
+		}
+	}
+
+	// Clone the latest toolset version
+	latestVersion, err := s.repo.GetLatestToolsetVersion(ctx, originalToolset.ID)
+	if err != nil {
+		logger.WarnContext(ctx, "failed to get latest toolset version", attr.SlogError(err))
+	} else {
+		_, err = s.repo.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
+			ToolsetID:     clonedToolset.ID,
+			Version:       1,
+			ToolUrns:      latestVersion.ToolUrns,
+			PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		})
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to create toolset version for clone", attr.SlogError(err))
+		}
+	}
+
+	// Clone prompt templates if any
+	originalPromptTemplates, err := s.repo.GetToolsetPromptTemplateNames(ctx, repo.GetToolsetPromptTemplateNamesParams{
+		ToolsetID: originalToolset.ID,
+		ProjectID: *authCtx.ProjectID,
+	})
+	if err == nil && len(originalPromptTemplates) > 0 {
+		tplr := tplRepo.New(s.db)
+		ptrows, err := tplr.PeekTemplatesByNames(ctx, tplRepo.PeekTemplatesByNamesParams{
+			ProjectID: *authCtx.ProjectID,
+			Names:     originalPromptTemplates,
+		})
+		if err == nil {
+			additions := make([]repo.AddToolsetPromptTemplatesParams, 0, len(ptrows))
+			for _, ptrow := range ptrows {
+				additions = append(additions, repo.AddToolsetPromptTemplatesParams{
+					ProjectID:        *authCtx.ProjectID,
+					ToolsetID:        clonedToolset.ID,
+					PromptHistoryID:  ptrow.HistoryID,
+					PromptTemplateID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+					PromptName:       ptrow.Name,
+				})
+			}
+			_, err = s.repo.AddToolsetPromptTemplates(ctx, additions)
+			if err != nil {
+				logger.WarnContext(ctx, "failed to clone prompt templates", attr.SlogError(err))
+			}
+		}
+	}
+
+	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(clonedToolset.Slug))
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to describe cloned toolset", attr.SlogError(err))
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe cloned toolset").Log(ctx, logger)
+	}
+
+	if toolsetDetails == nil {
+		logger.ErrorContext(ctx, "toolsetDetails is nil after successful describe")
+		return nil, oops.E(oops.CodeUnexpected, nil, "toolset details is nil").Log(ctx, logger)
+	}
+
+	logger.InfoContext(ctx, "successfully cloned toolset",
+		attr.SlogToolsetSlug(string(payload.Slug)),
+		attr.SlogToolsetSlug(clonedToolset.Slug))
+
+	return toolsetDetails, nil
+}
+
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
 }

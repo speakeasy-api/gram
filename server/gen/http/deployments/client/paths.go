@@ -17,6 +17,11 @@ func GetLatestDeploymentDeploymentsPath() string {
 	return "/rpc/deployments.latest"
 }
 
+// GetActiveDeploymentDeploymentsPath returns the URL path to the deployments service getActiveDeployment HTTP endpoint.
+func GetActiveDeploymentDeploymentsPath() string {
+	return "/rpc/deployments.active"
+}
+
 // CreateDeploymentDeploymentsPath returns the URL path to the deployments service createDeployment HTTP endpoint.
 func CreateDeploymentDeploymentsPath() string {
 	return "/rpc/deployments.create"

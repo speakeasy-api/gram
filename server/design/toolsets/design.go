@@ -151,6 +151,31 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CheckMCPSlugAvailability"}`)
 	})
 
+	Method("cloneToolset", func() {
+		Description("Clone an existing toolset with a new name")
+
+		Payload(func() {
+			Required("slug")
+			Attribute("slug", shared.Slug, "The slug of the toolset to clone")
+			security.SessionPayload()
+			security.ProjectPayload()
+		})
+
+		Result(shared.Toolset)
+
+		HTTP(func() {
+			POST("/rpc/toolsets.clone")
+			Param("slug")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "cloneToolset")
+		Meta("openapi:extension:x-speakeasy-name-override", "cloneBySlug")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CloneToolset"}`)
+	})
+
 	Method("addExternalOAuthServer", func() {
 		Description("Associate an external OAuth server with a toolset")
 

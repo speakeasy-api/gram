@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"slices"
@@ -34,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
@@ -128,11 +130,19 @@ func NewService(
 	}
 }
 
-func Attach(mux goahttp.Muxer, service *Service) {
+func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Service) {
 	o11y.AttachHandler(mux, "POST", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP(w, r)
 	})
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
+		// Check if this is a browser request (HTML Accept header)
+		for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
+			if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
+				oops.ErrHandle(service.logger, metadataService.ServeHostedPage).ServeHTTP(w, r)
+				return
+			}
+		}
+
 		body, err := json.Marshal(rpcError{
 			ID:      msgID{format: 0, String: "", Number: 0},
 			Code:    methodNotAllowed,
