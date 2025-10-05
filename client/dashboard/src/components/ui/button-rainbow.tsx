@@ -22,7 +22,7 @@ export const ButtonRainbow = ({
         "inline-block rounded-md p-[1px]",
         "bg-gradient-primary",
         inProgress && "opacity-50",
-        className
+        className,
       )}
     >
       <Comp
@@ -42,7 +42,7 @@ export const ButtonRainbow = ({
           "transition-all outline-none",
           "w-full rounded-[7px] bg-background border-0",
           "hover:bg-background/95",
-          "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-neutral-500"
+          "focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-neutral-500",
         )}
       >
         {children}

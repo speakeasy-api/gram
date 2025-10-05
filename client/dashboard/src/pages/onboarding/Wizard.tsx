@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
-import FileUpload from "@/components/upload";
+import { FullWidthUpload } from "@/components/upload";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useApiError } from "@/hooks/useApiError";
@@ -330,7 +330,7 @@ const UploadStep = ({
       )}
     </Stack>
   ) : (
-    <FileUpload
+    <FullWidthUpload
       label={<span className="text-body-sm">Drop your OpenAPI spec here</span>}
       onUpload={handleSpecUpload}
       allowedExtensions={["yaml", "yml", "json"]}
@@ -407,7 +407,7 @@ const ToolsetStep = ({
       if (!toolsetName) {
         throw new Error("No toolset name found");
       }
-      if (!tools?.tools.length) {
+      if (!tools?.httpTools.length) {
         throw new Error("No tools found");
       }
 
@@ -415,7 +415,7 @@ const ToolsetStep = ({
         createToolsetRequestBody: {
           name: toolsetName,
           description: `A toolset created from your OpenAPI document`,
-          httpToolNames: tools?.tools.map((tool) => tool.name) ?? [],
+          toolUrns: tools?.httpTools.map((tool) => tool.toolUrn) ?? [],
         },
       });
 
@@ -429,7 +429,7 @@ const ToolsetStep = ({
     }
   };
 
-  const groupedTools = useGroupedHttpTools(tools?.tools ?? []);
+  const groupedTools = useGroupedHttpTools(tools?.httpTools ?? []);
   const flattened = groupedTools.flatMap((group) => group.tools);
   const toolsToShow = flattened.slice(0, 25);
   const additionalTools = flattened.slice(25);

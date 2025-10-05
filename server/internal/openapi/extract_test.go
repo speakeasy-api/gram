@@ -2,9 +2,11 @@ package openapi
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -76,8 +78,8 @@ func TestDoProcess_Equal(t *testing.T) {
 	assert.Equal(t, libOpenAPIResult.DocumentUpgrade, speakeasyResult.DocumentUpgrade)
 	assert.Equal(t, libOpenAPIResult.DocumentVersion, speakeasyResult.DocumentVersion)
 
-	assertRecordedCalls(t, libopenapiMockedDBTX.recordedExec, speakeasyMockedDBTX.recordedExec, "recordedExec should match")
-	assertRecordedCalls(t, libopenapiMockedDBTX.recordedQueryRows, speakeasyMockedDBTX.recordedQueryRows, "recordedQueryRows should match")
+	assertRecordedCallsUnordered(t, libopenapiMockedDBTX.recordedExec, speakeasyMockedDBTX.recordedExec, "recordedExec should match")
+	assertRecordedCallsUnordered(t, libopenapiMockedDBTX.recordedQueryRows, speakeasyMockedDBTX.recordedQueryRows, "recordedQueryRows should match")
 }
 
 // compareJSONWithResponseSchema compares JSON strings that may contain <ResponseSchema> tags
@@ -144,17 +146,55 @@ func compareJSONWithResponseSchema(t *testing.T, expectedJSON, actualJSON string
 	return assert.JSONEq(t, expectedWithoutSchemas, actualWithoutSchemas, msgAndArgs...)
 }
 
-// assertRecordedCalls compares two recorded call slices (recordedExec or recordedQueryRows)
-// and uses JSONEq for []byte fields to properly compare JSON content, recursively handling nested structures
-func assertRecordedCalls(t *testing.T, expected, actual [][]any, msgAndArgs ...interface{}) bool {
+// callSortKey generates a sort key from a recorded call's arguments.
+// It concatenates string representations of the arguments to create a stable sort key.
+func callSortKey(call []any) string {
+	var key string
+	for _, arg := range call {
+		switch v := arg.(type) {
+		case string:
+			key += v
+		case fmt.Stringer:
+			key += v.String()
+		case []byte:
+			key += string(v)
+		default:
+			key += fmt.Sprintf("%v", v)
+		}
+		key += "|"
+	}
+	return key
+}
+
+// assertRecordedCallsUnordered compares two recorded call slices (recordedExec
+// or recordedQueryRows) and uses JSONEq for []byte fields to properly compare
+// JSON content, recursively handling nested structures. Calls are sorted before
+// comparison to handle parallel execution order variations.
+func assertRecordedCallsUnordered(
+	t *testing.T,
+	expected,
+	actual [][]any, msgAndArgs ...any,
+) bool {
 	t.Helper()
 
 	if !assert.Len(t, actual, len(expected), msgAndArgs...) {
 		return false
 	}
 
-	for i, expectedCall := range expected {
-		actualCall := actual[i]
+	// Sort both slices by their sort keys to handle parallel execution
+	expectedSorted := slices.Clone(expected)
+	actualSorted := slices.Clone(actual)
+
+	slices.SortFunc(expectedSorted, func(a, b []any) int {
+		return cmpString(callSortKey(a), callSortKey(b))
+	})
+
+	slices.SortFunc(actualSorted, func(a, b []any) int {
+		return cmpString(callSortKey(a), callSortKey(b))
+	})
+
+	for i, expectedCall := range expectedSorted {
+		actualCall := actualSorted[i]
 		if !assert.Len(t, actualCall, len(expectedCall), "call %d has different number of arguments", i) {
 			return false
 		}
@@ -169,6 +209,17 @@ func assertRecordedCalls(t *testing.T, expected, actual [][]any, msgAndArgs ...i
 	}
 
 	return true
+}
+
+// cmpString compares two strings for sorting.
+func cmpString(a, b string) int {
+	if a < b {
+		return -1
+	}
+	if a > b {
+		return 1
+	}
+	return 0
 }
 
 // compareRecursively compares two values recursively, handling []byte fields with JSON comparison
@@ -319,4 +370,286 @@ func (m *MockedDBTX) QueryRow(ctx context.Context, sql string, args ...interface
 
 func (m *MockedDBTX) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
 	panic("not implemented")
+}
+
+func TestDoProcess_ValidatesJSONSchema_LibOpenAPI(t *testing.T) {
+	t.Parallel()
+
+	logger := testenv.NewLogger(t)
+	tracer := testenv.NewTracerProvider(t).Tracer("github.com/speakeasy-api/gram/server/internal/openapi")
+
+	p := &ToolExtractor{
+		logger:       logger,
+		tracer:       tracer,
+		db:           nil,
+		feature:      nil,
+		assetStorage: nil,
+	}
+
+	mockedDBTX := &MockedDBTX{
+		recordedQueryRows: [][]any{},
+		recordedExec:      [][]any{},
+	}
+	tx := repo.New(mockedDBTX)
+
+	deploymentID := uuid.MustParse("87654321-4321-4321-4321-210987654321")
+	projectID := uuid.MustParse("12345678-1234-1234-1234-123456789012")
+	openapiDocID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+
+	// Valid OpenAPI document
+	validDoc := []byte(`
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /test:
+    get:
+      operationId: testGet
+      summary: Test operation
+      responses:
+        '200':
+          description: OK
+`)
+
+	tet := ToolExtractorTask{
+		Parser: "libopenapi",
+		DocInfo: &types.OpenAPIv3DeploymentAsset{
+			Name:    "test",
+			Slug:    "test",
+			ID:      "a",
+			AssetID: "b",
+		},
+		ProjectID:          projectID,
+		DeploymentID:       deploymentID,
+		DocumentID:         openapiDocID,
+		DocURL:             nil,
+		ProjectSlug:        "c",
+		OrgSlug:            "d",
+		OnOperationSkipped: nil,
+	}
+
+	// This should succeed and validate the generated JSON schema
+	result, err := p.doLibOpenAPI(t.Context(), logger, tracer, tx, validDoc, tet)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+}
+
+func TestDoProcess_ValidatesJSONSchema_Speakeasy(t *testing.T) {
+	t.Parallel()
+
+	logger := testenv.NewLogger(t)
+	tracer := testenv.NewTracerProvider(t).Tracer("github.com/speakeasy-api/gram/server/internal/openapi")
+
+	p := &ToolExtractor{
+		logger:       logger,
+		tracer:       tracer,
+		db:           nil,
+		feature:      nil,
+		assetStorage: nil,
+	}
+
+	mockedDBTX := &MockedDBTX{
+		recordedQueryRows: [][]any{},
+		recordedExec:      [][]any{},
+	}
+	tx := repo.New(mockedDBTX)
+
+	deploymentID := uuid.MustParse("87654321-4321-4321-4321-210987654321")
+	projectID := uuid.MustParse("12345678-1234-1234-1234-123456789012")
+	openapiDocID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+
+	// Valid OpenAPI document
+	validDoc := []byte(`
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /test:
+    get:
+      operationId: testGet
+      summary: Test operation
+      responses:
+        '200':
+          description: OK
+`)
+
+	tet := ToolExtractorTask{
+		Parser: "speakeasy",
+		DocInfo: &types.OpenAPIv3DeploymentAsset{
+			Name:    "test",
+			Slug:    "test",
+			ID:      "a",
+			AssetID: "b",
+		},
+		ProjectID:          projectID,
+		DeploymentID:       deploymentID,
+		DocumentID:         openapiDocID,
+		DocURL:             nil,
+		ProjectSlug:        "c",
+		OrgSlug:            "d",
+		OnOperationSkipped: nil,
+	}
+
+	// This should succeed and validate the generated JSON schema
+	result, err := p.doSpeakeasy(t.Context(), logger, tracer, tx, validDoc, tet)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+}
+
+func TestDoProcess_RejectsInvalidJSONSchema_LibOpenAPI(t *testing.T) {
+	t.Parallel()
+
+	logger := testenv.NewLogger(t)
+	tracer := testenv.NewTracerProvider(t).Tracer("github.com/speakeasy-api/gram/server/internal/openapi")
+
+	p := &ToolExtractor{
+		logger:       logger,
+		tracer:       tracer,
+		db:           nil,
+		feature:      nil,
+		assetStorage: nil,
+	}
+
+	mockedDBTX := &MockedDBTX{
+		recordedQueryRows: [][]any{},
+		recordedExec:      [][]any{},
+	}
+	tx := repo.New(mockedDBTX)
+
+	deploymentID := uuid.MustParse("87654321-4321-4321-4321-210987654321")
+	projectID := uuid.MustParse("12345678-1234-1234-1234-123456789012")
+	openapiDocID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+
+	// OpenAPI document with invalid JSON schema syntax in parameter
+	invalidDoc := []byte(`
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /test:
+    get:
+      operationId: testGet
+      summary: Test operation
+      parameters:
+        - name: testParam
+          in: query
+          schema:
+            type: invalid_type_that_breaks_jsonschema
+            properties:
+              nested: null
+      responses:
+        '200':
+          description: OK
+`)
+
+	// Track if operation was skipped due to validation error
+	var skippedErr error
+	tet := ToolExtractorTask{
+		Parser: "libopenapi",
+		DocInfo: &types.OpenAPIv3DeploymentAsset{
+			Name:    "test",
+			Slug:    "test",
+			ID:      "a",
+			AssetID: "b",
+		},
+		ProjectID:    projectID,
+		DeploymentID: deploymentID,
+		DocumentID:   openapiDocID,
+		DocURL:       nil,
+		ProjectSlug:  "c",
+		OrgSlug:      "d",
+		OnOperationSkipped: func(err error) {
+			skippedErr = err
+		},
+	}
+
+	// Extraction succeeds but operation is skipped
+	result, err := p.doLibOpenAPI(t.Context(), logger, tracer, tx, invalidDoc, tet)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify that the operation was skipped due to invalid schema
+	require.Error(t, skippedErr)
+	require.Contains(t, skippedErr.Error(), "invalid tool input schema")
+}
+
+func TestDoProcess_RejectsInvalidJSONSchema_Speakeasy(t *testing.T) {
+	t.Parallel()
+
+	logger := testenv.NewLogger(t)
+	tracer := testenv.NewTracerProvider(t).Tracer("github.com/speakeasy-api/gram/server/internal/openapi")
+
+	p := &ToolExtractor{
+		logger:       logger,
+		tracer:       tracer,
+		db:           nil,
+		feature:      nil,
+		assetStorage: nil,
+	}
+
+	mockedDBTX := &MockedDBTX{
+		recordedQueryRows: [][]any{},
+		recordedExec:      [][]any{},
+	}
+	tx := repo.New(mockedDBTX)
+
+	deploymentID := uuid.MustParse("87654321-4321-4321-4321-210987654321")
+	projectID := uuid.MustParse("12345678-1234-1234-1234-123456789012")
+	openapiDocID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+
+	// OpenAPI document with invalid JSON schema syntax in parameter
+	invalidDoc := []byte(`
+openapi: 3.0.0
+info:
+  title: Test API
+  version: 1.0.0
+paths:
+  /test:
+    get:
+      operationId: testGet
+      summary: Test operation
+      parameters:
+        - name: testParam
+          in: query
+          schema:
+            type: invalid_type_that_breaks_jsonschema
+            properties:
+              nested: null
+      responses:
+        '200':
+          description: OK
+`)
+
+	// Track if operation was skipped due to validation error
+	var skippedErr error
+	tet := ToolExtractorTask{
+		Parser: "speakeasy",
+		DocInfo: &types.OpenAPIv3DeploymentAsset{
+			Name:    "test",
+			Slug:    "test",
+			ID:      "a",
+			AssetID: "b",
+		},
+		ProjectID:    projectID,
+		DeploymentID: deploymentID,
+		DocumentID:   openapiDocID,
+		DocURL:       nil,
+		ProjectSlug:  "c",
+		OrgSlug:      "d",
+		OnOperationSkipped: func(err error) {
+			skippedErr = err
+		},
+	}
+
+	// Extraction succeeds but operation is skipped
+	result, err := p.doSpeakeasy(t.Context(), logger, tracer, tx, invalidDoc, tet)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify that the operation was skipped due to invalid schema
+	require.Error(t, skippedErr)
+	require.Contains(t, skippedErr.Error(), "invalid tool input schema")
 }

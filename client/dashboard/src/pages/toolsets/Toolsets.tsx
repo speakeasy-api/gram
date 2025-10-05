@@ -14,7 +14,7 @@ import { Button } from "@speakeasy-api/moonshine";
 import { Outlet } from "react-router";
 import { ToolsetCard } from "./ToolsetCard";
 import { ToolsetsEmptyState } from "./ToolsetsEmptyState";
-import { APIsContent, useDeploymentIsEmpty } from "./openapi/OpenAPI";
+import OpenAPIAssets, { useDeploymentIsEmpty } from "./openapi/OpenAPI";
 
 export function useToolsets() {
   const { data: toolsets, refetch, isLoading } = useListToolsets();
@@ -63,7 +63,7 @@ export default function Toolsets() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <APIsContent />
+        <OpenAPIAssets />
         <ToolsetsContent
           setCreateToolsetDialogOpen={setCreateToolsetDialogOpen}
         />
@@ -123,9 +123,7 @@ function ToolsetsContent({
         Organized collections of tools and prompts for your AI applications
       </Page.Section.Description>
       <Page.Section.CTA>
-        <Button
-          onClick={() => setCreateToolsetDialogOpen(true)}
-        >
+        <Button onClick={() => setCreateToolsetDialogOpen(true)}>
           <Button.LeftIcon>
             <Plus className="w-4 h-4" />
           </Button.LeftIcon>

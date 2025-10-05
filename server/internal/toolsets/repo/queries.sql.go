@@ -805,3 +805,44 @@ func (q *Queries) UpdateToolsetExternalOAuthServer(ctx context.Context, arg Upda
 	)
 	return i, err
 }
+
+const updateToolsetHttpToolNames = `-- name: UpdateToolsetHttpToolNames :one
+UPDATE toolsets
+SET 
+    http_tool_names = $1::text[]
+  , updated_at = clock_timestamp()
+WHERE slug = $2 AND project_id = $3
+RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, http_tool_names, mcp_slug, mcp_is_public, mcp_enabled, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
+`
+
+type UpdateToolsetHttpToolNamesParams struct {
+	HttpToolNames []string
+	Slug          string
+	ProjectID     uuid.UUID
+}
+
+func (q *Queries) UpdateToolsetHttpToolNames(ctx context.Context, arg UpdateToolsetHttpToolNamesParams) (Toolset, error) {
+	row := q.db.QueryRow(ctx, updateToolsetHttpToolNames, arg.HttpToolNames, arg.Slug, arg.ProjectID)
+	var i Toolset
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.DefaultEnvironmentSlug,
+		&i.HttpToolNames,
+		&i.McpSlug,
+		&i.McpIsPublic,
+		&i.McpEnabled,
+		&i.CustomDomainID,
+		&i.ExternalOauthServerID,
+		&i.OauthProxyServerID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}

@@ -71,7 +71,7 @@ export function FeatureRequestModal({
               variant="brand"
               onClick={() => {
                 handleAccountUpgradeClick();
-                window.open(routes.billing.href(), '_self');
+                window.open(routes.billing.href(), "_self");
               }}
             >
               UPGRADE

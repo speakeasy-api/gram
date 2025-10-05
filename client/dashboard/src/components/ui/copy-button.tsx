@@ -23,7 +23,7 @@ export const CopyButton = ({
   const handleCopy = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
     e.preventDefault();
-    
+
     navigator.clipboard.writeText(text);
     setRecentlyCopied(true);
     setTimeout(() => {
@@ -41,7 +41,7 @@ export const CopyButton = ({
       className={cn(
         absolute && "absolute top-3 right-3 z-10 shadow-md",
         size === "inline" && "h-6 w-6",
-        className
+        className,
       )}
       style={absolute ? { boxShadow: "0 2px 8px rgba(0,0,0,0.08)" } : undefined}
     >

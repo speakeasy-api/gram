@@ -8,3 +8,6 @@ client:
   - 'pnpm-workspace.yaml'
   - 'tsconfig.json'
   - 'sdks/typescript/**'
+
+functions:
+  - 'functions/**'

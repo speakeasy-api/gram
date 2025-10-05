@@ -17,7 +17,7 @@ const CardComponent = ({
       className={cn(
         "bg-card text-card-foreground flex flex-col gap-5 rounded-xl border p-4 group/card",
         size === "sm" && "gap-4 py-4",
-        className
+        className,
       )}
       {...props}
     />
@@ -30,7 +30,7 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="card-header"
       className={cn(
         "@container/card-header flex items-center justify-between [.border-b]:pb-6",
-        className
+        className,
       )}
       {...props}
     />
@@ -50,7 +50,7 @@ function CardTitle({
       data-slot="card-title"
       className={cn(
         "leading-none [a:has([data-slot=card]):hover_&]:underline", // Underline the title when the card is hovered, if the card is a link
-        className
+        className,
       )}
       {...props}
     />
@@ -79,7 +79,7 @@ function CardInfo({ className, ...props }: React.ComponentProps<"div">) {
       className={cn(
         "gap-2 flex justify-start ml-auto",
         "group-hover/card:has([data-slot=card-action]):opacity-0", // Only hide info when card has an action and is hovered
-        className
+        className,
       )}
       {...props}
     />
@@ -102,7 +102,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
       data-slot="card-footer"
       className={cn(
         "flex items-center justify-between [.border-t]:pt-6 w-full",
-        className
+        className,
       )}
       {...props}
     />
@@ -160,7 +160,7 @@ export function Cards({
           "grid-cols-1 gap-x-8 gap-y-4 mb-8",
           !noGrid &&
             "@lg/cards:grid-cols-2 @3xl/cards:grid-cols-4 @7xl/cards:grid-cols-6",
-          className
+          className,
         )}
         {...props}
       >

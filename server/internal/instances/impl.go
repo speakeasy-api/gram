@@ -36,7 +36,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -52,8 +51,7 @@ type Service struct {
 	environmentsRepo *environments_repo.Queries
 	env              *environments.EnvironmentEntries
 	toolProxy        *gateway.ToolProxy
-	posthog          *posthog.Posthog
-	billing          billing.Tracker
+	tracking         billing.Tracker
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -67,8 +65,7 @@ func NewService(
 	env *environments.EnvironmentEntries,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
-	posthog *posthog.Posthog,
-	billing billing.Tracker,
+	tracking billing.Tracker,
 	tcm tm.ToolMetricsClient,
 ) *Service {
 	envRepo := environments_repo.New(db)
@@ -83,8 +80,7 @@ func NewService(
 		toolset:          toolsets.NewToolsets(db),
 		environmentsRepo: envRepo,
 		env:              env,
-		posthog:          posthog,
-		billing:          billing,
+		tracking:         tracking,
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			traceProvider,
@@ -172,6 +168,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	for i, template := range toolset.PromptTemplates {
 		promptTemplates[i] = &types.PromptTemplate{
 			ID:            template.ID,
+			ToolUrn:       template.ToolUrn,
 			Name:          template.Name,
 			HistoryID:     template.HistoryID,
 			PredecessorID: template.PredecessorID,
@@ -272,26 +269,12 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, executionInfo.OrganizationSlug, executionInfo.ProjectSlug)
 
+	var toolset *types.Toolset
 	if chatID != "" && toolsetSlug != "" {
-		if toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolsetSlug)); err != nil {
+		var toolsetErr error
+		toolset, toolsetErr = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolsetSlug))
+		if toolsetErr != nil {
 			logger.ErrorContext(ctx, "failed to load toolset", attr.SlogError(err))
-		} else {
-			if err := s.posthog.CaptureEvent(ctx, "direct_tool_execution", authCtx.ProjectID.String(), map[string]interface{}{
-				"toolset":              toolset.Name,
-				"toolset_slug":         toolset.Slug,
-				"toolset_id":           toolset.ID,
-				"disable_notification": true,
-				"project_id":           authCtx.ProjectID.String(),
-				"project_slug":         authCtx.ProjectSlug,
-				"organization_id":      executionInfo.Tool.OrganizationID,
-				"organization_slug":    executionInfo.OrganizationSlug,
-				"authenticated":        true,
-				"chat_session_id":      chatID,
-				"tool_name":            executionInfo.Tool.Name,
-				"tool_id":              executionInfo.Tool.ID,
-			}); err != nil {
-				logger.ErrorContext(ctx, "failed to capture direct_tool_execution event", attr.SlogError(err))
-			}
 		}
 	}
 
@@ -333,8 +316,17 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
 
-	go s.billing.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
-		OrganizationID:   authCtx.ActiveOrganizationID,
+	organizationID := authCtx.ActiveOrganizationID
+	if organizationID == "" && toolset != nil {
+		organizationID = toolset.OrganizationID
+	}
+
+	var toolsetID *string
+	if toolset != nil {
+		toolsetID = &toolset.ID
+	}
+	go s.tracking.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
+		OrganizationID:   organizationID,
 		RequestBytes:     requestNumBytes,
 		OutputBytes:      outputNumBytes,
 		ToolID:           toolID,
@@ -345,7 +337,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		OrganizationSlug: &executionInfo.OrganizationSlug,
 		ToolsetSlug:      &toolsetSlug,
 		ChatID:           &chatID,
+		ToolsetID:        toolsetID,
 		MCPURL:           nil, // Not applicable for direct tool calls
+		MCPSessionID:     nil, // Not applicable for direct tool calls
 	})
 
 	return nil

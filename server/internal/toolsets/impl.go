@@ -107,6 +107,12 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		s.logger.ErrorContext(ctx, "error getting enabled server count", attr.SlogError(err), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
+	// Process tool URNs and split them by type, so that we still persist HTTP tool names for legacy read purposes
+	httpToolNames, err := s.extractToolNamesFromUrns(payload.ToolUrns, urn.ToolKindHTTP)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URNs").Log(ctx, s.logger)
+	}
+
 	createToolParams := repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -114,7 +120,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		Slug:                   conv.ToSlug(payload.Name),
 		Description:            conv.PtrToPGText(payload.Description),
 		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
-		HttpToolNames:          payload.HTTPToolNames,
+		HttpToolNames:          httpToolNames,
 		McpSlug:                conv.ToPGText(mcpSlug),
 		McpEnabled:             enabledServerCount == 0, // we automatically enable the first available toolset in an organization as an MCP server
 	}
@@ -152,25 +158,9 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	// Create initial toolset version with tool URNs
-	toolURNs := []urn.Tool{}
-	if len(payload.HTTPToolNames) > 0 {
-		toolURNs, err = s.repo.GetToolUrnsByNames(ctx, repo.GetToolUrnsByNamesParams{
-			ToolNames: payload.HTTPToolNames,
-			ProjectID: *authCtx.ProjectID,
-		})
-		if err != nil {
-			s.logger.WarnContext(ctx, "failed to get tool URNs for toolset version", attr.SlogError(err))
-		}
-	}
-
-	_, err = s.repo.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
-		ToolsetID:     createdToolset.ID,
-		Version:       1,
-		ToolUrns:      toolURNs,
-		PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-	})
+	err = s.createToolsetVersion(ctx, payload.ToolUrns, createdToolset.ID, s.repo)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to create toolset version", attr.SlogError(err))
+		return nil, err
 	}
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug))
@@ -221,7 +211,6 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	tr := s.repo.WithTx(dbtx)
-	tplr := tplRepo.New(dbtx)
 
 	// First get the existing toolset
 	existingToolset, err := tr.GetToolset(ctx, repo.GetToolsetParams{
@@ -283,7 +272,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 
 			mcpToolset, mcpToolsetErr := tr.GetToolsetByMcpSlug(ctx, conv.ToPGText(conv.ToLower(*payload.McpSlug)))
 			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
-				return nil, oops.E(oops.CodeConflict, nil, "this slug is already tken")
+				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
 			}
 			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
 		} else {
@@ -292,7 +281,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 				CustomDomainID: uuid.NullUUID{UUID: uuid.MustParse(*toolsetDomainID), Valid: true},
 			})
 			if mcpToolsetErr == nil && mcpToolset.ID != existingToolset.ID {
-				return nil, oops.E(oops.CodeConflict, nil, "this slug is already tken")
+				return nil, oops.E(oops.CodeConflict, nil, "this slug is already taken")
 			}
 			updateParams.McpSlug = conv.ToPGText(conv.ToLower(*payload.McpSlug))
 		}
@@ -323,10 +312,9 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.McpIsPublic = *payload.McpIsPublic
 	}
 
-	// Convert set back to slice
-	if payload.HTTPToolNames != nil {
-		updateParams.HttpToolNames = make([]string, 0, len(payload.HTTPToolNames))
-		updateParams.HttpToolNames = append(updateParams.HttpToolNames, payload.HTTPToolNames...)
+	err = s.createToolsetVersion(ctx, payload.ToolUrns, existingToolset.ID, tr)
+	if err != nil {
+		return nil, err
 	}
 
 	updatedToolset, err := tr.UpdateToolset(ctx, updateParams)
@@ -334,42 +322,30 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset").Log(ctx, logger)
 	}
 
-	err = s.CreateToolsetVersion(ctx, payload, existingToolset, tr)
-	if err != nil {
-		logger.ErrorContext(ctx, "error creating toolset version", attr.SlogError(err))
+	if payload.PromptTemplateNames != nil {
+		err = s.updatePromptTemplates(ctx, dbtx, *authCtx.ProjectID, existingToolset.ID, payload.PromptTemplateNames, logger)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	if payload.PromptTemplateNames != nil {
-		ptrows, err := tplr.PeekTemplatesByNames(ctx, tplRepo.PeekTemplatesByNamesParams{
-			ProjectID: *authCtx.ProjectID,
-			Names:     payload.PromptTemplateNames,
+	// BELOW: Legacy logic to continue keeping the http_tool_definitions field up to date
+	// Process tool URNs and split them by type when ToolUrns are provided
+	if payload.ToolUrns != nil {
+		httpToolNames, err := s.extractToolNamesFromUrns(payload.ToolUrns, urn.ToolKindHTTP)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URNs").Log(ctx, logger)
+		}
+
+		// Update only the http_tool_names field
+		// This is done separately from the updateToolset call above because that call can't distinguish between setting the field to an empty array and not setting it at all
+		updatedToolset, err = tr.UpdateToolsetHttpToolNames(ctx, repo.UpdateToolsetHttpToolNamesParams{
+			Slug:          conv.ToLower(payload.Slug),
+			ProjectID:     *authCtx.ProjectID,
+			HttpToolNames: httpToolNames,
 		})
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error validating prompt templates").Log(ctx, logger)
-		}
-
-		err = tr.ClearToolsetPromptTemplates(ctx, repo.ClearToolsetPromptTemplatesParams{
-			ProjectID: *authCtx.ProjectID,
-			ToolsetID: existingToolset.ID,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error resetting prompt templates for toolset").Log(ctx, logger)
-		}
-
-		additions := make([]repo.AddToolsetPromptTemplatesParams, 0, len(ptrows))
-		for _, ptrow := range ptrows {
-			additions = append(additions, repo.AddToolsetPromptTemplatesParams{
-				ProjectID:        *authCtx.ProjectID,
-				ToolsetID:        existingToolset.ID,
-				PromptHistoryID:  ptrow.HistoryID,
-				PromptTemplateID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				PromptName:       ptrow.Name,
-			})
-		}
-
-		_, err = tr.AddToolsetPromptTemplates(ctx, additions)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error adding prompt templates to toolset").Log(ctx, logger)
+			return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset http tool names").Log(ctx, logger)
 		}
 	}
 
@@ -543,132 +519,128 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 	return toolsetDetails, nil
 }
 
-// Temporary method to create toolset versions alongside the existing toolset tools tracking
-func (s *Service) CreateToolsetVersion(ctx context.Context, payload *gen.UpdateToolsetPayload, existingToolset repo.Toolset, tr *repo.Queries) error {
+// createToolsetVersion creates a toolset version using the tool URNs from the payload
+func (s *Service) createToolsetVersion(ctx context.Context, urnStrings []string, toolsetID uuid.UUID, tr *repo.Queries) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetSlug(string(payload.Slug)))
+	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetID(toolsetID.String()))
 
-	// Create new toolset version if HTTP tool names or prompt template names changed
-	httpToolNamesChanged := false
-	promptTemplateNamesChanged := false
+	// Only create a version if tool URNs are provided (indicating a change). Check nil (not len==0) so that toolsets can be made empty.
+	if urnStrings == nil {
+		return nil
+	}
 
-	// Check if HTTP tool names changed
-	if payload.HTTPToolNames != nil {
-		existingNames := make(map[string]bool)
-		for _, name := range existingToolset.HttpToolNames {
-			existingNames[name] = true
+	// Parse tool URNs from payload
+	allToolUrns := []urn.Tool{}
+	for _, urnStr := range urnStrings {
+		var toolUrn urn.Tool
+		if err := toolUrn.UnmarshalText([]byte(urnStr)); err != nil {
+			logger.WarnContext(ctx, "invalid tool URN", attr.SlogError(err), attr.SlogToolURN(urnStr))
+			continue
+		}
+		allToolUrns = append(allToolUrns, toolUrn)
+	}
+
+	// Get the latest version to set as predecessor
+	latestVersion, err := tr.GetLatestToolsetVersion(ctx, toolsetID)
+	latestVersionNumber := int64(0)
+	var predecessorID uuid.NullUUID
+	if err == nil {
+		predecessorID = uuid.NullUUID{UUID: latestVersion.ID, Valid: true}
+		latestVersionNumber = latestVersion.Version
+	}
+
+	// Check if URNs are different from latest version
+	if err == nil && len(latestVersion.ToolUrns) == len(allToolUrns) {
+		existingUrnSet := make(map[string]bool)
+		for _, existingUrn := range latestVersion.ToolUrns {
+			existingUrnSet[existingUrn.String()] = true
 		}
 
-		newNames := make(map[string]bool)
-		for _, name := range payload.HTTPToolNames {
-			newNames[name] = true
-		}
-
-		httpToolNamesChanged = len(existingNames) != len(newNames)
-		if !httpToolNamesChanged {
-			for name := range existingNames {
-				if !newNames[name] {
-					httpToolNamesChanged = true
-					break
-				}
+		unchanged := true
+		for _, newUrn := range allToolUrns {
+			if !existingUrnSet[newUrn.String()] {
+				unchanged = false
+				break
 			}
+		}
+
+		if unchanged {
+			return nil // No change needed
 		}
 	}
 
-	// Check if prompt template names changed
-	if payload.PromptTemplateNames != nil {
-		existingTemplateNames, err := tr.GetToolsetPromptTemplateNames(ctx, repo.GetToolsetPromptTemplateNamesParams{
-			ToolsetID: existingToolset.ID,
-			ProjectID: *authCtx.ProjectID,
-		})
-		if err != nil {
-			logger.WarnContext(ctx, "failed to get existing prompt template names", attr.SlogError(err))
-		} else {
-			existingNames := make(map[string]bool)
-			for _, name := range existingTemplateNames {
-				existingNames[name] = true
-			}
+	_, err = tr.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
+		ToolsetID:     toolsetID,
+		Version:       latestVersionNumber + 1,
+		ToolUrns:      allToolUrns,
+		PredecessorID: predecessorID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to create toolset version").Log(ctx, logger)
+	}
 
-			newNames := make(map[string]bool)
-			for _, name := range payload.PromptTemplateNames {
-				newNames[name] = true
-			}
+	return nil
+}
 
-			promptTemplateNamesChanged = len(existingNames) != len(newNames)
-			if !promptTemplateNamesChanged {
-				for name := range existingNames {
-					if !newNames[name] {
-						promptTemplateNamesChanged = true
-						break
-					}
-				}
-			}
+// extractToolNamesFromUrns extracts tool names of a specific kind from URN strings,
+func (s *Service) extractToolNamesFromUrns(toolUrns []string, kind urn.ToolKind) ([]string, error) {
+	if toolUrns == nil {
+		return nil, nil
+	}
+
+	var toolNames []string
+	for _, urnStr := range toolUrns {
+		var toolUrn urn.Tool
+		if err := toolUrn.UnmarshalText([]byte(urnStr)); err != nil {
+			return nil, fmt.Errorf("invalid tool URN %q: %w", urnStr, err)
+		}
+
+		if toolUrn.Kind == kind {
+			toolNames = append(toolNames, toolUrn.Name)
 		}
 	}
 
-	// Create toolset version if either HTTP tools or prompt templates changed
-	if httpToolNamesChanged || promptTemplateNamesChanged {
-		allToolUrns := []urn.Tool{}
+	return toolNames, nil
+}
 
-		toolNames := conv.Ternary(payload.HTTPToolNames != nil, payload.HTTPToolNames, existingToolset.HttpToolNames)
+// updatePromptTemplates updates the prompt templates for a toolset. NOTE: promptTemplates are NOT tools! These correspond to actual "prompts" in MCP
+func (s *Service) updatePromptTemplates(ctx context.Context, dbtx pgx.Tx, projectID uuid.UUID, toolsetID uuid.UUID, promptTemplateNames []string, logger *slog.Logger) error {
+	tr := repo.New(dbtx)
+	tplr := tplRepo.New(dbtx)
 
-		// Get HTTP tool URNs
-		if toolNames != nil {
-			toolUrns, err := tr.GetToolUrnsByNames(ctx, repo.GetToolUrnsByNamesParams{
-				ToolNames: toolNames,
-				ProjectID: *authCtx.ProjectID,
-			})
-			if err != nil {
-				logger.WarnContext(ctx, "failed to get tool URNs for toolset version", attr.SlogError(err))
-			} else {
-				allToolUrns = append(allToolUrns, toolUrns...)
-			}
-		}
+	ptrows, err := tplr.PeekTemplatesByNames(ctx, tplRepo.PeekTemplatesByNamesParams{
+		ProjectID: projectID,
+		Names:     promptTemplateNames,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error validating prompt templates").Log(ctx, logger)
+	}
 
-		existingTemplateNames, err := tr.GetToolsetPromptTemplateNames(ctx, repo.GetToolsetPromptTemplateNamesParams{
-			ToolsetID: existingToolset.ID,
-			ProjectID: *authCtx.ProjectID,
+	err = tr.ClearToolsetPromptTemplates(ctx, repo.ClearToolsetPromptTemplatesParams{
+		ProjectID: projectID,
+		ToolsetID: toolsetID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error resetting prompt templates for toolset").Log(ctx, logger)
+	}
+
+	additions := make([]repo.AddToolsetPromptTemplatesParams, 0, len(ptrows))
+	for _, ptrow := range ptrows {
+		additions = append(additions, repo.AddToolsetPromptTemplatesParams{
+			ProjectID:        projectID,
+			ToolsetID:        toolsetID,
+			PromptHistoryID:  ptrow.HistoryID,
+			PromptTemplateID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			PromptName:       ptrow.Name,
 		})
-		if err != nil {
-			logger.WarnContext(ctx, "failed to get existing prompt template names", attr.SlogError(err))
-		}
+	}
 
-		promptTemplateNames := conv.Ternary(payload.PromptTemplateNames != nil, payload.PromptTemplateNames, existingTemplateNames)
-
-		// Get prompt template URNs
-		if promptTemplateNames != nil {
-			templateUrns, err := tr.GetPromptTemplateUrnsByNames(ctx, repo.GetPromptTemplateUrnsByNamesParams{
-				TemplateNames: promptTemplateNames,
-				ProjectID:     *authCtx.ProjectID,
-			})
-			if err != nil {
-				logger.WarnContext(ctx, "failed to get prompt template URNs for toolset version", attr.SlogError(err))
-			} else {
-				allToolUrns = append(allToolUrns, templateUrns...)
-			}
-		}
-
-		// Get the latest version to set as predecessor
-		latestVersion, err := tr.GetLatestToolsetVersion(ctx, existingToolset.ID)
-		latestVersionNumber := int64(0)
-		var predecessorID uuid.NullUUID
-		if err == nil {
-			predecessorID = uuid.NullUUID{UUID: latestVersion.ID, Valid: true}
-			latestVersionNumber = latestVersion.Version
-		}
-
-		_, err = tr.CreateToolsetVersion(ctx, repo.CreateToolsetVersionParams{
-			ToolsetID:     existingToolset.ID,
-			Version:       latestVersionNumber + 1,
-			ToolUrns:      allToolUrns,
-			PredecessorID: predecessorID,
-		})
-		if err != nil {
-			logger.ErrorContext(ctx, "failed to create toolset version", attr.SlogError(err))
-		}
+	_, err = tr.AddToolsetPromptTemplates(ctx, additions)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error adding prompt templates to toolset").Log(ctx, logger)
 	}
 
 	return nil

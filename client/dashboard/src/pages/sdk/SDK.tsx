@@ -8,7 +8,12 @@ import { useProject } from "@/contexts/Auth";
 import { capitalize } from "@/lib/utils";
 import { CodeSnippet, Stack } from "@speakeasy-api/moonshine";
 import { AgentifyProvider, useAgentify } from "../playground/Agentify";
-import { CODE_SAMPLES, FRAMEWORKS, SdkFramework, SdkLanguage } from "./examples";
+import {
+  CODE_SAMPLES,
+  FRAMEWORKS,
+  SdkFramework,
+  SdkLanguage,
+} from "./examples";
 
 export default function SDK() {
   return (
@@ -55,7 +60,7 @@ export const SdkContent = ({
       CODE_SAMPLES[lang][framework as keyof (typeof CODE_SAMPLES)[typeof lang]](
         projectSlug ?? project.slug,
         toolset,
-        environment
+        environment,
       )
     );
   };

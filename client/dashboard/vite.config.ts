@@ -31,6 +31,7 @@ export default defineConfig({
     esbuildOptions: {
       target: "es2022",
     },
+    exclude: ["@speakeasy-api/moonshine"],
   },
   server: {
     host: true,

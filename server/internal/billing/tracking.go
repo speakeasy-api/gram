@@ -24,6 +24,8 @@ type ToolCallUsageEvent struct {
 	ChatID           *string
 	MCPURL           *string
 	Type             ToolCallType
+	ToolsetID        *string
+	MCPSessionID     *string
 }
 
 type PromptCallUsageEvent struct {
@@ -36,8 +38,10 @@ type PromptCallUsageEvent struct {
 	ProjectSlug      *string
 	OrganizationSlug *string
 	ToolsetSlug      *string
+	ToolsetID        *string
 	ChatID           *string
 	MCPURL           *string
+	MCPSessionID     *string
 }
 
 type PlatformUsageEvent struct {

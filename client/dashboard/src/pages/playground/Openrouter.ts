@@ -8,7 +8,7 @@ export const useMiniModel = () => {
 
 export const useModel = (
   model: string,
-  additionalHeaders?: Record<string, string>
+  additionalHeaders?: Record<string, string>,
 ) => {
   const session = useSession();
   const project = useProject();

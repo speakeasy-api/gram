@@ -36,7 +36,7 @@ export function AnyField({
         className={cn(
           optionality === "visible"
             ? "after:content-(--optional-label) after:inline-block after:text-sm after:text-muted-foreground after:ms-2 group-has-[[readonly],[disabled],[required]]:after:content-['']"
-            : null
+            : null,
         )}
       >
         {label}

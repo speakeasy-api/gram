@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	packages "github.com/speakeasy-api/gram/server/internal/packages"
+	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/tools"
 )
@@ -50,6 +51,7 @@ type testInstance struct {
 	deployments    *deployments.Service
 	assets         *assets.Service
 	packages       *packages.Service
+	templates      *templates.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 }
@@ -93,6 +95,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
+	templatesSvc := templates.NewService(logger, conn, sessionManager)
 
 	return ctx, &testInstance{
 		service:        toolsSvc,
@@ -100,6 +103,7 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 		deployments:    deploymentsSvc,
 		assets:         assetsSvc,
 		packages:       packagesSvc,
+		templates:      templatesSvc,
 		conn:           conn,
 		sessionManager: sessionManager,
 	}

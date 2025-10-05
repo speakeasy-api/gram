@@ -50,16 +50,40 @@ import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { ToolDefinition, useToolDefinitions } from "../toolsets/types";
-import {
-  Block,
-  BlockInner,
-  HigherOrderTool,
-  Input,
-  instructionsPlaceholder,
-  Step,
-  toJSON,
-} from "./components";
 import { useToolifyContext } from "./Toolify";
+import { Block, BlockInner } from "@/components/block";
+
+type Input = {
+  name: string;
+  description?: string;
+};
+
+type Step = {
+  id: string;
+  tool?: string;
+  canonicalTool?: string;
+  instructions: string;
+  inputs?: string[];
+  update: (step: Step) => void;
+};
+
+function higherOrderToolToJSON(tool: HigherOrderTool): string {
+  return JSON.stringify(tool, null, 2);
+}
+
+const instructionsPlaceholder =
+  "Interpret what to do with this tool based on the <purpose />, the chat history, and the output of previous steps.";
+
+// Type for steps without the update function (used for JSON serialization)
+type SerializableStep = Omit<Step, "update">;
+
+// Needs to stay aligned with server/internal/templates/impl.go:CustomToolJSONV1
+type HigherOrderTool = {
+  toolName: string;
+  purpose: string;
+  inputs: Input[];
+  steps: SerializableStep[];
+};
 
 export function ToolBuilderNew() {
   const ctx = useToolifyContext();
@@ -108,7 +132,7 @@ export function ToolBuilderPage() {
 
   const toolset =
     toolsets?.toolsets.find((t) =>
-      t.promptTemplates.some((pt) => pt.name === toolName)
+      t.promptTemplates.some((pt) => pt.name === toolName),
     ) ?? undefined;
 
   const { data: template } = useTemplateSuspense({
@@ -163,13 +187,13 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   const [purpose, setPurpose] = useState(initial.purpose);
   const [inputs, setInputs] = useState<Input[]>(initial.inputs);
   const [toolsetFilter, setToolset] = useState<ToolsetEntry | undefined>(
-    initial.toolset
+    initial.toolset,
   );
 
   const { data: toolsetData } = useToolset(
     { slug: toolsetFilter?.slug ?? "" },
     undefined,
-    { enabled: !!toolsetFilter?.slug }
+    { enabled: !!toolsetFilter?.slug },
   );
 
   const parseInputs = (s: string): string[] => {
@@ -225,7 +249,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   }, [initial]);
 
   const insertTool = (
-    tool: { name: string; canonicalName: string } | "none"
+    tool: { name: string; canonicalName: string } | "none",
   ) => {
     if (steps.length >= 10) {
       return;
@@ -261,10 +285,10 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     const currentInputs = inputs.map((input) => input.name);
 
     const curFiltered = inputs.filter((input) =>
-      allInputs.includes(input.name)
+      allInputs.includes(input.name),
     );
     const toInsert = allInputs.filter(
-      (input) => !currentInputs.includes(input)
+      (input) => !currentInputs.includes(input),
     );
     setInputs([...curFiltered, ...toInsert.map((input) => ({ name: input }))]);
   }, [steps, purpose]);
@@ -298,7 +322,8 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
           setOpen(false);
         }}
       >
-        <Button variant="secondary"
+        <Button
+          variant="secondary"
           size="sm"
           className={
             "bg-card dark:bg-background border-stone-300 dark:border-stone-700 border-1"
@@ -322,16 +347,17 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     inputs.some(
       (input) =>
         input.description !==
-        initial.inputs.find((i) => i.name === input.name)?.description
+        initial.inputs.find((i) => i.name === input.name)?.description,
     ) ||
     steps.some(
       (step) =>
         step.instructions !==
-        initial.steps.find((s) => s.id === step.id)?.instructions
+        initial.steps.find((s) => s.id === step.id)?.instructions,
     );
 
   const revertButton = anyChanges && (
-    <Button variant="tertiary"
+    <Button
+      variant="tertiary"
       size="sm"
       onClick={() => {
         setName(initial.name);
@@ -370,7 +396,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                     description: input.description,
                   }),
                 },
-              ])
+              ]),
             ),
             required: inputs.map((input) => input.name),
           };
@@ -388,7 +414,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                 updatePromptTemplateForm: {
                   id: initial.id,
                   description,
-                  prompt: toJSON(higherOrderTool),
+                  prompt: higherOrderToolToJSON(higherOrderTool),
                   arguments: JSON.stringify(argsJsonSchema),
                   toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
                 },
@@ -399,12 +425,12 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
               event: "update_tool",
             });
           } else {
-            await client.templates.create({
+            const template = await client.templates.create({
               createPromptTemplateForm: {
                 name,
                 description,
                 kind: PromptTemplateKind.HigherOrderTool,
-                prompt: toJSON(higherOrderTool),
+                prompt: higherOrderToolToJSON(higherOrderTool),
                 arguments: JSON.stringify(argsJsonSchema),
                 toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
                 engine: "mustache",
@@ -419,9 +445,9 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             await client.toolsets.updateBySlug({
               slug: toolsetFilter?.slug ?? "",
               updateToolsetRequestBody: {
-                promptTemplateNames: [
-                  ...(toolsetData?.promptTemplates ?? []).map((t) => t.name),
-                  name,
+                toolUrns: [
+                  ...(toolsetData?.toolUrns ?? []),
+                  template.template.toolUrn,
                 ],
               },
             });
@@ -538,8 +564,8 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                     onSubmit={(description) => {
                       setInputs(
                         inputs.map((i) =>
-                          i.name === input.name ? { ...i, description } : i
-                        )
+                          i.name === input.name ? { ...i, description } : i,
+                        ),
                       );
                     }}
                   >
@@ -650,7 +676,7 @@ export const MustacheHighlight = ({
     chunks.push(
       <span key={`var-${start}`} className={inputStyles}>
         {part[0].slice(2, -2)}
-      </span>
+      </span>,
     );
 
     start = part.index + part[0].length;
@@ -733,7 +759,8 @@ const StepCard = ({
             className="mr-[-8px] mt-[-8px] group-hover/heading:opacity-100 opacity-0 trans"
           >
             {moveUp && (
-              <Button variant="tertiary"
+              <Button
+                variant="tertiary"
                 size="xs"
                 onClick={moveUp}
                 className="mr-[-4px]"
@@ -745,7 +772,8 @@ const StepCard = ({
               </Button>
             )}
             {moveDown && (
-              <Button variant="tertiary"
+              <Button
+                variant="tertiary"
                 size="xs"
                 onClick={moveDown}
                 className="mr-[-4px]"
@@ -773,7 +801,7 @@ const StepCard = ({
               small
               className={cn(
                 step.instructions === instructionsPlaceholder &&
-                  "italic text-muted-foreground!"
+                  "italic text-muted-foreground!",
               )}
             >
               <MustacheHighlight>{step.instructions}</MustacheHighlight>
@@ -856,7 +884,7 @@ const StepSeparator = () => {
 };
 
 const parsePrompt = (
-  prompt: string
+  prompt: string,
 ): { purpose: string; inputs: Input[]; steps: Step[] } => {
   // First try to parse as JSON
   try {
@@ -886,7 +914,10 @@ const parsePrompt = (
       };
     }
   } catch (error) {
-    console.error("Failed to parse template as JSON, falling back to legacy parsing:", error);
+    console.error(
+      "Failed to parse template as JSON, falling back to legacy parsing:",
+      error,
+    );
   }
 
   // Legacy parsing logic (kept for backward compatibility)
@@ -895,14 +926,14 @@ const parsePrompt = (
 
 // Keep this around until important "old" templates have been migrated
 const parsePromptLegacy = (
-  prompt: string
+  prompt: string,
 ): { purpose: string; inputs: Input[]; steps: Step[] } => {
   // Remove markdown backticks and xml tag if present
   const cleanPrompt = prompt.replace(/```xml\n|\n```/g, "").trim();
 
   // Extract purpose
   const purposeMatch = cleanPrompt.match(
-    /<Purpose>\s*<Instruction>.*?<\/Instruction>\s*<Purpose>\s*(.*?)\s*<\/Purpose>\s*<\/Purpose>/s
+    /<Purpose>\s*<Instruction>.*?<\/Instruction>\s*<Purpose>\s*(.*?)\s*<\/Purpose>\s*<\/Purpose>/s,
   );
   const purpose = purposeMatch?.[1]?.trim() || "";
 
@@ -910,7 +941,7 @@ const parsePromptLegacy = (
   const inputsSection = cleanPrompt.match(/<Inputs>.*?<\/Inputs>/s)?.[0] || "";
   const inputMatches = [
     ...inputsSection.matchAll(
-      /<Input name="([^"]+)"(?:\s+description="([^"]*)")?\s*\/>/g
+      /<Input name="([^"]+)"(?:\s+description="([^"]*)")?\s*\/>/g,
     ),
   ];
   const inputs: Input[] = [];
@@ -929,7 +960,7 @@ const parsePromptLegacy = (
   const planSection = cleanPrompt.match(/<Plan>(.*?)<\/Plan>/s)?.[0] || "";
   const stepMatches = [
     ...planSection.matchAll(
-      /<CallTool tool_name="([^"]+)">\s*<Instruction>(.*?)<\/Instruction>(.*?)<\/CallTool>/gs
+      /<CallTool tool_name="([^"]+)">\s*<Instruction>(.*?)<\/Instruction>(.*?)<\/CallTool>/gs,
     ),
   ];
   const steps: Step[] = [];
@@ -982,7 +1013,7 @@ function ChatPanel(props: {
   const chat = useChatContext();
   const telemetry = useTelemetry();
   const [selectedEnvironment, setSelectedEnvironment] = useState(
-    defaultEnvironmentSlug ?? null
+    defaultEnvironmentSlug ?? null,
   );
 
   const chatConfigRef: ChatConfig = useRef({
@@ -1026,7 +1057,7 @@ function ChatPanel(props: {
         });
 
         const inputArgs = Object.fromEntries(
-          inputs.map((input) => [input.name, `{{${input.name}}}`])
+          inputs.map((input) => [input.name, `{{${input.name}}}`]),
         );
 
         const higherOrderTool: HigherOrderTool = {
@@ -1038,7 +1069,7 @@ function ChatPanel(props: {
 
         const renderResult = await client.templates.render({
           renderTemplateRequestBody: {
-            prompt: toJSON(higherOrderTool),
+            prompt: higherOrderToolToJSON(higherOrderTool),
             arguments: inputArgs,
             engine: "mustache",
             kind: PromptTemplateKind.HigherOrderTool,

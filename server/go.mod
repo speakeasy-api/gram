@@ -27,10 +27,10 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/pb33f/libopenapi v0.25.3
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
-	github.com/polarsource/polar-go v0.9.0
-	github.com/posthog/posthog-go v1.6.8
+	github.com/polarsource/polar-go v0.9.2
+	github.com/posthog/posthog-go v1.6.10
 	github.com/redis/go-redis/extra/redisotel/v9 v9.14.0
-	github.com/redis/go-redis/v9 v9.15.1
+	github.com/redis/go-redis/v9 v9.14.0
 	github.com/samber/lo v1.51.0
 	github.com/samber/slog-multi v1.5.0
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
@@ -106,7 +106,6 @@ require (
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
-	github.com/ericlagergren/decimal v0.0.0-20221120152707-495c53812d05 // indirect
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/fatih/color v1.17.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -163,7 +162,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
-	github.com/redis/go-redis/extra/rediscmd/v9 v9.15.1 // indirect
+	github.com/redis/go-redis/extra/rediscmd/v9 v9.14.0 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/samber/slog-common v0.19.0 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
@@ -266,7 +265,7 @@ require (
 	golang.org/x/net v0.44.0 // indirect
 	golang.org/x/sync v0.17.0
 	golang.org/x/sys v0.36.0 // indirect
-	golang.org/x/text v0.29.0
+	golang.org/x/text v0.29.0 // indirect
 	golang.org/x/tools v0.37.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250908214217-97024824d090 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250908214217-97024824d090 // indirect

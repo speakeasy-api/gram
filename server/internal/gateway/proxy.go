@@ -19,8 +19,10 @@ import (
 	"time"
 
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/tool-metrics"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -459,8 +461,11 @@ func reverseProxyRequest(ctx context.Context,
 	loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, tcm, logger)
 
 	client := &http.Client{
-		Timeout:   60 * time.Second,
-		Transport: loggingTransport,
+		Timeout: 60 * time.Second,
+		Transport: otelhttp.NewTransport(
+			loggingTransport,
+			otelhttp.WithPropagators(propagation.TraceContext{}),
+		),
 	}
 
 	// Add tool to context for the round tripper
@@ -472,6 +477,7 @@ func reverseProxyRequest(ctx context.Context,
 		DeploymentID:   tool.DeploymentID,
 		OrganizationID: tool.OrganizationID,
 	}
+
 	ctx = context.WithValue(ctx, tm.ToolInfoContextKey, toolInfo)
 
 	// Clone the request body before it's read by the client

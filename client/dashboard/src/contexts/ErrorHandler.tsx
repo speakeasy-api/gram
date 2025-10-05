@@ -19,14 +19,14 @@ interface ErrorHandlerOptions {
 }
 
 const ErrorHandlerContext = createContext<ErrorHandlerContextType | undefined>(
-  undefined
+  undefined,
 );
 
 export const useErrorHandler = () => {
   const context = useContext(ErrorHandlerContext);
   if (!context) {
     throw new Error(
-      "useErrorHandler must be used within an ErrorHandlerProvider"
+      "useErrorHandler must be used within an ErrorHandlerProvider",
     );
   }
   return context;
@@ -72,18 +72,18 @@ export const ErrorHandlerProvider = ({
                   onClick: customAction.onClick,
                 }
               : undefined,
-          }
+          },
         );
       }
     },
-    []
+    [],
   );
 
   const showError = useCallback(
     (error: Error | string, options: ErrorHandlerOptions = {}) => {
       handleError(error, options);
     },
-    [handleError]
+    [handleError],
   );
 
   const value = {

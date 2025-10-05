@@ -58,7 +58,7 @@ export function useDeleteToolset({
   return (slug: string) => {
     if (
       confirm(
-        "Are you sure you want to delete this toolset? This action cannot be undone."
+        "Are you sure you want to delete this toolset? This action cannot be undone.",
       )
     ) {
       mutation.mutate({
@@ -138,7 +138,7 @@ export function ToolsetView({
   const { data: toolset, refetch } = useToolset(
     { slug: toolsetSlug },
     undefined,
-    { enabled: !!toolsetSlug }
+    { enabled: !!toolsetSlug },
   );
 
   const toolDefinitions = useToolDefinitions(toolset);
@@ -231,7 +231,7 @@ export function ToolsetView({
 
   const grouped = useGroupedTools(toolDefinitions);
   const [selectedGroups, setSelectedGroups] = useState<string[]>(
-    grouped.map((group) => group.key)
+    grouped.map((group) => group.key),
   );
   const groupFilterItems = grouped.map((group) => ({
     label: group.key,

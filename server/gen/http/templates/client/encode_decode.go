@@ -1723,6 +1723,7 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 		Kind:          *v.Kind,
 		CreatedAt:     *v.CreatedAt,
 		UpdatedAt:     *v.UpdatedAt,
+		ToolUrn:       *v.ToolUrn,
 	}
 	res.ToolsHint = make([]string, len(v.ToolsHint))
 	for i, val := range v.ToolsHint {

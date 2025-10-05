@@ -5,6 +5,7 @@ packages:
   - sdks/*
   - server
   - cli
+  - functions
 
 catalog:
   '@ai-sdk/openai': ^1.3.4

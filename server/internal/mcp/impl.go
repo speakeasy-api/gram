@@ -1,21 +1,16 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	_ "embed"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"io"
 	"log/slog"
-	"mime"
 	"net/http"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -28,8 +23,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -41,7 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/mv"
+	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -58,6 +51,7 @@ type Service struct {
 	db                *pgxpool.Pool
 	authRepo          *auth_repo.Queries
 	toolsetsRepo      *toolsets_repo.Queries
+	mcpMetadataRepo   *metadata_repo.Queries
 	orgsRepo          *organizations_repo.Queries
 	auth              *auth.Auth
 	env               gateway.EnvironmentLoader
@@ -85,12 +79,6 @@ type mcpInputs struct {
 	sessionID        string
 }
 
-//go:embed config_snippet.json.tmpl
-var configSnippetTmplData string
-
-//go:embed hosted_page.html.tmpl
-var hostedPageTmplData string
-
 func NewService(
 	logger *slog.Logger,
 	tracerProvider trace.TracerProvider,
@@ -112,17 +100,18 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("mcp"))
 
 	return &Service{
-		logger:       logger,
-		tracer:       tracer,
-		metrics:      newMetrics(meter, logger),
-		db:           db,
-		authRepo:     auth_repo.New(db),
-		toolsetsRepo: toolsets_repo.New(db),
-		orgsRepo:     organizations_repo.New(db),
-		auth:         auth.New(logger, db, sessions),
-		env:          env,
-		serverURL:    serverURL,
-		posthog:      posthog,
+		logger:          logger,
+		tracer:          tracer,
+		metrics:         newMetrics(meter, logger),
+		db:              db,
+		authRepo:        auth_repo.New(db),
+		toolsetsRepo:    toolsets_repo.New(db),
+		mcpMetadataRepo: metadata_repo.New(db),
+		orgsRepo:        organizations_repo.New(db),
+		auth:            auth.New(logger, db, sessions),
+		env:             env,
+		serverURL:       serverURL,
+		posthog:         posthog,
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,
@@ -144,14 +133,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP(w, r)
 	})
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
-		// This is page is being laoded in the browser request
-		for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
-			if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
-				oops.ErrHandle(service.logger, service.ServeHostedPage).ServeHTTP(w, r)
-				return
-			}
-		}
-
 		body, err := json.Marshal(rpcError{
 			ID:      msgID{format: 0, String: "", Number: 0},
 			Code:    methodNotAllowed,
@@ -170,9 +151,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		if writeErr != nil {
 			service.logger.ErrorContext(r.Context(), "failed to write response body", attr.SlogError(writeErr))
 		}
-	})
-	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.ServeHostedPage).ServeHTTP(w, r)
 	})
 	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP(w, r)
@@ -297,162 +275,6 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 	return nil
 }
 
-type jsonSnippetData struct {
-	MCPName        string
-	MCPSlug        string
-	MCPDescription string
-	Headers        []string
-	EnvHeaders     []string
-	MCPURL         string
-	ToolNames      []string
-}
-
-type hostedPageData struct {
-	jsonSnippetData
-	MCPConfig           string
-	MCPConfigURIEncoded string
-	OrganizationName    string
-	SiteURL             string
-}
-
-func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error {
-	ctx := r.Context()
-	defer o11y.LogDefer(ctx, s.logger, func() error {
-		return r.Body.Close()
-	})
-
-	mcpSlug := chi.URLParam(r, "mcpSlug")
-	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
-	}
-
-	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
-	}
-
-	if !toolset.McpIsPublic {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
-	}
-
-	// Load organization information
-	organization, err := s.orgsRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
-	var organizationName string
-	if err != nil {
-		s.logger.WarnContext(ctx, "could not load organization information", attr.SlogOrganizationID(toolset.OrganizationID), attr.SlogError(err))
-		organizationName = "Unknown Organization"
-	} else {
-		organizationName = organization.Name
-	}
-
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to describe toolset").Log(ctx, s.logger)
-	}
-
-	envHeaders := []string{}
-
-	// Collect environment variables from security variables
-	for _, secVar := range toolsetDetails.SecurityVariables {
-		for _, envVar := range secVar.EnvVariables {
-			if !strings.Contains(strings.ToLower(envVar), "token_url") {
-				envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")))
-			}
-		}
-	}
-
-	toolNames := []string{}
-
-	for _, toolDesc := range toolsetDetails.HTTPTools {
-		toolNames = append(toolNames, toolDesc.Name)
-	}
-
-	for _, promptTpl := range toolsetDetails.PromptTemplates {
-		if promptTpl.Kind == "higher_order_tool" {
-			toolNames = append(toolNames, string(promptTpl.Name))
-		}
-	}
-
-	baseURL := s.serverURL.String() + "/mcp"
-	if customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain+"/mcp")
-	}
-	MCPURL, err := url.JoinPath(baseURL, mcpSlug)
-	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "malformed mcp url").Log(ctx, s.logger)
-	}
-
-	// Create env-safe versions of headers (replace dashes with underscores)
-	envHeadersEnvSafe := make([]string, len(envHeaders))
-	for i, header := range envHeaders {
-		envHeadersEnvSafe[i] = strings.ReplaceAll(header, "-", "_")
-	}
-
-	configSnippetData := jsonSnippetData{
-		MCPName:        cases.Title(language.English).String(toolset.Name),
-		MCPSlug:        toolset.Slug,
-		MCPDescription: toolset.Description.String,
-		MCPURL:         MCPURL,
-		Headers:        envHeaders,
-		EnvHeaders:     envHeadersEnvSafe,
-		ToolNames:      toolNames,
-	}
-
-	configSnippetTmpl, err := template.New("config_snippet").Parse(configSnippetTmplData)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to parse config snippet template").Log(ctx, s.logger)
-	}
-
-	var configSnippet bytes.Buffer
-	if err := configSnippetTmpl.Execute(&configSnippet, configSnippetData); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to execute config snippet template").Log(ctx, s.logger)
-	}
-
-	data := hostedPageData{
-		jsonSnippetData:     configSnippetData,
-		MCPConfig:           configSnippet.String(),
-		MCPConfigURIEncoded: url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
-		OrganizationName:    organizationName,
-		SiteURL:             os.Getenv("GRAM_SITE_URL"),
-	}
-
-	hostedPageTmpl, err := template.New("hosted_page").Funcs(template.FuncMap{
-		"diff": func(a, b int) int { return a - b },
-		"indent": func(spaces int, text string) string {
-			if spaces <= 0 || text == "" {
-				return text
-			}
-			indent := strings.Repeat(" ", spaces)
-			lines := strings.Split(text, "\n")
-			for i := 1; i < len(lines); i++ {
-				if i == len(lines)-1 && lines[i] == "" {
-					continue
-				}
-				lines[i] = indent + lines[i]
-			}
-			return strings.Join(lines, "\n")
-		},
-	}).Parse(hostedPageTmplData)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted page template").Log(ctx, s.logger)
-	}
-
-	buf := &bytes.Buffer{}
-	if err := hostedPageTmpl.Execute(buf, data); err != nil {
-		s.logger.ErrorContext(ctx, "failed to execute hosted page template", attr.SlogError(err))
-		return oops.E(oops.CodeUnexpected, err, "failed to execute hosted page template")
-	}
-
-	w.Header().Set("Content-Type", "text/html")
-	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(buf.Bytes())
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to write response body", attr.SlogError(err))
-	}
-
-	return nil
-}
-
 func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {
@@ -554,7 +376,7 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	if authenticated {
 		selectedEnvironment = conv.PtrValOr(conv.FromPGText[string](toolset.DefaultEnvironmentSlug), "")
 		if passedEnv := r.Header.Get("Gram-Environment"); passedEnv != "" {
-			selectedEnvironment = passedEnv
+			selectedEnvironment = conv.ToSlug(passedEnv)
 		}
 	}
 
