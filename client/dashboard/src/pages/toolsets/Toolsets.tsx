@@ -1,6 +1,5 @@
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
-import { Cards } from "@/components/ui/card";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useApiError } from "@/hooks/useApiError";
 import { useRoutes } from "@/routes";
@@ -12,9 +11,10 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@speakeasy-api/moonshine";
 import { Outlet } from "react-router";
-import { ToolsetCard } from "./ToolsetCard";
+import { ServerCard } from "@/components/server-card";
 import { ToolsetsEmptyState } from "./ToolsetsEmptyState";
 import OpenAPIAssets, { useDeploymentIsEmpty } from "./openapi/OpenAPI";
+import { useCloneToolset } from "./Toolset";
 
 export function useToolsets() {
   const { data: toolsets, refetch, isLoading } = useListToolsets();
@@ -102,6 +102,7 @@ function ToolsetsContent({
 }) {
   const toolsets = useToolsets();
   const deploymentIsEmpty = useDeploymentIsEmpty();
+  const cloneToolset = useCloneToolset();
 
   if (!toolsets.isLoading && toolsets.length === 0) {
     // We do this because toolsets and apis are rendered on the same page, so if the APIs empty state is going to be shown, we don't need to show the toolsets empty state
@@ -131,11 +132,22 @@ function ToolsetsContent({
         </Button>
       </Page.Section.CTA>
       <Page.Section.Body>
-        <Cards isLoading={toolsets.isLoading}>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {toolsets.map((toolset) => (
-            <ToolsetCard key={toolset.id} toolset={toolset} />
+            <ServerCard
+              key={toolset.id}
+              toolset={toolset}
+              className="bg-secondary"
+              additionalActions={[
+                {
+                  label: "Clone",
+                  onClick: () => cloneToolset(toolset.slug),
+                  icon: "copy",
+                },
+              ]}
+            />
           ))}
-        </Cards>
+        </div>
       </Page.Section.Body>
     </Page.Section>
   );
