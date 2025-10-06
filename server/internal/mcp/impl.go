@@ -46,23 +46,23 @@ import (
 )
 
 type Service struct {
-	logger             *slog.Logger
-	tracer             trace.Tracer
-	metrics            *metrics
-	db                 *pgxpool.Pool
-	authRepo           *auth_repo.Queries
-	toolsetsRepo       *toolsets_repo.Queries
-	mcpMetadataRepo *metadata_repo.Queries
-	orgsRepo           *organizations_repo.Queries
-	auth               *auth.Auth
-	env                gateway.EnvironmentLoader
-	serverURL          *url.URL
-	posthog            *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
-	toolProxy          *gateway.ToolProxy
-	oauthService       *oauth.Service
-	oauthRepo          *oauth_repo.Queries
-	billingTracker     billing.Tracker
-	billingRepository  billing.Repository
+	logger            *slog.Logger
+	tracer            trace.Tracer
+	metrics           *metrics
+	db                *pgxpool.Pool
+	authRepo          *auth_repo.Queries
+	toolsetsRepo      *toolsets_repo.Queries
+	mcpMetadataRepo   *metadata_repo.Queries
+	orgsRepo          *organizations_repo.Queries
+	auth              *auth.Auth
+	env               gateway.EnvironmentLoader
+	serverURL         *url.URL
+	posthog           *posthog.Posthog // posthog metrics will no-op if the dependency is not provided
+	toolProxy         *gateway.ToolProxy
+	oauthService      *oauth.Service
+	oauthRepo         *oauth_repo.Queries
+	billingTracker    billing.Tracker
+	billingRepository billing.Repository
 }
 
 type oauthTokenInputs struct {
@@ -100,18 +100,18 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("mcp"))
 
 	return &Service{
-		logger:             logger,
-		tracer:             tracer,
-		metrics:            newMetrics(meter, logger),
-		db:                 db,
-		authRepo:           auth_repo.New(db),
-		toolsetsRepo:       toolsets_repo.New(db),
+		logger:          logger,
+		tracer:          tracer,
+		metrics:         newMetrics(meter, logger),
+		db:              db,
+		authRepo:        auth_repo.New(db),
+		toolsetsRepo:    toolsets_repo.New(db),
 		mcpMetadataRepo: metadata_repo.New(db),
-		orgsRepo:           organizations_repo.New(db),
-		auth:               auth.New(logger, db, sessions),
-		env:                env,
-		serverURL:          serverURL,
-		posthog:            posthog,
+		orgsRepo:        organizations_repo.New(db),
+		auth:            auth.New(logger, db, sessions),
+		env:             env,
+		serverURL:       serverURL,
+		posthog:         posthog,
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			tracerProvider,

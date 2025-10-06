@@ -118,10 +118,10 @@ func DescribeToolsetEntry(
 			name := conv.Default(nameVariations[def.Name], def.Name)
 
 			tool := &types.ToolEntry{
-				Type: string(urn.ToolKindHTTP),
-				ID:       def.ID.String(),
-				Name:     name,
-				ToolUrn:  def.ToolUrn.String(),
+				Type:    string(urn.ToolKindHTTP),
+				ID:      def.ID.String(),
+				Name:    name,
+				ToolUrn: def.ToolUrn.String(),
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
@@ -143,10 +143,10 @@ func DescribeToolsetEntry(
 
 		for _, pt := range promptTools {
 			tools = append(tools, &types.ToolEntry{
-				Type: string(urn.ToolKindPrompt),
-				ID:       pt.ID.String(),
-				Name:     pt.Name,
-				ToolUrn:  pt.ToolUrn.String(),
+				Type:    string(urn.ToolKindPrompt),
+				ID:      pt.ID.String(),
+				Name:    pt.Name,
+				ToolUrn: pt.ToolUrn.String(),
 			})
 		}
 

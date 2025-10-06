@@ -115,8 +115,8 @@ func TestToolsetsService_UpdateToolset_PartialUpdate(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, "Updated Name Only", result.Name)
-	require.Equal(t, "Original description", *result.Description)     // Should remain unchanged
-	require.Len(t, result.Tools, 1, "should still have 1 tool")  // Should remain unchanged
+	require.Equal(t, "Original description", *result.Description) // Should remain unchanged
+	require.Len(t, result.Tools, 1, "should still have 1 tool")   // Should remain unchanged
 	require.Equal(t, tools[0].ToolUrn.String(), conv.ToBaseTool(result.Tools[0]).ToolUrn)
 }
 
