@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
+	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/o11y"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/urfave/cli/v2"
@@ -40,25 +41,9 @@ Sample deployment file
 
 NOTE: Names and slugs must be unique across all sources.`[1:],
 		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "api-url",
-				Usage:   "The base URL to use for API calls.",
-				EnvVars: []string{"GRAM_API_URL"},
-				Value:   "https://app.getgram.ai",
-				Hidden:  true,
-			},
-			&cli.StringFlag{
-				Name:     "api-key",
-				Usage:    "Your Gram API key (must be scoped as a 'Provider')",
-				EnvVars:  []string{"GRAM_API_KEY"},
-				Required: true,
-			},
-			&cli.StringFlag{
-				Name:     "project",
-				Usage:    "The Gram project to push to",
-				EnvVars:  []string{"GRAM_PROJECT"},
-				Required: true,
-			},
+			flags.APIEndpoint(),
+			flags.APIKey(),
+			flags.Project(),
 			&cli.PathFlag{
 				Name:     "config",
 				Usage:    "Path to the deployment file",
