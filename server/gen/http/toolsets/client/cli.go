@@ -285,6 +285,41 @@ func BuildCheckMCPSlugAvailabilityPayload(toolsetsCheckMCPSlugAvailabilitySlug s
 	return v, nil
 }
 
+// BuildCloneToolsetPayload builds the payload for the toolsets cloneToolset
+// endpoint from CLI flags.
+func BuildCloneToolsetPayload(toolsetsCloneToolsetSlug string, toolsetsCloneToolsetSessionToken string, toolsetsCloneToolsetProjectSlugInput string) (*toolsets.CloneToolsetPayload, error) {
+	var err error
+	var slug string
+	{
+		slug = toolsetsCloneToolsetSlug
+		err = goa.MergeErrors(err, goa.ValidatePattern("slug", slug, "^[a-z0-9_-]{1,128}$"))
+		if utf8.RuneCountInString(slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("slug", slug, utf8.RuneCountInString(slug), 40, false))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if toolsetsCloneToolsetSessionToken != "" {
+			sessionToken = &toolsetsCloneToolsetSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if toolsetsCloneToolsetProjectSlugInput != "" {
+			projectSlugInput = &toolsetsCloneToolsetProjectSlugInput
+		}
+	}
+	v := &toolsets.CloneToolsetPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildAddExternalOAuthServerPayload builds the payload for the toolsets
 // addExternalOAuthServer endpoint from CLI flags.
 func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody string, toolsetsAddExternalOAuthServerSlug string, toolsetsAddExternalOAuthServerSessionToken string, toolsetsAddExternalOAuthServerProjectSlugInput string) (*toolsets.AddExternalOAuthServerPayload, error) {
@@ -293,7 +328,7 @@ func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody strin
 	{
 		err = json.Unmarshal([]byte(toolsetsAddExternalOAuthServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Reiciendis quis eveniet cupiditate non sed rerum.\",\n         \"slug\": \"lav\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Qui hic corrupti voluptate accusamus sunt.\",\n         \"slug\": \"kgp\"\n      }\n   }'")
 		}
 		if body.ExternalOauthServer == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("external_oauth_server", "body"))

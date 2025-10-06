@@ -9,7 +9,7 @@ import { MoreActions } from "@/components/ui/more-actions";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
 import { Stack } from "@speakeasy-api/moonshine";
-import { useDeleteToolset } from "./Toolset";
+import { useCloneToolset, useDeleteToolset } from "./Toolset";
 import { UpdatedAt } from "@/components/updated-at";
 
 type ToolsetForCard = Pick<
@@ -53,6 +53,7 @@ export function ToolsetCard({
 }) {
   const routes = useRoutes();
   const deleteToolset = useDeleteToolset();
+  const cloneToolset = useCloneToolset();
 
   return (
     <routes.toolsets.toolset.Link
@@ -76,6 +77,11 @@ export function ToolsetCard({
                 label: "Playground",
                 onClick: () => routes.playground.goTo(toolset.slug),
                 icon: "message-circle",
+              },
+              {
+                label: "Clone",
+                onClick: () => cloneToolset(toolset.slug),
+                icon: "copy",
               },
               {
                 label: "Delete",

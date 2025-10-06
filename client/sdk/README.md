@@ -233,6 +233,7 @@ run();
 
 * [addExternalOAuthServer](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 * [checkMCPSlugAvailability](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
+* [cloneBySlug](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 * [create](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 * [deleteBySlug](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 * [getBySlug](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
@@ -330,6 +331,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`templatesUpdate`](docs/sdks/templates/README.md#update) - updateTemplate templates
 - [`toolsetsAddExternalOAuthServer`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`toolsetsCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
+- [`toolsetsCloneBySlug`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`toolsetsCreate`](docs/sdks/toolsets/README.md#create) - createToolset toolsets
 - [`toolsetsDeleteBySlug`](docs/sdks/toolsets/README.md#deletebyslug) - deleteToolset toolsets
 - [`toolsetsGetBySlug`](docs/sdks/toolsets/README.md#getbyslug) - getToolset toolsets
@@ -372,6 +374,7 @@ To learn about this feature and how to get started, check
 
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
+- [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
 - [`useCreateAPIKeyMutation`](docs/sdks/keys/README.md#create) - createKey keys
 - [`useCreateCheckoutMutation`](docs/sdks/usage/README.md#createcheckout) - createCheckout usage
 - [`useCreateCustomerSessionMutation`](docs/sdks/usage/README.md#createcustomersession) - createCustomerSession usage

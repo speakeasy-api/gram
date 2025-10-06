@@ -6,6 +6,7 @@ export * from "./addexternaloauthserver.js";
 export * from "./authcallback.js";
 export * from "./authlogin.js";
 export * from "./checkmcpslugavailability.js";
+export * from "./clonetoolset.js";
 export * from "./createapikey.js";
 export * from "./createcheckout.js";
 export * from "./createcustomersession.js";

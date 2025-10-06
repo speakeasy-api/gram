@@ -4,6 +4,7 @@
 
 import { toolsetsAddExternalOAuthServer } from "../funcs/toolsetsAddExternalOAuthServer.js";
 import { toolsetsCheckMCPSlugAvailability } from "../funcs/toolsetsCheckMCPSlugAvailability.js";
+import { toolsetsCloneBySlug } from "../funcs/toolsetsCloneBySlug.js";
 import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
 import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
 import { toolsetsGetBySlug } from "../funcs/toolsetsGetBySlug.js";
@@ -47,6 +48,25 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<boolean> {
     return unwrapAsync(toolsetsCheckMCPSlugAvailability(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * cloneToolset toolsets
+   *
+   * @remarks
+   * Clone an existing toolset with a new name
+   */
+  async cloneBySlug(
+    request: operations.CloneToolsetRequest,
+    security?: operations.CloneToolsetSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.Toolset> {
+    return unwrapAsync(toolsetsCloneBySlug(
       this,
       request,
       security,

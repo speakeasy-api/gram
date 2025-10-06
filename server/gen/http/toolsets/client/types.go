@@ -210,6 +210,54 @@ type GetToolsetResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
+// CloneToolsetResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body.
+type CloneToolsetResponseBody struct {
+	// The ID of the toolset
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The project ID this toolset belongs to
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The organization ID this toolset belongs to
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// The account type of the organization
+	AccountType *string `form:"account_type,omitempty" json:"account_type,omitempty" xml:"account_type,omitempty"`
+	// The name of the toolset
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The slug of the toolset
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// When the toolset was created.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// When the toolset was last updated.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
 // AddExternalOAuthServerResponseBody is the type of the "toolsets" service
 // "addExternalOAuthServer" endpoint HTTP response body.
 type AddExternalOAuthServerResponseBody struct {
@@ -1390,6 +1438,188 @@ type CheckMCPSlugAvailabilityUnexpectedResponseBody struct {
 // "toolsets" service "checkMCPSlugAvailability" endpoint HTTP response body
 // for the "gateway_error" error.
 type CheckMCPSlugAvailabilityGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneToolsetUnauthorizedResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "unauthorized" error.
+type CloneToolsetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneToolsetForbiddenResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "forbidden" error.
+type CloneToolsetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneToolsetBadRequestResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "bad_request" error.
+type CloneToolsetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneToolsetNotFoundResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "not_found" error.
+type CloneToolsetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneToolsetConflictResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "conflict" error.
+type CloneToolsetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneToolsetUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "cloneToolset" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CloneToolsetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneToolsetInvalidResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "invalid" error.
+type CloneToolsetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneToolsetInvariantViolationResponseBody is the type of the "toolsets"
+// service "cloneToolset" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CloneToolsetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneToolsetUnexpectedResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "unexpected" error.
+type CloneToolsetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// CloneToolsetGatewayErrorResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "gateway_error" error.
+type CloneToolsetGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3263,6 +3493,215 @@ func NewCheckMCPSlugAvailabilityGatewayError(body *CheckMCPSlugAvailabilityGatew
 	return v
 }
 
+// NewCloneToolsetToolsetOK builds a "toolsets" service "cloneToolset" endpoint
+// result from a HTTP "OK" response.
+func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
+	v := &types.Toolset{
+		ID:             *body.ID,
+		ProjectID:      *body.ProjectID,
+		OrganizationID: *body.OrganizationID,
+		AccountType:    *body.AccountType,
+		Name:           *body.Name,
+		Slug:           types.Slug(*body.Slug),
+		Description:    body.Description,
+		McpIsPublic:    body.McpIsPublic,
+		McpEnabled:     body.McpEnabled,
+		CustomDomainID: body.CustomDomainID,
+		CreatedAt:      *body.CreatedAt,
+		UpdatedAt:      *body.UpdatedAt,
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := types.Slug(*body.DefaultEnvironmentSlug)
+		v.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if body.McpSlug != nil {
+		mcpSlug := types.Slug(*body.McpSlug)
+		v.McpSlug = &mcpSlug
+	}
+	if body.SecurityVariables != nil {
+		v.SecurityVariables = make([]*types.SecurityVariable, len(body.SecurityVariables))
+		for i, val := range body.SecurityVariables {
+			v.SecurityVariables[i] = unmarshalSecurityVariableResponseBodyToTypesSecurityVariable(val)
+		}
+	}
+	if body.ServerVariables != nil {
+		v.ServerVariables = make([]*types.ServerVariable, len(body.ServerVariables))
+		for i, val := range body.ServerVariables {
+			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
+		}
+	}
+	v.Tools = make([]*types.Tool, len(body.Tools))
+	for i, val := range body.Tools {
+		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
+	}
+	v.ToolUrns = make([]string, len(body.ToolUrns))
+	for i, val := range body.ToolUrns {
+		v.ToolUrns[i] = val
+	}
+	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
+	for i, val := range body.PromptTemplates {
+		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	}
+	if body.ExternalOauthServer != nil {
+		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
+	}
+	if body.OauthProxyServer != nil {
+		v.OauthProxyServer = unmarshalOAuthProxyServerResponseBodyToTypesOAuthProxyServer(body.OauthProxyServer)
+	}
+
+	return v
+}
+
+// NewCloneToolsetUnauthorized builds a toolsets service cloneToolset endpoint
+// unauthorized error.
+func NewCloneToolsetUnauthorized(body *CloneToolsetUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneToolsetForbidden builds a toolsets service cloneToolset endpoint
+// forbidden error.
+func NewCloneToolsetForbidden(body *CloneToolsetForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneToolsetBadRequest builds a toolsets service cloneToolset endpoint
+// bad_request error.
+func NewCloneToolsetBadRequest(body *CloneToolsetBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneToolsetNotFound builds a toolsets service cloneToolset endpoint
+// not_found error.
+func NewCloneToolsetNotFound(body *CloneToolsetNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneToolsetConflict builds a toolsets service cloneToolset endpoint
+// conflict error.
+func NewCloneToolsetConflict(body *CloneToolsetConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneToolsetUnsupportedMedia builds a toolsets service cloneToolset
+// endpoint unsupported_media error.
+func NewCloneToolsetUnsupportedMedia(body *CloneToolsetUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneToolsetInvalid builds a toolsets service cloneToolset endpoint
+// invalid error.
+func NewCloneToolsetInvalid(body *CloneToolsetInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneToolsetInvariantViolation builds a toolsets service cloneToolset
+// endpoint invariant_violation error.
+func NewCloneToolsetInvariantViolation(body *CloneToolsetInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneToolsetUnexpected builds a toolsets service cloneToolset endpoint
+// unexpected error.
+func NewCloneToolsetUnexpected(body *CloneToolsetUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCloneToolsetGatewayError builds a toolsets service cloneToolset endpoint
+// gateway_error error.
+func NewCloneToolsetGatewayError(body *CloneToolsetGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewAddExternalOAuthServerToolsetOK builds a "toolsets" service
 // "addExternalOAuthServer" endpoint result from a HTTP "OK" response.
 func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody) *types.Toolset {
@@ -3914,6 +4353,113 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 // ValidateGetToolsetResponseBody runs the validations defined on
 // GetToolsetResponseBody
 func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.AccountType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("account_type", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.PromptTemplates == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
+	}
+	if body.ToolUrns == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urns", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 40, false))
+		}
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.DefaultEnvironmentSlug != nil {
+		if utf8.RuneCountInString(*body.DefaultEnvironmentSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.default_environment_slug", *body.DefaultEnvironmentSlug, utf8.RuneCountInString(*body.DefaultEnvironmentSlug), 40, false))
+		}
+	}
+	for _, e := range body.SecurityVariables {
+		if e != nil {
+			if err2 := ValidateSecurityVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.ServerVariables {
+		if e != nil {
+			if err2 := ValidateServerVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateToolResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.PromptTemplates {
+		if e != nil {
+			if err2 := ValidatePromptTemplateResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.McpSlug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.mcp_slug", *body.McpSlug, "^[a-z0-9_-]{1,128}$"))
+	}
+	if body.McpSlug != nil {
+		if utf8.RuneCountInString(*body.McpSlug) > 40 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.mcp_slug", *body.McpSlug, utf8.RuneCountInString(*body.McpSlug), 40, false))
+		}
+	}
+	if body.ExternalOauthServer != nil {
+		if err2 := ValidateExternalOAuthServerResponseBody(body.ExternalOauthServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.OauthProxyServer != nil {
+		if err2 := ValidateOAuthProxyServerResponseBody(body.OauthProxyServer); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateCloneToolsetResponseBody runs the validations defined on
+// CloneToolsetResponseBody
+func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -5653,6 +6199,246 @@ func ValidateCheckMCPSlugAvailabilityUnexpectedResponseBody(body *CheckMCPSlugAv
 // ValidateCheckMCPSlugAvailabilityGatewayErrorResponseBody runs the
 // validations defined on checkMCPSlugAvailability_gateway_error_response_body
 func ValidateCheckMCPSlugAvailabilityGatewayErrorResponseBody(body *CheckMCPSlugAvailabilityGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneToolsetUnauthorizedResponseBody runs the validations defined on
+// cloneToolset_unauthorized_response_body
+func ValidateCloneToolsetUnauthorizedResponseBody(body *CloneToolsetUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneToolsetForbiddenResponseBody runs the validations defined on
+// cloneToolset_forbidden_response_body
+func ValidateCloneToolsetForbiddenResponseBody(body *CloneToolsetForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneToolsetBadRequestResponseBody runs the validations defined on
+// cloneToolset_bad_request_response_body
+func ValidateCloneToolsetBadRequestResponseBody(body *CloneToolsetBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneToolsetNotFoundResponseBody runs the validations defined on
+// cloneToolset_not_found_response_body
+func ValidateCloneToolsetNotFoundResponseBody(body *CloneToolsetNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneToolsetConflictResponseBody runs the validations defined on
+// cloneToolset_conflict_response_body
+func ValidateCloneToolsetConflictResponseBody(body *CloneToolsetConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneToolsetUnsupportedMediaResponseBody runs the validations
+// defined on cloneToolset_unsupported_media_response_body
+func ValidateCloneToolsetUnsupportedMediaResponseBody(body *CloneToolsetUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneToolsetInvalidResponseBody runs the validations defined on
+// cloneToolset_invalid_response_body
+func ValidateCloneToolsetInvalidResponseBody(body *CloneToolsetInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneToolsetInvariantViolationResponseBody runs the validations
+// defined on cloneToolset_invariant_violation_response_body
+func ValidateCloneToolsetInvariantViolationResponseBody(body *CloneToolsetInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneToolsetUnexpectedResponseBody runs the validations defined on
+// cloneToolset_unexpected_response_body
+func ValidateCloneToolsetUnexpectedResponseBody(body *CloneToolsetUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateCloneToolsetGatewayErrorResponseBody runs the validations defined on
+// cloneToolset_gateway_error_response_body
+func ValidateCloneToolsetGatewayErrorResponseBody(body *CloneToolsetGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

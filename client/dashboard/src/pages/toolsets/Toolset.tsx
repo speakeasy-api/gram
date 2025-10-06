@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   queryKeyInstance,
+  useCloneToolsetMutation,
   useDeleteToolsetMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query/index.js";
@@ -22,6 +23,7 @@ import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Outlet, useParams } from "react-router";
+import { toast } from "sonner";
 import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
 import { PromptsTabContent } from "./PromptsTab";
 import { ToolCard } from "./ToolCard";
@@ -65,6 +67,39 @@ export function useDeleteToolset({
         },
       });
     }
+  };
+}
+
+export function useCloneToolset({
+  onSuccess,
+}: { onSuccess?: () => void } = {}) {
+  const toolsets = useToolsets();
+  const telemetry = useTelemetry();
+  const routes = useRoutes();
+  const { handleApiError } = useApiError();
+
+  const mutation = useCloneToolsetMutation({
+    onSuccess: async (data) => {
+      telemetry.capture("toolset_event", {
+        action: "toolset_cloned",
+        toolset_slug: data.slug,
+      });
+      toast.success(`Toolset cloned successfully as "${data.name}"`);
+      await toolsets.refetch();
+      routes.toolsets.toolset.update.goTo(data.slug);
+      onSuccess?.();
+    },
+    onError: (error) => {
+      handleApiError(error, "Failed to clone toolset");
+    },
+  });
+
+  return (slug: string) => {
+    mutation.mutate({
+      request: {
+        slug,
+      },
+    });
   };
 }
 

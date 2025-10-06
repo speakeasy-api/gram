@@ -210,6 +210,54 @@ type GetToolsetResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// CloneToolsetResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body.
+type CloneToolsetResponseBody struct {
+	// The ID of the toolset
+	ID string `form:"id" json:"id" xml:"id"`
+	// The project ID this toolset belongs to
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The organization ID this toolset belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The account type of the organization
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// The name of the toolset
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the toolset
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Description of the toolset
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The slug of the environment to use as the default for the toolset
+	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
+	// The security variables that are relevant to the toolset
+	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
+	// The server variables that are relevant to the toolset
+	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
+	// The tool URNs in this toolset
+	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
+	// The slug of the MCP to use for the toolset
+	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
+	// Whether the toolset is public in MCP
+	McpIsPublic *bool `form:"mcp_is_public,omitempty" json:"mcp_is_public,omitempty" xml:"mcp_is_public,omitempty"`
+	// Whether the toolset is enabled for MCP
+	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
+	// The ID of the custom domain to use for the toolset
+	CustomDomainID *string `form:"custom_domain_id,omitempty" json:"custom_domain_id,omitempty" xml:"custom_domain_id,omitempty"`
+	// The external OAuth server details
+	ExternalOauthServer *ExternalOAuthServerResponseBody `form:"external_oauth_server,omitempty" json:"external_oauth_server,omitempty" xml:"external_oauth_server,omitempty"`
+	// The OAuth proxy server details
+	OauthProxyServer *OAuthProxyServerResponseBody `form:"oauth_proxy_server,omitempty" json:"oauth_proxy_server,omitempty" xml:"oauth_proxy_server,omitempty"`
+	// When the toolset was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the toolset was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // AddExternalOAuthServerResponseBody is the type of the "toolsets" service
 // "addExternalOAuthServer" endpoint HTTP response body.
 type AddExternalOAuthServerResponseBody struct {
@@ -1405,6 +1453,188 @@ type CheckMCPSlugAvailabilityGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CloneToolsetUnauthorizedResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "unauthorized" error.
+type CloneToolsetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneToolsetForbiddenResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "forbidden" error.
+type CloneToolsetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneToolsetBadRequestResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "bad_request" error.
+type CloneToolsetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneToolsetNotFoundResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "not_found" error.
+type CloneToolsetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneToolsetConflictResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "conflict" error.
+type CloneToolsetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneToolsetUnsupportedMediaResponseBody is the type of the "toolsets"
+// service "cloneToolset" endpoint HTTP response body for the
+// "unsupported_media" error.
+type CloneToolsetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneToolsetInvalidResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "invalid" error.
+type CloneToolsetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneToolsetInvariantViolationResponseBody is the type of the "toolsets"
+// service "cloneToolset" endpoint HTTP response body for the
+// "invariant_violation" error.
+type CloneToolsetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneToolsetUnexpectedResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "unexpected" error.
+type CloneToolsetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CloneToolsetGatewayErrorResponseBody is the type of the "toolsets" service
+// "cloneToolset" endpoint HTTP response body for the "gateway_error" error.
+type CloneToolsetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AddExternalOAuthServerUnauthorizedResponseBody is the type of the "toolsets"
 // service "addExternalOAuthServer" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -2270,6 +2500,76 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 // the "getToolset" endpoint of the "toolsets" service.
 func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 	body := &GetToolsetResponseBody{
+		ID:             res.ID,
+		ProjectID:      res.ProjectID,
+		OrganizationID: res.OrganizationID,
+		AccountType:    res.AccountType,
+		Name:           res.Name,
+		Slug:           string(res.Slug),
+		Description:    res.Description,
+		McpIsPublic:    res.McpIsPublic,
+		McpEnabled:     res.McpEnabled,
+		CustomDomainID: res.CustomDomainID,
+		CreatedAt:      res.CreatedAt,
+		UpdatedAt:      res.UpdatedAt,
+	}
+	if res.DefaultEnvironmentSlug != nil {
+		defaultEnvironmentSlug := string(*res.DefaultEnvironmentSlug)
+		body.DefaultEnvironmentSlug = &defaultEnvironmentSlug
+	}
+	if res.McpSlug != nil {
+		mcpSlug := string(*res.McpSlug)
+		body.McpSlug = &mcpSlug
+	}
+	if res.SecurityVariables != nil {
+		body.SecurityVariables = make([]*SecurityVariableResponseBody, len(res.SecurityVariables))
+		for i, val := range res.SecurityVariables {
+			body.SecurityVariables[i] = marshalTypesSecurityVariableToSecurityVariableResponseBody(val)
+		}
+	}
+	if res.ServerVariables != nil {
+		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
+		for i, val := range res.ServerVariables {
+			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*ToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			body.Tools[i] = marshalTypesToolToToolResponseBody(val)
+		}
+	} else {
+		body.Tools = []*ToolResponseBody{}
+	}
+	if res.ToolUrns != nil {
+		body.ToolUrns = make([]string, len(res.ToolUrns))
+		for i, val := range res.ToolUrns {
+			body.ToolUrns[i] = val
+		}
+	} else {
+		body.ToolUrns = []string{}
+	}
+	if res.PromptTemplates != nil {
+		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
+		for i, val := range res.PromptTemplates {
+			body.PromptTemplates[i] = marshalTypesPromptTemplateToPromptTemplateResponseBody(val)
+		}
+	} else {
+		body.PromptTemplates = []*PromptTemplateResponseBody{}
+	}
+	if res.ExternalOauthServer != nil {
+		body.ExternalOauthServer = marshalTypesExternalOAuthServerToExternalOAuthServerResponseBody(res.ExternalOauthServer)
+	}
+	if res.OauthProxyServer != nil {
+		body.OauthProxyServer = marshalTypesOAuthProxyServerToOAuthProxyServerResponseBody(res.OauthProxyServer)
+	}
+	return body
+}
+
+// NewCloneToolsetResponseBody builds the HTTP response body from the result of
+// the "cloneToolset" endpoint of the "toolsets" service.
+func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
+	body := &CloneToolsetResponseBody{
 		ID:             res.ID,
 		ProjectID:      res.ProjectID,
 		OrganizationID: res.OrganizationID,
@@ -3326,6 +3626,146 @@ func NewCheckMCPSlugAvailabilityGatewayErrorResponseBody(res *goa.ServiceError) 
 	return body
 }
 
+// NewCloneToolsetUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "cloneToolset" endpoint of the "toolsets" service.
+func NewCloneToolsetUnauthorizedResponseBody(res *goa.ServiceError) *CloneToolsetUnauthorizedResponseBody {
+	body := &CloneToolsetUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneToolsetForbiddenResponseBody builds the HTTP response body from the
+// result of the "cloneToolset" endpoint of the "toolsets" service.
+func NewCloneToolsetForbiddenResponseBody(res *goa.ServiceError) *CloneToolsetForbiddenResponseBody {
+	body := &CloneToolsetForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneToolsetBadRequestResponseBody builds the HTTP response body from the
+// result of the "cloneToolset" endpoint of the "toolsets" service.
+func NewCloneToolsetBadRequestResponseBody(res *goa.ServiceError) *CloneToolsetBadRequestResponseBody {
+	body := &CloneToolsetBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneToolsetNotFoundResponseBody builds the HTTP response body from the
+// result of the "cloneToolset" endpoint of the "toolsets" service.
+func NewCloneToolsetNotFoundResponseBody(res *goa.ServiceError) *CloneToolsetNotFoundResponseBody {
+	body := &CloneToolsetNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneToolsetConflictResponseBody builds the HTTP response body from the
+// result of the "cloneToolset" endpoint of the "toolsets" service.
+func NewCloneToolsetConflictResponseBody(res *goa.ServiceError) *CloneToolsetConflictResponseBody {
+	body := &CloneToolsetConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneToolsetUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "cloneToolset" endpoint of the "toolsets" service.
+func NewCloneToolsetUnsupportedMediaResponseBody(res *goa.ServiceError) *CloneToolsetUnsupportedMediaResponseBody {
+	body := &CloneToolsetUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneToolsetInvalidResponseBody builds the HTTP response body from the
+// result of the "cloneToolset" endpoint of the "toolsets" service.
+func NewCloneToolsetInvalidResponseBody(res *goa.ServiceError) *CloneToolsetInvalidResponseBody {
+	body := &CloneToolsetInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneToolsetInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "cloneToolset" endpoint of the "toolsets" service.
+func NewCloneToolsetInvariantViolationResponseBody(res *goa.ServiceError) *CloneToolsetInvariantViolationResponseBody {
+	body := &CloneToolsetInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneToolsetUnexpectedResponseBody builds the HTTP response body from the
+// result of the "cloneToolset" endpoint of the "toolsets" service.
+func NewCloneToolsetUnexpectedResponseBody(res *goa.ServiceError) *CloneToolsetUnexpectedResponseBody {
+	body := &CloneToolsetUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCloneToolsetGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "cloneToolset" endpoint of the "toolsets" service.
+func NewCloneToolsetGatewayErrorResponseBody(res *goa.ServiceError) *CloneToolsetGatewayErrorResponseBody {
+	body := &CloneToolsetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewAddExternalOAuthServerUnauthorizedResponseBody builds the HTTP response
 // body from the result of the "addExternalOAuthServer" endpoint of the
 // "toolsets" service.
@@ -3717,6 +4157,17 @@ func NewGetToolsetPayload(slug string, sessionToken *string, projectSlugInput *s
 // checkMCPSlugAvailability endpoint payload.
 func NewCheckMCPSlugAvailabilityPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.CheckMCPSlugAvailabilityPayload {
 	v := &toolsets.CheckMCPSlugAvailabilityPayload{}
+	v.Slug = types.Slug(slug)
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewCloneToolsetPayload builds a toolsets service cloneToolset endpoint
+// payload.
+func NewCloneToolsetPayload(slug string, sessionToken *string, projectSlugInput *string) *toolsets.CloneToolsetPayload {
+	v := &toolsets.CloneToolsetPayload{}
 	v.Slug = types.Slug(slug)
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
