@@ -38,7 +38,6 @@ require (
 	github.com/speakeasy-api/openapi v1.7.3
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20250711233419-a173a6c0125c
 	github.com/testcontainers/testcontainers-go v0.39.0
-	github.com/testcontainers/testcontainers-go/modules/clickhouse v0.39.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.39.0
 	github.com/testcontainers/testcontainers-go/modules/redis v0.39.0
 	github.com/urfave/cli/v2 v2.27.7

@@ -15,7 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
-	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/tool-metrics"
+	"github.com/speakeasy-api/gram/server/internal/logs"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -569,6 +570,7 @@ func newStartCommand() *cli.Command {
 			variations.Attach(mux, variations.NewService(logger, db, sessionManager))
 			customdomains.Attach(mux, customdomains.NewService(logger, db, sessionManager, &background.CustomDomainRegistrationClient{Temporal: temporalClient}))
 			usage.Attach(mux, usage.NewService(logger, db, sessionManager, billingRepo, serverURL, posthogClient, openRouter))
+			logs.Attach(mux, logs.NewService(logger, db, sessionManager, tcm))
 
 			srv := &http.Server{
 				Addr:              c.String("address"),

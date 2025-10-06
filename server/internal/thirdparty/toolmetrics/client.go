@@ -1,4 +1,4 @@
-package tool_metrics
+package toolmetrics
 
 import (
 	"context"
@@ -19,32 +19,20 @@ const (
 )
 
 type ToolMetricsClient interface {
-	Ping(ctx context.Context) error
-	Exec(ctx context.Context, query string, args ...any) error
 	Close() error
-
-	// Record metric
-	Record(ctx context.Context, args ...any) error
-
+	// List tool call logs
+	List(context.Context, string, ...any) ([]any, error)
 	// Log tool call request/response
 	Log(context.Context, ToolHTTPRequest) error
 }
 
 type StubToolMetricsClient struct{}
 
-func (n *StubToolMetricsClient) Record(context.Context, ...any) error {
-	return nil
+func (n *StubToolMetricsClient) List(context.Context, string, ...any) ([]any, error) {
+	return nil, nil
 }
 
 func (n *StubToolMetricsClient) Log(context.Context, ToolHTTPRequest) error {
-	return nil
-}
-
-func (n *StubToolMetricsClient) Ping(context.Context) error {
-	return nil
-}
-
-func (n *StubToolMetricsClient) Exec(context.Context, string, ...any) error {
 	return nil
 }
 
@@ -57,9 +45,8 @@ type ClickhouseClient struct {
 	Logger *slog.Logger
 }
 
-func (c *ClickhouseClient) Record(ctx context.Context, args ...any) error {
-	// insert into metrics (timestamp, metric_name, metric_value) values (?, ?, ?)
-	return nil
+func (c *ClickhouseClient) List(context.Context, string, ...any) ([]any, error) {
+	return nil, nil
 }
 
 func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
@@ -93,22 +80,6 @@ func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
 		return fmt.Errorf("insert http raw: %w", err)
 	}
 
-	return nil
-}
-
-func (c *ClickhouseClient) Exec(ctx context.Context, query string, args ...any) error {
-	err := c.Conn.Exec(ctx, query, args...)
-	if err != nil {
-		return fmt.Errorf("exec query: %w", err)
-	}
-	return nil
-}
-
-func (c *ClickhouseClient) Ping(ctx context.Context) error {
-	err := c.Conn.Ping(ctx)
-	if err != nil {
-		return fmt.Errorf("ping: %w", err)
-	}
 	return nil
 }
 

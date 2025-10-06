@@ -1,4 +1,4 @@
-package tool_metrics
+package toolmetrics
 
 import (
 	"bytes"

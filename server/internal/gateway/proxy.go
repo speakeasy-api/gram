@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/tool-metrics"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
