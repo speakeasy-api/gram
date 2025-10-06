@@ -17,7 +17,7 @@ async function main() {
   const [hash, ...lines] = migs.split("\n");
   if (!hash.startsWith("h1:")) {
     throw new Error(
-      "Invalid atlas.sum file. Expected it to start with a has line like h1:<base64-string>.",
+      "Invalid atlas.sum file. Expected it to start with a line like h1:<base64-string>.",
     );
   }
 
