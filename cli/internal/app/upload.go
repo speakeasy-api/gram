@@ -1,4 +1,4 @@
-package upload
+package app
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-func NewCommand() *cli.Command {
+func newUploadCommand() *cli.Command {
 	return &cli.Command{
 		Name:  "upload",
 		Usage: "Upload an asset to Gram",
