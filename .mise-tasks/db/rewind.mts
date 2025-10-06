@@ -41,6 +41,11 @@ async function main() {
     drops.push(c);
   }
 
+  if (drops.length === 0) {
+    console.log("Nothing to do.");
+    process.exit(0);
+  }
+
   let droptxt = chalk.redBright(
     "The following migrations will be dropped:\n\n",
   );
