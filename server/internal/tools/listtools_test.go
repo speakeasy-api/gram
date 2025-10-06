@@ -557,7 +557,7 @@ func TestToolsService_ListTools_VerifyToolFields(t *testing.T) {
 			require.NotEmpty(t, tool.HTTPToolDefinition.Schema, "schema should not be empty")
 
 			// Verify that confirm is a valid value
-			require.Contains(t, []string{"", "never", "always", "dangerous"}, tool.HTTPToolDefinition.Confirm, "confirm should be a valid value")
+			require.Contains(t, []string{"", "never", "always", "dangerous"}, *tool.HTTPToolDefinition.Confirm, "confirm should be a valid value")
 		}
 	}
 	require.GreaterOrEqual(t, httpToolCount, 1, "should have at least one http tool")
