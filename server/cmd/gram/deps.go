@@ -59,14 +59,30 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 }
 
 func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (tm.ToolMetricsClient, error) {
+	logger.InfoContext(ctx,
+		"newToolMetricsClient",
+		"database", c.String("clickhouse-database"),
+		"username", c.String("clickhouse-username"),
+		"password", c.String("clickhouse-password"),
+		"host", c.String("clickhouse-host"),
+		"port", c.String("clickhouse-http-port"),
+	)
+
 	conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // too many fields
 		Auth: clickhouse.Auth{
 			Database: c.String("clickhouse-database"),
 			Username: c.String("clickhouse-username"),
 			Password: c.String("clickhouse-password"),
 		},
+		Debug: c.Bool("clickhouse-debug"),
+		Debugf: func(format string, v ...interface{}) {
+			logger.InfoContext(ctx, fmt.Sprintf(format, v...))
+		},
 		Addr:     []string{fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-http-port"))},
 		Protocol: clickhouse.HTTP,
+		Settings: clickhouse.Settings{
+			"max_execution_time": 60,
+		},
 	})
 	if err != nil {
 		logger.WarnContext(ctx, "error connecting to clickhouse; falling back to stub tool call metrics client")

@@ -2,7 +2,6 @@ package logs
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
@@ -55,9 +55,9 @@ func Attach(mux goahttp.Muxer, service *Service) {
 
 func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (res *gen.ListToolLogResult, err error) {
 	// Parse time parameters with defaults
-	tsStart := parseTimeOrDefault(payload.TsStart, time.Now().Add(-24*time.Hour))
-	tsEnd := parseTimeOrDefault(payload.TsEnd, time.Now())
-	cursor := parseTimeOrDefault(payload.Cursor, time.Now())
+	tsStart := parseTimeOrDefault(payload.TsStart, time.Now().Add(-48*time.Hour).UTC())
+	tsEnd := parseTimeOrDefault(payload.TsEnd, time.Now().UTC())
+	cursor := parseTimeOrDefault(payload.Cursor, time.Now().UTC())
 
 	// Build pagination request
 	pagination := &tm.PaginationRequest{
@@ -67,10 +67,25 @@ func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (re
 	}
 	pagination.SetDefaults()
 
+	s.logger.InfoContext(ctx, "request payload",
+		slog.Any("projectID", payload.ProjectID),
+		slog.Any("toolID", payload.ToolID),
+		slog.Any("pagination.PerPage", pagination.PerPage),
+		slog.Any("pagination.Direction", pagination.Direction),
+		slog.Any("pagination.Sort", pagination.Sort),
+		slog.Any("pagination.Cursor", pagination.Cursor()),
+		slog.Any("pagination.PrevCursor", pagination.PrevCursor),
+		slog.Any("pagination.NextCursor", pagination.NextCursor),
+		slog.Any("pagination.Limit", pagination.Limit()),
+		slog.Any("tsStart", tsStart),
+		slog.Any("tsEnd", tsEnd),
+		slog.Any("cursor", cursor))
+
 	// Query logs from ClickHouse
-	results, err := s.tcm.List(ctx, payload.ProjectID, payload.ToolID, tsStart, tsEnd, cursor, pagination)
+	results, err := s.tcm.List(ctx, payload.ProjectID, tsStart, tsEnd, cursor, pagination)
 	if err != nil {
-		return nil, fmt.Errorf("query logs: %w", err)
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing logs").
+			Log(ctx, s.logger, attr.SlogProjectID(payload.ProjectID), attr.SlogToolID(payload.ToolID))
 	}
 
 	// Convert results to gen.HTTPToolLog

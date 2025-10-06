@@ -20,17 +20,34 @@ const (
 	ToolTypePrompt   ToolType = "prompt"
 )
 
+func (t *ToolType) Scan(src interface{}) error {
+	if src == nil {
+		*t = ""
+		return nil
+	}
+	switch v := src.(type) {
+	case string:
+		*t = ToolType(v)
+		return nil
+	case []byte:
+		*t = ToolType(v)
+		return nil
+	default:
+		return fmt.Errorf("cannot scan %T into ToolType", src)
+	}
+}
+
 type ToolMetricsClient interface {
 	Close() error
 	// List tool call logs
-	List(ctx context.Context, projectID, toolID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) ([]ToolHTTPRequest, error)
+	List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) ([]ToolHTTPRequest, error)
 	// Log tool call request/response
 	Log(context.Context, ToolHTTPRequest) error
 }
 
 type StubToolMetricsClient struct{}
 
-func (n *StubToolMetricsClient) List(context.Context, string, string, time.Time, time.Time, time.Time, Pageable) ([]ToolHTTPRequest, error) {
+func (n *StubToolMetricsClient) List(context.Context, string, time.Time, time.Time, time.Time, Pageable) ([]ToolHTTPRequest, error) {
 	return nil, nil
 }
 
@@ -47,20 +64,21 @@ type ClickhouseClient struct {
 	Logger *slog.Logger
 }
 
-func (c *ClickhouseClient) List(ctx context.Context, projectID, toolID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) ([]ToolHTTPRequest, error) {
+func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) ([]ToolHTTPRequest, error) {
 	query := listLogsQueryDesc
 	if pagination.SortOrder() == "ASC" {
 		query = listLogsQueryAsc
 	}
 
-	rows, err := c.Conn.Query(ctx, query,
-		clickhouse.Named("project_id", projectID),
-		clickhouse.Named("tool_id", toolID),
-		clickhouse.Named("ts_start", tsStart),
-		clickhouse.Named("ts_end", tsEnd),
-		clickhouse.Named("cursor", cursor),
-		clickhouse.Named("limit", pagination.Limit()),
-	)
+	// format := "2006-01-02 15:04:05.000000 -0700 MST"
+	//
+	// tsStart, err := tsStart.Format(time.RFC3339Nano)
+
+	rows, err := c.Conn.Query(ctx, query, projectID,
+		tsStart,
+		tsEnd,
+		cursor,
+		pagination.Limit())
 	if err != nil {
 		return nil, fmt.Errorf("query logs: %w", err)
 	}
@@ -75,13 +93,14 @@ func (c *ClickhouseClient) List(ctx context.Context, projectID, toolID string, t
 	var results []ToolHTTPRequest
 	for rows.Next() {
 		var log ToolHTTPRequest
+		c.Logger.DebugContext(ctx, "scan row")
 		if err = rows.ScanStruct(&log); err != nil {
-			return nil, fmt.Errorf("scan log: %w", err)
+			return nil, fmt.Errorf("error scanning row: %w", err)
 		}
 		results = append(results, log)
 	}
 
-	if err := rows.Err(); err != nil {
+	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("rows error: %w", err)
 	}
 

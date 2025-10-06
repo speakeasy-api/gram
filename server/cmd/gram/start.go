@@ -335,11 +335,32 @@ func newStartCommand() *cli.Command {
 			Value:    "gram",
 		},
 		&cli.StringFlag{
+			Name:     "clickhouse-native-port",
+			Usage:    "Clickhouse Native Port",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_NATIVE_PORT"},
+			Value:    "9000",
+		},
+		&cli.StringFlag{
 			Name:     "clickhouse-http-port",
 			Usage:    "Clickhouse HTTP Port",
 			Required: false,
 			EnvVars:  []string{"CLICKHOUSE_HTTP_PORT"},
 			Value:    "8123",
+		},
+		&cli.BoolFlag{
+			Name:     "clickhouse-insecure",
+			Usage:    "Clickhouse Insecure",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_INSECURE"},
+			Value:    false,
+		},
+		&cli.BoolFlag{
+			Name:     "clickhouse-debug",
+			Usage:    "Clickhouse Debug",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_DEBUG"},
+			Value:    true,
 		},
 	}
 

@@ -8,22 +8,20 @@ var insertHttpRaw = `insert into gram.http_requests_raw
 
 var listLogsQueryDesc = `
 select * from gram.http_requests_raw
-where project_id = {project_id:UUID}
-and tool_id = {tool_id:UUID}
-and ts >= {ts_start:DateTime64(3)}
-and ts <= {ts_end:DateTime64(3)}
-and ts < {cursor:DateTime64(3)}
+where project_id = $1
+and ts >= $2
+and ts <= $3
+and ts < $4
 order by ts desc
-limit {limit:UInt32}
+limit $5
 `
 
 var listLogsQueryAsc = `
 select * from gram.http_requests_raw
-where project_id = {project_id:UUID}
-and tool_id = {tool_id:UUID}
-and ts >= {ts_start:DateTime64(3)}
-and ts <= {ts_end:DateTime64(3)}
-and ts > {cursor:DateTime64(3)}
-order by ts asc
-limit {limit:UInt32}
+where project_id = $1
+and ts >= $2
+and ts <= $3
+and ts > $4
+order by ts
+limit $5
 `
