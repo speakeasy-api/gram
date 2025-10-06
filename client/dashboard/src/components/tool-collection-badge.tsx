@@ -7,6 +7,7 @@ import {
   Stack,
   Tooltip,
   TooltipContent,
+  TooltipPortal,
   TooltipTrigger,
 } from "@speakeasy-api/moonshine";
 
@@ -41,7 +42,9 @@ export const ToolsetPromptsBadge = ({
           {names.length} Prompt{names.length === 1 ? "" : "s"}
         </Badge>
       </TooltipTrigger>
-      <TooltipContent side="bottom">{tooltipContent}</TooltipContent>
+      <TooltipPortal>
+        <TooltipContent side="bottom">{tooltipContent}</TooltipContent>
+      </TooltipPortal>
     </Tooltip>
   ) : null;
 };
@@ -62,7 +65,9 @@ export const ToolCollectionBadge = ({
   let tooltipContent: React.ReactNode = (
     <div className="max-h-[300px] overflow-y-auto">
       <Stack gap={1}>
-        {toolNames?.map((tool, i) => <p key={i}>{tool}</p>)}
+        {toolNames?.map((tool, i) => (
+          <p key={i}>{tool}</p>
+        ))}
       </Stack>
     </div>
   );
@@ -97,7 +102,9 @@ export const ToolCollectionBadge = ({
           {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
         </Badge>
       </TooltipTrigger>
-      <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
+      <TooltipPortal>
+        <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
+      </TooltipPortal>
     </Tooltip>
   ) : (
     <Badge size={size} variant={variant} className={className}>

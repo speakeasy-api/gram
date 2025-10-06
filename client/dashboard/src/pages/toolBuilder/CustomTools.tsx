@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { ToolCollectionBadge } from "@/components/tools-badge";
+import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { UpdatedAt } from "@/components/updated-at";

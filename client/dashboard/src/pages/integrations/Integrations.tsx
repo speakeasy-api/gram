@@ -3,8 +3,7 @@ import { AssetImage } from "@/components/asset-image";
 import { CreateThingCard } from "@/components/create-thing-card";
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
-import { ToolCollectionBadge } from "@/components/tools-badge";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Card, Cards } from "@/components/ui/card";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
@@ -20,7 +19,7 @@ import {
   useListIntegrations,
   useListPackagesSuspense,
 } from "@gram/client/react-query";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { CheckIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
