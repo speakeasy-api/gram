@@ -11,7 +11,3 @@ var Slug = Type("Slug", String, func() {
 	Pattern(constants.SlugPattern)
 	MaxLength(40)
 })
-
-var URN = Type("URN", String, func() {
-	Meta("struct:field:type", "urn.Tool", "github.com/speakeasy-api/gram/server/internal/urn")
-})
