@@ -206,6 +206,28 @@ function DeploymentsTable() {
     <>
       <Heading variant="h2">Recent Deployments</Heading>
 
+      <div className="bg-secondary p-6 rounded-lg mb-6 space-y-4">
+        <div>
+          <p className="text-sm text-muted-foreground">
+            Each time you upload a new OpenAPI document or update a previously
+            uploaded one, you create a new deployment in Gram.
+          </p>
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">
+            For each deployment, Gram analyzes all related OpenAPI documents to
+            generate or update the corresponding tool definitions.
+          </p>
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground">
+            Gram generates logs for every deployment, showing what was processed
+            successfully and which operations or endpoints failed to convert
+            into tools.
+          </p>
+        </div>
+      </div>
+
       <Table<DeploymentSummary>
         columns={columnsWithData}
         rowKey={(row) => row.id}
