@@ -217,8 +217,8 @@ function DeploymentsTable() {
         </p>
         <p className="text-sm text-muted-foreground">
           Gram generates logs for every deployment, showing what was processed
-          successfully and which operations or endpoints failed to convert
-          into tools.
+          successfully and which operations or endpoints failed to convert into
+          tools.
         </p>
       </div>
 
