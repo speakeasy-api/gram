@@ -1,0 +1,5 @@
+# External dependencies
+public/external/**
+
+# Generated or problematic files
+src/components/tools-badge.tsx

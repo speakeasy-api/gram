@@ -59,7 +59,7 @@ WHERE
 ORDER BY htd.id DESC
 LIMIT $1;
 
--- name: FindToolsByName :many
+-- name: FindHttpToolsByUrn :many
 WITH deployment AS (
     SELECT d.id
     FROM deployments d
@@ -88,10 +88,10 @@ LEFT JOIN packages ON http_tool_definitions.project_id = packages.project_id
 WHERE
   http_tool_definitions.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
   AND http_tool_definitions.deleted IS FALSE
-  AND http_tool_definitions.name = ANY (@names::text[])
+  AND http_tool_definitions.tool_urn = ANY (@urns::text[])
 ORDER BY http_tool_definitions.id DESC;
 
--- name: FindToolEntriesByName :many
+-- name: FindHttpToolEntriesByUrn :many
 WITH deployment AS (
     SELECT d.id
     FROM deployments d
@@ -108,13 +108,30 @@ external_deployments AS (
   WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
 )
 SELECT 
-  htd.id, htd.deployment_id, htd.name, htd.security, htd.server_env_var
+  htd.id, htd.tool_urn, htd.deployment_id, htd.name, htd.security, htd.server_env_var
 FROM http_tool_definitions htd
 WHERE
   htd.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
   AND htd.deleted IS FALSE
-  AND htd.name = ANY (@names::text[])
+  AND htd.tool_urn = ANY (@urns::text[])
 ORDER BY htd.id DESC;
+
+-- name: GetHTTPToolDefinitionByURN :one
+WITH deployment AS (
+  SELECT d.id 
+  FROM deployments d
+  JOIN deployment_statuses ds ON d.id = ds.deployment_id
+  WHERE d.project_id = @project_id
+  AND ds.status = 'completed'
+  ORDER BY d.seq DESC LIMIT 1
+)
+SELECT *
+FROM http_tool_definitions
+WHERE http_tool_definitions.tool_urn = @urn
+  AND http_tool_definitions.project_id = @project_id
+  AND http_tool_definitions.deleted IS FALSE 
+  AND http_tool_definitions.deployment_id = (SELECT id FROM deployment)
+LIMIT 1;
 
 -- name: GetHTTPToolDefinitionByID :one
 WITH first_party AS (
@@ -141,11 +158,11 @@ SELECT *
 FROM http_tool_definitions
 WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party));
 
--- name: PokeHTTPToolDefinitionByName :one
+-- name: PokeHTTPToolDefinitionByUrn :one
 WITH first_party AS (
   SELECT id
   FROM http_tool_definitions
-  WHERE http_tool_definitions.name = @name
+  WHERE http_tool_definitions.tool_urn = @urn
     AND http_tool_definitions.project_id = @project_id
     AND http_tool_definitions.deleted IS FALSE
   LIMIT 1
@@ -158,7 +175,7 @@ third_party AS (
   INNER JOIN package_versions pv ON dp.version_id = pv.id
   INNER JOIN http_tool_definitions htd ON htd.deployment_id = pv.deployment_id
   WHERE d.project_id = @project_id
-    AND htd.name = @name
+    AND htd.tool_urn = @urn
     AND NOT EXISTS(SELECT 1 FROM first_party)
   LIMIT 1
 )

@@ -1,5 +1,7 @@
 # HTTPToolDefinition
 
+An HTTP tool
+
 ## Example Usage
 
 ```typescript
@@ -7,7 +9,6 @@ import { HTTPToolDefinition } from "@gram/client/models/components";
 
 let value: HTTPToolDefinition = {
   canonicalName: "<value>",
-  confirm: "<value>",
   createdAt: new Date("2025-03-04T09:26:20.697Z"),
   deploymentId: "<id>",
   description:
@@ -20,7 +21,6 @@ let value: HTTPToolDefinition = {
   schema: "<value>",
   summary: "<value>",
   tags: [],
-  toolType: "http",
   toolUrn: "<value>",
   updatedAt: new Date("2025-05-22T21:11:55.475Z"),
 };
@@ -32,14 +32,14 @@ let value: HTTPToolDefinition = {
 | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `canonical`                                                                                   | [components.CanonicalToolAttributes](../../models/components/canonicaltoolattributes.md)      | :heavy_minus_sign:                                                                            | The original details of a tool                                                                |
 | `canonicalName`                                                                               | *string*                                                                                      | :heavy_check_mark:                                                                            | The canonical name of the tool. Will be the same as the name if there is no variation.        |
-| `confirm`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | Confirmation mode for the tool                                                                |
+| `confirm`                                                                                     | *string*                                                                                      | :heavy_minus_sign:                                                                            | Confirmation mode for the tool                                                                |
 | `confirmPrompt`                                                                               | *string*                                                                                      | :heavy_minus_sign:                                                                            | Prompt for the confirmation                                                                   |
 | `createdAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | The creation date of the tool.                                                                |
 | `defaultServerUrl`                                                                            | *string*                                                                                      | :heavy_minus_sign:                                                                            | The default server URL for the tool                                                           |
 | `deploymentId`                                                                                | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the deployment                                                                      |
 | `description`                                                                                 | *string*                                                                                      | :heavy_check_mark:                                                                            | Description of the tool                                                                       |
 | `httpMethod`                                                                                  | *string*                                                                                      | :heavy_check_mark:                                                                            | HTTP method for the request                                                                   |
-| `id`                                                                                          | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the HTTP tool                                                                       |
+| `id`                                                                                          | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the tool                                                                            |
 | `name`                                                                                        | *string*                                                                                      | :heavy_check_mark:                                                                            | The name of the tool                                                                          |
 | `openapiv3DocumentId`                                                                         | *string*                                                                                      | :heavy_minus_sign:                                                                            | The ID of the OpenAPI v3 document                                                             |
 | `openapiv3Operation`                                                                          | *string*                                                                                      | :heavy_minus_sign:                                                                            | OpenAPI v3 operation                                                                          |
@@ -53,7 +53,6 @@ let value: HTTPToolDefinition = {
 | `summarizer`                                                                                  | *string*                                                                                      | :heavy_minus_sign:                                                                            | Summarizer for the tool                                                                       |
 | `summary`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | Summary of the tool                                                                           |
 | `tags`                                                                                        | *string*[]                                                                                    | :heavy_check_mark:                                                                            | The tags list for this http tool                                                              |
-| `toolType`                                                                                    | [components.ToolType](../../models/components/tooltype.md)                                    | :heavy_check_mark:                                                                            | N/A                                                                                           |
-| `toolUrn`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The URN of this HTTP tool                                                                     |
+| `toolUrn`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The URN of this tool                                                                          |
 | `updatedAt`                                                                                   | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_check_mark:                                                                            | The last update date of the tool.                                                             |
 | `variation`                                                                                   | [components.ToolVariation](../../models/components/toolvariation.md)                          | :heavy_minus_sign:                                                                            | N/A                                                                                           |

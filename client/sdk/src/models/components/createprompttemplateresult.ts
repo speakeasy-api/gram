@@ -14,6 +14,9 @@ import {
 } from "./prompttemplate.js";
 
 export type CreatePromptTemplateResult = {
+  /**
+   * A prompt template
+   */
   template: PromptTemplate;
 };
 

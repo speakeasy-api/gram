@@ -57,17 +57,19 @@ func TestToolsetsService_CloneToolset_Success(t *testing.T) {
 	require.Equal(t, "Original Toolset_copy", cloned.Name)
 	require.Equal(t, "original-toolsetcopy", string(cloned.Slug)) // Slug conversion removes underscore
 	require.Equal(t, "Original toolset description", *cloned.Description)
-	require.Len(t, cloned.HTTPTools, 2, "should have same number of HTTP tools")
+	require.Len(t, cloned.Tools, 2, "should have same number of HTTP tools")
 	require.NotEqual(t, original.ID, cloned.ID, "should have different ID")
 
 	// Verify the tools are correctly copied
-	originalToolNames := make([]string, len(original.HTTPTools))
-	for i, tool := range original.HTTPTools {
-		originalToolNames[i] = tool.Name
+	originalToolNames := make([]string, len(original.Tools))
+	for i, tool := range original.Tools {
+		baseTool := conv.ToBaseTool(tool)
+		originalToolNames[i] = baseTool.Name
 	}
-	clonedToolNames := make([]string, len(cloned.HTTPTools))
-	for i, tool := range cloned.HTTPTools {
-		clonedToolNames[i] = tool.Name
+	clonedToolNames := make([]string, len(cloned.Tools))
+	for i, tool := range cloned.Tools {
+		baseTool := conv.ToBaseTool(tool)
+		clonedToolNames[i] = baseTool.Name
 	}
 	require.ElementsMatch(t, originalToolNames, clonedToolNames)
 }

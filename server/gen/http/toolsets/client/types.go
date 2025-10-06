@@ -82,12 +82,13 @@ type CreateToolsetResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
-	// The HTTP tools in this toolset
-	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
-	// The prompt templates in this toolset
-	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -136,12 +137,13 @@ type UpdateToolsetResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
-	// The HTTP tools in this toolset
-	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
-	// The prompt templates in this toolset
-	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -183,12 +185,13 @@ type GetToolsetResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
-	// The HTTP tools in this toolset
-	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
-	// The prompt templates in this toolset
-	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -230,12 +233,13 @@ type CloneToolsetResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
-	// The HTTP tools in this toolset
-	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
-	// The prompt templates in this toolset
-	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -277,12 +281,13 @@ type AddExternalOAuthServerResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
-	// The HTTP tools in this toolset
-	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
-	// The prompt templates in this toolset
-	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -324,12 +329,13 @@ type RemoveOAuthServerResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
-	// The HTTP tools in this toolset
-	HTTPTools []*HTTPToolDefinitionResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
-	// The prompt templates in this toolset
-	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -2033,31 +2039,21 @@ type ServerVariableResponseBody struct {
 	EnvVariables []string `form:"env_variables,omitempty" json:"env_variables,omitempty" xml:"env_variables,omitempty"`
 }
 
+// ToolResponseBody is used to define fields on response body types.
+type ToolResponseBody struct {
+	// The HTTP tool definition
+	HTTPToolDefinition *HTTPToolDefinitionResponseBody `form:"http_tool_definition,omitempty" json:"http_tool_definition,omitempty" xml:"http_tool_definition,omitempty"`
+	// The prompt template
+	PromptTemplate *PromptTemplateResponseBody `form:"prompt_template,omitempty" json:"prompt_template,omitempty" xml:"prompt_template,omitempty"`
+}
+
 // HTTPToolDefinitionResponseBody is used to define fields on response body
 // types.
 type HTTPToolDefinitionResponseBody struct {
-	ToolType *string `form:"tool_type,omitempty" json:"tool_type,omitempty" xml:"tool_type,omitempty"`
-	// The ID of the HTTP tool
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The ID of the project
-	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// The ID of the deployment
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
-	// The name of the tool
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The canonical name of the tool. Will be the same as the name if there is no
-	// variation.
-	CanonicalName *string `form:"canonical_name,omitempty" json:"canonical_name,omitempty" xml:"canonical_name,omitempty"`
 	// Summary of the tool
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
-	// Description of the tool
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// Confirmation mode for the tool
-	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
-	// Prompt for the confirmation
-	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
-	// Summarizer for the tool
-	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
 	// Response filter metadata for the tool
 	ResponseFilter *ResponseFilterResponseBody `form:"response_filter,omitempty" json:"response_filter,omitempty" xml:"response_filter,omitempty"`
 	// The ID of the OpenAPI v3 document
@@ -2074,12 +2070,31 @@ type HTTPToolDefinitionResponseBody struct {
 	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
 	// Path for the request
 	Path *string `form:"path,omitempty" json:"path,omitempty" xml:"path,omitempty"`
+	// The name of the source package
+	PackageName *string `form:"package_name,omitempty" json:"package_name,omitempty" xml:"package_name,omitempty"`
+	// The ID of the tool
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The URN of this tool
+	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
+	// The ID of the project
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The name of the tool
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName *string `form:"canonical_name,omitempty" json:"canonical_name,omitempty" xml:"canonical_name,omitempty"`
+	// Description of the tool
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Version of the schema
 	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
 	// JSON schema for the request
 	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
-	// The name of the source package
-	PackageName *string `form:"package_name,omitempty" json:"package_name,omitempty" xml:"package_name,omitempty"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
 	// The creation date of the tool.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the tool.
@@ -2088,8 +2103,6 @@ type HTTPToolDefinitionResponseBody struct {
 	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
 	// The variation details of a tool. Only includes explicitly varied fields.
 	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
-	// The URN of this HTTP tool
-	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
 }
 
 // ResponseFilterResponseBody is used to define fields on response body types.
@@ -2153,32 +2166,49 @@ type ToolVariationResponseBody struct {
 
 // PromptTemplateResponseBody is used to define fields on response body types.
 type PromptTemplateResponseBody struct {
-	// The ID of the prompt template
-	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The revision tree ID for the prompt template
 	HistoryID *string `form:"history_id,omitempty" json:"history_id,omitempty" xml:"history_id,omitempty"`
 	// The previous version of the prompt template to use as predecessor
 	PredecessorID *string `form:"predecessor_id,omitempty" json:"predecessor_id,omitempty" xml:"predecessor_id,omitempty"`
-	// The name of the prompt template
-	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The template content
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
-	// The description of the prompt template
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The JSON Schema defining the placeholders found in the prompt template
-	Arguments *string `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
 	// The template engine
 	Engine *string `form:"engine,omitempty" json:"engine,omitempty" xml:"engine,omitempty"`
 	// The kind of prompt the template is used for
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string `form:"tools_hint,omitempty" json:"tools_hint,omitempty" xml:"tools_hint,omitempty"`
-	// The creation date of the prompt template.
-	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
-	// The last update date of the prompt template.
-	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
-	// The URN of this prompt template
+	// The ID of the tool
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The URN of this tool
 	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
+	// The ID of the project
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The name of the tool
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName *string `form:"canonical_name,omitempty" json:"canonical_name,omitempty" xml:"canonical_name,omitempty"`
+	// Description of the tool
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// JSON schema for the request
+	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The creation date of the tool.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The last update date of the tool.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The original details of a tool, excluding any variations
+	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
 }
 
 // ExternalOAuthServerResponseBody is used to define fields on response body
@@ -2257,12 +2287,13 @@ type ToolsetEntryResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
-	// The HTTP tools in this toolset
-	HTTPTools []*HTTPToolDefinitionEntryResponseBody `form:"http_tools,omitempty" json:"http_tools,omitempty" xml:"http_tools,omitempty"`
-	// The prompt templates in this toolset
-	PromptTemplates []*PromptTemplateEntryResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
+	// The tools in this toolset
+	Tools []*ToolEntryResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateEntryResponseBody `form:"prompt_templates,omitempty" json:"prompt_templates,omitempty" xml:"prompt_templates,omitempty"`
 	// The slug of the MCP to use for the toolset
 	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
 	// Whether the toolset is public in MCP
@@ -2277,12 +2308,13 @@ type ToolsetEntryResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 }
 
-// HTTPToolDefinitionEntryResponseBody is used to define fields on response
-// body types.
-type HTTPToolDefinitionEntryResponseBody struct {
-	ToolType *string `form:"tool_type,omitempty" json:"tool_type,omitempty" xml:"tool_type,omitempty"`
-	// The ID of the HTTP tool
+// ToolEntryResponseBody is used to define fields on response body types.
+type ToolEntryResponseBody struct {
+	Type *string `form:"type,omitempty" json:"type,omitempty" xml:"type,omitempty"`
+	// The ID of the tool
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The URN of the tool
+	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
 	// The name of the tool
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 }
@@ -2407,17 +2439,17 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
-	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
-	for i, val := range body.HTTPTools {
-		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
-	}
-	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
-	for i, val := range body.PromptTemplates {
-		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	v.Tools = make([]*types.Tool, len(body.Tools))
+	for i, val := range body.Tools {
+		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
 	}
 	v.ToolUrns = make([]string, len(body.ToolUrns))
 	for i, val := range body.ToolUrns {
 		v.ToolUrns[i] = val
+	}
+	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
+	for i, val := range body.PromptTemplates {
+		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
@@ -2778,17 +2810,17 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
-	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
-	for i, val := range body.HTTPTools {
-		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
-	}
-	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
-	for i, val := range body.PromptTemplates {
-		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	v.Tools = make([]*types.Tool, len(body.Tools))
+	for i, val := range body.Tools {
+		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
 	}
 	v.ToolUrns = make([]string, len(body.ToolUrns))
 	for i, val := range body.ToolUrns {
 		v.ToolUrns[i] = val
+	}
+	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
+	for i, val := range body.PromptTemplates {
+		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
@@ -3137,17 +3169,17 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
-	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
-	for i, val := range body.HTTPTools {
-		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
-	}
-	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
-	for i, val := range body.PromptTemplates {
-		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	v.Tools = make([]*types.Tool, len(body.Tools))
+	for i, val := range body.Tools {
+		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
 	}
 	v.ToolUrns = make([]string, len(body.ToolUrns))
 	for i, val := range body.ToolUrns {
 		v.ToolUrns[i] = val
+	}
+	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
+	for i, val := range body.PromptTemplates {
+		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
@@ -3496,17 +3528,17 @@ func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
-	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
-	for i, val := range body.HTTPTools {
-		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
-	}
-	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
-	for i, val := range body.PromptTemplates {
-		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	v.Tools = make([]*types.Tool, len(body.Tools))
+	for i, val := range body.Tools {
+		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
 	}
 	v.ToolUrns = make([]string, len(body.ToolUrns))
 	for i, val := range body.ToolUrns {
 		v.ToolUrns[i] = val
+	}
+	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
+	for i, val := range body.PromptTemplates {
+		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
@@ -3705,17 +3737,17 @@ func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
-	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
-	for i, val := range body.HTTPTools {
-		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
-	}
-	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
-	for i, val := range body.PromptTemplates {
-		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	v.Tools = make([]*types.Tool, len(body.Tools))
+	for i, val := range body.Tools {
+		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
 	}
 	v.ToolUrns = make([]string, len(body.ToolUrns))
 	for i, val := range body.ToolUrns {
 		v.ToolUrns[i] = val
+	}
+	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
+	for i, val := range body.PromptTemplates {
+		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
@@ -3914,17 +3946,17 @@ func NewRemoveOAuthServerToolsetOK(body *RemoveOAuthServerResponseBody) *types.T
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
-	v.HTTPTools = make([]*types.HTTPToolDefinition, len(body.HTTPTools))
-	for i, val := range body.HTTPTools {
-		v.HTTPTools[i] = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(val)
-	}
-	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
-	for i, val := range body.PromptTemplates {
-		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
+	v.Tools = make([]*types.Tool, len(body.Tools))
+	for i, val := range body.Tools {
+		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
 	}
 	v.ToolUrns = make([]string, len(body.ToolUrns))
 	for i, val := range body.ToolUrns {
 		v.ToolUrns[i] = val
+	}
+	v.PromptTemplates = make([]*types.PromptTemplate, len(body.PromptTemplates))
+	for i, val := range body.PromptTemplates {
+		v.PromptTemplates[i] = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(val)
 	}
 	if body.ExternalOauthServer != nil {
 		v.ExternalOauthServer = unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer(body.ExternalOauthServer)
@@ -4107,8 +4139,8 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
-	if body.HTTPTools == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("http_tools", "body"))
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
@@ -4152,9 +4184,9 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 			}
 		}
 	}
-	for _, e := range body.HTTPTools {
+	for _, e := range body.Tools {
 		if e != nil {
-			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
+			if err2 := ValidateToolResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -4230,8 +4262,8 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
-	if body.HTTPTools == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("http_tools", "body"))
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
@@ -4275,9 +4307,9 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 			}
 		}
 	}
-	for _, e := range body.HTTPTools {
+	for _, e := range body.Tools {
 		if e != nil {
-			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
+			if err2 := ValidateToolResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -4337,8 +4369,8 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
-	if body.HTTPTools == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("http_tools", "body"))
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
@@ -4382,9 +4414,9 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 			}
 		}
 	}
-	for _, e := range body.HTTPTools {
+	for _, e := range body.Tools {
 		if e != nil {
-			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
+			if err2 := ValidateToolResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -4444,8 +4476,8 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
-	if body.HTTPTools == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("http_tools", "body"))
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
@@ -4489,9 +4521,9 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 			}
 		}
 	}
-	for _, e := range body.HTTPTools {
+	for _, e := range body.Tools {
 		if e != nil {
-			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
+			if err2 := ValidateToolResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -4551,8 +4583,8 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
-	if body.HTTPTools == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("http_tools", "body"))
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
@@ -4596,9 +4628,9 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 			}
 		}
 	}
-	for _, e := range body.HTTPTools {
+	for _, e := range body.Tools {
 		if e != nil {
-			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
+			if err2 := ValidateToolResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -4658,8 +4690,8 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
-	if body.HTTPTools == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("http_tools", "body"))
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
@@ -4703,9 +4735,9 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 			}
 		}
 	}
-	for _, e := range body.HTTPTools {
+	for _, e := range body.Tools {
 		if e != nil {
-			if err2 := ValidateHTTPToolDefinitionResponseBody(e); err2 != nil {
+			if err2 := ValidateToolResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -6937,35 +6969,26 @@ func ValidateServerVariableResponseBody(body *ServerVariableResponseBody) (err e
 	return
 }
 
+// ValidateToolResponseBody runs the validations defined on ToolResponseBody
+func ValidateToolResponseBody(body *ToolResponseBody) (err error) {
+	if body.HTTPToolDefinition != nil {
+		if err2 := ValidateHTTPToolDefinitionResponseBody(body.HTTPToolDefinition); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.PromptTemplate != nil {
+		if err2 := ValidatePromptTemplateResponseBody(body.PromptTemplate); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateHTTPToolDefinitionResponseBody runs the validations defined on
 // HTTPToolDefinitionResponseBody
 func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody) (err error) {
-	if body.ToolType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_type", "body"))
-	}
-	if body.ID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
-	if body.DeploymentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
-	}
-	if body.Name == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
-	}
-	if body.CanonicalName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_name", "body"))
-	}
 	if body.Summary == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("summary", "body"))
-	}
-	if body.Description == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
-	}
-	if body.Confirm == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("confirm", "body"))
 	}
 	if body.Tags == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
@@ -6979,6 +7002,24 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	if body.Schema == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
 	}
+	if body.DeploymentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.CanonicalName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_name", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
 	if body.ToolUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
 	}
@@ -6987,11 +7028,6 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
-	}
-	if body.ToolType != nil {
-		if !(*body.ToolType == "http") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tool_type", *body.ToolType, []any{"http"}))
-		}
 	}
 	if body.ResponseFilter != nil {
 		if err2 := ValidateResponseFilterResponseBody(body.ResponseFilter); err2 != nil {
@@ -7098,16 +7134,17 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
 	}
-	if body.Name != nil {
-		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", *body.Name, "^[a-z0-9_-]{1,128}$"))
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
-	if body.Name != nil {
-		if utf8.RuneCountInString(*body.Name) > 40 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 40, false))
-		}
+	if body.CanonicalName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_name", "body"))
 	}
-	if body.Arguments != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.arguments", *body.Arguments, goa.FormatJSON))
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Schema == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
 	}
 	if body.Engine != nil {
 		if !(*body.Engine == "mustache") {
@@ -7127,6 +7164,16 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.Canonical != nil {
+		if err2 := ValidateCanonicalToolAttributesResponseBody(body.Canonical); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Variation != nil {
+		if err2 := ValidateToolVariationResponseBody(body.Variation); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -7267,8 +7314,8 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 	if body.Slug == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
 	}
-	if body.HTTPTools == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("http_tools", "body"))
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
 	}
 	if body.PromptTemplates == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("prompt_templates", "body"))
@@ -7312,9 +7359,9 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 			}
 		}
 	}
-	for _, e := range body.HTTPTools {
+	for _, e := range body.Tools {
 		if e != nil {
-			if err2 := ValidateHTTPToolDefinitionEntryResponseBody(e); err2 != nil {
+			if err2 := ValidateToolEntryResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -7343,11 +7390,11 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 	return
 }
 
-// ValidateHTTPToolDefinitionEntryResponseBody runs the validations defined on
-// HTTPToolDefinitionEntryResponseBody
-func ValidateHTTPToolDefinitionEntryResponseBody(body *HTTPToolDefinitionEntryResponseBody) (err error) {
-	if body.ToolType == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("tool_type", "body"))
+// ValidateToolEntryResponseBody runs the validations defined on
+// ToolEntryResponseBody
+func ValidateToolEntryResponseBody(body *ToolEntryResponseBody) (err error) {
+	if body.Type == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("type", "body"))
 	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
@@ -7355,9 +7402,12 @@ func ValidateHTTPToolDefinitionEntryResponseBody(body *HTTPToolDefinitionEntryRe
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
-	if body.ToolType != nil {
-		if !(*body.ToolType == "http") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tool_type", *body.ToolType, []any{"http"}))
+	if body.ToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
+	}
+	if body.Type != nil {
+		if !(*body.Type == "http" || *body.Type == "prompt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"http", "prompt"}))
 		}
 	}
 	return

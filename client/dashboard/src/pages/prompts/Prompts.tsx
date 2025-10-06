@@ -1,21 +1,18 @@
 import { Page } from "@/components/page-layout";
-import { Button } from "@speakeasy-api/moonshine";
-import { Plus } from "lucide-react";
 import { Card, Cards } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
 import { UpdatedAt } from "@/components/updated-at";
+import { isPrompt } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
-import {
-  PromptTemplate,
-  PromptTemplateKind,
-  Toolset,
-} from "@gram/client/models/components";
+import { PromptTemplate } from "@gram/client/models/components";
 import {
   invalidateAllTemplates,
   useDeleteTemplateMutation,
   useTemplates,
 } from "@gram/client/react-query/index.js";
+import { Button } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import { Outlet } from "react-router";
 import { PromptsEmptyState } from "./PromptsEmptyState";
 
@@ -26,17 +23,9 @@ export function PromptsRoot() {
 export function usePrompts() {
   const { data, isLoading } = useTemplates();
   return {
-    prompts: data?.templates.filter(
-      (template) => template.kind === PromptTemplateKind.Prompt,
-    ),
+    prompts: data?.templates.filter(isPrompt),
     isLoading,
   };
-}
-
-export function getToolsetPrompts(toolset: Toolset | undefined) {
-  return toolset?.promptTemplates.filter(
-    (template) => template.kind === PromptTemplateKind.Prompt,
-  );
 }
 
 export default function Prompts() {

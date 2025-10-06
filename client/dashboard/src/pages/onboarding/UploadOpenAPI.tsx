@@ -31,13 +31,13 @@ import {
 import {
   useDeploymentLogs,
   useLatestDeployment,
-  useListTools,
   useListToolsets,
 } from "@gram/client/react-query/index.js";
 import { Alert, Button, CodeSnippet, Stack } from "@speakeasy-api/moonshine";
 import { ArrowRightIcon, CheckIcon, RefreshCcwIcon } from "lucide-react";
 import { useState } from "react";
 import { useParams } from "react-router";
+import { useListTools } from "@/hooks/toolTypes";
 
 export default function UploadOpenAPI() {
   return (
@@ -331,8 +331,9 @@ const useAssetNumtools = (
   )?.id;
 
   return documentId
-    ? tools?.httpTools.filter(
+    ? tools?.tools.filter(
         (tool) =>
+          tool.type === "http" &&
           tool.openapiv3DocumentId !== undefined &&
           tool.deploymentId === deployment?.id &&
           tool.openapiv3DocumentId === documentId,

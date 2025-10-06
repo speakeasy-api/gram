@@ -1,21 +1,18 @@
+import { promptNames } from "@/lib/toolTypes";
+import { cn } from "@/lib/utils";
 import { ToolsetEntry } from "@gram/client/models/components";
 import {
-  Stack,
   Badge,
+  Icon,
+  Stack,
   Tooltip,
-  TooltipTrigger,
   TooltipContent,
   TooltipPortal,
-  Icon,
+  TooltipTrigger,
 } from "@speakeasy-api/moonshine";
-import { cn } from "@/lib/utils";
-import { promptNames } from "@/lib/toolNames";
 
 // Define minimal types for badge components
-type ToolsetForBadge = Pick<
-  ToolsetEntry,
-  "name" | "slug" | "httpTools" | "promptTemplates"
->;
+type ToolsetForBadge = Pick<ToolsetEntry, "name" | "slug" | "promptTemplates">;
 
 export const ToolsetPromptsBadge = ({
   toolset,
@@ -45,7 +42,9 @@ export const ToolsetPromptsBadge = ({
           {names.length} Prompt{names.length === 1 ? "" : "s"}
         </Badge>
       </TooltipTrigger>
-      <TooltipContent side="bottom">{tooltipContent}</TooltipContent>
+      <TooltipPortal>
+        <TooltipContent side="bottom">{tooltipContent}</TooltipContent>
+      </TooltipPortal>
     </Tooltip>
   ) : null;
 };

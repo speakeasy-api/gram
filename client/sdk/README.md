@@ -77,9 +77,12 @@ bun add @tanstack/react-query react react-dom
 ### Yarn
 
 ```bash
-yarn add <UNSET>
+yarn add <UNSET> zod
 # Install optional peer dependencies if you plan to use React hooks
 yarn add @tanstack/react-query react react-dom
+
+# Note that Yarn does not install peer dependencies automatically. You will need
+# to install zod as shown above.
 ```
 
 > [!NOTE]
@@ -148,6 +151,7 @@ run();
 
 ### [deployments](docs/sdks/deployments/README.md)
 
+* [active](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 * [create](docs/sdks/deployments/README.md#create) - createDeployment deployments
 * [evolveDeployment](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 * [getById](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
@@ -284,6 +288,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`chatCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
+- [`deploymentsActive`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`deploymentsEvolveDeployment`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`deploymentsGetById`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
@@ -369,6 +374,7 @@ To learn about this feature and how to get started, check
 
 <summary>Available React hooks</summary>
 
+- [`useActiveDeployment`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets
@@ -653,7 +659,7 @@ httpClient.addHook("requestError", (error, request) => {
   console.groupEnd();
 });
 
-const sdk = new Gram({ httpClient: httpClient });
+const sdk = new Gram({ httpClient });
 ```
 <!-- End Custom HTTP Client [http-client] -->
 
