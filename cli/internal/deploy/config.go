@@ -23,7 +23,10 @@ type SourceType string
 
 const (
 	SourceTypeOpenAPIV3 SourceType = "openapiv3"
+	SourceTypeFunction  SourceType = "function"
 )
+
+var AllowedTypes = []SourceType{SourceTypeOpenAPIV3, SourceTypeFunction}
 
 type Source struct {
 	Type SourceType `json:"type" yaml:"type" toml:"type"`
@@ -36,12 +39,20 @@ type Source struct {
 
 	// Slug is the human readable public id of the asset.
 	Slug string `json:"slug" yaml:"slug" toml:"slug"`
+
+	// Runtime is the runtime to use for function execution (required for functions).
+	// Allowed values are: nodejs:22, python:3.12
+	Runtime string `json:"runtime,omitempty" yaml:"runtime,omitempty" toml:"runtime,omitempty"`
 }
 
 // Validate returns an error if the source is missing required fields.
 func (s Source) Validate() error {
 	if !isSupportedType(s) {
-		return fmt.Errorf("source has unsupported type %q (allowed types: %s)", s.Type, SourceTypeOpenAPIV3)
+		return fmt.Errorf(
+			"source has unsupported type %q (allowed types: %v)",
+			s.Type,
+			AllowedTypes,
+		)
 	}
 
 	if s.Location == "" {
@@ -53,11 +64,16 @@ func (s Source) Validate() error {
 	if s.Slug == "" {
 		return fmt.Errorf("source is missing required field 'slug'")
 	}
+	if s.Type == SourceTypeFunction && s.Runtime == "" {
+		return fmt.Errorf(
+			"source of type 'function' is missing required field 'runtime' (allowed values: nodejs:22, python:3.12)",
+		)
+	}
 	return nil
 }
 
 func isSupportedType(s Source) bool {
-	return s.Type == SourceTypeOpenAPIV3
+	return slices.Contains(AllowedTypes, s.Type)
 }
 
 type Config struct {

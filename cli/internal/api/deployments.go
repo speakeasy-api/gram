@@ -49,6 +49,7 @@ type CreateDeploymentRequest struct {
 	ProjectSlug     string
 	IdempotencyKey  string
 	OpenAPIv3Assets []*deployments.AddOpenAPIv3DeploymentAssetForm
+	Functions       []*deployments.AddFunctionsForm
 }
 
 // CreateDeployment creates a remote deployment.
@@ -65,7 +66,7 @@ func (c *DeploymentsClient) CreateDeployment(
 		ProjectSlugInput: &req.ProjectSlug,
 		IdempotencyKey:   req.IdempotencyKey,
 		Openapiv3Assets:  req.OpenAPIv3Assets,
-		Functions:        []*deployments.AddFunctionsForm{},
+		Functions:        req.Functions,
 		SessionToken:     nil,
 		GithubRepo:       nil,
 		GithubPr:         nil,
@@ -169,6 +170,7 @@ func (c *DeploymentsClient) GetActiveDeployment(
 // EvolveRequest lists the assets to add to a deployment.
 type EvolveRequest struct {
 	Assets       []*deployments.AddOpenAPIv3DeploymentAssetForm
+	Functions    []*deployments.AddFunctionsForm
 	APIKey       secret.Secret
 	DeploymentID string
 	ProjectSlug  string
@@ -185,7 +187,7 @@ func (c *DeploymentsClient) Evolve(
 		ProjectSlugInput:       &req.ProjectSlug,
 		DeploymentID:           &req.DeploymentID,
 		UpsertOpenapiv3Assets:  req.Assets,
-		UpsertFunctions:        []*deployments.AddFunctionsForm{},
+		UpsertFunctions:        req.Functions,
 		ExcludeOpenapiv3Assets: []string{},
 		ExcludeFunctions:       []string{},
 		ExcludePackages:        []string{},
