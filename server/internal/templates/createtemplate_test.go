@@ -39,7 +39,7 @@ func TestTemplatesService_CreateTemplate_Success(t *testing.T) {
 	require.Equal(t, "mustache", result.Template.Engine, "template engine mismatch")
 	require.Equal(t, "prompt", result.Template.Kind, "template kind mismatch")
 	require.ElementsMatch(t, []string{"assistant"}, result.Template.ToolsHint, "template tools hint mismatch")
-	require.JSONEq(t, `{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`, *result.Template.Schema, "template arguments mismatch")
+	require.JSONEq(t, `{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`, result.Template.Schema, "template arguments mismatch")
 	require.NotNil(t, result.Template.CreatedAt, "template created at is nil")
 	require.NotNil(t, result.Template.UpdatedAt, "template updated at is nil")
 }
@@ -71,7 +71,7 @@ func TestTemplatesService_CreateTemplate_MinimalPayload(t *testing.T) {
 	require.Empty(t, result.Template.Engine, "template engine should be empty")
 	require.Equal(t, "prompt", result.Template.Kind, "template kind should default to prompt")
 	require.Empty(t, result.Template.ToolsHint, "template tools hint should be empty")
-	require.Nil(t, result.Template.Schema, "template arguments should be nil")
+	require.Empty(t, result.Template.Schema, "template arguments should be empty")
 }
 
 func TestTemplatesService_CreateTemplate_DuplicateName(t *testing.T) {

@@ -99,7 +99,7 @@ func TestTemplatesService_ListTemplates_Success(t *testing.T) {
 	require.True(t, found, "third template not found in list")
 	require.Equal(t, template3.Template.ID, t3.ID, "third template ID mismatch")
 	require.Equal(t, "Third template prompt", t3.Prompt, "third template prompt mismatch")
-	require.JSONEq(t, `{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`, *t3.Schema, "third template arguments mismatch")
+	require.JSONEq(t, `{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`, t3.Schema, "third template arguments mismatch")
 }
 
 func TestTemplatesService_ListTemplates_EmptyList(t *testing.T) {

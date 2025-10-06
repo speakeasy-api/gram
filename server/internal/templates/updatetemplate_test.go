@@ -54,7 +54,7 @@ func TestTemplatesService_UpdateTemplate_Success(t *testing.T) {
 	require.Equal(t, "mustache", result.Template.Engine, "template engine should remain unchanged when updating to empty")
 	require.Equal(t, "prompt", result.Template.Kind, "template kind mismatch")
 	require.ElementsMatch(t, []string{"user", "assistant"}, result.Template.ToolsHint, "template tools hint mismatch")
-	require.JSONEq(t, `{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`, *result.Template.Schema, "template arguments mismatch")
+	require.JSONEq(t, `{"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}`, result.Template.Schema, "template arguments mismatch")
 	require.Equal(t, created.Template.CreatedAt, result.Template.CreatedAt, "created at should not change")
 	// Note: UpdatedAt may or may not change depending on whether the update actually creates a new version
 

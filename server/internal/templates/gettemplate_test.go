@@ -50,7 +50,7 @@ func TestTemplatesService_GetTemplate_ByID_Success(t *testing.T) {
 	require.Equal(t, "mustache", result.Template.Engine, "template engine mismatch")
 	require.Equal(t, "prompt", result.Template.Kind, "template kind mismatch")
 	require.ElementsMatch(t, []string{"assistant"}, result.Template.ToolsHint, "template tools hint mismatch")
-	require.JSONEq(t, `{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`, *result.Template.Schema, "template arguments mismatch")
+	require.JSONEq(t, `{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`, result.Template.Schema, "template arguments mismatch")
 }
 
 func TestTemplatesService_GetTemplate_ByName_Success(t *testing.T) {
