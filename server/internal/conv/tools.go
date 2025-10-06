@@ -7,21 +7,21 @@ import (
 )
 
 func GetToolURN(tool types.Tool) (*urn.Tool, error) {
-	var toolURN *urn.Tool
+	var toolURN urn.Tool
 
 	if tool.HTTPToolDefinition != nil {
 		err := toolURN.UnmarshalText([]byte(tool.HTTPToolDefinition.ToolUrn))
 		if err != nil {
 			return nil, urn.ErrInvalid
 		}
-		return toolURN, nil
+		return &toolURN, nil
 	}
 	if tool.PromptTemplate != nil {
 		err := toolURN.UnmarshalText([]byte(tool.PromptTemplate.ToolUrn))
 		if err != nil {
 			return nil, urn.ErrInvalid
 		}
-		return toolURN, nil
+		return &toolURN, nil
 	}
 
 	return nil, urn.ErrInvalid
