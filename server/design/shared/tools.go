@@ -27,7 +27,6 @@ var BaseToolAttributes = Type("BaseToolAttributes", func() {
 	Attribute("id", String, "The ID of the tool")
 	Attribute("tool_urn", String, "The URN of this tool")
 	Attribute("project_id", String, "The ID of the project")
-	Attribute("deployment_id", String, "The ID of the deployment")
 
 	Attribute("name", String, "The name of the tool")
 	Attribute("canonical_name", String, "The canonical name of the tool. Will be the same as the name if there is no variation.")
@@ -51,7 +50,7 @@ var BaseToolAttributes = Type("BaseToolAttributes", func() {
 	Attribute("canonical", CanonicalToolAttributes, "The original details of a tool, excluding any variations")
 	Attribute("variation", ToolVariation, "The variation details of a tool. Only includes explicitly varied fields.")
 
-	Required("id", "project_id", "deployment_id", "name", "canonical_name", "description", "schema", "confirm", "tool_urn", "created_at", "updated_at")
+	Required("id", "project_id", "name", "canonical_name", "description", "schema", "tool_urn", "created_at", "updated_at")
 })
 
 // HTTPTool represents an HTTP tool with all its attributes
@@ -61,6 +60,8 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Description("An HTTP tool")
 
 	Extend(BaseToolAttributes)
+
+	Attribute("deployment_id", String, "The ID of the deployment")
 
 	Attribute("summary", String, "Summary of the tool")
 	Attribute("response_filter", ResponseFilter, "Response filter metadata for the tool")
@@ -74,7 +75,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("path", String, "Path for the request")
 	Attribute("package_name", String, "The name of the source package")
 
-	Required("summary", "tags", "http_method", "path", "schema")
+	Required("summary", "tags", "http_method", "path", "schema", "deployment_id")
 })
 
 // Tool is a discriminated union of HTTP tools and prompt templates.

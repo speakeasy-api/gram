@@ -15,8 +15,6 @@ type BaseToolAttributes struct {
 	ToolUrn string
 	// The ID of the project
 	ProjectID string
-	// The ID of the deployment
-	DeploymentID string
 	// The name of the tool
 	Name string
 	// The canonical name of the tool. Will be the same as the name if there is no
@@ -29,7 +27,7 @@ type BaseToolAttributes struct {
 	// JSON schema for the request
 	Schema string
 	// Confirmation mode for the tool
-	Confirm string
+	Confirm *string
 	// Prompt for the confirmation
 	ConfirmPrompt *string
 	// Summarizer for the tool

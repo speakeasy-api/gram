@@ -73,7 +73,7 @@ func TestTemplatesService_ListTemplates_Success(t *testing.T) {
 	// Find our created templates in the list
 	templateMap := make(map[string]*types.PromptTemplate)
 	for _, template := range result.Templates {
-		templateMap[string(template.Name)] = template
+		templateMap[template.Name] = template
 	}
 
 	// Verify first template

@@ -7547,9 +7547,6 @@ components:
                     type: string
                     description: The creation date of the tool.
                     format: date-time
-                deployment_id:
-                    type: string
-                    description: The ID of the deployment
                 description:
                     type: string
                     description: Description of the tool
@@ -7584,12 +7581,10 @@ components:
             required:
                 - id
                 - project_id
-                - deployment_id
                 - name
                 - canonical_name
                 - description
                 - schema
-                - confirm
                 - tool_urn
                 - created_at
                 - updated_at
@@ -8816,13 +8811,12 @@ components:
                 - http_method
                 - path
                 - schema
+                - deployment_id
                 - id
                 - project_id
-                - deployment_id
                 - name
                 - canonical_name
                 - description
-                - confirm
                 - tool_urn
                 - created_at
                 - updated_at
@@ -9516,9 +9510,6 @@ components:
                     type: string
                     description: The creation date of the tool.
                     format: date-time
-                deployment_id:
-                    type: string
-                    description: The ID of the deployment
                 description:
                     type: string
                     description: Description of the tool
@@ -9588,11 +9579,9 @@ components:
                 - created_at
                 - updated_at
                 - project_id
-                - deployment_id
                 - canonical_name
                 - description
                 - schema
-                - confirm
         PromptTemplateEntry:
             type: object
             properties:

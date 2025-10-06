@@ -67,7 +67,7 @@ func TestTemplatesService_CreateTemplate_MinimalPayload(t *testing.T) {
 	require.NotNil(t, result.Template, "template is nil")
 	require.Equal(t, "minimal-template", result.Template.Name, "template name mismatch")
 	require.Equal(t, "Simple prompt", result.Template.Prompt, "template prompt mismatch")
-	require.Equal(t, "", result.Template.Description, "template description should be empty")
+	require.Empty(t, result.Template.Description, "template description should be empty")
 	require.Empty(t, result.Template.Engine, "template engine should be empty")
 	require.Equal(t, "prompt", result.Template.Kind, "template kind should default to prompt")
 	require.Empty(t, result.Template.ToolsHint, "template tools hint should be empty")

@@ -85,7 +85,7 @@ func handlePromptsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 			}
 
 			prompts = append(prompts, &promptsListEntry{
-				Name:        string(prompt.Name),
+				Name:        prompt.Name,
 				Description: &prompt.Description,
 				Arguments:   args,
 			})

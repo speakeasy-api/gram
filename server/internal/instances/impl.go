@@ -165,6 +165,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	for i, template := range toolset.PromptTemplates {
 		promptTemplates[i] = &types.PromptTemplate{
 			ID:            template.ID,
+			ProjectID:     template.ProjectID,
 			ToolUrn:       template.ToolUrn,
 			Name:          template.Name,
 			HistoryID:     template.HistoryID,
@@ -178,6 +179,12 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 			ToolsHint:     template.ToolsHint,
 			CreatedAt:     template.CreatedAt,
 			UpdatedAt:     template.UpdatedAt,
+			CanonicalName: template.CanonicalName,
+			Confirm:       template.Confirm,
+			ConfirmPrompt: template.ConfirmPrompt,
+			Summarizer:    template.Summarizer,
+			Canonical:     template.Canonical,
+			Variation:     template.Variation,
 		}
 	}
 

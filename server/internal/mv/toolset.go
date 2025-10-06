@@ -355,7 +355,7 @@ func DescribeToolset(
 				CanonicalName:       canonicalName,
 				Summary:             summary,
 				Description:         description,
-				Confirm:             string(confirm),
+				Confirm:             conv.Ptr(string(confirm)),
 				ConfirmPrompt:       confirmPrompt,
 				Summarizer:          summarizer,
 				Tags:                tags,
@@ -419,6 +419,13 @@ func DescribeToolset(
 					ToolsHint:     pt.ToolsHint,
 					CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
 					UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
+					ProjectID:     pt.ProjectID.String(),
+					CanonicalName: pt.Name,
+					Confirm:       nil,
+					ConfirmPrompt: nil,
+					Summarizer:    nil,
+					Canonical:     nil,
+					Variation:     nil,
 				},
 			})
 		}
@@ -459,6 +466,13 @@ func DescribeToolset(
 			ToolsHint:     hint,
 			CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
+			ProjectID:     pt.ProjectID.String(),
+			CanonicalName: pt.Name,
+			Confirm:       nil,
+			ConfirmPrompt: nil,
+			Summarizer:    nil,
+			Canonical:     nil,
+			Variation:     nil,
 		})
 	}
 

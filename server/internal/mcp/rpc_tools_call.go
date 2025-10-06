@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type toolsCallParams struct {
@@ -111,7 +110,7 @@ func handleToolsCall(
 			RequestBytes:     requestBytes,
 			OutputBytes:      outputBytes,
 			ToolID:           higherOrderTool.ID,
-			ToolName:         string(higherOrderTool.Name),
+			ToolName:         higherOrderTool.Name,
 			Type:             billing.ToolCallTypeHigherOrder,
 			ProjectID:        payload.projectID.String(),
 			ToolsetSlug:      &payload.toolset,

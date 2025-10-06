@@ -1,32 +1,30 @@
 package conv
 
 import (
-	"fmt"
-
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func GetToolURN(tool types.Tool) (*urn.Tool, error) {
-	urn := &urn.Tool{}
+	var toolURN *urn.Tool
 
 	if tool.HTTPToolDefinition != nil {
-		err := urn.UnmarshalText([]byte(tool.HTTPToolDefinition.ToolUrn))
+		err := toolURN.UnmarshalText([]byte(tool.HTTPToolDefinition.ToolUrn))
 		if err != nil {
-			return nil, err
+			return nil, urn.ErrInvalid
 		}
-		return urn, nil
+		return toolURN, nil
 	}
 	if tool.PromptTemplate != nil {
-		err := urn.UnmarshalText([]byte(tool.PromptTemplate.ToolUrn))
+		err := toolURN.UnmarshalText([]byte(tool.PromptTemplate.ToolUrn))
 		if err != nil {
-			return nil, err
+			return nil, urn.ErrInvalid
 		}
-		return urn, nil
+		return toolURN, nil
 	}
 
-	return nil, fmt.Errorf("unknown tool type")
+	return nil, urn.ErrInvalid
 }
 
 func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
@@ -41,7 +39,6 @@ func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 			ID:            tool.HTTPToolDefinition.ID,
 			ToolUrn:       tool.HTTPToolDefinition.ToolUrn,
 			ProjectID:     tool.HTTPToolDefinition.ProjectID,
-			DeploymentID:  tool.HTTPToolDefinition.DeploymentID,
 			Name:          tool.HTTPToolDefinition.Name,
 			CanonicalName: tool.HTTPToolDefinition.CanonicalName,
 			Description:   tool.HTTPToolDefinition.Description,
@@ -65,7 +62,6 @@ func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 			ID:            tool.PromptTemplate.ID,
 			ToolUrn:       tool.PromptTemplate.ToolUrn,
 			ProjectID:     tool.PromptTemplate.ProjectID,
-			DeploymentID:  tool.PromptTemplate.DeploymentID,
 			Name:          tool.PromptTemplate.Name,
 			CanonicalName: tool.PromptTemplate.CanonicalName,
 			Description:   tool.PromptTemplate.Description,
@@ -81,5 +77,5 @@ func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 		}
 	}
 
-	panic("unknown tool type")
+	panic(urn.ErrInvalid)
 }

@@ -1424,8 +1424,6 @@ type PromptTemplateResponseBody struct {
 	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
 	// The ID of the project
 	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The ID of the deployment
-	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
 	// The name of the tool
 	Name string `form:"name" json:"name" xml:"name"`
 	// The canonical name of the tool. Will be the same as the name if there is no
@@ -1438,7 +1436,7 @@ type PromptTemplateResponseBody struct {
 	// JSON schema for the request
 	Schema string `form:"schema" json:"schema" xml:"schema"`
 	// Confirmation mode for the tool
-	Confirm string `form:"confirm" json:"confirm" xml:"confirm"`
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
 	// Prompt for the confirmation
 	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
 	// Summarizer for the tool

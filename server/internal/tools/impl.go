@@ -214,7 +214,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				CanonicalName:       canonicalName,
 				Summary:             summary,
 				Description:         description,
-				Confirm:             string(confirm),
+				Confirm:             conv.Ptr(string(confirm)),
 				ConfirmPrompt:       confirmPrompt,
 				Summarizer:          conv.FromPGText[string](tool.Summarizer),
 				ResponseFilter:      responseFilter,
@@ -259,6 +259,13 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				ToolsHint:     hint,
 				CreatedAt:     template.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:     template.UpdatedAt.Time.Format(time.RFC3339),
+				ProjectID:     template.ProjectID.String(),
+				CanonicalName: template.Name,
+				Confirm:       nil,
+				ConfirmPrompt: nil,
+				Summarizer:    nil,
+				Canonical:     nil,
+				Variation:     nil,
 			},
 		})
 	}

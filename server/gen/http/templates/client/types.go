@@ -1422,8 +1422,6 @@ type PromptTemplateResponseBody struct {
 	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
 	// The ID of the project
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	// The ID of the deployment
-	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
 	// The name of the tool
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The canonical name of the tool. Will be the same as the name if there is no
@@ -4475,9 +4473,6 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 	if body.ProjectID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
 	}
-	if body.DeploymentID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
-	}
 	if body.CanonicalName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_name", "body"))
 	}
@@ -4486,9 +4481,6 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 	}
 	if body.Schema == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
-	}
-	if body.Confirm == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("confirm", "body"))
 	}
 	if body.Engine != nil {
 		if !(*body.Engine == "mustache") {

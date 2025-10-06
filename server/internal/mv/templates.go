@@ -104,5 +104,12 @@ func fromPromptTemplateRow(row repo.PromptTemplate) *types.PromptTemplate {
 		ToolsHint:     tools,
 		CreatedAt:     row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:     row.UpdatedAt.Time.Format(time.RFC3339),
+		ProjectID:     row.ProjectID.String(),
+		CanonicalName: row.Name,
+		Confirm:       nil,
+		ConfirmPrompt: nil,
+		Summarizer:    nil,
+		Canonical:     nil,
+		Variation:     nil,
 	}
 }

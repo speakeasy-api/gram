@@ -273,6 +273,7 @@ func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTT
 		return nil
 	}
 	res := &HTTPToolDefinitionResponseBody{
+		DeploymentID:        v.DeploymentID,
 		Summary:             v.Summary,
 		Openapiv3DocumentID: v.Openapiv3DocumentID,
 		Openapiv3Operation:  v.Openapiv3Operation,
@@ -284,7 +285,6 @@ func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTT
 		ID:                  v.ID,
 		ToolUrn:             v.ToolUrn,
 		ProjectID:           v.ProjectID,
-		DeploymentID:        v.DeploymentID,
 		Name:                v.Name,
 		CanonicalName:       v.CanonicalName,
 		Description:         v.Description,
@@ -416,7 +416,6 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 		ID:            v.ID,
 		ToolUrn:       v.ToolUrn,
 		ProjectID:     v.ProjectID,
-		DeploymentID:  v.DeploymentID,
 		Name:          v.Name,
 		CanonicalName: v.CanonicalName,
 		Description:   v.Description,
