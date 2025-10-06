@@ -86,7 +86,7 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").Log(ctx, logger)
 	}
 
-	if conv.ToToolUrn(*tool).Kind == urn.ToolKindPrompt {
+	if tool.PromptTemplate != nil {
 		higherOrderTool := tool.PromptTemplate
 		var args map[string]any
 		if err := json.Unmarshal(params.Arguments, &args); err != nil {
@@ -126,6 +126,11 @@ func handleToolsCall(
 		return formatHigherOrderToolResult(ctx, logger, req, promptData)
 	}
 
+	// At this point, non-http tools have already been handled
+	if tool.HTTPToolDefinition == nil {
+		return nil, oops.E(oops.CodeUnexpected, errors.New("tool is not an HTTP tool"), "tool is not an HTTP tool").Log(ctx, logger)
+	}
+
 	// Transform environment entries into a map
 	envVars := make(map[string]string)
 
@@ -149,7 +154,12 @@ func handleToolsCall(
 		maps.Copy(envVars, payload.mcpEnvVariables)
 	}
 
-	executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByURN(ctx, conv.ToToolUrn(*tool), uuid.UUID(projectID))
+	toolURN, err := conv.GetToolURN(*tool)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+	}
+
+	executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByURN(ctx, *toolURN, uuid.UUID(projectID))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool execution plan").Log(ctx, logger)
 	}

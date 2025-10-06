@@ -1,22 +1,32 @@
 package conv
 
 import (
+	"fmt"
+
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func ToToolUrn(tool types.Tool) urn.Tool {
+func GetToolURN(tool types.Tool) (*urn.Tool, error) {
 	urn := &urn.Tool{}
 
 	if tool.HTTPToolDefinition != nil {
-		urn.UnmarshalText([]byte(tool.HTTPToolDefinition.ToolUrn))
+		err := urn.UnmarshalText([]byte(tool.HTTPToolDefinition.ToolUrn))
+		if err != nil {
+			return nil, err
+		}
+		return urn, nil
 	}
 	if tool.PromptTemplate != nil {
-		urn.UnmarshalText([]byte(tool.PromptTemplate.ToolUrn))
+		err := urn.UnmarshalText([]byte(tool.PromptTemplate.ToolUrn))
+		if err != nil {
+			return nil, err
+		}
+		return urn, nil
 	}
 
-	panic("unknown tool type")
+	return nil, fmt.Errorf("unknown tool type")
 }
 
 func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {

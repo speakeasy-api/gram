@@ -223,23 +223,27 @@ func (c *ChatClient) LoadToolsetTools(
 			continue
 		}
 
-		toolURN := conv.ToToolUrn(*tool)
-		if toolURN.Kind != urn.ToolKindHTTP {
+		if tool.HTTPToolDefinition == nil {
 			// TODO: support other tool types
 			continue
 		}
 
-		httpTool := tool.HTTPToolDefinition
+		toolURN, err := conv.GetToolURN(*tool)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tool urn: %w", err)
+		}
 
+		httpTool := tool.HTTPToolDefinition
+		
 		// Capture for closure
-		name := toolURN.Name
+		name := httpTool.Name
 		projID := projectID
 
 		executor := func(ctx context.Context, rawArgs string) (string, error) {
 			// Find tool by name
 			toolID, err := toolsRepo.PokeHTTPToolDefinitionByUrn(ctx, tools_repo.PokeHTTPToolDefinitionByUrnParams{
 				ProjectID: projectID,
-				Urn:       toolURN,
+				Urn:       *toolURN,
 			})
 			if err != nil {
 				return "", fmt.Errorf("failed to load tool: %w", err)
