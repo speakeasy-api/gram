@@ -41,7 +41,7 @@ export type HTTPToolDefinition = {
   /**
    * Confirmation mode for the tool
    */
-  confirm: string;
+  confirm?: string | undefined;
   /**
    * Prompt for the confirmation
    */
@@ -141,7 +141,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
 > = z.object({
   canonical: CanonicalToolAttributes$inboundSchema.optional(),
   canonical_name: z.string(),
-  confirm: z.string(),
+  confirm: z.string().optional(),
   confirm_prompt: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   default_server_url: z.string().optional(),
@@ -188,7 +188,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
 export type HTTPToolDefinition$Outbound = {
   canonical?: CanonicalToolAttributes$Outbound | undefined;
   canonical_name: string;
-  confirm: string;
+  confirm?: string | undefined;
   confirm_prompt?: string | undefined;
   created_at: string;
   default_server_url?: string | undefined;
@@ -222,7 +222,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
 > = z.object({
   canonical: CanonicalToolAttributes$outboundSchema.optional(),
   canonicalName: z.string(),
-  confirm: z.string(),
+  confirm: z.string().optional(),
   confirmPrompt: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),
   defaultServerUrl: z.string().optional(),

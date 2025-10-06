@@ -59,7 +59,7 @@ export type PromptTemplate = {
   /**
    * Confirmation mode for the tool
    */
-  confirm: string;
+  confirm?: string | undefined;
   /**
    * Prompt for the confirmation
    */
@@ -68,10 +68,6 @@ export type PromptTemplate = {
    * The creation date of the tool.
    */
   createdAt: Date;
-  /**
-   * The ID of the deployment
-   */
-  deploymentId: string;
   /**
    * Description of the tool
    */
@@ -183,10 +179,9 @@ export const PromptTemplate$inboundSchema: z.ZodType<
 > = z.object({
   canonical: CanonicalToolAttributes$inboundSchema.optional(),
   canonical_name: z.string(),
-  confirm: z.string(),
+  confirm: z.string().optional(),
   confirm_prompt: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
-  deployment_id: z.string(),
   description: z.string(),
   engine: Engine$inboundSchema,
   history_id: z.string(),
@@ -208,7 +203,6 @@ export const PromptTemplate$inboundSchema: z.ZodType<
     "canonical_name": "canonicalName",
     "confirm_prompt": "confirmPrompt",
     "created_at": "createdAt",
-    "deployment_id": "deploymentId",
     "history_id": "historyId",
     "predecessor_id": "predecessorId",
     "project_id": "projectId",
@@ -223,10 +217,9 @@ export const PromptTemplate$inboundSchema: z.ZodType<
 export type PromptTemplate$Outbound = {
   canonical?: CanonicalToolAttributes$Outbound | undefined;
   canonical_name: string;
-  confirm: string;
+  confirm?: string | undefined;
   confirm_prompt?: string | undefined;
   created_at: string;
-  deployment_id: string;
   description: string;
   engine: string;
   history_id: string;
@@ -253,10 +246,9 @@ export const PromptTemplate$outboundSchema: z.ZodType<
 > = z.object({
   canonical: CanonicalToolAttributes$outboundSchema.optional(),
   canonicalName: z.string(),
-  confirm: z.string(),
+  confirm: z.string().optional(),
   confirmPrompt: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),
-  deploymentId: z.string(),
   description: z.string(),
   engine: Engine$outboundSchema,
   historyId: z.string(),
@@ -278,7 +270,6 @@ export const PromptTemplate$outboundSchema: z.ZodType<
     canonicalName: "canonical_name",
     confirmPrompt: "confirm_prompt",
     createdAt: "created_at",
-    deploymentId: "deployment_id",
     historyId: "history_id",
     predecessorId: "predecessor_id",
     projectId: "project_id",

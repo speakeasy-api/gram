@@ -8,9 +8,7 @@ import { CreatePromptTemplateResult } from "@gram/client/models/components";
 let value: CreatePromptTemplateResult = {
   template: {
     canonicalName: "<value>",
-    confirm: "<value>",
     createdAt: new Date("2025-02-04T03:43:35.518Z"),
-    deploymentId: "<id>",
     description: "ha swathe dental an evil",
     engine: "mustache",
     historyId: "<id>",

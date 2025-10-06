@@ -1,11 +1,11 @@
-# CreateDeploymentResult
+# GetActiveDeploymentResult
 
 ## Example Usage
 
 ```typescript
-import { CreateDeploymentResult } from "@gram/client/models/components";
+import { GetActiveDeploymentResult } from "@gram/client/models/components";
 
-let value: CreateDeploymentResult = {
+let value: GetActiveDeploymentResult = {
   deployment: {
     clonedFrom: "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6",
     createdAt: new Date("2024-03-05T07:08:32.853Z"),
