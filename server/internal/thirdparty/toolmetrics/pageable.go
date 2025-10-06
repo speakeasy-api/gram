@@ -1,14 +1,9 @@
 package toolmetrics
 
-import (
-	"strings"
-)
-
 type Pageable interface {
 	Cursor() string
 	SortOrder() string // Changed from SortOrder to Sort
 	Limit() int
-	SetCursors()
 	SetDefaults()
 }
 
@@ -46,31 +41,14 @@ func (p *PaginationRequest) Limit() int {
 	return p.PerPage + 1 // +1 for detecting if there are more records
 }
 
-func (p *PaginationRequest) SetCursors() {
-	switch p.Sort {
-	case "ASC":
-		if isStringEmpty(p.NextCursor) {
-			p.NextCursor = "" // Start from the beginning for ASC
-		}
-	default: // DESC
-		if isStringEmpty(p.NextCursor) {
-			p.NextCursor = "7ZZZZZZZZZZZZZZZZZZZZZZZZZ" // Largest valid ULID for DESC
-		}
+func (p *PaginationRequest) SetDefaults() {
+	if p.PerPage <= 0 || p.PerPage > 100 {
+		p.PerPage = 20
 	}
-}
-
-func isStringEmpty(s string) bool {
-	return len(strings.TrimSpace(s)) == 0
-}
-
-func (r *PaginationRequest) SetDefaults() {
-	if r.PerPage <= 0 || r.PerPage > 100 {
-		r.PerPage = 20
+	if p.Sort == "" {
+		p.Sort = "DESC"
 	}
-	if r.Sort == "" {
-		r.Sort = "created_at"
-	}
-	if r.Direction == "" {
-		r.Direction = Next
+	if p.Direction == "" {
+		p.Direction = Next
 	}
 }

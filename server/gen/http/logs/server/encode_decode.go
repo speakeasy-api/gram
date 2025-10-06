@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	logs "github.com/speakeasy-api/gram/server/gen/logs"
@@ -35,10 +36,87 @@ func EncodeListLogsResponse(encoder func(context.Context, http.ResponseWriter) g
 func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*logs.ListLogsPayload, error) {
 	return func(r *http.Request) (*logs.ListLogsPayload, error) {
 		var (
+			projectID        string
+			toolID           string
+			tsStart          *string
+			tsEnd            *string
+			cursor           *string
+			perPage          int
+			direction        string
+			sort             string
 			sessionToken     *string
 			apikeyToken      *string
 			projectSlugInput *string
+			err              error
 		)
+		qp := r.URL.Query()
+		projectID = qp.Get("project_id")
+		if projectID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		toolID = qp.Get("tool_id")
+		if toolID == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("tool_id", "query string"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("tool_id", toolID, goa.FormatUUID))
+		tsStartRaw := qp.Get("ts_start")
+		if tsStartRaw != "" {
+			tsStart = &tsStartRaw
+		}
+		if tsStart != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("ts_start", *tsStart, goa.FormatDateTime))
+		}
+		tsEndRaw := qp.Get("ts_end")
+		if tsEndRaw != "" {
+			tsEnd = &tsEndRaw
+		}
+		if tsEnd != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("ts_end", *tsEnd, goa.FormatDateTime))
+		}
+		cursorRaw := qp.Get("cursor")
+		if cursorRaw != "" {
+			cursor = &cursorRaw
+		}
+		if cursor != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatDateTime))
+		}
+		{
+			perPageRaw := qp.Get("per_page")
+			if perPageRaw == "" {
+				perPage = 20
+			} else {
+				v, err2 := strconv.ParseInt(perPageRaw, 10, strconv.IntSize)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("per_page", perPageRaw, "integer"))
+				}
+				perPage = int(v)
+			}
+		}
+		if perPage < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("per_page", perPage, 1, true))
+		}
+		if perPage > 100 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("per_page", perPage, 100, false))
+		}
+		directionRaw := qp.Get("direction")
+		if directionRaw != "" {
+			direction = directionRaw
+		} else {
+			direction = "next"
+		}
+		if !(direction == "next" || direction == "prev") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("direction", direction, []any{"next", "prev"}))
+		}
+		sortRaw := qp.Get("sort")
+		if sortRaw != "" {
+			sort = sortRaw
+		} else {
+			sort = "DESC"
+		}
+		if !(sort == "ASC" || sort == "DESC") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"ASC", "DESC"}))
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -51,7 +129,10 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if projectSlugInputRaw != "" {
 			projectSlugInput = &projectSlugInputRaw
 		}
-		payload := NewListLogsPayload(sessionToken, apikeyToken, projectSlugInput)
+		if err != nil {
+			return nil, err
+		}
+		payload := NewListLogsPayload(projectID, toolID, tsStart, tsEnd, cursor, perPage, direction, sort, sessionToken, apikeyToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

@@ -8,12 +8,107 @@
 package client
 
 import (
+	"fmt"
+	"strconv"
+
 	logs "github.com/speakeasy-api/gram/server/gen/logs"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildListLogsPayload builds the payload for the logs listLogs endpoint from
 // CLI flags.
-func BuildListLogsPayload(logsListLogsSessionToken string, logsListLogsApikeyToken string, logsListLogsProjectSlugInput string) (*logs.ListLogsPayload, error) {
+func BuildListLogsPayload(logsListLogsProjectID string, logsListLogsToolID string, logsListLogsTsStart string, logsListLogsTsEnd string, logsListLogsCursor string, logsListLogsPerPage string, logsListLogsDirection string, logsListLogsSort string, logsListLogsSessionToken string, logsListLogsApikeyToken string, logsListLogsProjectSlugInput string) (*logs.ListLogsPayload, error) {
+	var err error
+	var projectID string
+	{
+		projectID = logsListLogsProjectID
+		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var toolID string
+	{
+		toolID = logsListLogsToolID
+		err = goa.MergeErrors(err, goa.ValidateFormat("tool_id", toolID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var tsStart *string
+	{
+		if logsListLogsTsStart != "" {
+			tsStart = &logsListLogsTsStart
+			err = goa.MergeErrors(err, goa.ValidateFormat("ts_start", *tsStart, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var tsEnd *string
+	{
+		if logsListLogsTsEnd != "" {
+			tsEnd = &logsListLogsTsEnd
+			err = goa.MergeErrors(err, goa.ValidateFormat("ts_end", *tsEnd, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var cursor *string
+	{
+		if logsListLogsCursor != "" {
+			cursor = &logsListLogsCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var perPage int
+	{
+		if logsListLogsPerPage != "" {
+			var v int64
+			v, err = strconv.ParseInt(logsListLogsPerPage, 10, strconv.IntSize)
+			perPage = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for perPage, must be INT")
+			}
+			if perPage < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("per_page", perPage, 1, true))
+			}
+			if perPage > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("per_page", perPage, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var direction string
+	{
+		if logsListLogsDirection != "" {
+			direction = logsListLogsDirection
+			if !(direction == "next" || direction == "prev") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("direction", direction, []any{"next", "prev"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sort string
+	{
+		if logsListLogsSort != "" {
+			sort = logsListLogsSort
+			if !(sort == "ASC" || sort == "DESC") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"ASC", "DESC"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if logsListLogsSessionToken != "" {
@@ -33,6 +128,14 @@ func BuildListLogsPayload(logsListLogsSessionToken string, logsListLogsApikeyTok
 		}
 	}
 	v := &logs.ListLogsPayload{}
+	v.ProjectID = projectID
+	v.ToolID = toolID
+	v.TsStart = tsStart
+	v.TsEnd = tsEnd
+	v.Cursor = cursor
+	v.PerPage = perPage
+	v.Direction = direction
+	v.Sort = sort
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

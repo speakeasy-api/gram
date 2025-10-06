@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 )
 
 type ToolLogLevel string
@@ -21,18 +23,18 @@ const (
 type ToolMetricsClient interface {
 	Close() error
 	// List tool call logs
-	List(context.Context, string, ...any) ([]any, error)
+	List(ctx context.Context, projectID, toolID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) ([]ToolHTTPRequest, error)
 	// Log tool call request/response
 	Log(context.Context, ToolHTTPRequest) error
 }
 
 type StubToolMetricsClient struct{}
 
-func (n *StubToolMetricsClient) List(context.Context, string, ...any) ([]any, error) {
+func (n *StubToolMetricsClient) List(context.Context, string, string, time.Time, time.Time, time.Time, Pageable) ([]ToolHTTPRequest, error) {
 	return nil, nil
 }
 
-func (n *StubToolMetricsClient) Log(context.Context, ToolHTTPRequest) error {
+func (n *StubToolMetricsClient) Log(_ context.Context, _ ToolHTTPRequest) error {
 	return nil
 }
 
@@ -45,8 +47,45 @@ type ClickhouseClient struct {
 	Logger *slog.Logger
 }
 
-func (c *ClickhouseClient) List(context.Context, string, ...any) ([]any, error) {
-	return nil, nil
+func (c *ClickhouseClient) List(ctx context.Context, projectID, toolID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) ([]ToolHTTPRequest, error) {
+	query := listLogsQueryDesc
+	if pagination.SortOrder() == "ASC" {
+		query = listLogsQueryAsc
+	}
+
+	rows, err := c.Conn.Query(ctx, query,
+		clickhouse.Named("project_id", projectID),
+		clickhouse.Named("tool_id", toolID),
+		clickhouse.Named("ts_start", tsStart),
+		clickhouse.Named("ts_end", tsEnd),
+		clickhouse.Named("cursor", cursor),
+		clickhouse.Named("limit", pagination.Limit()),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query logs: %w", err)
+	}
+
+	defer func(rows driver.Rows, logger *slog.Logger) {
+		err = rows.Close()
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to close rows", attr.SlogError(err))
+		}
+	}(rows, c.Logger)
+
+	var results []ToolHTTPRequest
+	for rows.Next() {
+		var log ToolHTTPRequest
+		if err = rows.ScanStruct(&log); err != nil {
+			return nil, fmt.Errorf("scan log: %w", err)
+		}
+		results = append(results, log)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows error: %w", err)
+	}
+
+	return results, nil
 }
 
 func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {

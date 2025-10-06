@@ -2,7 +2,9 @@ package logs
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/logs/server"
@@ -15,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
+	"goa.design/goa/v3/security"
 )
 
 type Service struct {
@@ -26,6 +29,7 @@ type Service struct {
 }
 
 var _ gen.Service = (*Service)(nil)
+var _ gen.Auther = (*Service)(nil)
 
 func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, tcm tm.ToolMetricsClient) *Service {
 	logger = logger.With(attr.SlogComponent("logs"))
@@ -50,6 +54,73 @@ func Attach(mux goahttp.Muxer, service *Service) {
 }
 
 func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (res *gen.ListToolLogResult, err error) {
-	// TODO implement me
-	panic("implement me")
+	// Parse time parameters with defaults
+	tsStart := parseTimeOrDefault(payload.TsStart, time.Now().Add(-24*time.Hour))
+	tsEnd := parseTimeOrDefault(payload.TsEnd, time.Now())
+	cursor := parseTimeOrDefault(payload.Cursor, time.Now())
+
+	// Build pagination request
+	pagination := &tm.PaginationRequest{
+		PerPage:   payload.PerPage,
+		Direction: tm.PageDirection(payload.Direction),
+		Sort:      payload.Sort,
+	}
+	pagination.SetDefaults()
+
+	// Query logs from ClickHouse
+	results, err := s.tcm.List(ctx, payload.ProjectID, payload.ToolID, tsStart, tsEnd, cursor, pagination)
+	if err != nil {
+		return nil, fmt.Errorf("query logs: %w", err)
+	}
+
+	// Convert results to gen.HTTPToolLog
+	logs := make([]*gen.HTTPToolLog, 0, len(results))
+	for _, r := range results {
+		logs = append(logs, toHTTPToolLog(r))
+	}
+
+	return &gen.ListToolLogResult{Logs: logs}, nil
+}
+
+func parseTimeOrDefault(s *string, defaultTime time.Time) time.Time {
+	if s == nil || *s == "" {
+		return defaultTime
+	}
+	t, err := time.Parse(time.RFC3339, *s)
+	if err != nil {
+		return defaultTime
+	}
+	return t
+}
+
+func toHTTPToolLog(r tm.ToolHTTPRequest) *gen.HTTPToolLog {
+	return &gen.HTTPToolLog{
+		Ts:                r.Ts.Format(time.RFC3339),
+		OrganizationID:    r.OrganizationID,
+		ProjectID:         r.ProjectID,
+		DeploymentID:      r.DeploymentID,
+		ToolID:            r.ToolID,
+		ToolUrn:           r.ToolURN,
+		ToolType:          gen.ToolType(r.ToolType),
+		TraceID:           r.TraceID,
+		SpanID:            r.SpanID,
+		HTTPMethod:        r.HTTPMethod,
+		HTTPRoute:         r.HTTPRoute,
+		StatusCode:        uint32(r.StatusCode),
+		DurationMs:        r.DurationMs,
+		UserAgent:         r.UserAgent,
+		ClientIpv4:        r.ClientIPv4,
+		RequestHeaders:    r.RequestHeaders,
+		RequestBody:       r.RequestBody,
+		RequestBodySkip:   r.RequestBodySkip,
+		RequestBodyBytes:  &r.RequestBodyBytes,
+		ResponseHeaders:   r.ResponseHeaders,
+		ResponseBody:      r.ResponseBody,
+		ResponseBodySkip:  r.ResponseBodySkip,
+		ResponseBodyBytes: &r.ResponseBodyBytes,
+	}
+}
+
+func (s Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
 }

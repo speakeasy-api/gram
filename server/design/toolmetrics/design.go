@@ -24,6 +24,33 @@ var _ = Service("logs", func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
+
+			Attribute("project_id", String, "Project ID", func() {
+				Format(FormatUUID)
+			})
+			Attribute("tool_id", String, "Tool ID", func() {
+				Format(FormatUUID)
+			})
+			Attribute("ts_start", String, "Start timestamp", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("ts_end", String, "End timestamp", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("cursor", String, "Cursor for pagination", func() {
+				Format(FormatDateTime)
+			})
+			Attribute("per_page", Int, "Number of items per page (1-100)", func() {
+				Minimum(1)
+				Maximum(100)
+				Default(20)
+			})
+			Attribute("direction", String, "Pagination direction", func() {
+				Enum("next", "prev")
+				Default("next")
+			})
+
+			Required("tool_id", "project_id")
 		})
 
 		Result(ListToolLogResult)
@@ -36,6 +63,15 @@ var _ = Service("logs", func() {
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
+
+			Param("project_id")
+			Param("tool_id")
+			Param("ts_start")
+			Param("ts_end")
+			Param("cursor")
+			Param("per_page")
+			Param("direction")
+			Param("sort")
 		})
 
 		Meta("openapi:operationId", "listToolLogs")
@@ -48,6 +84,27 @@ var _ = Service("logs", func() {
 var ListToolLogResult = Type("ListToolLogResult", func() {
 	Attribute("logs", ArrayOf(HTTPToolLog))
 	Required("logs")
+})
+
+var PaginationParams = Type("PaginationParams", func() {
+	Description("Pagination parameters for listing logs")
+
+	Attribute("per_page", Int, "Number of items per page (1-100)", func() {
+		Minimum(1)
+		Maximum(100)
+		Default(20)
+	})
+	Attribute("direction", String, "Pagination direction", func() {
+		Enum("next", "prev")
+		Default("next")
+	})
+	Attribute("sort", String, "Sort order", func() {
+		Enum("ASC", "DESC")
+		Default("DESC")
+	})
+	Attribute("cursor", String, "Cursor for pagination", func() {
+		Format(FormatDateTime)
+	})
 })
 
 var ToolType = Type("ToolType", String, func() {

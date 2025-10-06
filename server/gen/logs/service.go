@@ -97,6 +97,22 @@ type ListLogsPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
+	// Project ID
+	ProjectID string
+	// Tool ID
+	ToolID string
+	// Start timestamp
+	TsStart *string
+	// End timestamp
+	TsEnd *string
+	// Cursor for pagination
+	Cursor *string
+	// Number of items per page (1-100)
+	PerPage int
+	// Pagination direction
+	Direction string
+	// Sort order
+	Sort string
 }
 
 // ListToolLogResult is the result type of the logs service listLogs method.

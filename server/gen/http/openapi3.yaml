@@ -3626,6 +3626,81 @@ paths:
             operationId: listToolLogs
             parameters:
                 - allowEmptyValue: true
+                  description: Project ID
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    description: Project ID
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Tool ID
+                  in: query
+                  name: tool_id
+                  required: true
+                  schema:
+                    description: Tool ID
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Start timestamp
+                  in: query
+                  name: ts_start
+                  schema:
+                    description: Start timestamp
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: End timestamp
+                  in: query
+                  name: ts_end
+                  schema:
+                    description: End timestamp
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Cursor for pagination
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Cursor for pagination
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Number of items per page (1-100)
+                  in: query
+                  name: per_page
+                  schema:
+                    default: 20
+                    description: Number of items per page (1-100)
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Pagination direction
+                  in: query
+                  name: direction
+                  schema:
+                    default: next
+                    description: Pagination direction
+                    enum:
+                        - next
+                        - prev
+                    type: string
+                - allowEmptyValue: true
+                  description: Sort order
+                  in: query
+                  name: sort
+                  schema:
+                    default: DESC
+                    description: Sort order
+                    enum:
+                        - ASC
+                        - DESC
+                    type: string
+                - allowEmptyValue: true
                   description: Session header
                   in: header
                   name: Gram-Session
@@ -9590,6 +9665,35 @@ components:
                 - visibility
                 - semver
                 - created_at
+        PaginationParams:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Cursor for pagination
+                    format: date-time
+                direction:
+                    type: string
+                    description: Pagination direction
+                    default: next
+                    enum:
+                        - next
+                        - prev
+                per_page:
+                    type: integer
+                    description: Number of items per page (1-100)
+                    default: 20
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                sort:
+                    type: string
+                    description: Sort order
+                    default: DESC
+                    enum:
+                        - ASC
+                        - DESC
+            description: Pagination parameters for listing logs
         PeriodUsage:
             type: object
             properties:

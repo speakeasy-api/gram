@@ -10,6 +10,7 @@ package client
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -53,6 +54,22 @@ func EncodeListLogsRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		values := req.URL.Query()
+		values.Add("project_id", p.ProjectID)
+		values.Add("tool_id", p.ToolID)
+		if p.TsStart != nil {
+			values.Add("ts_start", *p.TsStart)
+		}
+		if p.TsEnd != nil {
+			values.Add("ts_end", *p.TsEnd)
+		}
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("per_page", fmt.Sprintf("%v", p.PerPage))
+		values.Add("direction", p.Direction)
+		values.Add("sort", p.Sort)
+		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
