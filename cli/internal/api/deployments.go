@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	depl_client "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
@@ -56,6 +57,9 @@ func (c *DeploymentsClient) CreateDeployment(
 	req CreateDeploymentRequest,
 ) (*deployments.CreateDeploymentResult, error) {
 	key := req.APIKey.Reveal()
+	if req.IdempotencyKey == "" {
+		req.IdempotencyKey = uuid.New().String()
+	}
 	payload := &deployments.CreateDeploymentPayload{
 		ApikeyToken:      &key,
 		ProjectSlugInput: &req.ProjectSlug,

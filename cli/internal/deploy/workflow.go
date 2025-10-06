@@ -33,7 +33,7 @@ func (p WorkflowParams) Validate() error {
 	return nil
 }
 
-type WorkflowState struct {
+type Workflow struct {
 	Logger            *slog.Logger
 	Params            WorkflowParams
 	AssetsClient      *api.AssetsClient
@@ -43,20 +43,22 @@ type WorkflowState struct {
 	Err               error
 }
 
-func (s *WorkflowState) Fail(err error) *WorkflowState {
+// Fail indicates an unexpected error and halts execution.
+func (s *Workflow) Fail(err error) *Workflow {
 	s.Err = err
 	return s
 }
 
-func (s *WorkflowState) Failed() bool {
+// Failed indicates an unexpected error has interrupted the workflow.
+func (s *Workflow) Failed() bool {
 	return s.Err != nil
 }
 
 func NewWorkflow(
 	ctx context.Context,
 	params WorkflowParams,
-) *WorkflowState {
-	state := &WorkflowState{
+) *Workflow {
+	state := &Workflow{
 		Logger:            logging.PullLogger(ctx),
 		Params:            params,
 		AssetsClient:      nil,
@@ -84,14 +86,15 @@ func NewWorkflow(
 	return state
 }
 
-func (s *WorkflowState) UploadAssets(
+func (s *Workflow) UploadAssets(
 	ctx context.Context,
 	sources []Source,
-) *WorkflowState {
+) *Workflow {
 	if s.Failed() {
 		return s
 	}
 
+	s.Logger.InfoContext(ctx, "uploading files")
 	newAssets := make(
 		[]*deployments.AddOpenAPIv3DeploymentAssetForm,
 		len(sources),
@@ -114,32 +117,25 @@ func (s *WorkflowState) UploadAssets(
 
 		newAssets[idx] = asset
 	}
-
 	s.NewAssets = newAssets
 	return s
 }
 
-func (s *WorkflowState) EvolveActiveDeployment(
+func (s *Workflow) EvolveDeployment(
 	ctx context.Context,
-) *WorkflowState {
+) *Workflow {
 	if s.Failed() {
 		return s
 	}
 
-	active, err := s.DeploymentsClient.GetActiveDeployment(
+	if s.Deployment == nil {
+		return s.Fail(fmt.Errorf("update failed: no deployment found"))
+	}
+	s.Logger.InfoContext(
 		ctx,
-		s.Params.APIKey,
-		s.Params.ProjectSlug,
+		"updating deployment",
+		slog.String("deployment_id", s.Deployment.ID),
 	)
-	if err != nil {
-		return s.Fail(fmt.Errorf("failed to get active deployment: %w", err))
-	}
-
-	if active == nil {
-		return s
-	}
-
-	s.Deployment = active
 	evolved, err := s.DeploymentsClient.Evolve(ctx, api.EvolveRequest{
 		Assets:       s.NewAssets,
 		APIKey:       s.Params.APIKey,
@@ -152,7 +148,7 @@ func (s *WorkflowState) EvolveActiveDeployment(
 
 	s.Logger.InfoContext(
 		ctx,
-		"Updated successfully",
+		"updated deployment",
 		slog.String("deployment_id", evolved.Deployment.ID),
 	)
 
@@ -161,26 +157,15 @@ func (s *WorkflowState) EvolveActiveDeployment(
 	return s
 }
 
-func (s *WorkflowState) OrCreateDeployment(ctx context.Context) *WorkflowState {
-	if s.Failed() {
-		return s
-	}
-
-	if s.Deployment == nil {
-		return s.CreateDeployment(ctx, "")
-	}
-
-	return s
-}
-
-func (s *WorkflowState) CreateDeployment(
+func (s *Workflow) CreateDeployment(
 	ctx context.Context,
 	idem string,
-) *WorkflowState {
+) *Workflow {
 	if s.Failed() {
 		return s
 	}
 
+	s.Logger.InfoContext(ctx, "creating deployment")
 	createReq := api.CreateDeploymentRequest{
 		APIKey:          s.Params.APIKey,
 		IdempotencyKey:  idem,
@@ -194,7 +179,7 @@ func (s *WorkflowState) CreateDeployment(
 
 	s.Logger.InfoContext(
 		ctx,
-		"Created successfully",
+		"created new deployment",
 		slog.String("deployment_id", result.Deployment.ID),
 	)
 
@@ -203,10 +188,10 @@ func (s *WorkflowState) CreateDeployment(
 	return s
 }
 
-func (s *WorkflowState) LoadDeploymentByID(
+func (s *Workflow) LoadDeploymentByID(
 	ctx context.Context,
 	deploymentID string,
-) *WorkflowState {
+) *Workflow {
 	result, err := s.DeploymentsClient.GetDeployment(
 		ctx,
 		s.Params.APIKey,
@@ -223,9 +208,9 @@ func (s *WorkflowState) LoadDeploymentByID(
 	return s
 }
 
-func (s *WorkflowState) LoadLatestDeployment(
+func (s *Workflow) LoadLatestDeployment(
 	ctx context.Context,
-) *WorkflowState {
+) *Workflow {
 	result, err := s.DeploymentsClient.GetLatestDeployment(
 		ctx,
 		s.Params.APIKey,
@@ -239,7 +224,23 @@ func (s *WorkflowState) LoadLatestDeployment(
 	return s
 }
 
-func (s *WorkflowState) Poll(ctx context.Context) *WorkflowState {
+func (s *Workflow) LoadActiveDeployment(
+	ctx context.Context,
+) *Workflow {
+	result, err := s.DeploymentsClient.GetActiveDeployment(
+		ctx,
+		s.Params.APIKey,
+		s.Params.ProjectSlug,
+	)
+	if err != nil {
+		return s.Fail(fmt.Errorf("failed to get active deployment: %w", err))
+	}
+
+	s.Deployment = result
+	return s
+}
+
+func (s *Workflow) Poll(ctx context.Context) *Workflow {
 	if s.Failed() {
 		return s
 	}

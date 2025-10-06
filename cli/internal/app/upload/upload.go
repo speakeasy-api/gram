@@ -2,6 +2,7 @@ package upload
 
 import (
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"os/signal"
@@ -87,13 +88,22 @@ Example:
 
 			result := deploy.NewWorkflow(ctx, params).
 				UploadAssets(ctx, []deploy.Source{parseSource(c)}).
-				EvolveActiveDeployment(ctx).
-				OrCreateDeployment(ctx)
+				LoadActiveDeployment(ctx)
+			if result.Deployment == nil {
+				result.CreateDeployment(ctx, "")
+			} else {
+				result.EvolveDeployment(ctx)
+			}
 
-			if result.Err != nil {
+			if result.Failed() {
 				return fmt.Errorf("failed to upload: %w", result.Err)
 			}
 
+			result.Logger.InfoContext(
+				ctx,
+				"upload success",
+				slog.String("deployment_id", result.Deployment.ID),
+			)
 			return nil
 		},
 	}

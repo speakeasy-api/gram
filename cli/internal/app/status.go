@@ -127,7 +127,7 @@ func printDeploymentStatus(deployment *types.Deployment) {
 		fmt.Printf("External URL: %s\n", *deployment.ExternalURL)
 	}
 
-	fmt.Printf("\nAssets:\n")
+	fmt.Printf("\nTools:\n")
 	fmt.Printf("  OpenAPI Tools: %d\n", deployment.Openapiv3ToolCount)
 	fmt.Printf("  Functions:     %d\n", deployment.FunctionsToolCount)
 
