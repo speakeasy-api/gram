@@ -1,4 +1,4 @@
-import { Button } from "@speakeasy-api/moonshine";
+import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { Link } from "@/components/ui/link";
 import { Separator } from "@/components/ui/separator";
@@ -19,7 +19,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { Slot } from "@radix-ui/react-slot";
 import { VariantProps, cva } from "class-variance-authority";
-import { PanelLeftIcon } from "lucide-react";
 import * as React from "react";
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state";
@@ -271,8 +270,10 @@ function SidebarTrigger({
       }}
       {...props}
     >
-      <PanelLeftIcon />
-      <span className="sr-only">Toggle Sidebar</span>
+      <Button.LeftIcon>
+        <Icon name="panel-left" />
+      </Button.LeftIcon>
+      <Button.Text className="sr-only">Toggle Sidebar</Button.Text>
     </Button>
   );
 }
