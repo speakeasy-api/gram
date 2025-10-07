@@ -832,11 +832,13 @@ export const AssetsTabContents = () => {
           return (
             <li key={asset.id}>
               <MiniCard className="w-full max-w-full bg-surface-secondary-default border-neutral-softest p-6">
-                <MiniCard.Title className="truncate max-w-48">
+                <MiniCard.Title>
                   <div className="flex gap-4 w-full items-center">
                     <FileCodeIcon size={48} strokeWidth={1} />
-                    <div className="flex flex-col">
-                      <span className="text-base leading-7">{asset.name}</span>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-base leading-7 break-words">
+                        {asset.name}
+                      </span>
                       <span className="text-xs text-muted leading-5">
                         OpenAPI Document
                       </span>
