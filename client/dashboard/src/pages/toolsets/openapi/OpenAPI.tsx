@@ -389,7 +389,7 @@ function OpenAPICard({
   const [documentViewOpen, setDocumentViewOpen] = useState(false);
 
   return (
-    <MiniCard key={asset.id}>
+    <MiniCard key={asset.id} className="bg-secondary">
       <MiniCard.Title
         onClick={() => setDocumentViewOpen(true)}
         className="cursor-pointer"

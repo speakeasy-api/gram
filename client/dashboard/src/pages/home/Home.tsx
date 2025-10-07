@@ -34,6 +34,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { useMcpUrl } from "../mcp/MCPDetails";
 import { MCPEmptyState } from "../mcp/MCPEmptyState";
+import { useCloneToolset } from "../toolsets/Toolset";
 
 // Component for toolset dropdown items
 function ToolsetSelectItem({ toolset }: { toolset: ToolsetEntry }) {
@@ -150,6 +151,7 @@ function HomeContent() {
   const routes = useRoutes();
   const navigate = useNavigate();
   const telemetry = useTelemetry();
+  const cloneToolset = useCloneToolset();
   const [prompt, setPrompt] = useState("");
   const [isInputHovered, setIsInputHovered] = useState(false);
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -577,6 +579,13 @@ function HomeContent() {
                 key={toolset.slug}
                 toolset={toolset}
                 className="bg-secondary"
+                additionalActions={[
+                  {
+                    label: "Clone",
+                    onClick: () => cloneToolset(toolset.slug),
+                    icon: "copy",
+                  },
+                ]}
               />
             ))}
           </div>
