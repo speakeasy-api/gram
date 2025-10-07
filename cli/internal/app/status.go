@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
@@ -40,6 +41,7 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
 			defer cancel()
 
+			logger := logging.PullLogger(ctx)
 			projectSlug := c.String("project")
 			deploymentID := c.String("id")
 			jsonOutput := c.Bool("json")
@@ -58,7 +60,7 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 				APIURL:      apiURL,
 				ProjectSlug: projectSlug,
 			}
-			result := deploy.NewWorkflow(ctx, params)
+			result := deploy.NewWorkflow(ctx, logger, params)
 
 			if deploymentID != "" {
 				result.LoadDeploymentByID(ctx, deploymentID)

@@ -106,7 +106,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				APIURL:      apiURL,
 				ProjectSlug: projectSlug,
 			}
-			result := deploy.NewWorkflow(ctx, params).
+			result := deploy.NewWorkflow(ctx, logger, params).
 				UploadAssets(ctx, config.Sources).
 				CreateDeployment(ctx, c.String("idempotency-key"))
 

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
-	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -56,10 +55,11 @@ func (s *Workflow) Failed() bool {
 
 func NewWorkflow(
 	ctx context.Context,
+	logger *slog.Logger,
 	params WorkflowParams,
 ) *Workflow {
 	state := &Workflow{
-		Logger:            logging.PullLogger(ctx),
+		Logger:            logger,
 		Params:            params,
 		AssetsClient:      nil,
 		DeploymentsClient: nil,

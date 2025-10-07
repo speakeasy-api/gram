@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
@@ -57,6 +58,7 @@ Example:
 			)
 			defer cancel()
 
+			logger := logging.PullLogger(ctx)
 			apiURL, err := url.Parse(c.String("api-url"))
 			if err != nil {
 				return fmt.Errorf(
@@ -71,7 +73,7 @@ Example:
 				ProjectSlug: c.String("project"),
 			}
 
-			result := deploy.NewWorkflow(ctx, params).
+			result := deploy.NewWorkflow(ctx, logger, params).
 				UploadAssets(ctx, []deploy.Source{parseSource(c)}).
 				LoadLatestDeployment(ctx)
 			if result.Deployment == nil {
