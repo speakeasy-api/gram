@@ -27,7 +27,7 @@ func TestVariationsService_UpsertGlobal_Create(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "test-tool",
+		SrcToolUrn:       "tools:http:source:test-tool",
 		Confirm:          &confirm,
 		ConfirmPrompt:    &confirmPrompt,
 		Name:             &name,
@@ -43,7 +43,7 @@ func TestVariationsService_UpsertGlobal_Create(t *testing.T) {
 	// Verify variation fields
 	require.NotEmpty(t, result.Variation.ID, "ID should not be empty")
 	require.NotEmpty(t, result.Variation.GroupID, "group ID should not be empty")
-	require.Equal(t, "test-tool", result.Variation.SrcToolName, "src tool name should match")
+	require.Equal(t, "tools:http:source:test-tool", result.Variation.SrcToolUrn, "src tool urn should match")
 	require.Equal(t, &confirm, result.Variation.Confirm, "confirm should match")
 	require.Equal(t, &confirmPrompt, result.Variation.ConfirmPrompt, "confirm prompt should match")
 	require.Equal(t, &name, result.Variation.Name, "name should match")
@@ -68,7 +68,7 @@ func TestVariationsService_UpsertGlobal_Update(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "test-tool",
+		SrcToolUrn:       "tools:http:source:test-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
 		Name:             &initialName,
@@ -91,7 +91,7 @@ func TestVariationsService_UpsertGlobal_Update(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "test-tool", // Same tool name - should update
+		SrcToolUrn:       "tools:http:source:test-tool", // Same tool name - should update
 		Confirm:          &updatedConfirm,
 		ConfirmPrompt:    nil,
 		Name:             &updatedName,
@@ -108,7 +108,7 @@ func TestVariationsService_UpsertGlobal_Update(t *testing.T) {
 	require.Equal(t, first.Variation.GroupID, second.Variation.GroupID, "group ID should be the same")
 
 	// Values should be updated
-	require.Equal(t, "test-tool", second.Variation.SrcToolName, "src tool name should match")
+	require.Equal(t, "tools:http:source:test-tool", second.Variation.SrcToolUrn, "src tool urn should match")
 	require.Equal(t, &updatedConfirm, second.Variation.Confirm, "confirm should be updated")
 	require.Equal(t, &updatedName, second.Variation.Name, "name should be updated")
 	require.Equal(t, &updatedSummary, second.Variation.Summary, "summary should be updated")
@@ -128,7 +128,7 @@ func TestVariationsService_UpsertGlobal_MinimalPayload(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "minimal-tool",
+		SrcToolUrn:       "tools:http:source:minimal-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
 		Name:             nil,
@@ -145,7 +145,7 @@ func TestVariationsService_UpsertGlobal_MinimalPayload(t *testing.T) {
 	// Verify variation fields
 	require.NotEmpty(t, result.Variation.ID, "ID should not be empty")
 	require.NotEmpty(t, result.Variation.GroupID, "group ID should not be empty")
-	require.Equal(t, "minimal-tool", result.Variation.SrcToolName, "src tool name should match")
+	require.Equal(t, "tools:http:source:minimal-tool", result.Variation.SrcToolUrn, "src tool urn should match")
 	require.Nil(t, result.Variation.Confirm, "confirm should be nil")
 	require.Nil(t, result.Variation.ConfirmPrompt, "confirm prompt should be nil")
 	require.Nil(t, result.Variation.Name, "name should be nil")
@@ -166,7 +166,7 @@ func TestVariationsService_UpsertGlobal_EmptyTags(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "empty-tags-tool",
+		SrcToolUrn:       "tools:http:source:empty-tags-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
 		Name:             nil,
@@ -179,7 +179,7 @@ func TestVariationsService_UpsertGlobal_EmptyTags(t *testing.T) {
 	require.NotNil(t, result, "result should not be nil")
 	require.NotNil(t, result.Variation, "variation should not be nil")
 
-	require.Equal(t, "empty-tags-tool", result.Variation.SrcToolName, "src tool name should match")
+	require.Equal(t, "tools:http:source:empty-tags-tool", result.Variation.SrcToolUrn, "src tool urn should match")
 	require.Empty(t, result.Variation.Tags, "tags should be empty")
 }
 
@@ -192,7 +192,7 @@ func TestVariationsService_UpsertGlobal_NilTags(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "nil-tags-tool",
+		SrcToolUrn:       "tools:http:source:nil-tags-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
 		Name:             nil,
@@ -205,7 +205,7 @@ func TestVariationsService_UpsertGlobal_NilTags(t *testing.T) {
 	require.NotNil(t, result, "result should not be nil")
 	require.NotNil(t, result.Variation, "variation should not be nil")
 
-	require.Equal(t, "nil-tags-tool", result.Variation.SrcToolName, "src tool name should match")
+	require.Equal(t, "tools:http:source:nil-tags-tool", result.Variation.SrcToolUrn, "src tool urn should match")
 	require.Empty(t, result.Variation.Tags, "tags should be empty when nil")
 }
 
@@ -221,7 +221,7 @@ func TestVariationsService_UpsertGlobal_Unauthorized(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "test-tool",
+		SrcToolUrn:       "tools:http:source:test-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
 		Name:             nil,
@@ -257,7 +257,7 @@ func TestVariationsService_UpsertGlobal_NoProjectID(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "test-tool",
+		SrcToolUrn:       "tools:http:source:test-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
 		Name:             nil,
@@ -280,7 +280,7 @@ func TestVariationsService_UpsertGlobal_CreatesGroup(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "first-tool",
+		SrcToolUrn:       "tools:http:source:first-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
 		Name:             conv.Ptr("first variation"),
@@ -297,7 +297,7 @@ func TestVariationsService_UpsertGlobal_CreatesGroup(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "second-tool",
+		SrcToolUrn:       "tools:http:source:second-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
 		Name:             conv.Ptr("second variation"),
@@ -329,7 +329,7 @@ func TestVariationsService_UpsertGlobal_MultipleToolsSameGroup(t *testing.T) {
 			ApikeyToken:      nil,
 			SessionToken:     nil,
 			ProjectSlugInput: nil,
-			SrcToolName:      toolName,
+			SrcToolUrn:       "tools:http:source:" + toolName,
 			Confirm:          nil,
 			ConfirmPrompt:    nil,
 			Name:             &name,
@@ -348,7 +348,7 @@ func TestVariationsService_UpsertGlobal_MultipleToolsSameGroup(t *testing.T) {
 	groupID := variations[0].Variation.GroupID
 	for i, variation := range variations {
 		require.Equal(t, groupID, variation.Variation.GroupID, "variation %d should belong to the same group", i)
-		require.Equal(t, tools[i], variation.Variation.SrcToolName, "variation %d should have correct tool name", i)
+		require.Equal(t, "tools:http:source:"+tools[i], variation.Variation.SrcToolUrn, "variation %d should have correct tool urn", i)
 	}
 }
 
@@ -366,7 +366,7 @@ func TestVariationsService_UpsertGlobal_LongValues(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "long-values-tool",
+		SrcToolUrn:       "tools:http:source:long-values-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
 		Name:             &longName,
@@ -397,7 +397,7 @@ func TestVariationsService_UpsertGlobal_EmptyStrings(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "empty-strings-tool",
+		SrcToolUrn:       "tools:http:source:empty-strings-tool",
 		Confirm:          &emptyString,
 		ConfirmPrompt:    &emptyString,
 		Name:             &emptyString,

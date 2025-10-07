@@ -175,7 +175,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			variation = &types.ToolVariation{
 				ID:            variations.ID.String(),
 				GroupID:       variations.GroupID.String(),
-				SrcToolName:   tool.Name,
+				SrcToolUrn:    variations.SrcToolUrn.String,
 				Confirm:       conv.FromPGText[string](variations.Confirm),
 				ConfirmPrompt: conv.FromPGText[string](variations.ConfirmPrompt),
 				Name:          conv.PtrEmpty(variations.Name.String),

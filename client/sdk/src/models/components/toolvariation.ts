@@ -38,9 +38,9 @@ export type ToolVariation = {
    */
   name?: string | undefined;
   /**
-   * The name of the source tool
+   * The URN of the source tool
    */
-  srcToolName: string;
+  srcToolUrn: string;
   /**
    * The summarizer of the tool variation
    */
@@ -72,7 +72,7 @@ export const ToolVariation$inboundSchema: z.ZodType<
   group_id: z.string(),
   id: z.string(),
   name: z.string().optional(),
-  src_tool_name: z.string(),
+  src_tool_urn: z.string(),
   summarizer: z.string().optional(),
   summary: z.string().optional(),
   tags: z.array(z.string()).optional(),
@@ -82,7 +82,7 @@ export const ToolVariation$inboundSchema: z.ZodType<
     "confirm_prompt": "confirmPrompt",
     "created_at": "createdAt",
     "group_id": "groupId",
-    "src_tool_name": "srcToolName",
+    "src_tool_urn": "srcToolUrn",
     "updated_at": "updatedAt",
   });
 });
@@ -96,7 +96,7 @@ export type ToolVariation$Outbound = {
   group_id: string;
   id: string;
   name?: string | undefined;
-  src_tool_name: string;
+  src_tool_urn: string;
   summarizer?: string | undefined;
   summary?: string | undefined;
   tags?: Array<string> | undefined;
@@ -116,7 +116,7 @@ export const ToolVariation$outboundSchema: z.ZodType<
   groupId: z.string(),
   id: z.string(),
   name: z.string().optional(),
-  srcToolName: z.string(),
+  srcToolUrn: z.string(),
   summarizer: z.string().optional(),
   summary: z.string().optional(),
   tags: z.array(z.string()).optional(),
@@ -126,7 +126,7 @@ export const ToolVariation$outboundSchema: z.ZodType<
     confirmPrompt: "confirm_prompt",
     createdAt: "created_at",
     groupId: "group_id",
-    srcToolName: "src_tool_name",
+    srcToolUrn: "src_tool_urn",
     updatedAt: "updated_at",
   });
 });

@@ -84,8 +84,8 @@ type UpsertGlobalPayload struct {
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string
-	// The name of the source tool
-	SrcToolName string
+	// The URN of the source tool
+	SrcToolUrn string
 	// The confirmation mode for the tool variation
 	Confirm *string
 	// The confirmation prompt for the tool variation

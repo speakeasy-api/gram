@@ -40,9 +40,9 @@ export type UpsertGlobalToolVariationForm = {
    */
   name?: string | undefined;
   /**
-   * The name of the source tool
+   * The URN of the source tool
    */
-  srcToolName: string;
+  srcToolUrn: string;
   /**
    * The summarizer of the tool variation
    */
@@ -86,14 +86,14 @@ export const UpsertGlobalToolVariationForm$inboundSchema: z.ZodType<
   confirm_prompt: z.string().optional(),
   description: z.string().optional(),
   name: z.string().optional(),
-  src_tool_name: z.string(),
+  src_tool_urn: z.string(),
   summarizer: z.string().optional(),
   summary: z.string().optional(),
   tags: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     "confirm_prompt": "confirmPrompt",
-    "src_tool_name": "srcToolName",
+    "src_tool_urn": "srcToolUrn",
   });
 });
 
@@ -103,7 +103,7 @@ export type UpsertGlobalToolVariationForm$Outbound = {
   confirm_prompt?: string | undefined;
   description?: string | undefined;
   name?: string | undefined;
-  src_tool_name: string;
+  src_tool_urn: string;
   summarizer?: string | undefined;
   summary?: string | undefined;
   tags?: Array<string> | undefined;
@@ -119,14 +119,14 @@ export const UpsertGlobalToolVariationForm$outboundSchema: z.ZodType<
   confirmPrompt: z.string().optional(),
   description: z.string().optional(),
   name: z.string().optional(),
-  srcToolName: z.string(),
+  srcToolUrn: z.string(),
   summarizer: z.string().optional(),
   summary: z.string().optional(),
   tags: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     confirmPrompt: "confirm_prompt",
-    srcToolName: "src_tool_name",
+    srcToolUrn: "src_tool_urn",
   });
 });
 

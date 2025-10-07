@@ -271,7 +271,7 @@ func DescribeToolset(
 			keyedVariations[variation.SrcToolName] = types.ToolVariation{
 				ID:            variation.ID.String(),
 				GroupID:       variation.GroupID.String(),
-				SrcToolName:   variation.SrcToolName,
+				SrcToolUrn:    variation.SrcToolUrn.String,
 				Confirm:       conv.FromPGText[string](variation.Confirm),
 				ConfirmPrompt: conv.FromPGText[string](variation.ConfirmPrompt),
 				Name:          conv.FromPGText[string](variation.Name),

@@ -19,14 +19,13 @@ generation:
   auth:
     oAuth2ClientCredentialsEnabled: true
     oAuth2PasswordEnabled: true
-    hoistGlobalSecurity: true
   sdkHooksConfigAccess: true
   tests:
     generateTests: true
     generateNewTests: false
     skipResponseBodyAssertions: false
 typescript:
-  version: 0.14.5
+  version: 0.14.6
   acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}

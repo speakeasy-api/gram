@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/variations/repo"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
@@ -80,7 +81,7 @@ func (s *Service) ListGlobal(ctx context.Context, payload *gen.ListGlobalPayload
 		variations = append(variations, &types.ToolVariation{
 			ID:            row.ToolVariation.ID.String(),
 			GroupID:       row.ToolVariation.GroupID.String(),
-			SrcToolName:   row.ToolVariation.SrcToolName,
+			SrcToolUrn:    row.ToolVariation.SrcToolUrn.String,
 			Confirm:       conv.FromPGText[string](row.ToolVariation.Confirm),
 			ConfirmPrompt: conv.FromPGText[string](row.ToolVariation.ConfirmPrompt),
 			Name:          conv.FromPGText[string](row.ToolVariation.Name),
@@ -130,9 +131,15 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 		}
 	}
 
+	srcToolUrn, err := urn.Parse(payload.SrcToolUrn)
+	if err != nil {
+		return nil, oops.E(oops.CodeInvalid, err, "invalid source tool URN").Log(ctx, s.logger)
+	}
+
 	row, err := tx.UpsertToolVariation(ctx, repo.UpsertToolVariationParams{
 		GroupID:       groupID,
-		SrcToolName:   payload.SrcToolName,
+		SrcToolUrn:    conv.ToPGTextEmpty(payload.SrcToolUrn),
+		SrcToolName:   srcToolUrn.Name, // TODO: This is still used as the ON CONFLICT. After backfilling, we should change this
 		Confirm:       conv.PtrToPGText(payload.Confirm),
 		ConfirmPrompt: conv.PtrToPGText(payload.ConfirmPrompt),
 		Name:          conv.PtrToPGText(payload.Name),
@@ -153,7 +160,7 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 		Variation: &types.ToolVariation{
 			ID:            row.ID.String(),
 			GroupID:       row.GroupID.String(),
-			SrcToolName:   row.SrcToolName,
+			SrcToolUrn:    row.SrcToolUrn.String,
 			Confirm:       conv.FromPGText[string](row.Confirm),
 			ConfirmPrompt: conv.FromPGText[string](row.ConfirmPrompt),
 			Name:          conv.FromPGText[string](row.Name),

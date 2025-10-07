@@ -1,18 +1,18 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: cc9edf681089c4ac13e4c97b34ebe998
+  docChecksum: 2c30804e3a90c3735018c8ab202a030b
   docVersion: 0.0.1
-  speakeasyVersion: 1.635.1
-  generationVersion: 2.722.2
-  releaseVersion: 0.14.5
-  configChecksum: 59295d17e28f2ebd92c86c30ffac7565
+  speakeasyVersion: 1.613.0
+  generationVersion: 2.696.0
+  releaseVersion: 0.14.6
+  configChecksum: f8fcd59bc9879ed6bdfa983eb4035617
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.26
+    core: 3.21.22
     defaultEnabledRetries: 0.1.0
-    devContainers: 2.90.1
+    devContainers: 2.90.0
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
@@ -1371,10 +1371,10 @@ examples:
   upsertGlobalVariation:
     speakeasy-default-upsert-global-variation:
       requestBody:
-        application/json: {"src_tool_name": "<value>"}
+        application/json: {"src_tool_urn": "<value>"}
       responses:
         "200":
-          application/json: {"variation": {"created_at": "1727504584138", "group_id": "<id>", "id": "<id>", "src_tool_name": "<value>", "updated_at": "1735639497584"}}
+          application/json: {"variation": {"created_at": "1727504584138", "group_id": "<id>", "id": "<id>", "src_tool_urn": "<value>", "updated_at": "1735639497584"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

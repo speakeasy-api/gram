@@ -52,13 +52,14 @@ type Toolset struct {
 }
 
 type ToolsetVersion struct {
-	ID            uuid.UUID
-	ToolsetID     uuid.UUID
-	Version       int64
-	ToolUrns      []urn.Tool
-	PredecessorID uuid.NullUUID
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
+	ID             uuid.UUID
+	ToolsetID      uuid.UUID
+	Version        int64
+	ToolUrns       []urn.Tool
+	ToolVariations []uuid.UUID
+	PredecessorID  uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }

@@ -3586,7 +3586,7 @@ func variationsUpsertGlobalUsage() {
       "confirm_prompt": "Aliquam voluptas necessitatibus dolorum magnam.",
       "description": "Sed optio.",
       "name": "Consequatur dolor non aperiam.",
-      "src_tool_name": "Numquam eligendi atque ipsum ipsum.",
+      "src_tool_urn": "Numquam eligendi atque ipsum ipsum.",
       "summarizer": "Rerum sunt culpa.",
       "summary": "Voluptas at consectetur neque voluptatem.",
       "tags": [

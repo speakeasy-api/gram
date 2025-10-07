@@ -12,7 +12,9 @@ import (
 type ToolVariation struct {
 	ID            uuid.UUID
 	GroupID       uuid.UUID
+	PredecessorID uuid.NullUUID
 	SrcToolName   string
+	SrcToolUrn    pgtype.Text
 	Confirm       pgtype.Text
 	ConfirmPrompt pgtype.Text
 	Name          pgtype.Text

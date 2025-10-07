@@ -1476,8 +1476,8 @@ type ToolVariationResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the tool variation group
 	GroupID *string `form:"group_id,omitempty" json:"group_id,omitempty" xml:"group_id,omitempty"`
-	// The name of the source tool
-	SrcToolName *string `form:"src_tool_name,omitempty" json:"src_tool_name,omitempty" xml:"src_tool_name,omitempty"`
+	// The URN of the source tool
+	SrcToolUrn *string `form:"src_tool_urn,omitempty" json:"src_tool_urn,omitempty" xml:"src_tool_urn,omitempty"`
 	// The confirmation mode for the tool variation
 	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
 	// The confirmation prompt for the tool variation
@@ -4535,8 +4535,8 @@ func ValidateToolVariationResponseBody(body *ToolVariationResponseBody) (err err
 	if body.GroupID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("group_id", "body"))
 	}
-	if body.SrcToolName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("src_tool_name", "body"))
+	if body.SrcToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("src_tool_urn", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

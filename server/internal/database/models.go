@@ -430,7 +430,9 @@ type SlackAppConnection struct {
 type ToolVariation struct {
 	ID            uuid.UUID
 	GroupID       uuid.UUID
+	PredecessorID uuid.NullUUID
 	SrcToolName   string
+	SrcToolUrn    pgtype.Text
 	Confirm       pgtype.Text
 	ConfirmPrompt pgtype.Text
 	Name          pgtype.Text
@@ -486,15 +488,16 @@ type ToolsetPrompt struct {
 }
 
 type ToolsetVersion struct {
-	ID            uuid.UUID
-	ToolsetID     uuid.UUID
-	Version       int64
-	ToolUrns      []urn.Tool
-	PredecessorID uuid.NullUUID
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-	DeletedAt     pgtype.Timestamptz
-	Deleted       bool
+	ID             uuid.UUID
+	ToolsetID      uuid.UUID
+	Version        int64
+	ToolUrns       []urn.Tool
+	ToolVariations []uuid.UUID
+	PredecessorID  uuid.NullUUID
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
 }
 
 type User struct {

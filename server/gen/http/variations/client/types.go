@@ -16,8 +16,8 @@ import (
 // UpsertGlobalRequestBody is the type of the "variations" service
 // "upsertGlobal" endpoint HTTP request body.
 type UpsertGlobalRequestBody struct {
-	// The name of the source tool
-	SrcToolName string `form:"src_tool_name" json:"src_tool_name" xml:"src_tool_name"`
+	// The URN of the source tool
+	SrcToolUrn string `form:"src_tool_urn" json:"src_tool_urn" xml:"src_tool_urn"`
 	// The confirmation mode for the tool variation
 	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
 	// The confirmation prompt for the tool variation
@@ -605,8 +605,8 @@ type ToolVariationResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the tool variation group
 	GroupID *string `form:"group_id,omitempty" json:"group_id,omitempty" xml:"group_id,omitempty"`
-	// The name of the source tool
-	SrcToolName *string `form:"src_tool_name,omitempty" json:"src_tool_name,omitempty" xml:"src_tool_name,omitempty"`
+	// The URN of the source tool
+	SrcToolUrn *string `form:"src_tool_urn,omitempty" json:"src_tool_urn,omitempty" xml:"src_tool_urn,omitempty"`
 	// The confirmation mode for the tool variation
 	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
 	// The confirmation prompt for the tool variation
@@ -631,7 +631,7 @@ type ToolVariationResponseBody struct {
 // the "upsertGlobal" endpoint of the "variations" service.
 func NewUpsertGlobalRequestBody(p *variations.UpsertGlobalPayload) *UpsertGlobalRequestBody {
 	body := &UpsertGlobalRequestBody{
-		SrcToolName:   p.SrcToolName,
+		SrcToolUrn:    p.SrcToolUrn,
 		Confirm:       p.Confirm,
 		ConfirmPrompt: p.ConfirmPrompt,
 		Name:          p.Name,
@@ -1897,8 +1897,8 @@ func ValidateToolVariationResponseBody(body *ToolVariationResponseBody) (err err
 	if body.GroupID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("group_id", "body"))
 	}
-	if body.SrcToolName == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("src_tool_name", "body"))
+	if body.SrcToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("src_tool_urn", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

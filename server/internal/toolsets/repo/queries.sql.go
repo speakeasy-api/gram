@@ -179,7 +179,7 @@ INSERT INTO toolset_versions (
   , $3
   , $4
 )
-RETURNING id, toolset_id, version, tool_urns, predecessor_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, toolset_id, version, tool_urns, tool_variations, predecessor_id, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateToolsetVersionParams struct {
@@ -202,6 +202,7 @@ func (q *Queries) CreateToolsetVersion(ctx context.Context, arg CreateToolsetVer
 		&i.ToolsetID,
 		&i.Version,
 		&i.ToolUrns,
+		&i.ToolVariations,
 		&i.PredecessorID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -278,7 +279,7 @@ func (q *Queries) GetHTTPSecurityDefinitions(ctx context.Context, arg GetHTTPSec
 }
 
 const getLatestToolsetVersion = `-- name: GetLatestToolsetVersion :one
-SELECT id, toolset_id, version, tool_urns, predecessor_id, created_at, updated_at, deleted_at, deleted
+SELECT id, toolset_id, version, tool_urns, tool_variations, predecessor_id, created_at, updated_at, deleted_at, deleted
 FROM toolset_versions
 WHERE toolset_id = $1
   AND deleted IS FALSE
@@ -294,6 +295,7 @@ func (q *Queries) GetLatestToolsetVersion(ctx context.Context, toolsetID uuid.UU
 		&i.ToolsetID,
 		&i.Version,
 		&i.ToolUrns,
+		&i.ToolVariations,
 		&i.PredecessorID,
 		&i.CreatedAt,
 		&i.UpdatedAt,

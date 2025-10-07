@@ -211,7 +211,7 @@ const gram = new Gram();
 async function run() {
   const result = await gram.variations.upsertGlobal({
     upsertGlobalToolVariationForm: {
-      srcToolName: "<value>",
+      srcToolUrn: "<value>",
     },
   });
 
@@ -236,7 +236,7 @@ const gram = new GramCore();
 async function run() {
   const res = await variationsUpsertGlobal(gram, {
     upsertGlobalToolVariationForm: {
-      srcToolName: "<value>",
+      srcToolUrn: "<value>",
     },
   });
   if (res.ok) {

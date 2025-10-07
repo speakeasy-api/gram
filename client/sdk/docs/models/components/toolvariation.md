@@ -9,7 +9,7 @@ let value: ToolVariation = {
   createdAt: "1715329601419",
   groupId: "<id>",
   id: "<id>",
-  srcToolName: "<value>",
+  srcToolUrn: "<value>",
   updatedAt: "1735622567982",
 };
 ```
@@ -25,7 +25,7 @@ let value: ToolVariation = {
 | `groupId`                                      | *string*                                       | :heavy_check_mark:                             | The ID of the tool variation group             |
 | `id`                                           | *string*                                       | :heavy_check_mark:                             | The ID of the tool variation                   |
 | `name`                                         | *string*                                       | :heavy_minus_sign:                             | The name of the tool variation                 |
-| `srcToolName`                                  | *string*                                       | :heavy_check_mark:                             | The name of the source tool                    |
+| `srcToolUrn`                                   | *string*                                       | :heavy_check_mark:                             | The URN of the source tool                     |
 | `summarizer`                                   | *string*                                       | :heavy_minus_sign:                             | The summarizer of the tool variation           |
 | `summary`                                      | *string*                                       | :heavy_minus_sign:                             | The summary of the tool variation              |
 | `tags`                                         | *string*[]                                     | :heavy_minus_sign:                             | The tags of the tool variation                 |

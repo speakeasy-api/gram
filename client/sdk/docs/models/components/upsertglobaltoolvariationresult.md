@@ -10,7 +10,7 @@ let value: UpsertGlobalToolVariationResult = {
     createdAt: "1735598563864",
     groupId: "<id>",
     id: "<id>",
-    srcToolName: "<value>",
+    srcToolUrn: "<value>",
     updatedAt: "1735668149726",
   },
 };

@@ -37,13 +37,14 @@ export function ToolCard({
     if (tool.type === "http") {
       await client.variations.upsertGlobal({
         upsertGlobalToolVariationForm: {
-          srcToolName: tool.name,
           ...tool.variation,
           confirm: tool.variation?.confirm as Confirm, // TODO: Should the server return the same type?
           ...vals,
+          srcToolUrn: tool.toolUrn,
         },
       });
     } else {
+      // TODO: change me when we support variations for all tool types
       await client.templates.update({
         updatePromptTemplateForm: {
           ...tool,

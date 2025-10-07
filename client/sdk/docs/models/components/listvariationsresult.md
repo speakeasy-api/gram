@@ -11,7 +11,7 @@ let value: ListVariationsResult = {
       createdAt: "1708604588094",
       groupId: "<id>",
       id: "<id>",
-      srcToolName: "<value>",
+      srcToolUrn: "<value>",
       updatedAt: "1735676357006",
     },
   ],

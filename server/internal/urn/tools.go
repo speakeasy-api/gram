@@ -33,7 +33,7 @@ func NewTool(kind ToolKind, source, name string) Tool {
 	return t
 }
 
-func newToolFromString(value string) (Tool, error) {
+func Parse(value string) (Tool, error) {
 	if value == "" {
 		return Tool{}, fmt.Errorf("%w: empty string", ErrInvalid)
 	}
@@ -87,7 +87,7 @@ func (u *Tool) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("read tool urn string from json: %w", err)
 	}
 
-	parsed, err := newToolFromString(s)
+	parsed, err := Parse(s)
 	if err != nil {
 		return fmt.Errorf("parse tool urn json string: %w", err)
 	}
@@ -112,7 +112,7 @@ func (u *Tool) Scan(value interface{}) error {
 		return fmt.Errorf("cannot scan %T into Tool", value)
 	}
 
-	parsed, err := newToolFromString(s)
+	parsed, err := Parse(s)
 	if err != nil {
 		return fmt.Errorf("scan database value: %w", err)
 	}
@@ -139,7 +139,7 @@ func (u Tool) MarshalText() (text []byte, err error) {
 }
 
 func (u *Tool) UnmarshalText(text []byte) error {
-	parsed, err := newToolFromString(string(text))
+	parsed, err := Parse(string(text))
 	if err != nil {
 		return fmt.Errorf("unmarshal tool urn text: %w", err)
 	}

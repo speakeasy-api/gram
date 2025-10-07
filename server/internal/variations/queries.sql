@@ -26,6 +26,7 @@ SELECT id FROM created;
 -- name: UpsertToolVariation :one
 INSERT INTO tool_variations (
   group_id,
+  src_tool_urn,
   src_tool_name,
   confirm,
   confirm_prompt,
@@ -33,9 +34,11 @@ INSERT INTO tool_variations (
   summary,
   description,
   tags,
-  summarizer
+  summarizer,
+  predecessor_id
 ) VALUES (
   @group_id,
+  @src_tool_urn,
   @src_tool_name,
   @confirm,
   @confirm_prompt,
@@ -43,16 +46,14 @@ INSERT INTO tool_variations (
   @summary,
   @description,
   @tags,
-  @summarizer
-) ON CONFLICT (group_id, src_tool_name) WHERE deleted IS FALSE DO UPDATE SET
-  confirm = EXCLUDED.confirm,
-  confirm_prompt = EXCLUDED.confirm_prompt,
-  name = EXCLUDED.name,
-  summary = EXCLUDED.summary,
-  description = EXCLUDED.description,
-  tags = EXCLUDED.tags,
-  summarizer = EXCLUDED.summarizer,
-  updated_at = clock_timestamp()
+  @summarizer,
+  (SELECT id FROM tool_variations 
+   WHERE group_id = @group_id 
+     AND src_tool_name = @src_tool_name 
+     AND deleted IS FALSE 
+   ORDER BY created_at DESC 
+   LIMIT 1)
+)
 RETURNING *;
 
 -- name: ListGlobalToolVariations :many
@@ -65,6 +66,12 @@ INNER JOIN project_tool_variations
 WHERE
   project_tool_variations.project_id = @project_id
   AND tool_variations.deleted IS FALSE
+  AND tool_variations.id NOT IN (
+    SELECT DISTINCT predecessor_id 
+    FROM tool_variations 
+    WHERE predecessor_id IS NOT NULL 
+      AND deleted IS FALSE
+  )
 ORDER BY tool_variations.id DESC;
 
 -- name: FindGlobalVariationsByToolNames :many
@@ -79,6 +86,7 @@ WITH global_group AS (
 SELECT
   id,
   group_id,
+  src_tool_urn,
   src_tool_name,
   confirm,
   confirm_prompt,
@@ -93,7 +101,13 @@ FROM tool_variations
 WHERE
   group_id = (SELECT id FROM global_group)
   AND src_tool_name = ANY(@tool_names::text[])
-  AND deleted IS FALSE;
+  AND deleted IS FALSE
+  AND id NOT IN (
+    SELECT DISTINCT predecessor_id 
+    FROM tool_variations 
+    WHERE predecessor_id IS NOT NULL 
+      AND deleted IS FALSE
+  );
 
 -- name: DeleteGlobalToolVariation :one
 UPDATE tool_variations SET deleted_at = clock_timestamp()

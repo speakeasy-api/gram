@@ -49,6 +49,7 @@ WITH global_group AS (
 SELECT
   id,
   group_id,
+  src_tool_urn,
   src_tool_name,
   confirm,
   confirm_prompt,
@@ -74,6 +75,7 @@ type FindGlobalVariationsByToolNamesParams struct {
 type FindGlobalVariationsByToolNamesRow struct {
 	ID            uuid.UUID
 	GroupID       uuid.UUID
+	SrcToolUrn    pgtype.Text
 	SrcToolName   string
 	Confirm       pgtype.Text
 	ConfirmPrompt pgtype.Text
@@ -98,6 +100,7 @@ func (q *Queries) FindGlobalVariationsByToolNames(ctx context.Context, arg FindG
 		if err := rows.Scan(
 			&i.ID,
 			&i.GroupID,
+			&i.SrcToolUrn,
 			&i.SrcToolName,
 			&i.Confirm,
 			&i.ConfirmPrompt,
@@ -153,7 +156,7 @@ func (q *Queries) InitGlobalToolVariationsGroup(ctx context.Context, arg InitGlo
 }
 
 const listGlobalToolVariations = `-- name: ListGlobalToolVariations :many
-SELECT tool_variations.id, tool_variations.group_id, tool_variations.src_tool_name, tool_variations.confirm, tool_variations.confirm_prompt, tool_variations.name, tool_variations.summary, tool_variations.description, tool_variations.tags, tool_variations.summarizer, tool_variations.created_at, tool_variations.updated_at, tool_variations.deleted_at, tool_variations.deleted
+SELECT tool_variations.id, tool_variations.group_id, tool_variations.predecessor_id, tool_variations.src_tool_name, tool_variations.src_tool_urn, tool_variations.confirm, tool_variations.confirm_prompt, tool_variations.name, tool_variations.summary, tool_variations.description, tool_variations.tags, tool_variations.summarizer, tool_variations.created_at, tool_variations.updated_at, tool_variations.deleted_at, tool_variations.deleted
 FROM tool_variations
 INNER JOIN tool_variations_groups
   ON tool_variations.group_id = tool_variations_groups.id
@@ -181,7 +184,9 @@ func (q *Queries) ListGlobalToolVariations(ctx context.Context, projectID uuid.U
 		if err := rows.Scan(
 			&i.ToolVariation.ID,
 			&i.ToolVariation.GroupID,
+			&i.ToolVariation.PredecessorID,
 			&i.ToolVariation.SrcToolName,
+			&i.ToolVariation.SrcToolUrn,
 			&i.ToolVariation.Confirm,
 			&i.ToolVariation.ConfirmPrompt,
 			&i.ToolVariation.Name,
@@ -221,6 +226,7 @@ func (q *Queries) PokeGlobalToolVariationsGroup(ctx context.Context, projectID u
 const upsertToolVariation = `-- name: UpsertToolVariation :one
 INSERT INTO tool_variations (
   group_id,
+  src_tool_urn,
   src_tool_name,
   confirm,
   confirm_prompt,
@@ -228,7 +234,8 @@ INSERT INTO tool_variations (
   summary,
   description,
   tags,
-  summarizer
+  summarizer,
+  predecessor_id
 ) VALUES (
   $1,
   $2,
@@ -238,21 +245,21 @@ INSERT INTO tool_variations (
   $6,
   $7,
   $8,
-  $9
-) ON CONFLICT (group_id, src_tool_name) WHERE deleted IS FALSE DO UPDATE SET
-  confirm = EXCLUDED.confirm,
-  confirm_prompt = EXCLUDED.confirm_prompt,
-  name = EXCLUDED.name,
-  summary = EXCLUDED.summary,
-  description = EXCLUDED.description,
-  tags = EXCLUDED.tags,
-  summarizer = EXCLUDED.summarizer,
-  updated_at = clock_timestamp()
-RETURNING id, group_id, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
+  $9,
+  $10,
+  (SELECT id FROM tool_variations 
+   WHERE group_id = $1 
+     AND src_tool_name = $3 
+     AND deleted IS FALSE 
+   ORDER BY created_at DESC 
+   LIMIT 1)
+)
+RETURNING id, group_id, predecessor_id, src_tool_name, src_tool_urn, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertToolVariationParams struct {
 	GroupID       uuid.UUID
+	SrcToolUrn    pgtype.Text
 	SrcToolName   string
 	Confirm       pgtype.Text
 	ConfirmPrompt pgtype.Text
@@ -266,6 +273,7 @@ type UpsertToolVariationParams struct {
 func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariationParams) (ToolVariation, error) {
 	row := q.db.QueryRow(ctx, upsertToolVariation,
 		arg.GroupID,
+		arg.SrcToolUrn,
 		arg.SrcToolName,
 		arg.Confirm,
 		arg.ConfirmPrompt,
@@ -279,7 +287,9 @@ func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariati
 	err := row.Scan(
 		&i.ID,
 		&i.GroupID,
+		&i.PredecessorID,
 		&i.SrcToolName,
+		&i.SrcToolUrn,
 		&i.Confirm,
 		&i.ConfirmPrompt,
 		&i.Name,

@@ -63,7 +63,7 @@ func TestVariationsService_ListGlobal_WithVariations(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "test-tool",
+		SrcToolUrn:       "tools:http:source:test-tool",
 		Confirm:          &confirm,
 		ConfirmPrompt:    &confirmPrompt,
 		Name:             &name,
@@ -99,7 +99,7 @@ func TestVariationsService_ListGlobal_WithVariations(t *testing.T) {
 	// Verify variation fields
 	require.Equal(t, created.Variation.ID, foundVar.ID, "variation ID should match")
 	require.Equal(t, created.Variation.GroupID, foundVar.GroupID, "group ID should match")
-	require.Equal(t, created.Variation.SrcToolName, foundVar.SrcToolName, "src tool name should match")
+	require.Equal(t, created.Variation.SrcToolUrn, foundVar.SrcToolUrn, "src tool urn should match")
 	require.Equal(t, created.Variation.Confirm, foundVar.Confirm, "confirm should match")
 	require.Equal(t, created.Variation.ConfirmPrompt, foundVar.ConfirmPrompt, "confirm prompt should match")
 	require.Equal(t, created.Variation.Name, foundVar.Name, "name should match")
@@ -175,7 +175,7 @@ func TestVariationsService_ListGlobal_MultipleVariations(t *testing.T) {
 			ApikeyToken:      nil,
 			SessionToken:     nil,
 			ProjectSlugInput: nil,
-			SrcToolName:      toolName,
+			SrcToolUrn:       "tools:http:source:" + toolName,
 			Confirm:          nil,
 			ConfirmPrompt:    nil,
 			Name:             &name,
@@ -206,7 +206,7 @@ func TestVariationsService_ListGlobal_MultipleVariations(t *testing.T) {
 			if v.ID == created.Variation.ID {
 				foundVars[created.Variation.ID] = true
 				// Verify the variation fields
-				require.Equal(t, created.Variation.SrcToolName, v.SrcToolName, "src tool name should match for variation %s", created.Variation.ID)
+				require.Equal(t, created.Variation.SrcToolUrn, v.SrcToolUrn, "src tool urn should match for variation %s", created.Variation.ID)
 				require.Equal(t, created.Variation.Name, v.Name, "name should match for variation %s", created.Variation.ID)
 				require.Equal(t, created.Variation.Summary, v.Summary, "summary should match for variation %s", created.Variation.ID)
 				require.Equal(t, created.Variation.Description, v.Description, "description should match for variation %s", created.Variation.ID)
@@ -230,7 +230,7 @@ func TestVariationsService_ListGlobal_OrderedByID(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "first-tool",
+		SrcToolUrn:       "tools:http:source:first-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
 		Name:             conv.Ptr("first-variation"),
@@ -247,7 +247,7 @@ func TestVariationsService_ListGlobal_OrderedByID(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		SrcToolName:      "second-tool",
+		SrcToolUrn:       "tools:http:source:second-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
 		Name:             conv.Ptr("second-variation"),

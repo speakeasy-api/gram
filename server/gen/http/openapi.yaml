@@ -5953,7 +5953,7 @@ paths:
                   schema:
                     $ref: '#/definitions/VariationsUpsertGlobalRequestBody'
                     required:
-                        - src_tool_name
+                        - src_tool_urn
             responses:
                 "200":
                     description: OK response.
@@ -13128,7 +13128,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -20886,7 +20886,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -20934,7 +20934,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -20982,7 +20982,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -21030,7 +21030,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -21233,7 +21233,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -21282,7 +21282,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -21344,7 +21344,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -21393,7 +21393,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -21455,7 +21455,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -21504,7 +21504,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -21582,7 +21582,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -21630,7 +21630,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -21678,7 +21678,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -21915,7 +21915,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -21964,7 +21964,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -22026,7 +22026,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -22075,7 +22075,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -22174,7 +22174,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -22387,7 +22387,7 @@ definitions:
                 group_id: Ut et velit facere.
                 id: Vero voluptatem excepturi modi iusto.
                 name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                src_tool_name: Explicabo perspiciatis vero.
+                src_tool_urn: Explicabo perspiciatis vero.
                 summarizer: Optio ducimus quia aut modi.
                 summary: Omnis voluptas nulla.
                 tags:
@@ -26079,7 +26079,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -26127,7 +26127,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -26177,7 +26177,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -26225,7 +26225,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -26273,7 +26273,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -26351,7 +26351,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -26400,7 +26400,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -26462,7 +26462,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -26511,7 +26511,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -26573,7 +26573,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -26622,7 +26622,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -26684,7 +26684,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -26733,7 +26733,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -26798,7 +26798,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -26847,7 +26847,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -26909,7 +26909,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -26958,7 +26958,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -27837,7 +27837,7 @@ definitions:
                       group_id: Ut et velit facere.
                       id: Vero voluptatem excepturi modi iusto.
                       name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                      src_tool_name: Explicabo perspiciatis vero.
+                      src_tool_urn: Explicabo perspiciatis vero.
                       summarizer: Optio ducimus quia aut modi.
                       summary: Omnis voluptas nulla.
                       tags:
@@ -27851,7 +27851,7 @@ definitions:
                       group_id: Ut et velit facere.
                       id: Vero voluptatem excepturi modi iusto.
                       name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                      src_tool_name: Explicabo perspiciatis vero.
+                      src_tool_urn: Explicabo perspiciatis vero.
                       summarizer: Optio ducimus quia aut modi.
                       summary: Omnis voluptas nulla.
                       tags:
@@ -27865,7 +27865,7 @@ definitions:
                       group_id: Ut et velit facere.
                       id: Vero voluptatem excepturi modi iusto.
                       name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                      src_tool_name: Explicabo perspiciatis vero.
+                      src_tool_urn: Explicabo perspiciatis vero.
                       summarizer: Optio ducimus quia aut modi.
                       summary: Omnis voluptas nulla.
                       tags:
@@ -27881,7 +27881,7 @@ definitions:
                   group_id: Ut et velit facere.
                   id: Vero voluptatem excepturi modi iusto.
                   name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                  src_tool_name: Explicabo perspiciatis vero.
+                  src_tool_urn: Explicabo perspiciatis vero.
                   summarizer: Optio ducimus quia aut modi.
                   summary: Omnis voluptas nulla.
                   tags:
@@ -27895,7 +27895,7 @@ definitions:
                   group_id: Ut et velit facere.
                   id: Vero voluptatem excepturi modi iusto.
                   name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                  src_tool_name: Explicabo perspiciatis vero.
+                  src_tool_urn: Explicabo perspiciatis vero.
                   summarizer: Optio ducimus quia aut modi.
                   summary: Omnis voluptas nulla.
                   tags:
@@ -27909,7 +27909,7 @@ definitions:
                   group_id: Ut et velit facere.
                   id: Vero voluptatem excepturi modi iusto.
                   name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                  src_tool_name: Explicabo perspiciatis vero.
+                  src_tool_urn: Explicabo perspiciatis vero.
                   summarizer: Optio ducimus quia aut modi.
                   summary: Omnis voluptas nulla.
                   tags:
@@ -27923,7 +27923,7 @@ definitions:
                   group_id: Ut et velit facere.
                   id: Vero voluptatem excepturi modi iusto.
                   name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                  src_tool_name: Explicabo perspiciatis vero.
+                  src_tool_urn: Explicabo perspiciatis vero.
                   summarizer: Optio ducimus quia aut modi.
                   summary: Omnis voluptas nulla.
                   tags:
@@ -33326,7 +33326,7 @@ definitions:
                 group_id: Ut et velit facere.
                 id: Vero voluptatem excepturi modi iusto.
                 name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                src_tool_name: Explicabo perspiciatis vero.
+                src_tool_urn: Explicabo perspiciatis vero.
                 summarizer: Optio ducimus quia aut modi.
                 summary: Omnis voluptas nulla.
                 tags:
@@ -39148,7 +39148,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -39197,7 +39197,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -39268,9 +39268,9 @@ definitions:
                 type: string
                 description: The name of the tool variation
                 example: Repellendus aut consequuntur sequi.
-            src_tool_name:
+            src_tool_urn:
                 type: string
-                description: The name of the source tool
+                description: The URN of the source tool
                 example: Autem quis.
             summarizer:
                 type: string
@@ -39301,7 +39301,7 @@ definitions:
             group_id: Fugit non soluta dolores rem eos at.
             id: Ut accusantium ex dolorem repellendus.
             name: Doloremque ipsum.
-            src_tool_name: Esse est.
+            src_tool_urn: Esse est.
             summarizer: Dolores laboriosam provident.
             summary: Et vitae voluptatibus adipisci quidem praesentium eos.
             tags:
@@ -39312,7 +39312,7 @@ definitions:
         required:
             - id
             - group_id
-            - src_tool_name
+            - src_tool_urn
             - created_at
             - updated_at
     ToolsListToolsBadRequestResponseBody:
@@ -39853,7 +39853,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -39901,7 +39901,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -39949,7 +39949,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -39997,7 +39997,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -40216,7 +40216,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -40265,7 +40265,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -40327,7 +40327,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -40376,7 +40376,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -40438,7 +40438,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -40487,7 +40487,7 @@ definitions:
                             group_id: Ut et velit facere.
                             id: Vero voluptatem excepturi modi iusto.
                             name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                            src_tool_name: Explicabo perspiciatis vero.
+                            src_tool_urn: Explicabo perspiciatis vero.
                             summarizer: Optio ducimus quia aut modi.
                             summary: Omnis voluptas nulla.
                             tags:
@@ -40610,7 +40610,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -40658,7 +40658,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -40706,7 +40706,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -40948,7 +40948,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -40997,7 +40997,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -41059,7 +41059,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -41108,7 +41108,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -41170,7 +41170,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -41219,7 +41219,7 @@ definitions:
                         group_id: Ut et velit facere.
                         id: Vero voluptatem excepturi modi iusto.
                         name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                        src_tool_name: Explicabo perspiciatis vero.
+                        src_tool_urn: Explicabo perspiciatis vero.
                         summarizer: Optio ducimus quia aut modi.
                         summary: Omnis voluptas nulla.
                         tags:
@@ -45876,7 +45876,7 @@ definitions:
                     group_id: Ut et velit facere.
                     id: Vero voluptatem excepturi modi iusto.
                     name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                    src_tool_name: Explicabo perspiciatis vero.
+                    src_tool_urn: Explicabo perspiciatis vero.
                     summarizer: Optio ducimus quia aut modi.
                     summary: Omnis voluptas nulla.
                     tags:
@@ -45951,7 +45951,7 @@ definitions:
                 group_id: Ut et velit facere.
                 id: Vero voluptatem excepturi modi iusto.
                 name: Deleniti voluptas dolorem et exercitationem unde placeat.
-                src_tool_name: Explicabo perspiciatis vero.
+                src_tool_urn: Explicabo perspiciatis vero.
                 summarizer: Optio ducimus quia aut modi.
                 summary: Omnis voluptas nulla.
                 tags:
@@ -48949,9 +48949,9 @@ definitions:
                 type: string
                 description: The name of the tool variation
                 example: Recusandae perferendis accusantium temporibus cupiditate impedit.
-            src_tool_name:
+            src_tool_urn:
                 type: string
-                description: The name of the source tool
+                description: The URN of the source tool
                 example: Et cupiditate voluptas enim aut.
             summarizer:
                 type: string
@@ -48975,14 +48975,14 @@ definitions:
             confirm_prompt: Laudantium aperiam.
             description: Et occaecati sit qui qui dolores iste.
             name: Facilis officia ut dolorem dolore quas et.
-            src_tool_name: Sint ut.
+            src_tool_urn: Sint ut.
             summarizer: Mollitia non ab vel repudiandae ipsa qui.
             summary: Aliquid laboriosam eum ut quae ex.
             tags:
                 - Vero sit eius.
                 - Voluptas voluptatum quis optio suscipit amet esse.
         required:
-            - src_tool_name
+            - src_tool_urn
     VariationsUpsertGlobalUnauthorizedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object

@@ -7,7 +7,7 @@ import { UpsertGlobalVariationRequest } from "@gram/client/models/operations";
 
 let value: UpsertGlobalVariationRequest = {
   upsertGlobalToolVariationForm: {
-    srcToolName: "<value>",
+    srcToolUrn: "<value>",
   },
 };
 ```
