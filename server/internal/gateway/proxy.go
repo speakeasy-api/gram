@@ -480,29 +480,28 @@ func reverseProxyRequest(ctx context.Context,
 
 	ctx = context.WithValue(ctx, tm.ToolInfoContextKey, toolInfo)
 
-	// Clone the request body before it's read by the client
-	var reqBodyBytes []byte
-	if req.Body != nil {
-		reqBodyBytes, _ = io.ReadAll(req.Body)
-		req.Body = io.NopCloser(bytes.NewReader(reqBodyBytes))
-		req.GetBody = func() (io.ReadCloser, error) {
-			return io.NopCloser(bytes.NewReader(reqBodyBytes)), nil
-		}
-	}
-	ctx = context.WithValue(ctx, tm.RequestBodyContextKey, reqBodyBytes)
+	// Track request body size
+	var requestBodySize uint64
 
 	executeRequest := func() (*http.Response, error) {
 		// Clone the request for each retry attempt
 		retryReq := req.Clone(ctx)
 
-		// Set fresh body on the cloned request
+		// Set the fresh body on the cloned request and wrap with counter
 		if req.Body != nil && req.GetBody != nil {
 			freshBody, err := req.GetBody()
 			if err != nil {
 				return nil, fmt.Errorf("retry: clone request body: %w", err)
 			}
-			retryReq.Body = freshBody
+
+			// Wrap body to count bytes as they're sent
+			retryReq.Body = tm.NewCountingReadCloser(freshBody, func(count uint64) {
+				requestBodySize = count
+			})
 		}
+
+		retryCtx := context.WithValue(retryReq.Context(), tm.RequestBodyContextKey, &requestBodySize)
+		retryReq = retryReq.WithContext(retryCtx)
 
 		return client.Do(retryReq)
 	}

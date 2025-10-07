@@ -2,7 +2,7 @@ package toolmetrics
 
 type Pageable interface {
 	Cursor() string
-	SortOrder() string // Changed from SortOrder to Sort
+	SortOrder() string
 	Limit() int
 	SetDefaults()
 }
@@ -29,7 +29,6 @@ func (p *PaginationRequest) Cursor() string {
 	return p.PrevCursor
 }
 
-// SortOrder Fixed method name to match interface
 func (p *PaginationRequest) SortOrder() string {
 	if p.Sort == "ASC" || p.Sort == "DESC" {
 		return p.Sort
