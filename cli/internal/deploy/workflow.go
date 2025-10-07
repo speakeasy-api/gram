@@ -192,6 +192,10 @@ func (s *Workflow) LoadDeploymentByID(
 	ctx context.Context,
 	deploymentID string,
 ) *Workflow {
+	if s.Failed() {
+		return s
+	}
+
 	result, err := s.DeploymentsClient.GetDeployment(
 		ctx,
 		s.Params.APIKey,
@@ -211,6 +215,10 @@ func (s *Workflow) LoadDeploymentByID(
 func (s *Workflow) LoadLatestDeployment(
 	ctx context.Context,
 ) *Workflow {
+	if s.Failed() {
+		return s
+	}
+
 	result, err := s.DeploymentsClient.GetLatestDeployment(
 		ctx,
 		s.Params.APIKey,
@@ -227,6 +235,10 @@ func (s *Workflow) LoadLatestDeployment(
 func (s *Workflow) LoadActiveDeployment(
 	ctx context.Context,
 ) *Workflow {
+	if s.Failed() {
+		return s
+	}
+
 	result, err := s.DeploymentsClient.GetActiveDeployment(
 		ctx,
 		s.Params.APIKey,
