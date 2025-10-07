@@ -30,7 +30,7 @@ Example:
 			flags.Project(),
 			&cli.StringFlag{
 				Name:     "type",
-				Usage:    "The type of asset to upload",
+				Usage:    fmt.Sprintf("The type of asset to upload: %+v", deploy.AllowedTypes),
 				Required: true,
 			},
 			&cli.StringFlag{

@@ -25,6 +25,8 @@ const (
 	SourceTypeOpenAPIV3 SourceType = "openapiv3"
 )
 
+var AllowedTypes = []SourceType{SourceTypeOpenAPIV3}
+
 type Source struct {
 	Type SourceType `json:"type" yaml:"type" toml:"type"`
 
@@ -57,7 +59,7 @@ func (s Source) Validate() error {
 }
 
 func isSupportedType(s Source) bool {
-	return s.Type == SourceTypeOpenAPIV3
+	return slices.Contains(AllowedTypes, s.Type)
 }
 
 type Config struct {
