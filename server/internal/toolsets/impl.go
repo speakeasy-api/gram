@@ -685,27 +685,6 @@ func (s *Service) createToolsetVersion(ctx context.Context, urnStrings []string,
 	return nil
 }
 
-// extractToolNamesFromUrns extracts tool names of a specific kind from URN strings,
-func (s *Service) extractToolNamesFromUrns(toolUrns []string, kind urn.ToolKind) ([]string, error) {
-	if toolUrns == nil {
-		return nil, nil
-	}
-
-	var toolNames []string
-	for _, urnStr := range toolUrns {
-		var toolUrn urn.Tool
-		if err := toolUrn.UnmarshalText([]byte(urnStr)); err != nil {
-			return nil, fmt.Errorf("invalid tool URN %q: %w", urnStr, err)
-		}
-
-		if toolUrn.Kind == kind {
-			toolNames = append(toolNames, toolUrn.Name)
-		}
-	}
-
-	return toolNames, nil
-}
-
 // updatePromptTemplates updates the prompt templates for a toolset. NOTE: promptTemplates are NOT tools! These correspond to actual "prompts" in MCP
 func (s *Service) updatePromptTemplates(ctx context.Context, dbtx pgx.Tx, projectID uuid.UUID, toolsetID uuid.UUID, promptTemplateNames []string, logger *slog.Logger) error {
 	tr := repo.New(dbtx)
