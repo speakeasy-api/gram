@@ -422,10 +422,9 @@ func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.
 
 func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerState) (*billing.Tier, error) {
 	if customerState != nil {
-		for _, sub := range customerState.ActiveSubscriptions {
-			if sub.ProductID == p.catalog.ProductIDPro {
-				return conv.Ptr(billing.TierPro), nil
-			}
+		// Active enterprise subscriptions return earlier with the enterprise flag in the DB
+		if len(customerState.ActiveSubscriptions) >= 1 {
+			return conv.Ptr(billing.TierPro), nil
 		}
 	}
 
