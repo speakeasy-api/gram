@@ -25,6 +25,8 @@ const (
 	SourceTypeOpenAPIV3 SourceType = "openapiv3"
 )
 
+var AllowedTypes = []SourceType{SourceTypeOpenAPIV3}
+
 type Source struct {
 	Type SourceType `json:"type" yaml:"type" toml:"type"`
 
@@ -57,7 +59,7 @@ func (s Source) Validate() error {
 }
 
 func isSupportedType(s Source) bool {
-	return s.Type == SourceTypeOpenAPIV3
+	return slices.Contains(AllowedTypes, s.Type)
 }
 
 type Config struct {
@@ -114,6 +116,14 @@ func NewConfig(cfgRdr io.Reader, filename string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+func NewConfigFromSources(sources ...Source) *Config {
+	return &Config{
+		SchemaVersion: validSchemaVersions[0],
+		Type:          configTypeDeployment,
+		Sources:       sources,
+	}
 }
 
 // Validate returns an error if the schema version is invalid, if the config

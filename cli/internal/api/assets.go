@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	assets_client "github.com/speakeasy-api/gram/server/gen/http/assets/client"
@@ -51,7 +50,6 @@ type UploadOpenAPIv3Request struct {
 
 func (c *AssetsClient) UploadOpenAPIv3(
 	ctx context.Context,
-	logger *slog.Logger,
 	req *UploadOpenAPIv3Request,
 ) (*assets.UploadOpenAPIv3Result, error) {
 	payload := &assets.UploadOpenAPIv3Form{

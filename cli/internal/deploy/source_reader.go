@@ -16,31 +16,31 @@ const (
 
 // SourceReader reads source content from local files or remote URLs.
 type SourceReader struct {
-	source Source
+	Source Source
 }
 
 // NewSourceReader creates a new SourceReader for the given source.
 func NewSourceReader(source Source) *SourceReader {
 	return &SourceReader{
-		source: source,
+		Source: source,
 	}
 }
 
 // GetContentType returns the MIME type of the content based on file extension.
 func (sr *SourceReader) GetContentType() string {
-	if isRemoteURL(sr.source.Location) {
+	if isRemoteURL(sr.Source.Location) {
 		// NOTE(cjea): For remote URLs, we'll need to determine content type
 		// differently. For now, default to common OpenAPI types based on
 		// extension.
-		return getContentTypeFromPath(sr.source.Location)
+		return getContentTypeFromPath(sr.Source.Location)
 	}
 
-	return getContentTypeFromPath(sr.source.Location)
+	return getContentTypeFromPath(sr.Source.Location)
 }
 
 // Read returns a reader for the asset content and its size.
 func (sr *SourceReader) Read(ctx context.Context) (io.ReadCloser, int64, error) {
-	if isRemoteURL(sr.source.Location) {
+	if isRemoteURL(sr.Source.Location) {
 		return sr.readRemote(ctx)
 	}
 	return sr.readLocal()

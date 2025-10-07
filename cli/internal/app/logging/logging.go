@@ -1,4 +1,4 @@
-package app
+package logging
 
 import (
 	"context"
