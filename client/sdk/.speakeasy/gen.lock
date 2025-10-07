@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: b0600ba652b467d7913749f213f17ebe
+  docChecksum: cc9edf681089c4ac13e4c97b34ebe998
   docVersion: 0.0.1
-  speakeasyVersion: 1.634.0
-  generationVersion: 2.721.0
-  releaseVersion: 0.12.72
-  configChecksum: cdd2788bd2f93fb3e2e1e920bf79e975
+  speakeasyVersion: 1.635.1
+  generationVersion: 2.722.2
+  releaseVersion: 0.14.5
+  configChecksum: 59295d17e28f2ebd92c86c30ffac7565
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -77,6 +77,7 @@ generatedFiles:
   - docs/models/components/evolveresult.md
   - docs/models/components/externaloauthserver.md
   - docs/models/components/externaloauthserverform.md
+  - docs/models/components/getactivedeploymentresult.md
   - docs/models/components/getdeploymentlogsresult.md
   - docs/models/components/getdeploymentresult.md
   - docs/models/components/getinstanceresult.md
@@ -86,8 +87,6 @@ generatedFiles:
   - docs/models/components/getprompttemplateresult.md
   - docs/models/components/getslackconnectionresult.md
   - docs/models/components/httptooldefinition.md
-  - docs/models/components/httptooldefinitionentry.md
-  - docs/models/components/httptooldefinitionentrytooltype.md
   - docs/models/components/inforesponsebody.md
   - docs/models/components/integration.md
   - docs/models/components/integrationentry.md
@@ -138,10 +137,12 @@ generatedFiles:
   - docs/models/components/setprojectlogoform.md
   - docs/models/components/setprojectlogoresult.md
   - docs/models/components/tierlimits.md
+  - docs/models/components/tool.md
+  - docs/models/components/toolentry.md
   - docs/models/components/toolset.md
   - docs/models/components/toolsetentry.md
-  - docs/models/components/tooltype.md
   - docs/models/components/toolvariation.md
+  - docs/models/components/type.md
   - docs/models/components/updateenvironmentrequestbody.md
   - docs/models/components/updatepackageform.md
   - docs/models/components/updatepackageresult.md
@@ -166,6 +167,8 @@ generatedFiles:
   - docs/models/operations/authloginresponse.md
   - docs/models/operations/checkmcpslugavailabilityrequest.md
   - docs/models/operations/checkmcpslugavailabilitysecurity.md
+  - docs/models/operations/clonetoolsetrequest.md
+  - docs/models/operations/clonetoolsetsecurity.md
   - docs/models/operations/createapikeyrequest.md
   - docs/models/operations/createapikeysecurity.md
   - docs/models/operations/createcheckoutrequest.md
@@ -212,6 +215,10 @@ generatedFiles:
   - docs/models/operations/evolvedeploymentsecurity.md
   - docs/models/operations/evolvedeploymentsecurityoption1.md
   - docs/models/operations/evolvedeploymentsecurityoption2.md
+  - docs/models/operations/getactivedeploymentrequest.md
+  - docs/models/operations/getactivedeploymentsecurity.md
+  - docs/models/operations/getactivedeploymentsecurityoption1.md
+  - docs/models/operations/getactivedeploymentsecurityoption2.md
   - docs/models/operations/getdeploymentlogsrequest.md
   - docs/models/operations/getdeploymentlogssecurity.md
   - docs/models/operations/getdeploymentlogssecurityoption1.md
@@ -410,6 +417,7 @@ generatedFiles:
   - src/funcs/chatCreditUsage.ts
   - src/funcs/chatList.ts
   - src/funcs/chatLoad.ts
+  - src/funcs/deploymentsActive.ts
   - src/funcs/deploymentsCreate.ts
   - src/funcs/deploymentsEvolveDeployment.ts
   - src/funcs/deploymentsGetById.ts
@@ -455,6 +463,7 @@ generatedFiles:
   - src/funcs/toolsList.ts
   - src/funcs/toolsetsAddExternalOAuthServer.ts
   - src/funcs/toolsetsCheckMCPSlugAvailability.ts
+  - src/funcs/toolsetsCloneBySlug.ts
   - src/funcs/toolsetsCreate.ts
   - src/funcs/toolsetsDeleteBySlug.ts
   - src/funcs/toolsetsGetBySlug.ts
@@ -525,6 +534,7 @@ generatedFiles:
   - src/models/components/evolveresult.ts
   - src/models/components/externaloauthserver.ts
   - src/models/components/externaloauthserverform.ts
+  - src/models/components/getactivedeploymentresult.ts
   - src/models/components/getdeploymentlogsresult.ts
   - src/models/components/getdeploymentresult.ts
   - src/models/components/getinstanceresult.ts
@@ -534,7 +544,6 @@ generatedFiles:
   - src/models/components/getprompttemplateresult.ts
   - src/models/components/getslackconnectionresult.ts
   - src/models/components/httptooldefinition.ts
-  - src/models/components/httptooldefinitionentry.ts
   - src/models/components/index.ts
   - src/models/components/inforesponsebody.ts
   - src/models/components/integration.ts
@@ -582,6 +591,8 @@ generatedFiles:
   - src/models/components/setprojectlogoform.ts
   - src/models/components/setprojectlogoresult.ts
   - src/models/components/tierlimits.ts
+  - src/models/components/tool.ts
+  - src/models/components/toolentry.ts
   - src/models/components/toolset.ts
   - src/models/components/toolsetentry.ts
   - src/models/components/toolvariation.ts
@@ -609,6 +620,7 @@ generatedFiles:
   - src/models/operations/authcallback.ts
   - src/models/operations/authlogin.ts
   - src/models/operations/checkmcpslugavailability.ts
+  - src/models/operations/clonetoolset.ts
   - src/models/operations/createapikey.ts
   - src/models/operations/createcheckout.ts
   - src/models/operations/createcustomersession.ts
@@ -626,6 +638,7 @@ generatedFiles:
   - src/models/operations/deletetemplate.ts
   - src/models/operations/deletetoolset.ts
   - src/models/operations/evolvedeployment.ts
+  - src/models/operations/getactivedeployment.ts
   - src/models/operations/getdeployment.ts
   - src/models/operations/getdeploymentlogs.ts
   - src/models/operations/getdomain.ts
@@ -680,8 +693,10 @@ generatedFiles:
   - src/models/operations/upsertglobalvariation.ts
   - src/react-query/_context.tsx
   - src/react-query/_types.ts
+  - src/react-query/activeDeployment.ts
   - src/react-query/addExternalOAuthServer.ts
   - src/react-query/checkMCPSlugAvailability.ts
+  - src/react-query/cloneToolset.ts
   - src/react-query/createAPIKey.ts
   - src/react-query/createCheckout.ts
   - src/react-query/createCustomerSession.ts
@@ -1223,7 +1238,7 @@ examples:
         application/json: {"engine": "mustache", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>"}
       responses:
         "200":
-          application/json: {"template": {"created_at": "2023-07-18T03:17:12.882Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2024-11-12T17:29:28.662Z"}}
+          application/json: {"template": {"canonical_name": "<value>", "created_at": "2023-07-18T03:17:12.882Z", "description": "ugh fathom till jut cannibalise meanwhile kosher compete", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2024-11-12T17:29:28.662Z"}}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1239,7 +1254,7 @@ examples:
     speakeasy-default-get-template:
       responses:
         "200":
-          application/json: {"template": {"created_at": "2024-12-19T01:56:17.353Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-01-07T00:24:23.441Z"}}
+          application/json: {"template": {"canonical_name": "<value>", "created_at": "2024-12-19T01:56:17.353Z", "description": "disrespect honesty usually however brief er that fooey", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-01-07T00:24:23.441Z"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1271,7 +1286,7 @@ examples:
     speakeasy-default-list-tools:
       responses:
         "200":
-          application/json: {"http_tools": [], "prompt_templates": [{"created_at": "2024-05-03T23:42:06.374Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-07-14T21:01:07.725Z"}]}
+          application/json: {"tools": []}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1282,7 +1297,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "updated_at": "2024-05-10T06:01:51.541Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "updated_at": "2024-05-10T06:01:51.541Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1304,7 +1319,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "http_tools": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-03-12T17:08:53.143Z", "deployment_id": "<id>", "description": "rosin ashamed hyphenation camouflage", "http_method": "<value>", "id": "<id>", "name": "<value>", "path": "/usr/lib", "project_id": "<id>", "schema": "<value>", "summary": "<value>", "tags": ["<value 1>"], "tool_type": "http", "tool_urn": "<value>", "updated_at": "2023-09-18T10:48:55.904Z"}], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "updated_at": "2025-12-20T03:22:44.412Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2025-12-20T03:22:44.412Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1327,7 +1342,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"created_at": "2025-09-02T01:42:31.498Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>"], "updated_at": "2024-05-27T18:01:12.846Z"}], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2025-08-07T19:20:12.233Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "description": "mushy comparison messy lady fly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2023-07-28T22:54:49.336Z"}], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "updated_at": "2025-08-07T19:20:12.233Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1370,7 +1385,7 @@ examples:
         application/json: {"id": "<id>"}
       responses:
         "200":
-          application/json: {"template": {"created_at": "2023-08-04T16:54:18.293Z", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "prompt": "<value>", "tool_urn": "<value>", "tools_hint": [], "updated_at": "2023-03-25T20:37:57.210Z"}}
+          application/json: {"template": {"canonical_name": "<value>", "created_at": "2023-08-04T16:54:18.293Z", "description": "tectonics duh fooey properly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": [], "updated_at": "2023-03-25T20:37:57.210Z"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
@@ -1461,7 +1476,7 @@ examples:
         application/json: {"external_oauth_server": {"metadata": "<value>", "slug": "<value>"}}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "updated_at": "2025-03-28T09:33:33.851Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2025-03-28T09:33:33.851Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1485,7 +1500,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "http_tools": [], "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "updated_at": "2023-10-21T14:21:06.001Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2023-10-21T14:21:06.001Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1549,30 +1564,6 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  getInstallPageMetadata:
-    speakeasy-default-get-install-page-metadata:
-      parameters:
-        query:
-          toolset_id: "b6e4ca24-e078-4ae2-8b4e-f99e8b24755c"
-          toolset_slug: "<value>"
-      responses:
-        "200":
-          application/json: {}
-        "400":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-  setInstallPageMetadata:
-    speakeasy-default-set-install-page-metadata:
-      requestBody:
-        application/json: {"toolset_slug": "<value>"}
-      responses:
-        "200":
-          application/json: {"created_at": "2025-07-02T04:34:47.296Z", "id": "<id>", "toolset_id": "1e7ed99d-76d3-4eaa-a245-36fe9e5308c2", "updated_at": "2024-05-24T08:09:35.124Z"}
-        "400":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
-        "500":
-          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   getMcpMetadata:
     speakeasy-default-get-mcp-metadata:
       parameters:
@@ -1596,5 +1587,26 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getActiveDeployment:
+    speakeasy-default-get-active-deployment:
+      responses:
+        "200":
+          application/json: {"deployment": {"cloned_from": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "created_at": "2023-03-14T06:52:58.051Z", "external_id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "functions_tool_count": 254017, "github_pr": "1234", "github_repo": "speakeasyapi/gram", "github_sha": "f33e693e9e12552043bc0ec5c37f1b8a9e076161", "id": "bc5f4a555e933e6861d12edba4c2d87ef6caf8e6", "idempotency_key": "01jqq0ajmb4qh9eppz48dejr2m", "openapiv3_assets": [], "openapiv3_tool_count": 85948, "organization_id": "<id>", "packages": [], "project_id": "<id>", "status": "<value>", "user_id": "<id>"}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  cloneToolset:
+    speakeasy-default-clone-toolset:
+      parameters:
+        query:
+          slug: "<value>"
+      responses:
+        "200":
+          application/json: {"account_type": "<value>", "created_at": "2023-07-27T03:45:28.599Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-10-23T10:29:38.107Z", "description": "chap whoa gee lightly devastation vivacious about t-shirt", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-11-26T08:12:18.787Z"}], "slug": "<value>", "tool_urns": ["<value 1>"], "tools": [], "updated_at": "2024-04-29T05:29:07.967Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

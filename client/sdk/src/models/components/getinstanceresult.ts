@@ -14,12 +14,6 @@ import {
   Environment$outboundSchema,
 } from "./environment.js";
 import {
-  HTTPToolDefinition,
-  HTTPToolDefinition$inboundSchema,
-  HTTPToolDefinition$Outbound,
-  HTTPToolDefinition$outboundSchema,
-} from "./httptooldefinition.js";
-import {
   PromptTemplate,
   PromptTemplate$inboundSchema,
   PromptTemplate$Outbound,
@@ -37,6 +31,12 @@ import {
   ServerVariable$Outbound,
   ServerVariable$outboundSchema,
 } from "./servervariable.js";
+import {
+  Tool,
+  Tool$inboundSchema,
+  Tool$Outbound,
+  Tool$outboundSchema,
+} from "./tool.js";
 
 export type GetInstanceResult = {
   /**
@@ -66,7 +66,7 @@ export type GetInstanceResult = {
   /**
    * The list of tools
    */
-  tools: Array<HTTPToolDefinition>;
+  tools: Array<Tool>;
 };
 
 /** @internal */
@@ -81,7 +81,7 @@ export const GetInstanceResult$inboundSchema: z.ZodType<
   prompt_templates: z.array(PromptTemplate$inboundSchema).optional(),
   security_variables: z.array(SecurityVariable$inboundSchema).optional(),
   server_variables: z.array(ServerVariable$inboundSchema).optional(),
-  tools: z.array(HTTPToolDefinition$inboundSchema),
+  tools: z.array(Tool$inboundSchema),
 }).transform((v) => {
   return remap$(v, {
     "prompt_templates": "promptTemplates",
@@ -98,7 +98,7 @@ export type GetInstanceResult$Outbound = {
   prompt_templates?: Array<PromptTemplate$Outbound> | undefined;
   security_variables?: Array<SecurityVariable$Outbound> | undefined;
   server_variables?: Array<ServerVariable$Outbound> | undefined;
-  tools: Array<HTTPToolDefinition$Outbound>;
+  tools: Array<Tool$Outbound>;
 };
 
 /** @internal */
@@ -113,7 +113,7 @@ export const GetInstanceResult$outboundSchema: z.ZodType<
   promptTemplates: z.array(PromptTemplate$outboundSchema).optional(),
   securityVariables: z.array(SecurityVariable$outboundSchema).optional(),
   serverVariables: z.array(ServerVariable$outboundSchema).optional(),
-  tools: z.array(HTTPToolDefinition$outboundSchema),
+  tools: z.array(Tool$outboundSchema),
 }).transform((v) => {
   return remap$(v, {
     promptTemplates: "prompt_templates",

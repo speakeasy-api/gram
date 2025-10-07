@@ -2,7 +2,7 @@ import { cn } from "@/lib/utils.ts";
 import { useIsProjectEmpty } from "@/pages/onboarding/UploadOpenAPI.tsx";
 import { useRoutes } from "@/routes.tsx";
 import { Stack } from "@speakeasy-api/moonshine";
-import React from "react"; // Added missing import for React
+import React, { ReactElement } from "react"; // Added missing import for React
 import { ContentErrorBoundary } from "./content-error-boundary.tsx";
 import { PageHeader } from "./page-header.tsx";
 import { Button } from "@speakeasy-api/moonshine";
@@ -45,7 +45,15 @@ function PageBody({
   );
 }
 
-function PageSectionComponent({ children }: { children: React.ReactNode }) {
+type PageSectionChild =
+  | ReactElement<typeof PageSection.Title>
+  | ReactElement<typeof PageSection.Description>
+  | ReactElement<typeof PageSection.CTA>
+  | ReactElement<typeof PageSection.Body>
+  | ReactElement<typeof PageSection.MoreActions>
+  | null;
+
+function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
   const slots = {
     title: null as React.ReactElement | null,
     description: null as React.ReactElement | null,

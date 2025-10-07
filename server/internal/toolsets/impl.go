@@ -336,7 +336,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URNs").Log(ctx, logger)
 		}
-		
+
 		// Update only the http_tool_names field
 		// This is done separately from the updateToolset call above because that call can't distinguish between setting the field to an empty array and not setting it at all
 		updatedToolset, err = tr.UpdateToolsetHttpToolNames(ctx, repo.UpdateToolsetHttpToolNamesParams{
@@ -687,7 +687,7 @@ func (s *Service) createToolsetVersion(ctx context.Context, urnStrings []string,
 		for _, existingUrn := range latestVersion.ToolUrns {
 			existingUrnSet[existingUrn.String()] = true
 		}
-		
+
 		unchanged := true
 		for _, newUrn := range allToolUrns {
 			if !existingUrnSet[newUrn.String()] {
@@ -695,7 +695,7 @@ func (s *Service) createToolsetVersion(ctx context.Context, urnStrings []string,
 				break
 			}
 		}
-		
+
 		if unchanged {
 			return nil // No change needed
 		}
@@ -726,7 +726,7 @@ func (s *Service) extractToolNamesFromUrns(toolUrns []string, kind urn.ToolKind)
 		if err := toolUrn.UnmarshalText([]byte(urnStr)); err != nil {
 			return nil, fmt.Errorf("invalid tool URN %q: %w", urnStr, err)
 		}
-		
+
 		if toolUrn.Kind == kind {
 			toolNames = append(toolNames, toolUrn.Name)
 		}
@@ -739,7 +739,7 @@ func (s *Service) extractToolNamesFromUrns(toolUrns []string, kind urn.ToolKind)
 func (s *Service) updatePromptTemplates(ctx context.Context, dbtx pgx.Tx, projectID uuid.UUID, toolsetID uuid.UUID, promptTemplateNames []string, logger *slog.Logger) error {
 	tr := repo.New(dbtx)
 	tplr := tplRepo.New(dbtx)
-	
+
 	ptrows, err := tplr.PeekTemplatesByNames(ctx, tplRepo.PeekTemplatesByNamesParams{
 		ProjectID: projectID,
 		Names:     promptTemplateNames,

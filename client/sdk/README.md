@@ -148,6 +148,7 @@ run();
 
 ### [deployments](docs/sdks/deployments/README.md)
 
+* [active](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 * [create](docs/sdks/deployments/README.md#create) - createDeployment deployments
 * [evolveDeployment](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 * [getById](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
@@ -284,6 +285,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`chatCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`chatList`](docs/sdks/chat/README.md#list) - listChats chat
 - [`chatLoad`](docs/sdks/chat/README.md#load) - loadChat chat
+- [`deploymentsActive`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`deploymentsCreate`](docs/sdks/deployments/README.md#create) - createDeployment deployments
 - [`deploymentsEvolveDeployment`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
 - [`deploymentsGetById`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
@@ -369,6 +371,7 @@ To learn about this feature and how to get started, check
 
 <summary>Available React hooks</summary>
 
+- [`useActiveDeployment`](docs/sdks/deployments/README.md#active) - getActiveDeployment deployments
 - [`useAddExternalOAuthServerMutation`](docs/sdks/toolsets/README.md#addexternaloauthserver) - addExternalOAuthServer toolsets
 - [`useCheckMCPSlugAvailability`](docs/sdks/toolsets/README.md#checkmcpslugavailability) - checkMCPSlugAvailability toolsets
 - [`useCloneToolsetMutation`](docs/sdks/toolsets/README.md#clonebyslug) - cloneToolset toolsets

@@ -103,6 +103,57 @@ func (q *Queries) DeleteTemplateByName(ctx context.Context, arg DeleteTemplateBy
 	return err
 }
 
+const findPromptTemplatesByUrns = `-- name: FindPromptTemplatesByUrns :many
+SELECT DISTINCT ON (pt.project_id, pt.tool_urn) id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
+FROM prompt_templates pt
+WHERE pt.project_id = $1
+  AND pt.tool_urn = ANY($2::TEXT[])
+  AND pt.deleted IS FALSE
+ORDER BY pt.project_id, pt.tool_urn, pt.id DESC
+`
+
+type FindPromptTemplatesByUrnsParams struct {
+	ProjectID uuid.UUID
+	Urns      []string
+}
+
+func (q *Queries) FindPromptTemplatesByUrns(ctx context.Context, arg FindPromptTemplatesByUrnsParams) ([]PromptTemplate, error) {
+	rows, err := q.db.Query(ctx, findPromptTemplatesByUrns, arg.ProjectID, arg.Urns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PromptTemplate
+	for rows.Next() {
+		var i PromptTemplate
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolUrn,
+			&i.ProjectID,
+			&i.HistoryID,
+			&i.PredecessorID,
+			&i.Name,
+			&i.Description,
+			&i.Arguments,
+			&i.Prompt,
+			&i.Engine,
+			&i.Kind,
+			&i.ToolsHint,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTemplateByID = `-- name: GetTemplateByID :one
 SELECT id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
 FROM prompt_templates pt
@@ -296,6 +347,52 @@ func (q *Queries) PeekTemplatesByNames(ctx context.Context, arg PeekTemplatesByN
 	return items, nil
 }
 
+const peekTemplatesByUrns = `-- name: PeekTemplatesByUrns :many
+SELECT DISTINCT ON (pt.project_id, pt.tool_urn) pt.id, pt.tool_urn, pt.history_id, pt.name
+FROM prompt_templates pt
+WHERE pt.project_id = $1
+  AND pt.tool_urn = ANY($2::TEXT[])
+  AND pt.deleted IS FALSE
+ORDER BY pt.project_id, pt.tool_urn, pt.id DESC
+`
+
+type PeekTemplatesByUrnsParams struct {
+	ProjectID uuid.UUID
+	Urns      []string
+}
+
+type PeekTemplatesByUrnsRow struct {
+	ID        uuid.UUID
+	ToolUrn   urn.Tool
+	HistoryID uuid.UUID
+	Name      string
+}
+
+func (q *Queries) PeekTemplatesByUrns(ctx context.Context, arg PeekTemplatesByUrnsParams) ([]PeekTemplatesByUrnsRow, error) {
+	rows, err := q.db.Query(ctx, peekTemplatesByUrns, arg.ProjectID, arg.Urns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PeekTemplatesByUrnsRow
+	for rows.Next() {
+		var i PeekTemplatesByUrnsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolUrn,
+			&i.HistoryID,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateTemplate = `-- name: UpdateTemplate :one
 INSERT INTO prompt_templates (
   project_id,
@@ -317,7 +414,7 @@ SELECT
   COALESCE($1, c.tool_urn),
   c.name,
   COALESCE($2, c.prompt),
-  NULLIF($3, ''),
+  COALESCE(NULLIF($3, ''), c.description),
   $4,
   COALESCE(NULLIF($5, ''), c.engine),
   COALESCE(NULLIF($6, ''), c.kind),

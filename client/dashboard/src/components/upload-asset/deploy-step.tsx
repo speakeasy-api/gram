@@ -1,12 +1,12 @@
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useListTools } from "@/hooks/toolTypes";
 import { slugify } from "@/lib/constants";
 import { useRoutes } from "@/routes";
 import { Deployment } from "@gram/client/models/components";
 import {
   useDeploymentLogs,
   useLatestDeployment,
-  useListTools,
 } from "@gram/client/react-query";
 import { Alert, Stack } from "@speakeasy-api/moonshine";
 import React from "react";
@@ -34,8 +34,9 @@ export default function DeployStep() {
       (doc) => doc.assetId === uploadResult?.asset.id,
     )?.id;
 
-    return toolsList.data.httpTools.reduce((prev, cur) => {
-      if (cur.openapiv3DocumentId === documentId) return prev + 1;
+    return toolsList.data.tools.reduce((prev: number, cur) => {
+      if (cur.type === "http" && cur.openapiv3DocumentId === documentId)
+        return prev + 1;
       return prev;
     }, 0);
   }, [toolsList.data]);

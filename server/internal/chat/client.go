@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	env_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -215,21 +216,33 @@ func (c *ChatClient) LoadToolsetTools(
 		return nil, fmt.Errorf("failed to load environment entries: %w", err)
 	}
 
-	agentTools := make([]AgentTool, 0, len(toolset.HTTPTools))
-	for _, httpTool := range toolset.HTTPTools {
-		if httpTool == nil {
+	agentTools := make([]AgentTool, 0, len(toolset.Tools))
+	for _, tool := range toolset.Tools {
+		if tool == nil {
 			continue
 		}
 
+		if tool.HTTPToolDefinition == nil {
+			// TODO: support other tool types
+			continue
+		}
+
+		toolURN, err := conv.GetToolURN(*tool)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get tool urn: %w", err)
+		}
+
+		httpTool := tool.HTTPToolDefinition
+		
 		// Capture for closure
 		name := httpTool.Name
 		projID := projectID
 
 		executor := func(ctx context.Context, rawArgs string) (string, error) {
 			// Find tool by name
-			toolID, err := toolsRepo.PokeHTTPToolDefinitionByName(ctx, tools_repo.PokeHTTPToolDefinitionByNameParams{
-				ProjectID: projID,
-				Name:      name,
+			toolID, err := toolsRepo.PokeHTTPToolDefinitionByUrn(ctx, tools_repo.PokeHTTPToolDefinitionByUrnParams{
+				ProjectID: projectID,
+				Urn:       *toolURN,
 			})
 			if err != nil {
 				return "", fmt.Errorf("failed to load tool: %w", err)
@@ -250,18 +263,17 @@ func (c *ChatClient) LoadToolsetTools(
 				statusCode: http.StatusOK,
 			}
 
-			// Transform environment entries into a map
-			envVars := make(map[string]string)
+			ciEnv := gateway.NewCaseInsensitiveEnv()
 			for _, entry := range environmentEntries {
-				envVars[entry.Name] = entry.Value
+				ciEnv.Set(entry.Name, entry.Value)
 			}
 
 			// use environment overrides
 			for key, value := range addedEnvironmentEntries {
-				envVars[key] = value
+				ciEnv.Set(key, value)
 			}
 
-			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), envVars, executionPlan.Tool)
+			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), ciEnv, executionPlan.Tool)
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

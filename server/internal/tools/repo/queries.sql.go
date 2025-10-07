@@ -14,7 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-const findToolEntriesByName = `-- name: FindToolEntriesByName :many
+const findHttpToolEntriesByUrn = `-- name: FindHttpToolEntriesByUrn :many
 WITH deployment AS (
     SELECT d.id
     FROM deployments d
@@ -31,39 +31,41 @@ external_deployments AS (
   WHERE deployments_packages.deployment_id = (SELECT id FROM deployment)
 )
 SELECT 
-  htd.id, htd.deployment_id, htd.name, htd.security, htd.server_env_var
+  htd.id, htd.tool_urn, htd.deployment_id, htd.name, htd.security, htd.server_env_var
 FROM http_tool_definitions htd
 WHERE
   htd.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
   AND htd.deleted IS FALSE
-  AND htd.name = ANY ($1::text[])
+  AND htd.tool_urn = ANY ($1::text[])
 ORDER BY htd.id DESC
 `
 
-type FindToolEntriesByNameParams struct {
-	Names     []string
+type FindHttpToolEntriesByUrnParams struct {
+	Urns      []string
 	ProjectID uuid.UUID
 }
 
-type FindToolEntriesByNameRow struct {
+type FindHttpToolEntriesByUrnRow struct {
 	ID           uuid.UUID
+	ToolUrn      urn.Tool
 	DeploymentID uuid.UUID
 	Name         string
 	Security     []byte
 	ServerEnvVar string
 }
 
-func (q *Queries) FindToolEntriesByName(ctx context.Context, arg FindToolEntriesByNameParams) ([]FindToolEntriesByNameRow, error) {
-	rows, err := q.db.Query(ctx, findToolEntriesByName, arg.Names, arg.ProjectID)
+func (q *Queries) FindHttpToolEntriesByUrn(ctx context.Context, arg FindHttpToolEntriesByUrnParams) ([]FindHttpToolEntriesByUrnRow, error) {
+	rows, err := q.db.Query(ctx, findHttpToolEntriesByUrn, arg.Urns, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []FindToolEntriesByNameRow
+	var items []FindHttpToolEntriesByUrnRow
 	for rows.Next() {
-		var i FindToolEntriesByNameRow
+		var i FindHttpToolEntriesByUrnRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.ToolUrn,
 			&i.DeploymentID,
 			&i.Name,
 			&i.Security,
@@ -79,7 +81,7 @@ func (q *Queries) FindToolEntriesByName(ctx context.Context, arg FindToolEntries
 	return items, nil
 }
 
-const findToolsByName = `-- name: FindToolsByName :many
+const findHttpToolsByUrn = `-- name: FindHttpToolsByUrn :many
 WITH deployment AS (
     SELECT d.id
     FROM deployments d
@@ -108,30 +110,30 @@ LEFT JOIN packages ON http_tool_definitions.project_id = packages.project_id
 WHERE
   http_tool_definitions.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
   AND http_tool_definitions.deleted IS FALSE
-  AND http_tool_definitions.name = ANY ($2::text[])
+  AND http_tool_definitions.tool_urn = ANY ($2::text[])
 ORDER BY http_tool_definitions.id DESC
 `
 
-type FindToolsByNameParams struct {
+type FindHttpToolsByUrnParams struct {
 	ProjectID uuid.UUID
-	Names     []string
+	Urns      []string
 }
 
-type FindToolsByNameRow struct {
+type FindHttpToolsByUrnRow struct {
 	HttpToolDefinition HttpToolDefinition
 	OwningDeploymentID uuid.UUID
 	PackageName        string
 }
 
-func (q *Queries) FindToolsByName(ctx context.Context, arg FindToolsByNameParams) ([]FindToolsByNameRow, error) {
-	rows, err := q.db.Query(ctx, findToolsByName, arg.ProjectID, arg.Names)
+func (q *Queries) FindHttpToolsByUrn(ctx context.Context, arg FindHttpToolsByUrnParams) ([]FindHttpToolsByUrnRow, error) {
+	rows, err := q.db.Query(ctx, findHttpToolsByUrn, arg.ProjectID, arg.Urns)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []FindToolsByNameRow
+	var items []FindHttpToolsByUrnRow
 	for rows.Next() {
-		var i FindToolsByNameRow
+		var i FindHttpToolsByUrnRow
 		if err := rows.Scan(
 			&i.HttpToolDefinition.ID,
 			&i.HttpToolDefinition.ToolUrn,
@@ -213,6 +215,71 @@ type GetHTTPToolDefinitionByIDParams struct {
 // This CTE is for integrating third party tools by checking for tool definitions from external deployments/packages.
 func (q *Queries) GetHTTPToolDefinitionByID(ctx context.Context, arg GetHTTPToolDefinitionByIDParams) (HttpToolDefinition, error) {
 	row := q.db.QueryRow(ctx, getHTTPToolDefinitionByID, arg.ID, arg.ProjectID)
+	var i HttpToolDefinition
+	err := row.Scan(
+		&i.ID,
+		&i.ToolUrn,
+		&i.ProjectID,
+		&i.DeploymentID,
+		&i.Openapiv3DocumentID,
+		&i.Confirm,
+		&i.ConfirmPrompt,
+		&i.Summarizer,
+		&i.Name,
+		&i.UntruncatedName,
+		&i.Summary,
+		&i.Description,
+		&i.Openapiv3Operation,
+		&i.Tags,
+		&i.XGram,
+		&i.OriginalName,
+		&i.OriginalSummary,
+		&i.OriginalDescription,
+		&i.ServerEnvVar,
+		&i.DefaultServerUrl,
+		&i.Security,
+		&i.HttpMethod,
+		&i.Path,
+		&i.SchemaVersion,
+		&i.Schema,
+		&i.HeaderSettings,
+		&i.QuerySettings,
+		&i.PathSettings,
+		&i.RequestContentType,
+		&i.ResponseFilter,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getHTTPToolDefinitionByURN = `-- name: GetHTTPToolDefinitionByURN :one
+WITH deployment AS (
+  SELECT d.id 
+  FROM deployments d
+  JOIN deployment_statuses ds ON d.id = ds.deployment_id
+  WHERE d.project_id = $2
+  AND ds.status = 'completed'
+  ORDER BY d.seq DESC LIMIT 1
+)
+SELECT id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
+FROM http_tool_definitions
+WHERE http_tool_definitions.tool_urn = $1
+  AND http_tool_definitions.project_id = $2
+  AND http_tool_definitions.deleted IS FALSE 
+  AND http_tool_definitions.deployment_id = (SELECT id FROM deployment)
+LIMIT 1
+`
+
+type GetHTTPToolDefinitionByURNParams struct {
+	Urn       urn.Tool
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) GetHTTPToolDefinitionByURN(ctx context.Context, arg GetHTTPToolDefinitionByURNParams) (HttpToolDefinition, error) {
+	row := q.db.QueryRow(ctx, getHTTPToolDefinitionByURN, arg.Urn, arg.ProjectID)
 	var i HttpToolDefinition
 	err := row.Scan(
 		&i.ID,
@@ -395,11 +462,11 @@ func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToo
 	return items, nil
 }
 
-const pokeHTTPToolDefinitionByName = `-- name: PokeHTTPToolDefinitionByName :one
+const pokeHTTPToolDefinitionByUrn = `-- name: PokeHTTPToolDefinitionByUrn :one
 WITH first_party AS (
   SELECT id
   FROM http_tool_definitions
-  WHERE http_tool_definitions.name = $1
+  WHERE http_tool_definitions.tool_urn = $1
     AND http_tool_definitions.project_id = $2
     AND http_tool_definitions.deleted IS FALSE
   LIMIT 1
@@ -411,7 +478,7 @@ third_party AS (
   INNER JOIN package_versions pv ON dp.version_id = pv.id
   INNER JOIN http_tool_definitions htd ON htd.deployment_id = pv.deployment_id
   WHERE d.project_id = $2
-    AND htd.name = $1
+    AND htd.tool_urn = $1
     AND NOT EXISTS(SELECT 1 FROM first_party)
   LIMIT 1
 )
@@ -420,14 +487,14 @@ FROM http_tool_definitions
 WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party))
 `
 
-type PokeHTTPToolDefinitionByNameParams struct {
-	Name      string
+type PokeHTTPToolDefinitionByUrnParams struct {
+	Urn       urn.Tool
 	ProjectID uuid.UUID
 }
 
 // This CTE is for integrating third party tools by checking for tool definitions from external deployments/packages.
-func (q *Queries) PokeHTTPToolDefinitionByName(ctx context.Context, arg PokeHTTPToolDefinitionByNameParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, pokeHTTPToolDefinitionByName, arg.Name, arg.ProjectID)
+func (q *Queries) PokeHTTPToolDefinitionByUrn(ctx context.Context, arg PokeHTTPToolDefinitionByUrnParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, pokeHTTPToolDefinitionByUrn, arg.Urn, arg.ProjectID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err

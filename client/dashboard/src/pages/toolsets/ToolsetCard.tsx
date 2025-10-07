@@ -2,16 +2,14 @@ import { CopyableSlug } from "@/components/name-and-slug";
 import {
   ToolCollectionBadge,
   ToolsetPromptsBadge,
-} from "@/components/tools-badge";
-import { Button, cn } from "@speakeasy-api/moonshine";
+} from "@/components/tool-collection-badge";
 import { Card } from "@/components/ui/card";
 import { MoreActions } from "@/components/ui/more-actions";
+import { UpdatedAt } from "@/components/updated-at";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Button, cn, Stack } from "@speakeasy-api/moonshine";
 import { useCloneToolset, useDeleteToolset } from "./Toolset";
-import { UpdatedAt } from "@/components/updated-at";
-import { userFacingToolNames } from "@/lib/toolNames";
 
 type ToolsetForCard = Pick<
   ToolsetEntry,
@@ -20,7 +18,7 @@ type ToolsetForCard = Pick<
   | "slug"
   | "description"
   | "updatedAt"
-  | "httpTools"
+  | "tools"
   | "promptTemplates"
 >;
 
@@ -33,7 +31,7 @@ const BoundToolsBadge = ({
   variant?: "outline" | "default";
   className?: string;
 }) => {
-  const names: string[] = toolset ? userFacingToolNames(toolset) : [];
+  const names: string[] = toolset?.tools.map((tool) => tool.name) ?? [];
 
   return (
     <ToolCollectionBadge

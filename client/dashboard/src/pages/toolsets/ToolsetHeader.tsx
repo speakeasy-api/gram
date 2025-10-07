@@ -1,15 +1,14 @@
 import { EditableText } from "@/components/editable-text";
 import { CopyableSlug } from "@/components/name-and-slug";
 import {
-  ToolsetPromptsBadge,
   ToolCollectionBadge,
-} from "@/components/tools-badge";
+  ToolsetPromptsBadge,
+} from "@/components/tool-collection-badge";
 import { Heading } from "@/components/ui/heading";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
-import { userFacingToolNames } from "@/lib/toolNames";
-import { Toolset } from "@gram/client/models/components";
-import { useToolset } from "@gram/client/react-query";
+import { useToolset } from "@/hooks/toolTypes";
+import { Toolset } from "@/lib/toolTypes";
 import { Stack } from "@speakeasy-api/moonshine";
 
 export const ToolsetHeader = ({
@@ -20,11 +19,7 @@ export const ToolsetHeader = ({
   actions?: React.ReactNode;
 }) => {
   const client = useSdkClient();
-  const { data: toolset, refetch } = useToolset(
-    { slug: toolsetSlug },
-    undefined,
-    { enabled: !!toolsetSlug },
-  );
+  const { data: toolset, refetch } = useToolset(toolsetSlug);
 
   const updateToolset = async (changes: Partial<Toolset>) => {
     if (!toolset) {
@@ -75,7 +70,7 @@ export const ToolsetHeader = ({
         </EditableText>
         <Stack direction="horizontal" gap={2}>
           <ToolCollectionBadge
-            toolNames={toolset ? userFacingToolNames(toolset) : []}
+            toolNames={toolset?.tools.map((t) => t.name) ?? []}
             size="md"
             variant="secondary"
             warnOnTooManyTools

@@ -251,34 +251,50 @@ func EncodeListToolsError(encoder func(context.Context, http.ResponseWriter) goa
 	}
 }
 
+// marshalTypesToolToToolResponseBody builds a value of type *ToolResponseBody
+// from a value of type *types.Tool.
+func marshalTypesToolToToolResponseBody(v *types.Tool) *ToolResponseBody {
+	res := &ToolResponseBody{}
+	if v.HTTPToolDefinition != nil {
+		res.HTTPToolDefinition = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v.HTTPToolDefinition)
+	}
+	if v.PromptTemplate != nil {
+		res.PromptTemplate = marshalTypesPromptTemplateToPromptTemplateResponseBody(v.PromptTemplate)
+	}
+
+	return res
+}
+
 // marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody builds a
 // value of type *HTTPToolDefinitionResponseBody from a value of type
 // *types.HTTPToolDefinition.
 func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTTPToolDefinition) *HTTPToolDefinitionResponseBody {
+	if v == nil {
+		return nil
+	}
 	res := &HTTPToolDefinitionResponseBody{
-		ToolType:            v.ToolType,
-		ID:                  v.ID,
-		ProjectID:           v.ProjectID,
 		DeploymentID:        v.DeploymentID,
-		Name:                v.Name,
-		CanonicalName:       v.CanonicalName,
 		Summary:             v.Summary,
-		Description:         v.Description,
-		Confirm:             v.Confirm,
-		ConfirmPrompt:       v.ConfirmPrompt,
-		Summarizer:          v.Summarizer,
 		Openapiv3DocumentID: v.Openapiv3DocumentID,
 		Openapiv3Operation:  v.Openapiv3Operation,
 		Security:            v.Security,
 		DefaultServerURL:    v.DefaultServerURL,
 		HTTPMethod:          v.HTTPMethod,
 		Path:                v.Path,
+		PackageName:         v.PackageName,
+		ID:                  v.ID,
+		ToolUrn:             v.ToolUrn,
+		ProjectID:           v.ProjectID,
+		Name:                v.Name,
+		CanonicalName:       v.CanonicalName,
+		Description:         v.Description,
 		SchemaVersion:       v.SchemaVersion,
 		Schema:              v.Schema,
-		PackageName:         v.PackageName,
+		Confirm:             v.Confirm,
+		ConfirmPrompt:       v.ConfirmPrompt,
+		Summarizer:          v.Summarizer,
 		CreatedAt:           v.CreatedAt,
 		UpdatedAt:           v.UpdatedAt,
-		ToolUrn:             v.ToolUrn,
 	}
 	if v.ResponseFilter != nil {
 		res.ResponseFilter = marshalTypesResponseFilterToResponseFilterResponseBody(v.ResponseFilter)
@@ -388,19 +404,28 @@ func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation
 // marshalTypesPromptTemplateToPromptTemplateResponseBody builds a value of
 // type *PromptTemplateResponseBody from a value of type *types.PromptTemplate.
 func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTemplate) *PromptTemplateResponseBody {
+	if v == nil {
+		return nil
+	}
 	res := &PromptTemplateResponseBody{
-		ID:            v.ID,
 		HistoryID:     v.HistoryID,
 		PredecessorID: v.PredecessorID,
-		Name:          string(v.Name),
 		Prompt:        v.Prompt,
-		Description:   v.Description,
-		Arguments:     v.Arguments,
 		Engine:        v.Engine,
 		Kind:          v.Kind,
+		ID:            v.ID,
+		ToolUrn:       v.ToolUrn,
+		ProjectID:     v.ProjectID,
+		Name:          v.Name,
+		CanonicalName: v.CanonicalName,
+		Description:   v.Description,
+		SchemaVersion: v.SchemaVersion,
+		Schema:        v.Schema,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Summarizer:    v.Summarizer,
 		CreatedAt:     v.CreatedAt,
 		UpdatedAt:     v.UpdatedAt,
-		ToolUrn:       v.ToolUrn,
 	}
 	if v.ToolsHint != nil {
 		res.ToolsHint = make([]string, len(v.ToolsHint))
@@ -409,6 +434,12 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 		}
 	} else {
 		res.ToolsHint = []string{}
+	}
+	if v.Canonical != nil {
+		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
 	}
 
 	return res

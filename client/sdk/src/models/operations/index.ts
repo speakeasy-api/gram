@@ -24,6 +24,7 @@ export * from "./deleteslackconnection.js";
 export * from "./deletetemplate.js";
 export * from "./deletetoolset.js";
 export * from "./evolvedeployment.js";
+export * from "./getactivedeployment.js";
 export * from "./getdeployment.js";
 export * from "./getdeploymentlogs.js";
 export * from "./getdomain.js";
