@@ -269,11 +269,18 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	envHeaders := []string{}
 
 	// Collect environment variables from security variables
+	isOAuthEnabled := toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid
 	for _, secVar := range toolsetDetails.SecurityVariables {
 		for _, envVar := range secVar.EnvVariables {
-			if !strings.Contains(strings.ToLower(envVar), "token_url") {
-				envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")))
+			envVarLower := strings.ToLower(envVar)
+			if strings.HasSuffix(envVarLower, "token_url") {
+				continue
 			}
+			// Skip access_token env vars if OAuth is enabled
+			if isOAuthEnabled && strings.HasSuffix(envVarLower, "access_token") {
+				continue
+			}
+			envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")))
 		}
 	}
 
