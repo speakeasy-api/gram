@@ -1,15 +1,17 @@
-import { MiniCard } from "@/components/ui/card-mini";
 import { Heading } from "@/components/ui/heading";
-import { cn, getServerURL } from "@/lib/utils";
-import {
-  useDeploymentLogsSuspense,
-  useDeploymentSuspense,
-} from "@gram/client/react-query";
+import { cn } from "@/lib/utils";
+import { useDeploymentLogsSuspense } from "@gram/client/react-query";
 import { Icon, Input } from "@speakeasy-api/moonshine";
-import { FileCodeIcon } from "lucide-react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useParams } from "react-router";
-import { ToolsList } from "./ToolsList";
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { ToolsList } from "../ToolsList";
+import { useDeploymentSearchParams } from "./use-deployment-search-params";
 
 type LogLevel = "WARN" | "INFO" | "DEBUG" | "ERROR" | "OK" | "SKIP";
 type LogFocus = "all" | "warns" | "errors" | "skipped";
@@ -131,10 +133,27 @@ export const LogsTabContents = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentLogIndex, setCurrentLogIndex] = useState<number | null>(null);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
-  const [groupBySource, setGroupBySource] = useState(false);
+  // const [groupBySource, setGroupBySource] = useState(false);
   const [showBottomFade, setShowBottomFade] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [searchInputFocused, setSearchInputFocused] = useState(false);
+
+  const { searchParams, setSearchParams } = useDeploymentSearchParams();
+
+  const setGroupBySource = (value: boolean) => {
+    setSearchParams((prev) => {
+      if (prev.tab !== "logs") return prev;
+      const next = { ...prev };
+      if (value) next.grouping = "by_source";
+      else next.grouping = undefined;
+      return { ...prev };
+    });
+  };
+
+  const groupBySource = React.useMemo(() => {
+    if (searchParams.tab !== "logs") return false;
+    return searchParams.grouping === "by_source";
+  }, [searchParams]);
 
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const logRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -793,70 +812,6 @@ export const LogsTabContents = () => {
           )}
         </div>
       </div>
-    </>
-  );
-};
-
-export const AssetsTabContents = () => {
-  const { deploymentId } = useParams();
-  const { data: deployment } = useDeploymentSuspense(
-    { id: deploymentId! },
-    undefined,
-    {
-      staleTime: Infinity,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-    },
-  );
-
-  const handleDownload = (assetId: string, assetName: string) => {
-    const downloadURL = new URL("/rpc/assets.serveOpenAPIv3", getServerURL());
-    downloadURL.searchParams.set("id", assetId);
-    downloadURL.searchParams.set("project_id", deployment.projectId);
-
-    const link = document.createElement("a");
-    link.href = downloadURL.toString();
-    link.download = assetName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  return (
-    <>
-      <Heading variant="h2" className="mb-6">
-        Assets
-      </Heading>
-      <ul className="flex flex-col gap-4 flex-wrap">
-        {deployment.openapiv3Assets.map((asset) => {
-          return (
-            <li key={asset.id}>
-              <MiniCard className="w-full max-w-full bg-surface-secondary-default border-neutral-softest p-6">
-                <MiniCard.Title className="truncate max-w-48">
-                  <div className="flex gap-4 w-full items-center">
-                    <FileCodeIcon size={48} strokeWidth={1} />
-                    <div className="flex flex-col">
-                      <span className="text-base leading-7">{asset.name}</span>
-                      <span className="text-xs text-muted leading-5">
-                        OpenAPI Document
-                      </span>
-                    </div>
-                  </div>
-                </MiniCard.Title>
-                <MiniCard.Actions
-                  actions={[
-                    {
-                      label: "Download",
-                      icon: "download",
-                      onClick: () => handleDownload(asset.assetId, asset.name),
-                    },
-                  ]}
-                />
-              </MiniCard>
-            </li>
-          );
-        })}
-      </ul>
     </>
   );
 };

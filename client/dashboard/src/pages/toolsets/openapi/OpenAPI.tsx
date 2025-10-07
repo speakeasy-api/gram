@@ -12,7 +12,6 @@ import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
 import { cn, getServerURL } from "@/lib/utils";
-import { useDeploymentLogsSummary } from "@/pages/deployments/Deployment";
 import { UploadedDocument } from "@/pages/onboarding/Wizard";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
@@ -35,6 +34,7 @@ import { toast } from "sonner";
 import { useUploadOpenAPISteps } from "../../onboarding/UploadOpenAPI";
 import AddOpenAPIDialog, { AddOpenAPIDialogRef } from "./AddOpenAPIDialog";
 import { ApisEmptyState } from "./ApisEmptyState";
+import { useDeploymentLogsSummary } from "@/pages/deployments/deployment/Deployment";
 
 type NamedAsset = Asset & {
   name: string;
