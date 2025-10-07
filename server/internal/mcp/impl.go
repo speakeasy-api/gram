@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -63,6 +64,7 @@ type Service struct {
 	oauthRepo         *oauth_repo.Queries
 	billingTracker    billing.Tracker
 	billingRepository billing.Repository
+	toolsetCache      cache.TypedCacheObject[mv.CachedToolset]
 }
 
 type oauthTokenInputs struct {
@@ -124,6 +126,7 @@ func NewService(
 		oauthRepo:         oauth_repo.New(db),
 		billingTracker:    billingTracker,
 		billingRepository: billingRepository,
+		toolsetCache:      cache.NewTypedObjectCache[mv.CachedToolset](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}
 }
 
@@ -613,11 +616,11 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog)
+		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache)
 	case "prompts/list":
-		return handlePromptsList(ctx, s.logger, s.db, payload, req)
+		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
 		return handlePromptsGet(ctx, s.logger, s.db, payload, req)
 	default:

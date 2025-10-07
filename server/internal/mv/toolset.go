@@ -13,8 +13,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	deploymentR "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -201,6 +203,7 @@ func DescribeToolset(
 	tx DBTX,
 	projectID ProjectID,
 	toolsetSlug ToolsetSlug,
+	toolsetCache *cache.TypedCacheObject[CachedToolset],
 ) (*types.Toolset, error) {
 	toolsetRepo := tsr.New(tx)
 	orgRepo := org.New(tx)
@@ -209,6 +212,7 @@ func DescribeToolset(
 	templatesRepo := templatesR.New(tx)
 	pid := uuid.UUID(projectID)
 	oauthRepo := oauth.New(tx)
+	deploymentRepo := deploymentR.New(tx)
 
 	if err := inv.Check(
 		"describe toolset inputs",
@@ -229,14 +233,31 @@ func DescribeToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
 	}
 
+	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
+	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get latest deployment id").Log(ctx, logger)
+	}
+
 	// Get tool URNs from latest toolset version
 	// TODO: use this to power everything below rather than the http_tool_names field
 	var toolUrns []string
+	var toolsetVersion int64
 	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
 	if err == nil {
 		toolUrns = make([]string, len(latestVersion.ToolUrns))
 		for i, urn := range latestVersion.ToolUrns {
 			toolUrns[i] = urn.String()
+		}
+		toolsetVersion = latestVersion.Version
+
+		// Check cache if available
+		// NOTE: A slight shortcoming here is that the cache is keyed by the active deployment id, but the queries below don't strictly depend on
+		// the deployment ID fetched above. Technically the deployment could change at just the right time to mess up the cache.
+		if toolsetCache != nil {
+			if cached, cacheErr := toolsetCache.Get(ctx, ToolsetCacheKey(toolset.ID.String(), activeDeploymentID.String(), toolsetVersion)); cacheErr == nil {
+				return cached.Toolset, nil
+			}
 		}
 	}
 
@@ -552,7 +573,7 @@ func DescribeToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
 	}
 
-	return &types.Toolset{
+	result := &types.Toolset{
 		ID:                     toolset.ID.String(),
 		OrganizationID:         toolset.OrganizationID,
 		AccountType:            orgMetadata.GramAccountType,
@@ -574,7 +595,21 @@ func DescribeToolset(
 		ToolUrns:               toolUrns,
 		ExternalOauthServer:    externalOAuthServer,
 		OauthProxyServer:       oauthProxyServer,
-	}, nil
+	}
+
+	// Store in cache if available
+	if toolsetCache != nil && toolsetVersion > 0 {
+		if err := toolsetCache.Store(ctx, CachedToolset{
+			DeploymentID: activeDeploymentID.String(),
+			ToolsetID:    toolset.ID.String(),
+			Version:      toolsetVersion,
+			Toolset:      result,
+		}); err != nil {
+			logger.ErrorContext(ctx, "failed to cache toolset", slog.String("error", err.Error()))
+		}
+	}
+
+	return result, nil
 }
 
 type toolEnvLookupParams struct {

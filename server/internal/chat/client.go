@@ -187,7 +187,7 @@ func (c *ChatClient) LoadToolsetTools(
 	toolsetSlug string,
 	addedEnvironmentEntries map[string]string,
 ) ([]AgentTool, error) {
-	toolset, err := mv.DescribeToolset(ctx, c.logger, c.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolsetSlug))
+	toolset, err := mv.DescribeToolset(ctx, c.logger, c.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolsetSlug), nil)
 	if err != nil {
 		return nil, err
 	}
