@@ -2,5 +2,4 @@
 "@gram/server": patch
 ---
 
-feat
-Plea`se enter a summary for your changes.
+feat: add project id to function tools model
