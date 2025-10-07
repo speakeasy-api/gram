@@ -60,7 +60,6 @@ func DescribeToolsetEntry(
 	}
 
 	// Get tool URNs from latest toolset version
-	// TODO: use this to power everything below rather than the http_tool_names field
 	var toolUrns []string
 	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
 	if err == nil {
@@ -230,7 +229,6 @@ func DescribeToolset(
 	}
 
 	// Get tool URNs from latest toolset version
-	// TODO: use this to power everything below rather than the http_tool_names field
 	var toolUrns []string
 	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
 	if err == nil {
