@@ -689,6 +689,7 @@ CREATE TABLE IF NOT EXISTS slack_app_connections (
 CREATE TABLE IF NOT EXISTS tool_variations_groups (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   project_id uuid NOT NULL,
+  version BIGINT NOT NULL DEFAULT 1,
 
   name TEXT NOT NULL CHECK (name <> '' AND CHAR_LENGTH(name) <= 40),
   description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 100),
