@@ -453,7 +453,7 @@ func DescribeToolset(
 
 		promptTemplates = append(promptTemplates, &types.PromptTemplate{
 			ID:            pt.ID.String(),
-			ToolUrn:       pt.ToolUrn.String,
+			ToolUrn:       pt.ToolUrn,
 			HistoryID:     pt.HistoryID.String(),
 			PredecessorID: conv.FromNullableUUID(pt.PredecessorID),
 			Name:          pt.Name,

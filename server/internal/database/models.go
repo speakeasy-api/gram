@@ -463,7 +463,6 @@ type Toolset struct {
 	Slug                   string
 	Description            pgtype.Text
 	DefaultEnvironmentSlug pgtype.Text
-	HttpToolNames          []string
 	McpSlug                pgtype.Text
 	McpIsPublic            bool
 	McpEnabled             bool

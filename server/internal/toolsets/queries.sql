@@ -10,7 +10,6 @@ INSERT INTO toolsets (
   , name
   , slug
   , description
-  , http_tool_names
   , default_environment_slug
   , mcp_slug
   , mcp_enabled
@@ -20,7 +19,6 @@ INSERT INTO toolsets (
   , @name
   , @slug
   , @description
-  , COALESCE(@http_tool_names::text[], '{}'::text[])
   , @default_environment_slug
   , @mcp_slug
   , @mcp_enabled
@@ -39,7 +37,6 @@ UPDATE toolsets
 SET 
     name = COALESCE(@name, name)
   , description = COALESCE(@description, description)
-  , http_tool_names = COALESCE(@http_tool_names::text[], http_tool_names)
   , default_environment_slug = COALESCE(@default_environment_slug, default_environment_slug)
   , mcp_slug = COALESCE(@mcp_slug, mcp_slug)
   , mcp_is_public = COALESCE(@mcp_is_public, mcp_is_public)
@@ -190,11 +187,3 @@ FROM toolset_prompts tp
 WHERE tp.toolset_id = @toolset_id
   AND tp.project_id = @project_id
 ORDER BY tp.prompt_name;
-
--- name: UpdateToolsetHttpToolNames :one
-UPDATE toolsets
-SET 
-    http_tool_names = @http_tool_names::text[]
-  , updated_at = clock_timestamp()
-WHERE slug = @slug AND project_id = @project_id
-RETURNING *;
