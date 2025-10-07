@@ -73,7 +73,7 @@ Example:
 
 			result := deploy.NewWorkflow(ctx, params).
 				UploadAssets(ctx, []deploy.Source{parseSource(c)}).
-				LoadActiveDeployment(ctx)
+				LoadLatestDeployment(ctx)
 			if result.Deployment == nil {
 				result.CreateDeployment(ctx, "")
 			} else {
