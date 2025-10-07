@@ -27,17 +27,21 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	organizations_repo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	project_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
 const keyPrefix = "gram"
 
 type Service struct {
-	tracer    trace.Tracer
-	logger    *slog.Logger
-	db        *pgxpool.Pool
-	repo      *repo.Queries
-	auth      *auth.Auth
-	keyPrefix string
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	repo        *repo.Queries
+	auth        *auth.Auth
+	projectRepo *project_repo.Queries
+	orgsRepo    *organizations_repo.Queries
+	keyPrefix   string
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -58,12 +62,14 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 	}
 	fullKeyPrefix := fmt.Sprintf("%s_%s_", keyPrefix, keyEnv)
 	return &Service{
-		tracer:    otel.Tracer("github.com/speakeasy-api/gram/server/internal/keys"),
-		logger:    logger,
-		db:        db,
-		repo:      repo.New(db),
-		auth:      auth.New(logger, db, sessions),
-		keyPrefix: fullKeyPrefix,
+		tracer:      otel.Tracer("github.com/speakeasy-api/gram/server/internal/keys"),
+		logger:      logger,
+		db:          db,
+		repo:        repo.New(db),
+		auth:        auth.New(logger, db, sessions),
+		projectRepo: project_repo.New(db),
+		orgsRepo:    organizations_repo.New(db),
+		keyPrefix:   fullKeyPrefix,
 	}
 }
 
@@ -197,6 +203,55 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 	}
 
 	return nil
+}
+
+func (s *Service) ValidateKey(
+	ctx context.Context,
+	payload *gen.ValidateKeyPayload,
+) (*gen.ValidateKeyResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	orgID := authCtx.ActiveOrganizationID
+	orgMeta, err := s.orgsRepo.GetOrganizationMetadata(ctx, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch organization: %w", err)
+	}
+
+	rawProjects, err := s.projectRepo.ListProjectsByOrganization(ctx, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch projects: %w", err)
+	}
+
+	result := &gen.ValidateKeyResult{
+		Organization: parseOrg(orgMeta),
+		Projects:     parseProjects(rawProjects),
+	}
+
+	return result, nil
+}
+
+func parseOrg(orgMeta organizations_repo.OrganizationMetadatum) *gen.ValidateKeyOrganization {
+	return &gen.ValidateKeyOrganization{
+		ID:   orgMeta.ID,
+		Name: orgMeta.Name,
+		Slug: orgMeta.Slug,
+	}
+}
+
+func parseProjects(rawProjects []project_repo.Project) []*gen.ValidateKeyProject {
+	projects := make([]*gen.ValidateKeyProject, len(rawProjects))
+	for idx, p := range rawProjects {
+		projects[idx] = &gen.ValidateKeyProject{
+			ID:   p.ID.String(),
+			Name: p.Name,
+			Slug: p.Slug,
+		}
+	}
+
+	return projects
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {

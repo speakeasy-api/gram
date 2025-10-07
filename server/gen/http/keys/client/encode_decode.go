@@ -702,6 +702,236 @@ func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildValidateKeyRequest instantiates a HTTP request object with method and
+// path set to call the "keys" service "validateKey" endpoint
+func (c *Client) BuildValidateKeyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ValidateKeyKeysPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("keys", "validateKey", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeValidateKeyRequest returns an encoder for requests sent to the keys
+// validateKey server.
+func EncodeValidateKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*keys.ValidateKeyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("keys", "validateKey", "*keys.ValidateKeyPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		return nil
+	}
+}
+
+// DecodeValidateKeyResponse returns a decoder for responses returned by the
+// keys validateKey endpoint. restoreBody controls whether the response body
+// should be restored after having been read.
+// DecodeValidateKeyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeValidateKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ValidateKeyResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "validateKey", err)
+			}
+			err = ValidateValidateKeyResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "validateKey", err)
+			}
+			res := NewValidateKeyResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ValidateKeyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "validateKey", err)
+			}
+			err = ValidateValidateKeyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "validateKey", err)
+			}
+			return nil, NewValidateKeyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ValidateKeyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "validateKey", err)
+			}
+			err = ValidateValidateKeyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "validateKey", err)
+			}
+			return nil, NewValidateKeyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ValidateKeyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "validateKey", err)
+			}
+			err = ValidateValidateKeyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "validateKey", err)
+			}
+			return nil, NewValidateKeyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ValidateKeyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "validateKey", err)
+			}
+			err = ValidateValidateKeyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "validateKey", err)
+			}
+			return nil, NewValidateKeyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ValidateKeyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "validateKey", err)
+			}
+			err = ValidateValidateKeyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "validateKey", err)
+			}
+			return nil, NewValidateKeyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ValidateKeyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "validateKey", err)
+			}
+			err = ValidateValidateKeyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "validateKey", err)
+			}
+			return nil, NewValidateKeyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ValidateKeyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "validateKey", err)
+			}
+			err = ValidateValidateKeyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "validateKey", err)
+			}
+			return nil, NewValidateKeyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ValidateKeyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "validateKey", err)
+				}
+				err = ValidateValidateKeyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "validateKey", err)
+				}
+				return nil, NewValidateKeyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ValidateKeyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "validateKey", err)
+				}
+				err = ValidateValidateKeyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "validateKey", err)
+				}
+				return nil, NewValidateKeyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "validateKey", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ValidateKeyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "validateKey", err)
+			}
+			err = ValidateValidateKeyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "validateKey", err)
+			}
+			return nil, NewValidateKeyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("keys", "validateKey", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalKeyResponseBodyToKeysKey builds a value of type *keys.Key from a
 // value of type *KeyResponseBody.
 func unmarshalKeyResponseBodyToKeysKey(v *KeyResponseBody) *keys.Key {
@@ -719,6 +949,32 @@ func unmarshalKeyResponseBodyToKeysKey(v *KeyResponseBody) *keys.Key {
 	res.Scopes = make([]string, len(v.Scopes))
 	for i, val := range v.Scopes {
 		res.Scopes[i] = val
+	}
+
+	return res
+}
+
+// unmarshalValidateKeyOrganizationResponseBodyToKeysValidateKeyOrganization
+// builds a value of type *keys.ValidateKeyOrganization from a value of type
+// *ValidateKeyOrganizationResponseBody.
+func unmarshalValidateKeyOrganizationResponseBodyToKeysValidateKeyOrganization(v *ValidateKeyOrganizationResponseBody) *keys.ValidateKeyOrganization {
+	res := &keys.ValidateKeyOrganization{
+		ID:   *v.ID,
+		Name: *v.Name,
+		Slug: *v.Slug,
+	}
+
+	return res
+}
+
+// unmarshalValidateKeyProjectResponseBodyToKeysValidateKeyProject builds a
+// value of type *keys.ValidateKeyProject from a value of type
+// *ValidateKeyProjectResponseBody.
+func unmarshalValidateKeyProjectResponseBodyToKeysValidateKeyProject(v *ValidateKeyProjectResponseBody) *keys.ValidateKeyProject {
+	res := &keys.ValidateKeyProject{
+		ID:   *v.ID,
+		Name: *v.Name,
+		Slug: *v.Slug,
 	}
 
 	return res

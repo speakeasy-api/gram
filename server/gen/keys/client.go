@@ -15,17 +15,19 @@ import (
 
 // Client is the "keys" service client.
 type Client struct {
-	CreateKeyEndpoint goa.Endpoint
-	ListKeysEndpoint  goa.Endpoint
-	RevokeKeyEndpoint goa.Endpoint
+	CreateKeyEndpoint   goa.Endpoint
+	ListKeysEndpoint    goa.Endpoint
+	RevokeKeyEndpoint   goa.Endpoint
+	ValidateKeyEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "keys" service client given the endpoints.
-func NewClient(createKey, listKeys, revokeKey goa.Endpoint) *Client {
+func NewClient(createKey, listKeys, revokeKey, validateKey goa.Endpoint) *Client {
 	return &Client{
-		CreateKeyEndpoint: createKey,
-		ListKeysEndpoint:  listKeys,
-		RevokeKeyEndpoint: revokeKey,
+		CreateKeyEndpoint:   createKey,
+		ListKeysEndpoint:    listKeys,
+		RevokeKeyEndpoint:   revokeKey,
+		ValidateKeyEndpoint: validateKey,
 	}
 }
 
@@ -89,4 +91,26 @@ func (c *Client) ListKeys(ctx context.Context, p *ListKeysPayload) (res *ListKey
 func (c *Client) RevokeKey(ctx context.Context, p *RevokeKeyPayload) (err error) {
 	_, err = c.RevokeKeyEndpoint(ctx, p)
 	return
+}
+
+// ValidateKey calls the "validateKey" endpoint of the "keys" service.
+// ValidateKey may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ValidateKey(ctx context.Context, p *ValidateKeyPayload) (res *ValidateKeyResult, err error) {
+	var ires any
+	ires, err = c.ValidateKeyEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ValidateKeyResult), nil
 }

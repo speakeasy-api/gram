@@ -73,6 +73,28 @@ var _ = Service("keys", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "revokeById")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeAPIKey"}`)
 	})
+
+	Method("validateKey", func() {
+		Description("Validate an api key")
+
+		Security(security.ByKey)
+
+		Payload(func() {
+			security.ByKeyPayload()
+		})
+		Result(ValidateKeyResult)
+
+		HTTP(func() {
+			GET("/rpc/keys.validate")
+			security.ByKeyHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "validateAPIKey")
+		Meta("openapi:extension:x-speakeasy-name-override", "validate")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ValidateAPIKey"}`)
+	})
+
 })
 
 var CreateKeyForm = Type("CreateKeyForm", func() {
@@ -110,4 +132,27 @@ var KeyModel = Type("Key", func() {
 		Description("When the key was last updated.")
 		Format(FormatDateTime)
 	})
+})
+
+var ValidateKeyResult = Type("ValidateKeyResult", func() {
+	Required("organization", "projects")
+
+	Attribute("organization", ValidateKeyOrganization, "The organization the key belongs to")
+	Attribute("projects", ArrayOf(ValidateKeyProject), "The projects accessible with this key")
+})
+
+var ValidateKeyOrganization = Type("ValidateKeyOrganization", func() {
+	Required("id", "name", "slug")
+
+	Attribute("id", String, "The ID of the organization")
+	Attribute("name", String, "The name of the organization")
+	Attribute("slug", String, "The slug of the organization")
+})
+
+var ValidateKeyProject = Type("ValidateKeyProject", func() {
+	Required("id", "name", "slug")
+
+	Attribute("id", String, "The ID of the project")
+	Attribute("name", String, "The name of the project")
+	Attribute("slug", String, "The slug of the project")
 })

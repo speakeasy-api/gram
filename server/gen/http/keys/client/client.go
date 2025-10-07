@@ -29,6 +29,10 @@ type Client struct {
 	// endpoint.
 	RevokeKeyDoer goahttp.Doer
 
+	// ValidateKey Doer is the HTTP client used to make requests to the validateKey
+	// endpoint.
+	ValidateKeyDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -52,6 +56,7 @@ func NewClient(
 		CreateKeyDoer:       doer,
 		ListKeysDoer:        doer,
 		RevokeKeyDoer:       doer,
+		ValidateKeyDoer:     doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
 		host:                host,
@@ -127,6 +132,30 @@ func (c *Client) RevokeKey() goa.Endpoint {
 		resp, err := c.RevokeKeyDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("keys", "revokeKey", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ValidateKey returns an endpoint that makes HTTP requests to the keys service
+// validateKey server.
+func (c *Client) ValidateKey() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeValidateKeyRequest(c.encoder)
+		decodeResponse = DecodeValidateKeyResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildValidateKeyRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ValidateKeyDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("keys", "validateKey", err)
 		}
 		return decodeResponse(resp)
 	}
