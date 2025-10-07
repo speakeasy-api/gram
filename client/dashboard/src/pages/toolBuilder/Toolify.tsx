@@ -170,7 +170,6 @@ export const ToolifyDialog = ({
               />
               <ToolCollectionBadge
                 toolNames={toolset ? toolset.tools.map((t) => t.name) : []}
-                size={"md"}
                 warnOnTooManyTools
               />
             </Stack>
