@@ -7,29 +7,12 @@
 
 package types
 
+// An HTTP tool
 type HTTPToolDefinition struct {
-	ToolType string
-	// The ID of the HTTP tool
-	ID string
-	// The ID of the project
-	ProjectID string
 	// The ID of the deployment
 	DeploymentID string
-	// The name of the tool
-	Name string
-	// The canonical name of the tool. Will be the same as the name if there is no
-	// variation.
-	CanonicalName string
 	// Summary of the tool
 	Summary string
-	// Description of the tool
-	Description string
-	// Confirmation mode for the tool
-	Confirm string
-	// Prompt for the confirmation
-	ConfirmPrompt *string
-	// Summarizer for the tool
-	Summarizer *string
 	// Response filter metadata for the tool
 	ResponseFilter *ResponseFilter
 	// The ID of the OpenAPI v3 document
@@ -46,12 +29,31 @@ type HTTPToolDefinition struct {
 	HTTPMethod string
 	// Path for the request
 	Path string
+	// The name of the source package
+	PackageName *string
+	// The ID of the tool
+	ID string
+	// The URN of this tool
+	ToolUrn string
+	// The ID of the project
+	ProjectID string
+	// The name of the tool
+	Name string
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName string
+	// Description of the tool
+	Description string
 	// Version of the schema
 	SchemaVersion *string
 	// JSON schema for the request
 	Schema string
-	// The name of the source package
-	PackageName *string
+	// Confirmation mode for the tool
+	Confirm *string
+	// Prompt for the confirmation
+	ConfirmPrompt *string
+	// Summarizer for the tool
+	Summarizer *string
 	// The creation date of the tool.
 	CreatedAt string
 	// The last update date of the tool.
@@ -60,6 +62,4 @@ type HTTPToolDefinition struct {
 	Canonical *CanonicalToolAttributes
 	// The variation details of a tool. Only includes explicitly varied fields.
 	Variation *ToolVariation
-	// The URN of this HTTP tool
-	ToolUrn string
 }

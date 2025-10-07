@@ -7,10 +7,12 @@
 
 package types
 
-type HTTPToolDefinitionEntry struct {
-	ToolType string
-	// The ID of the HTTP tool
+type ToolEntry struct {
+	Type string
+	// The ID of the tool
 	ID string
+	// The URN of the tool
+	ToolUrn string
 	// The name of the tool
 	Name string
 }

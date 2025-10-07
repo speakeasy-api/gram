@@ -26,12 +26,13 @@ type ToolsetEntry struct {
 	SecurityVariables []*SecurityVariable
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariable
-	// The HTTP tools in this toolset
-	HTTPTools []*HTTPToolDefinitionEntry
-	// The prompt templates in this toolset
-	PromptTemplates []*PromptTemplateEntry
+	// The tools in this toolset
+	Tools []*ToolEntry
 	// The tool URNs in this toolset
 	ToolUrns []string
+	// The prompt templates in this toolset -- Note: these are actual prompts, as
+	// in MCP prompts
+	PromptTemplates []*PromptTemplateEntry
 	// The slug of the MCP to use for the toolset
 	McpSlug *Slug
 	// Whether the toolset is public in MCP

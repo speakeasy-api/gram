@@ -1,9 +1,9 @@
-speakeasyVersion: 1.634.0
+speakeasyVersion: 1.635.1
 sources:
     Gram-Internal:
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:166a1ba23bb7220b05154455123abfc3d87998f8f66959f2be867ee9c03c5b01
-        sourceBlobDigest: sha256:ce34f19dab0e59ab0fb0615214580a4a77c50e4376f2d948c3576f7093892aa8
+        sourceRevisionDigest: sha256:e7378144f4b9236b7fdbd83613de768206528d29bde71d4efb74723be3ba14fd
+        sourceBlobDigest: sha256:7bacbf6f201c3b620005dfc8ed03fdf5ebfa39de6290efeb339bed6c67f9ca94
         tags:
             - latest
             - 0.0.1
@@ -11,10 +11,10 @@ targets:
     gram-internal:
         source: Gram-Internal
         sourceNamespace: gram-api-description
-        sourceRevisionDigest: sha256:166a1ba23bb7220b05154455123abfc3d87998f8f66959f2be867ee9c03c5b01
-        sourceBlobDigest: sha256:ce34f19dab0e59ab0fb0615214580a4a77c50e4376f2d948c3576f7093892aa8
+        sourceRevisionDigest: sha256:e7378144f4b9236b7fdbd83613de768206528d29bde71d4efb74723be3ba14fd
+        sourceBlobDigest: sha256:7bacbf6f201c3b620005dfc8ed03fdf5ebfa39de6290efeb339bed6c67f9ca94
         codeSamplesNamespace: gram-api-description-typescript-code-samples
-        codeSamplesRevisionDigest: sha256:9bf552825d6bf7b3ee3df4a68a3cb11b85545d6ef94c767bcb944cdfaf75c463
+        codeSamplesRevisionDigest: sha256:e93ce319cd16773b0ae4d716bec358a223c9a8a1ec2fa2873ba3cc16fc3224ff
 workflow:
     workflowVersion: 1.0.0
     speakeasyVersion: latest
@@ -24,6 +24,7 @@ workflow:
                 - location: server/gen/http/openapi3.yaml
             overlays:
                 - location: overlays/goa.yaml
+            output: .speakeasy/out.openapi.yaml
             registry:
                 location: registry.speakeasyapi.dev/gram/gram/gram-api-description
         Gram-Public:

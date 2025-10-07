@@ -7529,6 +7529,65 @@ components:
                 - content_length
                 - created_at
                 - updated_at
+        BaseToolAttributes:
+            type: object
+            properties:
+                canonical:
+                    $ref: '#/components/schemas/CanonicalToolAttributes'
+                canonical_name:
+                    type: string
+                    description: The canonical name of the tool. Will be the same as the name if there is no variation.
+                confirm:
+                    type: string
+                    description: Confirmation mode for the tool
+                confirm_prompt:
+                    type: string
+                    description: Prompt for the confirmation
+                created_at:
+                    type: string
+                    description: The creation date of the tool.
+                    format: date-time
+                description:
+                    type: string
+                    description: Description of the tool
+                id:
+                    type: string
+                    description: The ID of the tool
+                name:
+                    type: string
+                    description: The name of the tool
+                project_id:
+                    type: string
+                    description: The ID of the project
+                schema:
+                    type: string
+                    description: JSON schema for the request
+                schema_version:
+                    type: string
+                    description: Version of the schema
+                summarizer:
+                    type: string
+                    description: Summarizer for the tool
+                tool_urn:
+                    type: string
+                    description: The URN of this tool
+                updated_at:
+                    type: string
+                    description: The last update date of the tool.
+                    format: date-time
+                variation:
+                    $ref: '#/components/schemas/ToolVariation'
+            description: Common attributes shared by all tool types
+            required:
+                - id
+                - project_id
+                - name
+                - canonical_name
+                - description
+                - schema
+                - tool_urn
+                - created_at
+                - updated_at
         CanonicalToolAttributes:
             type: object
             properties:
@@ -8599,7 +8658,7 @@ components:
                 tools:
                     type: array
                     items:
-                        $ref: '#/components/schemas/HTTPToolDefinition'
+                        $ref: '#/components/schemas/Tool'
                     description: The list of tools
             required:
                 - name
@@ -8695,7 +8754,7 @@ components:
                     description: HTTP method for the request
                 id:
                     type: string
-                    description: The ID of the HTTP tool
+                    description: The ID of the tool
                 name:
                     type: string
                     description: The name of the tool
@@ -8736,53 +8795,31 @@ components:
                     items:
                         type: string
                     description: The tags list for this http tool
-                tool_type:
-                    type: string
-                    enum:
-                        - http
                 tool_urn:
                     type: string
-                    description: The URN of this HTTP tool
+                    description: The URN of this tool
                 updated_at:
                     type: string
                     description: The last update date of the tool.
                     format: date-time
                 variation:
                     $ref: '#/components/schemas/ToolVariation'
+            description: An HTTP tool
             required:
-                - tool_type
-                - id
-                - project_id
-                - deployment_id
-                - name
-                - canonical_name
                 - summary
-                - description
-                - confirm
                 - tags
                 - http_method
                 - path
                 - schema
+                - deployment_id
+                - id
+                - project_id
+                - name
+                - canonical_name
+                - description
                 - tool_urn
                 - created_at
                 - updated_at
-        HTTPToolDefinitionEntry:
-            type: object
-            properties:
-                id:
-                    type: string
-                    description: The ID of the HTTP tool
-                name:
-                    type: string
-                    description: The name of the tool
-                tool_type:
-                    type: string
-                    enum:
-                        - http
-            required:
-                - tool_type
-                - id
-                - name
         InfoResponseBody:
             type: object
             properties:
@@ -9070,22 +9107,16 @@ components:
         ListToolsResult:
             type: object
             properties:
-                http_tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/HTTPToolDefinition'
-                    description: The list of HTTP tools
                 next_cursor:
                     type: string
                     description: The cursor to fetch results from
-                prompt_templates:
+                tools:
                     type: array
                     items:
-                        $ref: '#/components/schemas/PromptTemplate'
-                    description: The list of prompt templates
+                        $ref: '#/components/schemas/Tool'
+                    description: The list of tools (polymorphic union of HTTP tools and prompt templates)
             required:
-                - http_tools
-                - prompt_templates
+                - tools
         ListToolsetsResult:
             type: object
             properties:
@@ -9464,17 +9495,24 @@ components:
         PromptTemplate:
             type: object
             properties:
-                arguments:
+                canonical:
+                    $ref: '#/components/schemas/CanonicalToolAttributes'
+                canonical_name:
                     type: string
-                    description: The JSON Schema defining the placeholders found in the prompt template
-                    format: json
+                    description: The canonical name of the tool. Will be the same as the name if there is no variation.
+                confirm:
+                    type: string
+                    description: Confirmation mode for the tool
+                confirm_prompt:
+                    type: string
+                    description: Prompt for the confirmation
                 created_at:
                     type: string
-                    description: The creation date of the prompt template.
+                    description: The creation date of the tool.
                     format: date-time
                 description:
                     type: string
-                    description: The description of the prompt template
+                    description: Description of the tool
                 engine:
                     type: string
                     description: The template engine
@@ -9485,7 +9523,7 @@ components:
                     description: The revision tree ID for the prompt template
                 id:
                     type: string
-                    description: The ID of the prompt template
+                    description: The ID of the tool
                 kind:
                     type: string
                     description: The kind of prompt the template is used for
@@ -9494,18 +9532,28 @@ components:
                         - higher_order_tool
                 name:
                     type: string
-                    description: A short url-friendly label that uniquely identifies a resource.
-                    pattern: ^[a-z0-9_-]{1,128}$
-                    maxLength: 40
+                    description: The name of the tool
                 predecessor_id:
                     type: string
                     description: The previous version of the prompt template to use as predecessor
+                project_id:
+                    type: string
+                    description: The ID of the project
                 prompt:
                     type: string
                     description: The template content
+                schema:
+                    type: string
+                    description: JSON schema for the request
+                schema_version:
+                    type: string
+                    description: Version of the schema
+                summarizer:
+                    type: string
+                    description: Summarizer for the tool
                 tool_urn:
                     type: string
-                    description: The URN of this prompt template
+                    description: The URN of this tool
                 tools_hint:
                     type: array
                     items:
@@ -9514,8 +9562,11 @@ components:
                     maxItems: 20
                 updated_at:
                     type: string
-                    description: The last update date of the prompt template.
+                    description: The last update date of the tool.
                     format: date-time
+                variation:
+                    $ref: '#/components/schemas/ToolVariation'
+            description: A prompt template
             required:
                 - id
                 - history_id
@@ -9527,6 +9578,10 @@ components:
                 - tool_urn
                 - created_at
                 - updated_at
+                - project_id
+                - canonical_name
+                - description
+                - schema
         PromptTemplateEntry:
             type: object
             properties:
@@ -9856,6 +9911,36 @@ components:
                 - price_per_additional_credit
                 - feature_bullets
                 - included_bullets
+        Tool:
+            type: object
+            properties:
+                http_tool_definition:
+                    $ref: '#/components/schemas/HTTPToolDefinition'
+                prompt_template:
+                    $ref: '#/components/schemas/PromptTemplate'
+            description: A polymorphic tool - can be an HTTP tool or a prompt template
+        ToolEntry:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the tool
+                name:
+                    type: string
+                    description: The name of the tool
+                tool_urn:
+                    type: string
+                    description: The URN of the tool
+                type:
+                    type: string
+                    enum:
+                        - http
+                        - prompt
+            required:
+                - type
+                - id
+                - name
+                - tool_urn
         ToolVariation:
             type: object
             properties:
@@ -9926,11 +10011,6 @@ components:
                     description: Description of the toolset
                 external_oauth_server:
                     $ref: '#/components/schemas/ExternalOAuthServer'
-                http_tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/HTTPToolDefinition'
-                    description: The HTTP tools in this toolset
                 id:
                     type: string
                     description: The ID of the toolset
@@ -9960,7 +10040,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/PromptTemplate'
-                    description: The prompt templates in this toolset
+                    description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
                 security_variables:
                     type: array
                     items:
@@ -9981,6 +10061,11 @@ components:
                     items:
                         type: string
                     description: The tool URNs in this toolset
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Tool'
+                    description: The tools in this toolset
                 updated_at:
                     type: string
                     description: When the toolset was last updated.
@@ -9992,7 +10077,7 @@ components:
                 - account_type
                 - name
                 - slug
-                - http_tools
+                - tools
                 - prompt_templates
                 - tool_urns
                 - created_at
@@ -10015,11 +10100,6 @@ components:
                 description:
                     type: string
                     description: Description of the toolset
-                http_tools:
-                    type: array
-                    items:
-                        $ref: '#/components/schemas/HTTPToolDefinitionEntry'
-                    description: The HTTP tools in this toolset
                 id:
                     type: string
                     description: The ID of the toolset
@@ -10047,7 +10127,7 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/PromptTemplateEntry'
-                    description: The prompt templates in this toolset
+                    description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
                 security_variables:
                     type: array
                     items:
@@ -10068,6 +10148,11 @@ components:
                     items:
                         type: string
                     description: The tool URNs in this toolset
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ToolEntry'
+                    description: The tools in this toolset
                 updated_at:
                     type: string
                     description: When the toolset was last updated.
@@ -10078,7 +10163,7 @@ components:
                 - organization_id
                 - name
                 - slug
-                - http_tools
+                - tools
                 - prompt_templates
                 - tool_urns
                 - created_at
