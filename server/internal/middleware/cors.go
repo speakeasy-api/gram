@@ -41,6 +41,7 @@ func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.H
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 
 			// Special CORS policy for OAuth well-known endpoints
+			// These need to be accessible from the browser on any origin
 			if slices.ContainsFunc(mcpOpenAccessControlRoutes, func(route string) bool {
 				return strings.HasPrefix(r.URL.Path, route)
 			}) {
