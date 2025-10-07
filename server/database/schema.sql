@@ -557,7 +557,6 @@ CREATE TABLE IF NOT EXISTS toolset_versions (
   toolset_id uuid NOT NULL,
   version BIGINT NOT NULL,
   tool_urns TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
-  tool_variations uuid[] NOT NULL DEFAULT ARRAY[]::uuid[],
 
   predecessor_id uuid,
 
