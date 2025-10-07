@@ -58,7 +58,7 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	return cfgLoader(c)
 }
 
-func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (tm.ToolMetricsClient, error) {
+func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (tm.ToolMetricsClient, func(context.Context) error, error) {
 	//nolint:sloglint // debug logging for clickhouse connection
 	logger.InfoContext(ctx,
 		"newToolMetricsClient",
@@ -87,18 +87,28 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 	})
 	if err != nil {
 		logger.WarnContext(ctx, "error connecting to clickhouse; falling back to stub tool call metrics client")
-		return &tm.StubToolMetricsClient{}, nil
+		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil
 	}
 
 	if err = conn.Ping(ctx); err != nil {
 		logger.WarnContext(ctx, "failed to ping clickhouse; falling back to stub tool call metrics client", attr.SlogError(err))
-		return &tm.StubToolMetricsClient{}, nil
+		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil
 	}
 
-	return &tm.ClickhouseClient{
+	cc := &tm.ClickhouseClient{
 		Conn:   conn,
 		Logger: logger,
-	}, nil
+	}
+
+	shutdown := func(ctx context.Context) error {
+		if err := cc.Close(); err != nil {
+			logger.ErrorContext(ctx, "failed to close tool metrics client connection", attr.SlogError(err))
+			return fmt.Errorf("close tool metrics client: %w", err)
+		}
+		return nil
+	}
+
+	return cc, shutdown, nil
 }
 
 type dbClientOptions struct {

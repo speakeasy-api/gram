@@ -16,7 +16,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/speakeasy-api/gram/server/internal/logs"
-	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -388,17 +387,11 @@ func newStartCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			tcm, err := newToolMetricsClient(ctx, logger, c)
+			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c)
 			if err != nil {
 				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
 			}
-
-			defer func(c tm.ToolMetricsClient) {
-				closeErr := c.Close()
-				if closeErr != nil {
-					logger.ErrorContext(ctx, "failed to close tool metrics client connection", attr.SlogError(closeErr))
-				}
-			}(tcm)
+			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
