@@ -741,10 +741,6 @@ CREATE TABLE IF NOT EXISTS tool_variations (
   CONSTRAINT tool_variations_predecessor_id_fkey FOREIGN KEY (predecessor_id) REFERENCES tool_variations (id) ON DELETE SET NULL
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS tool_variations_scoped_src_tool_name_key
-ON tool_variations (group_id, src_tool_name)
-WHERE deleted IS FALSE;
-
 CREATE TABLE IF NOT EXISTS prompt_templates (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   tool_urn TEXT,
