@@ -515,7 +515,6 @@ CREATE TABLE IF NOT EXISTS toolsets (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 250),
   default_environment_slug TEXT CHECK (default_environment_slug <> '' AND CHAR_LENGTH(default_environment_slug) <= 60),
-  -- http_tool_names TEXT[] DEFAULT ARRAY[]::TEXT[] CHECK (array_length(http_tool_names, 1) <= 5000),
   mcp_slug TEXT CHECK (
     mcp_slug IS NULL OR (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 60)
   ),
