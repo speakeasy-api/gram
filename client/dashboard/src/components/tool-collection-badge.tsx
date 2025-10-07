@@ -16,12 +16,10 @@ type ToolsetForBadge = Pick<ToolsetEntry, "name" | "slug" | "promptTemplates">;
 
 export const ToolsetPromptsBadge = ({
   toolset,
-  size = "md",
-  variant = "outline",
+  variant = "neutral",
 }: {
   toolset: ToolsetForBadge | undefined;
-  size?: "sm" | "md";
-  variant?: "outline" | "default";
+  variant?: "neutral" | "destructive" | "information" | "success" | "warning";
 }) => {
   const names = toolset ? promptNames(toolset.promptTemplates) : [];
 
@@ -38,7 +36,7 @@ export const ToolsetPromptsBadge = ({
   return names && names.length > 0 ? (
     <Tooltip>
       <TooltipTrigger>
-        <Badge size={size} variant={variant}>
+        <Badge variant={variant}>
           {names.length} Prompt{names.length === 1 ? "" : "s"}
         </Badge>
       </TooltipTrigger>
@@ -51,13 +49,11 @@ export const ToolsetPromptsBadge = ({
 
 export const ToolCollectionBadge = ({
   toolNames,
-  size = "md",
-  variant = "outline",
+  variant = "neutral",
   className,
   warnOnTooManyTools = false,
 }: {
   toolNames: string[] | undefined;
-  size?: "sm" | "md";
   variant?: React.ComponentProps<typeof Badge>["variant"];
   className?: string;
   warnOnTooManyTools?: boolean;
@@ -88,7 +84,6 @@ export const ToolCollectionBadge = ({
     <Tooltip>
       <TooltipTrigger>
         <Badge
-          size={size}
           variant={toolsWarnings ? "warning" : variant}
           className={cn(
             !toolsWarnings && "bg-card",
@@ -107,7 +102,7 @@ export const ToolCollectionBadge = ({
       </TooltipPortal>
     </Tooltip>
   ) : (
-    <Badge size={size} variant={variant} className={className}>
+    <Badge variant={variant} className={className}>
       No Tools
     </Badge>
   );
