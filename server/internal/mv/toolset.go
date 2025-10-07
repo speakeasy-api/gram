@@ -13,11 +13,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	deploymentR "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	deploymentR "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	org "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -235,8 +236,9 @@ func DescribeToolset(
 
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
 	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get latest deployment id").Log(ctx, logger)
+	if err != nil { 
+		// We only log this because we only need to know this for the cache
+		logger.ErrorContext(ctx, "failed to get active deployment id", attr.SlogError(err))
 	}
 
 	// Get tool URNs from latest toolset version
@@ -254,7 +256,7 @@ func DescribeToolset(
 		// Check cache if available
 		// NOTE: A slight shortcoming here is that the cache is keyed by the active deployment id, but the queries below don't strictly depend on
 		// the deployment ID fetched above. Technically the deployment could change at just the right time to mess up the cache.
-		if toolsetCache != nil {
+		if toolsetCache != nil && activeDeploymentID != uuid.Nil {
 			if cached, cacheErr := toolsetCache.Get(ctx, ToolsetCacheKey(toolset.ID.String(), activeDeploymentID.String(), toolsetVersion)); cacheErr == nil {
 				return cached.Toolset, nil
 			}
@@ -598,14 +600,14 @@ func DescribeToolset(
 	}
 
 	// Store in cache if available
-	if toolsetCache != nil && toolsetVersion > 0 {
+	if toolsetCache != nil && toolsetVersion > 0 && activeDeploymentID != uuid.Nil {
 		if err := toolsetCache.Store(ctx, CachedToolset{
 			DeploymentID: activeDeploymentID.String(),
 			ToolsetID:    toolset.ID.String(),
 			Version:      toolsetVersion,
 			Toolset:      result,
 		}); err != nil {
-			logger.ErrorContext(ctx, "failed to cache toolset", slog.String("error", err.Error()))
+			logger.ErrorContext(ctx, "failed to cache toolset", attr.SlogError(err))
 		}
 	}
 

@@ -51,6 +51,7 @@ type Service struct {
 	env              *environments.EnvironmentEntries
 	toolProxy        *gateway.ToolProxy
 	tracking         billing.Tracker
+	toolsetCache     cache.TypedCacheObject[mv.CachedToolset]
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -87,6 +88,7 @@ func NewService(
 			cacheImpl,
 			guardianPolicy,
 		),
+		toolsetCache: cache.NewTypedObjectCache[mv.CachedToolset](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}
 }
 
@@ -109,7 +111,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(conv.ToLower(payload.ToolsetSlug)), nil)
+	toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(conv.ToLower(payload.ToolsetSlug)), &s.toolsetCache)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +279,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	var toolset *types.Toolset
 	if chatID != "" && toolsetSlug != "" {
 		var toolsetErr error
-		toolset, toolsetErr = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolsetSlug), nil)
+		toolset, toolsetErr = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolsetSlug), &s.toolsetCache)
 		if toolsetErr != nil {
 			logger.ErrorContext(ctx, "failed to load toolset", attr.SlogError(err))
 		}
