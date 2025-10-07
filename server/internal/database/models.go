@@ -449,6 +449,7 @@ type ToolVariation struct {
 type ToolVariationsGroup struct {
 	ID          uuid.UUID
 	ProjectID   uuid.UUID
+	Version     int64
 	Name        string
 	Description pgtype.Text
 	CreatedAt   pgtype.Timestamptz

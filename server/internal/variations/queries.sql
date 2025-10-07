@@ -4,6 +4,12 @@ FROM tool_variations_groups
 INNER JOIN project_tool_variations ON tool_variations_groups.id = project_tool_variations.group_id
 WHERE project_tool_variations.project_id = @project_id;
 
+-- name: PokeGlobalToolVariationsGroupVersion :one
+SELECT tool_variations_groups.version
+FROM tool_variations_groups
+INNER JOIN project_tool_variations ON tool_variations_groups.id = project_tool_variations.group_id
+WHERE project_tool_variations.project_id = @project_id;
+
 -- name: InitGlobalToolVariationsGroup :one
 WITH created AS (
   INSERT INTO tool_variations_groups (
@@ -24,37 +30,49 @@ attached AS (
 SELECT id FROM created;
 
 -- name: UpsertToolVariation :one
-INSERT INTO tool_variations (
-  group_id,
-  src_tool_urn,
-  src_tool_name,
-  confirm,
-  confirm_prompt,
-  name,
-  summary,
-  description,
-  tags,
-  summarizer,
-  predecessor_id
-) VALUES (
-  @group_id,
-  @src_tool_urn,
-  @src_tool_name,
-  @confirm,
-  @confirm_prompt,
-  @name,
-  @summary,
-  @description,
-  @tags,
-  @summarizer,
-  (SELECT id FROM tool_variations 
-   WHERE group_id = @group_id 
-     AND src_tool_name = @src_tool_name 
-     AND deleted IS FALSE 
-   ORDER BY created_at DESC 
-   LIMIT 1)
+WITH updated_group AS (
+  -- Automatically bump the group version
+  UPDATE tool_variations_groups tvg
+  SET
+    version = version + 1,
+    updated_at = now()
+  WHERE tvg.id = @group_id
+  RETURNING tvg.version
+),
+inserted AS (
+  INSERT INTO tool_variations (
+    group_id,
+    src_tool_urn,
+    src_tool_name,
+    confirm,
+    confirm_prompt,
+    name,
+    summary,
+    description,
+    tags,
+    summarizer,
+    predecessor_id
+  ) VALUES (
+    @group_id,
+    @src_tool_urn,
+    @src_tool_name,
+    @confirm,
+    @confirm_prompt,
+    @name,
+    @summary,
+    @description,
+    @tags,
+    @summarizer,
+    (SELECT id FROM tool_variations
+     WHERE group_id = @group_id
+       AND src_tool_name = @src_tool_name
+       AND deleted IS FALSE
+     ORDER BY created_at DESC
+     LIMIT 1)
+  )
+  RETURNING *
 )
-RETURNING *;
+SELECT * FROM inserted;
 
 -- name: ListGlobalToolVariations :many
 SELECT sqlc.embed(tool_variations)

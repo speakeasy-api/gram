@@ -65,6 +65,12 @@ WHERE
   group_id = (SELECT id FROM global_group)
   AND src_tool_name = ANY($1::text[])
   AND deleted IS FALSE
+  AND id NOT IN (
+    SELECT DISTINCT predecessor_id 
+    FROM tool_variations 
+    WHERE predecessor_id IS NOT NULL 
+      AND deleted IS FALSE
+  )
 `
 
 type FindGlobalVariationsByToolNamesParams struct {
@@ -165,6 +171,12 @@ INNER JOIN project_tool_variations
 WHERE
   project_tool_variations.project_id = $1
   AND tool_variations.deleted IS FALSE
+  AND tool_variations.id NOT IN (
+    SELECT DISTINCT predecessor_id 
+    FROM tool_variations 
+    WHERE predecessor_id IS NOT NULL 
+      AND deleted IS FALSE
+  )
 ORDER BY tool_variations.id DESC
 `
 
@@ -224,37 +236,49 @@ func (q *Queries) PokeGlobalToolVariationsGroup(ctx context.Context, projectID u
 }
 
 const upsertToolVariation = `-- name: UpsertToolVariation :one
-INSERT INTO tool_variations (
-  group_id,
-  src_tool_urn,
-  src_tool_name,
-  confirm,
-  confirm_prompt,
-  name,
-  summary,
-  description,
-  tags,
-  summarizer,
-  predecessor_id
-) VALUES (
-  $1,
-  $2,
-  $3,
-  $4,
-  $5,
-  $6,
-  $7,
-  $8,
-  $9,
-  $10,
-  (SELECT id FROM tool_variations 
-   WHERE group_id = $1 
-     AND src_tool_name = $3 
-     AND deleted IS FALSE 
-   ORDER BY created_at DESC 
-   LIMIT 1)
+WITH updated_group AS (
+  -- Automatically bump the group version
+  UPDATE tool_variations_groups tvg
+  SET
+    version = version + 1,
+    updated_at = now()
+  WHERE tvg.id = $1
+  RETURNING tvg.version
+),
+inserted AS (
+  INSERT INTO tool_variations (
+    group_id,
+    src_tool_urn,
+    src_tool_name,
+    confirm,
+    confirm_prompt,
+    name,
+    summary,
+    description,
+    tags,
+    summarizer,
+    predecessor_id
+  ) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    (SELECT id FROM tool_variations
+     WHERE group_id = $1
+       AND src_tool_name = $3
+       AND deleted IS FALSE
+     ORDER BY created_at DESC
+     LIMIT 1)
+  )
+  RETURNING id, group_id, predecessor_id, src_tool_name, src_tool_urn, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
 )
-RETURNING id, group_id, predecessor_id, src_tool_name, src_tool_urn, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
+SELECT id, group_id, predecessor_id, src_tool_name, src_tool_urn, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted FROM inserted
 `
 
 type UpsertToolVariationParams struct {
@@ -270,7 +294,26 @@ type UpsertToolVariationParams struct {
 	Summarizer    pgtype.Text
 }
 
-func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariationParams) (ToolVariation, error) {
+type UpsertToolVariationRow struct {
+	ID            uuid.UUID
+	GroupID       uuid.UUID
+	PredecessorID uuid.NullUUID
+	SrcToolName   string
+	SrcToolUrn    pgtype.Text
+	Confirm       pgtype.Text
+	ConfirmPrompt pgtype.Text
+	Name          pgtype.Text
+	Summary       pgtype.Text
+	Description   pgtype.Text
+	Tags          []string
+	Summarizer    pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+	DeletedAt     pgtype.Timestamptz
+	Deleted       bool
+}
+
+func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariationParams) (UpsertToolVariationRow, error) {
 	row := q.db.QueryRow(ctx, upsertToolVariation,
 		arg.GroupID,
 		arg.SrcToolUrn,
@@ -283,7 +326,7 @@ func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariati
 		arg.Tags,
 		arg.Summarizer,
 	)
-	var i ToolVariation
+	var i UpsertToolVariationRow
 	err := row.Scan(
 		&i.ID,
 		&i.GroupID,
