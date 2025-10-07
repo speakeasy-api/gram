@@ -208,6 +208,7 @@ INSERT INTO function_tool_definitions (
   deployment_id
   , function_id
   , tool_urn
+  , project_id
   , name
   , description
   , runtime
@@ -218,6 +219,7 @@ SELECT
   $1
   , current.function_id
   , current.tool_urn
+  , current.project_id
   , current.name
   , current.description
   , current.runtime
@@ -349,6 +351,7 @@ INSERT INTO function_tool_definitions (
     deployment_id
   , function_id
   , tool_urn
+  , project_id
   , runtime
   , name
   , description
@@ -363,14 +366,16 @@ INSERT INTO function_tool_definitions (
   , $6
   , $7
   , $8
+  , $9
 )
-RETURNING id, tool_urn, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
+RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateFunctionsToolParams struct {
 	DeploymentID uuid.UUID
 	FunctionID   uuid.UUID
 	ToolUrn      urn.Tool
+	ProjectID    uuid.UUID
 	Runtime      string
 	Name         string
 	Description  string
@@ -383,6 +388,7 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		arg.DeploymentID,
 		arg.FunctionID,
 		arg.ToolUrn,
+		arg.ProjectID,
 		arg.Runtime,
 		arg.Name,
 		arg.Description,
@@ -393,6 +399,7 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 	err := row.Scan(
 		&i.ID,
 		&i.ToolUrn,
+		&i.ProjectID,
 		&i.DeploymentID,
 		&i.FunctionID,
 		&i.Runtime,

@@ -76,7 +76,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	}
 
 	// Get HTTP tools
-	toolParams := repo.ListToolsParams{
+	toolParams := repo.ListHttpToolsParams{
 		ProjectID:    *authCtx.ProjectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
 		DeploymentID: uuid.NullUUID{Valid: false, UUID: uuid.Nil},
@@ -99,9 +99,19 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		toolParams.DeploymentID = uuid.NullUUID{UUID: deploymentUUID, Valid: true}
 	}
 
-	tools, err := s.repo.ListTools(ctx, toolParams)
+	tools, err := s.repo.ListHttpTools(ctx, toolParams)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools").Log(ctx, s.logger)
+	}
+
+	functionTools, err := s.repo.ListFunctionTools(ctx, repo.ListFunctionToolsParams{
+		ProjectID:    *authCtx.ProjectID,
+		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		DeploymentID: uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		Limit:        limit + 1,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list function tools").Log(ctx, s.logger)
 	}
 
 	// Get prompt templates
@@ -232,6 +242,34 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
 				Canonical:           canonical,
 				Variation:           variation,
+			},
+		})
+	}
+
+	for _, tool := range functionTools {
+		// TODO: Chase to look at what applies from variations here
+		result.Tools = append(result.Tools, &types.Tool{
+			FunctionToolDefinition: &types.FunctionToolDefinition{
+				ID:            tool.ID.String(),
+				ToolUrn:       tool.ToolUrn.String(),
+				DeploymentID:  tool.DeploymentID.String(),
+				ProjectID:     authCtx.ProjectID.String(),
+				FunctionID:    tool.FunctionID.String(),
+				Runtime:       tool.Runtime,
+				Name:          tool.Name,
+				CanonicalName: tool.Name,
+				Description:   tool.Description,
+				InputSchema:   tool.InputSchema,
+				Variables:     tool.Variables,
+				SchemaVersion: nil,
+				Schema:        string(tool.InputSchema),
+				Confirm:       nil,
+				ConfirmPrompt: nil,
+				Summarizer:    nil,
+				CreatedAt:     tool.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:     tool.UpdatedAt.Time.Format(time.RFC3339),
+				Canonical:     nil,
+				Variation:     nil,
 			},
 		})
 	}

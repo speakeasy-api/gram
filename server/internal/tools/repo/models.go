@@ -11,6 +11,23 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type FunctionToolDefinition struct {
+	ID           uuid.UUID
+	ToolUrn      urn.Tool
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+	InputSchema  []byte
+	Variables    []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
 type HttpToolDefinition struct {
 	ID                  uuid.UUID
 	ToolUrn             urn.Tool

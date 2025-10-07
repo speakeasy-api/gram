@@ -78,6 +78,23 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Required("summary", "tags", "http_method", "path", "schema", "deployment_id")
 })
 
+// FunctionToolDefinition represents a function-based tool with all its attributes
+var FunctionToolDefinition = Type("FunctionToolDefinition", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A function tool")
+
+	Extend(BaseToolAttributes)
+
+	Attribute("deployment_id", String, "The ID of the deployment")
+	Attribute("function_id", String, "The ID of the function")
+	Attribute("runtime", String, "Runtime environment (e.g., nodejs:22, python:3.12)")
+	Attribute("input_schema", Any, "JSON schema for the function input")
+	Attribute("variables", Any, "Variables configuration for the function")
+
+	Required("deployment_id", "function_id", "runtime", "schema")
+})
+
 // Tool is a discriminated union of HTTP tools and prompt templates.
 // Custom JSON marshaling provided in goaext.
 var Tool = Type("Tool", func() {
@@ -85,6 +102,7 @@ var Tool = Type("Tool", func() {
 	Description("A polymorphic tool - can be an HTTP tool or a prompt template")
 
 	Attribute("http_tool_definition", HTTPToolDefinition, "The HTTP tool definition")
+	Attribute("function_tool_definition", FunctionToolDefinition, "The function tool definition")
 	Attribute("prompt_template", PromptTemplate, "The prompt template")
 })
 

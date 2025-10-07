@@ -183,6 +183,7 @@ type ExternalOauthServerMetadatum struct {
 type FunctionToolDefinition struct {
 	ID           uuid.UUID
 	ToolUrn      urn.Tool
+	ProjectID    uuid.UUID
 	DeploymentID uuid.UUID
 	FunctionID   uuid.UUID
 	Runtime      string

@@ -133,6 +133,22 @@ func DescribeToolsetEntry(
 			tools = append(tools, tool)
 		}
 
+		funcTools, err := toolsRepo.FindFunctionToolEntriesByUrn(ctx, tr.FindFunctionToolEntriesByUrnParams{
+			ProjectID: pid,
+			Urns:      toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list function tools in toolset").Log(ctx, logger)
+		}
+		for _, tool := range funcTools {
+			tools = append(tools, &types.ToolEntry{
+				Type:    string(urn.ToolKindFunction),
+				ID:      tool.ID.String(),
+				Name:    tool.Name,
+				ToolUrn: tool.ToolUrn.String(),
+			})
+		}
+
 		promptTools, err := templatesRepo.PeekTemplatesByUrns(ctx, templatesR.PeekTemplatesByUrnsParams{
 			ProjectID: pid,
 			Urns:      toolUrns,
@@ -391,6 +407,46 @@ func DescribeToolset(
 
 			tools = append(tools, &types.Tool{
 				HTTPToolDefinition: tool,
+			})
+		}
+
+		functionDefinitions, err := toolsRepo.FindFunctionToolsByUrn(ctx, tr.FindFunctionToolsByUrnParams{
+			ProjectID: pid,
+			Urns:      toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get function tools for toolset").Log(ctx, logger)
+		}
+
+		for _, def := range functionDefinitions {
+			functionTool := &types.FunctionToolDefinition{
+				ID:            def.FunctionToolDefinition.ID.String(),
+				ToolUrn:       def.FunctionToolDefinition.ToolUrn.String(),
+				ProjectID:     def.FunctionToolDefinition.ProjectID.String(),
+				DeploymentID:  def.FunctionToolDefinition.DeploymentID.String(),
+				FunctionID:    def.FunctionToolDefinition.FunctionID.String(),
+				Runtime:       def.FunctionToolDefinition.Runtime,
+				Name:          def.FunctionToolDefinition.Name,
+				CanonicalName: def.FunctionToolDefinition.Name,
+				Description:   def.FunctionToolDefinition.Description,
+				InputSchema:   def.FunctionToolDefinition.InputSchema,
+				Variables:     def.FunctionToolDefinition.Variables,
+				SchemaVersion: nil,
+				Schema:        string(def.FunctionToolDefinition.InputSchema),
+				Confirm:       nil,
+				ConfirmPrompt: nil,
+				Summarizer:    nil,
+				CreatedAt:     def.FunctionToolDefinition.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:     def.FunctionToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
+				Canonical:     nil,
+				Variation:     nil,
+			}
+			// TODO: Chase to look at what applies from variations here
+			if functionTool.Schema == "" {
+				functionTool.Schema = constants.DefaultEmptyToolSchema
+			}
+			tools = append(tools, &types.Tool{
+				FunctionToolDefinition: functionTool,
 			})
 		}
 

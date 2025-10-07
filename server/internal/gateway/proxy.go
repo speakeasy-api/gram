@@ -136,8 +136,14 @@ func (itp *ToolProxy) Do(
 	w http.ResponseWriter,
 	requestBody io.Reader,
 	env *CaseInsensitiveEnv,
-	tool *HTTPTool,
+	gatewayTool *Tool,
 ) error {
+	if !gatewayTool.IsHTTP() {
+		return fmt.Errorf("tool type not supported: %s", gatewayTool.Kind)
+	}
+
+	tool := gatewayTool.HTTPTool
+
 	ctx, span := itp.tracer.Start(ctx, "proxyToolCall", trace.WithAttributes(
 		attr.ToolName(tool.Name),
 		attr.ToolID(tool.ID),

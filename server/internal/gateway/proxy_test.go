@@ -231,7 +231,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-		err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, tool)
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, &Tool{Kind: ToolKindHTTP, HTTPTool: tool, FunctionTool: nil})
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -358,7 +358,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-		err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, tool)
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, &Tool{Kind: ToolKindHTTP, HTTPTool: tool, FunctionTool: nil})
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -706,7 +706,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-		err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, tool)
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, &Tool{Kind: ToolKindHTTP, HTTPTool: tool, FunctionTool: nil})
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -924,7 +924,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), ciEnv, tool)
+			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), ciEnv, &Tool{Kind: ToolKindHTTP, HTTPTool: tool, FunctionTool: nil})
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
