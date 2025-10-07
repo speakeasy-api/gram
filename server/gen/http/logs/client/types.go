@@ -15,7 +15,8 @@ import (
 // ListLogsResponseBody is the type of the "logs" service "listLogs" endpoint
 // HTTP response body.
 type ListLogsResponseBody struct {
-	Logs []*HTTPToolLogResponseBody `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
+	Logs       []*HTTPToolLogResponseBody    `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
+	Pagination *PaginationResultResponseBody `form:"pagination,omitempty" json:"pagination,omitempty" xml:"pagination,omitempty"`
 }
 
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
@@ -248,13 +249,28 @@ type HTTPToolLogResponseBody struct {
 	ResponseBodyBytes *uint64 `form:"response_body_bytes,omitempty" json:"response_body_bytes,omitempty" xml:"response_body_bytes,omitempty"`
 }
 
+// PaginationResultResponseBody is used to define fields on response body types.
+type PaginationResultResponseBody struct {
+	// Number of items per page
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty" xml:"per_page,omitempty"`
+	// Whether there is a next page
+	HasNextPage *bool `form:"has_next_page,omitempty" json:"has_next_page,omitempty" xml:"has_next_page,omitempty"`
+	// Cursor for next page
+	NextPageCursor *string `form:"next_page_cursor,omitempty" json:"next_page_cursor,omitempty" xml:"next_page_cursor,omitempty"`
+}
+
 // NewListLogsListToolLogResultOK builds a "logs" service "listLogs" endpoint
 // result from a HTTP "OK" response.
 func NewListLogsListToolLogResultOK(body *ListLogsResponseBody) *logs.ListToolLogResult {
 	v := &logs.ListToolLogResult{}
-	v.Logs = make([]*logs.HTTPToolLog, len(body.Logs))
-	for i, val := range body.Logs {
-		v.Logs[i] = unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(val)
+	if body.Logs != nil {
+		v.Logs = make([]*logs.HTTPToolLog, len(body.Logs))
+		for i, val := range body.Logs {
+			v.Logs[i] = unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(val)
+		}
+	}
+	if body.Pagination != nil {
+		v.Pagination = unmarshalPaginationResultResponseBodyToLogsPaginationResult(body.Pagination)
 	}
 
 	return v
@@ -409,14 +425,16 @@ func NewListLogsGatewayError(body *ListLogsGatewayErrorResponseBody) *goa.Servic
 // ValidateListLogsResponseBody runs the validations defined on
 // ListLogsResponseBody
 func ValidateListLogsResponseBody(body *ListLogsResponseBody) (err error) {
-	if body.Logs == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("logs", "body"))
-	}
 	for _, e := range body.Logs {
 		if e != nil {
 			if err2 := ValidateHTTPToolLogResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
+		}
+	}
+	if body.Pagination != nil {
+		if err2 := ValidatePaginationResultResponseBody(body.Pagination); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return
@@ -729,6 +747,15 @@ func ValidateHTTPToolLogResponseBody(body *HTTPToolLogResponseBody) (err error) 
 		if !(*body.ToolType == "http" || *body.ToolType == "function" || *body.ToolType == "prompt") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.tool_type", *body.ToolType, []any{"http", "function", "prompt"}))
 		}
+	}
+	return
+}
+
+// ValidatePaginationResultResponseBody runs the validations defined on
+// PaginationResultResponseBody
+func ValidatePaginationResultResponseBody(body *PaginationResultResponseBody) (err error) {
+	if body.NextPageCursor != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_page_cursor", *body.NextPageCursor, goa.FormatDateTime))
 	}
 	return
 }

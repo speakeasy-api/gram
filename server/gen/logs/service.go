@@ -100,7 +100,7 @@ type ListLogsPayload struct {
 	// Project ID
 	ProjectID string
 	// Tool ID
-	ToolID string
+	ToolID *string
 	// Start timestamp
 	TsStart *string
 	// End timestamp
@@ -117,7 +117,18 @@ type ListLogsPayload struct {
 
 // ListToolLogResult is the result type of the logs service listLogs method.
 type ListToolLogResult struct {
-	Logs []*HTTPToolLog
+	Logs       []*HTTPToolLog
+	Pagination *PaginationResult
+}
+
+// Pagination metadata for list responses
+type PaginationResult struct {
+	// Number of items per page
+	PerPage *int
+	// Whether there is a next page
+	HasNextPage *bool
+	// Cursor for next page
+	NextPageCursor *string
 }
 
 // Type of tool being logged

@@ -59,13 +59,14 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 }
 
 func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context) (tm.ToolMetricsClient, error) {
+	//nolint:sloglint // debug logging for clickhouse connection
 	logger.InfoContext(ctx,
 		"newToolMetricsClient",
-		"database", c.String("clickhouse-database"),
-		"username", c.String("clickhouse-username"),
-		"password", c.String("clickhouse-password"),
-		"host", c.String("clickhouse-host"),
-		"port", c.String("clickhouse-http-port"),
+		slog.String("database", c.String("clickhouse-database")),
+		slog.String("username", c.String("clickhouse-username")),
+		slog.String("password", c.String("clickhouse-password")),
+		slog.String("host", c.String("clickhouse-host")),
+		slog.String("port", c.String("clickhouse-http-port")),
 	)
 
 	conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // too many fields
@@ -74,14 +75,14 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 			Username: c.String("clickhouse-username"),
 			Password: c.String("clickhouse-password"),
 		},
-		Debug: c.Bool("clickhouse-debug"),
+		Debug: true,
 		Debugf: func(format string, v ...interface{}) {
 			logger.InfoContext(ctx, fmt.Sprintf(format, v...))
 		},
 		Addr:     []string{fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-http-port"))},
 		Protocol: clickhouse.HTTP,
 		Settings: clickhouse.Settings{
-			"max_execution_time": 60,
+			"max_execution_time": 60, // query timeout
 		},
 	})
 	if err != nil {

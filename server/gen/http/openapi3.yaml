@@ -3638,7 +3638,6 @@ paths:
                   description: Tool ID
                   in: query
                   name: tool_id
-                  required: true
                   schema:
                     description: Tool ID
                     format: uuid
@@ -9351,8 +9350,8 @@ components:
                     type: array
                     items:
                         $ref: '#/components/schemas/HTTPToolLog'
-            required:
-                - logs
+                pagination:
+                    $ref: '#/components/schemas/PaginationResult'
         ListToolsResult:
             type: object
             properties:
@@ -9665,35 +9664,21 @@ components:
                 - visibility
                 - semver
                 - created_at
-        PaginationParams:
+        PaginationResult:
             type: object
             properties:
-                cursor:
+                has_next_page:
+                    type: boolean
+                    description: Whether there is a next page
+                next_page_cursor:
                     type: string
-                    description: Cursor for pagination
+                    description: Cursor for next page
                     format: date-time
-                direction:
-                    type: string
-                    description: Pagination direction
-                    default: next
-                    enum:
-                        - next
-                        - prev
                 per_page:
                     type: integer
-                    description: Number of items per page (1-100)
-                    default: 20
+                    description: Number of items per page
                     format: int64
-                    minimum: 1
-                    maximum: 100
-                sort:
-                    type: string
-                    description: Sort order
-                    default: DESC
-                    enum:
-                        - ASC
-                        - DESC
-            description: Pagination parameters for listing logs
+            description: Pagination metadata for list responses
         PeriodUsage:
             type: object
             properties:

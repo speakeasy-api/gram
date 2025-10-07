@@ -49,8 +49,12 @@ var _ = Service("logs", func() {
 				Enum("next", "prev")
 				Default("next")
 			})
+			Attribute("sort", String, "Sort order", func() {
+				Enum("ASC", "DESC")
+				Default("DESC")
+			})
 
-			Required("tool_id", "project_id")
+			Required("project_id")
 		})
 
 		Result(ListToolLogResult)
@@ -83,26 +87,16 @@ var _ = Service("logs", func() {
 
 var ListToolLogResult = Type("ListToolLogResult", func() {
 	Attribute("logs", ArrayOf(HTTPToolLog))
-	Required("logs")
+	Attribute("pagination", PaginationResult)
+	// Required("logs", "pagination")
 })
 
-var PaginationParams = Type("PaginationParams", func() {
-	Description("Pagination parameters for listing logs")
+var PaginationResult = Type("PaginationResult", func() {
+	Description("Pagination metadata for list responses")
 
-	Attribute("per_page", Int, "Number of items per page (1-100)", func() {
-		Minimum(1)
-		Maximum(100)
-		Default(20)
-	})
-	Attribute("direction", String, "Pagination direction", func() {
-		Enum("next", "prev")
-		Default("next")
-	})
-	Attribute("sort", String, "Sort order", func() {
-		Enum("ASC", "DESC")
-		Default("DESC")
-	})
-	Attribute("cursor", String, "Cursor for pagination", func() {
+	Attribute("per_page", Int, "Number of items per page")
+	Attribute("has_next_page", Boolean, "Whether there is a next page")
+	Attribute("next_page_cursor", String, "Cursor for next page", func() {
 		Format(FormatDateTime)
 	})
 })
@@ -120,7 +114,7 @@ var HTTPToolLog = Type("HTTPToolLog", func() {
 		Format(FormatDateTime)
 	})
 
-	// Required multi-tenant keys
+	// Multi-tenant keys
 	Attribute("organization_id", String, "Organization UUID", func() {
 		Format(FormatUUID)
 	})

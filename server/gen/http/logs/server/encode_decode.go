@@ -37,7 +37,7 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 	return func(r *http.Request) (*logs.ListLogsPayload, error) {
 		var (
 			projectID        string
-			toolID           string
+			toolID           *string
 			tsStart          *string
 			tsEnd            *string
 			cursor           *string
@@ -55,11 +55,13 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "query string"))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
-		toolID = qp.Get("tool_id")
-		if toolID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("tool_id", "query string"))
+		toolIDRaw := qp.Get("tool_id")
+		if toolIDRaw != "" {
+			toolID = &toolIDRaw
 		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("tool_id", toolID, goa.FormatUUID))
+		if toolID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("tool_id", *toolID, goa.FormatUUID))
+		}
 		tsStartRaw := qp.Get("ts_start")
 		if tsStartRaw != "" {
 			tsStart = &tsStartRaw
@@ -311,6 +313,9 @@ func EncodeListLogsError(encoder func(context.Context, http.ResponseWriter) goah
 // marshalLogsHTTPToolLogToHTTPToolLogResponseBody builds a value of type
 // *HTTPToolLogResponseBody from a value of type *logs.HTTPToolLog.
 func marshalLogsHTTPToolLogToHTTPToolLogResponseBody(v *logs.HTTPToolLog) *HTTPToolLogResponseBody {
+	if v == nil {
+		return nil
+	}
 	res := &HTTPToolLogResponseBody{
 		Ts:                v.Ts,
 		OrganizationID:    v.OrganizationID,
@@ -349,6 +354,22 @@ func marshalLogsHTTPToolLogToHTTPToolLogResponseBody(v *logs.HTTPToolLog) *HTTPT
 			tv := val
 			res.ResponseHeaders[tk] = tv
 		}
+	}
+
+	return res
+}
+
+// marshalLogsPaginationResultToPaginationResultResponseBody builds a value of
+// type *PaginationResultResponseBody from a value of type
+// *logs.PaginationResult.
+func marshalLogsPaginationResultToPaginationResultResponseBody(v *logs.PaginationResult) *PaginationResultResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &PaginationResultResponseBody{
+		PerPage:        v.PerPage,
+		HasNextPage:    v.HasNextPage,
+		NextPageCursor: v.NextPageCursor,
 	}
 
 	return res

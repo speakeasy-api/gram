@@ -61,40 +61,55 @@ func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (re
 
 	// Build pagination request
 	pagination := &tm.PaginationRequest{
-		PerPage:   payload.PerPage,
-		Direction: tm.PageDirection(payload.Direction),
-		Sort:      payload.Sort,
+		PerPage:    payload.PerPage,
+		Direction:  tm.PageDirection(payload.Direction),
+		Sort:       payload.Sort,
+		PrevCursor: "",
+		NextCursor: "",
 	}
 	pagination.SetDefaults()
 
+	//nolint:sloglint // debug logging for pagination
 	s.logger.InfoContext(ctx, "request payload",
-		slog.Any("projectID", payload.ProjectID),
-		slog.Any("toolID", payload.ToolID),
-		slog.Any("pagination.PerPage", pagination.PerPage),
-		slog.Any("pagination.Direction", pagination.Direction),
-		slog.Any("pagination.Sort", pagination.Sort),
-		slog.Any("pagination.Cursor", pagination.Cursor()),
-		slog.Any("pagination.PrevCursor", pagination.PrevCursor),
-		slog.Any("pagination.NextCursor", pagination.NextCursor),
-		slog.Any("pagination.Limit", pagination.Limit()),
-		slog.Any("tsStart", tsStart),
-		slog.Any("tsEnd", tsEnd),
-		slog.Any("cursor", cursor))
+		attr.SlogProjectID(payload.ProjectID),
+		slog.Int("pagination_per_page", pagination.PerPage),
+		slog.String("pagination_direction", string(pagination.Direction)),
+		slog.String("pagination_sort", pagination.Sort),
+		slog.String("pagination_cursor", pagination.Cursor()),
+		slog.String("pagination_prev_cursor", pagination.PrevCursor),
+		slog.String("pagination_next_cursor", pagination.NextCursor),
+		slog.Int("pagination_limit", pagination.Limit()),
+		slog.Time("ts_start", tsStart),
+		slog.Time("ts_end", tsEnd),
+		slog.Time("cursor", cursor))
 
 	// Query logs from ClickHouse
-	results, err := s.tcm.List(ctx, payload.ProjectID, tsStart, tsEnd, cursor, pagination)
+	result, err := s.tcm.List(ctx, payload.ProjectID, tsStart, tsEnd, cursor, pagination)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing logs").
-			Log(ctx, s.logger, attr.SlogProjectID(payload.ProjectID), attr.SlogToolID(payload.ToolID))
+			Log(ctx, s.logger, attr.SlogProjectID(payload.ProjectID))
 	}
 
 	// Convert results to gen.HTTPToolLog
-	logs := make([]*gen.HTTPToolLog, 0, len(results))
-	for _, r := range results {
+	logs := make([]*gen.HTTPToolLog, 0, len(result.Logs))
+	for _, r := range result.Logs {
 		logs = append(logs, toHTTPToolLog(r))
 	}
 
-	return &gen.ListToolLogResult{Logs: logs}, nil
+	// Convert pagination metadata to API format
+	var nextPageCursor *string
+	if result.Pagination.NextPageCursor != nil {
+		c := result.Pagination.NextPageCursor.Format(time.RFC3339)
+		nextPageCursor = &c
+	}
+
+	pp := &gen.PaginationResult{
+		PerPage:        &result.Pagination.PerPage,
+		HasNextPage:    &result.Pagination.HasNextPage,
+		NextPageCursor: nextPageCursor,
+	}
+
+	return &gen.ListToolLogResult{Logs: logs, Pagination: pp}, nil
 }
 
 func parseTimeOrDefault(s *string, defaultTime time.Time) time.Time {

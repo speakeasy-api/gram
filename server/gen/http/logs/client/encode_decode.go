@@ -56,7 +56,9 @@ func EncodeListLogsRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 		}
 		values := req.URL.Query()
 		values.Add("project_id", p.ProjectID)
-		values.Add("tool_id", p.ToolID)
+		if p.ToolID != nil {
+			values.Add("tool_id", *p.ToolID)
+		}
 		if p.TsStart != nil {
 			values.Add("ts_start", *p.TsStart)
 		}
@@ -276,6 +278,9 @@ func DecodeListLogsResponse(decoder func(*http.Response) goahttp.Decoder, restor
 // unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog builds a value of type
 // *logs.HTTPToolLog from a value of type *HTTPToolLogResponseBody.
 func unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(v *HTTPToolLogResponseBody) *logs.HTTPToolLog {
+	if v == nil {
+		return nil
+	}
 	res := &logs.HTTPToolLog{
 		Ts:                *v.Ts,
 		OrganizationID:    *v.OrganizationID,
@@ -314,6 +319,22 @@ func unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(v *HTTPToolLogResponseBod
 			tv := val
 			res.ResponseHeaders[tk] = tv
 		}
+	}
+
+	return res
+}
+
+// unmarshalPaginationResultResponseBodyToLogsPaginationResult builds a value
+// of type *logs.PaginationResult from a value of type
+// *PaginationResultResponseBody.
+func unmarshalPaginationResultResponseBodyToLogsPaginationResult(v *PaginationResultResponseBody) *logs.PaginationResult {
+	if v == nil {
+		return nil
+	}
+	res := &logs.PaginationResult{
+		PerPage:        v.PerPage,
+		HasNextPage:    v.HasNextPage,
+		NextPageCursor: v.NextPageCursor,
 	}
 
 	return res

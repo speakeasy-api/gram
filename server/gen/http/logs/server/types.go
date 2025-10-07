@@ -15,7 +15,8 @@ import (
 // ListLogsResponseBody is the type of the "logs" service "listLogs" endpoint
 // HTTP response body.
 type ListLogsResponseBody struct {
-	Logs []*HTTPToolLogResponseBody `form:"logs" json:"logs" xml:"logs"`
+	Logs       []*HTTPToolLogResponseBody    `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
+	Pagination *PaginationResultResponseBody `form:"pagination,omitempty" json:"pagination,omitempty" xml:"pagination,omitempty"`
 }
 
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
@@ -248,6 +249,16 @@ type HTTPToolLogResponseBody struct {
 	ResponseBodyBytes *uint64 `form:"response_body_bytes,omitempty" json:"response_body_bytes,omitempty" xml:"response_body_bytes,omitempty"`
 }
 
+// PaginationResultResponseBody is used to define fields on response body types.
+type PaginationResultResponseBody struct {
+	// Number of items per page
+	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty" xml:"per_page,omitempty"`
+	// Whether there is a next page
+	HasNextPage *bool `form:"has_next_page,omitempty" json:"has_next_page,omitempty" xml:"has_next_page,omitempty"`
+	// Cursor for next page
+	NextPageCursor *string `form:"next_page_cursor,omitempty" json:"next_page_cursor,omitempty" xml:"next_page_cursor,omitempty"`
+}
+
 // NewListLogsResponseBody builds the HTTP response body from the result of the
 // "listLogs" endpoint of the "logs" service.
 func NewListLogsResponseBody(res *logs.ListToolLogResult) *ListLogsResponseBody {
@@ -257,8 +268,9 @@ func NewListLogsResponseBody(res *logs.ListToolLogResult) *ListLogsResponseBody 
 		for i, val := range res.Logs {
 			body.Logs[i] = marshalLogsHTTPToolLogToHTTPToolLogResponseBody(val)
 		}
-	} else {
-		body.Logs = []*HTTPToolLogResponseBody{}
+	}
+	if res.Pagination != nil {
+		body.Pagination = marshalLogsPaginationResultToPaginationResultResponseBody(res.Pagination)
 	}
 	return body
 }
@@ -404,7 +416,7 @@ func NewListLogsGatewayErrorResponseBody(res *goa.ServiceError) *ListLogsGateway
 }
 
 // NewListLogsPayload builds a logs service listLogs endpoint payload.
-func NewListLogsPayload(projectID string, toolID string, tsStart *string, tsEnd *string, cursor *string, perPage int, direction string, sort string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *logs.ListLogsPayload {
+func NewListLogsPayload(projectID string, toolID *string, tsStart *string, tsEnd *string, cursor *string, perPage int, direction string, sort string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *logs.ListLogsPayload {
 	v := &logs.ListLogsPayload{}
 	v.ProjectID = projectID
 	v.ToolID = toolID

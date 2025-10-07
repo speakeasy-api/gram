@@ -355,13 +355,6 @@ func newStartCommand() *cli.Command {
 			EnvVars:  []string{"CLICKHOUSE_INSECURE"},
 			Value:    false,
 		},
-		&cli.BoolFlag{
-			Name:     "clickhouse-debug",
-			Usage:    "Clickhouse Debug",
-			Required: false,
-			EnvVars:  []string{"CLICKHOUSE_DEBUG"},
-			Value:    true,
-		},
 	}
 
 	return &cli.Command{

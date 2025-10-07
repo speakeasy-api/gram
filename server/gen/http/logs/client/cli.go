@@ -27,12 +27,14 @@ func BuildListLogsPayload(logsListLogsProjectID string, logsListLogsToolID strin
 			return nil, err
 		}
 	}
-	var toolID string
+	var toolID *string
 	{
-		toolID = logsListLogsToolID
-		err = goa.MergeErrors(err, goa.ValidateFormat("tool_id", toolID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
+		if logsListLogsToolID != "" {
+			toolID = &logsListLogsToolID
+			err = goa.MergeErrors(err, goa.ValidateFormat("tool_id", *toolID, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var tsStart *string

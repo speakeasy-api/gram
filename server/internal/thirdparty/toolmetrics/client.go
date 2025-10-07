@@ -40,15 +40,33 @@ func (t *ToolType) Scan(src interface{}) error {
 type ToolMetricsClient interface {
 	Close() error
 	// List tool call logs
-	List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) ([]ToolHTTPRequest, error)
+	List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) (*ListResult, error)
 	// Log tool call request/response
 	Log(context.Context, ToolHTTPRequest) error
 }
 
+type PaginationMetadata struct {
+	PerPage        int        `json:"per_page"`
+	HasNextPage    bool       `json:"has_next_page"`
+	NextPageCursor *time.Time `json:"next_page_cursor,omitempty"`
+}
+
+type ListResult struct {
+	Logs       []ToolHTTPRequest  `json:"logs"`
+	Pagination PaginationMetadata `json:"pagination"`
+}
+
 type StubToolMetricsClient struct{}
 
-func (n *StubToolMetricsClient) List(context.Context, string, time.Time, time.Time, time.Time, Pageable) ([]ToolHTTPRequest, error) {
-	return nil, nil
+func (n *StubToolMetricsClient) List(_ context.Context, _ string, _ time.Time, _ time.Time, _ time.Time, p Pageable) (*ListResult, error) {
+	return &ListResult{
+		Logs: []ToolHTTPRequest{},
+		Pagination: PaginationMetadata{
+			PerPage:        p.Limit() - 1, // Remove the +1 we added for detection
+			HasNextPage:    false,
+			NextPageCursor: nil,
+		},
+	}, nil
 }
 
 func (n *StubToolMetricsClient) Log(_ context.Context, _ ToolHTTPRequest) error {
@@ -64,16 +82,13 @@ type ClickhouseClient struct {
 	Logger *slog.Logger
 }
 
-func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) ([]ToolHTTPRequest, error) {
+func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) (*ListResult, error) {
 	query := listLogsQueryDesc
 	if pagination.SortOrder() == "ASC" {
 		query = listLogsQueryAsc
 	}
 
-	// format := "2006-01-02 15:04:05.000000 -0700 MST"
-	//
-	// tsStart, err := tsStart.Format(time.RFC3339Nano)
-
+	perPage := pagination.Limit() - 1 // Remove the +1 for actual page size
 	rows, err := c.Conn.Query(ctx, query, projectID,
 		tsStart,
 		tsEnd,
@@ -104,7 +119,31 @@ func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, 
 		return nil, fmt.Errorf("rows error: %w", err)
 	}
 
-	return results, nil
+	// Calculate pagination metadata
+	hasNextPage := len(results) > perPage
+
+	// Trim to actual page size if we fetched extra for detection
+	if hasNextPage {
+		results = results[:perPage]
+	}
+
+	var nextPageCursor *time.Time
+	if len(results) > 0 {
+		// Next cursor is the timestamp of the last record
+		if hasNextPage {
+			lastTs := results[len(results)-1].Ts
+			nextPageCursor = &lastTs
+		}
+	}
+
+	return &ListResult{
+		Logs: results,
+		Pagination: PaginationMetadata{
+			PerPage:        perPage,
+			HasNextPage:    hasNextPage,
+			NextPageCursor: nextPageCursor,
+		},
+	}, nil
 }
 
 func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
