@@ -3,8 +3,14 @@ package middleware
 import (
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 )
+
+var mcpOpenAccessControlRoutes = []string{
+	"/.well-known/oauth-authorization-server/mcp",
+	"/.well-known/oauth-protected-resource/mcp",
+}
 
 func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -33,6 +39,14 @@ func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.H
 			w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, Authorization, Gram-Session, Gram-Project, Gram-Token, idempotency-key, Gram-Admin-Override, Gram-Chat-ID")
 			w.Header().Set("Access-Control-Expose-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, x-trace-id, Gram-Session, Gram-Chat-ID")
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+			// Special CORS policy for OAuth well-known endpoints
+			if slices.ContainsFunc(mcpOpenAccessControlRoutes, func(route string) bool {
+				return strings.HasPrefix(r.URL.Path, route)
+			}) {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+				w.Header().Set("Access-Control-Allow-Methods", "GET")
+			}
 
 			if r.Method == "OPTIONS" {
 				w.WriteHeader(http.StatusOK)
