@@ -1,4 +1,4 @@
-h1:aXF1sF4mc5qOXReDz3C8yUIqibu40JqeAHge+o5xh0k=
+h1:MFtfIL1HZlHd7oQAl6qFJiQPFm7ANfJ9JsnVW4iplZc=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -53,3 +53,4 @@ h1:aXF1sF4mc5qOXReDz3C8yUIqibu40JqeAHge+o5xh0k=
 20250919164535_drop-toolset-versions-auto-increment.sql h1:VquIFsQ8YrUif6JzY9pjzlzJACFWKXk3TaIuh/y0TLU=
 20250926123815_add-functions-access.sql h1:U7fixgEYgFexXn6BaSzbJRQe8ihDj065lFEB3yrelm8=
 20251002201549_mcp-install-page-metadata-add-table.sql h1:It4omo5zgT95i7fwhauodkAr2H1ynM0d3mQoiTvK+Yc=
+20251007193425_variations-versions.sql h1:YxNbalzM3thllDPzJfNLZxCHSQzQ+7pW/96br+H6zrM=

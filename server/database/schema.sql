@@ -557,6 +557,8 @@ CREATE TABLE IF NOT EXISTS toolset_versions (
   toolset_id uuid NOT NULL,
   version BIGINT NOT NULL,
   tool_urns TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  tool_variations uuid[] NOT NULL DEFAULT ARRAY[]::uuid[],
+
   predecessor_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -716,8 +718,10 @@ ON project_tool_variations (project_id);
 CREATE TABLE IF NOT EXISTS tool_variations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   group_id uuid NOT NULL,
+  predecessor_id uuid,
 
   src_tool_name TEXT NOT NULL,
+  src_tool_urn TEXT,
 
   confirm TEXT,
   confirm_prompt TEXT,
@@ -733,7 +737,8 @@ CREATE TABLE IF NOT EXISTS tool_variations (
   deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
 
   CONSTRAINT tool_variations_pkey PRIMARY KEY (id),
-  CONSTRAINT tool_variations_group_id_fkey FOREIGN KEY (group_id) REFERENCES tool_variations_groups (id) ON DELETE CASCADE
+  CONSTRAINT tool_variations_group_id_fkey FOREIGN KEY (group_id) REFERENCES tool_variations_groups (id) ON DELETE CASCADE,
+  CONSTRAINT tool_variations_predecessor_id_fkey FOREIGN KEY (predecessor_id) REFERENCES tool_variations (id) ON DELETE SET NULL
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS tool_variations_scoped_src_tool_name_key
