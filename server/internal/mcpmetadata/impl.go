@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -53,6 +54,7 @@ type Service struct {
 	sessions    *sessions.Manager
 	auth        *auth.Auth
 	serverURL   *url.URL
+	toolsetCache cache.TypedCacheObject[mv.CachedToolset]
 }
 
 //go:embed config_snippet.json.tmpl
@@ -84,7 +86,7 @@ type hostedPageData struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, cacheAdapter cache.Cache) *Service {
 	logger = logger.With(attr.SlogComponent("mcp_install_page"))
 
 	return &Service{
@@ -97,6 +99,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		sessions:    sessions,
 		auth:        auth.New(logger, db, sessions),
 		serverURL:   serverURL,
+		toolsetCache: cache.NewTypedObjectCache[mv.CachedToolset](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 	}
 }
 
@@ -243,7 +246,7 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		organizationName = organization.Name
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), nil)
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to describe toolset").Log(ctx, s.logger)
 	}

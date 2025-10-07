@@ -505,7 +505,7 @@ func newStartCommand() *cli.Command {
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env)
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, billingTracker))
-			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL)
+			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, cache.NewRedisCacheAdapter(redisClient))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService, billingTracker, billingRepo), mcpMetadataService)
 			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter))
