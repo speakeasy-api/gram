@@ -14,6 +14,11 @@ import { SdkProvider } from "./contexts/Sdk.tsx";
 import { TelemetryProvider } from "./contexts/Telemetry.tsx";
 import { AppRoute, useRoutes } from "./routes";
 import { Toaster } from "@/components/ui/sonner";
+import {
+  CommandPaletteProvider,
+  useCommandPalette,
+} from "./contexts/CommandPalette";
+import { CommandPalette } from "./components/command-palette";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -70,16 +75,19 @@ export default function App() {
       <LocalTooltipProvider>
         <TooltipProvider>
           <TelemetryProvider>
-            <BrowserRouter>
-              <SdkProvider>
-                <AuthProvider>
-                  <ProjectProvider>
-                    <RouteProvider />
-                  </ProjectProvider>
-                  <Toaster />
-                </AuthProvider>
-              </SdkProvider>
-            </BrowserRouter>
+            <CommandPaletteProvider>
+              <BrowserRouter>
+                <SdkProvider>
+                  <AuthProvider>
+                    <ProjectProvider>
+                      <RouteProvider />
+                    </ProjectProvider>
+                    <Toaster />
+                    <CommandPalette />
+                  </AuthProvider>
+                </SdkProvider>
+              </BrowserRouter>
+            </CommandPaletteProvider>
           </TelemetryProvider>
         </TooltipProvider>
       </LocalTooltipProvider>
@@ -89,6 +97,47 @@ export default function App() {
 
 const RouteProvider = () => {
   const routes = useRoutes();
+  const { addActions, removeActions } = useCommandPalette();
+
+  // Register global command palette actions
+  useEffect(() => {
+    const globalActions = [
+      {
+        id: "go-home",
+        label: "Go to Home",
+        icon: "home",
+        onSelect: () => routes.home.goTo(),
+        group: "Navigation",
+      },
+      {
+        id: "go-deployments",
+        label: "Go to Deployments",
+        icon: "package",
+        onSelect: () => routes.deployments.goTo(),
+        group: "Navigation",
+      },
+      {
+        id: "go-toolsets",
+        label: "Go to Toolsets",
+        icon: "blocks",
+        onSelect: () => routes.toolsets.goTo(),
+        group: "Navigation",
+      },
+      {
+        id: "go-playground",
+        label: "Go to Playground",
+        icon: "message-square",
+        onSelect: () => routes.playground.goTo(),
+        group: "Navigation",
+      },
+    ];
+
+    addActions(globalActions);
+
+    return () => {
+      removeActions(globalActions.map((a) => a.id));
+    };
+  }, [routes, addActions, removeActions]);
 
   const unauthenticatedRoutes = Object.values(routes).filter(
     (route) => route.unauthenticated,

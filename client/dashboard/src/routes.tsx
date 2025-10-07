@@ -29,7 +29,6 @@ import {
   ToolBuilderNew,
   ToolBuilderPage,
 } from "./pages/toolBuilder/ToolBuilder";
-import { ToolSelect } from "./pages/toolsets/ToolSelect";
 import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 import Billing from "./pages/billing/Billing";
@@ -177,13 +176,6 @@ const ROUTE_STRUCTURE = {
         url: ":toolsetSlug",
         component: ToolsetRoot,
         indexComponent: ToolsetPage,
-        subPages: {
-          update: {
-            title: "Update",
-            url: "update",
-            component: ToolSelect,
-          },
-        },
       },
     },
   },

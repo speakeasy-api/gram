@@ -59,8 +59,8 @@ function DeploymentLogs(props: { deploymentId: string }) {
   };
 
   return (
-    <div className="grid gap-16">
-      <section className="space-y-6">
+    <div className="grid gap-16 w-full overflow-x-hidden">
+      <section className="space-y-6 min-w-0">
         <HeadingSection />
 
         <Suspense
@@ -80,7 +80,7 @@ function DeploymentLogs(props: { deploymentId: string }) {
       <Tabs
         value={searchParams.tab}
         onValueChange={handleUpdateTab}
-        className="gap-16"
+        className="gap-16 min-w-0"
       >
         <TabsList>
           <TabsTrigger value="logs">Logs</TabsTrigger>

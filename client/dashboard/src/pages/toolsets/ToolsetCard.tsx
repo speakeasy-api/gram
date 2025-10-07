@@ -68,8 +68,7 @@ export function ToolsetCard({
             actions={[
               {
                 label: "Add Tools",
-                onClick: () =>
-                  routes.toolsets.toolset.update.goTo(toolset.slug),
+                onClick: () => routes.toolsets.toolset.goTo(toolset.slug),
                 icon: "pencil",
               },
               {

@@ -168,7 +168,7 @@ function DeploymentsTable() {
             <div className="flex gap-2">
               <p className="text-muted-foreground text-sm">{createdAt}</p>
               {activeDeployment === row && (
-                <Badge size="xs" variant="success" className="py-0.25 px-1.5">
+                <Badge variant="success" className="py-0.25 px-1.5">
                   Active
                 </Badge>
               )}
