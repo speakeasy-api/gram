@@ -208,9 +208,6 @@ func DescribeToolset(
 ) (*types.Toolset, error) {
 	toolsetRepo := tsr.New(tx)
 	orgRepo := org.New(tx)
-	toolsRepo := tr.New(tx)
-	variationsRepo := vr.New(tx)
-	templatesRepo := templatesR.New(tx)
 	pid := uuid.UUID(projectID)
 	oauthRepo := oauth.New(tx)
 	deploymentRepo := deploymentR.New(tx)
@@ -252,20 +249,173 @@ func DescribeToolset(
 			toolUrns[i] = urn.String()
 		}
 		toolsetVersion = latestVersion.Version
+	}
 
-		// Check cache if available
-		// NOTE: A slight shortcoming here is that the cache is keyed by the active deployment id, but the queries below don't strictly depend on
-		// the deployment ID fetched above. Technically the deployment could change at just the right time to mess up the cache.
-		if toolsetCache != nil && activeDeploymentID != uuid.Nil {
-			if cached, cacheErr := toolsetCache.Get(ctx, ToolsetCacheKey(toolset.ID.String(), activeDeploymentID.String(), toolsetVersion)); cacheErr == nil {
-				return cached.Toolset, nil
+	toolsetTools, err := readToolsetTools(ctx, logger, tx, pid, activeDeploymentID, toolset.ID, toolsetVersion, toolUrns, toolsetCache)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset tools").Log(ctx, logger)
+	}
+	
+	ptrows, err := toolsetRepo.GetPromptTemplatesForToolset(ctx, tsr.GetPromptTemplatesForToolsetParams{
+		ProjectID: pid,
+		ToolsetID: toolset.ID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").Log(ctx, logger)
+	}
+
+	promptTemplates := make([]*types.PromptTemplate, 0, len(ptrows))
+	for _, pt := range ptrows {
+		hint := pt.ToolsHint
+		if hint == nil {
+			hint = []string{}
+		}
+
+		promptTemplates = append(promptTemplates, &types.PromptTemplate{
+			ID:            pt.ID.String(),
+			ToolUrn:       pt.ToolUrn.String,
+			HistoryID:     pt.HistoryID.String(),
+			PredecessorID: conv.FromNullableUUID(pt.PredecessorID),
+			Name:          pt.Name,
+			Prompt:        pt.Prompt,
+			Description:   conv.PtrValOrEmpty(conv.FromPGText[string](pt.Description), ""),
+			Schema:        string(pt.Arguments),
+			SchemaVersion: nil,
+			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
+			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
+			ToolsHint:     hint,
+			CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
+			ProjectID:     pt.ProjectID.String(),
+			CanonicalName: pt.Name,
+			Confirm:       nil,
+			ConfirmPrompt: nil,
+			Summarizer:    nil,
+			Canonical:     nil,
+			Variation:     nil,
+		})
+	}
+
+	var externalOAuthServer *types.ExternalOAuthServer
+	var oauthProxyServer *types.OAuthProxyServer
+
+	if toolset.ExternalOauthServerID.Valid {
+		externalOauthMetadata, err := oauthRepo.GetExternalOAuthServerMetadata(ctx, oauth.GetExternalOAuthServerMetadataParams{
+			ProjectID: pid,
+			ID:        toolset.ExternalOauthServerID.UUID,
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").Log(ctx, logger)
+		}
+		if len(externalOauthMetadata.Metadata) > 0 {
+			var metadata interface{}
+			if err := json.Unmarshal(externalOauthMetadata.Metadata, &metadata); err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal external oauth metadata").Log(ctx, logger)
+			}
+
+			externalOAuthServer = &types.ExternalOAuthServer{
+				ID:        externalOauthMetadata.ID.String(),
+				ProjectID: externalOauthMetadata.ProjectID.String(),
+				Slug:      types.Slug(externalOauthMetadata.Slug),
+				Metadata:  metadata,
+				CreatedAt: externalOauthMetadata.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt: externalOauthMetadata.UpdatedAt.Time.Format(time.RFC3339),
 			}
 		}
 	}
 
+	if toolset.OauthProxyServerID.Valid {
+		oauthProxyServerData, err := oauthRepo.GetOAuthProxyServer(ctx, oauth.GetOAuthProxyServerParams{
+			ProjectID: pid,
+			ID:        toolset.OauthProxyServerID.UUID,
+		})
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy server").Log(ctx, logger)
+		}
+		if err == nil {
+			oauthProxyProviders, err := oauthRepo.ListOAuthProxyProvidersByServer(ctx, oauth.ListOAuthProxyProvidersByServerParams{
+				ProjectID:          pid,
+				OauthProxyServerID: oauthProxyServerData.ID,
+			})
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy providers").Log(ctx, logger)
+			}
+
+			providers := make([]*types.OAuthProxyProvider, 0, len(oauthProxyProviders))
+			for _, provider := range oauthProxyProviders {
+				providers = append(providers, &types.OAuthProxyProvider{
+					ID:                                provider.ID.String(),
+					Slug:                              types.Slug(provider.Slug),
+					AuthorizationEndpoint:             provider.AuthorizationEndpoint,
+					TokenEndpoint:                     provider.TokenEndpoint,
+					ScopesSupported:                   provider.ScopesSupported,
+					GrantTypesSupported:               provider.GrantTypesSupported,
+					TokenEndpointAuthMethodsSupported: provider.TokenEndpointAuthMethodsSupported,
+					CreatedAt:                         provider.CreatedAt.Time.Format(time.RFC3339),
+					UpdatedAt:                         provider.UpdatedAt.Time.Format(time.RFC3339),
+				})
+			}
+
+			oauthProxyServer = &types.OAuthProxyServer{
+				ID:                  oauthProxyServerData.ID.String(),
+				ProjectID:           oauthProxyServerData.ProjectID.String(),
+				Slug:                types.Slug(oauthProxyServerData.Slug),
+				OauthProxyProviders: providers,
+				CreatedAt:           oauthProxyServerData.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:           oauthProxyServerData.UpdatedAt.Time.Format(time.RFC3339),
+			}
+		}
+	}
+
+	orgMetadata, err := orgRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
+	}
+
+	result := &types.Toolset{
+		ID:                     toolset.ID.String(),
+		OrganizationID:         toolset.OrganizationID,
+		AccountType:            orgMetadata.GramAccountType,
+		ProjectID:              toolset.ProjectID.String(),
+		Name:                   toolset.Name,
+		Slug:                   types.Slug(toolset.Slug),
+		DefaultEnvironmentSlug: conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
+		SecurityVariables:      toolsetTools.SecurityVars,
+		ServerVariables:        toolsetTools.ServerVars,
+		Description:            conv.FromPGText[string](toolset.Description),
+		Tools:                  toolsetTools.Tools,
+		PromptTemplates:        promptTemplates,
+		McpSlug:                conv.FromPGText[types.Slug](toolset.McpSlug),
+		McpEnabled:             &toolset.McpEnabled,
+		CustomDomainID:         conv.FromNullableUUID(toolset.CustomDomainID),
+		McpIsPublic:            &toolset.McpIsPublic,
+		CreatedAt:              toolset.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:              toolset.UpdatedAt.Time.Format(time.RFC3339),
+		ToolUrns:               toolUrns,
+		ExternalOauthServer:    externalOAuthServer,
+		OauthProxyServer:       oauthProxyServer,
+	}
+
+	return result, nil
+}
+
+func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uuid.UUID, activeDeploymentID uuid.UUID, toolsetID uuid.UUID, toolsetVersion int64, toolUrns []string, toolsetCache *cache.TypedCacheObject[CachedToolset]) (*CachedToolset, error) {
+	toolsRepo := tr.New(tx)
+	variationsRepo := vr.New(tx)
+	templatesRepo := templatesR.New(tx)
+
 	var tools []*types.Tool
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
+
+	// NOTE: A slight shortcoming here is that the cache is keyed by the active deployment id, but the queries below don't strictly depend on
+	// the deployment ID fetched above. Technically the deployment could change at just the right time to mess up the cache.
+	if toolsetCache != nil && activeDeploymentID != uuid.Nil {
+		if cached, cacheErr := toolsetCache.Get(ctx, ToolsetCacheKey(toolsetID.String(), activeDeploymentID.String(), toolsetVersion)); cacheErr == nil {
+			return &cached, nil
+		}
+	}
+
 	if len(toolUrns) > 0 {
 		definitions, err := toolsRepo.FindHttpToolsByUrn(ctx, tr.FindHttpToolsByUrnParams{
 			ProjectID: pid,
@@ -459,159 +609,22 @@ func DescribeToolset(
 		}
 	}
 
-	ptrows, err := toolsetRepo.GetPromptTemplatesForToolset(ctx, tsr.GetPromptTemplatesForToolsetParams{
-		ProjectID: pid,
-		ToolsetID: toolset.ID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").Log(ctx, logger)
+	cachedToolset := CachedToolset{
+		DeploymentID: activeDeploymentID.String(),
+		ToolsetID:    toolsetID.String(),
+		Version:      toolsetVersion,
+		Tools:        tools,
+		SecurityVars: securityVars,
+		ServerVars:   serverVars,
 	}
 
-	promptTemplates := make([]*types.PromptTemplate, 0, len(ptrows))
-	for _, pt := range ptrows {
-		hint := pt.ToolsHint
-		if hint == nil {
-			hint = []string{}
-		}
-
-		promptTemplates = append(promptTemplates, &types.PromptTemplate{
-			ID:            pt.ID.String(),
-			ToolUrn:       pt.ToolUrn.String,
-			HistoryID:     pt.HistoryID.String(),
-			PredecessorID: conv.FromNullableUUID(pt.PredecessorID),
-			Name:          pt.Name,
-			Prompt:        pt.Prompt,
-			Description:   conv.PtrValOrEmpty(conv.FromPGText[string](pt.Description), ""),
-			Schema:        string(pt.Arguments),
-			SchemaVersion: nil,
-			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
-			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
-			ToolsHint:     hint,
-			CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
-			ProjectID:     pt.ProjectID.String(),
-			CanonicalName: pt.Name,
-			Confirm:       nil,
-			ConfirmPrompt: nil,
-			Summarizer:    nil,
-			Canonical:     nil,
-			Variation:     nil,
-		})
-	}
-
-	var externalOAuthServer *types.ExternalOAuthServer
-	var oauthProxyServer *types.OAuthProxyServer
-
-	if toolset.ExternalOauthServerID.Valid {
-		externalOauthMetadata, err := oauthRepo.GetExternalOAuthServerMetadata(ctx, oauth.GetExternalOAuthServerMetadataParams{
-			ProjectID: pid,
-			ID:        toolset.ExternalOauthServerID.UUID,
-		})
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get external oauth server metadata").Log(ctx, logger)
-		}
-		if len(externalOauthMetadata.Metadata) > 0 {
-			var metadata interface{}
-			if err := json.Unmarshal(externalOauthMetadata.Metadata, &metadata); err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal external oauth metadata").Log(ctx, logger)
-			}
-
-			externalOAuthServer = &types.ExternalOAuthServer{
-				ID:        externalOauthMetadata.ID.String(),
-				ProjectID: externalOauthMetadata.ProjectID.String(),
-				Slug:      types.Slug(externalOauthMetadata.Slug),
-				Metadata:  metadata,
-				CreatedAt: externalOauthMetadata.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt: externalOauthMetadata.UpdatedAt.Time.Format(time.RFC3339),
-			}
-		}
-	}
-
-	if toolset.OauthProxyServerID.Valid {
-		oauthProxyServerData, err := oauthRepo.GetOAuthProxyServer(ctx, oauth.GetOAuthProxyServerParams{
-			ProjectID: pid,
-			ID:        toolset.OauthProxyServerID.UUID,
-		})
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy server").Log(ctx, logger)
-		}
-		if err == nil {
-			oauthProxyProviders, err := oauthRepo.ListOAuthProxyProvidersByServer(ctx, oauth.ListOAuthProxyProvidersByServerParams{
-				ProjectID:          pid,
-				OauthProxyServerID: oauthProxyServerData.ID,
-			})
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "failed to get oauth proxy providers").Log(ctx, logger)
-			}
-
-			providers := make([]*types.OAuthProxyProvider, 0, len(oauthProxyProviders))
-			for _, provider := range oauthProxyProviders {
-				providers = append(providers, &types.OAuthProxyProvider{
-					ID:                                provider.ID.String(),
-					Slug:                              types.Slug(provider.Slug),
-					AuthorizationEndpoint:             provider.AuthorizationEndpoint,
-					TokenEndpoint:                     provider.TokenEndpoint,
-					ScopesSupported:                   provider.ScopesSupported,
-					GrantTypesSupported:               provider.GrantTypesSupported,
-					TokenEndpointAuthMethodsSupported: provider.TokenEndpointAuthMethodsSupported,
-					CreatedAt:                         provider.CreatedAt.Time.Format(time.RFC3339),
-					UpdatedAt:                         provider.UpdatedAt.Time.Format(time.RFC3339),
-				})
-			}
-
-			oauthProxyServer = &types.OAuthProxyServer{
-				ID:                  oauthProxyServerData.ID.String(),
-				ProjectID:           oauthProxyServerData.ProjectID.String(),
-				Slug:                types.Slug(oauthProxyServerData.Slug),
-				OauthProxyProviders: providers,
-				CreatedAt:           oauthProxyServerData.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:           oauthProxyServerData.UpdatedAt.Time.Format(time.RFC3339),
-			}
-		}
-	}
-
-	orgMetadata, err := orgRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
-	}
-
-	result := &types.Toolset{
-		ID:                     toolset.ID.String(),
-		OrganizationID:         toolset.OrganizationID,
-		AccountType:            orgMetadata.GramAccountType,
-		ProjectID:              toolset.ProjectID.String(),
-		Name:                   toolset.Name,
-		Slug:                   types.Slug(toolset.Slug),
-		DefaultEnvironmentSlug: conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
-		SecurityVariables:      securityVars,
-		ServerVariables:        serverVars,
-		Description:            conv.FromPGText[string](toolset.Description),
-		Tools:                  tools,
-		PromptTemplates:        promptTemplates,
-		McpSlug:                conv.FromPGText[types.Slug](toolset.McpSlug),
-		McpEnabled:             &toolset.McpEnabled,
-		CustomDomainID:         conv.FromNullableUUID(toolset.CustomDomainID),
-		McpIsPublic:            &toolset.McpIsPublic,
-		CreatedAt:              toolset.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              toolset.UpdatedAt.Time.Format(time.RFC3339),
-		ToolUrns:               toolUrns,
-		ExternalOauthServer:    externalOAuthServer,
-		OauthProxyServer:       oauthProxyServer,
-	}
-
-	// Store in cache if available
-	if toolsetCache != nil && toolsetVersion > 0 && activeDeploymentID != uuid.Nil {
-		if err := toolsetCache.Store(ctx, CachedToolset{
-			DeploymentID: activeDeploymentID.String(),
-			ToolsetID:    toolset.ID.String(),
-			Version:      toolsetVersion,
-			Toolset:      result,
-		}); err != nil {
+	if toolsetCache != nil && activeDeploymentID != uuid.Nil {
+		if err := toolsetCache.Store(ctx, cachedToolset); err != nil {
 			logger.ErrorContext(ctx, "failed to cache toolset", attr.SlogError(err))
 		}
 	}
 
-	return result, nil
+	return &cachedToolset, nil
 }
 
 type toolEnvLookupParams struct {

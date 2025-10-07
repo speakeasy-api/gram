@@ -11,8 +11,10 @@ import (
 type CachedToolset struct {
 	DeploymentID string
 	ToolsetID    string
-	Version   int64
-	*types.Toolset
+	Version      int64
+	Tools        []*types.Tool
+	SecurityVars []*types.SecurityVariable
+	ServerVars   []*types.ServerVariable
 }
 
 var _ cache.CacheableObject[CachedToolset] = (*CachedToolset)(nil)
