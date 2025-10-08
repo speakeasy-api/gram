@@ -143,7 +143,7 @@ async function transmitKey(callbackUrl: string, apiKey: string): Promise<void> {
   const url = new URL(callbackUrl);
   url.searchParams.set("api_key", apiKey);
 
-  const smoothRedirectDelay = new Promise((r) => setTimeout(r, 200));
+  const smoothRedirectDelay = new Promise((r) => setTimeout(r, 500));
   await smoothRedirectDelay;
 
   window.location.replace(url.toString());
