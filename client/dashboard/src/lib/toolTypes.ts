@@ -5,6 +5,7 @@ import {
   PromptTemplate,
   PromptTemplateEntry,
   PromptTemplateKind,
+  FunctionToolDefinition,
 } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
@@ -20,7 +21,8 @@ export type Toolset = Omit<GeneratedToolset, "tools"> & {
 
 export type Tool =
   | ({ type: "http" } & HTTPToolDefinition)
-  | ({ type: "prompt" } & PromptTemplate);
+  | ({ type: "prompt" } & PromptTemplate)
+  | ({ type: "function" } & FunctionToolDefinition);
 
 export type ToolGroup = {
   key: string;
@@ -37,6 +39,8 @@ export const asTool = (tool: GeneratedTool): Tool => {
     return { type: "http", ...tool.httpToolDefinition };
   } else if (tool.promptTemplate) {
     return { type: "prompt", ...tool.promptTemplate };
+  } else if (tool.functionToolDefinition) {
+    return { type: "function", ...tool.functionToolDefinition };
   } else {
     throw new Error("Unexpected tool type");
   }

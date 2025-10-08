@@ -3,12 +3,14 @@
  */
 
 import { GramCore } from "../core.js";
-import { encodeFormQuery } from "../lib/encodings.js";
+import { encodeSimple } from "../lib/encodings.js";
 import * as M from "../lib/matchers.js";
 import { compactMap } from "../lib/primitives.js";
 import { safeParse } from "../lib/schemas.js";
 import { RequestOptions } from "../lib/sdks.js";
+import { resolveSecurity } from "../lib/security.js";
 import { pathToFunc } from "../lib/url.js";
+import * as components from "../models/components/index.js";
 import { GramError } from "../models/errors/gramerror.js";
 import {
   ConnectionError,
@@ -25,18 +27,19 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * callback auth
+ * verifyKey keys
  *
  * @remarks
- * Handles the authentication callback.
+ * Verify an api key
  */
-export function authCallback(
+export function keysValidate(
   client: GramCore,
-  request: operations.AuthCallbackRequest,
+  request?: operations.ValidateAPIKeyRequest | undefined,
+  security?: operations.ValidateAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
   Result<
-    operations.AuthCallbackResponse | undefined,
+    components.ValidateKeyResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -51,18 +54,20 @@ export function authCallback(
   return new APIPromise($do(
     client,
     request,
+    security,
     options,
   ));
 }
 
 async function $do(
   client: GramCore,
-  request: operations.AuthCallbackRequest,
+  request?: operations.ValidateAPIKeyRequest | undefined,
+  security?: operations.ValidateAPIKeySecurity | undefined,
   options?: RequestOptions,
 ): Promise<
   [
     Result<
-      operations.AuthCallbackResponse | undefined,
+      components.ValidateKeyResult,
       | errors.ServiceError
       | GramError
       | ResponseValidationError
@@ -78,7 +83,8 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) => operations.AuthCallbackRequest$outboundSchema.parse(value),
+    (value) =>
+      operations.ValidateAPIKeyRequest$outboundSchema.optional().parse(value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -87,25 +93,35 @@ async function $do(
   const payload = parsed.value;
   const body = null;
 
-  const path = pathToFunc("/rpc/auth.callback")();
-
-  const query = encodeFormQuery({
-    "code": payload.code,
-  });
+  const path = pathToFunc("/rpc/keys.verify")();
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
+    "Gram-Key": encodeSimple("Gram-Key", payload?.["Gram-Key"], {
+      explode: false,
+      charEncoding: "none",
+    }),
   }));
+
+  const requestSecurity = resolveSecurity(
+    [
+      {
+        fieldName: "Gram-Key",
+        type: "apiKey:header",
+        value: security?.apikeyHeaderGramKey,
+      },
+    ],
+  );
 
   const context = {
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
-    operationID: "authCallback",
+    operationID: "validateAPIKey",
     oAuth2Scopes: null,
 
-    resolvedSecurity: null,
+    resolvedSecurity: requestSecurity,
 
-    securitySource: null,
+    securitySource: security,
     retryConfig: options?.retries
       || client._options.retryConfig
       || { strategy: "none" },
@@ -113,11 +129,11 @@ async function $do(
   };
 
   const requestRes = client._createRequest(context, {
+    security: requestSecurity,
     method: "GET",
     baseURL: options?.serverURL,
     path: path,
     headers: headers,
-    query: query,
     body: body,
     userAgent: client._options.userAgent,
     timeoutMs: options?.timeoutMs || client._options.timeoutMs || -1,
@@ -155,7 +171,7 @@ async function $do(
   };
 
   const [result] = await M.match<
-    operations.AuthCallbackResponse | undefined,
+    components.ValidateKeyResult,
     | errors.ServiceError
     | GramError
     | ResponseValidationError
@@ -166,9 +182,7 @@ async function $do(
     | UnexpectedClientError
     | SDKValidationError
   >(
-    M.nil(307, operations.AuthCallbackResponse$inboundSchema.optional(), {
-      hdrs: true,
-    }),
+    M.json(200, components.ValidateKeyResult$inboundSchema),
     M.jsonErr(
       [400, 401, 403, 404, 409, 415, 422],
       errors.ServiceError$inboundSchema,

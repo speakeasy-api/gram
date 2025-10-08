@@ -76,3 +76,4 @@ export * from "./uploadFunctions.js";
 export * from "./uploadImage.js";
 export * from "./uploadOpenAPIv3.js";
 export * from "./upsertGlobalVariation.js";
+export * from "./validateAPIKey.js";

@@ -11,5 +11,5 @@ let value: Type = "http";
 ## Values
 
 ```typescript
-"http" | "prompt"
+"http" | "prompt" | "function"
 ```
