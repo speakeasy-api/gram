@@ -1,18 +1,18 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: cc9edf681089c4ac13e4c97b34ebe998
+  docChecksum: 2fb95736ab65d5152a8b16adedefabca
   docVersion: 0.0.1
-  speakeasyVersion: 1.635.1
-  generationVersion: 2.722.2
-  releaseVersion: 0.14.5
-  configChecksum: 59295d17e28f2ebd92c86c30ffac7565
+  speakeasyVersion: 1.613.0
+  generationVersion: 2.696.0
+  releaseVersion: 0.14.6
+  configChecksum: f8fcd59bc9879ed6bdfa983eb4035617
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.26
+    core: 3.21.22
     defaultEnabledRetries: 0.1.0
-    devContainers: 2.90.1
+    devContainers: 2.90.0
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2

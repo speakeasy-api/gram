@@ -103,9 +103,7 @@ func TestVariationsService_ListGlobal_WithVariations(t *testing.T) {
 	require.Equal(t, created.Variation.Confirm, foundVar.Confirm, "confirm should match")
 	require.Equal(t, created.Variation.ConfirmPrompt, foundVar.ConfirmPrompt, "confirm prompt should match")
 	require.Equal(t, created.Variation.Name, foundVar.Name, "name should match")
-	require.Equal(t, created.Variation.Summary, foundVar.Summary, "summary should match")
 	require.Equal(t, created.Variation.Description, foundVar.Description, "description should match")
-	require.Equal(t, created.Variation.Tags, foundVar.Tags, "tags should match")
 	require.Equal(t, created.Variation.Summarizer, foundVar.Summarizer, "summarizer should match")
 	require.NotEmpty(t, foundVar.CreatedAt, "created at should not be empty")
 	require.NotEmpty(t, foundVar.UpdatedAt, "updated at should not be empty")
@@ -208,7 +206,6 @@ func TestVariationsService_ListGlobal_MultipleVariations(t *testing.T) {
 				// Verify the variation fields
 				require.Equal(t, created.Variation.SrcToolName, v.SrcToolName, "src tool name should match for variation %s", created.Variation.ID)
 				require.Equal(t, created.Variation.Name, v.Name, "name should match for variation %s", created.Variation.ID)
-				require.Equal(t, created.Variation.Summary, v.Summary, "summary should match for variation %s", created.Variation.ID)
 				require.Equal(t, created.Variation.Description, v.Description, "description should match for variation %s", created.Variation.ID)
 			}
 		}

@@ -15,10 +15,9 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/inv"
 	deploymentR "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	org "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -204,7 +203,7 @@ func DescribeToolset(
 	tx DBTX,
 	projectID ProjectID,
 	toolsetSlug ToolsetSlug,
-	toolsetCache *cache.TypedCacheObject[CachedToolset],
+	toolsetCache *cache.TypedCacheObject[ToolsetTools],
 ) (*types.Toolset, error) {
 	toolsetRepo := tsr.New(tx)
 	orgRepo := org.New(tx)
@@ -233,7 +232,7 @@ func DescribeToolset(
 
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
 	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
-	if err != nil { 
+	if err != nil {
 		// We only log this because we only need to know this for the cache
 		logger.ErrorContext(ctx, "failed to get active deployment id", attr.SlogError(err))
 	}
@@ -255,7 +254,7 @@ func DescribeToolset(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset tools").Log(ctx, logger)
 	}
-	
+
 	ptrows, err := toolsetRepo.GetPromptTemplatesForToolset(ctx, tsr.GetPromptTemplatesForToolsetParams{
 		ProjectID: pid,
 		ToolsetID: toolset.ID,
@@ -399,9 +398,8 @@ func DescribeToolset(
 	return result, nil
 }
 
-func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uuid.UUID, activeDeploymentID uuid.UUID, toolsetID uuid.UUID, toolsetVersion int64, toolUrns []string, toolsetCache *cache.TypedCacheObject[CachedToolset]) (*CachedToolset, error) {
+func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uuid.UUID, activeDeploymentID uuid.UUID, toolsetID uuid.UUID, toolsetVersion int64, toolUrns []string, toolsetCache *cache.TypedCacheObject[ToolsetTools]) (*ToolsetTools, error) {
 	toolsRepo := tr.New(tx)
-	variationsRepo := vr.New(tx)
 	templatesRepo := templatesR.New(tx)
 
 	var tools []*types.Tool
@@ -425,38 +423,6 @@ func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uui
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
 		}
 
-		names := make([]string, 0, len(definitions))
-		for _, def := range definitions {
-			names = append(names, def.HttpToolDefinition.Name)
-		}
-
-		// TODO variations by urns
-		allVariations, err := variationsRepo.FindGlobalVariationsByToolNames(ctx, vr.FindGlobalVariationsByToolNamesParams{
-			ProjectID: pid,
-			ToolNames: names,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").Log(ctx, logger)
-		}
-
-		keyedVariations := make(map[string]types.ToolVariation, len(allVariations))
-		for _, variation := range allVariations {
-			keyedVariations[variation.SrcToolName] = types.ToolVariation{
-				ID:            variation.ID.String(),
-				GroupID:       variation.GroupID.String(),
-				SrcToolName:   variation.SrcToolName,
-				Confirm:       conv.FromPGText[string](variation.Confirm),
-				ConfirmPrompt: conv.FromPGText[string](variation.ConfirmPrompt),
-				Name:          conv.FromPGText[string](variation.Name),
-				Summary:       conv.FromPGText[string](variation.Summary),
-				Description:   conv.FromPGText[string](variation.Description),
-				Tags:          variation.Tags,
-				Summarizer:    conv.FromPGText[string](variation.Summarizer),
-				CreatedAt:     variation.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:     variation.UpdatedAt.Time.Format(time.RFC3339),
-			}
-		}
-
 		tools = make([]*types.Tool, 0, len(definitions))
 		seen := make(map[string]bool, 0)
 		envQueries := make([]toolEnvLookupParams, 0, len(definitions))
@@ -466,46 +432,12 @@ func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uui
 			}
 			seen[def.HttpToolDefinition.ID.String()] = true
 
-			var variation *types.ToolVariation
-			var canonical *types.CanonicalToolAttributes
-
 			name := def.HttpToolDefinition.Name
-			summary := def.HttpToolDefinition.Summary
 			description := def.HttpToolDefinition.Description
 			confirmRaw := conv.PtrValOr(conv.FromPGText[string](def.HttpToolDefinition.Confirm), "")
 			confirmPrompt := conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt)
 			summarizer := conv.FromPGText[string](def.HttpToolDefinition.Summarizer)
 			tags := def.HttpToolDefinition.Tags
-
-			variations, ok := keyedVariations[def.HttpToolDefinition.Name]
-			if ok {
-				name = conv.PtrValOrEmpty(variations.Name, name)
-				summary = conv.PtrValOr(variations.Summary, summary)
-				description = conv.PtrValOr(variations.Description, description)
-				confirmRaw = conv.PtrValOrEmpty(variations.Confirm, confirmRaw)
-				confirmPrompt = conv.Default(variations.ConfirmPrompt, confirmPrompt)
-				summarizer = conv.Default(variations.Summarizer, summarizer)
-				if len(variations.Tags) > 0 {
-					tags = variations.Tags
-				}
-
-				variation = &variations
-				canonical = &types.CanonicalToolAttributes{
-					VariationID:   variations.ID,
-					Name:          def.HttpToolDefinition.Name,
-					Summary:       conv.PtrEmpty(def.HttpToolDefinition.Summary),
-					Description:   conv.PtrEmpty(def.HttpToolDefinition.Description),
-					Tags:          def.HttpToolDefinition.Tags,
-					Confirm:       conv.FromPGText[string](def.HttpToolDefinition.Confirm),
-					ConfirmPrompt: conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt),
-					Summarizer:    conv.FromPGText[string](def.HttpToolDefinition.Summarizer),
-				}
-			}
-
-			canonicalName := name
-			if canonical != nil {
-				canonicalName = canonical.Name
-			}
 
 			confirm, _ := SanitizeConfirm(confirmRaw)
 
@@ -525,8 +457,8 @@ func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uui
 				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
 				Openapiv3DocumentID: conv.FromNullableUUID(def.HttpToolDefinition.Openapiv3DocumentID),
 				Name:                name,
-				CanonicalName:       canonicalName,
-				Summary:             summary,
+				CanonicalName:       name,
+				Summary:             "", // Slowly phasing this out
 				Description:         description,
 				Confirm:             conv.Ptr(string(confirm)),
 				ConfirmPrompt:       confirmPrompt,
@@ -541,19 +473,10 @@ func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uui
 				Schema:              string(def.HttpToolDefinition.Schema),
 				CreatedAt:           def.HttpToolDefinition.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:           def.HttpToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
-				Canonical:           canonical,
-				Variation:           variation,
 				PackageName:         &def.PackageName,
 				ResponseFilter:      responseFilter,
-			}
-
-			if newSchema, err := variedToolSchema(ctx, logger, tool); err == nil {
-				tool.Schema = newSchema
-			}
-
-			// models like claude expect schema to never be empty but be a valid json schema
-			if tool.Schema == "" {
-				tool.Schema = constants.DefaultEmptyToolSchema
+				Variation:           nil, // Applied later
+				Canonical:           nil,
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
@@ -609,7 +532,12 @@ func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uui
 		}
 	}
 
-	cachedToolset := CachedToolset{
+	err := ApplyVariations(ctx, logger, tx, pid, tools)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to toolset").Log(ctx, logger)
+	}
+
+	toolsetTools := ToolsetTools{
 		DeploymentID: activeDeploymentID.String(),
 		ToolsetID:    toolsetID.String(),
 		Version:      toolsetVersion,
@@ -619,12 +547,61 @@ func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uui
 	}
 
 	if toolsetCache != nil && activeDeploymentID != uuid.Nil {
-		if err := toolsetCache.Store(ctx, cachedToolset); err != nil {
+		if err := toolsetCache.Store(ctx, toolsetTools); err != nil {
 			logger.ErrorContext(ctx, "failed to cache toolset", attr.SlogError(err))
 		}
 	}
 
-	return &cachedToolset, nil
+	return &toolsetTools, nil
+}
+
+func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectID uuid.UUID, tools []*types.Tool) error {
+	variationsRepo := vr.New(tx)
+
+	names := make([]string, 0, len(tools))
+	for _, def := range tools {
+		baseTool := conv.ToBaseTool(def)
+		names = append(names, baseTool.Name)
+	}
+
+	// TODO variations by urns
+	allVariations, err := variationsRepo.FindGlobalVariationsByToolNames(ctx, vr.FindGlobalVariationsByToolNamesParams{
+		ProjectID: projectID,
+		ToolNames: names,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").Log(ctx, logger)
+	}
+
+	keyedVariations := make(map[string]types.ToolVariation, len(allVariations))
+	for _, variation := range allVariations {
+		keyedVariations[variation.SrcToolName] = types.ToolVariation{
+			ID:            variation.ID.String(),
+			GroupID:       variation.GroupID.String(),
+			SrcToolName:   variation.SrcToolName,
+			Confirm:       conv.FromPGText[string](variation.Confirm),
+			ConfirmPrompt: conv.FromPGText[string](variation.ConfirmPrompt),
+			Name:          conv.FromPGText[string](variation.Name),
+			Description:   conv.FromPGText[string](variation.Description),
+			Summarizer:    conv.FromPGText[string](variation.Summarizer),
+			CreatedAt:     variation.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     variation.UpdatedAt.Time.Format(time.RFC3339),
+		}
+	}
+
+	for _, tool := range tools {
+		if tool == nil {
+			continue
+		}
+		baseTool := conv.ToBaseTool(tool)
+
+		v, ok := keyedVariations[baseTool.Name]
+		if ok {
+			conv.ApplyVariation(*tool, v)
+		}
+	}
+
+	return nil
 }
 
 type toolEnvLookupParams struct {
@@ -705,47 +682,6 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []toolEnvL
 	}
 
 	return slices.Collect(maps.Values(securityVarsMap)), serverVars, nil
-}
-
-func variedToolSchema(ctx context.Context, logger *slog.Logger, tool *types.HTTPToolDefinition) (string, error) {
-	schema := tool.Schema
-	if tool.Summarizer != nil {
-		var jsonSchema map[string]interface{}
-		err := json.Unmarshal([]byte(schema), &jsonSchema)
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to unmarshal schema").Log(ctx, logger)
-		}
-
-		properties, ok := jsonSchema["properties"].(map[string]interface{})
-		if !ok {
-			properties = make(map[string]interface{})
-		}
-
-		properties["gram-request-summary"] = map[string]interface{}{
-			"type":        "string",
-			"description": "REQUIRED: A summary of the request to the tool. Distill the user's intention in order to ensure the response contains all the necessary information, without unnecessary details.",
-		}
-
-		jsonSchema["properties"] = properties
-
-		var required []string
-		required, ok = jsonSchema["required"].([]string)
-		if !ok {
-			required = []string{}
-		}
-
-		required = append(required, "gram-request-summary")
-		jsonSchema["required"] = required
-
-		newSchema, err := json.Marshal(jsonSchema)
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to marshal schema").Log(ctx, logger)
-		}
-
-		schema = string(newSchema)
-	}
-
-	return schema, nil
 }
 
 const defaultPromptTemplateKind = "prompt"

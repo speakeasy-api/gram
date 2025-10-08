@@ -45,16 +45,16 @@ import (
 )
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	repo        *repo.Queries
-	toolsetRepo *toolsets_repo.Queries
-	orgsRepo    *organizations_repo.Queries
-	sessions    *sessions.Manager
-	auth        *auth.Auth
-	serverURL   *url.URL
-	toolsetCache cache.TypedCacheObject[mv.CachedToolset]
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	repo         *repo.Queries
+	toolsetRepo  *toolsets_repo.Queries
+	orgsRepo     *organizations_repo.Queries
+	sessions     *sessions.Manager
+	auth         *auth.Auth
+	serverURL    *url.URL
+	toolsetCache cache.TypedCacheObject[mv.ToolsetTools]
 }
 
 //go:embed config_snippet.json.tmpl
@@ -90,16 +90,16 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 	logger = logger.With(attr.SlogComponent("mcp_install_page"))
 
 	return &Service{
-		tracer:      otel.Tracer("github.com/speakeasy-api/gram/server/internal/mcpinstallpage"),
-		logger:      logger,
-		db:          db,
-		repo:        repo.New(db),
-		toolsetRepo: toolsets_repo.New(db),
-		orgsRepo:    organizations_repo.New(db),
-		sessions:    sessions,
-		auth:        auth.New(logger, db, sessions),
-		serverURL:   serverURL,
-		toolsetCache: cache.NewTypedObjectCache[mv.CachedToolset](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/mcpinstallpage"),
+		logger:       logger,
+		db:           db,
+		repo:         repo.New(db),
+		toolsetRepo:  toolsets_repo.New(db),
+		orgsRepo:     organizations_repo.New(db),
+		sessions:     sessions,
+		auth:         auth.New(logger, db, sessions),
+		serverURL:    serverURL,
+		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 	}
 }
 

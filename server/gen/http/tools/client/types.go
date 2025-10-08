@@ -285,8 +285,6 @@ type CanonicalToolAttributesResponseBody struct {
 	VariationID *string `form:"variation_id,omitempty" json:"variation_id,omitempty" xml:"variation_id,omitempty"`
 	// The name of the tool
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Summary of the tool
-	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// Description of the tool
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Confirmation mode for the tool
@@ -295,8 +293,6 @@ type CanonicalToolAttributesResponseBody struct {
 	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
 	// Summarizer for the tool
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
-	// The tags list for this http tool
-	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 }
 
 // ToolVariationResponseBody is used to define fields on response body types.
@@ -313,12 +309,8 @@ type ToolVariationResponseBody struct {
 	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
 	// The name of the tool variation
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The summary of the tool variation
-	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// The description of the tool variation
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The tags of the tool variation
-	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// The summarizer of the tool variation
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
 	// The creation date of the tool variation
@@ -900,6 +892,9 @@ func ValidateCanonicalToolAttributesResponseBody(body *CanonicalToolAttributesRe
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
 	}
 	return
 }

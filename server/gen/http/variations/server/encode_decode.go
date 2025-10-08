@@ -707,17 +707,10 @@ func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation
 		Confirm:       v.Confirm,
 		ConfirmPrompt: v.ConfirmPrompt,
 		Name:          v.Name,
-		Summary:       v.Summary,
 		Description:   v.Description,
 		Summarizer:    v.Summarizer,
 		CreatedAt:     v.CreatedAt,
 		UpdatedAt:     v.UpdatedAt,
-	}
-	if v.Tags != nil {
-		res.Tags = make([]string, len(v.Tags))
-		for i, val := range v.Tags {
-			res.Tags[i] = val
-		}
 	}
 
 	return res

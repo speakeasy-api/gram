@@ -58,7 +58,7 @@ type Service struct {
 	domainsRepo     *domainsRepo.Queries
 	usageRepo       *usageRepo.Queries
 	oauthRepo       *oauthRepo.Queries
-	toolsetCache    cache.TypedCacheObject[mv.CachedToolset]
+	toolsetCache    cache.TypedCacheObject[mv.ToolsetTools]
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -77,7 +77,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		domainsRepo:     domainsRepo.New(db),
 		usageRepo:       usageRepo.New(db),
 		oauthRepo:       oauthRepo.New(db),
-		toolsetCache:    cache.NewTypedObjectCache[mv.CachedToolset](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+		toolsetCache:    cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 	}
 }
 

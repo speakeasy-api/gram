@@ -40,7 +40,7 @@ type ChatClient struct {
 	env          *environments.EnvironmentEntries
 	cache        cache.Cache
 	toolProxy    *gateway.ToolProxy
-	toolsetCache cache.TypedCacheObject[mv.CachedToolset]
+	toolsetCache cache.TypedCacheObject[mv.ToolsetTools]
 }
 
 func NewChatClient(logger *slog.Logger,
@@ -68,7 +68,7 @@ func NewChatClient(logger *slog.Logger,
 			cacheImpl,
 			guardianPolicy,
 		),
-		toolsetCache: cache.NewTypedObjectCache[mv.CachedToolset](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
+		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}
 }
 
@@ -235,7 +235,7 @@ func (c *ChatClient) LoadToolsetTools(
 		}
 
 		httpTool := tool.HTTPToolDefinition
-		
+
 		// Capture for closure
 		name := httpTool.Name
 		projID := projectID

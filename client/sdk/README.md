@@ -77,9 +77,12 @@ bun add @tanstack/react-query react react-dom
 ### Yarn
 
 ```bash
-yarn add <UNSET>
+yarn add <UNSET> zod
 # Install optional peer dependencies if you plan to use React hooks
 yarn add @tanstack/react-query react react-dom
+
+# Note that Yarn does not install peer dependencies automatically. You will need
+# to install zod as shown above.
 ```
 
 > [!NOTE]
@@ -656,7 +659,7 @@ httpClient.addHook("requestError", (error, request) => {
   console.groupEnd();
 });
 
-const sdk = new Gram({ httpClient: httpClient });
+const sdk = new Gram({ httpClient });
 ```
 <!-- End Custom HTTP Client [http-client] -->
 
