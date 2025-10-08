@@ -7517,8 +7517,8 @@ func ValidateToolEntryResponseBody(body *ToolEntryResponseBody) (err error) {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
 	}
 	if body.Type != nil {
-		if !(*body.Type == "http" || *body.Type == "prompt") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"http", "prompt"}))
+		if !(*body.Type == "http" || *body.Type == "prompt" || *body.Type == "function") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.type", *body.Type, []any{"http", "prompt", "function"}))
 		}
 	}
 	return

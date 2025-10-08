@@ -108,7 +108,7 @@ var Tool = Type("Tool", func() {
 
 var ToolEntry = Type("ToolEntry", func() {
 	Attribute("type", String, func() {
-		Enum(string(urn.ToolKindHTTP), string(urn.ToolKindPrompt))
+		Enum(string(urn.ToolKindHTTP), string(urn.ToolKindPrompt), string(urn.ToolKindFunction))
 	})
 
 	Attribute("id", String, "The ID of the tool")

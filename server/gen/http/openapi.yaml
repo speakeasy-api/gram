@@ -27644,15 +27644,15 @@ definitions:
                         - id: Animi laudantium voluptatem dolor dicta sit.
                           name: Facilis voluptate est distinctio.
                           tool_urn: Cum aut non recusandae aut id.
-                          type: prompt
+                          type: http
                         - id: Animi laudantium voluptatem dolor dicta sit.
                           name: Facilis voluptate est distinctio.
                           tool_urn: Cum aut non recusandae aut id.
-                          type: prompt
+                          type: http
                         - id: Animi laudantium voluptatem dolor dicta sit.
                           name: Facilis voluptate est distinctio.
                           tool_urn: Cum aut non recusandae aut id.
-                          type: prompt
+                          type: http
                       updated_at: "1992-11-14T17:53:47Z"
                     - created_at: "1976-09-09T11:47:18Z"
                       custom_domain_id: Tempore illo quaerat.
@@ -27799,15 +27799,15 @@ definitions:
                         - id: Animi laudantium voluptatem dolor dicta sit.
                           name: Facilis voluptate est distinctio.
                           tool_urn: Cum aut non recusandae aut id.
-                          type: prompt
+                          type: http
                         - id: Animi laudantium voluptatem dolor dicta sit.
                           name: Facilis voluptate est distinctio.
                           tool_urn: Cum aut non recusandae aut id.
-                          type: prompt
+                          type: http
                         - id: Animi laudantium voluptatem dolor dicta sit.
                           name: Facilis voluptate est distinctio.
                           tool_urn: Cum aut non recusandae aut id.
-                          type: prompt
+                          type: http
                       updated_at: "1992-11-14T17:53:47Z"
         example:
             toolsets:
@@ -27956,15 +27956,15 @@ definitions:
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                   updated_at: "1992-11-14T17:53:47Z"
                 - created_at: "1976-09-09T11:47:18Z"
                   custom_domain_id: Tempore illo quaerat.
@@ -28111,15 +28111,15 @@ definitions:
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                   updated_at: "1992-11-14T17:53:47Z"
                 - created_at: "1976-09-09T11:47:18Z"
                   custom_domain_id: Tempore illo quaerat.
@@ -28266,15 +28266,15 @@ definitions:
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                   updated_at: "1992-11-14T17:53:47Z"
                 - created_at: "1976-09-09T11:47:18Z"
                   custom_domain_id: Tempore illo quaerat.
@@ -28421,15 +28421,15 @@ definitions:
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                   updated_at: "1992-11-14T17:53:47Z"
         required:
             - toolsets
@@ -39927,15 +39927,16 @@ definitions:
                 example: Doloremque molestias.
             type:
                 type: string
-                example: prompt
+                example: http
                 enum:
                     - http
                     - prompt
+                    - function
         example:
             id: Itaque placeat facilis ut dolores.
             name: Voluptatem ducimus eveniet voluptatibus esse.
             tool_urn: Accusamus doloribus aperiam odio ipsum et omnis.
-            type: prompt
+            type: function
         required:
             - type
             - id
@@ -42355,19 +42356,19 @@ definitions:
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
                     - id: Animi laudantium voluptatem dolor dicta sit.
                       name: Facilis voluptate est distinctio.
                       tool_urn: Cum aut non recusandae aut id.
-                      type: prompt
+                      type: http
             updated_at:
                 type: string
                 description: When the toolset was last updated.
@@ -42495,15 +42496,15 @@ definitions:
                 - id: Animi laudantium voluptatem dolor dicta sit.
                   name: Facilis voluptate est distinctio.
                   tool_urn: Cum aut non recusandae aut id.
-                  type: prompt
+                  type: http
                 - id: Animi laudantium voluptatem dolor dicta sit.
                   name: Facilis voluptate est distinctio.
                   tool_urn: Cum aut non recusandae aut id.
-                  type: prompt
+                  type: http
                 - id: Animi laudantium voluptatem dolor dicta sit.
                   name: Facilis voluptate est distinctio.
                   tool_urn: Cum aut non recusandae aut id.
-                  type: prompt
+                  type: http
             updated_at: "1984-09-05T00:46:48Z"
         required:
             - id
