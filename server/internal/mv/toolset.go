@@ -255,6 +255,11 @@ func DescribeToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset tools").Log(ctx, logger)
 	}
 
+	err = ApplyVariations(ctx, logger, tx, pid, toolsetTools.Tools)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to toolset").Log(ctx, logger)
+	}
+
 	ptrows, err := toolsetRepo.GetPromptTemplatesForToolset(ctx, tsr.GetPromptTemplatesForToolsetParams{
 		ProjectID: pid,
 		ToolsetID: toolset.ID,
@@ -530,11 +535,6 @@ func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uui
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").Log(ctx, logger)
 		}
-	}
-
-	err := ApplyVariations(ctx, logger, tx, pid, tools)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to toolset").Log(ctx, logger)
 	}
 
 	toolsetTools := ToolsetTools{

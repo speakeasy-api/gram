@@ -87,7 +87,7 @@ func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
 	baseTool := ToBaseTool(&tool)
 
 	canonicalAttributes := types.CanonicalToolAttributes{
-		VariationID:   baseTool.ID,
+		VariationID:   variation.ID,
 		Name:          baseTool.Name,
 		Description:   baseTool.Description,
 		Confirm:       baseTool.Confirm,
