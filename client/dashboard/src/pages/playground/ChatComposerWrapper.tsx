@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   ToolMentionAutocomplete,
   MentionedToolsBadges,
@@ -20,9 +21,9 @@ export function ChatComposerWrapper({
 }: ChatComposerWrapperProps) {
   const [inputValue, setInputValue] = useState("");
   const [mentionedToolIds, setMentionedToolIds] = useState<string[]>([]);
-  const [badgesBottomOffset, setBadgesBottomOffset] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null!);
+  const badgesContainerRef = useRef<HTMLDivElement | null>(null);
   const lastValueRef = useRef("");
 
   // Find and attach to the textarea in the chat composer
@@ -67,14 +68,21 @@ export function ChatComposerWrapper({
           onInputChange?.(value);
         }
 
-        // Update badges position based on the chat input container height
-        const chatContainer =
-          textarea.closest('[class*="composer"]') || textarea.parentElement;
-        if (chatContainer && containerRef.current) {
-          const containerRect = containerRef.current.getBoundingClientRect();
-          const chatContainerRect = chatContainer.getBoundingClientRect();
-          const offset = chatContainerRect.bottom - containerRect.top + 8;
-          setBadgesBottomOffset(offset);
+        // Insert badges container into DOM if not already there
+        if (mentionedToolIds.length > 0 && !badgesContainerRef.current) {
+          const composerParent = textarea.parentElement;
+          if (composerParent) {
+            const badgesDiv = document.createElement("div");
+            badgesDiv.setAttribute("data-tool-badges", "true");
+            composerParent.insertBefore(badgesDiv, composerParent.firstChild);
+            badgesContainerRef.current = badgesDiv;
+          }
+        }
+
+        // Remove badges container if no tools selected
+        if (mentionedToolIds.length === 0 && badgesContainerRef.current) {
+          badgesContainerRef.current.remove();
+          badgesContainerRef.current = null;
         }
       }
     }, 100);
@@ -82,12 +90,21 @@ export function ChatComposerWrapper({
     return () => {
       clearInterval(pollInterval);
     };
-  }, [onInputChange]);
+  }, [onInputChange, mentionedToolIds.length]);
 
   // Update parent when tools are selected
   useEffect(() => {
     onToolsSelected(mentionedToolIds);
   }, [mentionedToolIds, onToolsSelected]);
+
+  // Cleanup badges container on unmount
+  useEffect(() => {
+    return () => {
+      if (badgesContainerRef.current) {
+        badgesContainerRef.current.remove();
+      }
+    };
+  }, []);
 
   const handleInputChange = (value: string) => {
     lastValueRef.current = value;
@@ -125,34 +142,23 @@ export function ChatComposerWrapper({
         />
       )}
       {mentionedToolIds.length > 0 &&
-        textareaRef.current &&
-        badgesBottomOffset > 0 && (
-          <div
-            className="absolute left-0 right-0 z-50 pointer-events-none"
-            style={{ bottom: `${badgesBottomOffset}px` }}
-          >
-            <div className="pointer-events-auto">
-              <MentionedToolsBadges
-                toolIds={mentionedToolIds}
-                tools={tools}
-                onRemove={(toolId) => {
-                  setMentionedToolIds((prev) =>
-                    prev.filter((id) => id !== toolId),
-                  );
-                  // Remove the mention from input text
-                  const tool = tools.find((t) => t.id === toolId);
-                  if (tool) {
-                    handleInputChange(
-                      inputValue.replace(
-                        new RegExp(`@${tool.name}\\s*`, "g"),
-                        "",
-                      ),
-                    );
-                  }
-                }}
-              />
-            </div>
-          </div>
+        badgesContainerRef.current &&
+        createPortal(
+          <MentionedToolsBadges
+            toolIds={mentionedToolIds}
+            tools={tools}
+            onRemove={(toolId) => {
+              setMentionedToolIds((prev) => prev.filter((id) => id !== toolId));
+              // Remove the mention from input text
+              const tool = tools.find((t) => t.id === toolId);
+              if (tool) {
+                handleInputChange(
+                  inputValue.replace(new RegExp(`@${tool.name}\\s*`, "g"), ""),
+                );
+              }
+            }}
+          />,
+          badgesContainerRef.current,
         )}
     </div>
   );
