@@ -12,11 +12,10 @@ import {
   Route,
   Routes,
   useSearchParams,
-  Navigate,
   useLocation,
 } from "react-router";
 import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
-import { AuthProvider, ProjectProvider, useSession } from "./contexts/Auth.tsx";
+import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
 import { SdkProvider } from "./contexts/Sdk.tsx";
 import { TelemetryProvider } from "./contexts/Telemetry.tsx";
 import { AppRoute, useRoutes } from "./routes";
