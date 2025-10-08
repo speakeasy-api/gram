@@ -79,12 +79,23 @@ func newApp() *cli.App {
 			ctx := logging.PushLogger(c.Context, logger)
 
 			profilePath := c.String("profile-path")
+			userSpecifiedPath := c.IsSet("profile-path")
+			if profilePath == "" {
+				profilePath = defaultProfilePath
+			}
 			prof, err := profile.Load(profilePath)
 			if err != nil {
 				logger.WarnContext(
 					ctx,
 					"failed to load profile, continuing without it",
+					slog.String("profile path", profilePath),
 					slog.String("error", err.Error()),
+				)
+			} else if userSpecifiedPath && prof == nil {
+				logger.WarnContext(
+					ctx,
+					"profile file not found at specified path",
+					slog.String("profile path", profilePath),
 				)
 			}
 			if prof != nil {
