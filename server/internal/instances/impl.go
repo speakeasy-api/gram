@@ -249,7 +249,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	toolsetSlug := r.URL.Query().Get("toolset_slug")
 	chatID := r.URL.Query().Get("chat_id")
 
-	envVars := make(map[string]string)
+	ciEnv := gateway.NewCaseInsensitiveEnv()
 	if environmentSlug := r.URL.Query().Get(environmentSlugQueryParam); environmentSlug != "" {
 		envModel, err := s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
 			ProjectID: *authCtx.ProjectID,
@@ -264,9 +264,8 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			return oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, logger)
 		}
 
-		// Transform environment entries into a map
 		for _, entry := range environmentEntries {
-			envVars[entry.Name] = entry.Value
+			ciEnv.Set(entry.Name, entry.Value)
 		}
 	}
 
@@ -295,10 +294,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	requestBody = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
 
-	// Use a response interceptor that completely captures the response
 	interceptor := newResponseInterceptor(w)
 
-	err = s.toolProxy.Do(ctx, interceptor, requestBody, envVars, executionInfo.Tool)
+	err = s.toolProxy.Do(ctx, interceptor, requestBody, ciEnv, executionInfo.Tool)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}

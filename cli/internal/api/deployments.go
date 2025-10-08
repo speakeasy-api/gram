@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	depl_client "github.com/speakeasy-api/gram/server/gen/http/deployments/client"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
 
@@ -55,7 +57,10 @@ func (c *DeploymentsClient) CreateDeployment(
 	req CreateDeploymentRequest,
 ) (*deployments.CreateDeploymentResult, error) {
 	key := req.APIKey.Reveal()
-	result, err := c.client.CreateDeployment(ctx, &deployments.CreateDeploymentPayload{
+	if req.IdempotencyKey == "" {
+		req.IdempotencyKey = uuid.New().String()
+	}
+	payload := &deployments.CreateDeploymentPayload{
 		ApikeyToken:      &key,
 		ProjectSlugInput: &req.ProjectSlug,
 		IdempotencyKey:   req.IdempotencyKey,
@@ -68,7 +73,8 @@ func (c *DeploymentsClient) CreateDeployment(
 		ExternalID:       nil,
 		ExternalURL:      nil,
 		Packages:         nil,
-	})
+	}
+	result, err := c.client.CreateDeployment(ctx, payload)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create deployment: %w", err)
 	}
@@ -82,7 +88,7 @@ func (c *DeploymentsClient) GetDeployment(
 	apiKey secret.Secret,
 	projectSlug string,
 	deploymentID string,
-) (*deployments.GetDeploymentResult, error) {
+) (*types.Deployment, error) {
 	key := apiKey.Reveal()
 	result, err := c.client.GetDeployment(ctx, &deployments.GetDeploymentPayload{
 		ApikeyToken:      &key,
@@ -94,7 +100,26 @@ func (c *DeploymentsClient) GetDeployment(
 		return nil, fmt.Errorf("failed to get deployment: %w", err)
 	}
 
-	return result, nil
+	return &types.Deployment{
+		ID:                 result.ID,
+		OrganizationID:     result.OrganizationID,
+		ProjectID:          result.ProjectID,
+		UserID:             result.UserID,
+		CreatedAt:          result.CreatedAt,
+		Status:             result.Status,
+		IdempotencyKey:     result.IdempotencyKey,
+		GithubRepo:         result.GithubRepo,
+		GithubPr:           result.GithubPr,
+		GithubSha:          result.GithubSha,
+		ExternalID:         result.ExternalID,
+		ExternalURL:        result.ExternalURL,
+		ClonedFrom:         result.ClonedFrom,
+		Openapiv3ToolCount: result.Openapiv3ToolCount,
+		Openapiv3Assets:    result.Openapiv3Assets,
+		FunctionsToolCount: result.FunctionsToolCount,
+		FunctionsAssets:    result.FunctionsAssets,
+		Packages:           result.Packages,
+	}, nil
 }
 
 // GetLatestDeployment retrieves the latest deployment for a project.
@@ -102,15 +127,73 @@ func (c *DeploymentsClient) GetLatestDeployment(
 	ctx context.Context,
 	apiKey secret.Secret,
 	projectSlug string,
-) (*deployments.GetLatestDeploymentResult, error) {
+) (*types.Deployment, error) {
 	key := apiKey.Reveal()
-	result, err := c.client.GetLatestDeployment(ctx, &deployments.GetLatestDeploymentPayload{
-		ApikeyToken:      &key,
-		ProjectSlugInput: &projectSlug,
-		SessionToken:     nil,
-	})
+	result, err := c.client.GetLatestDeployment(
+		ctx,
+		&deployments.GetLatestDeploymentPayload{
+			ApikeyToken:      &key,
+			ProjectSlugInput: &projectSlug,
+			SessionToken:     nil,
+		},
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get latest deployment: %w", err)
+	}
+
+	return result.Deployment, nil
+}
+
+// GetActiveDeployment retrieves the active deployment for a project.
+func (c *DeploymentsClient) GetActiveDeployment(
+	ctx context.Context,
+	apiKey secret.Secret,
+	projectSlug string,
+) (*types.Deployment, error) {
+	key := apiKey.Reveal()
+	result, err := c.client.GetActiveDeployment(
+		ctx,
+		&deployments.GetActiveDeploymentPayload{
+			ApikeyToken:      &key,
+			ProjectSlugInput: &projectSlug,
+			SessionToken:     nil,
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active deployment: %w", err)
+	}
+
+	return result.Deployment, nil
+}
+
+// EvolveRequest lists the assets to add to a deployment.
+type EvolveRequest struct {
+	Assets       []*deployments.AddOpenAPIv3DeploymentAssetForm
+	APIKey       secret.Secret
+	DeploymentID string
+	ProjectSlug  string
+}
+
+// Evolve adds assets to an existing deployment.
+func (c *DeploymentsClient) Evolve(
+	ctx context.Context,
+	req EvolveRequest,
+) (*deployments.EvolveResult, error) {
+	key := req.APIKey.Reveal()
+	result, err := c.client.Evolve(ctx, &deployments.EvolvePayload{
+		ApikeyToken:            &key,
+		ProjectSlugInput:       &req.ProjectSlug,
+		DeploymentID:           &req.DeploymentID,
+		UpsertOpenapiv3Assets:  req.Assets,
+		UpsertFunctions:        []*deployments.AddFunctionsForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+		UpsertPackages:         []*deployments.AddPackageForm{},
+		SessionToken:           nil,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to evolve deployment: %w", err)
 	}
 
 	return result, nil

@@ -27,7 +27,7 @@ func processSecurity(
 	responseStatusCodeCapture *int,
 	tool *HTTPTool,
 	cacheImpl cache.Cache,
-	envVars *caseInsensitiveEnv,
+	envVars *CaseInsensitiveEnv,
 	serverURL string,
 ) bool {
 	for _, security := range tool.Security {
@@ -199,7 +199,7 @@ type clientCredentialsTokenResponseCamelCase struct {
 	ExpiresIn   int    `json:"expiresIn"`
 }
 
-func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *HTTPTool, security *HTTPToolSecurity, envVars *caseInsensitiveEnv, serverURL string) error {
+func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *HTTPTool, security *HTTPToolSecurity, envVars *CaseInsensitiveEnv, serverURL string) error {
 	// To discuss, currently we are taking the approach of exact scope match for reused tokens
 	// We could look into enabling a prefix match feature for caches where we return multiple entries matching the projectID, clientID, tokenURL and then check scopes against all returned values
 	// We would want to make sure any underlying cache implementation supports this feature

@@ -265,18 +265,17 @@ func (c *ChatClient) LoadToolsetTools(
 				statusCode: http.StatusOK,
 			}
 
-			// Transform environment entries into a map
-			envVars := make(map[string]string)
+			ciEnv := gateway.NewCaseInsensitiveEnv()
 			for _, entry := range environmentEntries {
-				envVars[entry.Name] = entry.Value
+				ciEnv.Set(entry.Name, entry.Value)
 			}
 
 			// use environment overrides
 			for key, value := range addedEnvironmentEntries {
-				envVars[key] = value
+				ciEnv.Set(key, value)
 			}
 
-			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), envVars, executionPlan.Tool)
+			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), ciEnv, executionPlan.Tool)
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}
