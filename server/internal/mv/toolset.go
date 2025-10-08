@@ -419,6 +419,7 @@ func DescribeToolset(
 		}
 
 		for _, def := range functionDefinitions {
+			// TODO: Chase to look at what applies from variations here
 			project := ""
 			if projectID := conv.FromNullableUUID(def.FunctionToolDefinition.ProjectID); projectID != nil {
 				project = *projectID
@@ -433,7 +434,6 @@ func DescribeToolset(
 				Name:          def.FunctionToolDefinition.Name,
 				CanonicalName: def.FunctionToolDefinition.Name,
 				Description:   def.FunctionToolDefinition.Description,
-				InputSchema:   def.FunctionToolDefinition.InputSchema,
 				Variables:     def.FunctionToolDefinition.Variables,
 				SchemaVersion: nil,
 				Schema:        string(def.FunctionToolDefinition.InputSchema),
@@ -445,7 +445,6 @@ func DescribeToolset(
 				Canonical:     nil,
 				Variation:     nil,
 			}
-			// TODO: Chase to look at what applies from variations here
 			if functionTool.Schema == "" {
 				functionTool.Schema = constants.DefaultEmptyToolSchema
 			}

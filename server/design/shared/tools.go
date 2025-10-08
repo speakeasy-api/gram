@@ -89,10 +89,9 @@ var FunctionToolDefinition = Type("FunctionToolDefinition", func() {
 	Attribute("deployment_id", String, "The ID of the deployment")
 	Attribute("function_id", String, "The ID of the function")
 	Attribute("runtime", String, "Runtime environment (e.g., nodejs:22, python:3.12)")
-	Attribute("input_schema", Any, "JSON schema for the function input")
 	Attribute("variables", Any, "Variables configuration for the function")
 
-	Required("deployment_id", "function_id", "runtime", "schema")
+	Required("deployment_id", "function_id", "runtime")
 })
 
 // Tool is a discriminated union of HTTP tools and prompt templates.

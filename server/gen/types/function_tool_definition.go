@@ -15,8 +15,6 @@ type FunctionToolDefinition struct {
 	FunctionID string
 	// Runtime environment (e.g., nodejs:22, python:3.12)
 	Runtime string
-	// JSON schema for the function input
-	InputSchema any
 	// Variables configuration for the function
 	Variables any
 	// The ID of the tool

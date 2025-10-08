@@ -702,6 +702,236 @@ func DecodeRevokeKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildVerifyKeyRequest instantiates a HTTP request object with method and
+// path set to call the "keys" service "verifyKey" endpoint
+func (c *Client) BuildVerifyKeyRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: VerifyKeyKeysPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("keys", "verifyKey", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeVerifyKeyRequest returns an encoder for requests sent to the keys
+// verifyKey server.
+func EncodeVerifyKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*keys.VerifyKeyPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("keys", "verifyKey", "*keys.VerifyKeyPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		return nil
+	}
+}
+
+// DecodeVerifyKeyResponse returns a decoder for responses returned by the keys
+// verifyKey endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeVerifyKeyResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeVerifyKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body VerifyKeyResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+			}
+			err = ValidateVerifyKeyResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+			}
+			res := NewVerifyKeyValidateKeyResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body VerifyKeyUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+			}
+			err = ValidateVerifyKeyUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+			}
+			return nil, NewVerifyKeyUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body VerifyKeyForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+			}
+			err = ValidateVerifyKeyForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+			}
+			return nil, NewVerifyKeyForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body VerifyKeyBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+			}
+			err = ValidateVerifyKeyBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+			}
+			return nil, NewVerifyKeyBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body VerifyKeyNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+			}
+			err = ValidateVerifyKeyNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+			}
+			return nil, NewVerifyKeyNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body VerifyKeyConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+			}
+			err = ValidateVerifyKeyConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+			}
+			return nil, NewVerifyKeyConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body VerifyKeyUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+			}
+			err = ValidateVerifyKeyUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+			}
+			return nil, NewVerifyKeyUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body VerifyKeyInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+			}
+			err = ValidateVerifyKeyInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+			}
+			return nil, NewVerifyKeyInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body VerifyKeyInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+				}
+				err = ValidateVerifyKeyInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+				}
+				return nil, NewVerifyKeyInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body VerifyKeyUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+				}
+				err = ValidateVerifyKeyUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+				}
+				return nil, NewVerifyKeyUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "verifyKey", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body VerifyKeyGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "verifyKey", err)
+			}
+			err = ValidateVerifyKeyGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "verifyKey", err)
+			}
+			return nil, NewVerifyKeyGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("keys", "verifyKey", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalKeyResponseBodyToKeysKey builds a value of type *keys.Key from a
 // value of type *KeyResponseBody.
 func unmarshalKeyResponseBodyToKeysKey(v *KeyResponseBody) *keys.Key {
@@ -719,6 +949,32 @@ func unmarshalKeyResponseBodyToKeysKey(v *KeyResponseBody) *keys.Key {
 	res.Scopes = make([]string, len(v.Scopes))
 	for i, val := range v.Scopes {
 		res.Scopes[i] = val
+	}
+
+	return res
+}
+
+// unmarshalValidateKeyOrganizationResponseBodyToKeysValidateKeyOrganization
+// builds a value of type *keys.ValidateKeyOrganization from a value of type
+// *ValidateKeyOrganizationResponseBody.
+func unmarshalValidateKeyOrganizationResponseBodyToKeysValidateKeyOrganization(v *ValidateKeyOrganizationResponseBody) *keys.ValidateKeyOrganization {
+	res := &keys.ValidateKeyOrganization{
+		ID:   *v.ID,
+		Name: *v.Name,
+		Slug: *v.Slug,
+	}
+
+	return res
+}
+
+// unmarshalValidateKeyProjectResponseBodyToKeysValidateKeyProject builds a
+// value of type *keys.ValidateKeyProject from a value of type
+// *ValidateKeyProjectResponseBody.
+func unmarshalValidateKeyProjectResponseBodyToKeysValidateKeyProject(v *ValidateKeyProjectResponseBody) *keys.ValidateKeyProject {
+	res := &keys.ValidateKeyProject{
+		ID:   *v.ID,
+		Name: *v.Name,
+		Slug: *v.Slug,
 	}
 
 	return res

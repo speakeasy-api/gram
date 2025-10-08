@@ -427,7 +427,6 @@ func marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody(v *t
 		DeploymentID:  v.DeploymentID,
 		FunctionID:    v.FunctionID,
 		Runtime:       v.Runtime,
-		InputSchema:   v.InputSchema,
 		Variables:     v.Variables,
 		ID:            v.ID,
 		ToolUrn:       v.ToolUrn,

@@ -352,8 +352,6 @@ type FunctionToolDefinitionResponseBody struct {
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
 	// Runtime environment (e.g., nodejs:22, python:3.12)
 	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
-	// JSON schema for the function input
-	InputSchema any `form:"input_schema,omitempty" json:"input_schema,omitempty" xml:"input_schema,omitempty"`
 	// Variables configuration for the function
 	Variables any `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
 	// The ID of the tool
@@ -1119,9 +1117,6 @@ func ValidateFunctionToolDefinitionResponseBody(body *FunctionToolDefinitionResp
 	if body.Runtime == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
 	}
-	if body.Schema == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
-	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -1136,6 +1131,9 @@ func ValidateFunctionToolDefinitionResponseBody(body *FunctionToolDefinitionResp
 	}
 	if body.Description == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Schema == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
 	}
 	if body.ToolUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))

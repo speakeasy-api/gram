@@ -350,8 +350,6 @@ type FunctionToolDefinitionResponseBody struct {
 	FunctionID string `form:"function_id" json:"function_id" xml:"function_id"`
 	// Runtime environment (e.g., nodejs:22, python:3.12)
 	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
-	// JSON schema for the function input
-	InputSchema any `form:"input_schema,omitempty" json:"input_schema,omitempty" xml:"input_schema,omitempty"`
 	// Variables configuration for the function
 	Variables any `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
 	// The ID of the tool

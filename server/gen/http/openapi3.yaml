@@ -3620,6 +3620,87 @@ paths:
             x-speakeasy-name-override: revokeById
             x-speakeasy-react-hook:
                 name: RevokeAPIKey
+    /rpc/keys.verify:
+        get:
+            description: Verify an api key
+            operationId: validateAPIKey
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ValidateKeyResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: verifyKey keys
+            tags:
+                - keys
+            x-speakeasy-name-override: validate
+            x-speakeasy-react-hook:
+                name: ValidateAPIKey
     /rpc/mcpMetadata.get:
         get:
             description: Fetch the metadata that powers the MCP install page.
@@ -8513,8 +8594,6 @@ components:
                 id:
                     type: string
                     description: The ID of the tool
-                input_schema:
-                    description: JSON schema for the function input
                 name:
                     type: string
                     description: The name of the tool
@@ -8549,12 +8628,12 @@ components:
                 - deployment_id
                 - function_id
                 - runtime
-                - schema
                 - id
                 - project_id
                 - name
                 - canonical_name
                 - description
+                - schema
                 - tool_urn
                 - created_at
                 - updated_at
@@ -10601,6 +10680,57 @@ components:
                 - free
                 - pro
                 - enterprise
+        ValidateKeyOrganization:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the organization
+                name:
+                    type: string
+                    description: The name of the organization
+                slug:
+                    type: string
+                    description: The slug of the organization
+            required:
+                - id
+                - name
+                - slug
+        ValidateKeyProject:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the project
+                name:
+                    type: string
+                    description: The name of the project
+                slug:
+                    type: string
+                    description: The slug of the project
+            required:
+                - id
+                - name
+                - slug
+        ValidateKeyResult:
+            type: object
+            properties:
+                organization:
+                    $ref: '#/components/schemas/ValidateKeyOrganization'
+                projects:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ValidateKeyProject'
+                    description: The projects accessible with this key
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: List of permission scopes for this key
+            required:
+                - organization
+                - projects
+                - scopes
     securitySchemes:
         apikey_header_Gram-Key:
             type: apiKey
