@@ -173,7 +173,7 @@ func (t *Toolsets) extractHTTPToolExecutionInfo(ctx context.Context, tool toolsR
 	}
 
 	return &ToolExecutionInfo{
-		Tool:             &gateway.Tool{Kind: gateway.ToolKindHTTP, HTTPTool: gatewayTool, FunctionTool: nil},
+		Tool:             gateway.NewHTTPTool(gatewayTool),
 		OrganizationSlug: orgData.Slug,
 		ProjectSlug:      orgData.ProjectSlug,
 	}, nil
@@ -203,7 +203,7 @@ func (t *Toolsets) extractFunctionToolExecutionInfo(ctx context.Context, tool to
 	}
 
 	return &ToolExecutionInfo{
-		Tool:             &gateway.Tool{Kind: gateway.ToolKindFunction, FunctionTool: gatewayTool, HTTPTool: nil},
+		Tool:             gateway.NewFunctionTool(gatewayTool),
 		OrganizationSlug: orgData.Slug,
 		ProjectSlug:      orgData.ProjectSlug,
 	}, nil

@@ -139,7 +139,7 @@ func (itp *ToolProxy) Do(
 	gatewayTool *Tool,
 ) error {
 	if !gatewayTool.IsHTTP() {
-		return fmt.Errorf("tool type not supported: %s", gatewayTool.Kind)
+		return fmt.Errorf("tool type not supported: %s", gatewayTool.Kind())
 	}
 
 	tool := gatewayTool.HTTPTool

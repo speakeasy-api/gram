@@ -104,18 +104,42 @@ const (
 )
 
 // Tool is a polymorphic type that can represent either an HTTPTool or a FunctionTool.
+// Use NewHTTPTool or NewFunctionTool to create instances.
 type Tool struct {
-	Kind         ToolKind
+	kind         ToolKind
 	HTTPTool     *HTTPTool
 	FunctionTool *FunctionTool
 }
 
+// Kind returns the tool kind.
+func (t *Tool) Kind() ToolKind {
+	return t.kind
+}
+
+// NewHTTPTool creates a new Tool wrapping an HTTPTool.
+func NewHTTPTool(httpTool *HTTPTool) *Tool {
+	return &Tool{
+		kind:         ToolKindHTTP,
+		HTTPTool:     httpTool,
+		FunctionTool: nil,
+	}
+}
+
+// NewFunctionTool creates a new Tool wrapping a FunctionTool.
+func NewFunctionTool(functionTool *FunctionTool) *Tool {
+	return &Tool{
+		kind:         ToolKindFunction,
+		HTTPTool:     nil,
+		FunctionTool: functionTool,
+	}
+}
+
 // IsHTTP returns true if this tool is an HTTP tool.
 func (t *Tool) IsHTTP() bool {
-	return t.HTTPTool != nil && t.Kind == ToolKindHTTP
+	return t.HTTPTool != nil && t.kind == ToolKindHTTP
 }
 
 // IsFunction returns true if this tool is a function tool.
 func (t *Tool) IsFunction() bool {
-	return t.FunctionTool != nil && t.Kind == ToolKindFunction
+	return t.FunctionTool != nil && t.kind == ToolKindFunction
 }
