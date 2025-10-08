@@ -148,6 +148,7 @@ func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, 
 
 func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
 	args := []any{
+		log.Ts,
 		log.OrganizationID,
 		log.ProjectID,
 		log.DeploymentID,

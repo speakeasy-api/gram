@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -150,13 +151,10 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			logCtx := context.WithoutCancel(ctx)
 
 			// Get final request body size now that request body has been read and closed
-			var requestBodyBytes uint64
-			if requestBodyBytesPtr != nil {
-				requestBodyBytes = *requestBodyBytesPtr
-			}
+			var requestBodyBytes = conv.PtrValOr(requestBodyBytesPtr, uint64(0))
 
 			httpRequest := ToolHTTPRequest{
-				Ts:                time.Now(),
+				Ts:                time.Now().UTC(),
 				OrganizationID:    tool.OrganizationID,
 				ProjectID:         tool.ProjectID,
 				DeploymentID:      tool.DeploymentID,

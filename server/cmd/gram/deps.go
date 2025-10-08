@@ -75,7 +75,7 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 			Username: c.String("clickhouse-username"),
 			Password: c.String("clickhouse-password"),
 		},
-		Debug: true,
+		Debug: true, // I'll remove this before merging
 		Debugf: func(format string, v ...interface{}) {
 			logger.InfoContext(ctx, fmt.Sprintf(format, v...))
 		},
