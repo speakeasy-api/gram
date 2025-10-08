@@ -139,7 +139,7 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 		// Check if this is a browser request (HTML Accept header)
 		for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
 			if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
-				oops.ErrHandle(service.logger, metadataService.ServeHostedPage).ServeHTTP(w, r)
+				oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP(w, r)
 				return
 			}
 		}

@@ -212,7 +212,7 @@ function useMcpMetadataMetadataForm(
 }
 
 export function ConfigForm({ toolset }: ConfigFormProps) {
-  const { url: mcpUrl } = useMcpUrl(toolset);
+  const { pageUrl: installPageUrl } = useMcpUrl(toolset);
   const [open, setOpen] = useState(false);
 
   const result = useGetMcpMetadata({ toolsetSlug: toolset.slug }, undefined, {
@@ -228,18 +228,16 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
   const form = useMcpMetadataMetadataForm(toolset.slug, result.data?.metadata);
   const isLoading = result.isLoading || form.isLoading;
 
+  if (!installPageUrl) {
+    return null;
+  }
+
   return (
     <Stack direction="vertical" justify="space-between" align="start" gap={2}>
-      <CodeBlock
-        copyable={toolset.mcpIsPublic}
-      >{`${mcpUrl}/install`}</CodeBlock>
+      <CodeBlock copyable={true}>{installPageUrl}</CodeBlock>
       <Stack direction="horizontal" gap={2}>
-        <Link external to={`${mcpUrl}/install`} noIcon>
-          <Button
-            variant="secondary"
-            className="px-4"
-            disabled={!toolset.mcpIsPublic}
-          >
+        <Link external to={installPageUrl} noIcon>
+          <Button variant="secondary" className="px-4">
             <Button.Text>View</Button.Text>
             <Button.RightIcon>
               <Icon name="external-link" className="w-4 h-4" />

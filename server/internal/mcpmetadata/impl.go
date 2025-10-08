@@ -112,10 +112,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
 
-	// Attach hosted page routes
-	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", func(w http.ResponseWriter, r *http.Request) {
-		oops.ErrHandle(service.logger, service.ServeHostedPage).ServeHTTP(w, r)
-	})
 }
 
 func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadataPayload) (*gen.GetMcpMetadataResult, error) {
@@ -216,7 +212,7 @@ func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
 	return metadata
 }
 
-func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return r.Body.Close()
@@ -229,10 +225,6 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
-	}
-
-	if !toolset.McpIsPublic {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
 
@@ -372,9 +364,9 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(buf.Bytes())
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to write response body", attr.SlogError(err))
+	_, writeErr := w.Write(buf.Bytes())
+	if writeErr != nil {
+		s.logger.ErrorContext(ctx, "failed to write response body", attr.SlogError(writeErr))
 	}
 
 	return nil
