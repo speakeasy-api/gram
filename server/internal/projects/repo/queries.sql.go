@@ -22,7 +22,7 @@ INSERT INTO projects (
   , $2
   , $3
 )
-RETURNING id, name, slug, organization_id, logo_asset_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateProjectParams struct {
@@ -40,6 +40,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 		&i.Slug,
 		&i.OrganizationID,
 		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -49,7 +50,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (P
 }
 
 const getProjectByID = `-- name: GetProjectByID :one
-SELECT id, name, slug, organization_id, logo_asset_id, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE id = $1
   AND deleted IS FALSE
@@ -64,6 +65,7 @@ func (q *Queries) GetProjectByID(ctx context.Context, id uuid.UUID) (Project, er
 		&i.Slug,
 		&i.OrganizationID,
 		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -118,7 +120,7 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 }
 
 const listProjectsByOrganization = `-- name: ListProjectsByOrganization :many
-SELECT id, name, slug, organization_id, logo_asset_id, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -140,6 +142,7 @@ func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID
 			&i.Slug,
 			&i.OrganizationID,
 			&i.LogoAssetID,
+			&i.FunctionsRunnerVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -161,7 +164,7 @@ SET logo_asset_id = $1,
     updated_at = clock_timestamp()
 WHERE id = $2
   AND deleted IS FALSE
-RETURNING id, name, slug, organization_id, logo_asset_id, created_at, updated_at, deleted_at, deleted
+RETURNING id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 `
 
 type UploadProjectLogoParams struct {
@@ -178,6 +181,7 @@ func (q *Queries) UploadProjectLogo(ctx context.Context, arg UploadProjectLogoPa
 		&i.Slug,
 		&i.OrganizationID,
 		&i.LogoAssetID,
+		&i.FunctionsRunnerVersion,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

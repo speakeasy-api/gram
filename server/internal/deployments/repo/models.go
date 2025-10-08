@@ -28,6 +28,16 @@ type Deployment struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type DeploymentsFunction struct {
+	ID            uuid.UUID
+	DeploymentID  uuid.UUID
+	AssetID       uuid.UUID
+	Name          string
+	Slug          string
+	Runtime       string
+	RunnerVersion pgtype.Text
+}
+
 type DeploymentsOpenapiv3Asset struct {
 	ID           uuid.UUID
 	DeploymentID uuid.UUID

@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -32,6 +33,7 @@ type Activities struct {
 	postSlackMessage              *activities.PostSlackMessage
 	processDeployment             *activities.ProcessDeployment
 	provisionFunctionsAccess      *activities.ProvisionFunctionsAccess
+	deployFunctionRunners         *activities.DeployFunctionRunners
 	refreshBillingUsage           *activities.RefreshBillingUsage
 	refreshOpenRouterKey          *activities.RefreshOpenRouterKey
 	slackChatCompletion           *activities.SlackChatCompletion
@@ -55,6 +57,8 @@ func NewActivities(
 	billingTracker billing.Tracker,
 	billingRepo billing.Repository,
 	posthogClient *posthog.Posthog,
+	functionsDeployer functions.Deployer,
+	functionsVersion functions.RunnerVersion,
 ) *Activities {
 	return &Activities{
 		collectPlatformUsageMetrics:   activities.NewCollectPlatformUsageMetrics(logger, db),
@@ -66,6 +70,7 @@ func NewActivities(
 		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
 		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage),
 		provisionFunctionsAccess:      activities.NewProvisionFunctionsAccess(logger, db, encryption),
+		deployFunctionRunners:         activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption), // FIXME
 		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
@@ -128,4 +133,8 @@ func (a *Activities) GetAllOrganizations(ctx context.Context) ([]string, error) 
 
 func (a *Activities) ProvisionFunctionsAccess(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID) error {
 	return a.provisionFunctionsAccess.Do(ctx, projectID, deploymentID)
+}
+
+func (a *Activities) DeployFunctionRunners(ctx context.Context, req activities.DeployFunctionRunnersRequest) error {
+	return a.deployFunctionRunners.Do(ctx, req)
 }
