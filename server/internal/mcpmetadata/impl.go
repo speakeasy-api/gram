@@ -213,6 +213,25 @@ func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
 	return metadata
 }
 
+func (s *Service) isFromDashboard(ctx context.Context, r *http.Request) bool {
+	// Local override
+	if os.Getenv("GRAM_ENVIRONMENT") == "local" && r.Header.Get("Gram-Project") != "" {
+		return true
+	}
+
+	cookie, err := r.Cookie("gram_session")
+	if err != nil {
+		println("error getting cookie", err.Error())
+		return false
+	}
+
+	_, err = s.sessions.Authenticate(ctx, cookie.Value, true)
+	if err != nil {
+		println("error authenticating session", err.Error())
+	}
+	return err == nil
+}
+
 func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {
@@ -229,7 +248,8 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
 
-	if !toolset.McpIsPublic {
+	// Private MCPs can only be accessed from the dashboard
+	if !toolset.McpIsPublic && !s.isFromDashboard(ctx, r) {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
 

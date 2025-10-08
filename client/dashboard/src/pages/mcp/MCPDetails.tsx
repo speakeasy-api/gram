@@ -1,8 +1,8 @@
+import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { ConfigForm } from "@/components/mcp_install_page/config_form";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
-import { Button, Icon } from "@speakeasy-api/moonshine";
-import { Trash2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,8 @@ import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useListTools, useToolset } from "@/hooks/toolTypes";
+import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
@@ -29,18 +31,15 @@ import {
   useRemoveOAuthServerMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
-import { Grid, Stack } from "@speakeasy-api/moonshine";
+import { Button, Grid, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Globe } from "lucide-react";
+import { Globe, Trash2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
-import { Block, BlockInner } from "@/components/block";
-import { isHttpTool, Toolset } from "@/lib/toolTypes";
-import { useListTools, useToolset } from "@/hooks/toolTypes";
-import { ConfigForm } from "@/components/mcp_install_page/config_form";
+import { MCPPagePreview } from "./MCPHostedPage";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -524,24 +523,23 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       >
         <PublicToggle isPublic={mcpIsPublic ?? false} />
       </PageSection>
-      {toolset.mcpIsPublic && (
-        <PageSection
-          heading="MCP Install Documentation"
-          description="Share this page with your users to give simple instructions
+      <PageSection
+        heading="MCP Installation"
+        description="Share this page with your users to give simple instructions
             for gettings started with your MCP to their client like Cursor or
             Claude Desktop."
-        >
-          <Stack className="mt-2" gap={1}>
-            <ConfigForm toolset={toolset} />
-          </Stack>
-        </PageSection>
-      )}
-      <PageSection
+      >
+        <div className="p-1 border rounded-md mt-2">
+          <ConfigForm toolset={toolset} />
+          <MCPPagePreview toolset={toolset} height={600} className="mt-2" />
+        </div>
+      </PageSection>
+      {/* <PageSection
         heading="Configuration"
         description="Configuration blocks for this server"
       >
         <MCPJson toolset={toolset} />
-      </PageSection>
+      </PageSection> */}
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
         onClose={() => setIsCustomDomainModalOpen(false)}
