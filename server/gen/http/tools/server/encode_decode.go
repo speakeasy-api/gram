@@ -258,6 +258,9 @@ func marshalTypesToolToToolResponseBody(v *types.Tool) *ToolResponseBody {
 	if v.HTTPToolDefinition != nil {
 		res.HTTPToolDefinition = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v.HTTPToolDefinition)
 	}
+	if v.FunctionToolDefinition != nil {
+		res.FunctionToolDefinition = marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody(v.FunctionToolDefinition)
+	}
 	if v.PromptTemplate != nil {
 		res.PromptTemplate = marshalTypesPromptTemplateToPromptTemplateResponseBody(v.PromptTemplate)
 	}
@@ -382,6 +385,42 @@ func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation
 		Summarizer:    v.Summarizer,
 		CreatedAt:     v.CreatedAt,
 		UpdatedAt:     v.UpdatedAt,
+	}
+
+	return res
+}
+
+// marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody
+// builds a value of type *FunctionToolDefinitionResponseBody from a value of
+// type *types.FunctionToolDefinition.
+func marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody(v *types.FunctionToolDefinition) *FunctionToolDefinitionResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &FunctionToolDefinitionResponseBody{
+		DeploymentID:  v.DeploymentID,
+		FunctionID:    v.FunctionID,
+		Runtime:       v.Runtime,
+		Variables:     v.Variables,
+		ID:            v.ID,
+		ToolUrn:       v.ToolUrn,
+		ProjectID:     v.ProjectID,
+		Name:          v.Name,
+		CanonicalName: v.CanonicalName,
+		Description:   v.Description,
+		SchemaVersion: v.SchemaVersion,
+		Schema:        v.Schema,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Summarizer:    v.Summarizer,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
+	}
+	if v.Canonical != nil {
+		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
 	}
 
 	return res

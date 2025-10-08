@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentR "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
@@ -133,6 +134,22 @@ func DescribeToolsetEntry(
 			})
 
 			tools = append(tools, tool)
+		}
+
+		funcTools, err := toolsRepo.FindFunctionToolEntriesByUrn(ctx, tr.FindFunctionToolEntriesByUrnParams{
+			ProjectID: pid,
+			Urns:      toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list function tools in toolset").Log(ctx, logger)
+		}
+		for _, tool := range funcTools {
+			tools = append(tools, &types.ToolEntry{
+				Type:    string(urn.ToolKindFunction),
+				ID:      tool.ID.String(),
+				Name:    tool.Name,
+				ToolUrn: tool.ToolUrn.String(),
+			})
 		}
 
 		promptTools, err := templatesRepo.PeekTemplatesByUrns(ctx, templatesR.PeekTemplatesByUrnsParams{
@@ -530,6 +547,49 @@ func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uui
 				},
 			})
 		}
+
+		functionDefinitions, err := toolsRepo.FindFunctionToolsByUrn(ctx, tr.FindFunctionToolsByUrnParams{
+			ProjectID: pid,
+			Urns:      toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get function tools for toolset").Log(ctx, logger)
+		}
+
+		for _, def := range functionDefinitions {
+			project := ""
+			if projectID := conv.FromNullableUUID(def.FunctionToolDefinition.ProjectID); projectID != nil {
+				project = *projectID
+			}
+			functionTool := &types.FunctionToolDefinition{
+				ID:            def.FunctionToolDefinition.ID.String(),
+				ToolUrn:       def.FunctionToolDefinition.ToolUrn.String(),
+				ProjectID:     project,
+				DeploymentID:  def.FunctionToolDefinition.DeploymentID.String(),
+				FunctionID:    def.FunctionToolDefinition.FunctionID.String(),
+				Runtime:       def.FunctionToolDefinition.Runtime,
+				Name:          def.FunctionToolDefinition.Name,
+				CanonicalName: def.FunctionToolDefinition.Name,
+				Description:   def.FunctionToolDefinition.Description,
+				Variables:     def.FunctionToolDefinition.Variables,
+				SchemaVersion: nil,
+				Schema:        string(def.FunctionToolDefinition.InputSchema),
+				Confirm:       nil,
+				ConfirmPrompt: nil,
+				Summarizer:    nil,
+				CreatedAt:     def.FunctionToolDefinition.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:     def.FunctionToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
+				Canonical:     nil,
+				Variation:     nil,
+			}
+			if functionTool.Schema == "" {
+				functionTool.Schema = constants.DefaultEmptyToolSchema
+			}
+			tools = append(tools, &types.Tool{
+				FunctionToolDefinition: functionTool,
+			})
+		}
+
 
 		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, envQueries)
 		if err != nil {

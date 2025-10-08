@@ -1,6 +1,8 @@
 package gateway
 
-import "errors"
+import (
+	"errors"
+)
 
 type FilterType string
 
@@ -79,4 +81,41 @@ type ResponseFilter struct {
 	Schema       []byte     `json:"schema" yaml:"schema"`
 	StatusCodes  []string   `json:"status_codes" yaml:"status_codes"`
 	ContentTypes []string   `json:"content_types" yaml:"content_types"`
+}
+
+// FunctionTool describes a serverless function that can be invoked as a tool.
+type FunctionTool struct {
+	ID             string `json:"id" yaml:"id"`
+	DeploymentID   string `json:"deployment_id" yaml:"deployment_id"`
+	ProjectID      string `json:"project_id" yaml:"project_id"`
+	OrganizationID string `json:"organization_id" yaml:"organization_id"`
+	FunctionID     string `json:"function_id" yaml:"function_id"`
+	Name           string `json:"name" yaml:"name"`
+	Runtime        string `json:"runtime" yaml:"runtime"`
+	InputSchema    []byte `json:"input_schema" yaml:"input_schema"`
+	Variables      []byte `json:"variables" yaml:"variables"`
+}
+
+type ToolKind string
+
+const (
+	ToolKindHTTP     ToolKind = "http"
+	ToolKindFunction ToolKind = "function"
+)
+
+// Tool is a polymorphic type that can represent either an HTTPTool or a FunctionTool.
+type Tool struct {
+	Kind         ToolKind
+	HTTPTool     *HTTPTool
+	FunctionTool *FunctionTool
+}
+
+// IsHTTP returns true if this tool is an HTTP tool.
+func (t *Tool) IsHTTP() bool {
+	return t.HTTPTool != nil && t.Kind == ToolKindHTTP
+}
+
+// IsFunction returns true if this tool is a function tool.
+func (t *Tool) IsFunction() bool {
+	return t.FunctionTool != nil && t.Kind == ToolKindFunction
 }

@@ -8557,6 +8557,79 @@ components:
             required:
                 - slug
                 - metadata
+        FunctionToolDefinition:
+            type: object
+            properties:
+                canonical:
+                    $ref: '#/components/schemas/CanonicalToolAttributes'
+                canonical_name:
+                    type: string
+                    description: The canonical name of the tool. Will be the same as the name if there is no variation.
+                confirm:
+                    type: string
+                    description: Confirmation mode for the tool
+                confirm_prompt:
+                    type: string
+                    description: Prompt for the confirmation
+                created_at:
+                    type: string
+                    description: The creation date of the tool.
+                    format: date-time
+                deployment_id:
+                    type: string
+                    description: The ID of the deployment
+                description:
+                    type: string
+                    description: Description of the tool
+                function_id:
+                    type: string
+                    description: The ID of the function
+                id:
+                    type: string
+                    description: The ID of the tool
+                name:
+                    type: string
+                    description: The name of the tool
+                project_id:
+                    type: string
+                    description: The ID of the project
+                runtime:
+                    type: string
+                    description: Runtime environment (e.g., nodejs:22, python:3.12)
+                schema:
+                    type: string
+                    description: JSON schema for the request
+                schema_version:
+                    type: string
+                    description: Version of the schema
+                summarizer:
+                    type: string
+                    description: Summarizer for the tool
+                tool_urn:
+                    type: string
+                    description: The URN of this tool
+                updated_at:
+                    type: string
+                    description: The last update date of the tool.
+                    format: date-time
+                variables:
+                    description: Variables configuration for the function
+                variation:
+                    $ref: '#/components/schemas/ToolVariation'
+            description: A function tool
+            required:
+                - deployment_id
+                - function_id
+                - runtime
+                - id
+                - project_id
+                - name
+                - canonical_name
+                - description
+                - schema
+                - tool_urn
+                - created_at
+                - updated_at
         GetActiveDeploymentResult:
             type: object
             properties:
@@ -9988,6 +10061,8 @@ components:
         Tool:
             type: object
             properties:
+                function_tool_definition:
+                    $ref: '#/components/schemas/FunctionToolDefinition'
                 http_tool_definition:
                     $ref: '#/components/schemas/HTTPToolDefinition'
                 prompt_template:
@@ -10010,6 +10085,7 @@ components:
                     enum:
                         - http
                         - prompt
+                        - function
             required:
                 - type
                 - id

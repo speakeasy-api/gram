@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/openapi"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -32,36 +33,59 @@ func NewToolsets(tx repo.DBTX) *Toolsets {
 	}
 }
 
-type HTTPToolExecutionInfo struct {
-	Tool             *gateway.HTTPTool
+type ToolExecutionInfo struct {
+	Tool             *gateway.Tool
 	OrganizationSlug string
 	ProjectSlug      string
 }
 
-func (t *Toolsets) GetHTTPToolExecutionInfoByURN(ctx context.Context, urn urn.Tool, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
-	tool, err := t.toolsRepo.GetHTTPToolDefinitionByURN(ctx, toolsRepo.GetHTTPToolDefinitionByURNParams{
-		ProjectID: projectID,
-		Urn:       urn,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("get http tool definition by id: %w", err)
-	}
+func (t *Toolsets) GetToolExecutionInfoByURN(ctx context.Context, toolUrn urn.Tool, projectID uuid.UUID) (*ToolExecutionInfo, error) {
+	switch toolUrn.Kind {
+	case urn.ToolKindHTTP:
+		tool, err := t.toolsRepo.GetHTTPToolDefinitionByURN(ctx, toolsRepo.GetHTTPToolDefinitionByURNParams{
+			ProjectID: projectID,
+			Urn:       toolUrn,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get http tool definition by urn: %w", err)
+		}
+		return t.extractHTTPToolExecutionInfo(ctx, tool)
 
-	return t.extractHTTPToolExecutionInfo(ctx, tool)
+	case urn.ToolKindFunction:
+		tool, err := t.toolsRepo.GetFunctionToolDefinitionByURN(ctx, toolsRepo.GetFunctionToolDefinitionByURNParams{
+			ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+			Urn:       toolUrn,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get function tool definition by urn: %w", err)
+		}
+		return t.extractFunctionToolExecutionInfo(ctx, tool)
+
+	default:
+		return nil, fmt.Errorf("unsupported tool kind: %s", toolUrn.Kind)
+	}
 }
 
-func (t *Toolsets) GetHTTPToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*HTTPToolExecutionInfo, error) {
-	tool, err := t.toolsRepo.GetHTTPToolDefinitionByID(ctx, toolsRepo.GetHTTPToolDefinitionByIDParams{
+// TODO: should we consider moving /rpc/instances.invoke/tool onto URNs, only the playground uses it right now.
+func (t *Toolsets) GetToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*ToolExecutionInfo, error) {
+	toolUrnStr, err := t.toolsRepo.GetToolUrnByID(ctx, toolsRepo.GetToolUrnByIDParams{
 		ProjectID: projectID,
 		ID:        id,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("get http tool definition by id: %w", err)
+		return nil, fmt.Errorf("get tool urn by id: %w", err)
 	}
-	return t.extractHTTPToolExecutionInfo(ctx, tool)
+
+	var toolURN urn.Tool
+	err = toolURN.UnmarshalText([]byte(toolUrnStr))
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal tool urn: %w", err)
+	}
+
+	return t.GetToolExecutionInfoByURN(ctx, toolURN, projectID)
 }
 
-func (t *Toolsets) extractHTTPToolExecutionInfo(ctx context.Context, tool toolsRepo.HttpToolDefinition) (*HTTPToolExecutionInfo, error) {
+func (t *Toolsets) extractHTTPToolExecutionInfo(ctx context.Context, tool toolsRepo.HttpToolDefinition) (*ToolExecutionInfo, error) {
 	securityKeysMap := make(map[string]bool)
 	securityKeys, securityScopes, err := security.ParseHTTPToolSecurityKeys(tool.Security)
 	if err != nil {
@@ -148,8 +172,38 @@ func (t *Toolsets) extractHTTPToolExecutionInfo(ctx context.Context, tool toolsR
 		ResponseFilter:     filter,
 	}
 
-	return &HTTPToolExecutionInfo{
-		Tool:             gatewayTool,
+	return &ToolExecutionInfo{
+		Tool:             &gateway.Tool{Kind: gateway.ToolKindHTTP, HTTPTool: gatewayTool, FunctionTool: nil},
+		OrganizationSlug: orgData.Slug,
+		ProjectSlug:      orgData.ProjectSlug,
+	}, nil
+}
+
+func (t *Toolsets) extractFunctionToolExecutionInfo(ctx context.Context, tool toolsRepo.FunctionToolDefinition) (*ToolExecutionInfo, error) {
+	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, tool.ProjectID.UUID)
+	if err != nil {
+		return nil, fmt.Errorf("get project with organization metadata: %w", err)
+	}
+
+	project := ""
+	if projectID := conv.FromNullableUUID(tool.ProjectID); projectID != nil {
+		project = *projectID
+	}
+
+	gatewayTool := &gateway.FunctionTool{
+		ID:             tool.ID.String(),
+		DeploymentID:   tool.DeploymentID.String(),
+		ProjectID:      project,
+		OrganizationID: orgData.ID,
+		FunctionID:     tool.FunctionID.String(),
+		Name:           tool.Name,
+		Runtime:        tool.Runtime,
+		InputSchema:    tool.InputSchema,
+		Variables:      tool.Variables,
+	}
+
+	return &ToolExecutionInfo{
+		Tool:             &gateway.Tool{Kind: gateway.ToolKindFunction, FunctionTool: gatewayTool, HTTPTool: nil},
 		OrganizationSlug: orgData.Slug,
 		ProjectSlug:      orgData.ProjectSlug,
 	}, nil

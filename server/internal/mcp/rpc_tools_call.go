@@ -158,18 +158,19 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
 	}
 
-	executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByURN(ctx, *toolURN, uuid.UUID(projectID))
+	executionPlan, err := toolsetHelpers.GetToolExecutionInfoByURN(ctx, *toolURN, uuid.UUID(projectID))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool execution plan").Log(ctx, logger)
 	}
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, executionPlan.OrganizationSlug, executionPlan.ProjectSlug)
-
-	for _, security := range executionPlan.Tool.Security {
-		for _, token := range payload.oauthTokenInputs {
-			if slices.Contains(security.OAuthTypes, "authorization_code") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
-				for _, envVar := range security.EnvVariables {
-					if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
-						ciEnv.Set(envVar, token.Token)
+	if executionPlan.Tool.IsHTTP() {
+		for _, security := range executionPlan.Tool.HTTPTool.Security {
+			for _, token := range payload.oauthTokenInputs {
+				if slices.Contains(security.OAuthTypes, "authorization_code") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
+					for _, envVar := range security.EnvVariables {
+						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
+							ciEnv.Set(envVar, token.Token)
+						}
 					}
 				}
 			}

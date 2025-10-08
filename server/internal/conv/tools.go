@@ -80,6 +80,29 @@ func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 		}
 	}
 
+	if tool.FunctionToolDefinition != nil {
+		if len(tool.FunctionToolDefinition.Schema) > 0 {
+			schema = tool.FunctionToolDefinition.Schema
+		}
+		return types.BaseToolAttributes{
+			ID:            tool.FunctionToolDefinition.ID,
+			ToolUrn:       tool.FunctionToolDefinition.ToolUrn,
+			ProjectID:     tool.FunctionToolDefinition.ProjectID,
+			Name:          tool.FunctionToolDefinition.Name,
+			CanonicalName: tool.FunctionToolDefinition.CanonicalName,
+			Description:   tool.FunctionToolDefinition.Description,
+			SchemaVersion: tool.FunctionToolDefinition.SchemaVersion,
+			Schema:        schema,
+			Confirm:       tool.FunctionToolDefinition.Confirm,
+			ConfirmPrompt: tool.FunctionToolDefinition.ConfirmPrompt,
+			Summarizer:    tool.FunctionToolDefinition.Summarizer,
+			CreatedAt:     tool.FunctionToolDefinition.CreatedAt,
+			UpdatedAt:     tool.FunctionToolDefinition.UpdatedAt,
+			Canonical:     tool.FunctionToolDefinition.Canonical,
+			Variation:     tool.FunctionToolDefinition.Variation,
+		}
+	}
+
 	panic(urn.ErrInvalid)
 }
 
