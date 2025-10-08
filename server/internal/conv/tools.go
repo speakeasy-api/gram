@@ -26,6 +26,13 @@ func GetToolURN(tool types.Tool) (*urn.Tool, error) {
 		}
 		return &toolURN, nil
 	}
+	if tool.FunctionToolDefinition != nil {
+		err := toolURN.UnmarshalText([]byte(tool.FunctionToolDefinition.ToolUrn))
+		if err != nil {
+			return nil, urn.ErrInvalid
+		}
+		return &toolURN, nil
+	}
 
 	return nil, urn.ErrInvalid
 }
@@ -56,6 +63,7 @@ func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 			Variation:     tool.HTTPToolDefinition.Variation,
 		}
 	}
+
 	if tool.PromptTemplate != nil {
 		if len(tool.PromptTemplate.Schema) > 0 {
 			schema = tool.PromptTemplate.Schema
@@ -132,6 +140,7 @@ func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
 			tool.HTTPToolDefinition.Schema = newSchema
 		}
 	}
+
 	if tool.PromptTemplate != nil {
 		tool.PromptTemplate.Name = PtrValOrEmpty(variation.Name, tool.PromptTemplate.Name)
 		tool.PromptTemplate.Description = PtrValOrEmpty(variation.Description, tool.PromptTemplate.Description)
@@ -146,8 +155,22 @@ func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
 			tool.PromptTemplate.Schema = newSchema
 		}
 	}
-}
 
+	if tool.FunctionToolDefinition != nil {
+		tool.FunctionToolDefinition.Name = PtrValOrEmpty(variation.Name, tool.FunctionToolDefinition.Name)
+		tool.FunctionToolDefinition.Description = PtrValOrEmpty(variation.Description, tool.FunctionToolDefinition.Description)
+		tool.FunctionToolDefinition.Confirm = Default(variation.Confirm, tool.FunctionToolDefinition.Confirm)
+		tool.FunctionToolDefinition.ConfirmPrompt = Default(variation.ConfirmPrompt, tool.FunctionToolDefinition.ConfirmPrompt)
+		tool.FunctionToolDefinition.Summarizer = Default(variation.Summarizer, tool.FunctionToolDefinition.Summarizer)
+		
+		tool.FunctionToolDefinition.Canonical = &canonicalAttributes
+		tool.FunctionToolDefinition.Variation = &variation
+
+		if newSchema, err := variedToolSchema(baseTool.Schema, baseTool.Summarizer); err == nil {
+			tool.FunctionToolDefinition.Schema = newSchema
+		}
+	}
+}
 
 func variedToolSchema(baseSchema string, summarizer *string) (string, error) {
 	schema := baseSchema
