@@ -12,6 +12,7 @@ export default function CliCallback(props: CliCallbackProps) {
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: createKey, isPending } = useCreateAPIKeyMutation();
   const hasCreatedKey = useRef(false);
+  const validCallback = isCallbackLocal(localCallbackUrl);
 
   useEffect(() => {
     if (status === "pending") return;
@@ -31,6 +32,12 @@ export default function CliCallback(props: CliCallbackProps) {
   useEffect(() => {
     if (!session) return;
     if (hasCreatedKey.current) return;
+
+    if (!validCallback) {
+      setError(errNonLocalCallback);
+      return;
+    }
+
     hasCreatedKey.current = true;
 
     createProducerKey(createKey, session.session)
@@ -41,10 +48,6 @@ export default function CliCallback(props: CliCallbackProps) {
         );
       });
   }, [createKey, session, localCallbackUrl]);
-
-  if (!isCallbackLocal(localCallbackUrl)) {
-    return <FailedScreen error={errNonLocalCallback} />;
-  }
 
   if (error) {
     return <FailedScreen error={error} />;

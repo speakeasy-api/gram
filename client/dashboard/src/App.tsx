@@ -24,14 +24,6 @@ import { Toaster } from "@/components/ui/sonner";
 import CliCallback from "./pages/cli/CliCallback";
 
 export default function App() {
-  return (
-    <BrowserRouter>
-      <AppContent />
-    </BrowserRouter>
-  );
-}
-
-function AppContent() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   // Initialize Pylon widget in production only
@@ -81,31 +73,48 @@ function AppContent() {
     applyTheme(initialTheme);
   }, []);
 
-  const cliFlow = useCliAuthFlow();
-
-  const appDisplay = cliFlow ? (
-    <CliCallback localCallbackUrl={cliFlow.cliCallbackUrl} />
-  ) : (
-    <AuthProvider>
-      <ProjectProvider>
-        <RouteProvider />
-      </ProjectProvider>
-    </AuthProvider>
-  );
-
   return (
     <MoonshineConfigProvider theme={theme} setTheme={applyTheme}>
       <LocalTooltipProvider>
         <TooltipProvider>
           <TelemetryProvider>
-            <SdkProvider>
-              {appDisplay}
-              <Toaster />
-            </SdkProvider>
+            <BrowserRouter>
+              <SdkProvider>
+                <AppContent />
+                <Toaster />
+              </SdkProvider>
+            </BrowserRouter>
           </TelemetryProvider>
         </TooltipProvider>
       </LocalTooltipProvider>
     </MoonshineConfigProvider>
+  );
+}
+
+function AppContent() {
+  /**
+   * NOTE(cjea): Do not wrap CliCallback in an AuthProvider.
+   *
+   * CLI requests don't include a redirect URL, so AuthProvider wouldn't know
+   * where to send authenticated users. Instead, CliCallback handles the flow:
+   *
+   * 1. CliCallback receives an unauthenticated request.
+   * 2. Sets the redirect query param to its current URL.
+   * 3. Sends the user through the standard login flow via AuthHandler.
+   * 4. Authenticated user is redirected back to CliCallback.
+   */
+  const cliFlow = useCliAuthFlow();
+
+  if (cliFlow) {
+    return <CliCallback localCallbackUrl={cliFlow.cliCallbackUrl} />;
+  }
+
+  return (
+    <AuthProvider>
+      <ProjectProvider>
+        <RouteProvider />
+      </ProjectProvider>
+    </AuthProvider>
   );
 }
 
