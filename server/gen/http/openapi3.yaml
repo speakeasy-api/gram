@@ -10646,9 +10646,15 @@ components:
                     items:
                         $ref: '#/components/schemas/ValidateKeyProject'
                     description: The projects accessible with this key
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: List of permission scopes for this key
             required:
                 - organization
                 - projects
+                - scopes
     securitySchemes:
         apikey_header_Gram-Key:
             type: apiKey

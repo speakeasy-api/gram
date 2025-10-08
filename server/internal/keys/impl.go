@@ -228,6 +228,7 @@ func (s *Service) VerifyKey(
 	result := &gen.ValidateKeyResult{
 		Organization: parseOrg(orgMeta),
 		Projects:     parseProjects(rawProjects),
+		Scopes:       authCtx.APIKeyScopes,
 	}
 
 	return result, nil
