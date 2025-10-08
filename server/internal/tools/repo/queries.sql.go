@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -308,6 +309,101 @@ func (q *Queries) FindHttpToolsByUrn(ctx context.Context, arg FindHttpToolsByUrn
 	return items, nil
 }
 
+const getFunctionToolByURN = `-- name: GetFunctionToolByURN :one
+WITH deployment AS (
+  SELECT d.id
+  FROM deployments d
+  JOIN deployment_statuses ds ON d.id = ds.deployment_id
+  WHERE d.project_id = $2
+  AND ds.status = 'completed'
+  ORDER BY d.seq DESC LIMIT 1
+)
+SELECT
+    tool.id
+  , tool.tool_urn
+  , tool.project_id
+  , tool.deployment_id
+  , tool.function_id
+  , tool.runtime
+  , tool.name
+  , tool.description
+  , tool.input_schema
+  , tool.variables
+  , access.id AS access_id
+  , access.encryption_key
+  , access.bearer_format
+  , apps.id as fly_app_internal_id
+  , apps.app_name as fly_app_name
+  , apps.app_url as fly_app_url
+  , apps.runner_version as fly_runner_version
+FROM deployment dep
+INNER JOIN function_tool_definitions tool
+  ON tool.deployment_id = dep.id
+  AND tool.tool_urn = $1
+  AND tool.project_id = $2
+  AND tool.deleted IS FALSE
+LEFT JOIN fly_apps apps
+  ON apps.project_id = $2
+  AND apps.deployment_id = tool.deployment_id
+  AND apps.function_id = tool.function_id
+  AND apps.status = 'ready'
+LEFT JOIN functions_access access
+  ON access.id = apps.access_id
+  AND access.deleted IS FALSE
+ORDER BY apps.seq DESC NULLS LAST
+LIMIT 1
+`
+
+type GetFunctionToolByURNParams struct {
+	Urn       urn.Tool
+	ProjectID uuid.UUID
+}
+
+type GetFunctionToolByURNRow struct {
+	ID               uuid.UUID
+	ToolUrn          urn.Tool
+	ProjectID        uuid.UUID
+	DeploymentID     uuid.UUID
+	FunctionID       uuid.UUID
+	Runtime          string
+	Name             string
+	Description      string
+	InputSchema      []byte
+	Variables        []byte
+	AccessID         uuid.NullUUID
+	EncryptionKey    conv.Secret
+	BearerFormat     pgtype.Text
+	FlyAppInternalID uuid.NullUUID
+	FlyAppName       pgtype.Text
+	FlyAppUrl        pgtype.Text
+	FlyRunnerVersion pgtype.Text
+}
+
+func (q *Queries) GetFunctionToolByURN(ctx context.Context, arg GetFunctionToolByURNParams) (GetFunctionToolByURNRow, error) {
+	row := q.db.QueryRow(ctx, getFunctionToolByURN, arg.Urn, arg.ProjectID)
+	var i GetFunctionToolByURNRow
+	err := row.Scan(
+		&i.ID,
+		&i.ToolUrn,
+		&i.ProjectID,
+		&i.DeploymentID,
+		&i.FunctionID,
+		&i.Runtime,
+		&i.Name,
+		&i.Description,
+		&i.InputSchema,
+		&i.Variables,
+		&i.AccessID,
+		&i.EncryptionKey,
+		&i.BearerFormat,
+		&i.FlyAppInternalID,
+		&i.FlyAppName,
+		&i.FlyAppUrl,
+		&i.FlyRunnerVersion,
+	)
+	return i, err
+}
+
 const getFunctionToolDefinitionByID = `-- name: GetFunctionToolDefinitionByID :one
 SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
 FROM function_tool_definitions
@@ -324,51 +420,6 @@ type GetFunctionToolDefinitionByIDParams struct {
 
 func (q *Queries) GetFunctionToolDefinitionByID(ctx context.Context, arg GetFunctionToolDefinitionByIDParams) (FunctionToolDefinition, error) {
 	row := q.db.QueryRow(ctx, getFunctionToolDefinitionByID, arg.ID, arg.ProjectID)
-	var i FunctionToolDefinition
-	err := row.Scan(
-		&i.ID,
-		&i.ToolUrn,
-		&i.ProjectID,
-		&i.DeploymentID,
-		&i.FunctionID,
-		&i.Runtime,
-		&i.Name,
-		&i.Description,
-		&i.InputSchema,
-		&i.Variables,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
-const getFunctionToolDefinitionByURN = `-- name: GetFunctionToolDefinitionByURN :one
-WITH deployment AS (
-  SELECT d.id
-  FROM deployments d
-  JOIN deployment_statuses ds ON d.id = ds.deployment_id
-  WHERE d.project_id = $2
-  AND ds.status = 'completed'
-  ORDER BY d.seq DESC LIMIT 1
-)
-SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
-FROM function_tool_definitions
-WHERE function_tool_definitions.tool_urn = $1
-  AND function_tool_definitions.project_id = $2
-  AND function_tool_definitions.deleted IS FALSE
-  AND function_tool_definitions.deployment_id = (SELECT id FROM deployment)
-LIMIT 1
-`
-
-type GetFunctionToolDefinitionByURNParams struct {
-	Urn       urn.Tool
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) GetFunctionToolDefinitionByURN(ctx context.Context, arg GetFunctionToolDefinitionByURNParams) (FunctionToolDefinition, error) {
-	row := q.db.QueryRow(ctx, getFunctionToolDefinitionByURN, arg.Urn, arg.ProjectID)
 	var i FunctionToolDefinition
 	err := row.Scan(
 		&i.ID,
