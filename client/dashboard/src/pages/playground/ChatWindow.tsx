@@ -35,6 +35,8 @@ import { useChatHistory } from "./ChatHistory";
 import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useMiniModel, useModel } from "./Openrouter";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
+import { parseMentionedTools, Tool as MentionTool } from "./ToolMentions";
+import { ChatComposerWrapper } from "./ChatComposerWrapper";
 
 const defaultModel = {
   label: "Claude 4.5 Sonnet",
@@ -97,7 +99,10 @@ export function ChatWindow({
   );
 }
 
-type Toolset = Record<string, Tool & { method?: string; path?: string }>;
+type Toolset = Record<
+  string,
+  Tool & { id?: string; method?: string; path?: string }
+>;
 
 function ChatInner({
   model,
@@ -133,6 +138,8 @@ function ChatInner({
 
   const [displayOnlyMessages, setDisplayOnlyMessages] = useState<Message[]>([]);
   const selectedTools = useRef<string[]>([]);
+  const [_mentionedToolIds, setMentionedToolIds] = useState<string[]>([]);
+  const [_inputText, setInputText] = useState("");
 
   const instance = useInstance(
     {
@@ -205,6 +212,7 @@ function ChatInner({
         return [
           tool.name,
           {
+            id: tool.id,
             method: tool.httpMethod,
             path: tool.path,
             description: tool.description,
@@ -220,13 +228,14 @@ function ChatInner({
 
     filterPromptTools(baseTools).forEach((pt) => {
       tools[pt.name] = {
+        id: pt.id as string,
         description: pt.description ?? "",
         parameters: jsonSchema(JSON.parse(pt.schema ?? "{}")),
         execute: async (args) => {
           const res = await client.templates.renderByID({
-            id: pt.id,
+            id: pt.id as `${string}.${string}`,
             renderTemplateByIDRequestBody: {
-              arguments: args,
+              arguments: args as Record<string, unknown>,
             },
           });
 
@@ -237,6 +246,21 @@ function ChatInner({
 
     return tools;
   }, [instance.data]);
+
+  // Create a list of tools for the mention system
+  const mentionTools: MentionTool[] = useMemo(() => {
+    return Object.entries(allTools).map(([name, tool]) => {
+      const toolWithId = tool as Tool & { id?: string };
+      return {
+        id: toolWithId.id || name,
+        name,
+        description: tool.description,
+        type: tool.method ? "http" : "prompt",
+        httpMethod: tool.method,
+        path: tool.path,
+      };
+    });
+  }, [allTools]);
 
   const openrouterChat = useModel(model, {
     "Gram-Chat-ID": chat.id,
@@ -305,27 +329,63 @@ function ChatInner({
 
     let tools = allTools;
 
-    // On the first message, get the initial set of tools if we're using a dynamic toolset
-    if (dynamicToolset && selectedTools.current.length === 0) {
-      await updateSelectedToolsFromMessages(messages);
+    // Check if there are mentioned tools in the message
+    const lastUserMessage = messages
+      .filter((m: Message) => m.role === "user")
+      .pop();
+    let hasMentions = false;
+
+    if (lastUserMessage && lastUserMessage.content) {
+      const mentionedIds = parseMentionedTools(
+        lastUserMessage.content,
+        mentionTools,
+      );
+      if (mentionedIds.length > 0) {
+        hasMentions = true;
+        // Filter tools to only include mentioned ones
+        tools = Object.fromEntries(
+          Object.entries(allTools).filter(([_, tool]) => {
+            const toolWithId = tool as Tool & { id?: string };
+            return mentionedIds.includes(toolWithId.id || _);
+          }),
+        );
+
+        // Remove @ mentions from the message before sending to the model
+        const cleanedContent = lastUserMessage.content
+          .replace(/@\w+\s*/g, "")
+          .trim();
+        lastUserMessage.content = cleanedContent;
+      }
     }
 
-    if (dynamicToolset) {
-      tools = Object.fromEntries(
-        Object.entries(allTools).filter(([tool]) =>
-          selectedTools.current.includes(tool),
-        ),
-      );
+    // Only use dynamic toolset if no mentions were found
+    if (!hasMentions) {
+      // On the first message, get the initial set of tools if we're using a dynamic toolset
+      if (dynamicToolset && selectedTools.current.length === 0) {
+        await updateSelectedToolsFromMessages(messages);
+      }
+
+      if (dynamicToolset) {
+        tools = Object.fromEntries(
+          Object.entries(allTools).filter(([tool]) =>
+            selectedTools.current.includes(tool),
+          ),
+        );
+      }
     }
 
     let systemPrompt = `You are a helpful assistant that can answer questions and help with tasks.
         When using tools, ensure that the arguments match the provided schema. Note that the schema may update as the conversation progresses.
         The current date is ${new Date().toISOString()}`;
 
-    if (dynamicToolset) {
+    if (hasMentions) {
+      const toolNames = Object.keys(tools).join(", ");
       systemPrompt += `
-        If you are unable to fulfill the user's request with the current set of tools, use the refresh_tools tool to get a new set of tools before saying you can't do it. 
-        The current date is ${new Date().toISOString()}`;
+        The user has specifically selected the following tools for this request: ${toolNames}.
+        Please use only these tools to fulfill the request.`;
+    } else if (dynamicToolset) {
+      systemPrompt += `
+        If you are unable to fulfill the user's request with the current set of tools, use the refresh_tools tool to get a new set of tools before saying you can't do it.`;
     }
 
     const result = streamText({
@@ -456,12 +516,24 @@ function ChatInner({
         localStorage.setItem(onboardingStepStorageKeys.test, "true");
       }
 
+      // Track if tools were mentioned
+      const mentionedIds = parseMentionedTools(msg, mentionTools);
+      if (mentionedIds.length > 0) {
+        telemetry.capture("chat_event", {
+          action: "tools_mentioned",
+          tool_count: mentionedIds.length,
+        });
+      }
+
       await append({
         role: "user",
         content: msg,
       });
+
+      // Clear the input text after sending
+      setInputText("");
     },
-    [append, chatMessages, telemetry, model],
+    [append, chatMessages, telemetry, model, mentionTools],
   );
 
   // This needs to be set so that the chat provider can append messages
@@ -516,45 +588,51 @@ function ChatInner({
   );
 
   return (
-    <div className="relative h-full flex items-center justify-center">
-      <AIChatContainer
-        messages={m}
-        isLoading={status === "streaming" || isChatHistoryLoading}
-        onSendMessage={handleSend}
-        className={"pb-4 w-3xl"} // Set width explicitly or else it will shrink to the size of the messages
-        toolCallApproval={toolCallApproval}
-        initialInput={initialPrompt || undefined}
-        components={{
-          composer: {
-            additionalActions: (
-              <div className="flex items-center gap-2">
-                {temperatureSlider}
-                {additionalActions}
-              </div>
-            ),
-            modelSelector: "text-foreground",
-          },
-          message: {
-            avatar: {
-              user: () => (
-                <ProjectAvatar project={project} className="h-6 w-6" />
+    <ChatComposerWrapper
+      tools={mentionTools}
+      onToolsSelected={setMentionedToolIds}
+      onInputChange={setInputText}
+    >
+      <div className="relative h-full flex items-center justify-center">
+        <AIChatContainer
+          messages={m}
+          isLoading={status === "streaming" || isChatHistoryLoading}
+          onSendMessage={handleSend}
+          className={"pb-4 w-3xl"} // Set width explicitly or else it will shrink to the size of the messages
+          toolCallApproval={toolCallApproval}
+          initialInput={initialPrompt || undefined}
+          components={{
+            composer: {
+              additionalActions: (
+                <div className="flex items-center gap-2">
+                  {temperatureSlider}
+                  {additionalActions}
+                </div>
               ),
+              modelSelector: "text-foreground",
             },
-            toolCall: toolCallComponents(allTools, telemetry),
-          },
-        }}
-        modelSelector={{
-          model,
-          onModelChange: setModel,
-          availableModels,
-        }}
-      />
-      <MessageHistoryIndicator
-        isNavigating={isNavigating}
-        historyIndex={historyIndex}
-        totalMessages={totalMessages}
-      />
-    </div>
+            message: {
+              avatar: {
+                user: () => (
+                  <ProjectAvatar project={project} className="h-6 w-6" />
+                ),
+              },
+              toolCall: toolCallComponents(allTools, telemetry),
+            },
+          }}
+          modelSelector={{
+            model,
+            onModelChange: setModel,
+            availableModels,
+          }}
+        />
+        <MessageHistoryIndicator
+          isNavigating={isNavigating}
+          historyIndex={historyIndex}
+          totalMessages={totalMessages}
+        />
+      </div>
+    </ChatComposerWrapper>
   );
 }
 
