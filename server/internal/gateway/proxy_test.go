@@ -5,18 +5,41 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+var sharedToolMetricsClient *toolmetrics.ClickhouseClient
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+	client, cleanup, err := testenv.NewSharedToolMetricsClient(ctx)
+	if err != nil {
+		log.Fatalf("failed to create shared tool metrics client: %v", err)
+	}
+
+	sharedToolMetricsClient = client
+
+	code := m.Run()
+
+	if err = cleanup(); err != nil {
+		log.Fatalf("failed to cleanup clickhouse: %v", err)
+	}
+
+	os.Exit(code)
+}
 
 func TestToolProxy_Do_PathParams(t *testing.T) {
 	t.Parallel()
@@ -224,7 +247,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
-				nil, // TODO: add tool metrics client
+				sharedToolMetricsClient,
 			)
 
 			// Create response recorder
@@ -351,7 +374,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
-				nil, // TODO: add tool metrics client
+				sharedToolMetricsClient,
 			)
 
 			// Create response recorder
@@ -373,6 +396,26 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				actualHeaderValue := capturedRequest.Header.Get(headerName)
 				require.Equal(t, tt.expectedHeader, actualHeaderValue, "header %s value mismatch", headerName)
 			}
+
+			// // Verify that logs were written to ClickHouse
+			// pagination := &toolmetrics.PaginationRequest{
+			// 	PerPage:   10,
+			// 	Sort:      "DESC",
+			// 	Direction: toolmetrics.Next,
+			// }
+			// logs, err := sharedToolMetricsClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
+			// require.NoError(t, err)
+			// require.NotNil(t, logs)
+			// require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
+			//
+			// log := logs.Logs[0]
+			// require.Equal(t, tool.ProjectID, log.ProjectID)
+			// require.Equal(t, tool.OrganizationID, log.OrganizationID)
+			// require.Equal(t, tool.DeploymentID, log.DeploymentID)
+			// require.Equal(t, tool.ID, log.ToolID)
+			// require.Equal(t, "GET", log.HTTPMethod)
+			// require.Equal(t, "/test", log.HTTPRoute)
+			// require.Equal(t, uint16(200), log.StatusCode)
 		})
 	}
 }
@@ -699,7 +742,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
-				nil, // TODO: add tool metrics client
+				sharedToolMetricsClient,
 			)
 
 			// Create response recorder
@@ -917,7 +960,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
-				nil, // TODO: add tool metrics client
+				sharedToolMetricsClient,
 			)
 
 			// Create response recorder
