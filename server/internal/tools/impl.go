@@ -259,7 +259,6 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				Name:          tool.Name,
 				CanonicalName: tool.Name,
 				Description:   tool.Description,
-				InputSchema:   tool.InputSchema,
 				Variables:     tool.Variables,
 				SchemaVersion: nil,
 				Schema:        string(tool.InputSchema),
