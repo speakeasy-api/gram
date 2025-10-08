@@ -1,6 +1,7 @@
 package assets_test
 
 import (
+	"archive/zip"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
@@ -198,8 +199,6 @@ func TestService_UploadFunctions_SupportedContentTypes(t *testing.T) {
 	ctx, ti := newTestAssetsService(t)
 
 	fixturePath := filepath.Clean(filepath.Join("fixtures", "valid-ts.zip"))
-	functionsContent, err := os.ReadFile(fixturePath)
-	require.NoError(t, err)
 
 	supportedTypes := []struct {
 		contentType string
@@ -211,9 +210,10 @@ func TestService_UploadFunctions_SupportedContentTypes(t *testing.T) {
 	}
 
 	for _, tt := range supportedTypes {
-		tt := tt
 		t.Run(tt.contentType, func(t *testing.T) {
 			t.Parallel()
+
+			functionsContent := cacheBustZipFixture(t, fixturePath)
 			contentLength := int64(len(functionsContent))
 
 			result, err := ti.service.UploadFunctions(ctx, &assets.UploadFunctionsForm{
@@ -228,7 +228,7 @@ func TestService_UploadFunctions_SupportedContentTypes(t *testing.T) {
 			require.NotNil(t, result)
 			require.NotNil(t, result.Asset)
 			require.Equal(t, "functions", result.Asset.Kind)
-			require.Equal(t, "application/zip", result.Asset.ContentType)
+			require.Equal(t, tt.contentType, result.Asset.ContentType)
 		})
 	}
 }
@@ -283,4 +283,47 @@ func TestService_UploadFunctions_NoEntryPoint(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 	require.Contains(t, oopsErr.Error(), "no entry point found")
+}
+
+// The assets service deduplicates uploads based on SHA256 hash of the content.
+// This function subtly changes the zip file by injecting a random file which
+// allows a single fixture to be reused multiple times in tests that do not want
+// to hit the deduplication logic.
+func cacheBustZipFixture(t *testing.T, fixturePath string) []byte {
+	t.Helper()
+
+	// Read the original zip file
+	originalContent, err := os.ReadFile(fixturePath)
+	require.NoError(t, err, "expect to read entire fixture file")
+
+	// Create a buffer to write the modified zip
+	buf := new(bytes.Buffer)
+	writer := zip.NewWriter(buf)
+
+	// Copy all files from the original zip
+	reader, err := zip.NewReader(bytes.NewReader(originalContent), int64(len(originalContent)))
+	require.NoError(t, err, "expected to create a zip reader in-memory")
+
+	for _, file := range reader.File {
+		rc, err := file.Open()
+		require.NoError(t, err, "expected to open file in existing zip")
+
+		w, err := writer.Create(file.Name)
+		require.NoError(t, err, "expected to create file in new zip")
+
+		_, err = io.Copy(w, rc)
+		require.NoError(t, err, "expected copy to succeed from existing zip to new zip")
+		rc.Close()
+	}
+
+	// Add a new file with random content to bust the cache
+	randomFile, err := writer.Create("__cache_bust_" + uuid.New().String() + ".txt")
+	require.NoError(t, err)
+	_, err = randomFile.Write([]byte(uuid.New().String()))
+	require.NoError(t, err)
+
+	err = writer.Close()
+	require.NoError(t, err)
+
+	return buf.Bytes()
 }
