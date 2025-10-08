@@ -100,9 +100,10 @@ function SuccessScreen() {
 }
 
 function generateKeyName(): string {
-  const timestamp = new Date().toISOString();
+  const timestamp = Date.now();
+  const maxLength = 40;
 
-  return `CLI Key - ${timestamp}`;
+  return `CLI Key (Generated) - ${timestamp}`.slice(0, maxLength);
 }
 
 const errInvalidCallback = "Callback URL must be localhost or 127.0.0.1";
