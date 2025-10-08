@@ -59,6 +59,8 @@ type VerifyKeyResponseBody struct {
 	Organization *ValidateKeyOrganizationResponseBody `form:"organization" json:"organization" xml:"organization"`
 	// The projects accessible with this key
 	Projects []*ValidateKeyProjectResponseBody `form:"projects" json:"projects" xml:"projects"`
+	// List of permission scopes for this key
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
 }
 
 // CreateKeyUnauthorizedResponseBody is the type of the "keys" service
@@ -881,6 +883,14 @@ func NewVerifyKeyResponseBody(res *keys.ValidateKeyResult) *VerifyKeyResponseBod
 		}
 	} else {
 		body.Projects = []*ValidateKeyProjectResponseBody{}
+	}
+	if res.Scopes != nil {
+		body.Scopes = make([]string, len(res.Scopes))
+		for i, val := range res.Scopes {
+			body.Scopes[i] = val
+		}
+	} else {
+		body.Scopes = []string{}
 	}
 	return body
 }

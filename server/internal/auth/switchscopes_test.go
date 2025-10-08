@@ -39,6 +39,7 @@ func TestService_SwitchScopes(t *testing.T) {
 			OrganizationSlug:     "",
 			Email:                &userInfo.Email,
 			ProjectSlug:          nil,
+			APIKeyScopes:         nil,
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
@@ -89,6 +90,7 @@ func TestService_SwitchScopes(t *testing.T) {
 			OrganizationSlug:     "",
 			Email:                &userInfo.Email,
 			ProjectSlug:          nil,
+			APIKeyScopes:         nil,
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
@@ -156,6 +158,7 @@ func TestService_SwitchScopes(t *testing.T) {
 			OrganizationSlug:     "",
 			Email:                &userInfo.Email,
 			ProjectSlug:          nil,
+			APIKeyScopes:         nil,
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 

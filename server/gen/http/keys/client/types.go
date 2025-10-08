@@ -59,6 +59,8 @@ type VerifyKeyResponseBody struct {
 	Organization *ValidateKeyOrganizationResponseBody `form:"organization,omitempty" json:"organization,omitempty" xml:"organization,omitempty"`
 	// The projects accessible with this key
 	Projects []*ValidateKeyProjectResponseBody `form:"projects,omitempty" json:"projects,omitempty" xml:"projects,omitempty"`
+	// List of permission scopes for this key
+	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
 }
 
 // CreateKeyUnauthorizedResponseBody is the type of the "keys" service
@@ -1329,6 +1331,10 @@ func NewVerifyKeyValidateKeyResultOK(body *VerifyKeyResponseBody) *keys.Validate
 	for i, val := range body.Projects {
 		v.Projects[i] = unmarshalValidateKeyProjectResponseBodyToKeysValidateKeyProject(val)
 	}
+	v.Scopes = make([]string, len(body.Scopes))
+	for i, val := range body.Scopes {
+		v.Scopes[i] = val
+	}
 
 	return v
 }
@@ -1541,6 +1547,9 @@ func ValidateVerifyKeyResponseBody(body *VerifyKeyResponseBody) (err error) {
 	}
 	if body.Projects == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("projects", "body"))
+	}
+	if body.Scopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
 	}
 	if body.Organization != nil {
 		if err2 := ValidateValidateKeyOrganizationResponseBody(body.Organization); err2 != nil {

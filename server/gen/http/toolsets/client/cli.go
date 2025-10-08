@@ -25,7 +25,7 @@ func BuildCreateToolsetPayload(toolsetsCreateToolsetBody string, toolsetsCreateT
 	{
 		err = json.Unmarshal([]byte(toolsetsCreateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"h0h\",\n      \"description\": \"Nisi quis pariatur.\",\n      \"name\": \"Deserunt provident nam tempore veritatis occaecati.\",\n      \"tool_urns\": [\n         \"Expedita eos enim ab voluptate quia et.\",\n         \"Incidunt qui ea at dignissimos libero.\",\n         \"Voluptatum nihil.\",\n         \"Labore officiis quam.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"default_environment_slug\": \"xbv\",\n      \"description\": \"Placeat aut quo alias.\",\n      \"name\": \"Accusantium ut sint cumque dolorem magni id.\",\n      \"tool_urns\": [\n         \"Odio rerum at quasi repellat rem.\",\n         \"Ut sed ex vero mollitia quaerat fugiat.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -101,7 +101,7 @@ func BuildUpdateToolsetPayload(toolsetsUpdateToolsetBody string, toolsetsUpdateT
 	{
 		err = json.Unmarshal([]byte(toolsetsUpdateToolsetBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Qui maxime dolorem sequi.\",\n      \"default_environment_slug\": \"lr4\",\n      \"description\": \"Sapiente enim ut quia.\",\n      \"mcp_enabled\": false,\n      \"mcp_is_public\": false,\n      \"mcp_slug\": \"tb2\",\n      \"name\": \"Expedita tenetur.\",\n      \"prompt_template_names\": [\n         \"Aspernatur quidem doloremque suscipit quos ut.\",\n         \"Illo expedita dicta.\",\n         \"Tempore at.\",\n         \"Aut consectetur dolorem.\"\n      ],\n      \"tool_urns\": [\n         \"Voluptatem quis unde enim sint error.\",\n         \"Saepe eius aperiam.\",\n         \"Soluta aperiam consequatur quis reprehenderit.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"custom_domain_id\": \"Illum impedit voluptas et magnam.\",\n      \"default_environment_slug\": \"0c3\",\n      \"description\": \"Qui odit.\",\n      \"mcp_enabled\": true,\n      \"mcp_is_public\": true,\n      \"mcp_slug\": \"3q0\",\n      \"name\": \"Reprehenderit sint explicabo aut.\",\n      \"prompt_template_names\": [\n         \"Similique necessitatibus.\",\n         \"Ex aperiam.\",\n         \"Pariatur animi laudantium voluptatem dolor dicta sit.\",\n         \"Cum aut non recusandae aut id.\"\n      ],\n      \"tool_urns\": [\n         \"Voluptate est distinctio autem expedita nobis.\",\n         \"Occaecati quasi ut corrupti qui.\",\n         \"Beatae dolor ut ea illum qui similique.\"\n      ]\n   }'")
 		}
 		if body.DefaultEnvironmentSlug != nil {
 			err = goa.MergeErrors(err, goa.ValidatePattern("body.default_environment_slug", *body.DefaultEnvironmentSlug, "^[a-z0-9_-]{1,128}$"))
@@ -328,7 +328,7 @@ func BuildAddExternalOAuthServerPayload(toolsetsAddExternalOAuthServerBody strin
 	{
 		err = json.Unmarshal([]byte(toolsetsAddExternalOAuthServerBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Pariatur blanditiis tempora molestiae.\",\n         \"slug\": \"fyt\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"external_oauth_server\": {\n         \"metadata\": \"Vel nihil est.\",\n         \"slug\": \"m07\"\n      }\n   }'")
 		}
 		if body.ExternalOauthServer == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("external_oauth_server", "body"))

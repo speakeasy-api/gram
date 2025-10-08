@@ -135,10 +135,11 @@ var KeyModel = Type("Key", func() {
 })
 
 var VerifyKeyResult = Type("ValidateKeyResult", func() {
-	Required("organization", "projects")
+	Required("organization", "projects", "scopes")
 
 	Attribute("organization", ValidateKeyOrganization, "The organization the key belongs to")
 	Attribute("projects", ArrayOf(ValidateKeyProject), "The projects accessible with this key")
+	Attribute("scopes", ArrayOf(String), "List of permission scopes for this key")
 })
 
 var ValidateKeyOrganization = Type("ValidateKeyOrganization", func() {

@@ -32,7 +32,7 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 }
 
 const listDeploymentFunctionsTools = `-- name: ListDeploymentFunctionsTools :many
-SELECT id, tool_urn, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
 FROM function_tool_definitions
 WHERE deployment_id = $1
 `
@@ -49,6 +49,7 @@ func (q *Queries) ListDeploymentFunctionsTools(ctx context.Context, deploymentID
 		if err := rows.Scan(
 			&i.ID,
 			&i.ToolUrn,
+			&i.ProjectID,
 			&i.DeploymentID,
 			&i.FunctionID,
 			&i.Runtime,

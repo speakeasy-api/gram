@@ -122,6 +122,8 @@ type ValidateKeyResult struct {
 	Organization *ValidateKeyOrganization
 	// The projects accessible with this key
 	Projects []*ValidateKeyProject
+	// List of permission scopes for this key
+	Scopes []string
 }
 
 // VerifyKeyPayload is the payload type of the keys service verifyKey method.
