@@ -66,6 +66,12 @@ func main() {
 }
 
 func run(ctx context.Context, logger *slog.Logger) error {
+	if *version {
+		fmt.Printf("version: %s\ncommit: %s\ndate: %s\n",
+			buildinfo.Version, buildinfo.Commit, buildinfo.Date)
+		return nil
+	}
+
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
@@ -74,12 +80,6 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	args, err := sanitizeArgs()
 	if err != nil {
 		return fmt.Errorf("invalid arguments: %w", err)
-	}
-
-	if *version {
-		fmt.Fprintf(os.Stdout, "version: %s\ncommit: %s\ndate: %s\n",
-			buildinfo.Version, buildinfo.Commit, buildinfo.Date)
-		return nil
 	}
 
 	if *doinit {

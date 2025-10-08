@@ -45,6 +45,7 @@ func InitializeMachine(ctx context.Context, logger *slog.Logger, language string
 		return "", "", fmt.Errorf("prepare program: %w", err)
 	}
 
+	// #nosec G302 -- workDir is a directory and needs to be executable to enter it.
 	if err := os.Chmod(workDir, 0555); err != nil {
 		return "", "", fmt.Errorf("chmod work dir: %w", err)
 	}

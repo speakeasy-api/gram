@@ -57,6 +57,11 @@ linters:
         linters:
           - musttag
   settings:
+    gosec:
+      config:
+        G301: "0755"
+        G302: "0644"
+        G306: "0644"
     sloglint:
       no-mixed-args: true
       attr-only: true
