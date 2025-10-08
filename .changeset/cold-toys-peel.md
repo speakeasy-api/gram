@@ -2,4 +2,4 @@
 "@gram/server": minor
 ---
 
-Support API key validation (/rpc/keys.validate)
+Support API key validation (/rpc/keys.verify)
