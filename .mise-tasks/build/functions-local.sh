@@ -3,14 +3,20 @@
 #MISE description="Build Gram Functions runner images for local use"
 #MISE dir="{{ config_root }}/functions"
 
+#USAGE flag "--arch <arch>" help="Comma-separated list of target architectures (e.g. amd64,arm64). Defaults to the current architecture."
+
 set -euo pipefail
 
 arch="$(uname -m)"
-if [ "$arch" = "aarch64" ]; then
-  arch="arm64"
+if [ -n "${usage_arch:-}" ]; then
+  arch="$usage_arch"
 fi
 
-mise run build:functions-bin --arch "$arch"
+arch="${arch/aarch64/arm64}"
+arch="${arch/x86_64/amd64}"
+echo "Building for architecture(s): $arch"
+
+mise run build:functions-bin --arch "$arch" --dev
 mise run build:functions-image \
   --arch "$arch" \
   --apko-config "./images/nodejs22-alpine3.22.yaml" \
