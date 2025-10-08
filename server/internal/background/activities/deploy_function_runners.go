@@ -1,0 +1,241 @@
+package activities
+
+import (
+	"context"
+	"encoding/base64"
+	"errors"
+	"log/slog"
+	"net/url"
+
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"go.temporal.io/sdk/temporal"
+
+	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/functions"
+	funcrepo "github.com/speakeasy-api/gram/server/internal/functions/repo"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
+)
+
+type DeployFunctionRunnersRequest struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+}
+
+type DeployFunctionRunners struct {
+	logger         *slog.Logger
+	db             *pgxpool.Pool
+	deployer       functions.Deployer
+	defaultVersion functions.RunnerVersion
+	enc            *encryption.Client
+}
+
+func NewDeployFunctionRunners(
+	logger *slog.Logger,
+	db *pgxpool.Pool,
+	deployer functions.Deployer,
+	defaultVersion functions.RunnerVersion,
+	enc *encryption.Client,
+) *DeployFunctionRunners {
+	return &DeployFunctionRunners{
+		logger:         logger.With(attr.SlogComponent("deploy-function-runner")),
+		db:             db,
+		deployer:       deployer,
+		defaultVersion: defaultVersion,
+		enc:            enc,
+	}
+}
+
+func (d *DeployFunctionRunners) Do(ctx context.Context, args DeployFunctionRunnersRequest) error {
+	err := d.do(ctx, args)
+	if err != nil {
+		return temporal.NewNonRetryableApplicationError("failed to deploy function runners", "deployment_error", err)
+	}
+	return nil
+}
+
+func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunnersRequest) error {
+	logger := d.logger
+
+	dbtx, err := d.db.Begin(ctx)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error starting transaction").Log(ctx, d.logger)
+	}
+	defer o11y.NoLogDefer(func() error {
+		return dbtx.Rollback(ctx)
+	})
+
+	arepo := assetsrepo.New(dbtx)
+	drepo := repo.New(dbtx)
+
+	depfuncs, err := drepo.GetDeploymentFunctions(ctx, repo.GetDeploymentFunctionsParams{
+		ProjectID:    args.ProjectID,
+		DeploymentID: args.DeploymentID,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error fetching deployment functions").Log(ctx, d.logger)
+	}
+
+	ids := make([]uuid.UUID, 0, len(depfuncs))
+	assetids := make([]uuid.UUID, 0, len(depfuncs))
+	for _, df := range depfuncs {
+		ids = append(ids, df.ID)
+		assetids = append(assetids, df.AssetID)
+	}
+
+	credrows, err := drepo.GetFunctionCredentialsBatch(ctx, repo.GetFunctionCredentialsBatchParams{
+		ProjectID:    args.ProjectID,
+		DeploymentID: args.DeploymentID,
+		FunctionIds:  ids,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error fetching function credentials").Log(ctx, d.logger)
+	}
+
+	creds := make(map[uuid.UUID]repo.GetFunctionCredentialsBatchRow, len(credrows))
+	for _, row := range credrows {
+		creds[row.FunctionID] = row
+	}
+
+	urlrows, err := arepo.GetAssetURLs(ctx, assetsrepo.GetAssetURLsParams{
+		ProjectID: args.ProjectID,
+		Ids:       assetids,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error reading function asset URLs").Log(ctx, d.logger)
+	}
+
+	assetURLs := make(map[uuid.UUID]string, len(urlrows))
+	for _, row := range urlrows {
+		assetURLs[row.ID] = row.Url
+	}
+
+	tasks := make([]deployFunctionRunnerTask, 0, len(depfuncs))
+	stop := false
+	for _, fnc := range depfuncs {
+		if task, err := d.preflightFunction(ctx, logger, args, fnc, creds, assetURLs); err != nil {
+			stop = true
+		} else {
+			tasks = append(tasks, task)
+		}
+	}
+	if stop {
+		return oops.E(oops.CodeInvalid, nil, "one or more functions failed preflight checks").Log(ctx, d.logger)
+	}
+
+	for _, task := range tasks {
+		version := d.resolveRunnerVersion(ctx, logger, task.ProjectID, task.DeploymentID, task.FunctionID)
+		_, err := d.deployer.Deploy(ctx, functions.RunnerDeployRequest{
+			Version:      version,
+			ProjectID:    task.ProjectID,
+			DeploymentID: task.DeploymentID,
+			FunctionID:   task.FunctionID,
+			Runtime:      task.Runtime,
+			Assets: []functions.RunnerAssetMount{{
+				AssetURL:  task.AssetURL,
+				GuestPath: "/data/code.zip",
+				Mode:      0444,
+			}},
+			BearerSecret: task.BearerSecret,
+		})
+		var serr *oops.ShareableError
+		switch {
+		case errors.As(err, &serr):
+			return serr
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "error deploying function runner").Log(ctx, d.logger)
+		}
+	}
+
+	if err := dbtx.Commit(ctx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error committing transaction").Log(ctx, d.logger)
+	}
+
+	return nil
+}
+
+type deployFunctionRunnerTask struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	Runtime      functions.Runtime
+	BearerSecret string
+	AssetURL     *url.URL
+}
+
+func (d *DeployFunctionRunners) preflightFunction(
+	ctx context.Context,
+	logger *slog.Logger,
+	args DeployFunctionRunnersRequest,
+	fnc repo.DeploymentsFunction,
+	credentials map[uuid.UUID]repo.GetFunctionCredentialsBatchRow,
+	assetURLs map[uuid.UUID]string,
+) (deployFunctionRunnerTask, error) {
+	var empty deployFunctionRunnerTask
+
+	if !functions.IsSupportedRuntime(fnc.Runtime) {
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has unsupported runtime %q", fnc.Runtime).Log(ctx, logger)
+	}
+
+	aurl, ok := assetURLs[fnc.AssetID]
+	if !ok || aurl == "" {
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function is missing asset URL").Log(ctx, logger)
+	}
+	assetURL, err := url.Parse(aurl)
+	if err != nil {
+		return empty, oops.E(oops.CodeInvariantViolation, err, "function has malformed asset URL").Log(ctx, logger)
+	}
+
+	c, ok := credentials[fnc.ID]
+	if !ok {
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function is missing credentials").Log(ctx, logger)
+	}
+
+	if len(c.EncryptionKey) == 0 || c.BearerFormat.String == "" {
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "malformed credentials generated for function").Log(ctx, logger)
+	}
+
+	sec, err := d.enc.Decrypt(string(c.EncryptionKey))
+	if err != nil {
+		return empty, oops.E(oops.CodeInvariantViolation, err, "failed to unseal function credentials").Log(ctx, logger)
+	}
+
+	if len(sec) == 0 {
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has empty credentials").Log(ctx, logger)
+	}
+
+	return deployFunctionRunnerTask{
+		ProjectID:    args.ProjectID,
+		DeploymentID: args.DeploymentID,
+		FunctionID:   fnc.ID,
+		Runtime:      functions.Runtime(fnc.Runtime),
+		BearerSecret: base64.StdEncoding.EncodeToString([]byte(sec)),
+		AssetURL:     assetURL,
+	}, nil
+}
+
+func (d *DeployFunctionRunners) resolveRunnerVersion(
+	ctx context.Context,
+	logger *slog.Logger,
+	projectID uuid.UUID,
+	deploymentID uuid.UUID,
+	functionID uuid.UUID,
+) functions.RunnerVersion {
+	pr := funcrepo.New(d.db)
+	pinned, err := pr.GetFunctionsRunnerVersion(ctx, funcrepo.GetFunctionsRunnerVersionParams{
+		ProjectID:    projectID,
+		FunctionID:   functionID,
+		DeploymentID: deploymentID,
+	})
+	if err != nil {
+		logger.ErrorContext(ctx, "falling back to default runner version: failed to get functions runner version for project", attr.SlogError(err))
+		return d.defaultVersion
+	}
+
+	return conv.Default(functions.RunnerVersion(pinned), d.defaultVersion)
+}

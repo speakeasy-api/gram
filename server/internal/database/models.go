@@ -125,12 +125,13 @@ type DeploymentStatus struct {
 }
 
 type DeploymentsFunction struct {
-	ID           uuid.UUID
-	DeploymentID uuid.UUID
-	AssetID      uuid.UUID
-	Name         string
-	Slug         string
-	Runtime      string
+	ID            uuid.UUID
+	DeploymentID  uuid.UUID
+	AssetID       uuid.UUID
+	Name          string
+	Slug          string
+	Runtime       string
+	RunnerVersion pgtype.Text
 }
 
 type DeploymentsOpenapiv3Asset struct {
@@ -178,6 +179,24 @@ type ExternalOauthServerMetadatum struct {
 	UpdatedAt pgtype.Timestamptz
 	DeletedAt pgtype.Timestamptz
 	Deleted   bool
+}
+
+type FlyApp struct {
+	ID            uuid.UUID
+	Seq           int64
+	ProjectID     uuid.UUID
+	DeploymentID  uuid.UUID
+	FunctionID    uuid.UUID
+	FlyOrgID      string
+	FlyOrgSlug    string
+	AppName       string
+	AppUrl        string
+	RunnerVersion string
+	PrimaryRegion string
+	Status        string
+	ReapedAt      pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
 }
 
 type FunctionToolDefinition struct {
@@ -381,15 +400,16 @@ type PackageVersion struct {
 }
 
 type Project struct {
-	ID             uuid.UUID
-	Name           string
-	Slug           string
-	OrganizationID string
-	LogoAssetID    uuid.NullUUID
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                     uuid.UUID
+	Name                   string
+	Slug                   string
+	OrganizationID         string
+	LogoAssetID            uuid.NullUUID
+	FunctionsRunnerVersion pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type ProjectToolVariation struct {

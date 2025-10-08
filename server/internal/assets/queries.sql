@@ -40,3 +40,10 @@ WHERE
 
 -- name: ListAssets :many
 SELECT * FROM assets WHERE project_id = @project_id;
+
+-- name: GetAssetURLs :many
+SELECT id, url
+FROM assets
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[])
+  AND deleted IS FALSE;
