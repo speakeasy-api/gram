@@ -143,6 +143,19 @@ export function ToolCard({
     );
   }
 
+  // TODO: this should get much more granular as the UX gets built out
+  if (sourceName === "Function") {
+    tags = (
+      <Badge
+        variant="secondary"
+        className="text-sm capitalize"
+        tooltip={<span>This is a function tool</span>}
+      >
+        Custom
+      </Badge>
+    );
+  }
+
   return (
     <Card size="sm" className="h-full">
       <Card.Header>
@@ -199,6 +212,9 @@ function useToolSourceName(tool: Tool) {
       const assets = deployment?.openapiv3Assets;
 
       return assets?.find((asset) => asset.id === openApiId)?.slug;
+    }
+    case "function": {
+      return "Function";
     }
     default: {
       return "Custom";
