@@ -266,6 +266,29 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Verify the path was correctly constructed with the number
 			require.Equal(t, tt.expectedPath, capturedRequest.URL.Path)
+
+			// Give ClickHouse a moment to process async writes
+			time.Sleep(100 * time.Millisecond)
+
+			// Verify that logs were written to ClickHouse
+			pagination := &toolmetrics.PaginationRequest{
+				PerPage:   10,
+				Sort:      "DESC",
+				Direction: toolmetrics.Next,
+			}
+			logs, err := sharedToolMetricsClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
+			require.NoError(t, err)
+			require.NotNil(t, logs)
+			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
+
+			toolHTTPRequest := logs.Logs[0]
+			require.Equal(t, tool.ProjectID, toolHTTPRequest.ProjectID)
+			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
+			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
+			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
+			require.Equal(t, tool.Method, toolHTTPRequest.HTTPMethod)
+			require.Equal(t, tool.Path, toolHTTPRequest.HTTPRoute)
+			require.Equal(t, uint16(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
@@ -765,6 +788,29 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				require.True(t, exists, "expected query parameter %s not found", expectedKey)
 				require.Equal(t, expectedValues, actualValues, "query parameter %s has incorrect values", expectedKey)
 			}
+
+			// Give ClickHouse a moment to process async writes
+			time.Sleep(100 * time.Millisecond)
+
+			// Verify that logs were written to ClickHouse
+			pagination := &toolmetrics.PaginationRequest{
+				PerPage:   10,
+				Sort:      "DESC",
+				Direction: toolmetrics.Next,
+			}
+			logs, err := sharedToolMetricsClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
+			require.NoError(t, err)
+			require.NotNil(t, logs)
+			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
+
+			toolHTTPRequest := logs.Logs[0]
+			require.Equal(t, tool.ProjectID, toolHTTPRequest.ProjectID)
+			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
+			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
+			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
+			require.Equal(t, tool.Method, toolHTTPRequest.HTTPMethod)
+			require.Equal(t, tool.Path, toolHTTPRequest.HTTPRoute)
+			require.Equal(t, uint16(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
@@ -997,6 +1043,29 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, expectedJSON, actualJSON)
 			}
+
+			// Give ClickHouse a moment to process async writes
+			time.Sleep(100 * time.Millisecond)
+
+			// Verify that logs were written to ClickHouse
+			pagination := &toolmetrics.PaginationRequest{
+				PerPage:   10,
+				Sort:      "DESC",
+				Direction: toolmetrics.Next,
+			}
+			logs, err := sharedToolMetricsClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
+			require.NoError(t, err)
+			require.NotNil(t, logs)
+			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
+
+			toolHTTPRequest := logs.Logs[0]
+			require.Equal(t, tool.ProjectID, toolHTTPRequest.ProjectID)
+			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
+			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
+			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
+			require.Equal(t, tool.Method, toolHTTPRequest.HTTPMethod)
+			require.Equal(t, tool.Path, toolHTTPRequest.HTTPRoute)
+			require.Equal(t, uint16(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }

@@ -476,6 +476,7 @@ func reverseProxyRequest(ctx context.Context,
 		ProjectID:      tool.ProjectID,
 		DeploymentID:   tool.DeploymentID,
 		OrganizationID: tool.OrganizationID,
+		HTTPRoute:      tool.Path,
 	}
 
 	ctx = context.WithValue(ctx, tm.ToolInfoContextKey, toolInfo)

@@ -166,7 +166,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 				TraceID:           traceID,
 				SpanID:            spanID,
 				HTTPMethod:        req.Method,
-				HTTPRoute:         req.URL.Path,
+				HTTPRoute:         tool.HTTPRoute,
 				StatusCode:        statusCode,
 				DurationMs:        durationMs,
 				UserAgent:         req.UserAgent(),
@@ -219,4 +219,5 @@ type ToolInfo struct {
 	ProjectID      string
 	DeploymentID   string
 	OrganizationID string
+	HTTPRoute      string
 }
