@@ -39,7 +39,7 @@ type DeploymentsOpenapiv3Asset struct {
 type FunctionToolDefinition struct {
 	ID           uuid.UUID
 	ToolUrn      urn.Tool
-	ProjectID    uuid.UUID
+	ProjectID    uuid.NullUUID
 	DeploymentID uuid.UUID
 	FunctionID   uuid.UUID
 	Runtime      string

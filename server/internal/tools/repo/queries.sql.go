@@ -317,7 +317,7 @@ LIMIT 1
 
 type GetFunctionToolDefinitionByIDParams struct {
 	ID        uuid.UUID
-	ProjectID uuid.UUID
+	ProjectID uuid.NullUUID
 }
 
 func (q *Queries) GetFunctionToolDefinitionByID(ctx context.Context, arg GetFunctionToolDefinitionByIDParams) (FunctionToolDefinition, error) {
@@ -362,7 +362,7 @@ LIMIT 1
 
 type GetFunctionToolDefinitionByURNParams struct {
 	Urn       urn.Tool
-	ProjectID uuid.UUID
+	ProjectID uuid.NullUUID
 }
 
 func (q *Queries) GetFunctionToolDefinitionByURN(ctx context.Context, arg GetFunctionToolDefinitionByURNParams) (FunctionToolDefinition, error) {

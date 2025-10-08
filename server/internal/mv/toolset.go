@@ -419,10 +419,14 @@ func DescribeToolset(
 		}
 
 		for _, def := range functionDefinitions {
+			project := ""
+			if projectID := conv.FromNullableUUID(def.FunctionToolDefinition.ProjectID); projectID != nil {
+				project = *projectID
+			}
 			functionTool := &types.FunctionToolDefinition{
 				ID:            def.FunctionToolDefinition.ID.String(),
 				ToolUrn:       def.FunctionToolDefinition.ToolUrn.String(),
-				ProjectID:     def.FunctionToolDefinition.ProjectID.String(),
+				ProjectID:     project,
 				DeploymentID:  def.FunctionToolDefinition.DeploymentID.String(),
 				FunctionID:    def.FunctionToolDefinition.FunctionID.String(),
 				Runtime:       def.FunctionToolDefinition.Runtime,
