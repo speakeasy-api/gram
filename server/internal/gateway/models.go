@@ -106,9 +106,9 @@ const (
 // Tool is a polymorphic type that can represent either an HTTPTool or a FunctionTool.
 // Use NewHTTPTool or NewFunctionTool to create instances.
 type Tool struct {
-	kind         ToolKind      // unexported - use Kind() method
-	HTTPTool     *HTTPTool     // exported for backward compatibility
-	FunctionTool *FunctionTool // exported for backward compatibility
+	kind         ToolKind
+	HTTPTool     *HTTPTool
+	FunctionTool *FunctionTool
 }
 
 // Kind returns the tool kind.
