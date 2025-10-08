@@ -7,9 +7,16 @@ import {
 } from "@speakeasy-api/moonshine";
 import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Route, Routes, useSearchParams } from "react-router";
+import {
+  BrowserRouter,
+  Route,
+  Routes,
+  useSearchParams,
+  Navigate,
+  useLocation,
+} from "react-router";
 import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
-import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
+import { AuthProvider, ProjectProvider, useSession } from "./contexts/Auth.tsx";
 import { SdkProvider } from "./contexts/Sdk.tsx";
 import { TelemetryProvider } from "./contexts/Telemetry.tsx";
 import { AppRoute, useRoutes } from "./routes";
@@ -79,9 +86,11 @@ function AppContent() {
   const appDisplay = cliFlow ? (
     <CliCallback localCallbackUrl={cliFlow.cliCallbackUrl} />
   ) : (
-    <ProjectProvider>
-      <RouteProvider />
-    </ProjectProvider>
+    <AuthProvider>
+      <ProjectProvider>
+        <RouteProvider />
+      </ProjectProvider>
+    </AuthProvider>
   );
 
   return (
@@ -90,10 +99,8 @@ function AppContent() {
         <TooltipProvider>
           <TelemetryProvider>
             <SdkProvider>
-              <AuthProvider>
-                {appDisplay}
-                <Toaster />
-              </AuthProvider>
+              {appDisplay}
+              <Toaster />
             </SdkProvider>
           </TelemetryProvider>
         </TooltipProvider>
@@ -167,11 +174,14 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
 
 function useCliAuthFlow() {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
 
   const fromCli = searchParams.get("from_cli") === "true";
   const cliCallbackUrl = searchParams.get("cli_callback_url");
 
-  if (fromCli && cliCallbackUrl) return { cliCallbackUrl };
+  if (location.pathname === "/" && fromCli && cliCallbackUrl) {
+    return { cliCallbackUrl };
+  }
 
   return null;
 }

@@ -1,85 +1,71 @@
 import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
+import { useSessionData } from "@/contexts/Auth";
 
 interface CliCallbackProps {
   localCallbackUrl: string;
 }
 
-function generateKeyName(): string {
-  const timestamp = new Date().toISOString();
-
-  return `CLI Key - ${timestamp}`;
-}
-
-const errNonLocalCallback = "Callback URL must be localhost or 127.0.0.1";
-
-function isCallbackLocal(callbackUrl: string): boolean {
-  try {
-    const url = new URL(callbackUrl);
-    const hostname = url.hostname.toLowerCase();
-
-    return hostname === "localhost" || hostname === "127.0.0.1";
-  } catch {
-    return false;
-  }
-}
-
-function keyRequest(scopes: string[]) {
-  const name = generateKeyName();
-
-  return { createKeyForm: { name, scopes } };
-}
-
-async function createProducerKey(
-  mutateAsync: ReturnType<typeof useCreateAPIKeyMutation>["mutateAsync"],
-): Promise<string> {
-  const request = keyRequest(["producer"]);
-  const result = await mutateAsync({ request });
-  if (!result.key) throw new Error("No API key returned from server");
-
-  return result.key;
-}
-
-async function transmitKey(callbackUrl: string, apiKey: string): Promise<void> {
-  const url = new URL(callbackUrl);
-  url.searchParams.set("api_key", apiKey);
-
-  const smoothRedirectDelay = new Promise((r) => setTimeout(r, 200));
-  await smoothRedirectDelay;
-
-  window.location.replace(url.toString());
-}
-
-export default function CliCallback({ localCallbackUrl }: CliCallbackProps) {
-  let isMounted = true;
+export default function CliCallback(props: CliCallbackProps) {
+  const { localCallbackUrl } = props;
+  const { session, status } = useSessionData();
   const [error, setError] = useState<string | null>(null);
-  const { mutateAsync, isPending } = useCreateAPIKeyMutation();
+  const { mutateAsync: createKey, isPending } = useCreateAPIKeyMutation();
+  const hasCreatedKey = useRef(false);
+
+  useEffect(() => {
+    if (status === "pending") return;
+
+    const redirectUrl = encodeURIComponent(window.location.href);
+    if (!session?.session) {
+      window.location.href = `/login?redirect=${redirectUrl}`;
+      return;
+    }
+
+    if (!session?.activeOrganizationId) {
+      window.location.href = `/register?redirect=${redirectUrl}`;
+      return;
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (!session) return;
+    if (hasCreatedKey.current) return;
+    hasCreatedKey.current = true;
+
+    createProducerKey(createKey, session.session)
+      .then((key) => transmitKey(localCallbackUrl, key))
+      .catch((err) => {
+        setError(
+          err instanceof Error ? err.message : "Failed to create API key",
+        );
+      });
+  }, [createKey, session, localCallbackUrl]);
 
   if (!isCallbackLocal(localCallbackUrl)) {
     return <FailedScreen error={errNonLocalCallback} />;
   }
 
-  useEffect(() => {
-    (async function () {
-      try {
-        transmitKey(localCallbackUrl, await createProducerKey(mutateAsync));
-      } catch (err) {
-        if (isMounted) {
-          setError(
-            err instanceof Error ? err.message : "Failed to create API key",
-          );
-        }
-      }
-    })();
+  if (error) {
+    return <FailedScreen error={error} />;
+  }
 
-    return () => {
-      isMounted = false;
-    };
-  }, [localCallbackUrl, mutateAsync]);
+  if (isPending) {
+    return <WaitScreen />;
+  }
 
-  if (error) return <FailedScreen error={error} />;
-  else if (isPending) return <WaitScreen />;
-  else return <SuccessScreen />;
+  return <SuccessScreen />;
+}
+
+function FailedScreen({ error }: { error: string }) {
+  return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="text-center">
+        <h1 className="text-2xl font-bold text-red-600 mb-2">Error</h1>
+        <p className="text-gray-600">{error}</p>
+      </div>
+    </div>
+  );
 }
 
 function WaitScreen() {
@@ -104,13 +90,58 @@ function SuccessScreen() {
   );
 }
 
-function FailedScreen({ error }: { error: string }) {
-  return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-red-600 mb-2">Error</h1>
-        <p className="text-gray-600">{error}</p>
-      </div>
-    </div>
-  );
+function generateKeyName(): string {
+  const timestamp = new Date().toISOString();
+
+  return `CLI Key - ${timestamp}`;
+}
+
+const errNonLocalCallback = "Callback URL must be localhost or 127.0.0.1";
+
+function isCallbackLocal(callbackUrl: string): boolean {
+  try {
+    const url = new URL(callbackUrl);
+    const hostname = url.hostname.toLowerCase();
+
+    return hostname === "localhost" || hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+interface KeyRequestParams {
+  scopes: string[];
+  sessionId: string;
+}
+function keyRequest(params: KeyRequestParams) {
+  const { scopes, sessionId } = params;
+  const name = generateKeyName();
+
+  return {
+    createKeyForm: { name, scopes },
+    gramSession: sessionId,
+  };
+}
+
+async function createProducerKey(
+  createKey: ReturnType<typeof useCreateAPIKeyMutation>["mutateAsync"],
+  sessionId: string,
+): Promise<string> {
+  const scopes = ["producer"];
+  const result = await createKey({
+    request: keyRequest({ sessionId, scopes }),
+  });
+  if (!result.key) throw new Error("No API key returned from server");
+
+  return result.key;
+}
+
+async function transmitKey(callbackUrl: string, apiKey: string): Promise<void> {
+  const url = new URL(callbackUrl);
+  url.searchParams.set("api_key", apiKey);
+
+  const smoothRedirectDelay = new Promise((r) => setTimeout(r, 200));
+  await smoothRedirectDelay;
+
+  window.location.replace(url.toString());
 }
