@@ -6,6 +6,12 @@ interface CliCallbackProps {
   localCallbackUrl: string;
 }
 
+/**
+ * CliCallback is an authentication handler for the CLI. When this component
+ * receives a local callback URL, it generates a producer-scoped API key and
+ * transmits it to the client by appending it to the callback URL as a query
+ * parameter.
+ */
 export default function CliCallback(props: CliCallbackProps) {
   const { localCallbackUrl } = props;
   const { session, status } = useSessionData();
@@ -34,7 +40,7 @@ export default function CliCallback(props: CliCallbackProps) {
     if (hasCreatedKey.current) return;
 
     if (!validCallback) {
-      setError(errNonLocalCallback);
+      setError(errInvalidCallback);
       return;
     }
 
@@ -99,7 +105,7 @@ function generateKeyName(): string {
   return `CLI Key - ${timestamp}`;
 }
 
-const errNonLocalCallback = "Callback URL must be localhost or 127.0.0.1";
+const errInvalidCallback = "Callback URL must be localhost or 127.0.0.1";
 
 function isCallbackLocal(callbackUrl: string): boolean {
   try {
