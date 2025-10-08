@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"errors"
+	"fmt"
 )
 
 type FilterType string
@@ -104,18 +105,66 @@ const (
 )
 
 // Tool is a polymorphic type that can represent either an HTTPTool or a FunctionTool.
+// Use NewHTTPTool or NewFunctionTool to create instances.
 type Tool struct {
-	Kind         ToolKind
-	HTTPTool     *HTTPTool
-	FunctionTool *FunctionTool
+	kind         ToolKind      // unexported - use Kind() method
+	HTTPTool     *HTTPTool     // exported for backward compatibility
+	FunctionTool *FunctionTool // exported for backward compatibility
+}
+
+// Kind returns the tool kind.
+func (t *Tool) Kind() ToolKind {
+	return t.kind
+}
+
+// NewHTTPTool creates a new Tool wrapping an HTTPTool.
+func NewHTTPTool(httpTool *HTTPTool) *Tool {
+	return &Tool{
+		kind:         ToolKindHTTP,
+		HTTPTool:     httpTool,
+		FunctionTool: nil,
+	}
+}
+
+// NewFunctionTool creates a new Tool wrapping a FunctionTool.
+func NewFunctionTool(functionTool *FunctionTool) *Tool {
+	return &Tool{
+		kind:         ToolKindFunction,
+		HTTPTool:     nil,
+		FunctionTool: functionTool,
+	}
+}
+
+// Validate ensures the tool is in a valid state.
+// This is a safety net for cases like JSON deserialization.
+func (t *Tool) Validate() error {
+	switch t.kind {
+	case ToolKindHTTP:
+		if t.HTTPTool == nil {
+			return fmt.Errorf("tool kind is HTTP but HTTPTool is nil")
+		}
+		if t.FunctionTool != nil {
+			return fmt.Errorf("tool kind is HTTP but FunctionTool is also set")
+		}
+	case ToolKindFunction:
+		if t.FunctionTool == nil {
+			return fmt.Errorf("tool kind is Function but FunctionTool is nil")
+		}
+		if t.HTTPTool != nil {
+			return fmt.Errorf("tool kind is Function but HTTPTool is also set")
+		}
+	default:
+		return fmt.Errorf("unknown tool kind: %s", t.kind)
+	}
+	return nil
 }
 
 // IsHTTP returns true if this tool is an HTTP tool.
 func (t *Tool) IsHTTP() bool {
-	return t.HTTPTool != nil && t.Kind == ToolKindHTTP
+	return t.HTTPTool != nil && t.kind == ToolKindHTTP
 }
 
 // IsFunction returns true if this tool is a function tool.
 func (t *Tool) IsFunction() bool {
-	return t.FunctionTool != nil && t.Kind == ToolKindFunction
+	return t.FunctionTool != nil && t.kind == ToolKindFunction
 }

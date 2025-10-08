@@ -329,7 +329,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		toolsetID = &toolset.ID
 	}
 	toolName := ""
-	switch executionInfo.Tool.Kind {
+	switch executionInfo.Tool.Kind() {
 	case gateway.ToolKindHTTP:
 		toolName = executionInfo.Tool.HTTPTool.Name
 	case gateway.ToolKindFunction:
