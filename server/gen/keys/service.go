@@ -22,6 +22,8 @@ type Service interface {
 	ListKeys(context.Context, *ListKeysPayload) (res *ListKeysResult, err error)
 	// Revoke a api key
 	RevokeKey(context.Context, *RevokeKeyPayload) (err error)
+	// Verify an api key
+	VerifyKey(context.Context, *VerifyKeyPayload) (res *ValidateKeyResult, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -44,7 +46,7 @@ const ServiceName = "keys"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [3]string{"createKey", "listKeys", "revokeKey"}
+var MethodNames = [4]string{"createKey", "listKeys", "revokeKey", "verifyKey"}
 
 // CreateKeyPayload is the payload type of the keys service createKey method.
 type CreateKeyPayload struct {
@@ -94,6 +96,39 @@ type RevokeKeyPayload struct {
 	// The ID of the key to revoke
 	ID           string
 	SessionToken *string
+}
+
+type ValidateKeyOrganization struct {
+	// The ID of the organization
+	ID string
+	// The name of the organization
+	Name string
+	// The slug of the organization
+	Slug string
+}
+
+type ValidateKeyProject struct {
+	// The ID of the project
+	ID string
+	// The name of the project
+	Name string
+	// The slug of the project
+	Slug string
+}
+
+// ValidateKeyResult is the result type of the keys service verifyKey method.
+type ValidateKeyResult struct {
+	// The organization the key belongs to
+	Organization *ValidateKeyOrganization
+	// The projects accessible with this key
+	Projects []*ValidateKeyProject
+	// List of permission scopes for this key
+	Scopes []string
+}
+
+// VerifyKeyPayload is the payload type of the keys service verifyKey method.
+type VerifyKeyPayload struct {
+	ApikeyToken *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.
