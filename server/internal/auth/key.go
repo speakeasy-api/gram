@@ -82,6 +82,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		Email:                nil,
 		AccountType:          org.GramAccountType,
 		ProjectSlug:          nil,
+		APIKeyScopes:         apiKey.Scopes,
 	})
 
 	return ctx, nil
