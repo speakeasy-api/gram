@@ -3,6 +3,8 @@ package gateway
 import (
 	"errors"
 
+	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -98,10 +100,13 @@ var DisableResponseFiltering = &ResponseFilter{
 
 // FunctionToolCallPlan describes a serverless function that can be invoked as a tool.
 type FunctionToolCallPlan struct {
-	FunctionID  string `json:"function_id" yaml:"function_id"`
-	Runtime     string `json:"runtime" yaml:"runtime"`
-	InputSchema []byte `json:"input_schema" yaml:"input_schema"`
-	Variables   []byte `json:"variables" yaml:"variables"`
+	FunctionID   string      `json:"function_id" yaml:"function_id"`
+	ServerURL    string      `json:"server_url" yaml:"server_url"`
+	Runtime      string      `json:"runtime" yaml:"runtime"`
+	BearerFormat string      `json:"bearer_format" yaml:"bearer_format"`
+	AuthSecret   conv.Secret `json:"auth_secret" yaml:"auth_secret"`
+	InputSchema  []byte      `json:"input_schema" yaml:"input_schema"`
+	Variables    []byte      `json:"variables" yaml:"variables"`
 }
 
 type ToolKind string
@@ -114,8 +119,9 @@ const (
 // ToolCallPlan is a polymorphic type that can represent either an HTTPTool or a FunctionTool.
 // Use NewHTTPTool or NewFunctionTool to create instances.
 type ToolCallPlan struct {
-	Kind       ToolKind
-	Descriptor *ToolDescriptor
+	Kind        ToolKind
+	BillingType billing.ToolCallType
+	Descriptor  *ToolDescriptor
 
 	HTTP     *HTTPToolCallPlan
 	Function *FunctionToolCallPlan
@@ -124,19 +130,21 @@ type ToolCallPlan struct {
 // NewHTTPToolCallPlan creates a new Tool wrapping an HTTPTool.
 func NewHTTPToolCallPlan(tool *ToolDescriptor, plan *HTTPToolCallPlan) *ToolCallPlan {
 	return &ToolCallPlan{
-		Kind:       ToolKindHTTP,
-		Descriptor: tool,
-		HTTP:       plan,
-		Function:   nil,
+		Kind:        ToolKindHTTP,
+		BillingType: billing.ToolCallTypeHTTP,
+		Descriptor:  tool,
+		HTTP:        plan,
+		Function:    nil,
 	}
 }
 
 // NewFunctionToolCallPlan creates a new Tool wrapping a FunctionTool.
 func NewFunctionToolCallPlan(tool *ToolDescriptor, plan *FunctionToolCallPlan) *ToolCallPlan {
 	return &ToolCallPlan{
-		Kind:       ToolKindFunction,
-		Descriptor: tool,
-		HTTP:       nil,
-		Function:   plan,
+		Kind:        ToolKindFunction,
+		BillingType: billing.ToolCallTypeFunction,
+		Descriptor:  tool,
+		HTTP:        nil,
+		Function:    plan,
 	}
 }

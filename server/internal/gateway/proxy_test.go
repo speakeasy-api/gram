@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -183,6 +184,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
+			enc := testenv.NewEncryptionClient(t)
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
@@ -233,6 +235,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				tracerProvider,
 				meterProvider,
 				ToolCallSourceDirect,
+				enc,
 				nil, // no cache needed for this test
 				policy,
 			)
@@ -306,6 +309,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
+			enc := testenv.NewEncryptionClient(t)
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
@@ -356,6 +360,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				tracerProvider,
 				meterProvider,
 				ToolCallSourceDirect,
+				enc,
 				nil, // no cache needed for this test
 				policy,
 			)
@@ -660,6 +665,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
+			enc := testenv.NewEncryptionClient(t)
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
@@ -700,6 +706,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				tracerProvider,
 				meterProvider,
 				ToolCallSourceDirect,
+				enc,
 				nil, // no cache needed for this test
 				policy,
 			)
@@ -863,6 +870,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
+			enc := testenv.NewEncryptionClient(t)
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
@@ -914,6 +922,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				tracerProvider,
 				meterProvider,
 				ToolCallSourceDirect,
+				enc,
 				nil, // no cache needed for this test
 				policy,
 			)
@@ -966,16 +975,20 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
+	enc := testenv.NewEncryptionClient(t)
 	policy, err := guardian.NewUnsafePolicy([]string{})
 	require.NoError(t, err)
 
 	tool := newTestToolDescriptor()
 	// Create a function tool
 	plan := &FunctionToolCallPlan{
-		FunctionID:  uuid.New().String(),
-		Runtime:     "nodejs:22",
-		InputSchema: []byte(`{"type": "object"}`),
-		Variables:   []byte(`{}`),
+		FunctionID:   uuid.New().String(),
+		Runtime:      "nodejs:22",
+		InputSchema:  []byte(`{"type": "object"}`),
+		Variables:    []byte(`{}`),
+		ServerURL:    "https://example.com",
+		BearerFormat: "v01",
+		AuthSecret:   conv.NewSecret([]byte("fixme")),
 	}
 
 	// Create request body
@@ -998,6 +1011,7 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 		tracerProvider,
 		meterProvider,
 		ToolCallSourceDirect,
+		enc,
 		nil,
 		policy,
 	)
@@ -1283,6 +1297,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
+			enc := testenv.NewEncryptionClient(t)
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
@@ -1309,6 +1324,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				tracerProvider,
 				meterProvider,
 				ToolCallSourceDirect,
+				enc,
 				nil,
 				policy,
 			)

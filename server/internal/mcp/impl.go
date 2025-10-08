@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -92,6 +93,7 @@ func NewService(
 	env gateway.EnvironmentLoader,
 	posthog *posthog.Posthog,
 	serverURL *url.URL,
+	enc *encryption.Client,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	oauthService *oauth.Service,
@@ -120,6 +122,7 @@ func NewService(
 			tracerProvider,
 			meterProvider,
 			gateway.ToolCallSourceMCP,
+			enc,
 			cacheImpl,
 			guardianPolicy,
 		),

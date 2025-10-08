@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -27,6 +28,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -98,12 +101,13 @@ type InstanceToolProxyConfig struct {
 }
 
 type ToolProxy struct {
-	source  ToolCallSource
-	logger  *slog.Logger
-	tracer  trace.Tracer
-	metrics *metrics
-	cache   cache.Cache
-	policy  *guardian.Policy
+	source     ToolCallSource
+	logger     *slog.Logger
+	tracer     trace.Tracer
+	metrics    *metrics
+	encryption *encryption.Client
+	cache      cache.Cache
+	policy     *guardian.Policy
 }
 
 func NewToolProxy(
@@ -111,6 +115,7 @@ func NewToolProxy(
 	tracerProivder trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	source ToolCallSource,
+	enc *encryption.Client,
 	cache cache.Cache,
 	policy *guardian.Policy,
 ) *ToolProxy {
@@ -118,12 +123,13 @@ func NewToolProxy(
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
 
 	return &ToolProxy{
-		source:  source,
-		logger:  logger,
-		tracer:  tracer,
-		metrics: newMetrics(meter, logger),
-		cache:   cache,
-		policy:  policy,
+		source:     source,
+		logger:     logger,
+		tracer:     tracer,
+		metrics:    newMetrics(meter, logger),
+		encryption: enc,
+		cache:      cache,
+		policy:     policy,
 	}
 }
 
@@ -181,7 +187,93 @@ func (tp *ToolProxy) doFunction(
 	descriptor *ToolDescriptor,
 	plan *FunctionToolCallPlan,
 ) error {
-	return oops.E(oops.CodeNotImplemented, nil, "function tool calls are not implemented yet").Log(ctx, logger)
+	method := http.MethodPost
+	route := "/tool-call"
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attr.HTTPRoute(route),
+	)
+	logger = logger.With(
+		attr.SlogHTTPRoute(route),
+	)
+
+	unsealedAuthKey, err := tp.encryption.Decrypt(string(plan.AuthSecret.Reveal()))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to access credentials for function tool call").Log(ctx, logger)
+	}
+
+	enc, err := encryption.NewWithBytes([]byte(unsealedAuthKey))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to create encryption client for function tool call").Log(ctx, logger)
+	}
+
+	endpoint, err := url.JoinPath(plan.ServerURL, route)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to parse function tool url").Log(ctx, logger)
+	}
+
+	token, err := functions.TokenV1(enc, functions.TokenRequestV1{
+		ID:  plan.FunctionID,
+		Exp: time.Now().Add(10 * time.Minute).Unix(),
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to create bearer token for function tool call").Log(ctx, logger)
+	}
+
+	var input json.RawMessage
+	if err := json.NewDecoder(requestBody).Decode(&input); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
+	}
+
+	payload, err := json.Marshal(functions.CallToolPayload{
+		ToolName:    descriptor.Name,
+		Input:       input,
+		Environment: env.data,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal function tool payload").Log(ctx, logger)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to create function tool request").Log(ctx, logger)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	var responseStatusCode int
+	defer func() {
+		rawct := w.Header().Get("content-type")
+		ct, _, err := mime.ParseMediaType(rawct)
+		if err != nil {
+			ct = rawct
+		}
+		ct = ct[:min(len(ct), 100)]
+
+		logger.InfoContext(ctx, "function tool call",
+			attr.SlogHTTPResponseStatusCode(responseStatusCode),
+			attr.SlogHTTPRequestMethod(method),
+			attr.SlogHTTPResponseHeaderContentType(ct),
+		)
+		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
+		tp.metrics.RecordToolCall(ctx, descriptor.OrganizationID, descriptor.URN, responseStatusCode)
+
+		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
+	}()
+
+	return reverseProxyRequest(
+		ctx,
+		logger,
+		tp.tracer,
+		w,
+		req,
+		descriptor,
+		&FilterRequest{Type: "none", Filter: ""},
+		DisableResponseFiltering,
+		tp.policy,
+		&responseStatusCode,
+	)
 }
 
 func (tp *ToolProxy) doHTTP(
@@ -210,7 +302,7 @@ func (tp *ToolProxy) doHTTP(
 			attr.SlogHTTPResponseHeaderContentType(plan.RequestContentType.Value),
 		)
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
-		tp.metrics.RecordHTTPToolCall(ctx, descriptor.OrganizationID, descriptor.Name, responseStatusCode)
+		tp.metrics.RecordToolCall(ctx, descriptor.OrganizationID, descriptor.URN, responseStatusCode)
 
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()

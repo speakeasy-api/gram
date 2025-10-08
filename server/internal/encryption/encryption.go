@@ -72,6 +72,10 @@ func New(base64Key string) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode base64 key: %w", err)
 	}
+	return NewWithBytes(key)
+}
+
+func NewWithBytes(key []byte) (*Client, error) {
 	if len(key) != 32 {
 		return nil, fmt.Errorf("invalid AES-256 key size: %d bytes", len(key))
 	}
