@@ -24,18 +24,32 @@ type Profile struct {
 	Projects           []any  `json:"projects"`
 }
 
-// Load reads the profile configuration from $HOME/.gram/profile.json and
-// returns the currently active profile based on the "current" field.
+// DefaultProfilePath returns the default path to the profile configuration file.
+func DefaultProfilePath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	return filepath.Join(homeDir, ".gram", "profile.json"), nil
+}
+
+// Load reads the profile configuration from the specified path, or from
+// DefaultProfilePath() if path is empty, and returns the currently active
+// profile based on the "current" field.
 //
 // Returns (nil, nil) if the profile file doesn't exist.
 // Returns an error if the file is malformed or the current profile is invalid.
-func Load() (*Profile, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user home directory: %w", err)
+func Load(path string) (*Profile, error) {
+	var profilePath string
+	if path != "" {
+		profilePath = path
+	} else {
+		defaultPath, err := DefaultProfilePath()
+		if err != nil {
+			return nil, err
+		}
+		profilePath = defaultPath
 	}
-
-	profilePath := filepath.Join(homeDir, ".gram", "profile.json")
 
 	data, err := os.ReadFile(filepath.Clean(profilePath))
 	if err != nil {

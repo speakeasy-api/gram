@@ -32,6 +32,8 @@ func newApp() *cli.App {
 		shortSha = GitSHA[:7]
 	}
 
+	defaultProfilePath, _ := profile.DefaultProfilePath()
+
 	return &cli.App{
 		Name:    "gram",
 		Usage:   "A command line interface for the Gram platform. Get started at https://docs.getgram.ai/",
@@ -60,6 +62,12 @@ func newApp() *cli.App {
 				Usage:   "Toggle pretty logging",
 				EnvVars: []string{"GRAM_LOG_PRETTY"},
 			},
+			&cli.StringFlag{
+				Name:    "profile-path",
+				Usage:   fmt.Sprintf("Path to profile JSON file (default: %s)", defaultProfilePath),
+				EnvVars: []string{"GRAM_PROFILE_PATH"},
+				Hidden:  true,
+			},
 		},
 		Before: func(c *cli.Context) error {
 			logger := slog.New(o11y.NewLogHandler(&o11y.LogHandlerOptions{
@@ -70,7 +78,8 @@ func newApp() *cli.App {
 
 			ctx := logging.PushLogger(c.Context, logger)
 
-			prof, err := profile.Load()
+			profilePath := c.String("profile-path")
+			prof, err := profile.Load(profilePath)
 			if err != nil {
 				logger.WarnContext(
 					ctx,
