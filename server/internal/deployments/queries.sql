@@ -276,6 +276,7 @@ INSERT INTO function_tool_definitions (
   deployment_id
   , function_id
   , tool_urn
+  , project_id
   , name
   , description
   , runtime
@@ -286,6 +287,7 @@ SELECT
   @clone_deployment_id
   , current.function_id
   , current.tool_urn
+  , current.project_id
   , current.name
   , current.description
   , current.runtime
@@ -500,6 +502,7 @@ INSERT INTO function_tool_definitions (
     deployment_id
   , function_id
   , tool_urn
+  , project_id
   , runtime
   , name
   , description
@@ -509,6 +512,7 @@ INSERT INTO function_tool_definitions (
     @deployment_id
   , @function_id
   , @tool_urn
+  , @project_id
   , @runtime
   , @name
   , @description
