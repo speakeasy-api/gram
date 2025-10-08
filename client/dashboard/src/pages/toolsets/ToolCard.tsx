@@ -151,11 +151,11 @@ export function ToolCard({
         <Card.Description>
           {tool.type === "http" ? (
             <HttpRoute method={tool.httpMethod} path={tool.path} />
-          ) : (
+          ) : tool.type === "prompt" ? (
             <Type small mono muted>
               {tool.toolsHint.join(", ")}
             </Type>
-          )}
+          ) : null}
         </Card.Description>
       </Card.Header>
       <Card.Content className="h-full">

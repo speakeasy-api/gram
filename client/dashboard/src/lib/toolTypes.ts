@@ -85,6 +85,9 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
           ? documentIdToSlug?.[tool.openapiv3DocumentId]
           : undefined;
         groupKey = documentSlug || "unknown";
+      } else if (tool.type === "function") {
+        // TODO: As the UX gets built out this should get more granular, tying to which function asset
+        groupKey = "function";
       } else {
         groupKey = "custom";
       }
@@ -124,6 +127,7 @@ export const promptNames = (promptTemplates: PromptTemplateEntry[]): string[] =>
 
 export const isHttpTool = (tool: Tool) => tool.type === "http";
 export const isPromptTool = (tool: Tool) => tool.type === "prompt";
+export const isFunctionTool = (tool: Tool) => tool.type === "function";
 
 export const filterHttpTools = (
   tools: Tool[] | undefined,
