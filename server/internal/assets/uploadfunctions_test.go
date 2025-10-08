@@ -293,7 +293,7 @@ func cacheBustZipFixture(t *testing.T, fixturePath string) []byte {
 	t.Helper()
 
 	// Read the original zip file
-	originalContent, err := os.ReadFile(fixturePath)
+	originalContent, err := os.ReadFile(filepath.Clean(fixturePath))
 	require.NoError(t, err, "expect to read entire fixture file")
 
 	// Create a buffer to write the modified zip
@@ -311,9 +311,10 @@ func cacheBustZipFixture(t *testing.T, fixturePath string) []byte {
 		w, err := writer.Create(file.Name)
 		require.NoError(t, err, "expected to create file in new zip")
 
-		_, err = io.Copy(w, rc)
+		// 10MB limit to avoid unintentional zip bombs
+		_, err = io.Copy(w, io.LimitReader(rc, 10*1024*1024))
 		require.NoError(t, err, "expected copy to succeed from existing zip to new zip")
-		rc.Close()
+		require.NoError(t, rc.Close())
 	}
 
 	// Add a new file with random content to bust the cache
