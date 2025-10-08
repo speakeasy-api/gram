@@ -151,7 +151,7 @@ export function ToolCard({
         className="text-sm capitalize"
         tooltip={<span>This is a function tool</span>}
       >
-        Custom
+        Function
       </Badge>
     );
   }
