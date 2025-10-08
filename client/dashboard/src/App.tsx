@@ -7,15 +7,24 @@ import {
 } from "@speakeasy-api/moonshine";
 import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Route, Routes } from "react-router";
+import { BrowserRouter, Route, Routes, useSearchParams } from "react-router";
 import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
 import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
 import { SdkProvider } from "./contexts/Sdk.tsx";
 import { TelemetryProvider } from "./contexts/Telemetry.tsx";
 import { AppRoute, useRoutes } from "./routes";
 import { Toaster } from "@/components/ui/sonner";
+import CliCallback from "./pages/cli/CliCallback";
 
 export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
+  );
+}
+
+function AppContent() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   // Initialize Pylon widget in production only
@@ -65,21 +74,27 @@ export default function App() {
     applyTheme(initialTheme);
   }, []);
 
+  const cliFlow = useCliAuthFlow();
+
+  const appDisplay = cliFlow ? (
+    <CliCallback localCallbackUrl={cliFlow.cliCallbackUrl} />
+  ) : (
+    <ProjectProvider>
+      <RouteProvider />
+    </ProjectProvider>
+  );
+
   return (
     <MoonshineConfigProvider theme={theme} setTheme={applyTheme}>
       <LocalTooltipProvider>
         <TooltipProvider>
           <TelemetryProvider>
-            <BrowserRouter>
-              <SdkProvider>
-                <AuthProvider>
-                  <ProjectProvider>
-                    <RouteProvider />
-                  </ProjectProvider>
-                  <Toaster />
-                </AuthProvider>
-              </SdkProvider>
-            </BrowserRouter>
+            <SdkProvider>
+              <AuthProvider>
+                {appDisplay}
+                <Toaster />
+              </AuthProvider>
+            </SdkProvider>
           </TelemetryProvider>
         </TooltipProvider>
       </LocalTooltipProvider>
@@ -149,3 +164,14 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
       </Route>
     ));
 };
+
+function useCliAuthFlow() {
+  const [searchParams] = useSearchParams();
+
+  const fromCli = searchParams.get("from_cli") === "true";
+  const cliCallbackUrl = searchParams.get("cli_callback_url");
+
+  if (fromCli && cliCallbackUrl) return { cliCallbackUrl };
+
+  return null;
+}
