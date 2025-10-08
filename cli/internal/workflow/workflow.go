@@ -1,4 +1,4 @@
-package deploy
+package workflow
 
 import (
 	"context"
@@ -8,18 +8,19 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
+	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
 
-type WorkflowParams struct {
+type Params struct {
 	APIKey      secret.Secret
 	APIURL      *url.URL
 	ProjectSlug string
 }
 
-func (p WorkflowParams) Validate() error {
+func (p Params) Validate() error {
 	if p.ProjectSlug == "" {
 		return fmt.Errorf("project slug is required")
 	}
@@ -34,7 +35,7 @@ func (p WorkflowParams) Validate() error {
 
 type Workflow struct {
 	Logger            *slog.Logger
-	Params            WorkflowParams
+	Params            Params
 	AssetsClient      *api.AssetsClient
 	DeploymentsClient *api.DeploymentsClient
 	NewAssets         []*deployments.AddOpenAPIv3DeploymentAssetForm
@@ -53,10 +54,10 @@ func (s *Workflow) Failed() bool {
 	return s.Err != nil
 }
 
-func NewWorkflow(
+func New(
 	ctx context.Context,
 	logger *slog.Logger,
-	params WorkflowParams,
+	params Params,
 ) *Workflow {
 	state := &Workflow{
 		Logger:            logger,
@@ -88,7 +89,7 @@ func NewWorkflow(
 
 func (s *Workflow) UploadAssets(
 	ctx context.Context,
-	sources []Source,
+	sources []deploy.Source,
 ) *Workflow {
 	if s.Failed() {
 		return s
@@ -105,12 +106,12 @@ func (s *Workflow) UploadAssets(
 			return s.Fail(fmt.Errorf("invalid source: %w", err))
 		}
 
-		upReq := &UploadRequest{
+		upReq := &deploy.UploadRequest{
 			APIKey:       s.Params.APIKey,
 			ProjectSlug:  s.Params.ProjectSlug,
-			SourceReader: NewSourceReader(source),
+			SourceReader: deploy.NewSourceReader(source),
 		}
-		asset, err := Upload(ctx, s.AssetsClient, upReq)
+		asset, err := deploy.Upload(ctx, s.AssetsClient, upReq)
 		if err != nil {
 			return s.Fail(fmt.Errorf("failed to upload asset: %w", err))
 		}

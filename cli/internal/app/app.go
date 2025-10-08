@@ -10,7 +10,21 @@ import (
 
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/o11y"
+	"github.com/speakeasy-api/gram/cli/internal/profile"
 )
+
+type contextKey string
+
+const profileContextKey contextKey = "profile"
+
+// ProfileFromContext retrieves the loaded profile from the context.
+// Returns nil if no profile was loaded.
+func ProfileFromContext(ctx context.Context) *profile.Profile {
+	if prof, ok := ctx.Value(profileContextKey).(*profile.Profile); ok {
+		return prof
+	}
+	return nil
+}
 
 func newApp() *cli.App {
 	shortSha := GitSHA
@@ -55,6 +69,19 @@ func newApp() *cli.App {
 			}))
 
 			ctx := logging.PushLogger(c.Context, logger)
+
+			prof, err := profile.Load()
+			if err != nil {
+				logger.WarnContext(
+					ctx,
+					"failed to load profile, continuing without it",
+					slog.String("error", err.Error()),
+				)
+			}
+			if prof != nil {
+				ctx = context.WithValue(ctx, profileContextKey, prof)
+			}
+
 			c.Context = ctx
 			return nil
 		},

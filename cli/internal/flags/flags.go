@@ -5,10 +5,9 @@ import "github.com/urfave/cli/v2"
 
 func APIKey() *cli.StringFlag {
 	return &cli.StringFlag{
-		Name:     "api-key",
-		Usage:    "Your Gram API key (must be scoped as a 'Provider')",
-		EnvVars:  []string{"GRAM_API_KEY"},
-		Required: true,
+		Name:    "api-key",
+		Usage:   "Your Gram API key (must be scoped as a 'Provider')",
+		EnvVars: []string{"GRAM_API_KEY"},
 	}
 }
 
@@ -24,9 +23,8 @@ func APIEndpoint() *cli.StringFlag {
 
 func Project() *cli.StringFlag {
 	return &cli.StringFlag{
-		Name:     "project",
-		Usage:    "The target Gram project",
-		EnvVars:  []string{"GRAM_PROJECT"},
-		Required: true,
+		Name:    "project",
+		Usage:   "The target Gram project",
+		EnvVars: []string{"GRAM_PROJECT"},
 	}
 }
