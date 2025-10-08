@@ -2,10 +2,12 @@ package testenv
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -25,7 +27,6 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 		clickhousecontainer.WithUsername("gram"),
 		clickhousecontainer.WithPassword("gram"),
 		clickhousecontainer.WithDatabase("gram"),
-		clickhousecontainer.WithInitScripts(filepath.Join("..", "..", "clickhouse", "schema.sql")),
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 	)
 	if err != nil {
@@ -43,7 +44,7 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 		return nil, nil, fmt.Errorf("failed to get clickhouse port: %w", err)
 	}
 
-	// Connect and run migrations
+	// Connect and run schema
 	conn, err := clickhouse.Open(&clickhouse.Options{
 		Addr: []string{fmt.Sprintf("%s:%s", host, port.Port())},
 		Auth: clickhouse.Auth{
@@ -61,6 +62,30 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 
 	if err = conn.Ping(ctx); err != nil {
 		return nil, nil, fmt.Errorf("failed to ping clickhouse: %w", err)
+	}
+
+	// Get the schema file path relative to this file's location
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return nil, nil, fmt.Errorf("failed to get current file path")
+	}
+	schemaPath := filepath.Join(filepath.Dir(filename), "..", "..", "clickhouse", "schema.sql")
+
+	// Read and execute the schema
+	schemaSQL, err := os.ReadFile(schemaPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read schema file at %s: %w", schemaPath, err)
+	}
+
+	if err = conn.Exec(ctx, string(schemaSQL)); err != nil {
+		return nil, nil, fmt.Errorf("failed to execute schema: %w", err)
+	}
+
+	// Verify table exists
+	var tableExists uint8
+	err = conn.QueryRow(ctx, "SELECT 1 FROM system.tables WHERE database = 'gram' AND name = 'http_requests_raw'").Scan(&tableExists)
+	if err != nil || tableExists != 1 {
+		return nil, nil, fmt.Errorf("http_requests_raw table not found after schema execution")
 	}
 
 	return container, newClickhouseClientFunc(container), nil
@@ -159,8 +184,18 @@ func NewSharedToolMetricsClient(ctx context.Context) (*toolmetrics.ClickhouseCli
 	}
 
 	cleanup := func() error {
-		_ = conn.Close()
-		return container.Terminate(ctx)
+		var errs []error
+		err = conn.Close()
+		if err != nil {
+			errs = append(errs, err)
+		}
+
+		err = container.Terminate(ctx)
+		if err != nil {
+			errs = append(errs, err)
+		}
+
+		return errors.Join(errs...)
 	}
 
 	return client, cleanup, nil

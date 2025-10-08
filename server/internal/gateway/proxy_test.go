@@ -397,25 +397,28 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				require.Equal(t, tt.expectedHeader, actualHeaderValue, "header %s value mismatch", headerName)
 			}
 
-			// // Verify that logs were written to ClickHouse
-			// pagination := &toolmetrics.PaginationRequest{
-			// 	PerPage:   10,
-			// 	Sort:      "DESC",
-			// 	Direction: toolmetrics.Next,
-			// }
-			// logs, err := sharedToolMetricsClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
-			// require.NoError(t, err)
-			// require.NotNil(t, logs)
-			// require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
-			//
-			// log := logs.Logs[0]
-			// require.Equal(t, tool.ProjectID, log.ProjectID)
-			// require.Equal(t, tool.OrganizationID, log.OrganizationID)
-			// require.Equal(t, tool.DeploymentID, log.DeploymentID)
-			// require.Equal(t, tool.ID, log.ToolID)
-			// require.Equal(t, "GET", log.HTTPMethod)
-			// require.Equal(t, "/test", log.HTTPRoute)
-			// require.Equal(t, uint16(200), log.StatusCode)
+			// Give ClickHouse a moment to process async writes
+			time.Sleep(100 * time.Millisecond)
+
+			// Verify that logs were written to ClickHouse
+			pagination := &toolmetrics.PaginationRequest{
+				PerPage:   10,
+				Sort:      "DESC",
+				Direction: toolmetrics.Next,
+			}
+			logs, err := sharedToolMetricsClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
+			require.NoError(t, err)
+			require.NotNil(t, logs)
+			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
+
+			toolHTTPRequest := logs.Logs[0]
+			require.Equal(t, tool.ProjectID, toolHTTPRequest.ProjectID)
+			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
+			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
+			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
+			require.Equal(t, tool.Method, toolHTTPRequest.HTTPMethod)
+			require.Equal(t, tool.Path, toolHTTPRequest.HTTPRoute)
+			require.Equal(t, uint16(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
