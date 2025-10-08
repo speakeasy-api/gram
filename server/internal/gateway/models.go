@@ -2,7 +2,6 @@ package gateway
 
 import (
 	"errors"
-	"fmt"
 )
 
 type FilterType string
@@ -133,30 +132,6 @@ func NewFunctionTool(functionTool *FunctionTool) *Tool {
 		HTTPTool:     nil,
 		FunctionTool: functionTool,
 	}
-}
-
-// Validate ensures the tool is in a valid state.
-// This is a safety net for cases like JSON deserialization.
-func (t *Tool) Validate() error {
-	switch t.kind {
-	case ToolKindHTTP:
-		if t.HTTPTool == nil {
-			return fmt.Errorf("tool kind is HTTP but HTTPTool is nil")
-		}
-		if t.FunctionTool != nil {
-			return fmt.Errorf("tool kind is HTTP but FunctionTool is also set")
-		}
-	case ToolKindFunction:
-		if t.FunctionTool == nil {
-			return fmt.Errorf("tool kind is Function but FunctionTool is nil")
-		}
-		if t.HTTPTool != nil {
-			return fmt.Errorf("tool kind is Function but HTTPTool is also set")
-		}
-	default:
-		return fmt.Errorf("unknown tool kind: %s", t.kind)
-	}
-	return nil
 }
 
 // IsHTTP returns true if this tool is an HTTP tool.
