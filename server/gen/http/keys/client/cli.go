@@ -92,16 +92,16 @@ func BuildRevokeKeyPayload(keysRevokeKeyID string, keysRevokeKeySessionToken str
 	return v, nil
 }
 
-// BuildValidateKeyPayload builds the payload for the keys validateKey endpoint
+// BuildVerifyKeyPayload builds the payload for the keys verifyKey endpoint
 // from CLI flags.
-func BuildValidateKeyPayload(keysValidateKeyApikeyToken string) (*keys.ValidateKeyPayload, error) {
+func BuildVerifyKeyPayload(keysVerifyKeyApikeyToken string) (*keys.VerifyKeyPayload, error) {
 	var apikeyToken *string
 	{
-		if keysValidateKeyApikeyToken != "" {
-			apikeyToken = &keysValidateKeyApikeyToken
+		if keysVerifyKeyApikeyToken != "" {
+			apikeyToken = &keysVerifyKeyApikeyToken
 		}
 	}
-	v := &keys.ValidateKeyPayload{}
+	v := &keys.VerifyKeyPayload{}
 	v.ApikeyToken = apikeyToken
 
 	return v, nil

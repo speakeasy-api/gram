@@ -52,9 +52,9 @@ type ListKeysResponseBody struct {
 	Keys []*KeyResponseBody `form:"keys,omitempty" json:"keys,omitempty" xml:"keys,omitempty"`
 }
 
-// ValidateKeyResponseBody is the type of the "keys" service "validateKey"
-// endpoint HTTP response body.
-type ValidateKeyResponseBody struct {
+// VerifyKeyResponseBody is the type of the "keys" service "verifyKey" endpoint
+// HTTP response body.
+type VerifyKeyResponseBody struct {
 	// The organization the key belongs to
 	Organization *ValidateKeyOrganizationResponseBody `form:"organization,omitempty" json:"organization,omitempty" xml:"organization,omitempty"`
 	// The projects accessible with this key
@@ -601,9 +601,9 @@ type RevokeKeyGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ValidateKeyUnauthorizedResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "unauthorized" error.
-type ValidateKeyUnauthorizedResponseBody struct {
+// VerifyKeyUnauthorizedResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "unauthorized" error.
+type VerifyKeyUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -619,9 +619,9 @@ type ValidateKeyUnauthorizedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ValidateKeyForbiddenResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "forbidden" error.
-type ValidateKeyForbiddenResponseBody struct {
+// VerifyKeyForbiddenResponseBody is the type of the "keys" service "verifyKey"
+// endpoint HTTP response body for the "forbidden" error.
+type VerifyKeyForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -637,9 +637,9 @@ type ValidateKeyForbiddenResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ValidateKeyBadRequestResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "bad_request" error.
-type ValidateKeyBadRequestResponseBody struct {
+// VerifyKeyBadRequestResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "bad_request" error.
+type VerifyKeyBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -655,9 +655,9 @@ type ValidateKeyBadRequestResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ValidateKeyNotFoundResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "not_found" error.
-type ValidateKeyNotFoundResponseBody struct {
+// VerifyKeyNotFoundResponseBody is the type of the "keys" service "verifyKey"
+// endpoint HTTP response body for the "not_found" error.
+type VerifyKeyNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -673,9 +673,9 @@ type ValidateKeyNotFoundResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ValidateKeyConflictResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "conflict" error.
-type ValidateKeyConflictResponseBody struct {
+// VerifyKeyConflictResponseBody is the type of the "keys" service "verifyKey"
+// endpoint HTTP response body for the "conflict" error.
+type VerifyKeyConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -691,9 +691,9 @@ type ValidateKeyConflictResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ValidateKeyUnsupportedMediaResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "unsupported_media" error.
-type ValidateKeyUnsupportedMediaResponseBody struct {
+// VerifyKeyUnsupportedMediaResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "unsupported_media" error.
+type VerifyKeyUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -709,9 +709,9 @@ type ValidateKeyUnsupportedMediaResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ValidateKeyInvalidResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "invalid" error.
-type ValidateKeyInvalidResponseBody struct {
+// VerifyKeyInvalidResponseBody is the type of the "keys" service "verifyKey"
+// endpoint HTTP response body for the "invalid" error.
+type VerifyKeyInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -727,10 +727,9 @@ type ValidateKeyInvalidResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ValidateKeyInvariantViolationResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "invariant_violation"
-// error.
-type ValidateKeyInvariantViolationResponseBody struct {
+// VerifyKeyInvariantViolationResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "invariant_violation" error.
+type VerifyKeyInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -746,9 +745,9 @@ type ValidateKeyInvariantViolationResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ValidateKeyUnexpectedResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "unexpected" error.
-type ValidateKeyUnexpectedResponseBody struct {
+// VerifyKeyUnexpectedResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "unexpected" error.
+type VerifyKeyUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -764,9 +763,9 @@ type ValidateKeyUnexpectedResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
-// ValidateKeyGatewayErrorResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "gateway_error" error.
-type ValidateKeyGatewayErrorResponseBody struct {
+// VerifyKeyGatewayErrorResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "gateway_error" error.
+type VerifyKeyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1321,9 +1320,9 @@ func NewRevokeKeyGatewayError(body *RevokeKeyGatewayErrorResponseBody) *goa.Serv
 	return v
 }
 
-// NewValidateKeyResultOK builds a "keys" service "validateKey" endpoint result
-// from a HTTP "OK" response.
-func NewValidateKeyResultOK(body *ValidateKeyResponseBody) *keys.ValidateKeyResult {
+// NewVerifyKeyValidateKeyResultOK builds a "keys" service "verifyKey" endpoint
+// result from a HTTP "OK" response.
+func NewVerifyKeyValidateKeyResultOK(body *VerifyKeyResponseBody) *keys.ValidateKeyResult {
 	v := &keys.ValidateKeyResult{}
 	v.Organization = unmarshalValidateKeyOrganizationResponseBodyToKeysValidateKeyOrganization(body.Organization)
 	v.Projects = make([]*keys.ValidateKeyProject, len(body.Projects))
@@ -1334,9 +1333,9 @@ func NewValidateKeyResultOK(body *ValidateKeyResponseBody) *keys.ValidateKeyResu
 	return v
 }
 
-// NewValidateKeyUnauthorized builds a keys service validateKey endpoint
+// NewVerifyKeyUnauthorized builds a keys service verifyKey endpoint
 // unauthorized error.
-func NewValidateKeyUnauthorized(body *ValidateKeyUnauthorizedResponseBody) *goa.ServiceError {
+func NewVerifyKeyUnauthorized(body *VerifyKeyUnauthorizedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1349,9 +1348,9 @@ func NewValidateKeyUnauthorized(body *ValidateKeyUnauthorizedResponseBody) *goa.
 	return v
 }
 
-// NewValidateKeyForbidden builds a keys service validateKey endpoint forbidden
+// NewVerifyKeyForbidden builds a keys service verifyKey endpoint forbidden
 // error.
-func NewValidateKeyForbidden(body *ValidateKeyForbiddenResponseBody) *goa.ServiceError {
+func NewVerifyKeyForbidden(body *VerifyKeyForbiddenResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1364,24 +1363,9 @@ func NewValidateKeyForbidden(body *ValidateKeyForbiddenResponseBody) *goa.Servic
 	return v
 }
 
-// NewValidateKeyBadRequest builds a keys service validateKey endpoint
-// bad_request error.
-func NewValidateKeyBadRequest(body *ValidateKeyBadRequestResponseBody) *goa.ServiceError {
-	v := &goa.ServiceError{
-		Name:      *body.Name,
-		ID:        *body.ID,
-		Message:   *body.Message,
-		Temporary: *body.Temporary,
-		Timeout:   *body.Timeout,
-		Fault:     *body.Fault,
-	}
-
-	return v
-}
-
-// NewValidateKeyNotFound builds a keys service validateKey endpoint not_found
+// NewVerifyKeyBadRequest builds a keys service verifyKey endpoint bad_request
 // error.
-func NewValidateKeyNotFound(body *ValidateKeyNotFoundResponseBody) *goa.ServiceError {
+func NewVerifyKeyBadRequest(body *VerifyKeyBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1394,9 +1378,9 @@ func NewValidateKeyNotFound(body *ValidateKeyNotFoundResponseBody) *goa.ServiceE
 	return v
 }
 
-// NewValidateKeyConflict builds a keys service validateKey endpoint conflict
+// NewVerifyKeyNotFound builds a keys service verifyKey endpoint not_found
 // error.
-func NewValidateKeyConflict(body *ValidateKeyConflictResponseBody) *goa.ServiceError {
+func NewVerifyKeyNotFound(body *VerifyKeyNotFoundResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1409,9 +1393,23 @@ func NewValidateKeyConflict(body *ValidateKeyConflictResponseBody) *goa.ServiceE
 	return v
 }
 
-// NewValidateKeyUnsupportedMedia builds a keys service validateKey endpoint
+// NewVerifyKeyConflict builds a keys service verifyKey endpoint conflict error.
+func NewVerifyKeyConflict(body *VerifyKeyConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewVerifyKeyUnsupportedMedia builds a keys service verifyKey endpoint
 // unsupported_media error.
-func NewValidateKeyUnsupportedMedia(body *ValidateKeyUnsupportedMediaResponseBody) *goa.ServiceError {
+func NewVerifyKeyUnsupportedMedia(body *VerifyKeyUnsupportedMediaResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1424,9 +1422,8 @@ func NewValidateKeyUnsupportedMedia(body *ValidateKeyUnsupportedMediaResponseBod
 	return v
 }
 
-// NewValidateKeyInvalid builds a keys service validateKey endpoint invalid
-// error.
-func NewValidateKeyInvalid(body *ValidateKeyInvalidResponseBody) *goa.ServiceError {
+// NewVerifyKeyInvalid builds a keys service verifyKey endpoint invalid error.
+func NewVerifyKeyInvalid(body *VerifyKeyInvalidResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1439,9 +1436,9 @@ func NewValidateKeyInvalid(body *ValidateKeyInvalidResponseBody) *goa.ServiceErr
 	return v
 }
 
-// NewValidateKeyInvariantViolation builds a keys service validateKey endpoint
+// NewVerifyKeyInvariantViolation builds a keys service verifyKey endpoint
 // invariant_violation error.
-func NewValidateKeyInvariantViolation(body *ValidateKeyInvariantViolationResponseBody) *goa.ServiceError {
+func NewVerifyKeyInvariantViolation(body *VerifyKeyInvariantViolationResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1454,9 +1451,9 @@ func NewValidateKeyInvariantViolation(body *ValidateKeyInvariantViolationRespons
 	return v
 }
 
-// NewValidateKeyUnexpected builds a keys service validateKey endpoint
-// unexpected error.
-func NewValidateKeyUnexpected(body *ValidateKeyUnexpectedResponseBody) *goa.ServiceError {
+// NewVerifyKeyUnexpected builds a keys service verifyKey endpoint unexpected
+// error.
+func NewVerifyKeyUnexpected(body *VerifyKeyUnexpectedResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1469,9 +1466,9 @@ func NewValidateKeyUnexpected(body *ValidateKeyUnexpectedResponseBody) *goa.Serv
 	return v
 }
 
-// NewValidateKeyGatewayError builds a keys service validateKey endpoint
+// NewVerifyKeyGatewayError builds a keys service verifyKey endpoint
 // gateway_error error.
-func NewValidateKeyGatewayError(body *ValidateKeyGatewayErrorResponseBody) *goa.ServiceError {
+func NewVerifyKeyGatewayError(body *VerifyKeyGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -1536,9 +1533,9 @@ func ValidateListKeysResponseBody(body *ListKeysResponseBody) (err error) {
 	return
 }
 
-// ValidateValidateKeyResponseBody runs the validations defined on
-// ValidateKeyResponseBody
-func ValidateValidateKeyResponseBody(body *ValidateKeyResponseBody) (err error) {
+// ValidateVerifyKeyResponseBody runs the validations defined on
+// VerifyKeyResponseBody
+func ValidateVerifyKeyResponseBody(body *VerifyKeyResponseBody) (err error) {
 	if body.Organization == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization", "body"))
 	}
@@ -2280,9 +2277,9 @@ func ValidateRevokeKeyGatewayErrorResponseBody(body *RevokeKeyGatewayErrorRespon
 	return
 }
 
-// ValidateValidateKeyUnauthorizedResponseBody runs the validations defined on
-// validateKey_unauthorized_response_body
-func ValidateValidateKeyUnauthorizedResponseBody(body *ValidateKeyUnauthorizedResponseBody) (err error) {
+// ValidateVerifyKeyUnauthorizedResponseBody runs the validations defined on
+// verifyKey_unauthorized_response_body
+func ValidateVerifyKeyUnauthorizedResponseBody(body *VerifyKeyUnauthorizedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2304,9 +2301,9 @@ func ValidateValidateKeyUnauthorizedResponseBody(body *ValidateKeyUnauthorizedRe
 	return
 }
 
-// ValidateValidateKeyForbiddenResponseBody runs the validations defined on
-// validateKey_forbidden_response_body
-func ValidateValidateKeyForbiddenResponseBody(body *ValidateKeyForbiddenResponseBody) (err error) {
+// ValidateVerifyKeyForbiddenResponseBody runs the validations defined on
+// verifyKey_forbidden_response_body
+func ValidateVerifyKeyForbiddenResponseBody(body *VerifyKeyForbiddenResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2328,9 +2325,9 @@ func ValidateValidateKeyForbiddenResponseBody(body *ValidateKeyForbiddenResponse
 	return
 }
 
-// ValidateValidateKeyBadRequestResponseBody runs the validations defined on
-// validateKey_bad_request_response_body
-func ValidateValidateKeyBadRequestResponseBody(body *ValidateKeyBadRequestResponseBody) (err error) {
+// ValidateVerifyKeyBadRequestResponseBody runs the validations defined on
+// verifyKey_bad_request_response_body
+func ValidateVerifyKeyBadRequestResponseBody(body *VerifyKeyBadRequestResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2352,9 +2349,9 @@ func ValidateValidateKeyBadRequestResponseBody(body *ValidateKeyBadRequestRespon
 	return
 }
 
-// ValidateValidateKeyNotFoundResponseBody runs the validations defined on
-// validateKey_not_found_response_body
-func ValidateValidateKeyNotFoundResponseBody(body *ValidateKeyNotFoundResponseBody) (err error) {
+// ValidateVerifyKeyNotFoundResponseBody runs the validations defined on
+// verifyKey_not_found_response_body
+func ValidateVerifyKeyNotFoundResponseBody(body *VerifyKeyNotFoundResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2376,9 +2373,9 @@ func ValidateValidateKeyNotFoundResponseBody(body *ValidateKeyNotFoundResponseBo
 	return
 }
 
-// ValidateValidateKeyConflictResponseBody runs the validations defined on
-// validateKey_conflict_response_body
-func ValidateValidateKeyConflictResponseBody(body *ValidateKeyConflictResponseBody) (err error) {
+// ValidateVerifyKeyConflictResponseBody runs the validations defined on
+// verifyKey_conflict_response_body
+func ValidateVerifyKeyConflictResponseBody(body *VerifyKeyConflictResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2400,9 +2397,9 @@ func ValidateValidateKeyConflictResponseBody(body *ValidateKeyConflictResponseBo
 	return
 }
 
-// ValidateValidateKeyUnsupportedMediaResponseBody runs the validations defined
-// on validateKey_unsupported_media_response_body
-func ValidateValidateKeyUnsupportedMediaResponseBody(body *ValidateKeyUnsupportedMediaResponseBody) (err error) {
+// ValidateVerifyKeyUnsupportedMediaResponseBody runs the validations defined
+// on verifyKey_unsupported_media_response_body
+func ValidateVerifyKeyUnsupportedMediaResponseBody(body *VerifyKeyUnsupportedMediaResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2424,9 +2421,9 @@ func ValidateValidateKeyUnsupportedMediaResponseBody(body *ValidateKeyUnsupporte
 	return
 }
 
-// ValidateValidateKeyInvalidResponseBody runs the validations defined on
-// validateKey_invalid_response_body
-func ValidateValidateKeyInvalidResponseBody(body *ValidateKeyInvalidResponseBody) (err error) {
+// ValidateVerifyKeyInvalidResponseBody runs the validations defined on
+// verifyKey_invalid_response_body
+func ValidateVerifyKeyInvalidResponseBody(body *VerifyKeyInvalidResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2448,9 +2445,9 @@ func ValidateValidateKeyInvalidResponseBody(body *ValidateKeyInvalidResponseBody
 	return
 }
 
-// ValidateValidateKeyInvariantViolationResponseBody runs the validations
-// defined on validateKey_invariant_violation_response_body
-func ValidateValidateKeyInvariantViolationResponseBody(body *ValidateKeyInvariantViolationResponseBody) (err error) {
+// ValidateVerifyKeyInvariantViolationResponseBody runs the validations defined
+// on verifyKey_invariant_violation_response_body
+func ValidateVerifyKeyInvariantViolationResponseBody(body *VerifyKeyInvariantViolationResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2472,9 +2469,9 @@ func ValidateValidateKeyInvariantViolationResponseBody(body *ValidateKeyInvarian
 	return
 }
 
-// ValidateValidateKeyUnexpectedResponseBody runs the validations defined on
-// validateKey_unexpected_response_body
-func ValidateValidateKeyUnexpectedResponseBody(body *ValidateKeyUnexpectedResponseBody) (err error) {
+// ValidateVerifyKeyUnexpectedResponseBody runs the validations defined on
+// verifyKey_unexpected_response_body
+func ValidateVerifyKeyUnexpectedResponseBody(body *VerifyKeyUnexpectedResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -2496,9 +2493,9 @@ func ValidateValidateKeyUnexpectedResponseBody(body *ValidateKeyUnexpectedRespon
 	return
 }
 
-// ValidateValidateKeyGatewayErrorResponseBody runs the validations defined on
-// validateKey_gateway_error_response_body
-func ValidateValidateKeyGatewayErrorResponseBody(body *ValidateKeyGatewayErrorResponseBody) (err error) {
+// ValidateVerifyKeyGatewayErrorResponseBody runs the validations defined on
+// verifyKey_gateway_error_response_body
+func ValidateVerifyKeyGatewayErrorResponseBody(body *VerifyKeyGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

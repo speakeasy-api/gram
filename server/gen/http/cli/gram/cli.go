@@ -50,7 +50,7 @@ func UsageCommands() []string {
 		"environments (create-environment|list-environments|update-environment|delete-environment)",
 		"instances get-instance",
 		"integrations (get|list)",
-		"keys (create-key|list-keys|revoke-key|validate-key)",
+		"keys (create-key|list-keys|revoke-key|verify-key)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"projects (create-project|list-projects|set-logo)",
@@ -288,8 +288,8 @@ func ParseEndpoint(
 		keysRevokeKeyIDFlag           = keysRevokeKeyFlags.String("id", "REQUIRED", "")
 		keysRevokeKeySessionTokenFlag = keysRevokeKeyFlags.String("session-token", "", "")
 
-		keysValidateKeyFlags           = flag.NewFlagSet("validate-key", flag.ExitOnError)
-		keysValidateKeyApikeyTokenFlag = keysValidateKeyFlags.String("apikey-token", "", "")
+		keysVerifyKeyFlags           = flag.NewFlagSet("verify-key", flag.ExitOnError)
+		keysVerifyKeyApikeyTokenFlag = keysVerifyKeyFlags.String("apikey-token", "", "")
 
 		mcpMetadataFlags = flag.NewFlagSet("mcp-metadata", flag.ContinueOnError)
 
@@ -570,7 +570,7 @@ func ParseEndpoint(
 	keysCreateKeyFlags.Usage = keysCreateKeyUsage
 	keysListKeysFlags.Usage = keysListKeysUsage
 	keysRevokeKeyFlags.Usage = keysRevokeKeyUsage
-	keysValidateKeyFlags.Usage = keysValidateKeyUsage
+	keysVerifyKeyFlags.Usage = keysVerifyKeyUsage
 
 	mcpMetadataFlags.Usage = mcpMetadataUsage
 	mcpMetadataGetMcpMetadataFlags.Usage = mcpMetadataGetMcpMetadataUsage
@@ -846,8 +846,8 @@ func ParseEndpoint(
 			case "revoke-key":
 				epf = keysRevokeKeyFlags
 
-			case "validate-key":
-				epf = keysValidateKeyFlags
+			case "verify-key":
+				epf = keysVerifyKeyFlags
 
 			}
 
@@ -1181,9 +1181,9 @@ func ParseEndpoint(
 			case "revoke-key":
 				endpoint = c.RevokeKey()
 				data, err = keysc.BuildRevokeKeyPayload(*keysRevokeKeyIDFlag, *keysRevokeKeySessionTokenFlag)
-			case "validate-key":
-				endpoint = c.ValidateKey()
-				data, err = keysc.BuildValidateKeyPayload(*keysValidateKeyApikeyTokenFlag)
+			case "verify-key":
+				endpoint = c.VerifyKey()
+				data, err = keysc.BuildVerifyKeyPayload(*keysVerifyKeyApikeyTokenFlag)
 			}
 		case "mcp-metadata":
 			c := mcpmetadatac.NewClient(scheme, host, doer, enc, dec, restore)
@@ -2420,7 +2420,7 @@ func keysUsage() {
 	fmt.Fprintln(os.Stderr, `    create-key: Create a new api key`)
 	fmt.Fprintln(os.Stderr, `    list-keys: List all api keys for an organization`)
 	fmt.Fprintln(os.Stderr, `    revoke-key: Revoke a api key`)
-	fmt.Fprintln(os.Stderr, `    validate-key: Validate an api key`)
+	fmt.Fprintln(os.Stderr, `    verify-key: Verify an api key`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s keys COMMAND --help\n", os.Args[0])
@@ -2493,15 +2493,15 @@ func keysRevokeKeyUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `keys revoke-key --id "Cupiditate sit commodi quisquam velit neque." --session-token "Ratione magni assumenda et."`)
 }
 
-func keysValidateKeyUsage() {
+func keysVerifyKeyUsage() {
 	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] keys validate-key", os.Args[0])
+	fmt.Fprintf(os.Stderr, "%s [flags] keys verify-key", os.Args[0])
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Validate an api key`)
+	fmt.Fprintln(os.Stderr, `Verify an api key`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
@@ -2509,7 +2509,7 @@ func keysValidateKeyUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `keys validate-key --apikey-token "Et delectus voluptatem nemo veniam doloribus officia."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `keys verify-key --apikey-token "Et delectus voluptatem nemo veniam doloribus officia."`)
 }
 
 // mcpMetadataUsage displays the usage of the mcp-metadata command and its

@@ -16,10 +16,10 @@ import (
 
 // Endpoints wraps the "keys" service endpoints.
 type Endpoints struct {
-	CreateKey   goa.Endpoint
-	ListKeys    goa.Endpoint
-	RevokeKey   goa.Endpoint
-	ValidateKey goa.Endpoint
+	CreateKey goa.Endpoint
+	ListKeys  goa.Endpoint
+	RevokeKey goa.Endpoint
+	VerifyKey goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "keys" service with endpoints.
@@ -27,10 +27,10 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateKey:   NewCreateKeyEndpoint(s, a.APIKeyAuth),
-		ListKeys:    NewListKeysEndpoint(s, a.APIKeyAuth),
-		RevokeKey:   NewRevokeKeyEndpoint(s, a.APIKeyAuth),
-		ValidateKey: NewValidateKeyEndpoint(s, a.APIKeyAuth),
+		CreateKey: NewCreateKeyEndpoint(s, a.APIKeyAuth),
+		ListKeys:  NewListKeysEndpoint(s, a.APIKeyAuth),
+		RevokeKey: NewRevokeKeyEndpoint(s, a.APIKeyAuth),
+		VerifyKey: NewVerifyKeyEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -39,7 +39,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateKey = m(e.CreateKey)
 	e.ListKeys = m(e.ListKeys)
 	e.RevokeKey = m(e.RevokeKey)
-	e.ValidateKey = m(e.ValidateKey)
+	e.VerifyKey = m(e.VerifyKey)
 }
 
 // NewCreateKeyEndpoint returns an endpoint function that calls the method
@@ -111,11 +111,11 @@ func NewRevokeKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 	}
 }
 
-// NewValidateKeyEndpoint returns an endpoint function that calls the method
-// "validateKey" of service "keys".
-func NewValidateKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+// NewVerifyKeyEndpoint returns an endpoint function that calls the method
+// "verifyKey" of service "keys".
+func NewVerifyKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ValidateKeyPayload)
+		p := req.(*VerifyKeyPayload)
 		var err error
 		sc := security.APIKeyScheme{
 			Name:           "apikey",
@@ -130,6 +130,6 @@ func NewValidateKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa
 		if err != nil {
 			return nil, err
 		}
-		return s.ValidateKey(ctx, p)
+		return s.VerifyKey(ctx, p)
 	}
 }

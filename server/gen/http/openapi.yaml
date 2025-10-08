@@ -2894,10 +2894,10 @@ paths:
             x-speakeasy-name-override: revokeById
             x-speakeasy-react-hook:
                 name: RevokeAPIKey
-    /rpc/keys.validate:
+    /rpc/keys.verify:
         get:
-            description: Validate an api key
-            operationId: keys#validateKey
+            description: Verify an api key
+            operationId: keys#verifyKey
             parameters:
                 - description: API Key header
                   in: header
@@ -2915,44 +2915,44 @@ paths:
                 "400":
                     description: Bad Request response.
                     schema:
-                        $ref: '#/definitions/KeysValidateKeyBadRequestResponseBody'
+                        $ref: '#/definitions/KeysVerifyKeyBadRequestResponseBody'
                 "401":
                     description: Unauthorized response.
                     schema:
-                        $ref: '#/definitions/KeysValidateKeyUnauthorizedResponseBody'
+                        $ref: '#/definitions/KeysVerifyKeyUnauthorizedResponseBody'
                 "403":
                     description: Forbidden response.
                     schema:
-                        $ref: '#/definitions/KeysValidateKeyForbiddenResponseBody'
+                        $ref: '#/definitions/KeysVerifyKeyForbiddenResponseBody'
                 "404":
                     description: Not Found response.
                     schema:
-                        $ref: '#/definitions/KeysValidateKeyNotFoundResponseBody'
+                        $ref: '#/definitions/KeysVerifyKeyNotFoundResponseBody'
                 "409":
                     description: Conflict response.
                     schema:
-                        $ref: '#/definitions/KeysValidateKeyConflictResponseBody'
+                        $ref: '#/definitions/KeysVerifyKeyConflictResponseBody'
                 "415":
                     description: Unsupported Media Type response.
                     schema:
-                        $ref: '#/definitions/KeysValidateKeyUnsupportedMediaResponseBody'
+                        $ref: '#/definitions/KeysVerifyKeyUnsupportedMediaResponseBody'
                 "422":
                     description: Unprocessable Entity response.
                     schema:
-                        $ref: '#/definitions/KeysValidateKeyInvalidResponseBody'
+                        $ref: '#/definitions/KeysVerifyKeyInvalidResponseBody'
                 "500":
                     description: Internal Server Error response.
                     schema:
-                        $ref: '#/definitions/KeysValidateKeyUnexpectedResponseBody'
+                        $ref: '#/definitions/KeysVerifyKeyUnexpectedResponseBody'
                 "502":
                     description: Bad Gateway response.
                     schema:
-                        $ref: '#/definitions/KeysValidateKeyGatewayErrorResponseBody'
+                        $ref: '#/definitions/KeysVerifyKeyGatewayErrorResponseBody'
             schemes:
                 - http
             security:
                 - apikey_header_Gram-Key: []
-            summary: validateKey keys
+            summary: verifyKey keys
             tags:
                 - keys
             x-speakeasy-name-override: validate
@@ -25503,7 +25503,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    KeysValidateKeyBadRequestResponseBody:
+    KeysVerifyKeyBadRequestResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -25546,7 +25546,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    KeysValidateKeyConflictResponseBody:
+    KeysVerifyKeyConflictResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -25589,7 +25589,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    KeysValidateKeyForbiddenResponseBody:
+    KeysVerifyKeyForbiddenResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -25632,7 +25632,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    KeysValidateKeyGatewayErrorResponseBody:
+    KeysVerifyKeyGatewayErrorResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -25675,7 +25675,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    KeysValidateKeyInvalidResponseBody:
+    KeysVerifyKeyInvalidResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -25718,7 +25718,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    KeysValidateKeyInvariantViolationResponseBody:
+    KeysVerifyKeyInvariantViolationResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -25761,7 +25761,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    KeysValidateKeyNotFoundResponseBody:
+    KeysVerifyKeyNotFoundResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -25804,7 +25804,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    KeysValidateKeyUnauthorizedResponseBody:
+    KeysVerifyKeyUnauthorizedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -25847,7 +25847,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    KeysValidateKeyUnexpectedResponseBody:
+    KeysVerifyKeyUnexpectedResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:
@@ -25890,7 +25890,7 @@ definitions:
             - temporary
             - timeout
             - fault
-    KeysValidateKeyUnsupportedMediaResponseBody:
+    KeysVerifyKeyUnsupportedMediaResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object
         properties:

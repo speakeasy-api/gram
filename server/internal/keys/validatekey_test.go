@@ -11,6 +11,8 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
 
+var tok string = "gram_live_test_token"
+
 func TestKeysService_ValidateKey(t *testing.T) {
 	t.Parallel()
 
@@ -19,7 +21,7 @@ func TestKeysService_ValidateKey(t *testing.T) {
 
 		ctx, ti := newTestKeysService(t)
 
-		result, err := ti.service.ValidateKey(ctx, &gen.ValidateKeyPayload{})
+		result, err := ti.service.VerifyKey(ctx, &gen.VerifyKeyPayload{ApikeyToken: &tok})
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
@@ -67,7 +69,7 @@ func TestKeysService_ValidateKey(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		result, err := ti.service.ValidateKey(ctx, &gen.ValidateKeyPayload{})
+		result, err := ti.service.VerifyKey(ctx, &gen.VerifyKeyPayload{ApikeyToken: &tok})
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
@@ -91,7 +93,7 @@ func TestKeysService_ValidateKey(t *testing.T) {
 		// Create a context without auth
 		ctxWithoutAuth := t.Context()
 
-		_, err := ti.service.ValidateKey(ctxWithoutAuth, &gen.ValidateKeyPayload{})
+		_, err := ti.service.VerifyKey(ctxWithoutAuth, &gen.VerifyKeyPayload{ApikeyToken: &tok})
 		require.Error(t, err)
 
 		var oopsErr *oops.ShareableError
@@ -108,7 +110,7 @@ func TestKeysService_ValidateKey(t *testing.T) {
 		require.True(t, ok)
 		require.NotNil(t, authCtx)
 
-		result, err := ti.service.ValidateKey(ctx, &gen.ValidateKeyPayload{})
+		result, err := ti.service.VerifyKey(ctx, &gen.VerifyKeyPayload{ApikeyToken: &tok})
 		require.NoError(t, err)
 
 		// Verify organization matches auth context

@@ -621,22 +621,22 @@ func EncodeRevokeKeyError(encoder func(context.Context, http.ResponseWriter) goa
 	}
 }
 
-// EncodeValidateKeyResponse returns an encoder for responses returned by the
-// keys validateKey endpoint.
-func EncodeValidateKeyResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeVerifyKeyResponse returns an encoder for responses returned by the
+// keys verifyKey endpoint.
+func EncodeVerifyKeyResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
 		res, _ := v.(*keys.ValidateKeyResult)
 		enc := encoder(ctx, w)
-		body := NewValidateKeyResponseBody(res)
+		body := NewVerifyKeyResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeValidateKeyRequest returns a decoder for requests sent to the keys
-// validateKey endpoint.
-func DecodeValidateKeyRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*keys.ValidateKeyPayload, error) {
-	return func(r *http.Request) (*keys.ValidateKeyPayload, error) {
+// DecodeVerifyKeyRequest returns a decoder for requests sent to the keys
+// verifyKey endpoint.
+func DecodeVerifyKeyRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*keys.VerifyKeyPayload, error) {
+	return func(r *http.Request) (*keys.VerifyKeyPayload, error) {
 		var (
 			apikeyToken *string
 		)
@@ -644,7 +644,7 @@ func DecodeValidateKeyRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
 		}
-		payload := NewValidateKeyPayload(apikeyToken)
+		payload := NewVerifyKeyPayload(apikeyToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -657,9 +657,9 @@ func DecodeValidateKeyRequest(mux goahttp.Muxer, decoder func(*http.Request) goa
 	}
 }
 
-// EncodeValidateKeyError returns an encoder for errors returned by the
-// validateKey keys endpoint.
-func EncodeValidateKeyError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeVerifyKeyError returns an encoder for errors returned by the verifyKey
+// keys endpoint.
+func EncodeVerifyKeyError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -676,7 +676,7 @@ func EncodeValidateKeyError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewValidateKeyUnauthorizedResponseBody(res)
+				body = NewVerifyKeyUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -690,7 +690,7 @@ func EncodeValidateKeyError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewValidateKeyForbiddenResponseBody(res)
+				body = NewVerifyKeyForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -704,7 +704,7 @@ func EncodeValidateKeyError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewValidateKeyBadRequestResponseBody(res)
+				body = NewVerifyKeyBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -718,7 +718,7 @@ func EncodeValidateKeyError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewValidateKeyNotFoundResponseBody(res)
+				body = NewVerifyKeyNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -732,7 +732,7 @@ func EncodeValidateKeyError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewValidateKeyConflictResponseBody(res)
+				body = NewVerifyKeyConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -746,7 +746,7 @@ func EncodeValidateKeyError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewValidateKeyUnsupportedMediaResponseBody(res)
+				body = NewVerifyKeyUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -760,7 +760,7 @@ func EncodeValidateKeyError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewValidateKeyInvalidResponseBody(res)
+				body = NewVerifyKeyInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -774,7 +774,7 @@ func EncodeValidateKeyError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewValidateKeyInvariantViolationResponseBody(res)
+				body = NewVerifyKeyInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -788,7 +788,7 @@ func EncodeValidateKeyError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewValidateKeyUnexpectedResponseBody(res)
+				body = NewVerifyKeyUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -802,7 +802,7 @@ func EncodeValidateKeyError(encoder func(context.Context, http.ResponseWriter) g
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewValidateKeyGatewayErrorResponseBody(res)
+				body = NewVerifyKeyGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)

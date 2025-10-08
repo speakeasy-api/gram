@@ -22,7 +22,7 @@ func RevokeKeyKeysPath() string {
 	return "/rpc/keys.revoke"
 }
 
-// ValidateKeyKeysPath returns the URL path to the keys service validateKey HTTP endpoint.
-func ValidateKeyKeysPath() string {
-	return "/rpc/keys.validate"
+// VerifyKeyKeysPath returns the URL path to the keys service verifyKey HTTP endpoint.
+func VerifyKeyKeysPath() string {
+	return "/rpc/keys.verify"
 }

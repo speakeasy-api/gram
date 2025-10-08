@@ -19,11 +19,11 @@ import (
 
 // Server lists the keys service endpoint HTTP handlers.
 type Server struct {
-	Mounts      []*MountPoint
-	CreateKey   http.Handler
-	ListKeys    http.Handler
-	RevokeKey   http.Handler
-	ValidateKey http.Handler
+	Mounts    []*MountPoint
+	CreateKey http.Handler
+	ListKeys  http.Handler
+	RevokeKey http.Handler
+	VerifyKey http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -56,12 +56,12 @@ func New(
 			{"CreateKey", "POST", "/rpc/keys.create"},
 			{"ListKeys", "GET", "/rpc/keys.list"},
 			{"RevokeKey", "DELETE", "/rpc/keys.revoke"},
-			{"ValidateKey", "GET", "/rpc/keys.validate"},
+			{"VerifyKey", "GET", "/rpc/keys.verify"},
 		},
-		CreateKey:   NewCreateKeyHandler(e.CreateKey, mux, decoder, encoder, errhandler, formatter),
-		ListKeys:    NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
-		RevokeKey:   NewRevokeKeyHandler(e.RevokeKey, mux, decoder, encoder, errhandler, formatter),
-		ValidateKey: NewValidateKeyHandler(e.ValidateKey, mux, decoder, encoder, errhandler, formatter),
+		CreateKey: NewCreateKeyHandler(e.CreateKey, mux, decoder, encoder, errhandler, formatter),
+		ListKeys:  NewListKeysHandler(e.ListKeys, mux, decoder, encoder, errhandler, formatter),
+		RevokeKey: NewRevokeKeyHandler(e.RevokeKey, mux, decoder, encoder, errhandler, formatter),
+		VerifyKey: NewVerifyKeyHandler(e.VerifyKey, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -73,7 +73,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreateKey = m(s.CreateKey)
 	s.ListKeys = m(s.ListKeys)
 	s.RevokeKey = m(s.RevokeKey)
-	s.ValidateKey = m(s.ValidateKey)
+	s.VerifyKey = m(s.VerifyKey)
 }
 
 // MethodNames returns the methods served.
@@ -84,7 +84,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreateKeyHandler(mux, h.CreateKey)
 	MountListKeysHandler(mux, h.ListKeys)
 	MountRevokeKeyHandler(mux, h.RevokeKey)
-	MountValidateKeyHandler(mux, h.ValidateKey)
+	MountVerifyKeyHandler(mux, h.VerifyKey)
 }
 
 // Mount configures the mux to serve the keys endpoints.
@@ -251,21 +251,21 @@ func NewRevokeKeyHandler(
 	})
 }
 
-// MountValidateKeyHandler configures the mux to serve the "keys" service
-// "validateKey" endpoint.
-func MountValidateKeyHandler(mux goahttp.Muxer, h http.Handler) {
+// MountVerifyKeyHandler configures the mux to serve the "keys" service
+// "verifyKey" endpoint.
+func MountVerifyKeyHandler(mux goahttp.Muxer, h http.Handler) {
 	f, ok := h.(http.HandlerFunc)
 	if !ok {
 		f = func(w http.ResponseWriter, r *http.Request) {
 			h.ServeHTTP(w, r)
 		}
 	}
-	mux.Handle("GET", "/rpc/keys.validate", otelhttp.WithRouteTag("/rpc/keys.validate", f).ServeHTTP)
+	mux.Handle("GET", "/rpc/keys.verify", otelhttp.WithRouteTag("/rpc/keys.verify", f).ServeHTTP)
 }
 
-// NewValidateKeyHandler creates a HTTP handler which loads the HTTP request
-// and calls the "keys" service "validateKey" endpoint.
-func NewValidateKeyHandler(
+// NewVerifyKeyHandler creates a HTTP handler which loads the HTTP request and
+// calls the "keys" service "verifyKey" endpoint.
+func NewVerifyKeyHandler(
 	endpoint goa.Endpoint,
 	mux goahttp.Muxer,
 	decoder func(*http.Request) goahttp.Decoder,
@@ -274,13 +274,13 @@ func NewValidateKeyHandler(
 	formatter func(ctx context.Context, err error) goahttp.Statuser,
 ) http.Handler {
 	var (
-		decodeRequest  = DecodeValidateKeyRequest(mux, decoder)
-		encodeResponse = EncodeValidateKeyResponse(encoder)
-		encodeError    = EncodeValidateKeyError(encoder, formatter)
+		decodeRequest  = DecodeVerifyKeyRequest(mux, decoder)
+		encodeResponse = EncodeVerifyKeyResponse(encoder)
+		encodeError    = EncodeVerifyKeyError(encoder, formatter)
 	)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "validateKey")
+		ctx = context.WithValue(ctx, goa.MethodKey, "verifyKey")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "keys")
 		payload, err := decodeRequest(r)
 		if err != nil {

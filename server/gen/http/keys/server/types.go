@@ -52,9 +52,9 @@ type ListKeysResponseBody struct {
 	Keys []*KeyResponseBody `form:"keys" json:"keys" xml:"keys"`
 }
 
-// ValidateKeyResponseBody is the type of the "keys" service "validateKey"
-// endpoint HTTP response body.
-type ValidateKeyResponseBody struct {
+// VerifyKeyResponseBody is the type of the "keys" service "verifyKey" endpoint
+// HTTP response body.
+type VerifyKeyResponseBody struct {
 	// The organization the key belongs to
 	Organization *ValidateKeyOrganizationResponseBody `form:"organization" json:"organization" xml:"organization"`
 	// The projects accessible with this key
@@ -601,9 +601,9 @@ type RevokeKeyGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ValidateKeyUnauthorizedResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "unauthorized" error.
-type ValidateKeyUnauthorizedResponseBody struct {
+// VerifyKeyUnauthorizedResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "unauthorized" error.
+type VerifyKeyUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -619,9 +619,9 @@ type ValidateKeyUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ValidateKeyForbiddenResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "forbidden" error.
-type ValidateKeyForbiddenResponseBody struct {
+// VerifyKeyForbiddenResponseBody is the type of the "keys" service "verifyKey"
+// endpoint HTTP response body for the "forbidden" error.
+type VerifyKeyForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -637,9 +637,9 @@ type ValidateKeyForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ValidateKeyBadRequestResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "bad_request" error.
-type ValidateKeyBadRequestResponseBody struct {
+// VerifyKeyBadRequestResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "bad_request" error.
+type VerifyKeyBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -655,9 +655,9 @@ type ValidateKeyBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ValidateKeyNotFoundResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "not_found" error.
-type ValidateKeyNotFoundResponseBody struct {
+// VerifyKeyNotFoundResponseBody is the type of the "keys" service "verifyKey"
+// endpoint HTTP response body for the "not_found" error.
+type VerifyKeyNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -673,9 +673,9 @@ type ValidateKeyNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ValidateKeyConflictResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "conflict" error.
-type ValidateKeyConflictResponseBody struct {
+// VerifyKeyConflictResponseBody is the type of the "keys" service "verifyKey"
+// endpoint HTTP response body for the "conflict" error.
+type VerifyKeyConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -691,9 +691,9 @@ type ValidateKeyConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ValidateKeyUnsupportedMediaResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "unsupported_media" error.
-type ValidateKeyUnsupportedMediaResponseBody struct {
+// VerifyKeyUnsupportedMediaResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "unsupported_media" error.
+type VerifyKeyUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -709,9 +709,9 @@ type ValidateKeyUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ValidateKeyInvalidResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "invalid" error.
-type ValidateKeyInvalidResponseBody struct {
+// VerifyKeyInvalidResponseBody is the type of the "keys" service "verifyKey"
+// endpoint HTTP response body for the "invalid" error.
+type VerifyKeyInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -727,10 +727,9 @@ type ValidateKeyInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ValidateKeyInvariantViolationResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "invariant_violation"
-// error.
-type ValidateKeyInvariantViolationResponseBody struct {
+// VerifyKeyInvariantViolationResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "invariant_violation" error.
+type VerifyKeyInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -746,9 +745,9 @@ type ValidateKeyInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ValidateKeyUnexpectedResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "unexpected" error.
-type ValidateKeyUnexpectedResponseBody struct {
+// VerifyKeyUnexpectedResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "unexpected" error.
+type VerifyKeyUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -764,9 +763,9 @@ type ValidateKeyUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ValidateKeyGatewayErrorResponseBody is the type of the "keys" service
-// "validateKey" endpoint HTTP response body for the "gateway_error" error.
-type ValidateKeyGatewayErrorResponseBody struct {
+// VerifyKeyGatewayErrorResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "gateway_error" error.
+type VerifyKeyGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -868,10 +867,10 @@ func NewListKeysResponseBody(res *keys.ListKeysResult) *ListKeysResponseBody {
 	return body
 }
 
-// NewValidateKeyResponseBody builds the HTTP response body from the result of
-// the "validateKey" endpoint of the "keys" service.
-func NewValidateKeyResponseBody(res *keys.ValidateKeyResult) *ValidateKeyResponseBody {
-	body := &ValidateKeyResponseBody{}
+// NewVerifyKeyResponseBody builds the HTTP response body from the result of
+// the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyResponseBody(res *keys.ValidateKeyResult) *VerifyKeyResponseBody {
+	body := &VerifyKeyResponseBody{}
 	if res.Organization != nil {
 		body.Organization = marshalKeysValidateKeyOrganizationToValidateKeyOrganizationResponseBody(res.Organization)
 	}
@@ -1306,10 +1305,10 @@ func NewRevokeKeyGatewayErrorResponseBody(res *goa.ServiceError) *RevokeKeyGatew
 	return body
 }
 
-// NewValidateKeyUnauthorizedResponseBody builds the HTTP response body from
-// the result of the "validateKey" endpoint of the "keys" service.
-func NewValidateKeyUnauthorizedResponseBody(res *goa.ServiceError) *ValidateKeyUnauthorizedResponseBody {
-	body := &ValidateKeyUnauthorizedResponseBody{
+// NewVerifyKeyUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyUnauthorizedResponseBody(res *goa.ServiceError) *VerifyKeyUnauthorizedResponseBody {
+	body := &VerifyKeyUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1320,10 +1319,10 @@ func NewValidateKeyUnauthorizedResponseBody(res *goa.ServiceError) *ValidateKeyU
 	return body
 }
 
-// NewValidateKeyForbiddenResponseBody builds the HTTP response body from the
-// result of the "validateKey" endpoint of the "keys" service.
-func NewValidateKeyForbiddenResponseBody(res *goa.ServiceError) *ValidateKeyForbiddenResponseBody {
-	body := &ValidateKeyForbiddenResponseBody{
+// NewVerifyKeyForbiddenResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyForbiddenResponseBody(res *goa.ServiceError) *VerifyKeyForbiddenResponseBody {
+	body := &VerifyKeyForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1334,10 +1333,10 @@ func NewValidateKeyForbiddenResponseBody(res *goa.ServiceError) *ValidateKeyForb
 	return body
 }
 
-// NewValidateKeyBadRequestResponseBody builds the HTTP response body from the
-// result of the "validateKey" endpoint of the "keys" service.
-func NewValidateKeyBadRequestResponseBody(res *goa.ServiceError) *ValidateKeyBadRequestResponseBody {
-	body := &ValidateKeyBadRequestResponseBody{
+// NewVerifyKeyBadRequestResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyBadRequestResponseBody(res *goa.ServiceError) *VerifyKeyBadRequestResponseBody {
+	body := &VerifyKeyBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1348,10 +1347,10 @@ func NewValidateKeyBadRequestResponseBody(res *goa.ServiceError) *ValidateKeyBad
 	return body
 }
 
-// NewValidateKeyNotFoundResponseBody builds the HTTP response body from the
-// result of the "validateKey" endpoint of the "keys" service.
-func NewValidateKeyNotFoundResponseBody(res *goa.ServiceError) *ValidateKeyNotFoundResponseBody {
-	body := &ValidateKeyNotFoundResponseBody{
+// NewVerifyKeyNotFoundResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyNotFoundResponseBody(res *goa.ServiceError) *VerifyKeyNotFoundResponseBody {
+	body := &VerifyKeyNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1362,10 +1361,10 @@ func NewValidateKeyNotFoundResponseBody(res *goa.ServiceError) *ValidateKeyNotFo
 	return body
 }
 
-// NewValidateKeyConflictResponseBody builds the HTTP response body from the
-// result of the "validateKey" endpoint of the "keys" service.
-func NewValidateKeyConflictResponseBody(res *goa.ServiceError) *ValidateKeyConflictResponseBody {
-	body := &ValidateKeyConflictResponseBody{
+// NewVerifyKeyConflictResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyConflictResponseBody(res *goa.ServiceError) *VerifyKeyConflictResponseBody {
+	body := &VerifyKeyConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1376,10 +1375,10 @@ func NewValidateKeyConflictResponseBody(res *goa.ServiceError) *ValidateKeyConfl
 	return body
 }
 
-// NewValidateKeyUnsupportedMediaResponseBody builds the HTTP response body
-// from the result of the "validateKey" endpoint of the "keys" service.
-func NewValidateKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *ValidateKeyUnsupportedMediaResponseBody {
-	body := &ValidateKeyUnsupportedMediaResponseBody{
+// NewVerifyKeyUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *VerifyKeyUnsupportedMediaResponseBody {
+	body := &VerifyKeyUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1390,10 +1389,10 @@ func NewValidateKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *Validate
 	return body
 }
 
-// NewValidateKeyInvalidResponseBody builds the HTTP response body from the
-// result of the "validateKey" endpoint of the "keys" service.
-func NewValidateKeyInvalidResponseBody(res *goa.ServiceError) *ValidateKeyInvalidResponseBody {
-	body := &ValidateKeyInvalidResponseBody{
+// NewVerifyKeyInvalidResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyInvalidResponseBody(res *goa.ServiceError) *VerifyKeyInvalidResponseBody {
+	body := &VerifyKeyInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1404,10 +1403,10 @@ func NewValidateKeyInvalidResponseBody(res *goa.ServiceError) *ValidateKeyInvali
 	return body
 }
 
-// NewValidateKeyInvariantViolationResponseBody builds the HTTP response body
-// from the result of the "validateKey" endpoint of the "keys" service.
-func NewValidateKeyInvariantViolationResponseBody(res *goa.ServiceError) *ValidateKeyInvariantViolationResponseBody {
-	body := &ValidateKeyInvariantViolationResponseBody{
+// NewVerifyKeyInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyInvariantViolationResponseBody(res *goa.ServiceError) *VerifyKeyInvariantViolationResponseBody {
+	body := &VerifyKeyInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1418,10 +1417,10 @@ func NewValidateKeyInvariantViolationResponseBody(res *goa.ServiceError) *Valida
 	return body
 }
 
-// NewValidateKeyUnexpectedResponseBody builds the HTTP response body from the
-// result of the "validateKey" endpoint of the "keys" service.
-func NewValidateKeyUnexpectedResponseBody(res *goa.ServiceError) *ValidateKeyUnexpectedResponseBody {
-	body := &ValidateKeyUnexpectedResponseBody{
+// NewVerifyKeyUnexpectedResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyUnexpectedResponseBody(res *goa.ServiceError) *VerifyKeyUnexpectedResponseBody {
+	body := &VerifyKeyUnexpectedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1432,10 +1431,10 @@ func NewValidateKeyUnexpectedResponseBody(res *goa.ServiceError) *ValidateKeyUne
 	return body
 }
 
-// NewValidateKeyGatewayErrorResponseBody builds the HTTP response body from
-// the result of the "validateKey" endpoint of the "keys" service.
-func NewValidateKeyGatewayErrorResponseBody(res *goa.ServiceError) *ValidateKeyGatewayErrorResponseBody {
-	body := &ValidateKeyGatewayErrorResponseBody{
+// NewVerifyKeyGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyGatewayErrorResponseBody(res *goa.ServiceError) *VerifyKeyGatewayErrorResponseBody {
+	body := &VerifyKeyGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -1477,9 +1476,9 @@ func NewRevokeKeyPayload(id string, sessionToken *string) *keys.RevokeKeyPayload
 	return v
 }
 
-// NewValidateKeyPayload builds a keys service validateKey endpoint payload.
-func NewValidateKeyPayload(apikeyToken *string) *keys.ValidateKeyPayload {
-	v := &keys.ValidateKeyPayload{}
+// NewVerifyKeyPayload builds a keys service verifyKey endpoint payload.
+func NewVerifyKeyPayload(apikeyToken *string) *keys.VerifyKeyPayload {
+	v := &keys.VerifyKeyPayload{}
 	v.ApikeyToken = apikeyToken
 
 	return v

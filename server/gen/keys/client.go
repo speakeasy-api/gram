@@ -15,19 +15,19 @@ import (
 
 // Client is the "keys" service client.
 type Client struct {
-	CreateKeyEndpoint   goa.Endpoint
-	ListKeysEndpoint    goa.Endpoint
-	RevokeKeyEndpoint   goa.Endpoint
-	ValidateKeyEndpoint goa.Endpoint
+	CreateKeyEndpoint goa.Endpoint
+	ListKeysEndpoint  goa.Endpoint
+	RevokeKeyEndpoint goa.Endpoint
+	VerifyKeyEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "keys" service client given the endpoints.
-func NewClient(createKey, listKeys, revokeKey, validateKey goa.Endpoint) *Client {
+func NewClient(createKey, listKeys, revokeKey, verifyKey goa.Endpoint) *Client {
 	return &Client{
-		CreateKeyEndpoint:   createKey,
-		ListKeysEndpoint:    listKeys,
-		RevokeKeyEndpoint:   revokeKey,
-		ValidateKeyEndpoint: validateKey,
+		CreateKeyEndpoint: createKey,
+		ListKeysEndpoint:  listKeys,
+		RevokeKeyEndpoint: revokeKey,
+		VerifyKeyEndpoint: verifyKey,
 	}
 }
 
@@ -93,8 +93,8 @@ func (c *Client) RevokeKey(ctx context.Context, p *RevokeKeyPayload) (err error)
 	return
 }
 
-// ValidateKey calls the "validateKey" endpoint of the "keys" service.
-// ValidateKey may return the following errors:
+// VerifyKey calls the "verifyKey" endpoint of the "keys" service.
+// VerifyKey may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid
@@ -106,9 +106,9 @@ func (c *Client) RevokeKey(ctx context.Context, p *RevokeKeyPayload) (err error)
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ValidateKey(ctx context.Context, p *ValidateKeyPayload) (res *ValidateKeyResult, err error) {
+func (c *Client) VerifyKey(ctx context.Context, p *VerifyKeyPayload) (res *ValidateKeyResult, err error) {
 	var ires any
-	ires, err = c.ValidateKeyEndpoint(ctx, p)
+	ires, err = c.VerifyKeyEndpoint(ctx, p)
 	if err != nil {
 		return
 	}

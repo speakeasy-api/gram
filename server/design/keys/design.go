@@ -74,18 +74,18 @@ var _ = Service("keys", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeAPIKey"}`)
 	})
 
-	Method("validateKey", func() {
-		Description("Validate an api key")
+	Method("verifyKey", func() {
+		Description("Verify an api key")
 
 		Security(security.ByKey)
 
 		Payload(func() {
 			security.ByKeyPayload()
 		})
-		Result(ValidateKeyResult)
+		Result(VerifyKeyResult)
 
 		HTTP(func() {
-			GET("/rpc/keys.validate")
+			GET("/rpc/keys.verify")
 			security.ByKeyHeader()
 			Response(StatusOK)
 		})
@@ -134,7 +134,7 @@ var KeyModel = Type("Key", func() {
 	})
 })
 
-var ValidateKeyResult = Type("ValidateKeyResult", func() {
+var VerifyKeyResult = Type("ValidateKeyResult", func() {
 	Required("organization", "projects")
 
 	Attribute("organization", ValidateKeyOrganization, "The organization the key belongs to")

@@ -3620,9 +3620,9 @@ paths:
             x-speakeasy-name-override: revokeById
             x-speakeasy-react-hook:
                 name: RevokeAPIKey
-    /rpc/keys.validate:
+    /rpc/keys.verify:
         get:
-            description: Validate an api key
+            description: Verify an api key
             operationId: validateAPIKey
             parameters:
                 - allowEmptyValue: true
@@ -3695,7 +3695,7 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
-            summary: validateKey keys
+            summary: verifyKey keys
             tags:
                 - keys
             x-speakeasy-name-override: validate

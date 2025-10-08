@@ -205,9 +205,9 @@ func (s *Service) RevokeKey(ctx context.Context, payload *gen.RevokeKeyPayload) 
 	return nil
 }
 
-func (s *Service) ValidateKey(
+func (s *Service) VerifyKey(
 	ctx context.Context,
-	payload *gen.ValidateKeyPayload,
+	payload *gen.VerifyKeyPayload,
 ) (*gen.ValidateKeyResult, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil {
