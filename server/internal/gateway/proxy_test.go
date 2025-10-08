@@ -21,24 +21,39 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-var sharedToolMetricsClient *toolmetrics.ClickhouseClient
+var (
+	infra *testenv.Environment
+)
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	client, cleanup, err := testenv.NewSharedToolMetricsClient(ctx)
+
+	res, cleanup, err := testenv.Launch(ctx)
 	if err != nil {
-		log.Fatalf("failed to create shared tool metrics client: %v", err)
+		log.Fatalf("Failed to launch test infrastructure: %v", err)
 	}
 
-	sharedToolMetricsClient = client
+	infra = res
 
 	code := m.Run()
 
 	if err = cleanup(); err != nil {
-		log.Fatalf("failed to cleanup clickhouse: %v", err)
+		log.Fatalf("Failed to cleanup test infrastructure: %v", err)
 	}
 
 	os.Exit(code)
+}
+
+func newClickhouseClient(t *testing.T) *toolmetrics.ClickhouseClient {
+	t.Helper()
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	return &toolmetrics.ClickhouseClient{
+		Conn:   chConn,
+		Logger: testenv.NewLogger(t),
+	}
 }
 
 func TestToolProxy_Do_PathParams(t *testing.T) {
@@ -188,6 +203,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Setup test dependencies
 			ctx := context.Background()
+			chClient := newClickhouseClient(t)
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
@@ -247,7 +263,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
-				sharedToolMetricsClient,
+				chClient,
 			)
 
 			// Create response recorder
@@ -273,11 +289,13 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Verify that logs were written to ClickHouse
 			pagination := &toolmetrics.PaginationRequest{
-				PerPage:   10,
-				Sort:      "DESC",
-				Direction: toolmetrics.Next,
+				PerPage:    10,
+				Sort:       "DESC",
+				Direction:  toolmetrics.Next,
+				PrevCursor: "",
+				NextCursor: "",
 			}
-			logs, err := sharedToolMetricsClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
+			logs, err := chClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
 			require.NoError(t, err)
 			require.NotNil(t, logs)
 			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
@@ -339,6 +357,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 
 			// Setup test dependencies
 			ctx := context.Background()
+			chClient := newClickhouseClient(t)
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
@@ -398,7 +417,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
-				sharedToolMetricsClient,
+				chClient,
 			)
 
 			// Create response recorder
@@ -427,11 +446,13 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 
 			// Verify that logs were written to ClickHouse
 			pagination := &toolmetrics.PaginationRequest{
-				PerPage:   10,
-				Sort:      "DESC",
-				Direction: toolmetrics.Next,
+				PerPage:    10,
+				Sort:       "DESC",
+				Direction:  toolmetrics.Next,
+				PrevCursor: "",
+				NextCursor: "",
 			}
-			logs, err := sharedToolMetricsClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
+			logs, err := chClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
 			require.NoError(t, err)
 			require.NotNil(t, logs)
 			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
@@ -721,6 +742,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 
 			// Setup test dependencies
 			ctx := context.Background()
+			chClient := newClickhouseClient(t)
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
@@ -770,7 +792,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
-				sharedToolMetricsClient,
+				chClient,
 			)
 
 			// Create response recorder
@@ -797,11 +819,13 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 
 			// Verify that logs were written to ClickHouse
 			pagination := &toolmetrics.PaginationRequest{
-				PerPage:   10,
-				Sort:      "DESC",
-				Direction: toolmetrics.Next,
+				PerPage:    10,
+				Sort:       "DESC",
+				Direction:  toolmetrics.Next,
+				PrevCursor: "",
+				NextCursor: "",
 			}
-			logs, err := sharedToolMetricsClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
+			logs, err := chClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
 			require.NoError(t, err)
 			require.NotNil(t, logs)
 			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
@@ -952,6 +976,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 
 			// Setup test dependencies
 			ctx := context.Background()
+			chClient := newClickhouseClient(t)
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
@@ -1012,7 +1037,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
-				sharedToolMetricsClient,
+				chClient,
 			)
 
 			// Create response recorder
@@ -1053,11 +1078,13 @@ func TestToolProxy_Do_Body(t *testing.T) {
 
 			// Verify that logs were written to ClickHouse
 			pagination := &toolmetrics.PaginationRequest{
-				PerPage:   10,
-				Sort:      "DESC",
-				Direction: toolmetrics.Next,
+				PerPage:    10,
+				Sort:       "DESC",
+				Direction:  toolmetrics.Next,
+				PrevCursor: "",
+				NextCursor: "",
 			}
-			logs, err := sharedToolMetricsClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
+			logs, err := chClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
 			require.NoError(t, err)
 			require.NotNil(t, logs)
 			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")

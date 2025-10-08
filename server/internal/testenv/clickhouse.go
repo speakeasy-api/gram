@@ -2,9 +2,7 @@ package testenv
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,7 +10,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
+
 	"github.com/testcontainers/testcontainers-go"
 	clickhousecontainer "github.com/testcontainers/testcontainers-go/modules/clickhouse"
 )
@@ -45,7 +43,7 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 	}
 
 	// Connect and run schema
-	conn, err := clickhouse.Open(&clickhouse.Options{
+	conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // third-party library struct with many optional fields
 		Addr: []string{fmt.Sprintf("%s:%s", host, port.Port())},
 		Auth: clickhouse.Auth{
 			Database: "gram",
@@ -64,6 +62,8 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 		return nil, nil, fmt.Errorf("failed to ping clickhouse: %w", err)
 	}
 
+	// Running the schema here because using clickhousecontainer.WithInitScripts() wasn't working for some reason.
+	// I'll add back when I figure out why.
 	// Get the schema file path relative to this file's location
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -72,7 +72,7 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 	schemaPath := filepath.Join(filepath.Dir(filename), "..", "..", "clickhouse", "schema.sql")
 
 	// Read and execute the schema
-	schemaSQL, err := os.ReadFile(schemaPath)
+	schemaSQL, err := os.ReadFile(schemaPath) //nolint:gosec // schemaPath is built from trusted runtime.Caller path
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to read schema file at %s: %w", schemaPath, err)
 	}
@@ -106,7 +106,7 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 			return nil, fmt.Errorf("failed to get clickhouse port: %w", err)
 		}
 
-		conn, err := clickhouse.Open(&clickhouse.Options{
+		conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // third-party library struct with many optional fields
 			Addr: []string{fmt.Sprintf("%s:%s", host, port.Port())},
 			Auth: clickhouse.Auth{
 				Database: "gram",
@@ -122,7 +122,7 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 			defer o11y.NoLogDefer(func() error {
 				if err2 := conn.Close(); err2 != nil {
 					t.Logf("failed to close clickhouse connection: %v", err2)
-					return err2
+					return fmt.Errorf("failed to close clickhouse connection: %w", err2)
 				}
 				return nil
 			})
@@ -130,73 +130,4 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 
 		return conn, nil
 	}
-}
-
-// NewTestClickhouseProvider creates a ClickHouse test container and returns
-// a direct connection and the container for manual lifecycle management.
-// This is intended for use in TestMain where testing.T is not available.
-// The caller is responsible for closing the connection and terminating the container.
-func NewTestClickhouseProvider(ctx context.Context) (clickhouse.Conn, *clickhousecontainer.ClickHouseContainer, error) {
-	container, _, err := NewTestClickhouse(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create clickhouse test container: %w", err)
-	}
-
-	// Get host and port
-	host, err := container.Host(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get clickhouse host: %w", err)
-	}
-
-	port, err := container.MappedPort(ctx, "9000/tcp")
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get clickhouse port: %w", err)
-	}
-
-	// Connect directly
-	conn, err := clickhouse.Open(&clickhouse.Options{
-		Addr: []string{fmt.Sprintf("%s:%s", host, port.Port())},
-		Auth: clickhouse.Auth{
-			Database: "gram",
-			Username: "gram",
-			Password: "gram",
-		},
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to clickhouse: %w", err)
-	}
-
-	return conn, container, nil
-}
-
-// NewSharedToolMetricsClient creates a shared ClickHouse container and tool metrics client
-// for use in TestMain. Returns the client and a cleanup function.
-// This is intended for tests that need a single shared ClickHouse instance across all tests.
-func NewSharedToolMetricsClient(ctx context.Context) (*toolmetrics.ClickhouseClient, func() error, error) {
-	conn, container, err := NewTestClickhouseProvider(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	client := &toolmetrics.ClickhouseClient{
-		Conn:   conn,
-		Logger: slog.New(slog.NewTextHandler(os.Stdout, nil)),
-	}
-
-	cleanup := func() error {
-		var errs []error
-		err = conn.Close()
-		if err != nil {
-			errs = append(errs, err)
-		}
-
-		err = container.Terminate(ctx)
-		if err != nil {
-			errs = append(errs, err)
-		}
-
-		return errors.Join(errs...)
-	}
-
-	return client, cleanup, nil
 }

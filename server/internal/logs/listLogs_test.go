@@ -197,6 +197,8 @@ func TestListLogs_EmptyResult(t *testing.T) {
 }
 
 func TestListLogs_SinglePage(t *testing.T) {
+	t.Parallel()
+
 	ctx, ti := newTestLogsService(t)
 
 	// Insert test data
@@ -214,17 +216,34 @@ func TestListLogs_SinglePage(t *testing.T) {
 		orgID:        orgID,
 		deploymentID: deploymentID,
 		toolID:       toolID,
+		toolURN:      "",
+		baseTime:     time.Time{},
 		count:        5,
+		httpMethod:   "",
+		httpRoute:    "",
+		statusCode:   0,
+		durationMs:   0,
 		reqBody:      &reqBody,
 		respBody:     &respBody,
+		reqSkip:      nil,
+		respSkip:     nil,
+		reqHeaders:   nil,
+		respHeaders:  nil,
 	})
 
 	// Query logs
 	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
-		ProjectID: projectID,
-		PerPage:   10,
-		Direction: "next",
-		Sort:      "DESC",
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ProjectID:        projectID,
+		ToolID:           nil,
+		TsStart:          nil,
+		TsEnd:            nil,
+		Cursor:           nil,
+		PerPage:          10,
+		Direction:        "next",
+		Sort:             "DESC",
 	})
 
 	require.NoError(t, err)
@@ -246,6 +265,8 @@ func TestListLogs_SinglePage(t *testing.T) {
 }
 
 func TestListLogs_Pagination(t *testing.T) {
+	t.Parallel()
+
 	ctx, ti := newTestLogsService(t)
 
 	// Insert test data
@@ -264,9 +285,18 @@ func TestListLogs_Pagination(t *testing.T) {
 		deploymentID: deploymentID,
 		toolID:       toolID,
 		toolURN:      "urn:tool:test",
+		baseTime:     time.Time{},
 		count:        25,
+		httpMethod:   "",
+		httpRoute:    "",
+		statusCode:   0,
+		durationMs:   0,
 		reqBody:      &reqBody,
 		respBody:     &respBody,
+		reqSkip:      nil,
+		respSkip:     nil,
+		reqHeaders:   nil,
+		respHeaders:  nil,
 	})
 
 	// Query first page
@@ -352,6 +382,8 @@ func TestListLogs_Pagination(t *testing.T) {
 }
 
 func TestListLogs_TimeRangeFilter(t *testing.T) {
+	t.Parallel()
+
 	ctx, ti := newTestLogsService(t)
 
 	// Insert test data
@@ -384,9 +416,11 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 			ClientIPv4:        "127.0.0.1",
 			RequestHeaders:    map[string]string{"Content-Type": "application/json"},
 			RequestBody:       &reqBody,
+			RequestBodySkip:   nil,
 			RequestBodyBytes:  12,
 			ResponseHeaders:   map[string]string{"Content-Type": "application/json"},
 			ResponseBody:      &respBody,
+			ResponseBodySkip:  nil,
 			ResponseBodyBytes: 13,
 		})
 		require.NoError(t, err)
@@ -426,6 +460,8 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 }
 
 func TestListLogs_DifferentPageSizes(t *testing.T) {
+	t.Parallel()
+
 	ctx, ti := newTestLogsService(t)
 
 	// Insert test data
@@ -444,9 +480,18 @@ func TestListLogs_DifferentPageSizes(t *testing.T) {
 		deploymentID: deploymentID,
 		toolID:       toolID,
 		toolURN:      "urn:tool:test",
+		baseTime:     time.Time{},
 		count:        15,
+		httpMethod:   "",
+		httpRoute:    "",
+		statusCode:   0,
+		durationMs:   0,
 		reqBody:      &reqBody,
 		respBody:     &respBody,
+		reqSkip:      nil,
+		respSkip:     nil,
+		reqHeaders:   nil,
+		respHeaders:  nil,
 	})
 
 	testCases := []struct {
@@ -493,6 +538,8 @@ func TestListLogs_DifferentPageSizes(t *testing.T) {
 }
 
 func TestListLogs_VerifyLogFields(t *testing.T) {
+	t.Parallel()
+
 	ctx, ti := newTestLogsService(t)
 
 	// Insert test data with specific values
@@ -539,10 +586,17 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 
 	// Query logs
 	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
-		ProjectID: projectID,
-		PerPage:   10,
-		Direction: "next",
-		Sort:      "DESC",
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ProjectID:        projectID,
+		ToolID:           nil,
+		TsStart:          nil,
+		TsEnd:            nil,
+		Cursor:           nil,
+		PerPage:          10,
+		Direction:        "next",
+		Sort:             "DESC",
 	})
 
 	require.NoError(t, err)
