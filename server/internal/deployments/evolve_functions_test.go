@@ -1096,7 +1096,7 @@ func TestEvolve_UpsertFunctions_BadToolsManifest(t *testing.T) {
 	require.NoError(t, err, "evolve should succeed even with bad tools")
 
 	require.NotEqual(t, uuid.Nil.String(), result.Deployment.ID, "deployment ID is nil")
-	require.Equal(t, "completed", result.Deployment.Status, "deployment status should be completed")
+	require.Equal(t, "failed", result.Deployment.Status, "deployment status should be failed")
 	require.Len(t, result.Deployment.FunctionsAssets, 1, "expected 1 functions file")
 
 	// Verify that NO function tools were created due to bad manifest

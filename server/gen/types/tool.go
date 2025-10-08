@@ -11,6 +11,8 @@ package types
 type Tool struct {
 	// The HTTP tool definition
 	HTTPToolDefinition *HTTPToolDefinition
+	// The function tool definition
+	FunctionToolDefinition *FunctionToolDefinition
 	// The prompt template
 	PromptTemplate *PromptTemplate
 }
