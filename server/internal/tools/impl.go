@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -113,9 +112,8 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	}
 
 	result := &gen.ListToolsResult{
-		HTTPTools:       make([]*types.HTTPToolDefinition, len(tools)),
-		PromptTemplates: make([]*types.PromptTemplate, len(templates)),
-		NextCursor:      nil,
+		Tools:      make([]*types.Tool, 0, len(tools)+len(templates)),
+		NextCursor: nil,
 	}
 
 	// Process HTTP tools with variations
@@ -137,7 +135,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		keyedVariations[variation.SrcToolName] = variation
 	}
 
-	for i, tool := range tools {
+	for _, tool := range tools {
 		var pkg *string
 		if tool.PackageName != "" {
 			pkg = &tool.PackageName
@@ -206,64 +204,70 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 			}
 		}
 
-		result.HTTPTools[i] = &types.HTTPToolDefinition{
-			ToolType:            constants.ToolTypeHTTP,
-			ID:                  tool.ID.String(),
-			ToolUrn:             tool.ToolUrn.String(),
-			DeploymentID:        tool.DeploymentID.String(),
-			ProjectID:           authCtx.ProjectID.String(),
-			Name:                name,
-			CanonicalName:       canonicalName,
-			Summary:             summary,
-			Description:         description,
-			Confirm:             string(confirm),
-			ConfirmPrompt:       confirmPrompt,
-			Summarizer:          conv.FromPGText[string](tool.Summarizer),
-			ResponseFilter:      responseFilter,
-			HTTPMethod:          tool.HttpMethod,
-			Path:                tool.Path,
-			Tags:                tags,
-			Openapiv3DocumentID: conv.Ptr(tool.Openapiv3DocumentID.UUID.String()),
-			Openapiv3Operation:  conv.Ptr(tool.Openapiv3Operation.String),
-			SchemaVersion:       conv.Ptr(tool.SchemaVersion),
-			Schema:              string(tool.Schema),
-			Security:            conv.Ptr(string(tool.Security)),
-			DefaultServerURL:    conv.FromPGText[string](tool.DefaultServerUrl),
-			PackageName:         pkg,
-			CreatedAt:           tool.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
-			Canonical:           canonical,
-			Variation:           variation,
-		}
+		result.Tools = append(result.Tools, &types.Tool{
+			HTTPToolDefinition: &types.HTTPToolDefinition{
+				ID:                  tool.ID.String(),
+				ToolUrn:             tool.ToolUrn.String(),
+				DeploymentID:        tool.DeploymentID.String(),
+				ProjectID:           authCtx.ProjectID.String(),
+				Name:                name,
+				CanonicalName:       canonicalName,
+				Summary:             summary,
+				Description:         description,
+				Confirm:             conv.Ptr(string(confirm)),
+				ConfirmPrompt:       confirmPrompt,
+				Summarizer:          conv.FromPGText[string](tool.Summarizer),
+				ResponseFilter:      responseFilter,
+				HTTPMethod:          tool.HttpMethod,
+				Path:                tool.Path,
+				Tags:                tags,
+				Openapiv3DocumentID: conv.Ptr(tool.Openapiv3DocumentID.UUID.String()),
+				Openapiv3Operation:  conv.Ptr(tool.Openapiv3Operation.String),
+				SchemaVersion:       conv.Ptr(tool.SchemaVersion),
+				Schema:              string(tool.Schema),
+				Security:            conv.Ptr(string(tool.Security)),
+				DefaultServerURL:    conv.FromPGText[string](tool.DefaultServerUrl),
+				PackageName:         pkg,
+				CreatedAt:           tool.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
+				Canonical:           canonical,
+				Variation:           variation,
+			},
+		})
 	}
 
 	// Process prompt templates
-	for i, template := range templates {
-		var args *string
-		if len(template.Arguments) > 0 {
-			args = conv.PtrEmpty(string(template.Arguments))
-		}
-
+	for _, template := range templates {
 		hint := template.ToolsHint
 		if hint == nil {
 			hint = []string{}
 		}
 
-		result.PromptTemplates[i] = &types.PromptTemplate{
-			ID:            template.ID.String(),
-			HistoryID:     template.HistoryID.String(),
-			PredecessorID: conv.FromNullableUUID(template.PredecessorID),
-			ToolUrn:       template.ToolUrn.String(),
-			Name:          types.Slug(template.Name),
-			Prompt:        template.Prompt,
-			Description:   conv.FromPGText[string](template.Description),
-			Arguments:     args,
-			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](template.Engine), "none"),
-			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](template.Kind), "prompt"),
-			ToolsHint:     hint,
-			CreatedAt:     template.CreatedAt.Time.Format(time.RFC3339),
-			UpdatedAt:     template.UpdatedAt.Time.Format(time.RFC3339),
-		}
+		result.Tools = append(result.Tools, &types.Tool{
+			PromptTemplate: &types.PromptTemplate{
+				ID:            template.ID.String(),
+				HistoryID:     template.HistoryID.String(),
+				PredecessorID: conv.FromNullableUUID(template.PredecessorID),
+				ToolUrn:       template.ToolUrn.String(),
+				Name:          template.Name,
+				Prompt:        template.Prompt,
+				Description:   conv.PtrValOrEmpty(conv.FromPGText[string](template.Description), ""),
+				Schema:        string(template.Arguments),
+				SchemaVersion: nil,
+				Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](template.Engine), "none"),
+				Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](template.Kind), "prompt"),
+				ToolsHint:     hint,
+				CreatedAt:     template.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:     template.UpdatedAt.Time.Format(time.RFC3339),
+				ProjectID:     template.ProjectID.String(),
+				CanonicalName: template.Name,
+				Confirm:       nil,
+				ConfirmPrompt: nil,
+				Summarizer:    nil,
+				Canonical:     nil,
+				Variation:     nil,
+			},
+		})
 	}
 
 	// For pagination, use the HTTP tools cursor since that's what the original API did
@@ -271,7 +275,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	if len(tools) >= int(limit+1) {
 		lastID := tools[len(tools)-1].ID.String()
 		result.NextCursor = &lastID
-		result.HTTPTools = result.HTTPTools[:len(result.HTTPTools)-1]
+		result.Tools = result.Tools[:len(result.Tools)-1]
 	}
 
 	return result, nil

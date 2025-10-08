@@ -178,11 +178,6 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallU
 	ctx, span := p.tracer.Start(ctx, "polar_client.track_tool_call_usage")
 	defer span.End()
 
-	// TODO: Temporary measure for easing polar backlog
-	if event.OrganizationID == "3ccdb3e2-4152-4925-933e-83dab9551dd2" {
-		return
-	}
-
 	totalBytes := event.RequestBytes + event.OutputBytes
 	typeStr := string(event.Type)
 
@@ -427,10 +422,9 @@ func (p *Client) GetCustomerTier(ctx context.Context, orgID string) (t *billing.
 
 func (p *Client) extractCustomerTier(customerState *polarComponents.CustomerState) (*billing.Tier, error) {
 	if customerState != nil {
-		for _, sub := range customerState.ActiveSubscriptions {
-			if sub.ProductID == p.catalog.ProductIDPro {
-				return conv.Ptr(billing.TierPro), nil
-			}
+		// Active enterprise subscriptions return earlier with the enterprise flag in the DB
+		if len(customerState.ActiveSubscriptions) >= 1 {
+			return conv.Ptr(billing.TierPro), nil
 		}
 	}
 

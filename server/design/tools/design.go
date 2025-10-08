@@ -42,7 +42,6 @@ var _ = Service("tools", func() {
 
 var ListToolsResult = Type("ListToolsResult", func() {
 	Attribute("next_cursor", String, "The cursor to fetch results from")
-	Attribute("http_tools", ArrayOf(shared.HTTPToolDefinition), "The list of HTTP tools")
-	Attribute("prompt_templates", ArrayOf(shared.PromptTemplate), "The list of prompt templates")
-	Required("http_tools", "prompt_templates")
+	Attribute("tools", ArrayOf(shared.Tool), "The list of tools (polymorphic union of HTTP tools and prompt templates)")
+	Required("tools")
 })

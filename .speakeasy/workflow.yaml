@@ -6,6 +6,7 @@ sources:
             - location: server/gen/http/openapi3.yaml
         overlays:
             - location: overlays/goa.yaml
+        output: .speakeasy/out.openapi.yaml
         registry:
             location: registry.speakeasyapi.dev/gram/gram/gram-api-description
     Gram-Public:

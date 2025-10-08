@@ -44,13 +44,13 @@ func TestTemplatesService_GetTemplate_ByID_Success(t *testing.T) {
 	require.NotNil(t, result, "result is nil")
 	require.NotNil(t, result.Template, "template is nil")
 	require.Equal(t, created.Template.ID, result.Template.ID, "template ID mismatch")
-	require.Equal(t, types.Slug("get-by-id-template"), result.Template.Name, "template name mismatch")
+	require.Equal(t, "get-by-id-template", result.Template.Name, "template name mismatch")
 	require.Equal(t, "Test prompt for get by ID", result.Template.Prompt, "template prompt mismatch")
-	require.Equal(t, "Test description", *result.Template.Description, "template description mismatch")
+	require.Equal(t, "Test description", result.Template.Description, "template description mismatch")
 	require.Equal(t, "mustache", result.Template.Engine, "template engine mismatch")
 	require.Equal(t, "prompt", result.Template.Kind, "template kind mismatch")
 	require.ElementsMatch(t, []string{"assistant"}, result.Template.ToolsHint, "template tools hint mismatch")
-	require.JSONEq(t, `{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`, *result.Template.Arguments, "template arguments mismatch")
+	require.JSONEq(t, `{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}`, result.Template.Schema, "template arguments mismatch")
 }
 
 func TestTemplatesService_GetTemplate_ByName_Success(t *testing.T) {
@@ -86,7 +86,7 @@ func TestTemplatesService_GetTemplate_ByName_Success(t *testing.T) {
 	require.NotNil(t, result, "result is nil")
 	require.NotNil(t, result.Template, "template is nil")
 	require.Equal(t, created.Template.ID, result.Template.ID, "template ID mismatch")
-	require.Equal(t, types.Slug("get-by-name-template"), result.Template.Name, "template name mismatch")
+	require.Equal(t, "get-by-name-template", result.Template.Name, "template name mismatch")
 	require.Equal(t, "Test prompt for get by name", result.Template.Prompt, "template prompt mismatch")
 }
 
@@ -242,7 +242,7 @@ func TestTemplatesService_GetTemplate_BothIDAndName(t *testing.T) {
 
 	require.NotNil(t, result, "result is nil")
 	require.Equal(t, created.Template.ID, result.Template.ID, "template ID mismatch")
-	require.Equal(t, types.Slug("both-id-name-template"), result.Template.Name, "template name mismatch")
+	require.Equal(t, "both-id-name-template", result.Template.Name, "template name mismatch")
 }
 
 func TestTemplatesService_GetTemplate_Unauthorized(t *testing.T) {

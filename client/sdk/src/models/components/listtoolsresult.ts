@@ -8,31 +8,21 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  HTTPToolDefinition,
-  HTTPToolDefinition$inboundSchema,
-  HTTPToolDefinition$Outbound,
-  HTTPToolDefinition$outboundSchema,
-} from "./httptooldefinition.js";
-import {
-  PromptTemplate,
-  PromptTemplate$inboundSchema,
-  PromptTemplate$Outbound,
-  PromptTemplate$outboundSchema,
-} from "./prompttemplate.js";
+  Tool,
+  Tool$inboundSchema,
+  Tool$Outbound,
+  Tool$outboundSchema,
+} from "./tool.js";
 
 export type ListToolsResult = {
-  /**
-   * The list of HTTP tools
-   */
-  httpTools: Array<HTTPToolDefinition>;
   /**
    * The cursor to fetch results from
    */
   nextCursor?: string | undefined;
   /**
-   * The list of prompt templates
+   * The list of tools (polymorphic union of HTTP tools and prompt templates)
    */
-  promptTemplates: Array<PromptTemplate>;
+  tools: Array<Tool>;
 };
 
 /** @internal */
@@ -41,22 +31,18 @@ export const ListToolsResult$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
-  http_tools: z.array(HTTPToolDefinition$inboundSchema),
   next_cursor: z.string().optional(),
-  prompt_templates: z.array(PromptTemplate$inboundSchema),
+  tools: z.array(Tool$inboundSchema),
 }).transform((v) => {
   return remap$(v, {
-    "http_tools": "httpTools",
     "next_cursor": "nextCursor",
-    "prompt_templates": "promptTemplates",
   });
 });
 
 /** @internal */
 export type ListToolsResult$Outbound = {
-  http_tools: Array<HTTPToolDefinition$Outbound>;
   next_cursor?: string | undefined;
-  prompt_templates: Array<PromptTemplate$Outbound>;
+  tools: Array<Tool$Outbound>;
 };
 
 /** @internal */
@@ -65,14 +51,11 @@ export const ListToolsResult$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListToolsResult
 > = z.object({
-  httpTools: z.array(HTTPToolDefinition$outboundSchema),
   nextCursor: z.string().optional(),
-  promptTemplates: z.array(PromptTemplate$outboundSchema),
+  tools: z.array(Tool$outboundSchema),
 }).transform((v) => {
   return remap$(v, {
-    httpTools: "http_tools",
     nextCursor: "next_cursor",
-    promptTemplates: "prompt_templates",
   });
 });
 

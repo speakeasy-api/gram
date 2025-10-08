@@ -2,11 +2,13 @@ import { AutoSummarizeBadge } from "@/components/auto-summarize-badge";
 import { HttpRoute } from "@/components/http-route";
 import { ProjectAvatar } from "@/components/project-menu";
 import { Link } from "@/components/ui/link";
+import { Slider } from "@/components/ui/slider";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { Telemetry, useTelemetry } from "@/contexts/Telemetry";
+import { asTool, filterHttpTools, filterPromptTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import { Message, useChat } from "@ai-sdk/react";
 import { HTTPToolDefinition } from "@gram/client/models/components";
@@ -27,12 +29,12 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
+import { onboardingStepStorageKeys } from "../home/Home";
 import { useChatContext } from "./ChatContext";
 import { useChatHistory } from "./ChatHistory";
 import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useMiniModel, useModel } from "./Openrouter";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
-import { onboardingStepStorageKeys } from "../home/Home";
 
 const defaultModel = {
   label: "Claude 4.5 Sonnet",
@@ -75,6 +77,7 @@ export function ChatWindow({
   initialPrompt?: string | null;
 }) {
   const [model, setModel] = useState(defaultModel.value);
+  const [temperature, setTemperature] = useState(0.5);
   const chatKey = `chat-${model}`;
 
   // We do this because we want the chat to reset when the model changes
@@ -83,6 +86,8 @@ export function ChatWindow({
       key={chatKey}
       model={model}
       setModel={setModel}
+      temperature={temperature}
+      setTemperature={setTemperature}
       configRef={configRef}
       dynamicToolset={dynamicToolset}
       initialMessages={initialMessages}
@@ -97,6 +102,8 @@ type Toolset = Record<string, Tool & { method?: string; path?: string }>;
 function ChatInner({
   model,
   setModel,
+  temperature,
+  setTemperature,
   configRef,
   dynamicToolset,
   initialMessages,
@@ -105,6 +112,8 @@ function ChatInner({
 }: {
   model: string;
   setModel: (model: string) => void;
+  temperature: number;
+  setTemperature: (temperature: number) => void;
   configRef: ChatConfig;
   dynamicToolset: boolean;
   initialMessages?: Message[];
@@ -189,8 +198,10 @@ function ChatInner({
     };
 
   const allTools: Toolset = useMemo(() => {
+    const baseTools = instance.data?.tools.map(asTool);
+
     const tools: Toolset = Object.fromEntries(
-      instance.data?.tools.map((tool) => {
+      filterHttpTools(baseTools).map((tool) => {
         return [
           tool.name,
           {
@@ -207,10 +218,10 @@ function ChatInner({
       }) ?? [],
     );
 
-    instance.data?.promptTemplates?.forEach((pt) => {
+    filterPromptTools(baseTools).forEach((pt) => {
       tools[pt.name] = {
         description: pt.description ?? "",
-        parameters: jsonSchema(JSON.parse(pt.arguments ?? "{}")),
+        parameters: jsonSchema(JSON.parse(pt.schema ?? "{}")),
         execute: async (args) => {
           const res = await client.templates.renderByID({
             id: pt.id,
@@ -330,7 +341,7 @@ function ChatInner({
           },
         ]),
       ),
-      temperature: 0.5,
+      temperature,
       system: systemPrompt,
       experimental_transform: smoothStream({
         delayInMs: 15, // Looks a little smoother
@@ -486,6 +497,24 @@ function ChatInner({
   /* eslint-disable  @typescript-eslint/no-explicit-any */
   const m = messagesToDisplay as any;
 
+  const temperatureSlider = (
+    <div className="flex items-center gap-3 px-2">
+      <SimpleTooltip tooltip="Controls randomness in responses. Lower values (0.0-0.3) make outputs more focused and deterministic. Higher values (0.7-1.0) increase creativity and variety. Default: 0.5">
+        <span className="text-xs text-muted-foreground whitespace-nowrap cursor-help">
+          Temp: {temperature.toFixed(1)}
+        </span>
+      </SimpleTooltip>
+      <Slider
+        value={temperature}
+        onChange={setTemperature}
+        min={0}
+        max={1}
+        step={0.1}
+        className="w-24"
+      />
+    </div>
+  );
+
   return (
     <div className="relative h-full flex items-center justify-center">
       <AIChatContainer
@@ -497,7 +526,12 @@ function ChatInner({
         initialInput={initialPrompt || undefined}
         components={{
           composer: {
-            additionalActions,
+            additionalActions: (
+              <div className="flex items-center gap-2">
+                {temperatureSlider}
+                {additionalActions}
+              </div>
+            ),
             modelSelector: "text-foreground",
           },
           message: {

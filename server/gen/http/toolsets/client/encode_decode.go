@@ -2188,34 +2188,50 @@ func unmarshalServerVariableResponseBodyToTypesServerVariable(v *ServerVariableR
 	return res
 }
 
+// unmarshalToolResponseBodyToTypesTool builds a value of type *types.Tool from
+// a value of type *ToolResponseBody.
+func unmarshalToolResponseBodyToTypesTool(v *ToolResponseBody) *types.Tool {
+	res := &types.Tool{}
+	if v.HTTPToolDefinition != nil {
+		res.HTTPToolDefinition = unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v.HTTPToolDefinition)
+	}
+	if v.PromptTemplate != nil {
+		res.PromptTemplate = unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v.PromptTemplate)
+	}
+
+	return res
+}
+
 // unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition builds a
 // value of type *types.HTTPToolDefinition from a value of type
 // *HTTPToolDefinitionResponseBody.
 func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToolDefinitionResponseBody) *types.HTTPToolDefinition {
+	if v == nil {
+		return nil
+	}
 	res := &types.HTTPToolDefinition{
-		ToolType:            *v.ToolType,
-		ID:                  *v.ID,
-		ProjectID:           *v.ProjectID,
 		DeploymentID:        *v.DeploymentID,
-		Name:                *v.Name,
-		CanonicalName:       *v.CanonicalName,
 		Summary:             *v.Summary,
-		Description:         *v.Description,
-		Confirm:             *v.Confirm,
-		ConfirmPrompt:       v.ConfirmPrompt,
-		Summarizer:          v.Summarizer,
 		Openapiv3DocumentID: v.Openapiv3DocumentID,
 		Openapiv3Operation:  v.Openapiv3Operation,
 		Security:            v.Security,
 		DefaultServerURL:    v.DefaultServerURL,
 		HTTPMethod:          *v.HTTPMethod,
 		Path:                *v.Path,
+		PackageName:         v.PackageName,
+		ID:                  *v.ID,
+		ToolUrn:             *v.ToolUrn,
+		ProjectID:           *v.ProjectID,
+		Name:                *v.Name,
+		CanonicalName:       *v.CanonicalName,
+		Description:         *v.Description,
 		SchemaVersion:       v.SchemaVersion,
 		Schema:              *v.Schema,
-		PackageName:         v.PackageName,
+		Confirm:             v.Confirm,
+		ConfirmPrompt:       v.ConfirmPrompt,
+		Summarizer:          v.Summarizer,
 		CreatedAt:           *v.CreatedAt,
 		UpdatedAt:           *v.UpdatedAt,
-		ToolUrn:             *v.ToolUrn,
 	}
 	if v.ResponseFilter != nil {
 		res.ResponseFilter = unmarshalResponseFilterResponseBodyToTypesResponseFilter(v.ResponseFilter)
@@ -2313,23 +2329,38 @@ func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResp
 // unmarshalPromptTemplateResponseBodyToTypesPromptTemplate builds a value of
 // type *types.PromptTemplate from a value of type *PromptTemplateResponseBody.
 func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateResponseBody) *types.PromptTemplate {
+	if v == nil {
+		return nil
+	}
 	res := &types.PromptTemplate{
-		ID:            *v.ID,
 		HistoryID:     *v.HistoryID,
 		PredecessorID: v.PredecessorID,
-		Name:          types.Slug(*v.Name),
 		Prompt:        *v.Prompt,
-		Description:   v.Description,
-		Arguments:     v.Arguments,
 		Engine:        *v.Engine,
 		Kind:          *v.Kind,
+		ID:            *v.ID,
+		ToolUrn:       *v.ToolUrn,
+		ProjectID:     *v.ProjectID,
+		Name:          *v.Name,
+		CanonicalName: *v.CanonicalName,
+		Description:   *v.Description,
+		SchemaVersion: v.SchemaVersion,
+		Schema:        *v.Schema,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Summarizer:    v.Summarizer,
 		CreatedAt:     *v.CreatedAt,
 		UpdatedAt:     *v.UpdatedAt,
-		ToolUrn:       *v.ToolUrn,
 	}
 	res.ToolsHint = make([]string, len(v.ToolsHint))
 	for i, val := range v.ToolsHint {
 		res.ToolsHint[i] = val
+	}
+	if v.Canonical != nil {
+		res.Canonical = unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = unmarshalToolVariationResponseBodyToTypesToolVariation(v.Variation)
 	}
 
 	return res
@@ -2451,30 +2482,30 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 			res.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
-	res.HTTPTools = make([]*types.HTTPToolDefinitionEntry, len(v.HTTPTools))
-	for i, val := range v.HTTPTools {
-		res.HTTPTools[i] = unmarshalHTTPToolDefinitionEntryResponseBodyToTypesHTTPToolDefinitionEntry(val)
-	}
-	res.PromptTemplates = make([]*types.PromptTemplateEntry, len(v.PromptTemplates))
-	for i, val := range v.PromptTemplates {
-		res.PromptTemplates[i] = unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(val)
+	res.Tools = make([]*types.ToolEntry, len(v.Tools))
+	for i, val := range v.Tools {
+		res.Tools[i] = unmarshalToolEntryResponseBodyToTypesToolEntry(val)
 	}
 	res.ToolUrns = make([]string, len(v.ToolUrns))
 	for i, val := range v.ToolUrns {
 		res.ToolUrns[i] = val
 	}
+	res.PromptTemplates = make([]*types.PromptTemplateEntry, len(v.PromptTemplates))
+	for i, val := range v.PromptTemplates {
+		res.PromptTemplates[i] = unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(val)
+	}
 
 	return res
 }
 
-// unmarshalHTTPToolDefinitionEntryResponseBodyToTypesHTTPToolDefinitionEntry
-// builds a value of type *types.HTTPToolDefinitionEntry from a value of type
-// *HTTPToolDefinitionEntryResponseBody.
-func unmarshalHTTPToolDefinitionEntryResponseBodyToTypesHTTPToolDefinitionEntry(v *HTTPToolDefinitionEntryResponseBody) *types.HTTPToolDefinitionEntry {
-	res := &types.HTTPToolDefinitionEntry{
-		ToolType: *v.ToolType,
-		ID:       *v.ID,
-		Name:     *v.Name,
+// unmarshalToolEntryResponseBodyToTypesToolEntry builds a value of type
+// *types.ToolEntry from a value of type *ToolEntryResponseBody.
+func unmarshalToolEntryResponseBodyToTypesToolEntry(v *ToolEntryResponseBody) *types.ToolEntry {
+	res := &types.ToolEntry{
+		Type:    *v.Type,
+		ID:      *v.ID,
+		ToolUrn: *v.ToolUrn,
+		Name:    *v.Name,
 	}
 
 	return res

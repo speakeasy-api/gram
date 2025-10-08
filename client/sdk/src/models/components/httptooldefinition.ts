@@ -5,7 +5,6 @@
 import * as z from "zod";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
-import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -27,11 +26,9 @@ import {
   ToolVariation$outboundSchema,
 } from "./toolvariation.js";
 
-export const ToolType = {
-  Http: "http",
-} as const;
-export type ToolType = ClosedEnum<typeof ToolType>;
-
+/**
+ * An HTTP tool
+ */
 export type HTTPToolDefinition = {
   /**
    * The original details of a tool
@@ -44,7 +41,7 @@ export type HTTPToolDefinition = {
   /**
    * Confirmation mode for the tool
    */
-  confirm: string;
+  confirm?: string | undefined;
   /**
    * Prompt for the confirmation
    */
@@ -70,7 +67,7 @@ export type HTTPToolDefinition = {
    */
   httpMethod: string;
   /**
-   * The ID of the HTTP tool
+   * The ID of the tool
    */
   id: string;
   /**
@@ -125,9 +122,8 @@ export type HTTPToolDefinition = {
    * The tags list for this http tool
    */
   tags: Array<string>;
-  toolType: ToolType;
   /**
-   * The URN of this HTTP tool
+   * The URN of this tool
    */
   toolUrn: string;
   /**
@@ -138,25 +134,6 @@ export type HTTPToolDefinition = {
 };
 
 /** @internal */
-export const ToolType$inboundSchema: z.ZodNativeEnum<typeof ToolType> = z
-  .nativeEnum(ToolType);
-
-/** @internal */
-export const ToolType$outboundSchema: z.ZodNativeEnum<typeof ToolType> =
-  ToolType$inboundSchema;
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace ToolType$ {
-  /** @deprecated use `ToolType$inboundSchema` instead. */
-  export const inboundSchema = ToolType$inboundSchema;
-  /** @deprecated use `ToolType$outboundSchema` instead. */
-  export const outboundSchema = ToolType$outboundSchema;
-}
-
-/** @internal */
 export const HTTPToolDefinition$inboundSchema: z.ZodType<
   HTTPToolDefinition,
   z.ZodTypeDef,
@@ -164,7 +141,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
 > = z.object({
   canonical: CanonicalToolAttributes$inboundSchema.optional(),
   canonical_name: z.string(),
-  confirm: z.string(),
+  confirm: z.string().optional(),
   confirm_prompt: z.string().optional(),
   created_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   default_server_url: z.string().optional(),
@@ -185,7 +162,6 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   summarizer: z.string().optional(),
   summary: z.string(),
   tags: z.array(z.string()),
-  tool_type: ToolType$inboundSchema,
   tool_urn: z.string(),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   variation: ToolVariation$inboundSchema.optional(),
@@ -203,7 +179,6 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
     "project_id": "projectId",
     "response_filter": "responseFilter",
     "schema_version": "schemaVersion",
-    "tool_type": "toolType",
     "tool_urn": "toolUrn",
     "updated_at": "updatedAt",
   });
@@ -213,7 +188,7 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
 export type HTTPToolDefinition$Outbound = {
   canonical?: CanonicalToolAttributes$Outbound | undefined;
   canonical_name: string;
-  confirm: string;
+  confirm?: string | undefined;
   confirm_prompt?: string | undefined;
   created_at: string;
   default_server_url?: string | undefined;
@@ -234,7 +209,6 @@ export type HTTPToolDefinition$Outbound = {
   summarizer?: string | undefined;
   summary: string;
   tags: Array<string>;
-  tool_type: string;
   tool_urn: string;
   updated_at: string;
   variation?: ToolVariation$Outbound | undefined;
@@ -248,7 +222,7 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
 > = z.object({
   canonical: CanonicalToolAttributes$outboundSchema.optional(),
   canonicalName: z.string(),
-  confirm: z.string(),
+  confirm: z.string().optional(),
   confirmPrompt: z.string().optional(),
   createdAt: z.date().transform(v => v.toISOString()),
   defaultServerUrl: z.string().optional(),
@@ -269,7 +243,6 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   summarizer: z.string().optional(),
   summary: z.string(),
   tags: z.array(z.string()),
-  toolType: ToolType$outboundSchema,
   toolUrn: z.string(),
   updatedAt: z.date().transform(v => v.toISOString()),
   variation: ToolVariation$outboundSchema.optional(),
@@ -287,7 +260,6 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
     projectId: "project_id",
     responseFilter: "response_filter",
     schemaVersion: "schema_version",
-    toolType: "tool_type",
     toolUrn: "tool_urn",
     updatedAt: "updated_at",
   });

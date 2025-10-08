@@ -109,8 +109,9 @@ linters:
         - '^k8s.io/apimachinery/pkg/apis/meta/v1\..+$'
         - '^k8s.io/api/networking/v1\..+$'
         - '^github.com/posthog/posthog-go\..+$'
-        - "^github\\.com/speakeasy-api/openapi/.*"
-        - "^github\\.com/polarsource/polar-go/.*"
+        - '^github\.com/speakeasy-api/openapi/.*'
+        - '^github\.com/polarsource/polar-go/.*'
+        - '^github\.com/speakeasy-api/gram/server/gen/types\.Tool$'
     exhaustive:
       check:
         - switch

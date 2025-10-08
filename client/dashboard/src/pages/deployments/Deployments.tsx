@@ -95,8 +95,10 @@ function DeploymentActionsDropdown({
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
         <Button variant="tertiary" size="sm" className="h-8 w-8 p-0">
-          <Icon name="ellipsis" className="size-4" />
-          <span className="sr-only">Open menu</span>
+          <Button.LeftIcon>
+            <Icon name="ellipsis" className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text className="sr-only">Open menu</Button.Text>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -205,6 +207,22 @@ function DeploymentsTable() {
   return (
     <>
       <Heading variant="h2">Recent Deployments</Heading>
+
+      <div className="bg-secondary p-6 rounded-lg mb-6 space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Each time you upload a new OpenAPI document or update a previously
+          uploaded one, you create a new deployment in Gram.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          For each deployment, Gram analyzes all related OpenAPI documents to
+          generate or update the corresponding tool definitions.
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Gram generates logs for every deployment, showing what was processed
+          successfully and which operations or endpoints failed to convert into
+          tools.
+        </p>
+      </div>
 
       <Table<DeploymentSummary>
         columns={columnsWithData}

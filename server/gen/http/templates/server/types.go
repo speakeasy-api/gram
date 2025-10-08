@@ -1406,32 +1406,98 @@ type RenderTemplateGatewayErrorResponseBody struct {
 
 // PromptTemplateResponseBody is used to define fields on response body types.
 type PromptTemplateResponseBody struct {
-	// The ID of the prompt template
-	ID string `form:"id" json:"id" xml:"id"`
 	// The revision tree ID for the prompt template
 	HistoryID string `form:"history_id" json:"history_id" xml:"history_id"`
 	// The previous version of the prompt template to use as predecessor
 	PredecessorID *string `form:"predecessor_id,omitempty" json:"predecessor_id,omitempty" xml:"predecessor_id,omitempty"`
-	// The name of the prompt template
-	Name string `form:"name" json:"name" xml:"name"`
 	// The template content
 	Prompt string `form:"prompt" json:"prompt" xml:"prompt"`
-	// The description of the prompt template
-	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The JSON Schema defining the placeholders found in the prompt template
-	Arguments *string `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
 	// The template engine
 	Engine string `form:"engine" json:"engine" xml:"engine"`
 	// The kind of prompt the template is used for
 	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string `form:"tools_hint" json:"tools_hint" xml:"tools_hint"`
-	// The creation date of the prompt template.
-	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
-	// The last update date of the prompt template.
-	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// The URN of this prompt template
+	// The ID of the tool
+	ID string `form:"id" json:"id" xml:"id"`
+	// The URN of this tool
 	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
+	// The ID of the project
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The name of the tool
+	Name string `form:"name" json:"name" xml:"name"`
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName string `form:"canonical_name" json:"canonical_name" xml:"canonical_name"`
+	// Description of the tool
+	Description string `form:"description" json:"description" xml:"description"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// JSON schema for the request
+	Schema string `form:"schema" json:"schema" xml:"schema"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The creation date of the tool.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the tool.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// The original details of a tool, excluding any variations
+	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
+}
+
+// CanonicalToolAttributesResponseBody is used to define fields on response
+// body types.
+type CanonicalToolAttributesResponseBody struct {
+	// The ID of the variation that was applied to the tool
+	VariationID string `form:"variation_id" json:"variation_id" xml:"variation_id"`
+	// The name of the tool
+	Name string `form:"name" json:"name" xml:"name"`
+	// Summary of the tool
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// Description of the tool
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The tags list for this http tool
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+}
+
+// ToolVariationResponseBody is used to define fields on response body types.
+type ToolVariationResponseBody struct {
+	// The ID of the tool variation
+	ID string `form:"id" json:"id" xml:"id"`
+	// The ID of the tool variation group
+	GroupID string `form:"group_id" json:"group_id" xml:"group_id"`
+	// The name of the source tool
+	SrcToolName string `form:"src_tool_name" json:"src_tool_name" xml:"src_tool_name"`
+	// The confirmation mode for the tool variation
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// The confirmation prompt for the tool variation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// The name of the tool variation
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The summary of the tool variation
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// The description of the tool variation
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The tags of the tool variation
+	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
+	// The summarizer of the tool variation
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The creation date of the tool variation
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the tool variation
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
 // NewCreateTemplateResponseBody builds the HTTP response body from the result

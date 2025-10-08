@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
 	"mime"
 	"net/http"
 	"slices"
@@ -70,30 +69,23 @@ func handleToolsCall(
 
 	toolsetHelpers := toolsets.NewToolsets(db)
 	envSlug := payload.environment
-	var higherOrderTool *types.PromptTemplate
-	var toolID *string
+	var tool *types.Tool
 
-	for _, tool := range toolset.HTTPTools {
-		if tool.Name == params.Name {
-			toolID = &tool.ID
+	// TODO: make sure this properly finds HOTs
+	for _, t := range toolset.Tools {
+		baseTool := conv.ToBaseTool(t)
+		if baseTool.Name == params.Name {
+			tool = t
 			break
 		}
 	}
 
-	if toolID == nil {
-		for _, prompt := range toolset.PromptTemplates {
-			if string(prompt.Name) == params.Name {
-				higherOrderTool = prompt
-				break
-			}
-		}
-	}
-
-	if higherOrderTool == nil && toolID == nil {
+	if tool == nil {
 		return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").Log(ctx, logger)
 	}
 
-	if higherOrderTool != nil {
+	if tool.PromptTemplate != nil {
+		higherOrderTool := tool.PromptTemplate
 		var args map[string]any
 		if err := json.Unmarshal(params.Arguments, &args); err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse higher order tool arguments").Log(ctx, logger)
@@ -117,7 +109,7 @@ func handleToolsCall(
 			RequestBytes:     requestBytes,
 			OutputBytes:      outputBytes,
 			ToolID:           higherOrderTool.ID,
-			ToolName:         string(higherOrderTool.Name),
+			ToolName:         higherOrderTool.Name,
 			Type:             billing.ToolCallTypeHigherOrder,
 			ProjectID:        payload.projectID.String(),
 			ToolsetSlug:      &payload.toolset,
@@ -132,8 +124,12 @@ func handleToolsCall(
 		return formatHigherOrderToolResult(ctx, logger, req, promptData)
 	}
 
-	// Transform environment entries into a map
-	envVars := make(map[string]string)
+	// At this point, non-http tools have already been handled
+	if tool.HTTPToolDefinition == nil {
+		return nil, oops.E(oops.CodeUnexpected, errors.New("tool is not an HTTP tool"), "tool is not an HTTP tool").Log(ctx, logger)
+	}
+
+	ciEnv := gateway.NewCaseInsensitiveEnv()
 
 	// IMPORTANT: MCP servers accessed in a public manner or not gram authenticated, there is no concept of using stored environments for them
 	if envSlug != "" && payload.authenticated {
@@ -145,29 +141,33 @@ func handleToolsCall(
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").Log(ctx, logger)
 		}
 
-		if len(storedEnvVars) > 0 {
-			maps.Copy(envVars, storedEnvVars)
+		for k, v := range storedEnvVars {
+			ciEnv.Set(k, v)
 		}
 	}
 
-	if len(payload.mcpEnvVariables) > 0 {
-		// apply user provided env variable overrides
-		maps.Copy(envVars, payload.mcpEnvVariables)
+	// user supplied variables comes after stored environment variables to allow overrides in the case of conflicts
+	for k, v := range payload.mcpEnvVariables {
+		ciEnv.Set(k, v)
 	}
 
-	executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByID(ctx, uuid.MustParse(*toolID), uuid.UUID(projectID))
+	toolURN, err := conv.GetToolURN(*tool)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+	}
+
+	executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByURN(ctx, *toolURN, uuid.UUID(projectID))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool execution plan").Log(ctx, logger)
 	}
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, executionPlan.OrganizationSlug, executionPlan.ProjectSlug)
 
-	// map provided oauth tokens into the relevant security env variables
 	for _, security := range executionPlan.Tool.Security {
 		for _, token := range payload.oauthTokenInputs {
 			if slices.Contains(security.OAuthTypes, "authorization_code") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
 				for _, envVar := range security.EnvVariables {
 					if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
-						envVars[envVar] = token.Token
+						ciEnv.Set(envVar, token.Token)
 					}
 				}
 			}
@@ -194,7 +194,7 @@ func handleToolsCall(
 			OrganizationID:   toolset.OrganizationID,
 			RequestBytes:     requestBytes,
 			OutputBytes:      outputBytes,
-			ToolID:           *toolID,
+			ToolID:           conv.ToBaseTool(tool).ID,
 			ToolName:         params.Name,
 			ProjectID:        payload.projectID.String(),
 			ProjectSlug:      &executionPlan.ProjectSlug,
@@ -209,7 +209,7 @@ func handleToolsCall(
 
 	}()
 
-	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), envVars, executionPlan.Tool)
+	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), ciEnv, executionPlan.Tool)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}

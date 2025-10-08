@@ -1,20 +1,17 @@
-import { ToolCollectionBadge } from "@/components/tools-badge";
-import { Button } from "@speakeasy-api/moonshine";
+import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Spinner } from "@/components/ui/spinner";
 import { TextArea } from "@/components/ui/textarea";
+import { useToolset } from "@/hooks/toolTypes";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
-import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { generateObject } from "ai";
 import { createContext, useContext, useState } from "react";
 import { z } from "zod";
 import { useMiniModel } from "../playground/Openrouter";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
-import { useToolDefinitions } from "../toolsets/types";
-import { useToolset } from "@gram/client/react-query";
-import { userFacingToolNames } from "@/lib/toolNames";
 
 const SuggestionSchema = z.object({
   name: z.string(),
@@ -76,12 +73,8 @@ export const ToolifyDialog = ({
   const [inProgress, setInProgress] = useState(false);
   const [purpose, setPurpose] = useState("");
   const [selectedToolset, setSelectedToolset] = useState<ToolsetEntry>();
-  const { data: toolset } = useToolset(
-    { slug: selectedToolset?.slug ?? "" },
-    undefined,
-    { enabled: !!selectedToolset?.slug },
-  );
-  const tools = useToolDefinitions(toolset);
+  const { data: toolset } = useToolset(selectedToolset?.slug);
+  const tools = toolset?.tools ?? [];
 
   const { set } = useToolifyContext();
 
@@ -176,7 +169,7 @@ export const ToolifyDialog = ({
                 setSelectedToolset={(toolset) => setSelectedToolset(toolset)}
               />
               <ToolCollectionBadge
-                toolNames={toolset ? userFacingToolNames(toolset) : []}
+                toolNames={toolset ? toolset.tools.map((t) => t.name) : []}
                 size={"md"}
                 warnOnTooManyTools
               />
