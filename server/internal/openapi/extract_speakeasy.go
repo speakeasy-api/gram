@@ -51,6 +51,7 @@ func parseSpeakeasy(ctx context.Context, tracer trace.Tracer, reader io.Reader) 
 		span.End()
 	}()
 
+
 	doc, _, err = openapi.Unmarshal(ctx, reader, openapi.WithSkipValidation())
 	if err != nil {
 		return nil, fmt.Errorf("parse document: %w", err)
@@ -677,7 +678,7 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 
 		// Validate the generated JSON schema
 		if err := jsonschema.IsValidJSONSchema(schemaBytes.Bytes()); err != nil {
-			return empty, deploymentEvents, fmt.Errorf("invalid tool input schema for operation %s: %w", opID, err)
+			return empty, deploymentEvents, fmt.Errorf("(speakeasy) invalid tool input schema for operation %s: %w", opID, err)
 		}
 	}
 

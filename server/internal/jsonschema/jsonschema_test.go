@@ -831,6 +831,221 @@ func TestHasAdditionalProperties(t *testing.T) {
 	}
 }
 
+func TestIsValidJSONSchema_RecursiveSchema(t *testing.T) {
+	t.Parallel()
+
+	schema := []byte(`{
+		"$schema": "http://json-schema.org/draft-07/schema#",
+		"$defs": {
+			"Filter": {
+				"type": "object",
+				"properties": {
+					"operator": {
+						"type": "string",
+						"enum": ["AND", "OR", "NOT"]
+					},
+					"clauses": {
+						"type": "array",
+						"items": {
+							"$ref": "#/$defs/Filter"
+						}
+					},
+					"field": {
+						"type": "string"
+					},
+					"value": {}
+				}
+			}
+		},
+		"$ref": "#/$defs/Filter"
+	}`)
+
+	err := IsValidJSONSchema(schema)
+	require.NoError(t, err)
+}
+
+func TestIsValidJSONSchema_RecursiveSchema2(t *testing.T) {
+	t.Parallel()
+
+	schema := []byte(`{
+  "type": "object",
+  "properties": {
+    "pathParameters": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "title": "Id",
+          "format": "uuid4",
+          "description": "The meter ID."
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "body": {
+      "type": "object",
+      "properties": {
+        "metadata": {
+          "type": "object",
+          "propertyNames": {
+            "maxLength": 40,
+            "minLength": 1
+          },
+          "title": "Metadata",
+          "maxProperties": 50,
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500,
+                "minLength": 1
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "description": "Key-value object allowing you to store additional information.\n\nThe key must be a string with a maximum length of **40 characters**.\nThe value must be either:\n\n* A string with a maximum length of **500 characters**\n* An integer\n* A floating-point number\n* A boolean\n\nYou can store up to **50 key-value pairs**."
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 3
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name",
+          "description": "The name of the meter. Will be shown on customer's invoices and usage."
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The filter to apply on events that'll be used to calculate the meter."
+        },
+        "aggregation": {
+          "anyOf": [
+            {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "func": {
+                      "type": "string",
+                      "title": "Func",
+                      "default": "count",
+                      "const": "count"
+                    }
+                  },
+                  "title": "CountAggregation"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "func": {
+                      "type": "string",
+                      "title": "Func",
+                      "enum": [
+                        "sum",
+                        "max",
+                        "min",
+                        "avg"
+                      ]
+                    },
+                    "property": {
+                      "type": "string",
+                      "title": "Property"
+                    }
+                  },
+                  "title": "PropertyAggregation",
+                  "required": [
+                    "func",
+                    "property"
+                  ]
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "func": {
+                      "type": "string",
+                      "title": "Func",
+                      "default": "unique",
+                      "const": "unique"
+                    },
+                    "property": {
+                      "type": "string",
+                      "title": "Property"
+                    }
+                  },
+                  "title": "UniqueAggregation",
+                  "required": [
+                    "property"
+                  ]
+                }
+              ],
+              "discriminator": {
+                "propertyName": "func",
+                "mapping": {
+                  "avg": "#/components/schemas/PropertyAggregation",
+                  "count": "#/components/schemas/CountAggregation",
+                  "max": "#/components/schemas/PropertyAggregation",
+                  "min": "#/components/schemas/PropertyAggregation",
+                  "sum": "#/components/schemas/PropertyAggregation",
+                  "unique": "#/components/schemas/UniqueAggregation"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Aggregation",
+          "description": "The aggregation to apply on the filtered events to calculate the meter."
+        },
+        "is_archived": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Is Archived",
+          "description": "Whether the meter is archived. Archived meters are no longer used for billing."
+        }
+      },
+      "title": "MeterUpdate"
+    }
+  },
+  "required": [
+    "pathParameters",
+    "body"
+  ],
+  "additionalProperties": false
+}`)
+
+	err := IsValidJSONSchema(schema)
+	require.NoError(t, err)
+}
+
 func TestIsValidJSONSchema_FromOpenAPIFixture(t *testing.T) {
 	t.Parallel()
 

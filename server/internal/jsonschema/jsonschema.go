@@ -37,6 +37,8 @@ func IsValidJSONSchema(bs []byte) error {
 		return fmt.Errorf("add json schema resource: %w", err)
 	}
 	if _, err = compiler.Compile(schemaResourceURI); err != nil {
+		fmt.Print("\n\n\n\n\n")
+		fmt.Println(string(bs))
 		return fmt.Errorf("compile json schema: %w", err)
 	}
 	return nil
@@ -54,6 +56,8 @@ func CompileSchema(schemaBytes []byte) (*jsonschema.Schema, error) {
 	}
 	schema, err := compiler.Compile(schemaResourceURI)
 	if err != nil {
+		fmt.Print("\n\n\n\n\n")
+		fmt.Println(string(schemaBytes))
 		return nil, fmt.Errorf("compile schema: %w", err)
 	}
 	return schema, nil

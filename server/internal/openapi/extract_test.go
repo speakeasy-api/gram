@@ -49,7 +49,7 @@ func TestDoProcess_Equal(t *testing.T) {
 	projectID := uuid.MustParse("12345678-1234-1234-1234-123456789012")
 	openapiDocID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
 
-	data, err := os.ReadFile("testdata/speakeasy-bar.yaml")
+	data, err := os.ReadFile("testdata/polar_openapi.json")
 	require.NoError(t, err)
 
 	tet := ToolExtractorTask{
