@@ -4,6 +4,7 @@
 
 Harden function runner images by:
 
+- Add basic safety checks after image builds to screen out setuid/setgid and check fs permissions.
 - Remove most unnecessary system binaries
 - Using root to bootstrap the filesystem of the runner then starting the runner as a non-root user. This ensures code is tamper proof. Alpine's `exec-su` is used to drop privileges.
 - Moving from `/srv/app` to `/var/task` as the working directory to following aws lambda conventions and making all created files and directories owned by root and read-only.
