@@ -2,6 +2,11 @@ import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
 import { MiniCard, MiniCards } from "@/components/ui/card-mini";
 import { Dialog } from "@/components/ui/dialog";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SkeletonCode } from "@/components/ui/skeleton";
@@ -12,15 +17,18 @@ import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { slugify } from "@/lib/constants";
 import { cn, getServerURL } from "@/lib/utils";
+import { useDeploymentLogsSummary } from "@/pages/deployments/deployment/Deployment";
 import { UploadedDocument } from "@/pages/onboarding/Wizard";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
 import {
   useLatestDeployment,
   useListAssets,
+  useListTools,
 } from "@gram/client/react-query/index.js";
+import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
-import { Loader2Icon, Plus } from "lucide-react";
+import { CircleAlertIcon, Loader2Icon, Plus } from "lucide-react";
 import {
   forwardRef,
   useEffect,
@@ -34,9 +42,9 @@ import { toast } from "sonner";
 import { useUploadOpenAPISteps } from "../../onboarding/UploadOpenAPI";
 import AddOpenAPIDialog, { AddOpenAPIDialogRef } from "./AddOpenAPIDialog";
 import { ApisEmptyState } from "./ApisEmptyState";
-import { useDeploymentLogsSummary } from "@/pages/deployments/deployment/Deployment";
 
 type NamedAsset = Asset & {
+  deploymentAssetId: string;
   name: string;
   slug: string;
 };
@@ -63,6 +71,8 @@ export default function OpenAPIAssets() {
   const { data: deploymentResult, refetch, isLoading } = useLatestDeployment();
   const { data: assets, refetch: refetchAssets } = useListAssets();
   const deployment = deploymentResult?.deployment;
+
+  const assetsCausingFailure = useUnusedAssetIds();
 
   const [isDeploying, setIsDeploying] = useState(false);
   const [changeDocumentTargetSlug, setChangeDocumentTargetSlug] = useState<
@@ -129,6 +139,7 @@ export default function OpenAPIAssets() {
       }
       return {
         ...asset,
+        deploymentAssetId: deploymentAsset.id,
         name: deploymentAsset.name,
         slug: deploymentAsset.slug,
       };
@@ -196,6 +207,7 @@ export default function OpenAPIAssets() {
             <OpenAPICard
               key={asset.id}
               asset={asset}
+              causingFailure={assetsCausingFailure.has(asset.deploymentAssetId)}
               onClickRemove={() => {
                 removeApiSourceDialogRef.current?.open(asset);
               }}
@@ -379,24 +391,28 @@ const RemoveAPISourceDialog = forwardRef<
 
 function OpenAPICard({
   asset,
+  causingFailure,
   onClickRemove,
   setChangeDocumentTargetSlug,
 }: {
   asset: NamedAsset;
+  causingFailure?: boolean | undefined;
   onClickRemove: (assetId: string) => void;
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
   const [documentViewOpen, setDocumentViewOpen] = useState(false);
 
   return (
-    <MiniCard key={asset.id}>
+    <MiniCard>
       <MiniCard.Title
         onClick={() => setDocumentViewOpen(true)}
-        className="cursor-pointer"
+        className="cursor-pointer flex items-center"
       >
         {asset.name}
       </MiniCard.Title>
-      <MiniCard.Description>
+
+      <MiniCard.Description className="flex gap-1.5 items-center ">
+        {causingFailure && <AssetIsCausingFailureNotice />}
         <UpdatedAt date={asset.updatedAt} italic={false} className="text-xs" />
       </MiniCard.Description>
       <MiniCard.Actions
@@ -428,6 +444,37 @@ function OpenAPICard({
   );
 }
 
+const AssetIsCausingFailureNotice = () => {
+  const latestDeployment = useLatestDeployment();
+  const routes = useRoutes();
+
+  return (
+    <HoverCard>
+      <HoverCardTrigger className="cursor-pointer" onClick={() => alert("hey")}>
+        <CircleAlertIcon className="size-3 text-destructive" />
+      </HoverCardTrigger>
+      <HoverCardPortal>
+        <HoverCardContent side="bottom" className="text-sm" asChild>
+          <div>
+            <div>
+              This API source caused the latest deployment to fail. Remove or
+              update it to prevent future failures.
+            </div>
+            <div className="flex justify-end mt-3">
+              <routes.deployments.deployment.Link
+                className="text-link"
+                params={[latestDeployment.data?.deployment?.id ?? ""]}
+              >
+                View Logs
+              </routes.deployments.deployment.Link>
+            </div>
+          </div>
+        </HoverCardContent>
+      </HoverCardPortal>
+    </HoverCard>
+  );
+};
+
 function AssetViewDialog({
   asset,
   open,
@@ -437,7 +484,6 @@ function AssetViewDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  // const client = useSdkClient();
   const { projectSlug } = useParams();
   const project = useProject();
   const [content, setContent] = useState<string>("");
@@ -486,3 +532,44 @@ function AssetViewDialog({
     </Dialog>
   );
 }
+
+/**
+ * Hook to identify asset IDs not referenced by any tools in the latest
+ * deployment.
+ */
+const useUnusedAssetIds = () => {
+  const latestDeployment = useLatestDeployment();
+  const toolsList = useListTools(
+    {
+      deploymentId: latestDeployment.data?.deployment?.id ?? "",
+    },
+    undefined,
+    {
+      enabled: !!latestDeployment.data?.deployment?.id,
+    },
+  );
+
+  const unusedAssetIds: Set<string> = useMemo(() => {
+    const deployment = latestDeployment.data?.deployment;
+
+    if (!toolsList.data || !deployment?.openapiv3Assets) {
+      return new Set<string>();
+    }
+
+    // Build set of valid asset IDs (those referenced by tools)
+    const validAssetIds = new Set(
+      toolsList.data.tools
+        .map((tool) => tool.httpToolDefinition?.openapiv3DocumentId)
+        .filter((id): id is string => id != null),
+    );
+
+    // Find assets not referenced by any tool
+    return new Set(
+      deployment.openapiv3Assets
+        .map((asset) => asset.id)
+        .filter((id) => !validAssetIds.has(id)),
+    );
+  }, [toolsList.data, latestDeployment.data]);
+
+  return unusedAssetIds;
+};
