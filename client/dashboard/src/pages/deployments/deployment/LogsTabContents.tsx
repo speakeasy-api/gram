@@ -830,18 +830,3 @@ export const LogsTabContents = () => {
     </>
   );
 };
-
-export const ToolsTabContents = ({
-  deploymentId,
-}: {
-  deploymentId: string;
-}) => {
-  return (
-    <>
-      <Heading variant="h2" className="mb-6">
-        Tools
-      </Heading>
-      <ToolsList deploymentId={deploymentId} />
-    </>
-  );
-};
