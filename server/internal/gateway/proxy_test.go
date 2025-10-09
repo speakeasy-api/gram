@@ -64,7 +64,7 @@ func newFeatureProvider(projectID string) feature.Provider {
 }
 
 func TestToolProxy_Do_PathParams(t *testing.T) {
-	// t.Parallel()
+	t.Parallel()
 
 	tests := []struct {
 		name          string
@@ -196,7 +196,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// t.Parallel()
+			t.Parallel()
 
 			// Create a mock server that captures the request
 			var capturedRequest *http.Request
@@ -292,20 +292,8 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 			// Verify the path was correctly constructed with the number
 			require.Equal(t, tt.expectedPath, capturedRequest.URL.Path)
 
-			// Give ClickHouse a moment to process async writes
-			time.Sleep(100 * time.Millisecond)
-
-			// Verify that logs were written to ClickHouse
-			pagination := &toolmetrics.PaginationRequest{
-				PerPage:    10,
-				Sort:       "DESC",
-				Direction:  toolmetrics.Next,
-				PrevCursor: "",
-				NextCursor: "",
-			}
-			logs, err := chClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
-			require.NoError(t, err)
-			require.NotNil(t, logs)
+			// Wait for ClickHouse logs to be written asynchronously
+			logs := waitForClickHouseLogs(ctx, t, chClient, tool.ProjectID, 1, 5*time.Second)
 			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
 
 			toolHTTPRequest := logs.Logs[0]
@@ -321,7 +309,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 }
 
 func TestToolProxy_Do_HeaderParams(t *testing.T) {
-	// t.Parallel()
+	t.Parallel()
 
 	tests := []struct {
 		name           string
@@ -351,7 +339,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// t.Parallel()
+			t.Parallel()
 
 			// Create a mock server that captures the request headers
 			var capturedRequest *http.Request
@@ -450,20 +438,8 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				require.Equal(t, tt.expectedHeader, actualHeaderValue, "header %s value mismatch", headerName)
 			}
 
-			// Give ClickHouse a moment to process async writes
-			time.Sleep(100 * time.Millisecond)
-
-			// Verify that logs were written to ClickHouse
-			pagination := &toolmetrics.PaginationRequest{
-				PerPage:    10,
-				Sort:       "DESC",
-				Direction:  toolmetrics.Next,
-				PrevCursor: "",
-				NextCursor: "",
-			}
-			logs, err := chClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
-			require.NoError(t, err)
-			require.NotNil(t, logs)
+			// Wait for ClickHouse logs to be written asynchronously
+			logs := waitForClickHouseLogs(ctx, t, chClient, tool.ProjectID, 1, 5*time.Second)
 			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
 
 			toolHTTPRequest := logs.Logs[0]
@@ -479,7 +455,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 }
 
 func TestToolProxy_Do_QueryParams(t *testing.T) {
-	// t.Parallel()
+	t.Parallel()
 
 	// Test timestamp in RFC3339Nano format
 	testTime := time.Date(2023, 12, 25, 15, 30, 45, 123456789, time.UTC)
@@ -737,7 +713,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// t.Parallel()
+			t.Parallel()
 
 			// Create a mock server that captures the request
 			var capturedRequest *http.Request
@@ -824,20 +800,8 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				require.Equal(t, expectedValues, actualValues, "query parameter %s has incorrect values", expectedKey)
 			}
 
-			// Give ClickHouse a moment to process async writes
-			time.Sleep(100 * time.Millisecond)
-
-			// Verify that logs were written to ClickHouse
-			pagination := &toolmetrics.PaginationRequest{
-				PerPage:    10,
-				Sort:       "DESC",
-				Direction:  toolmetrics.Next,
-				PrevCursor: "",
-				NextCursor: "",
-			}
-			logs, err := chClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
-			require.NoError(t, err)
-			require.NotNil(t, logs)
+			// Wait for ClickHouse logs to be written asynchronously
+			logs := waitForClickHouseLogs(ctx, t, chClient, tool.ProjectID, 1, 5*time.Second)
 			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
 
 			toolHTTPRequest := logs.Logs[0]
@@ -853,7 +817,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 }
 
 func TestToolProxy_Do_Body(t *testing.T) {
-	// t.Parallel()
+	t.Parallel()
 
 	tests := []struct {
 		name         string
@@ -965,7 +929,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// t.Parallel()
+			t.Parallel()
 
 			// Create a mock server that captures the request body
 			var capturedBody []byte
@@ -1084,20 +1048,8 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				require.Equal(t, expectedJSON, actualJSON)
 			}
 
-			// Give ClickHouse a moment to process async writes
-			time.Sleep(100 * time.Millisecond)
-
-			// Verify that logs were written to ClickHouse
-			pagination := &toolmetrics.PaginationRequest{
-				PerPage:    10,
-				Sort:       "DESC",
-				Direction:  toolmetrics.Next,
-				PrevCursor: "",
-				NextCursor: "",
-			}
-			logs, err := chClient.List(ctx, tool.ProjectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
-			require.NoError(t, err)
-			require.NotNil(t, logs)
+			// Wait for ClickHouse logs to be written asynchronously
+			logs := waitForClickHouseLogs(ctx, t, chClient, tool.ProjectID, 1, 5*time.Second)
 			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
 
 			toolHTTPRequest := logs.Logs[0]
@@ -1115,4 +1067,35 @@ func TestToolProxy_Do_Body(t *testing.T) {
 // boolPtr is a helper function to create a pointer to a boolean value
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// waitForClickHouseLogs polls ClickHouse until the expected number of logs appear or timeout is reached
+func waitForClickHouseLogs(ctx context.Context, t *testing.T, chClient *toolmetrics.ClickhouseClient, projectID string, expectedCount int, timeout time.Duration) *toolmetrics.ListResult {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	pollInterval := 50 * time.Millisecond
+
+	pagination := &toolmetrics.PaginationRequest{
+		PerPage:    10,
+		Sort:       "DESC",
+		Direction:  toolmetrics.Next,
+		PrevCursor: "",
+		NextCursor: "",
+	}
+
+	for time.Now().Before(deadline) {
+		logs, err := chClient.List(ctx, projectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
+		require.NoError(t, err)
+		require.NotNil(t, logs)
+
+		if len(logs.Logs) >= expectedCount {
+			return logs
+		}
+
+		time.Sleep(pollInterval)
+	}
+
+	t.Fatalf("timeout waiting for ClickHouse logs: expected %d logs, got 0 after %v", expectedCount, timeout)
+	return nil
 }
