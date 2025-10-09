@@ -9,11 +9,12 @@ contents:
     - nodejs=22.16.0-r2
     - gram-runner
 
+cmd: gram-runner -language javascript
 entrypoint:
   shell-fragment: |
     set -e
     gram-runner -init -language javascript
-    exec su-exec gram gram-runner -language javascript
+    exec su-exec gram "$@"
 
 accounts:
   # The actual container will be run as gram. This just allows an init process
@@ -38,4 +39,5 @@ paths:
     permissions: 0o755
 
 environment:
+  RUNNER_LANGUAGE: javascript
   PATH: /usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin

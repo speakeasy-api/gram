@@ -28,3 +28,5 @@ docker rmi --force "gram-runner-nodejs22:dev-$arch" gram-runner-nodejs22:dev || 
 docker image load -i ./oci/nodejs22/image.tar
 docker tag "gram-runner-nodejs22:dev-$arch" "gram-runner-nodejs22:dev"
 docker rmi "gram-runner-nodejs22:dev-$arch"
+echo "Image available locally as:"
+echo "gram-runner-nodejs22:dev"

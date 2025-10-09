@@ -9,11 +9,12 @@ contents:
     - python3=3.12.11-r0
     - gram-runner
 
+cmd: gram-runner -language python
 entrypoint:
   shell-fragment: |
     set -e
     gram-runner -init -language python
-    exec su-exec gram gram-runner -language python
+    exec su-exec gram "$@"
 
 accounts:
   # The actual container will be run as gram. This just allows an init process
@@ -38,4 +39,5 @@ paths:
     permissions: 0o755
 
 environment:
+  RUNNER_LANGUAGE: python
   PATH: /usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin
