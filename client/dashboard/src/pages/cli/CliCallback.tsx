@@ -33,7 +33,7 @@ export default function CliCallback(props: CliCallbackProps) {
       window.location.href = `/register?redirect=${redirectUrl}`;
       return;
     }
-  }, [session]);
+  }, [session, status]);
 
   useEffect(() => {
     if (!session) return;
