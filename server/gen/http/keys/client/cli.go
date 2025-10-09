@@ -23,7 +23,7 @@ func BuildCreateKeyPayload(keysCreateKeyBody string, keysCreateKeySessionToken s
 	{
 		err = json.Unmarshal([]byte(keysCreateKeyBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"Aut minima debitis.\",\n      \"scopes\": [\n         \"Eaque fuga sed nisi ipsum.\",\n         \"Exercitationem quidem sunt sunt aliquam illum sed.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"Delectus eum aperiam placeat est sed officiis.\",\n      \"scopes\": [\n         \"Necessitatibus minima asperiores sapiente.\",\n         \"Dignissimos sed minus.\"\n      ]\n   }'")
 		}
 		if body.Scopes == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
@@ -88,6 +88,21 @@ func BuildRevokeKeyPayload(keysRevokeKeyID string, keysRevokeKeySessionToken str
 	v := &keys.RevokeKeyPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildVerifyKeyPayload builds the payload for the keys verifyKey endpoint
+// from CLI flags.
+func BuildVerifyKeyPayload(keysVerifyKeyApikeyToken string) (*keys.VerifyKeyPayload, error) {
+	var apikeyToken *string
+	{
+		if keysVerifyKeyApikeyToken != "" {
+			apikeyToken = &keysVerifyKeyApikeyToken
+		}
+	}
+	v := &keys.VerifyKeyPayload{}
+	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }

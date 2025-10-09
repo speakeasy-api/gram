@@ -19,6 +19,7 @@ type Endpoints struct {
 	CreateKey goa.Endpoint
 	ListKeys  goa.Endpoint
 	RevokeKey goa.Endpoint
+	VerifyKey goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "keys" service with endpoints.
@@ -29,6 +30,7 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateKey: NewCreateKeyEndpoint(s, a.APIKeyAuth),
 		ListKeys:  NewListKeysEndpoint(s, a.APIKeyAuth),
 		RevokeKey: NewRevokeKeyEndpoint(s, a.APIKeyAuth),
+		VerifyKey: NewVerifyKeyEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -37,6 +39,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateKey = m(e.CreateKey)
 	e.ListKeys = m(e.ListKeys)
 	e.RevokeKey = m(e.RevokeKey)
+	e.VerifyKey = m(e.VerifyKey)
 }
 
 // NewCreateKeyEndpoint returns an endpoint function that calls the method
@@ -105,5 +108,28 @@ func NewRevokeKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 			return nil, err
 		}
 		return nil, s.RevokeKey(ctx, p)
+	}
+}
+
+// NewVerifyKeyEndpoint returns an endpoint function that calls the method
+// "verifyKey" of service "keys".
+func NewVerifyKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*VerifyKeyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer"},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.VerifyKey(ctx, p)
 	}
 }

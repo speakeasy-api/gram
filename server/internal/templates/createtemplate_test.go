@@ -8,6 +8,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
@@ -71,7 +72,7 @@ func TestTemplatesService_CreateTemplate_MinimalPayload(t *testing.T) {
 	require.Empty(t, result.Template.Engine, "template engine should be empty")
 	require.Equal(t, "prompt", result.Template.Kind, "template kind should default to prompt")
 	require.Empty(t, result.Template.ToolsHint, "template tools hint should be empty")
-	require.Empty(t, result.Template.Schema, "template arguments should be empty")
+	require.JSONEq(t, constants.DefaultEmptyToolSchema, result.Template.Schema, "template arguments should be empty object")
 }
 
 func TestTemplatesService_CreateTemplate_DuplicateName(t *testing.T) {

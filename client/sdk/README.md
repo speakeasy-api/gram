@@ -170,7 +170,6 @@ run();
 * [list](docs/sdks/environments/README.md#list) - listEnvironments environments
 * [updateBySlug](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 
-
 ### [instances](docs/sdks/instances/README.md)
 
 * [getBySlug](docs/sdks/instances/README.md#getbyslug) - getInstance instances
@@ -185,6 +184,7 @@ run();
 * [create](docs/sdks/keys/README.md#create) - createKey keys
 * [list](docs/sdks/keys/README.md#list) - listKeys keys
 * [revokeById](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+* [validate](docs/sdks/keys/README.md#validate) - verifyKey keys
 
 ### [mcpMetadata](docs/sdks/mcpmetadata/README.md)
 
@@ -306,6 +306,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`keysCreate`](docs/sdks/keys/README.md#create) - createKey keys
 - [`keysList`](docs/sdks/keys/README.md#list) - listKeys keys
 - [`keysRevokeById`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`keysValidate`](docs/sdks/keys/README.md#validate) - verifyKey keys
 - [`mcpMetadataGet`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
 - [`mcpMetadataSet`](docs/sdks/mcpmetadata/README.md#set) - setMcpMetadata mcpMetadata
 - [`packagesCreate`](docs/sdks/packages/README.md#create) - createPackage packages
@@ -442,6 +443,7 @@ To learn about this feature and how to get started, check
 - [`useUploadImageMutation`](docs/sdks/assets/README.md#uploadimage) - uploadImage assets
 - [`useUploadOpenAPIv3Mutation`](docs/sdks/assets/README.md#uploadopenapiv3) - uploadOpenAPIv3 assets
 - [`useUpsertGlobalVariationMutation`](docs/sdks/variations/README.md#upsertglobal) - upsertGlobal variations
+- [`useValidateAPIKey`](docs/sdks/keys/README.md#validate) - verifyKey keys
 
 </details>
 <!-- End React hooks with TanStack Query [react-query] -->

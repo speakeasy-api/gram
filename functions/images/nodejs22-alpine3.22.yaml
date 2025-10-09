@@ -3,34 +3,41 @@ contents:
     - './packages'
     - https://dl-cdn.alpinelinux.org/alpine/v3.22/main
   packages:
-    - alpine-base
+    - alpine-baselayout-data
     - ca-certificates
+    - su-exec
     - nodejs=22.16.0-r2
     - gram-runner
 
+cmd: gram-runner -language javascript
+entrypoint:
+  shell-fragment: |
+    set -e
+    gram-runner -init -language javascript
+    exec su-exec gram "$@"
+
 accounts:
+  # The actual container will be run as gram. This just allows an init process
+  # to prepare the filesystem.
+  run-as: root
   groups:
     - groupname: gram
       gid: 10000
   users:
     - username: gram
       uid: 10000
-      shell: /bin/sh
-  run-as: gram
+      gid: 10000
 
-work-dir: /srv/app
+work-dir: /var/task
 
 paths:
   - path: /data
     type: directory
-    uid: 10000
-    gid: 10000
     permissions: 0o755
-  - path: /srv/app
+  - path: /var/task
     type: directory
-    uid: 10000
-    gid: 10000
     permissions: 0o755
 
 environment:
+  RUNNER_LANGUAGE: javascript
   PATH: /usr/local/sbin:/usr/local/bin:/usr/bin:/usr/sbin:/sbin:/bin

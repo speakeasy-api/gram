@@ -104,6 +104,7 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 		Email:                nil,
 		AccountType:          "",
 		ProjectSlug:          nil,
+		APIKeyScopes:         nil,
 	}
 
 	if session.ActiveOrganizationID == "" {

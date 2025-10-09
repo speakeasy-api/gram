@@ -279,7 +279,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, tool)
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPTool(tool))
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -422,7 +422,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, tool)
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPTool(tool))
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -786,7 +786,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, tool)
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPTool(tool))
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -1020,7 +1020,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), ciEnv, tool)
+			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), ciEnv, NewHTTPTool(tool))
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -1067,6 +1067,65 @@ func TestToolProxy_Do_Body(t *testing.T) {
 // boolPtr is a helper function to create a pointer to a boolean value
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	policy, err := guardian.NewUnsafePolicy([]string{})
+	require.NoError(t, err)
+
+	// Create a function tool
+	functionTool := &FunctionTool{
+		ID:             uuid.New().String(),
+		ProjectID:      uuid.New().String(),
+		DeploymentID:   uuid.New().String(),
+		OrganizationID: uuid.New().String(),
+		FunctionID:     uuid.New().String(),
+		Name:           "test_function",
+		Runtime:        "nodejs:22",
+		InputSchema:    []byte(`{"type": "object"}`),
+		Variables:      []byte(`{}`),
+	}
+
+	// Create request body
+	requestBody := ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 json.RawMessage(`{}`),
+		ResponseFilter:       nil,
+		EnvironmentVariables: nil,
+		GramRequestSummary:   "test function call",
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	// Create tool proxy
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		nil,
+		policy,
+	)
+
+	// Create response recorder
+	recorder := httptest.NewRecorder()
+
+	// Execute the proxy call with a function tool
+	ciEnv := NewCaseInsensitiveEnv()
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewFunctionTool(functionTool))
+
+	// Verify that it fails
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "tool type not supported")
 }
 
 // waitForClickHouseLogs polls ClickHouse until the expected number of logs appear or timeout is reached

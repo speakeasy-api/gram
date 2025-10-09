@@ -30,7 +30,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -203,7 +202,6 @@ func (c *ChatClient) LoadToolsetTools(
 	}
 
 	envRepo := env_repo.New(c.db)
-	toolsRepo := tools_repo.New(c.db)
 	toolsetHelpers := toolsets.NewToolsets(c.db)
 	envSlug := string(*toolset.DefaultEnvironmentSlug)
 
@@ -245,19 +243,7 @@ func (c *ChatClient) LoadToolsetTools(
 		projID := projectID
 
 		executor := func(ctx context.Context, rawArgs string) (string, error) {
-			// Find tool by name
-			toolID, err := toolsRepo.PokeHTTPToolDefinitionByUrn(ctx, tools_repo.PokeHTTPToolDefinitionByUrnParams{
-				ProjectID: projectID,
-				Urn:       *toolURN,
-			})
-			if err != nil {
-				return "", fmt.Errorf("failed to load tool: %w", err)
-			}
-			if toolID == uuid.Nil {
-				return "", fmt.Errorf("tool not found")
-			}
-
-			executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByID(ctx, toolID, projID)
+			executionPlan, err := toolsetHelpers.GetToolExecutionInfoByURN(ctx, *toolURN, projID)
 			if err != nil {
 				return "", fmt.Errorf("failed to get tool execution info: %w", err)
 			}

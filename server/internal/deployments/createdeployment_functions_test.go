@@ -774,7 +774,7 @@ func TestCreateDeployment_WithFunctions_BadToolsManifest(t *testing.T) {
 	require.NoError(t, err, "create deployment should succeed even with bad tools")
 
 	require.NotEqual(t, uuid.Nil.String(), dep.Deployment.ID, "deployment ID is nil")
-	require.Equal(t, "completed", dep.Deployment.Status, "deployment status should be completed")
+	require.Equal(t, "failed", dep.Deployment.Status, "deployment status should be failed")
 	require.Len(t, dep.Deployment.FunctionsAssets, 1, "expected 1 functions file")
 
 	// Verify that NO function tools were created due to bad manifest
