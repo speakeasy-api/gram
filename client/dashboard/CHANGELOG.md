@@ -1,5 +1,20 @@
 # @gram/dashboard
 
+## 0.12.0
+
+### Minor Changes
+
+- e956b16: feat: temperature slider in the playground
+- fbdc9bd: feat: add @ symbol tool tagging syntax to playground
+- 0e83d56: add new mcp configuration section for setting up install pages
+
+### Patch Changes
+
+- 90daf89: fix: prevent asset names from being cut off in deployments overview
+- f312721: fix: only capture cmd-f in logs when logs section is focused
+- Updated dependencies [8972d1d]
+  - @gram/client@0.14.7
+
 ## 0.11.0
 
 ### Minor Changes
