@@ -12,7 +12,18 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+)
+
+// Log attribute keys for HTTP round trip operations
+const (
+	attrDurationMs    = "duration_ms"
+	attrPanic         = "panic"
+	attrRequestBytes  = "request_bytes"
+	attrResponseBytes = "response_bytes"
 )
 
 // sensitiveHeaders is a list of header names that should be redacted from logs
@@ -62,6 +73,22 @@ func NewHTTPLoggingRoundTripper(rt http.RoundTripper, tcm ToolMetricsClient, log
 // RoundTrip implements http.RoundTripper interface
 func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
+	tracer := otel.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics")
+
+	// Start a span for the HTTP logging round trip
+	ctx, span := tracer.Start(ctx, "tool.http.roundtrip",
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(
+			attribute.String("http.method", req.Method),
+			attribute.String("http.url", req.URL.String()),
+			attribute.String("http.host", req.URL.Host),
+		),
+	)
+	defer span.End()
+
+	// Update request context with span
+	req = req.WithContext(ctx)
+
 	startTime := time.Now()
 
 	base := h.rt
@@ -77,11 +104,12 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 				remote := info.Conn.RemoteAddr().String()
 				if host, _, err := net.SplitHostPort(remote); err == nil {
 					clientIP = host
+					span.SetAttributes(attribute.String("net.peer.ip", clientIP))
 				}
 			}
 		},
 	}
-	req = req.WithContext(httptrace.WithClientTrace(req.Context(), httpTrace))
+	req = req.WithContext(httptrace.WithClientTrace(ctx, httpTrace))
 
 	requestBodyBytesPtr, ok := ctx.Value(RequestBodyContextKey).(*uint64)
 	if !ok {
@@ -96,14 +124,41 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	tool, ok := ctx.Value(ToolInfoContextKey).(*ToolInfo)
 	if !ok {
 		// If no tool context, we can't log this request
+		noToolCtxErr := fmt.Errorf("no tool context")
+		span.RecordError(noToolCtxErr)
+		span.SetStatus(codes.Error, "missing tool context")
+		h.logger.WarnContext(ctx, "HTTP request missing tool context",
+			attr.SlogURLOriginal(req.URL.String()),
+			attr.SlogHTTPRequestMethod(req.Method),
+		)
 		if err != nil {
-			return resp, fmt.Errorf("no tool context: %w", err)
+			return resp, fmt.Errorf("%w: %w", noToolCtxErr, err)
 		}
-		return resp, fmt.Errorf("no tool context")
+		return resp, noToolCtxErr
 	}
+
+	// Add tool attributes to span
+	span.SetAttributes(
+		attribute.String("tool.id", tool.ID),
+		attribute.String("tool.urn", tool.Urn),
+		attribute.String("tool.name", tool.Name),
+		attribute.String("tool.project_id", tool.ProjectID),
+		attribute.String("tool.deployment_id", tool.DeploymentID),
+		attribute.String("tool.organization_id", tool.OrganizationID),
+		attribute.String("http.route", tool.HTTPRoute),
+	)
 
 	// If the request failed, wrap and return the error; E.g., request timeout, etc.
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "HTTP request failed")
+		h.logger.ErrorContext(ctx, "HTTP roundtrip failed",
+			attr.SlogError(err),
+			attr.SlogURLOriginal(req.URL.String()),
+			attr.SlogHTTPRequestMethod(req.Method),
+			attr.SlogToolURN(tool.Urn),
+			slog.Float64(attrDurationMs, durationMs),
+		)
 		return resp, fmt.Errorf("roundtrip: %w", err)
 	}
 
@@ -120,6 +175,25 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	statusCode := uint16(0)
 	if resp != nil {
 		statusCode = uint16(resp.StatusCode) //nolint:gosec // response codes aren't that large
+		span.SetAttributes(
+			attribute.Int("http.status_code", int(statusCode)),
+			attribute.Float64("http.duration_ms", durationMs),
+		)
+
+		// Set span status based on HTTP status code
+		if statusCode >= 500 {
+			span.SetStatus(codes.Error, fmt.Sprintf("HTTP %d", statusCode))
+		} else {
+			span.SetStatus(codes.Ok, "")
+		}
+
+		h.logger.DebugContext(ctx, "HTTP request completed",
+			attr.SlogHTTPRequestMethod(req.Method),
+			attr.SlogURLOriginal(req.URL.String()),
+			attr.SlogHTTPResponseStatusCode(int(statusCode)),
+			slog.Float64(attrDurationMs, durationMs),
+			attr.SlogToolURN(tool.Urn),
+		)
 	}
 
 	// Get request headers and filter sensitive ones
@@ -148,6 +222,17 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 
 	logHTTPRequest := func(respBodyBytes uint64) {
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					h.logger.ErrorContext(ctx, "panic in HTTP request logging goroutine",
+						slog.Any(attrPanic, r),
+						attr.SlogURLOriginal(url),
+						attr.SlogToolURN(toolID),
+						attr.SlogHTTPRequestMethod(method),
+					)
+				}
+			}()
+
 			logCtx := context.WithoutCancel(ctx)
 
 			// Get final request body size now that request body has been read and closed
@@ -160,7 +245,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 				DeploymentID:      tool.DeploymentID,
 				ToolID:            tool.ID,
 				ToolURN:           tool.Urn,
-				ToolType:          ToolTypeHttp,
+				ToolType:          HTTPToolType,
 				TraceID:           traceID,
 				SpanID:            spanID,
 				HTTPMethod:        req.Method,
@@ -187,6 +272,14 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 					attr.SlogToolURN(toolID),
 					attr.SlogToolName(tool.ProjectID),
 					attr.SlogHTTPRequestMethod(method),
+				)
+			} else {
+				h.logger.DebugContext(logCtx, "successfully logged HTTP request to ClickHouse",
+					attr.SlogURLOriginal(url),
+					attr.SlogToolURN(toolID),
+					attr.SlogHTTPRequestMethod(method),
+					slog.Uint64(attrRequestBytes, requestBodyBytes),
+					slog.Uint64(attrResponseBytes, respBodyBytes),
 				)
 			}
 		}()

@@ -9,15 +9,29 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+)
+
+// Log attribute keys for tool metrics operations
+const (
+	attrTsStart          = "ts_start"
+	attrTsEnd            = "ts_end"
+	attrResultCount      = "result_count"
+	attrHasNextPage      = "has_next_page"
+	attrQueryDurationMs  = "query_duration_ms"
+	attrInsertDurationMs = "insert_duration_ms"
 )
 
 type ToolLogLevel string
 type ToolType string
 
 const (
-	ToolTypeHttp     ToolType = "http"
-	ToolTypeFunction ToolType = "function"
-	ToolTypePrompt   ToolType = "prompt"
+	HTTPToolType     ToolType = "http"
+	FunctionToolType ToolType = "function"
+	PromptToolType   ToolType = "prompt"
 )
 
 func (t *ToolType) Scan(src interface{}) error {
@@ -83,6 +97,21 @@ type ClickhouseClient struct {
 }
 
 func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) (*ListResult, error) {
+	tracer := otel.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics")
+	ctx, span := tracer.Start(ctx, "clickhouse.list_logs",
+		trace.WithAttributes(
+			attribute.String("project_id", projectID),
+			attribute.String("ts_start", tsStart.Format(time.RFC3339)),
+			attribute.String("ts_end", tsEnd.Format(time.RFC3339)),
+			attribute.String("cursor", cursor.Format(time.RFC3339)),
+			attribute.Int("limit", pagination.Limit()),
+			attribute.String("sort_order", pagination.SortOrder()),
+		),
+	)
+	defer span.End()
+
+	startTime := time.Now()
+
 	query := listLogsQueryDesc
 	if pagination.SortOrder() == "ASC" {
 		query = listLogsQueryAsc
@@ -95,6 +124,14 @@ func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, 
 		cursor,
 		pagination.Limit())
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to query logs")
+		c.Logger.ErrorContext(ctx, "failed to query tool logs from ClickHouse",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID),
+			slog.String(attrTsStart, tsStart.Format(time.RFC3339)),
+			slog.String(attrTsEnd, tsEnd.Format(time.RFC3339)),
+		)
 		return nil, fmt.Errorf("query logs: %w", err)
 	}
 
@@ -108,14 +145,25 @@ func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, 
 	var results []ToolHTTPRequest
 	for rows.Next() {
 		var log ToolHTTPRequest
-		c.Logger.DebugContext(ctx, "scan row")
 		if err = rows.ScanStruct(&log); err != nil {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "failed to scan row")
+			c.Logger.ErrorContext(ctx, "failed to scan row",
+				attr.SlogError(err),
+				attr.SlogProjectID(projectID),
+			)
 			return nil, fmt.Errorf("error scanning row: %w", err)
 		}
 		results = append(results, log)
 	}
 
 	if err = rows.Err(); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "rows iteration error")
+		c.Logger.ErrorContext(ctx, "error iterating rows",
+			attr.SlogError(err),
+			attr.SlogProjectID(projectID),
+		)
 		return nil, fmt.Errorf("rows error: %w", err)
 	}
 
@@ -136,6 +184,21 @@ func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, 
 		}
 	}
 
+	queryDuration := time.Since(startTime)
+	span.SetAttributes(
+		attribute.Int("result_count", len(results)),
+		attribute.Bool("has_next_page", hasNextPage),
+		attribute.Float64("query_duration_ms", float64(queryDuration.Milliseconds())),
+	)
+	span.SetStatus(codes.Ok, "")
+
+	c.Logger.InfoContext(ctx, "successfully listed tool logs",
+		attr.SlogProjectID(projectID),
+		slog.Int(attrResultCount, len(results)),
+		slog.Bool(attrHasNextPage, hasNextPage),
+		slog.Float64(attrQueryDurationMs, float64(queryDuration.Milliseconds())),
+	)
+
 	return &ListResult{
 		Logs: results,
 		Pagination: PaginationMetadata{
@@ -147,6 +210,23 @@ func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, 
 }
 
 func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
+	tracer := otel.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics")
+	ctx, span := tracer.Start(ctx, "clickhouse.log_http_request",
+		trace.WithAttributes(
+			attribute.String("tool_id", log.ToolID),
+			attribute.String("tool_urn", log.ToolURN),
+			attribute.String("project_id", log.ProjectID),
+			attribute.String("organization_id", log.OrganizationID),
+			attribute.String("http_method", log.HTTPMethod),
+			attribute.String("http_route", log.HTTPRoute),
+			attribute.Int("status_code", int(log.StatusCode)),
+			attribute.Float64("duration_ms", log.DurationMs),
+		),
+	)
+	defer span.End()
+
+	startTime := time.Now()
+
 	args := []any{
 		log.Ts,
 		log.OrganizationID,
@@ -175,17 +255,49 @@ func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
 
 	err := c.Conn.Exec(ctx, insertHttpRaw, args...)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "failed to insert log")
+		c.Logger.ErrorContext(ctx, "failed to insert HTTP log to ClickHouse",
+			attr.SlogError(err),
+			attr.SlogToolID(log.ToolID),
+			attr.SlogToolURN(log.ToolURN),
+			attr.SlogProjectID(log.ProjectID),
+			attr.SlogHTTPRequestMethod(log.HTTPMethod),
+			attr.SlogHTTPResponseStatusCode(int(log.StatusCode)),
+		)
 		return fmt.Errorf("insert http raw: %w", err)
 	}
+
+	insertDuration := time.Since(startTime)
+	span.SetAttributes(
+		attribute.Float64("insert_duration_ms", float64(insertDuration.Milliseconds())),
+		attribute.Int64("request_body_bytes", int64(log.RequestBodyBytes)),   //nolint:gosec // uint64 to int64 conversion is safe for body sizes
+		attribute.Int64("response_body_bytes", int64(log.ResponseBodyBytes)), //nolint:gosec // uint64 to int64 conversion is safe for body sizes
+	)
+	span.SetStatus(codes.Ok, "")
+
+	c.Logger.DebugContext(ctx, "successfully logged HTTP request to ClickHouse",
+		attr.SlogToolID(log.ToolID),
+		attr.SlogToolURN(log.ToolURN),
+		attr.SlogProjectID(log.ProjectID),
+		attr.SlogHTTPRequestMethod(log.HTTPMethod),
+		attr.SlogHTTPResponseStatusCode(int(log.StatusCode)),
+		slog.Float64(attrInsertDurationMs, float64(insertDuration.Milliseconds())),
+	)
 
 	return nil
 }
 
 func (c *ClickhouseClient) Close() error {
+	c.Logger.InfoContext(context.Background(), "closing ClickHouse connection")
 	err := c.Conn.Close()
 	if err != nil {
+		c.Logger.ErrorContext(context.Background(), "failed to close ClickHouse connection",
+			attr.SlogError(err),
+		)
 		return fmt.Errorf("close: %w", err)
 	}
+	c.Logger.InfoContext(context.Background(), "successfully closed ClickHouse connection")
 	return nil
 }
 
