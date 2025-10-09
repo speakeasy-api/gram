@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
+import { SimpleTooltip } from "@/components/ui/tooltip";
 import { UpdatedAt } from "@/components/updated-at";
 import { FullWidthUpload } from "@/components/upload";
 import { useProject } from "@/contexts/Auth";
@@ -99,20 +100,31 @@ export default function OpenAPIAssets() {
       <Icon name="history" className="text-muted-foreground" />
     );
 
+    const deploymentFailed = deployment.status === "failed";
+    let tooltip = deploymentFailed
+      ? "Latest deployment failed"
+      : "Latest deployment succeeded";
+
+    if (deploymentLogsSummary.skipped > 0) {
+      tooltip += ` (${deploymentLogsSummary.skipped} operations skipped)`;
+    }
+
     return (
       <Page.Section.CTA>
-        <a href={routes.deployments.deployment.href(deployment.id)}>
-          <Button
-            variant="tertiary"
-            className={cn(
-              hasErrors &&
-                "text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/20!",
-            )}
-          >
-            <Button.LeftIcon>{icon}</Button.LeftIcon>
-            HISTORY
-          </Button>
-        </a>
+        <SimpleTooltip tooltip={tooltip}>
+          <a href={routes.deployments.deployment.href(deployment.id)}>
+            <Button
+              variant="tertiary"
+              className={cn(
+                hasErrors &&
+                  "text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/20!",
+              )}
+            >
+              <Button.LeftIcon>{icon}</Button.LeftIcon>
+              HISTORY
+            </Button>
+          </a>
+        </SimpleTooltip>
       </Page.Section.CTA>
     );
   }, [deployment, deploymentLogsSummary]);

@@ -204,3 +204,49 @@ func TestToolsetsService_GetToolset_VerifyAllFields(t *testing.T) {
 	require.Equal(t, created.OrganizationID, result.OrganizationID)
 	require.Equal(t, created.ProjectID, result.ProjectID)
 }
+
+func TestToolsetsService_GetToolset_WithFunctionTools(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	// Create deployment with function tools
+	dep := createFunctionsDeployment(t, ctx, ti)
+
+	// Get function tools from the deployment
+	repo := testrepo.New(ti.conn)
+	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.GreaterOrEqual(t, len(functionTools), 1, "expected at least 1 function tool")
+
+	// Create a toolset with function tools
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Function Toolset",
+		Description:            conv.Ptr("A toolset with function tools"),
+		ToolUrns:               []string{functionTools[0].ToolUrn.String()},
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+
+	// Get the toolset
+	result, err := ti.service.GetToolset(ctx, &gen.GetToolsetPayload{
+		Slug:             created.Slug,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, created.ID, result.ID)
+	require.Equal(t, "Function Toolset", result.Name)
+	require.Len(t, result.Tools, 1, "should have 1 function tool")
+
+	// Verify the function tool is properly populated
+	tool := result.Tools[0]
+	require.NotNil(t, tool.FunctionToolDefinition, "should be a function tool")
+	require.NotEmpty(t, tool.FunctionToolDefinition.ID)
+	require.NotEmpty(t, tool.FunctionToolDefinition.Name)
+	require.NotEmpty(t, tool.FunctionToolDefinition.DeploymentID)
+	require.NotNil(t, tool.FunctionToolDefinition.Schema)
+}

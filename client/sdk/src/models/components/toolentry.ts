@@ -12,6 +12,7 @@ import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 export const Type = {
   Http: "http",
   Prompt: "prompt",
+  Function: "function",
 } as const;
 export type Type = ClosedEnum<typeof Type>;
 
