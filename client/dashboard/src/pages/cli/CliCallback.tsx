@@ -16,7 +16,7 @@ export default function CliCallback(props: CliCallbackProps) {
   const { localCallbackUrl } = props;
   const { session, status } = useSessionData();
   const [error, setError] = useState<string | null>(null);
-  const { mutateAsync: createKey, isPending } = useCreateAPIKeyMutation();
+  const { mutateAsync: createKey } = useCreateAPIKeyMutation();
   const hasCreatedKey = useRef(false);
   const validCallback = isCallbackLocal(localCallbackUrl);
 
@@ -59,11 +59,7 @@ export default function CliCallback(props: CliCallbackProps) {
     return <FailedScreen error={error} />;
   }
 
-  if (isPending) {
-    return <WaitScreen />;
-  }
-
-  return <SuccessScreen />;
+  return <WaitScreen />;
 }
 
 function FailedScreen({ error }: { error: string }) {
@@ -78,17 +74,6 @@ function FailedScreen({ error }: { error: string }) {
 }
 
 function WaitScreen() {
-  return (
-    <div className="flex items-center justify-center h-screen">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold mb-2">Creating API Key...</h1>
-        <p className="text-gray-600">Please wait</p>
-      </div>
-    </div>
-  );
-}
-
-function SuccessScreen() {
   return (
     <div className="flex items-center justify-center h-screen">
       <div className="text-center">
@@ -149,9 +134,6 @@ async function createProducerKey(
 async function transmitKey(callbackUrl: string, apiKey: string): Promise<void> {
   const url = new URL(callbackUrl);
   url.searchParams.set("api_key", apiKey);
-
-  const smoothRedirectDelay = new Promise((r) => setTimeout(r, 500));
-  await smoothRedirectDelay;
 
   window.location.replace(url.toString());
 }
