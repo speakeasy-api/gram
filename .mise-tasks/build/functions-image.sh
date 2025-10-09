@@ -39,7 +39,7 @@ fi
 
 rm -rf "$out"
 mkdir -p "$out"
-exec apko build \
+apko build \
   --keyring-append "$melange_pub_key" \
   --build-date "$date" \
   --sbom-path "$out" \
@@ -49,3 +49,27 @@ exec apko build \
   "$apko_config" \
   "$image" \
   "$tarball"
+
+# Check for world-writable directories
+world_writable=$(find / -type d -perm -0002 ! -perm -1000 -exec ls -ld {} \;)
+if [ -n "$world_writable" ]; then
+  echo "Error: World-writable directories found:"
+  echo "$world_writable"
+  exit 1
+fi
+
+# Check for setuid/setgid files
+setuid_files=$(find / -perm /6000 -type f)
+if [ -n "$setuid_files" ]; then
+  echo "Error: Found setuid/setgid files:"
+  echo "$setuid_files"
+  exit 1
+fi
+
+# gram user should only own /home/gram
+non_gram_dirs=$(find / -type d -user gram)
+if [ "$non_gram_dirs" != "/home/gram" ]; then
+  echo "Error: Found directories owned by gram user other than /home/gram:"
+  echo "$non_gram_dirs"
+  exit 1
+fi
