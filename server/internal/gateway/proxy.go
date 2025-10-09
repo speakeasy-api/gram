@@ -196,41 +196,26 @@ func (itp *ToolProxy) Do(
 	}
 
 	if len(tool.Schema) > 0 {
-		if validateErr := validateToolCallBody(ctx, logger, bodyBytes, string(tool.Schema)); validateErr != nil {
-			// Validation failed, attempt to heal the body by recursively parsing stringified JSON
-			if len(toolCallBody.Body) > 0 {
-				healed, didHeal := healStringifiedJSON(ctx, logger, toolCallBody.Body, string(tool.Schema))
-				if didHeal {
-					// Update toolCallBody with healed body
-					toolCallBody.Body = healed
-					// Update bodyBytes by patching just the body field to preserve original structure
-					var originalBody map[string]json.RawMessage
-					if err := json.Unmarshal(bodyBytes, &originalBody); err == nil {
-						originalBody["body"] = healed
-						if newBodyBytes, err := json.Marshal(originalBody); err == nil {
-							bodyBytes = newBodyBytes
-							// Re-validate after healing
-							if validateErr = validateToolCallBody(ctx, logger, bodyBytes, string(tool.Schema)); validateErr == nil {
-								logger.InfoContext(ctx, "successfully healed stringified JSON body")
-							}
-						}
-					}
-				}
-			}
+		bodyBytes, err = validateAndAttemptHealing(ctx, logger, bodyBytes, string(tool.Schema))
 
-			// If still invalid after healing attempt, return error
-			if validateErr != nil {
-				logger.InfoContext(ctx, "tool call request schema failed validation", attr.SlogError(validateErr))
-				responseStatusCode = http.StatusBadRequest
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusBadRequest)
-				if err := json.NewEncoder(w).Encode(toolcallErrorSchema{
-					Error: fmt.Sprintf("The input to the tool is invalid with the attached error. Please review the tool schema closely: %s", validateErr.Error()),
-				}); err != nil {
-					logger.ErrorContext(ctx, "failed to encode tool call error", attr.SlogError(err))
-				}
-				return nil
+		// Extract the body field from healed bodyBytes
+		var healedToolCallBody ToolCallBody
+		if unmarshalErr := json.Unmarshal(bodyBytes, &healedToolCallBody); unmarshalErr == nil {
+			toolCallBody.Body = healedToolCallBody.Body
+		}
+
+		// If still invalid after healing attempt, return error
+		if err != nil {
+			logger.InfoContext(ctx, "tool call request schema failed validation", attr.SlogError(err))
+			responseStatusCode = http.StatusBadRequest
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			if err := json.NewEncoder(w).Encode(toolcallErrorSchema{
+				Error: fmt.Sprintf("The input to the tool is invalid with the attached error. Please review the tool schema closely: %s", err.Error()),
+			}); err != nil {
+				logger.ErrorContext(ctx, "failed to encode tool call error", attr.SlogError(err))
 			}
+			return nil
 		}
 	}
 
@@ -664,132 +649,4 @@ func formEncodeValue(values url.Values, key string, value any) {
 		// Handle primitives
 		values.Set(key, fmt.Sprintf("%v", value))
 	}
-}
-
-// healStringifiedJSON recursively attempts to parse stringified JSON in a body,
-// using the JSON schema to identify where objects are expected but strings are provided.
-// The schemaStr parameter should be the full tool schema that includes a "body" property.
-// Returns the healed body and a boolean indicating if any healing was performed.
-func healStringifiedJSON(ctx context.Context, logger *slog.Logger, body json.RawMessage, schemaStr string) (json.RawMessage, bool) {
-	// Parse the body as a generic value (could be object, string, array, etc.)
-	var bodyValue any
-	if err := json.Unmarshal(body, &bodyValue); err != nil {
-		// Not valid JSON, can't heal
-		return body, false
-	}
-
-	// Parse the full schema
-	var fullSchemaMap map[string]any
-	if err := json.Unmarshal([]byte(schemaStr), &fullSchemaMap); err != nil {
-		logger.WarnContext(ctx, "failed to parse schema for healing", attr.SlogError(err))
-		return body, false
-	}
-
-	// Extract the body schema from properties.body
-	var bodySchema any
-	if properties, ok := fullSchemaMap["properties"].(map[string]any); ok {
-		if bs, ok := properties["body"]; ok {
-			bodySchema = bs
-		}
-	}
-
-	// If we couldn't extract a body schema, try healing with the full schema
-	if bodySchema == nil {
-		bodySchema = fullSchemaMap
-	}
-
-	// Recursively heal the body based on the schema
-	healed := healValue(bodyValue, bodySchema)
-
-	// Marshal the healed body back to JSON
-	healedBytes, err := json.Marshal(healed)
-	if err != nil {
-		logger.WarnContext(ctx, "failed to marshal healed body", attr.SlogError(err))
-		return body, false
-	}
-
-	// Check if anything changed
-	changed := !bytes.Equal(body, healedBytes)
-	return json.RawMessage(healedBytes), changed
-}
-
-// healValue recursively heals a value based on its schema definition.
-// If the value is a string, attempt to parse it as JSON first.
-func healValue(value any, schema any) any {
-	// Step 1: If value is a string, try to parse it as JSON
-	if strVal, isString := value.(string); isString {
-		var parsed any
-		if err := json.Unmarshal([]byte(strVal), &parsed); err == nil {
-			// Successfully parsed, continue healing with the parsed value
-			value = parsed
-		}
-		// If parsing fails, keep the string value and continue
-	}
-
-	// Step 2: If value is an object, recursively heal its properties
-	valueMap, isMap := value.(map[string]any)
-	if !isMap {
-		// Not a map - check if it's an array
-		if arr, isArray := value.([]any); isArray {
-			// Heal array items if schema is available
-			schemaMap, ok := schema.(map[string]any)
-			if ok {
-				if items, hasItems := schemaMap["items"]; hasItems {
-					healed := make([]any, len(arr))
-					for i, item := range arr {
-						healed[i] = healValue(item, items)
-					}
-					return healed
-				}
-			}
-		}
-		// For primitives or arrays without schema, return as-is
-		return value
-	}
-
-	// Step 3: Extract properties schema from the schema definition
-	// Handle various schema formats: type:object, oneOf, anyOf, or direct properties
-	var propertiesSchema map[string]any
-
-	if schemaMap, ok := schema.(map[string]any); ok {
-		// Try direct properties
-		if props, ok := schemaMap["properties"].(map[string]any); ok {
-			propertiesSchema = props
-		} else if oneOf, ok := schemaMap["oneOf"].([]any); ok {
-			// For oneOf/anyOf, use the first option with properties
-			for _, option := range oneOf {
-				if optMap, ok := option.(map[string]any); ok {
-					if props, ok := optMap["properties"].(map[string]any); ok {
-						propertiesSchema = props
-						break
-					}
-				}
-			}
-		} else if anyOf, ok := schemaMap["anyOf"].([]any); ok {
-			for _, option := range anyOf {
-				if optMap, ok := option.(map[string]any); ok {
-					if props, ok := optMap["properties"].(map[string]any); ok {
-						propertiesSchema = props
-						break
-					}
-				}
-			}
-		}
-	}
-
-	// Step 4: Recursively heal each property in the object
-	if propertiesSchema != nil {
-		healed := make(map[string]any)
-		for key, val := range valueMap {
-			if propSchema, ok := propertiesSchema[key]; ok {
-				healed[key] = healValue(val, propSchema)
-			} else {
-				healed[key] = val
-			}
-		}
-		return healed
-	}
-
-	// No schema found, return the value as-is
-	return valueMap
 }
