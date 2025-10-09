@@ -21,9 +21,9 @@ import { memo, Suspense } from "react";
 import { useParams } from "react-router";
 import { useActiveDeployment } from "../useActiveDeployment";
 import { useRedeployDeployment } from "../useRedeployDeployment";
-import { AssetsTabContents } from "./AssetsTabContents";
-import { LogsTabContents } from "./LogsTabContents";
-import { ToolsTabContents } from "./ToolsTabContents";
+import { AssetsTabContent } from "./AssetsTabContent";
+import { LogsTabContent } from "./LogsTabContent";
+import { ToolsTabContent } from "./ToolsTabContent";
 import {
   DeploymentPageSearchParams,
   useDeploymentSearchParams,
@@ -89,16 +89,16 @@ function DeploymentLogs(props: { deploymentId: string }) {
         </TabsList>
         <TabsContent value="logs">
           <Suspense fallback={<div>Loading logs...</div>}>
-            <LogsTabContents />
+            <LogsTabContent />
           </Suspense>
         </TabsContent>
         <TabsContent value="assets">
           <Suspense fallback={<div>Loading assets...</div>}>
-            <AssetsTabContents />
+            <AssetsTabContent />
           </Suspense>
         </TabsContent>
         <TabsContent value="tools">
-          <ToolsTabContents deploymentId={deploymentId} />
+          <ToolsTabContent deploymentId={deploymentId} />
         </TabsContent>
       </Tabs>
     </div>

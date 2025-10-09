@@ -22,7 +22,7 @@ import React from "react";
 import { useParams } from "react-router";
 import { useDeploymentSearchParams } from "./use-deployment-search-params";
 
-export const AssetsTabContents = () => {
+export const AssetsTabContent = () => {
   const routes = useRoutes();
   const { setSearchParams } = useDeploymentSearchParams();
 

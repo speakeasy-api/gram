@@ -116,7 +116,7 @@ function parseLogMessage(message: string, event: string): ParsedLogEntry {
   };
 }
 
-export const LogsTabContents = () => {
+export const LogsTabContent = () => {
   const { deploymentId } = useParams();
   const { data: deploymentLogs } = useDeploymentLogsSuspense(
     { deploymentId: deploymentId! },
