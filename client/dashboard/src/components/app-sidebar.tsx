@@ -55,12 +55,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 asChild
                 className="data-[slot=sidebar-menu-button]:!p-1.5 h-12"
               >
-                <Stack direction={"horizontal"} align={"center"} gap={2}>
-                  <GramLogo className="w-25" />
-                  <Type variant="small" muted>
-                    v0.8.7 (beta)
-                  </Type>
-                </Stack>
+                <GramLogo className="w-25" />
               </SidebarMenuButton>
             </routes.home.Link>
           </SidebarMenuItem>
