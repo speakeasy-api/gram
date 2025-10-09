@@ -284,6 +284,10 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		}
 	}
 
+	for _, functionEnvVar := range toolsetDetails.FunctionEnvironmentVariables {
+		envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(functionEnvVar.Name, "_", "-")))
+	}
+
 	toolNames := []string{}
 
 	for _, toolDesc := range toolsetDetails.Tools {
