@@ -12,7 +12,7 @@ func IsReservedPath(workdir, path string) (bool, error) {
 
 	abs, err := filepath.Abs(path)
 	if err != nil {
-		return false, fmt.Errorf("get absolute pah: %w", err)
+		return false, fmt.Errorf("get absolute path: %w", err)
 	}
 
 	rel, err := filepath.Rel(workdir, abs)
