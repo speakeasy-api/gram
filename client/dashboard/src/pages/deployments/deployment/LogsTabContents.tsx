@@ -10,7 +10,6 @@ import React, {
   useState,
 } from "react";
 import { useParams } from "react-router";
-import { ToolsList } from "../ToolsList";
 import { useDeploymentSearchParams } from "./use-deployment-search-params";
 
 type LogLevel = "WARN" | "INFO" | "DEBUG" | "ERROR" | "OK" | "SKIP";
