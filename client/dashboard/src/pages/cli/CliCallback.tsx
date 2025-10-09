@@ -46,9 +46,7 @@ export default function CliCallback(props: CliCallbackProps) {
 
     hasCreatedKey.current = true;
 
-    const smoothRedirectDelay = thunk(500);
     createProducerKey(createKey, session.session)
-      .then(smoothRedirectDelay)
       .then((key) => transmitKey(localCallbackUrl, key))
       .catch((err) => {
         setError(
@@ -148,14 +146,12 @@ async function createProducerKey(
   return result.key;
 }
 
-function thunk(timeout: number) {
-  return function (value: string): Promise<string> {
-    return new Promise((r) => setTimeout(() => r(value), timeout));
-  };
-}
-
 async function transmitKey(callbackUrl: string, apiKey: string): Promise<void> {
   const url = new URL(callbackUrl);
   url.searchParams.set("api_key", apiKey);
+
+  const smoothRedirectDelay = new Promise((r) => setTimeout(r, 500));
+  await smoothRedirectDelay;
+
   window.location.replace(url.toString());
 }

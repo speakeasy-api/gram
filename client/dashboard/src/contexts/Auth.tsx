@@ -9,7 +9,7 @@ import { useSessionInfo } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { useNavigate, useSearchParams, useLocation } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -184,7 +184,6 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const { orgSlug, projectSlug } = useSlugs();
   const [searchParams] = useSearchParams();
-  const cliFlow = useCliAuthFlow();
 
   const { session, error, status } = useSessionData();
 
@@ -220,8 +219,6 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const redirectParam = searchParams.get("redirect");
   if (redirectParam) {
     navigate(redirectParam, { replace: true });
-  } else if (cliFlow !== null) {
-    // Do nothing. Avoid flashing the project dashboard during the CLI flow.
   } else if (session.organization && !projectSlug) {
     // if we're logged in but the URL doesn't have a project slug, redirect to
     // the default project
@@ -333,18 +330,4 @@ export function usePylonInAppChat(user: User | undefined) {
     localStorage.setItem("pylon_user_email", email);
     localStorage.setItem("pylon_user_display_name", displayName);
   }, [user]);
-}
-
-export function useCliAuthFlow() {
-  const [searchParams] = useSearchParams();
-  const location = useLocation();
-
-  const fromCli = searchParams.get("from_cli") === "true";
-  const cliCallbackUrl = searchParams.get("cli_callback_url");
-
-  if (location.pathname === "/" && fromCli && cliCallbackUrl) {
-    return { cliCallbackUrl };
-  }
-
-  return null;
 }

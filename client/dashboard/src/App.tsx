@@ -7,13 +7,15 @@ import {
 } from "@speakeasy-api/moonshine";
 import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Route, Routes } from "react-router";
-import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
 import {
-  AuthProvider,
-  ProjectProvider,
-  useCliAuthFlow,
-} from "./contexts/Auth.tsx";
+  BrowserRouter,
+  Route,
+  Routes,
+  useSearchParams,
+  useLocation,
+} from "react-router";
+import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
+import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
 import { SdkProvider } from "./contexts/Sdk.tsx";
 import { TelemetryProvider } from "./contexts/Telemetry.tsx";
 import { AppRoute, useRoutes } from "./routes";
@@ -77,9 +79,7 @@ export default function App() {
           <TelemetryProvider>
             <BrowserRouter>
               <SdkProvider>
-                <AuthProvider>
-                  <AppContent />
-                </AuthProvider>
+                <AppContent />
                 <Toaster />
               </SdkProvider>
             </BrowserRouter>
@@ -91,6 +91,17 @@ export default function App() {
 }
 
 function AppContent() {
+  /**
+   * NOTE(cjea): Do not wrap CliCallback in an AuthProvider.
+   *
+   * CLI requests don't include a redirect URL, so AuthProvider wouldn't know
+   * where to send authenticated users. Instead, CliCallback handles the flow:
+   *
+   * 1. CliCallback receives an unauthenticated request.
+   * 2. Sets the redirect query param to its current URL.
+   * 3. Sends the user through the standard login flow via AuthHandler.
+   * 4. Authenticated user is redirected back to CliCallback.
+   */
   const cliFlow = useCliAuthFlow();
 
   if (cliFlow) {
@@ -98,9 +109,11 @@ function AppContent() {
   }
 
   return (
-    <ProjectProvider>
-      <RouteProvider />
-    </ProjectProvider>
+    <AuthProvider>
+      <ProjectProvider>
+        <RouteProvider />
+      </ProjectProvider>
+    </AuthProvider>
   );
 }
 
@@ -166,3 +179,17 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
       </Route>
     ));
 };
+
+function useCliAuthFlow() {
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+
+  const fromCli = searchParams.get("from_cli") === "true";
+  const cliCallbackUrl = searchParams.get("cli_callback_url");
+
+  if (location.pathname === "/" && fromCli && cliCallbackUrl) {
+    return { cliCallbackUrl };
+  }
+
+  return null;
+}
