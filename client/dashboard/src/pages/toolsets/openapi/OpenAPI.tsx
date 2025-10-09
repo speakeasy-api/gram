@@ -450,7 +450,10 @@ const AssetIsCausingFailureNotice = () => {
 
   return (
     <HoverCard>
-      <HoverCardTrigger className="cursor-pointer" onClick={() => alert("hey")}>
+      <HoverCardTrigger
+        className="cursor-pointer"
+        aria-label="View deployment failure details"
+      >
         <CircleAlertIcon className="size-3 text-destructive" />
       </HoverCardTrigger>
       <HoverCardPortal>

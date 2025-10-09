@@ -172,21 +172,10 @@ type DeploymentAsset = OpenAPIv3DeploymentAsset & {
   report: { toolCount: number };
 };
 
-type DeploymentAssetsResult =
-  | {
-      status: "pending";
-    }
-  | {
-      status: "error";
-      errors: {
-        deployment?: Error | null;
-        tools?: Error | null;
-      };
-    }
-  | {
-      status: "success";
-      data: DeploymentAsset[];
-    };
+type DeploymentAssetsResult = {
+  status: "success";
+  data: DeploymentAsset[];
+};
 
 const useDeploymentAssetsSuspense = () => {
   const { deploymentId } = useParams();
@@ -200,7 +189,18 @@ const useDeploymentAssetsSuspense = () => {
     combine: ([deploymentQuery, toolsQuery]) => {
       const result: DeploymentAsset[] = [];
       if (deploymentQuery.isError || toolsQuery.isError) {
-        throw new Error("Failed to fetch deployment and/or tools data");
+        const errors = [];
+        if (deploymentQuery.isError) {
+          errors.push(
+            `deployment data (${deploymentQuery.error?.message || "unknown error"})`,
+          );
+        }
+        if (toolsQuery.isError) {
+          errors.push(
+            `tools data (${toolsQuery.error?.message || "unknown error"})`,
+          );
+        }
+        throw new Error(`Failed to fetch ${errors.join(" and ")}`);
       }
 
       const assets = deploymentQuery.data.openapiv3Assets;

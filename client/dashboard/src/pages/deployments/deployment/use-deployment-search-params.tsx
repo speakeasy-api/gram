@@ -38,7 +38,24 @@ export function useDeploymentSearchParams() {
   };
 
   const searchParams = React.useMemo(() => {
-    return Object.fromEntries(_searchParams) as DeploymentPageSearchParams;
+    const rawParams = Object.fromEntries(_searchParams);
+    const tab = rawParams.tab;
+    const grouping = rawParams.grouping;
+
+    // Validate tab parameter
+    if (tab !== "logs" && tab !== "assets" && tab !== "tools") {
+      return defaultValue as DeploymentPageSearchParams;
+    }
+
+    // Build validated result
+    if (tab === "logs") {
+      return {
+        tab: "logs",
+        ...(grouping === "by_source" ? { grouping: "by_source" } : {}),
+      } as DeploymentPageSearchParams;
+    }
+
+    return { tab } as DeploymentPageSearchParams;
   }, [_searchParams]);
 
   return { searchParams, setSearchParams };

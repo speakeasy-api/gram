@@ -133,7 +133,6 @@ export const LogsTabContents = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentLogIndex, setCurrentLogIndex] = useState<number | null>(null);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
-  // const [groupBySource, setGroupBySource] = useState(false);
   const [showBottomFade, setShowBottomFade] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [searchInputFocused, setSearchInputFocused] = useState(false);
