@@ -8,6 +8,9 @@
 #USAGE flag "--arch <arch>" required=#true help="Comma-separated list of target architectures" default="x86_64"
 #USAGE flag "--melange-private-key <path>" help="Path to melange signing key"
 #USAGE flag "--apk-cache-dir <path>" required=#true help="Path to apko cache directory" default="../local/cache/apk"
+#USAGE flag "--dev" help="Mark as development build" default="false"
+
+set -euo pipefail
 
 archs="${usage_arch:?Error: arch not provided}"
 apk_cache_dir="${usage_apk_cache_dir:?Error: apk cache dir not provided}"
@@ -19,6 +22,21 @@ if [ ! -f "$melange_priv_key" ]; then
   exit 1
 fi
 
+vars_file=$(mktemp)
+trap 'rm -f "$vars_file"' EXIT
+
+suffix=""
+if [ "${usage_dev:-false}" = "true" ]; then
+  suffix="-dev"
+fi
+
+sha="$(git rev-parse --short HEAD)"
+{
+  echo "date: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+  echo "commit: $sha"
+  echo "version: $sha$suffix"
+} >> "$vars_file"
+
 rm -rf ./packages
 exec melange build \
   --apk-cache-dir "$apk_cache_dir" \
@@ -28,4 +46,5 @@ exec melange build \
   --git-repo-url https://github.com/speakeasy-api/gram \
   --signing-key "$melange_priv_key" \
   --log-level "$log_level" \
+  --vars-file "$vars_file" \
   ./melange.yaml

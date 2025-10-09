@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/speakeasy-api/gram/functions/internal/attr"
@@ -18,6 +19,26 @@ import (
 	"github.com/speakeasy-api/gram/functions/internal/o11y"
 	"github.com/speakeasy-api/gram/functions/internal/svc"
 )
+
+var allowedHeaders = map[string]struct{}{
+	"cache-control":           {},
+	"content-disposition":     {},
+	"content-encoding":        {},
+	"content-language":        {},
+	"content-length":          {},
+	"content-location":        {},
+	"content-md5":             {},
+	"content-type":            {},
+	"etag":                    {},
+	"expires":                 {},
+	"last-modified":           {},
+	"retry-after":             {},
+	"vary":                    {},
+	"x-ratelimit-limit":       {},
+	"x-ratelimit-remaining":   {},
+	"x-ratelimit-reset-after": {},
+	"x-ratelimit-reset":       {},
+}
 
 type CallToolPayload struct {
 	ToolName    string            `json:"name"`
@@ -118,7 +139,18 @@ func (s *Service) callTool(ctx context.Context, payload CallToolPayload, w http.
 	}
 	defer o11y.LogDefer(ctx, logger, func() error { return response.Body.Close() })
 
+	ct := response.Header.Get("Content-Type")
+	if strings.HasPrefix(ct, "application/vnd.fly.replay") {
+		return svc.NewPermanentError(
+			fmt.Errorf("function attempted fly replay"),
+			http.StatusBadGateway,
+		)
+	}
+
 	for key, values := range response.Header {
+		if _, ok := allowedHeaders[strings.ToLower(key)]; !ok {
+			continue
+		}
 		for _, value := range values {
 			w.Header().Add(key, value)
 		}

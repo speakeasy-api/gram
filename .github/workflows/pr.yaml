@@ -612,6 +612,13 @@ jobs:
             --tarball-name ${{ matrix.runtime }} \
             --out oci/${{ matrix.runtime }}
 
+      - name: Run safety checks
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: |
+          mise run test:apko-functions \
+            --image ${{ steps.apko.outputs.image }} \
+            --tarball ${{ steps.apko.outputs.tarball }}
+
       - name: "[DEV] Create fly app"
         id: flyCreateDev
         if: ${{ needs.changes.outputs.functions == 'true' }}
