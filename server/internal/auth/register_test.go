@@ -40,6 +40,7 @@ func TestService_Register(t *testing.T) {
 			Email:                &userInfo.Email,
 			AccountType:          "test",
 			ProjectSlug:          nil,
+			APIKeyScopes:         nil,
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
@@ -77,6 +78,7 @@ func TestService_Register(t *testing.T) {
 			Email:                &userInfo.Email,
 			AccountType:          "test",
 			ProjectSlug:          nil,
+			APIKeyScopes:         nil,
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
@@ -120,6 +122,7 @@ func TestService_Register(t *testing.T) {
 			Email:                &userInfo.Email,
 			AccountType:          "test",
 			ProjectSlug:          nil,
+			APIKeyScopes:         nil,
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
@@ -163,6 +166,7 @@ func TestService_Register(t *testing.T) {
 			Email:                &userInfo.Email,
 			AccountType:          "test",
 			ProjectSlug:          nil,
+			APIKeyScopes:         nil,
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
@@ -222,6 +226,7 @@ func TestService_Register(t *testing.T) {
 			Email:                &userInfo.Email,
 			AccountType:          "test",
 			ProjectSlug:          nil,
+			APIKeyScopes:         nil,
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 
@@ -287,6 +292,7 @@ func TestService_Register(t *testing.T) {
 			Email:                &userInfo.Email,
 			AccountType:          "test",
 			ProjectSlug:          nil,
+			APIKeyScopes:         nil,
 		}
 		ctx = contextvalues.SetAuthContext(ctx, authCtx)
 

@@ -319,24 +319,39 @@ export const LogsTabContents = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Check if the logs container or its children are focused
+      const logsContainer = logsContainerRef.current;
+      const activeElement = document.activeElement;
+      const isWithinLogsSection = logsContainer?.contains(
+        activeElement as Node,
+      );
+      const isSearchInputFocused =
+        activeElement?.hasAttribute("data-search-input");
+
       if (e.key === "Escape") {
-        e.preventDefault();
-        setFocus("all");
-        setSearchQuery("");
-        setCurrentLogIndex(null);
-        const activeElement = document.activeElement as HTMLElement;
-        if (activeElement && activeElement.tagName === "INPUT") {
-          activeElement.blur();
+        // Only handle Escape if we're within the logs section
+        if (isWithinLogsSection || isSearchInputFocused) {
+          e.preventDefault();
+          setFocus("all");
+          setSearchQuery("");
+          setCurrentLogIndex(null);
+          const activeElement = document.activeElement as HTMLElement;
+          if (activeElement && activeElement.tagName === "INPUT") {
+            activeElement.blur();
+          }
         }
         return;
       }
 
       if ((e.metaKey || e.ctrlKey) && e.key === "f") {
-        e.preventDefault();
-        const searchInput = document.querySelector<HTMLInputElement>(
-          "[data-search-input]",
-        );
-        searchInput?.focus();
+        // Only capture cmd-f if the logs section is already focused
+        if (isWithinLogsSection || isSearchInputFocused) {
+          e.preventDefault();
+          const searchInput = document.querySelector<HTMLInputElement>(
+            "[data-search-input]",
+          );
+          searchInput?.focus();
+        }
         return;
       }
 
@@ -623,7 +638,8 @@ export const LogsTabContents = () => {
 
         <div
           ref={logsContainerRef}
-          className="font-mono text-xs max-h-[500px] overflow-y-auto pb-2"
+          tabIndex={0}
+          className="font-mono text-xs max-h-[500px] overflow-y-auto pb-2 focus:outline-none"
         >
           {parsedLogs.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">

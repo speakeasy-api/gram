@@ -7,21 +7,21 @@ import (
 )
 
 func GetToolURN(tool types.Tool) (*urn.Tool, error) {
-	var toolURN *urn.Tool
+	var toolURN urn.Tool
 
 	if tool.HTTPToolDefinition != nil {
 		err := toolURN.UnmarshalText([]byte(tool.HTTPToolDefinition.ToolUrn))
 		if err != nil {
 			return nil, urn.ErrInvalid
 		}
-		return toolURN, nil
+		return &toolURN, nil
 	}
 	if tool.PromptTemplate != nil {
 		err := toolURN.UnmarshalText([]byte(tool.PromptTemplate.ToolUrn))
 		if err != nil {
 			return nil, urn.ErrInvalid
 		}
-		return toolURN, nil
+		return &toolURN, nil
 	}
 
 	return nil, urn.ErrInvalid
@@ -74,6 +74,29 @@ func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 			UpdatedAt:     tool.PromptTemplate.UpdatedAt,
 			Canonical:     tool.PromptTemplate.Canonical,
 			Variation:     tool.PromptTemplate.Variation,
+		}
+	}
+
+	if tool.FunctionToolDefinition != nil {
+		if len(tool.FunctionToolDefinition.Schema) > 0 {
+			schema = tool.FunctionToolDefinition.Schema
+		}
+		return types.BaseToolAttributes{
+			ID:            tool.FunctionToolDefinition.ID,
+			ToolUrn:       tool.FunctionToolDefinition.ToolUrn,
+			ProjectID:     tool.FunctionToolDefinition.ProjectID,
+			Name:          tool.FunctionToolDefinition.Name,
+			CanonicalName: tool.FunctionToolDefinition.CanonicalName,
+			Description:   tool.FunctionToolDefinition.Description,
+			SchemaVersion: tool.FunctionToolDefinition.SchemaVersion,
+			Schema:        schema,
+			Confirm:       tool.FunctionToolDefinition.Confirm,
+			ConfirmPrompt: tool.FunctionToolDefinition.ConfirmPrompt,
+			Summarizer:    tool.FunctionToolDefinition.Summarizer,
+			CreatedAt:     tool.FunctionToolDefinition.CreatedAt,
+			UpdatedAt:     tool.FunctionToolDefinition.UpdatedAt,
+			Canonical:     tool.FunctionToolDefinition.Canonical,
+			Variation:     tool.FunctionToolDefinition.Variation,
 		}
 	}
 

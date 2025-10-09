@@ -1,4 +1,4 @@
--- name: ListTools :many
+-- name: ListHttpTools :many
 -- Two use cases:
 -- 1. List all tools from the latest successful deployment (when deployment_id is NULL)
 -- 2. List all tools for a specific deployment by ID (when deployment_id is provided)
@@ -158,7 +158,108 @@ SELECT *
 FROM http_tool_definitions
 WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party));
 
--- name: PokeHTTPToolDefinitionByUrn :one
+-- name: ListFunctionTools :many
+-- Two use cases:
+-- 1. List all tools from the latest successful deployment (when deployment_id is NULL)
+-- 2. List all tools for a specific deployment by ID (when deployment_id is provided)
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = @project_id
+      AND (sqlc.narg(deployment_id)::uuid IS NOT NULL OR ds.status = 'completed')
+      AND (
+        sqlc.narg(deployment_id)::uuid IS NULL
+        OR d.id = sqlc.narg(deployment_id)::uuid
+      )
+    ORDER BY d.seq DESC
+    LIMIT 1
+)
+SELECT
+  (SELECT id FROM deployment) as deployment_id,
+  ftd.id,
+  ftd.tool_urn,
+  ftd.name,
+  ftd.description,
+  ftd.input_schema,
+  ftd.variables,
+  ftd.runtime,
+  ftd.function_id,
+  ftd.created_at,
+  ftd.updated_at
+FROM function_tool_definitions ftd
+WHERE
+  ftd.deployment_id = (SELECT id FROM deployment)
+  AND ftd.deleted IS FALSE
+  AND (sqlc.narg(cursor)::uuid IS NULL OR ftd.id < sqlc.narg(cursor))
+ORDER BY ftd.id DESC
+LIMIT $1;
+
+-- name: FindFunctionToolsByUrn :many
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = @project_id
+    AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+)
+SELECT
+  sqlc.embed(function_tool_definitions),
+  (select id from deployment) as owning_deployment_id
+FROM function_tool_definitions
+WHERE
+  function_tool_definitions.deployment_id = (SELECT id FROM deployment)
+  AND function_tool_definitions.deleted IS FALSE
+  AND function_tool_definitions.tool_urn = ANY (@urns::text[])
+ORDER BY function_tool_definitions.id DESC;
+
+-- name: FindFunctionToolEntriesByUrn :many
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = @project_id
+    AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+)
+SELECT
+  ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name
+FROM function_tool_definitions ftd
+WHERE
+  ftd.deployment_id = (SELECT id FROM deployment)
+  AND ftd.deleted IS FALSE
+  AND ftd.tool_urn = ANY (@urns::text[])
+ORDER BY ftd.id DESC;
+
+-- name: GetFunctionToolDefinitionByURN :one
+WITH deployment AS (
+  SELECT d.id
+  FROM deployments d
+  JOIN deployment_statuses ds ON d.id = ds.deployment_id
+  WHERE d.project_id = @project_id
+  AND ds.status = 'completed'
+  ORDER BY d.seq DESC LIMIT 1
+)
+SELECT *
+FROM function_tool_definitions
+WHERE function_tool_definitions.tool_urn = @urn
+  AND function_tool_definitions.project_id = @project_id
+  AND function_tool_definitions.deleted IS FALSE
+  AND function_tool_definitions.deployment_id = (SELECT id FROM deployment)
+LIMIT 1;
+
+-- name: GetFunctionToolDefinitionByID :one
+SELECT *
+FROM function_tool_definitions
+WHERE function_tool_definitions.id = @id
+  AND function_tool_definitions.project_id = @project_id
+  AND function_tool_definitions.deleted IS FALSE
+LIMIT 1;
+
+-- name: PokeToolDefinitionByUrn :one
 WITH first_party AS (
   SELECT id
   FROM http_tool_definitions
@@ -178,7 +279,58 @@ third_party AS (
     AND htd.tool_urn = @urn
     AND NOT EXISTS(SELECT 1 FROM first_party)
   LIMIT 1
+),
+function_tools AS (
+  SELECT id
+  FROM function_tool_definitions
+  WHERE function_tool_definitions.tool_urn = @urn
+    AND function_tool_definitions.project_id = @project_id
+    AND function_tool_definitions.deleted IS FALSE
+    AND NOT EXISTS(SELECT 1 FROM first_party)
+    AND NOT EXISTS(SELECT 1 FROM third_party)
+  LIMIT 1
 )
-SELECT id
-FROM http_tool_definitions
-WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party));
+SELECT
+  COALESCE(
+    (SELECT id FROM first_party),
+    (SELECT id FROM third_party),
+    (SELECT id FROM function_tools)
+  ) AS id;
+
+-- name: GetToolUrnByID :one
+WITH first_party_http AS (
+  SELECT tool_urn::text as tool_urn
+  FROM http_tool_definitions
+  WHERE http_tool_definitions.id = @id
+    AND http_tool_definitions.project_id = @project_id
+    AND http_tool_definitions.deleted IS FALSE
+  LIMIT 1
+),
+-- This CTE is for integrating third party tools by checking for tool definitions from external deployments/packages.
+third_party_http AS (
+  SELECT htd.tool_urn::text as tool_urn
+  FROM deployments d
+  INNER JOIN deployments_packages dp ON d.id = dp.deployment_id
+  INNER JOIN package_versions pv ON dp.version_id = pv.id
+  INNER JOIN http_tool_definitions htd ON htd.deployment_id = pv.deployment_id
+  WHERE d.project_id = @project_id
+    AND htd.id = @id
+    AND NOT EXISTS(SELECT 1 FROM first_party_http)
+  LIMIT 1
+),
+function_tools AS (
+  SELECT tool_urn::text as tool_urn
+  FROM function_tool_definitions
+  WHERE function_tool_definitions.id = @id
+    AND function_tool_definitions.project_id = @project_id
+    AND function_tool_definitions.deleted IS FALSE
+    AND NOT EXISTS(SELECT 1 FROM first_party_http)
+    AND NOT EXISTS(SELECT 1 FROM third_party_http)
+  LIMIT 1
+)
+SELECT
+  COALESCE(
+    (SELECT tool_urn FROM first_party_http),
+    (SELECT tool_urn FROM third_party_http),
+    (SELECT tool_urn FROM function_tools)
+  )::text AS tool_urn;

@@ -69,23 +69,23 @@ type ToolCallBody struct {
 	GramRequestSummary   string                 `json:"gram-request-summary"`
 }
 
-type caseInsensitiveEnv struct {
+// CaseInsensitiveEnv provides case-insensitive environment variable lookup.
+type CaseInsensitiveEnv struct {
 	data map[string]string
 }
 
-func newCaseInsensitiveEnv(m map[string]string) *caseInsensitiveEnv {
-	ci := &caseInsensitiveEnv{data: make(map[string]string, len(m))}
-	for k, v := range m {
-		ci.data[strings.ToLower(k)] = v
-	}
-	return ci
+// NewCaseInsensitiveEnv creates a new empty case-insensitive environment.
+func NewCaseInsensitiveEnv() *CaseInsensitiveEnv {
+	return &CaseInsensitiveEnv{data: make(map[string]string)}
 }
 
-func (c *caseInsensitiveEnv) Get(key string) string {
+// Get retrieves an environment variable value by key (case-insensitive).
+func (c *CaseInsensitiveEnv) Get(key string) string {
 	return c.data[strings.ToLower(key)]
 }
 
-func (c *caseInsensitiveEnv) Set(key, value string) {
+// Set sets an environment variable value by key (case-insensitive).
+func (c *CaseInsensitiveEnv) Set(key, value string) {
 	c.data[strings.ToLower(key)] = value
 }
 
@@ -135,9 +135,15 @@ func (itp *ToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	envVars map[string]string,
-	tool *HTTPTool,
+	env *CaseInsensitiveEnv,
+	gatewayTool *Tool,
 ) error {
+	if !gatewayTool.IsHTTP() {
+		return fmt.Errorf("tool type not supported: %s", gatewayTool.Kind())
+	}
+
+	tool := gatewayTool.HTTPTool
+
 	ctx, span := itp.tracer.Start(ctx, "proxyToolCall", trace.WithAttributes(
 		attr.ToolName(tool.Name),
 		attr.ToolID(tool.ID),
@@ -157,6 +163,10 @@ func (itp *ToolProxy) Do(
 		attr.SlogHTTPRoute(tool.Path), // this is just from the raw OpenAPI spec. It is not a path with any parameters filled in, so not identifiable.
 	)
 
+	if env == nil {
+		env = NewCaseInsensitiveEnv()
+	}
+
 	// Variable to capture status code for metrics
 	var responseStatusCode int
 	defer func() {
@@ -170,8 +180,6 @@ func (itp *ToolProxy) Do(
 
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
-
-	ciEnv := newCaseInsensitiveEnv(envVars)
 
 	bodyBytes, err := io.ReadAll(requestBody)
 	if err != nil {
@@ -205,7 +213,7 @@ func (itp *ToolProxy) Do(
 	// environment variable overrides on tool calls typically defined in the SDK
 	if toolCallBody.EnvironmentVariables != nil {
 		for k, v := range toolCallBody.EnvironmentVariables {
-			ciEnv.Set(k, v)
+			env.Set(k, v)
 		}
 	}
 
@@ -248,7 +256,7 @@ func (itp *ToolProxy) Do(
 		serverURL = tool.DefaultServerUrl.Value
 	}
 
-	if envServerURL := processServerEnvVars(ctx, logger, tool, ciEnv); envServerURL != "" {
+	if envServerURL := processServerEnvVars(ctx, logger, tool, env); envServerURL != "" {
 		serverURL = envServerURL
 	}
 
@@ -363,7 +371,7 @@ func (itp *ToolProxy) Do(
 		}
 	}
 
-	shouldContinue := processSecurity(ctx, logger, req, w, &responseStatusCode, tool, itp.cache, ciEnv, serverURL)
+	shouldContinue := processSecurity(ctx, logger, req, w, &responseStatusCode, tool, itp.cache, env, serverURL)
 	if !shouldContinue {
 		return nil
 	}
@@ -585,7 +593,7 @@ func reverseProxyRequest(ctx context.Context,
 	return nil
 }
 
-func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTool, envVars *caseInsensitiveEnv) string {
+func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTool, envVars *CaseInsensitiveEnv) string {
 	if tool.ServerEnvVar != "" {
 		envVar := envVars.Get(tool.ServerEnvVar)
 		if envVar != "" {

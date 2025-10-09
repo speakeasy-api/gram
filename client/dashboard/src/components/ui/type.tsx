@@ -13,6 +13,7 @@ export function Type({
   mono,
   small,
   destructive,
+  as: Component = "p",
   ...props
 }: {
   variant?: "subheading" | "body" | "small";
@@ -22,6 +23,7 @@ export function Type({
   small?: boolean;
   skeleton?: "word" | "phrase" | "line" | "paragraph";
   destructive?: boolean;
+  as?: React.ElementType;
 } & React.ComponentProps<"p">) {
   if (children === undefined) {
     const variantHeight = {
@@ -90,24 +92,24 @@ export function Type({
   switch (variant) {
     case "subheading":
       return (
-        <p
+        <Component
           {...props}
           className={`text-md font-medium ${baseClass} ${className}`}
         >
           {children}
-        </p>
+        </Component>
       );
     case "body":
       return (
-        <p {...props} className={`text-base ${baseClass} ${className}`}>
+        <Component {...props} className={`text-base ${baseClass} ${className}`}>
           {children}
-        </p>
+        </Component>
       );
     case "small":
       return (
-        <p {...props} className={`text-sm ${baseClass} ${className}`}>
+        <Component {...props} className={`text-sm ${baseClass} ${className}`}>
           {children}
-        </p>
+        </Component>
       );
   }
 }

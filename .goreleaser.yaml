@@ -1,4 +1,5 @@
-# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/goreleaser/goreleaser/v2.12.5/www/docs/static/schema-pro.json
+
 version: 2
 
 builds:
@@ -20,12 +21,13 @@ checksum:
   name_template: "checksums.txt"
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
+
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
+  disable: true
+
+monorepo:
+  tag_prefix: "@gram/cli@"
+
 brews:
   - name: gram
     repository:
