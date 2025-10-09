@@ -1076,6 +1076,7 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
+	chClient := newClickhouseClient(t)
 	policy, err := guardian.NewUnsafePolicy([]string{})
 	require.NoError(t, err)
 
@@ -1114,6 +1115,8 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 		ToolCallSourceDirect,
 		nil,
 		policy,
+		chClient,
+		newFeatureProvider(functionTool.ProjectID),
 	)
 
 	// Create response recorder
