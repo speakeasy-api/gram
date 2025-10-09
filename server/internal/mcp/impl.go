@@ -122,6 +122,7 @@ func NewService(
 			cacheImpl,
 			guardianPolicy,
 			tcm,
+			nil,
 		),
 		oauthService:      oauthService,
 		oauthRepo:         oauth_repo.New(db),

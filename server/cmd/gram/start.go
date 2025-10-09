@@ -533,7 +533,7 @@ func newStartCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, tcm)
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, tcm, features)
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
@@ -561,7 +561,7 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger, db, sessionManager))
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env)
 			oauth.Attach(mux, oauthService)
-			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, billingTracker, tcm))
+			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, billingTracker, tcm, features))
 			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL)
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService, billingTracker, billingRepo, tcm), mcpMetadataService)
