@@ -141,6 +141,11 @@ function ChatInner({
   const [_mentionedToolIds, setMentionedToolIds] = useState<string[]>([]);
   const [_inputText, setInputText] = useState("");
 
+  // Feature flag for experimental tool tagging syntax
+  const isToolTaggingEnabled = telemetry.isFeatureEnabled(
+    "gram-experimental-chat",
+  );
+
   const instance = useInstance(
     {
       toolsetSlug: configRef.current.toolsetSlug ?? "",
@@ -329,13 +334,13 @@ function ChatInner({
 
     let tools = allTools;
 
-    // Check if there are mentioned tools in the message
+    // Check if there are mentioned tools in the message (only if feature flag is enabled)
     const lastUserMessage = messages
       .filter((m: Message) => m.role === "user")
       .pop();
     let hasMentions = false;
 
-    if (lastUserMessage && lastUserMessage.content) {
+    if (isToolTaggingEnabled && lastUserMessage && lastUserMessage.content) {
       const mentionedIds = parseMentionedTools(
         lastUserMessage.content,
         mentionTools,
@@ -516,13 +521,15 @@ function ChatInner({
         localStorage.setItem(onboardingStepStorageKeys.test, "true");
       }
 
-      // Track if tools were mentioned
-      const mentionedIds = parseMentionedTools(msg, mentionTools);
-      if (mentionedIds.length > 0) {
-        telemetry.capture("chat_event", {
-          action: "tools_mentioned",
-          tool_count: mentionedIds.length,
-        });
+      // Track if tools were mentioned (only if feature flag is enabled)
+      if (isToolTaggingEnabled) {
+        const mentionedIds = parseMentionedTools(msg, mentionTools);
+        if (mentionedIds.length > 0) {
+          telemetry.capture("chat_event", {
+            action: "tools_mentioned",
+            tool_count: mentionedIds.length,
+          });
+        }
       }
 
       await append({
@@ -587,52 +594,58 @@ function ChatInner({
     </div>
   );
 
-  return (
+  const chatContent = (
+    <div className="relative h-full flex items-center justify-center">
+      <AIChatContainer
+        messages={m}
+        isLoading={status === "streaming" || isChatHistoryLoading}
+        onSendMessage={handleSend}
+        className={"pb-4 w-3xl"} // Set width explicitly or else it will shrink to the size of the messages
+        toolCallApproval={toolCallApproval}
+        initialInput={initialPrompt || undefined}
+        components={{
+          composer: {
+            additionalActions: (
+              <div className="flex items-center gap-2">
+                {temperatureSlider}
+                {additionalActions}
+              </div>
+            ),
+            modelSelector: "text-foreground",
+          },
+          message: {
+            avatar: {
+              user: () => (
+                <ProjectAvatar project={project} className="h-6 w-6" />
+              ),
+            },
+            toolCall: toolCallComponents(allTools, telemetry),
+          },
+        }}
+        modelSelector={{
+          model,
+          onModelChange: setModel,
+          availableModels,
+        }}
+      />
+      <MessageHistoryIndicator
+        isNavigating={isNavigating}
+        historyIndex={historyIndex}
+        totalMessages={totalMessages}
+      />
+    </div>
+  );
+
+  return isToolTaggingEnabled ? (
     <ChatComposerWrapper
       tools={mentionTools}
       onToolsSelected={setMentionedToolIds}
       onInputChange={setInputText}
     >
-      <div className="relative h-full flex items-center justify-center">
-        <AIChatContainer
-          messages={m}
-          isLoading={status === "streaming" || isChatHistoryLoading}
-          onSendMessage={handleSend}
-          className={"pb-4 w-3xl"} // Set width explicitly or else it will shrink to the size of the messages
-          toolCallApproval={toolCallApproval}
-          initialInput={initialPrompt || undefined}
-          components={{
-            composer: {
-              additionalActions: (
-                <div className="flex items-center gap-2">
-                  {temperatureSlider}
-                  {additionalActions}
-                </div>
-              ),
-              modelSelector: "text-foreground",
-            },
-            message: {
-              avatar: {
-                user: () => (
-                  <ProjectAvatar project={project} className="h-6 w-6" />
-                ),
-              },
-              toolCall: toolCallComponents(allTools, telemetry),
-            },
-          }}
-          modelSelector={{
-            model,
-            onModelChange: setModel,
-            availableModels,
-          }}
-        />
-        <MessageHistoryIndicator
-          isNavigating={isNavigating}
-          historyIndex={historyIndex}
-          totalMessages={totalMessages}
-        />
-      </div>
+      {chatContent}
     </ChatComposerWrapper>
+  ) : (
+    chatContent
   );
 }
 
