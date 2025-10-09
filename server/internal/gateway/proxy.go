@@ -18,6 +18,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
@@ -103,13 +105,14 @@ type InstanceToolProxyConfig struct {
 }
 
 type ToolProxy struct {
-	source  ToolCallSource
-	logger  *slog.Logger
-	tracer  trace.Tracer
-	metrics *metrics
-	cache   cache.Cache
-	policy  *guardian.Policy
-	tcm     tm.ToolMetricsClient
+	source      ToolCallSource
+	logger      *slog.Logger
+	tracer      trace.Tracer
+	metrics     *metrics
+	cache       cache.Cache
+	policy      *guardian.Policy
+	toolMetrics tm.ToolMetricsClient
+	features    feature.Provider
 }
 
 func NewToolProxy(
@@ -119,19 +122,21 @@ func NewToolProxy(
 	source ToolCallSource,
 	cache cache.Cache,
 	policy *guardian.Policy,
-	tcm tm.ToolMetricsClient,
+	toolMetrics tm.ToolMetricsClient,
+	features feature.Provider,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
 
 	return &ToolProxy{
-		source:  source,
-		logger:  logger,
-		tracer:  tracer,
-		metrics: newMetrics(meter, logger),
-		cache:   cache,
-		policy:  policy,
-		tcm:     tcm,
+		source:      source,
+		logger:      logger,
+		tracer:      tracer,
+		metrics:     newMetrics(meter, logger),
+		cache:       cache,
+		policy:      policy,
+		toolMetrics: toolMetrics,
+		features:    features,
 	}
 }
 
@@ -376,7 +381,7 @@ func (itp *ToolProxy) Do(
 
 	req.Header.Set("X-Gram-Proxy", "1")
 
-	return reverseProxyRequest(ctx, logger, itp.tracer, tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode, itp.tcm)
+	return reverseProxyRequest(ctx, logger, itp.tracer, tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode, itp.toolMetrics, itp.features)
 }
 
 type retryConfig struct {
@@ -444,6 +449,7 @@ func reverseProxyRequest(ctx context.Context,
 	policy *guardian.Policy,
 	responseStatusCodeCapture *int,
 	tcm tm.ToolMetricsClient,
+	featureFlagProvider feature.Provider,
 ) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
@@ -459,15 +465,35 @@ func reverseProxyRequest(ctx context.Context,
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 
-	// Wrap with HTTP logging round tripper
-	loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, tcm, logger)
+	f := conv.Default[feature.Provider](featureFlagProvider, &feature.InMemory{})
+	isEnabled, err := f.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, tool.ProjectID)
+	if err != nil {
+		logger.ErrorContext(
+			ctx, "error checking if clickhouse tool metrics is enabled",
+			attr.SlogError(err),
+			attr.SlogOrganizationSlug(tool.OrganizationID),
+			attr.SlogProjectID(tool.ProjectID),
+		)
+	}
 
-	client := &http.Client{
-		Timeout: 60 * time.Second,
-		Transport: otelhttp.NewTransport(
+	var otelTransport *otelhttp.Transport
+	if isEnabled {
+		// Wrap with HTTP logging round tripper
+		loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, tcm, logger)
+		otelTransport = otelhttp.NewTransport(
 			loggingTransport,
 			otelhttp.WithPropagators(propagation.TraceContext{}),
-		),
+		)
+	} else {
+		otelTransport = otelhttp.NewTransport(
+			transport,
+			otelhttp.WithPropagators(propagation.TraceContext{}),
+		)
+	}
+
+	client := &http.Client{
+		Timeout:   60 * time.Second,
+		Transport: otelTransport,
 	}
 
 	// Add tool to context for the round tripper

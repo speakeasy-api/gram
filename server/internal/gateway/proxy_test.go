@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -56,8 +57,14 @@ func newClickhouseClient(t *testing.T) *toolmetrics.ClickhouseClient {
 	}
 }
 
+func newFeatureProvider(projectID string) feature.Provider {
+	fp := &feature.InMemory{}
+	fp.SetFlag(feature.FlagClickhouseToolMetrics, projectID, true)
+	return fp
+}
+
 func TestToolProxy_Do_PathParams(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 
 	tests := []struct {
 		name          string
@@ -189,7 +196,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+			// t.Parallel()
 
 			// Create a mock server that captures the request
 			var capturedRequest *http.Request
@@ -264,6 +271,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				chClient,
+				newFeatureProvider(tool.ProjectID),
 			)
 
 			// Create response recorder
@@ -313,7 +321,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 }
 
 func TestToolProxy_Do_HeaderParams(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 
 	tests := []struct {
 		name           string
@@ -343,7 +351,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+			// t.Parallel()
 
 			// Create a mock server that captures the request headers
 			var capturedRequest *http.Request
@@ -418,6 +426,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				chClient,
+				newFeatureProvider(tool.ProjectID),
 			)
 
 			// Create response recorder
@@ -470,7 +479,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 }
 
 func TestToolProxy_Do_QueryParams(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 
 	// Test timestamp in RFC3339Nano format
 	testTime := time.Date(2023, 12, 25, 15, 30, 45, 123456789, time.UTC)
@@ -728,7 +737,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+			// t.Parallel()
 
 			// Create a mock server that captures the request
 			var capturedRequest *http.Request
@@ -793,6 +802,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				chClient,
+				newFeatureProvider(tool.ProjectID),
 			)
 
 			// Create response recorder
@@ -843,7 +853,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 }
 
 func TestToolProxy_Do_Body(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 
 	tests := []struct {
 		name         string
@@ -955,7 +965,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+			// t.Parallel()
 
 			// Create a mock server that captures the request body
 			var capturedBody []byte
@@ -1038,6 +1048,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				chClient,
+				newFeatureProvider(tool.ProjectID),
 			)
 
 			// Create response recorder
