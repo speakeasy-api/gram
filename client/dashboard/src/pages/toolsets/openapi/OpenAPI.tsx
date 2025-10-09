@@ -104,7 +104,7 @@ export default function OpenAPIAssets() {
     let tooltip = deploymentFailed
       ? "Latest deployment failed"
       : "Latest deployment succeeded";
-      
+
     if (deploymentLogsSummary.skipped > 0) {
       tooltip += ` (${deploymentLogsSummary.skipped} operations skipped)`;
     }
