@@ -195,6 +195,30 @@ func (itp *ToolProxy) Do(
 		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
 	}
 
+	if len(toolCallBody.Body) > 0 {
+		// Check if the first character is a quote, indicating stringified JSON
+		trimmed := bytes.TrimSpace(toolCallBody.Body)
+		if len(trimmed) > 0 && trimmed[0] == '"' {
+			// Try to unmarshal as a string
+			var bodyStr string
+			if err := json.Unmarshal(trimmed, &bodyStr); err == nil {
+				// Validate the extracted string is valid JSON
+				if json.Valid([]byte(bodyStr)) {
+					logger.InfoContext(ctx, "converted LLM driven incorrectly stringified JSON body to raw JSON")
+					toolCallBody.Body = json.RawMessage([]byte(bodyStr))
+					// Update bodyBytes by patching just the body field to preserve original structure
+					var originalBody map[string]json.RawMessage
+					if err := json.Unmarshal(bodyBytes, &originalBody); err == nil {
+						originalBody["body"] = json.RawMessage([]byte(bodyStr))
+						if newBodyBytes, err := json.Marshal(originalBody); err == nil {
+							bodyBytes = newBodyBytes
+						}
+					}
+				}
+			}
+		}
+	}
+
 	if len(tool.Schema) > 0 {
 		if validateErr := validateToolCallBody(ctx, logger, bodyBytes, string(tool.Schema)); validateErr != nil {
 			logger.InfoContext(ctx, "tool call request schema failed validation", attr.SlogError(validateErr))

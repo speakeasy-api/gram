@@ -1018,3 +1018,88 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "tool type not supported")
 }
+
+func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
+	t.Parallel()
+
+	// Create a mock server that captures the request body
+	var capturedBody []byte
+	var capturedRequest *http.Request
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedRequest = r
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "failed to read body", http.StatusInternalServerError)
+			return
+		}
+		capturedBody = body
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"success": true}`))
+	}))
+	defer mockServer.Close()
+
+	// Setup test dependencies
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	policy, err := guardian.NewUnsafePolicy([]string{})
+	require.NoError(t, err)
+
+	// Create tool configuration
+	tool := &HTTPTool{
+		ID:                 uuid.New().String(),
+		ProjectID:          uuid.New().String(),
+		DeploymentID:       uuid.New().String(),
+		OrganizationID:     uuid.New().String(),
+		Name:               "test_tool",
+		ServerEnvVar:       "TEST_SERVER_URL",
+		DefaultServerUrl:   NullString{Value: mockServer.URL, Valid: true},
+		Security:           []*HTTPToolSecurity{},
+		SecurityScopes:     map[string][]string{},
+		Method:             "POST",
+		Path:               "/api/test",
+		Schema:             []byte{},
+		HeaderParams:       map[string]*HTTPParameter{},
+		QueryParams:        map[string]*HTTPParameter{},
+		PathParams:         map[string]*HTTPParameter{},
+		RequestContentType: NullString{Value: "application/json", Valid: true},
+		ResponseFilter:     nil,
+	}
+
+	// Create a stringified JSON body (what we're testing)
+	stringifiedBody := `"{\n  \"type\": \"custom\",\n  \"description\": \"Ryan\",\n  \"properties\": {}\n}"`
+
+	// Create request body for the tool call with stringified JSON
+	toolCallBodyBytes := []byte(`{"body":` + stringifiedBody + `}`)
+
+	// Create tool proxy
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		nil,
+		policy,
+	)
+
+	// Create response recorder
+	recorder := httptest.NewRecorder()
+
+	// Execute the proxy call
+	ciEnv := NewCaseInsensitiveEnv()
+	err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), ciEnv, NewHTTPTool(tool))
+	require.NoError(t, err)
+	require.NotNil(t, capturedRequest)
+
+	// Verify the body was correctly de-stringified
+	var actualBody map[string]any
+	err = json.Unmarshal(capturedBody, &actualBody)
+	require.NoError(t, err)
+
+	// Verify the expected structure
+	require.Equal(t, "custom", actualBody["type"])
+	require.Equal(t, "Ryan", actualBody["description"])
+	require.NotNil(t, actualBody["properties"])
+}
