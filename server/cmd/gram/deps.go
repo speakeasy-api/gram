@@ -65,10 +65,6 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 			Username: c.String("clickhouse-username"),
 			Password: c.String("clickhouse-password"),
 		},
-		Debug: true, // I'll remove this before merging
-		Debugf: func(format string, v ...interface{}) {
-			logger.InfoContext(ctx, fmt.Sprintf(format, v...))
-		},
 		Addr:     []string{fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-http-port"))},
 		Protocol: clickhouse.HTTP,
 		Settings: clickhouse.Settings{
