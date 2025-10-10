@@ -26,6 +26,7 @@ func newApp() *cli.App {
 		Usage:   "A command line interface for the Gram platform. Get started at https://docs.getgram.ai/",
 		Version: fmt.Sprintf("%s (%s)", Version, shortSha),
 		Commands: []*cli.Command{
+			newAuthCommand(),
 			newPushCommand(),
 			newUploadCommand(),
 			newStatusCommand(),
