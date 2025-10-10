@@ -25,7 +25,7 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name
+  ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name, ftd.variables
 FROM function_tool_definitions ftd
 WHERE
   ftd.deployment_id = (SELECT id FROM deployment)
@@ -44,6 +44,7 @@ type FindFunctionToolEntriesByUrnRow struct {
 	ToolUrn      urn.Tool
 	DeploymentID uuid.UUID
 	Name         string
+	Variables    []byte
 }
 
 func (q *Queries) FindFunctionToolEntriesByUrn(ctx context.Context, arg FindFunctionToolEntriesByUrnParams) ([]FindFunctionToolEntriesByUrnRow, error) {
@@ -60,6 +61,7 @@ func (q *Queries) FindFunctionToolEntriesByUrn(ctx context.Context, arg FindFunc
 			&i.ToolUrn,
 			&i.DeploymentID,
 			&i.Name,
+			&i.Variables,
 		); err != nil {
 			return nil, err
 		}

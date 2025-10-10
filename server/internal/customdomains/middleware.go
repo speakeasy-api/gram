@@ -1,4 +1,4 @@
-package middleware
+package customdomains
 
 import (
 	"database/sql"
@@ -10,14 +10,12 @@ import (
 	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL) func(next http.Handler) http.Handler {
+func Middleware(logger *slog.Logger, db *pgxpool.Pool, env string, serverURL *url.URL) func(next http.Handler) http.Handler {
 	domainsRepo := domainsRepo.New(db)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +70,7 @@ func CustomDomainsMiddleware(logger *slog.Logger, db *pgxpool.Pool, env string, 
 				return
 			}
 
-			ctx = gateway.DomainWithContext(ctx, &gateway.DomainContext{
+			ctx = WithContext(ctx, &Context{
 				OrganizationID: domain.OrganizationID,
 				Domain:         domain.Domain,
 				DomainID:       domain.ID,

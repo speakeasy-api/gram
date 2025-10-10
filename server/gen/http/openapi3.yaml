@@ -8564,6 +8564,17 @@ components:
             required:
                 - slug
                 - metadata
+        FunctionEnvironmentVariable:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of the function environment variable
+                name:
+                    type: string
+                    description: The environment variables
+            required:
+                - name
         FunctionToolDefinition:
             type: object
             properties:
@@ -8791,6 +8802,11 @@ components:
                     description: The description of the toolset
                 environment:
                     $ref: '#/components/schemas/Environment'
+                function_environment_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/FunctionEnvironmentVariable'
+                    description: The function environment variables that are relevant to the toolset
                 name:
                     type: string
                     description: The name of the toolset
@@ -10168,6 +10184,11 @@ components:
                     description: Description of the toolset
                 external_oauth_server:
                     $ref: '#/components/schemas/ExternalOAuthServer'
+                function_environment_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/FunctionEnvironmentVariable'
+                    description: The function environment variables that are relevant to the toolset
                 id:
                     type: string
                     description: The ID of the toolset
@@ -10257,6 +10278,11 @@ components:
                 description:
                     type: string
                     description: Description of the toolset
+                function_environment_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/FunctionEnvironmentVariable'
+                    description: The function environment variables that are relevant to the toolset
                 id:
                     type: string
                     description: The ID of the toolset

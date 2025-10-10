@@ -550,6 +550,21 @@ func marshalTypesServerVariableToServerVariableResponseBody(v *types.ServerVaria
 	return res
 }
 
+// marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody
+// builds a value of type *FunctionEnvironmentVariableResponseBody from a value
+// of type *types.FunctionEnvironmentVariable.
+func marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(v *types.FunctionEnvironmentVariable) *FunctionEnvironmentVariableResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &FunctionEnvironmentVariableResponseBody{
+		Description: v.Description,
+		Name:        v.Name,
+	}
+
+	return res
+}
+
 // marshalTypesEnvironmentToEnvironmentResponseBody builds a value of type
 // *EnvironmentResponseBody from a value of type *types.Environment.
 func marshalTypesEnvironmentToEnvironmentResponseBody(v *types.Environment) *EnvironmentResponseBody {
