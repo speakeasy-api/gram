@@ -226,7 +226,7 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name
+  ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name, ftd.variables
 FROM function_tool_definitions ftd
 WHERE
   ftd.deployment_id = (SELECT id FROM deployment)

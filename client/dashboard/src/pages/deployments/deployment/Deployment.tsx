@@ -17,15 +17,17 @@ import {
   WrenchIcon,
   XIcon,
 } from "lucide-react";
-import { memo, Suspense, useState } from "react";
+import { memo, Suspense } from "react";
 import { useParams } from "react-router";
+import { useActiveDeployment } from "../useActiveDeployment";
+import { useRedeployDeployment } from "../useRedeployDeployment";
+import { AssetsTabContent } from "./AssetsTabContent";
+import { LogsTabContent } from "./LogsTabContent";
+import { ToolsTabContent } from "./ToolsTabContent";
 import {
-  AssetsTabContents,
-  LogsTabContents,
-  ToolsTabContents,
-} from "./DeploymentTabs";
-import { useActiveDeployment } from "./useActiveDeployment";
-import { useRedeployDeployment } from "./useRedeployDeployment";
+  DeploymentPageSearchParams,
+  useDeploymentSearchParams,
+} from "./use-deployment-search-params";
 
 export default function DeploymentPage() {
   const { deploymentId } = useParams();
@@ -49,7 +51,12 @@ export default function DeploymentPage() {
 
 function DeploymentLogs(props: { deploymentId: string }) {
   const { deploymentId } = props;
-  const [selectedTab, setSelectedTab] = useState<string>("logs");
+
+  const { searchParams, setSearchParams } = useDeploymentSearchParams();
+
+  const handleUpdateTab = (tab: string) => {
+    setSearchParams({ tab: tab as DeploymentPageSearchParams["tab"] });
+  };
 
   return (
     <div className="grid gap-16">
@@ -64,15 +71,15 @@ function DeploymentLogs(props: { deploymentId: string }) {
           }
         >
           <StatsSection
-            onClickTools={() => setSelectedTab("tools")}
-            onClickAssets={() => setSelectedTab("assets")}
+            onClickTools={() => setSearchParams({ tab: "tools" })}
+            onClickAssets={() => setSearchParams({ tab: "assets" })}
           />
         </Suspense>
       </section>
 
       <Tabs
-        value={selectedTab}
-        onValueChange={setSelectedTab}
+        value={searchParams.tab}
+        onValueChange={handleUpdateTab}
         className="gap-16"
       >
         <TabsList>
@@ -82,16 +89,16 @@ function DeploymentLogs(props: { deploymentId: string }) {
         </TabsList>
         <TabsContent value="logs">
           <Suspense fallback={<div>Loading logs...</div>}>
-            <LogsTabContents />
+            <LogsTabContent />
           </Suspense>
         </TabsContent>
         <TabsContent value="assets">
           <Suspense fallback={<div>Loading assets...</div>}>
-            <AssetsTabContents />
+            <AssetsTabContent />
           </Suspense>
         </TabsContent>
         <TabsContent value="tools">
-          <ToolsTabContents deploymentId={deploymentId} />
+          <ToolsTabContent deploymentId={deploymentId} />
         </TabsContent>
       </Tabs>
     </div>
