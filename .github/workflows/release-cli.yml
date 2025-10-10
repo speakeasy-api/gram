@@ -34,17 +34,6 @@ jobs:
           skip-on-empty: "false"
           preset: conventionalcommits
           tag-prefix: "@gram/cli@"
-      - name: Prepare version
-        shell: bash
-        # GoReleaser tags must be valid semver, but conventional-changelog
-        # should be namespaced (e.g. @gram/cli). Strip the prefix from the tag
-        # so that GoReleaser can find a valid tag. If this gets too messy,
-        # consider https://goreleaser.com/cookbooks/set-a-custom-git-tag/
-        run: |
-          CLEAN_TAG=$(sed 's|@gram/cli@||' <<< "${{ steps.changelog.outputs.tag }}")
-          echo "GORELEASER_CURRENT_TAG=$CLEAN_TAG" >> $GITHUB_ENV
-          git tag -f "${CLEAN_TAG}" "${GITHUB_SHA}"
-
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version-file: "cli/go.mod"
@@ -65,9 +54,10 @@ jobs:
       - name: goreleaser
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
-          distribution: goreleaser
+          distribution: goreleaser-pro
           version: latest
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ steps.bot-token.outputs.token }}
           CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+          GORELEASER_KEY: ${{secrets.GORELEASER_PRO_LICENSE_KEY}}

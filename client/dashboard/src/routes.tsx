@@ -3,7 +3,7 @@ import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
-import Deployment from "./pages/deployments/Deployment";
+import Deployment from "./pages/deployments/deployment/Deployment";
 import Deployments, { DeploymentsRoot } from "./pages/deployments/Deployments";
 import EnvironmentPage from "./pages/environments/Environment";
 import Environments, {

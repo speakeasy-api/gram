@@ -192,13 +192,14 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	}
 
 	return &gen.GetInstanceResult{
-		Name:              toolset.Name,
-		Description:       toolset.Description,
-		SecurityVariables: toolset.SecurityVariables,
-		ServerVariables:   toolset.ServerVariables,
-		Tools:             toolset.Tools,
-		PromptTemplates:   promptTemplates,
-		Environment:       environment,
+		Name:                         toolset.Name,
+		Description:                  toolset.Description,
+		SecurityVariables:            toolset.SecurityVariables,
+		ServerVariables:              toolset.ServerVariables,
+		FunctionEnvironmentVariables: toolset.FunctionEnvironmentVariables,
+		Tools:                        toolset.Tools,
+		PromptTemplates:              promptTemplates,
+		Environment:                  environment,
 	}, nil
 }
 

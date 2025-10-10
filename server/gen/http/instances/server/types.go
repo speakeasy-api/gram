@@ -28,6 +28,8 @@ type GetInstanceResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
 	// The environment
 	Environment *EnvironmentResponseBody `form:"environment" json:"environment" xml:"environment"`
 }
@@ -460,6 +462,15 @@ type ServerVariableResponseBody struct {
 	EnvVariables []string `form:"env_variables" json:"env_variables" xml:"env_variables"`
 }
 
+// FunctionEnvironmentVariableResponseBody is used to define fields on response
+// body types.
+type FunctionEnvironmentVariableResponseBody struct {
+	// Description of the function environment variable
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The environment variables
+	Name string `form:"name" json:"name" xml:"name"`
+}
+
 // EnvironmentResponseBody is used to define fields on response body types.
 type EnvironmentResponseBody struct {
 	// The ID of the environment
@@ -525,6 +536,12 @@ func NewGetInstanceResponseBody(res *instances.GetInstanceResult) *GetInstanceRe
 		body.ServerVariables = make([]*ServerVariableResponseBody, len(res.ServerVariables))
 		for i, val := range res.ServerVariables {
 			body.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if res.FunctionEnvironmentVariables != nil {
+		body.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(res.FunctionEnvironmentVariables))
+		for i, val := range res.FunctionEnvironmentVariables {
+			body.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
 		}
 	}
 	if res.Environment != nil {
