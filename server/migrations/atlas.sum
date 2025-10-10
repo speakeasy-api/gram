@@ -1,4 +1,4 @@
-h1:XFFTuBnBmn9Ru6TqZvvlqH6W0ReLvMQ5q6uHtK2D4o8=
+h1:1TLsXlOzACTKeil9GrjDXt5aDFL3rgj063fRM3/aLwU=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -55,3 +55,4 @@ h1:XFFTuBnBmn9Ru6TqZvvlqH6W0ReLvMQ5q6uHtK2D4o8=
 20251002201549_mcp-install-page-metadata-add-table.sql h1:It4omo5zgT95i7fwhauodkAr2H1ynM0d3mQoiTvK+Yc=
 20251007235014_add-project-id-function-tools.sql h1:qWQUw9Wy/cJ7dN+d5N2yNA7I8Mb+EUlfc08DhFnpg/I=
 20251010175120_drop-http-tool-names.sql h1:3NK74Aw0j48ydhVS35Z4xt2IyaWWpqxCsn6+3nDSMt8=
+20251010180025_project-id-not-null-function-tools.sql h1:04hsYGb5CxbkTo33bVZvqsThaV4qmWrldQ1jg3obfXQ=

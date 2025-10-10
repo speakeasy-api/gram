@@ -375,7 +375,7 @@ type CreateFunctionsToolParams struct {
 	DeploymentID uuid.UUID
 	FunctionID   uuid.UUID
 	ToolUrn      urn.Tool
-	ProjectID    uuid.NullUUID
+	ProjectID    uuid.UUID
 	Runtime      string
 	Name         string
 	Description  string
