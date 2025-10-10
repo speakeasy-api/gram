@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -46,7 +47,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 					Slug:                   "public-test-toolset",
 					McpSlug:                conv.ToPGText("public-test-toolset"),
 					Description:            conv.ToPGText("A public test MCP server"),
-					DefaultEnvironmentSlug: conv.ToPGText(""),
+					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 					McpEnabled:             true,
 				})
 				require.NoError(t, err)
@@ -78,7 +79,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 					Slug:                   "private-test-toolset",
 					McpSlug:                conv.ToPGText("private-test-toolset"),
 					Description:            conv.ToPGText("A private test MCP server"),
-					DefaultEnvironmentSlug: conv.ToPGText(""),
+					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 					McpEnabled:             true,
 				})
 				require.NoError(t, err)
@@ -108,7 +109,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 					Slug:                   "private-org-toolset",
 					McpSlug:                conv.ToPGText("private-org-toolset"),
 					Description:            conv.ToPGText("A private org test MCP server"),
-					DefaultEnvironmentSlug: conv.ToPGText(""),
+					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 					McpEnabled:             true,
 				})
 				require.NoError(t, err)
@@ -147,7 +148,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 					Slug:                   "wrong-org-toolset",
 					McpSlug:                conv.ToPGText("wrong-org-toolset"),
 					Description:            conv.ToPGText("A wrong org test MCP server"),
-					DefaultEnvironmentSlug: conv.ToPGText(""),
+					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 					McpEnabled:             true,
 				})
 				require.NoError(t, err)
