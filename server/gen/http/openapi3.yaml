@@ -7687,14 +7687,6 @@ components:
                 summarizer:
                     type: string
                     description: Summarizer for the tool
-                summary:
-                    type: string
-                    description: Summary of the tool
-                tags:
-                    type: array
-                    items:
-                        type: string
-                    description: The tags list for this http tool
                 variation_id:
                     type: string
                     description: The ID of the variation that was applied to the tool
@@ -7702,6 +7694,7 @@ components:
             required:
                 - variation_id
                 - name
+                - description
         Chat:
             type: object
             properties:
@@ -10144,14 +10137,6 @@ components:
                 summarizer:
                     type: string
                     description: The summarizer of the tool variation
-                summary:
-                    type: string
-                    description: The summary of the tool variation
-                tags:
-                    type: array
-                    items:
-                        type: string
-                    description: The tags of the tool variation
                 updated_at:
                     type: string
                     description: The last update date of the tool variation

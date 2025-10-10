@@ -46,14 +46,6 @@ export type ToolVariation = {
    */
   summarizer?: string | undefined;
   /**
-   * The summary of the tool variation
-   */
-  summary?: string | undefined;
-  /**
-   * The tags of the tool variation
-   */
-  tags?: Array<string> | undefined;
-  /**
    * The last update date of the tool variation
    */
   updatedAt: string;
@@ -74,8 +66,6 @@ export const ToolVariation$inboundSchema: z.ZodType<
   name: z.string().optional(),
   src_tool_name: z.string(),
   summarizer: z.string().optional(),
-  summary: z.string().optional(),
-  tags: z.array(z.string()).optional(),
   updated_at: z.string(),
 }).transform((v) => {
   return remap$(v, {
@@ -98,8 +88,6 @@ export type ToolVariation$Outbound = {
   name?: string | undefined;
   src_tool_name: string;
   summarizer?: string | undefined;
-  summary?: string | undefined;
-  tags?: Array<string> | undefined;
   updated_at: string;
 };
 
@@ -118,8 +106,6 @@ export const ToolVariation$outboundSchema: z.ZodType<
   name: z.string().optional(),
   srcToolName: z.string(),
   summarizer: z.string().optional(),
-  summary: z.string().optional(),
-  tags: z.array(z.string()).optional(),
   updatedAt: z.string(),
 }).transform((v) => {
   return remap$(v, {

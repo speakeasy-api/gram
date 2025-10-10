@@ -39,6 +39,7 @@ export * from "./evolveform.js";
 export * from "./evolveresult.js";
 export * from "./externaloauthserver.js";
 export * from "./externaloauthserverform.js";
+export * from "./functionenvironmentvariable.js";
 export * from "./functiontooldefinition.js";
 export * from "./getactivedeploymentresult.js";
 export * from "./getdeploymentlogsresult.js";

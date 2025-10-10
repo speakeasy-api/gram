@@ -32,13 +32,14 @@ import (
 )
 
 type ChatClient struct {
-	logger     *slog.Logger
-	openRouter openrouter.Provisioner
-	chatClient *openrouter.ChatClient
-	db         *pgxpool.Pool
-	env        *environments.EnvironmentEntries
-	cache      cache.Cache
-	toolProxy  *gateway.ToolProxy
+	logger       *slog.Logger
+	openRouter   openrouter.Provisioner
+	chatClient   *openrouter.ChatClient
+	db           *pgxpool.Pool
+	env          *environments.EnvironmentEntries
+	cache        cache.Cache
+	toolProxy    *gateway.ToolProxy
+	toolsetCache cache.TypedCacheObject[mv.ToolsetTools]
 }
 
 func NewChatClient(logger *slog.Logger,
@@ -66,6 +67,7 @@ func NewChatClient(logger *slog.Logger,
 			cacheImpl,
 			guardianPolicy,
 		),
+		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}
 }
 
@@ -186,7 +188,7 @@ func (c *ChatClient) LoadToolsetTools(
 	toolsetSlug string,
 	addedEnvironmentEntries map[string]string,
 ) ([]AgentTool, error) {
-	toolset, err := mv.DescribeToolset(ctx, c.logger, c.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolsetSlug))
+	toolset, err := mv.DescribeToolset(ctx, c.logger, c.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolsetSlug), &c.toolsetCache)
 	if err != nil {
 		return nil, err
 	}

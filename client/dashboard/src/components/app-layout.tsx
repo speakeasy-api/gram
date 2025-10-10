@@ -9,11 +9,13 @@ export const LoginCheck = () => {
   const location = useLocation();
 
   if (session.session === "") {
-    return <Navigate to={`/login${location.search}`} />;
+    const redirectTo = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/login?redirect=${redirectTo}`} />;
   }
 
   if (!session.activeOrganizationId) {
-    return <Navigate to={`/register${location.search}`} />;
+    const redirectTo = encodeURIComponent(location.pathname + location.search);
+    return <Navigate to={`/register?redirect=${redirectTo}`} />;
   }
 
   return <Outlet />;

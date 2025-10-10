@@ -9,7 +9,7 @@ import { useSessionInfo } from "@gram/client/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ErrorBoundary } from "react-error-boundary";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useSlugs } from "./Sdk";
 import {
   useCaptureUserAuthorizationEvent,
@@ -183,49 +183,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const { orgSlug, projectSlug } = useSlugs();
+  const [searchParams] = useSearchParams();
 
-  const {
-    data: sessionData,
-    error,
-    refetch,
-    isLoading,
-  } = useSessionInfo(undefined, undefined, {
-    refetchOnWindowFocus: false,
-    retry: false,
-    throwOnError: false,
-  });
+  const { session, error, status } = useSessionData();
 
-  const asSession = (sessionData: SessionInfoResponse): Session => {
-    const sessionId = sessionData?.headers["gram-session"]?.[0];
-    const result = sessionData.result;
-
-    const organization =
-      result.organizations.find(
-        (org) => org.id === result.activeOrganizationId,
-      ) ?? result.organizations[0];
-
-    return {
-      ...result,
-      organization: organization ?? emptyOrganization,
-      user: {
-        id: result.userId,
-        email: result.userEmail,
-        isAdmin: result.isAdmin,
-        signature: result.userSignature,
-        displayName: result.userDisplayName,
-        photoUrl: result.userPhotoUrl,
-      },
-      session: sessionId ?? "",
-      refetch: sessionRefetch,
-    };
-  };
-
-  const sessionRefetch: () => Promise<Session> = async () => {
-    const newSession = await refetch();
-    return newSession.data ? asSession(newSession.data) : emptySession;
-  };
-
-  const session = sessionData ? asSession(sessionData) : undefined;
+  const isLoading = status === "pending";
 
   useIdentifyUserForTelemetry(session?.user);
 
@@ -254,8 +216,12 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // if we're logged in but the URL doesn't have a project slug, redirect to the default project
-  if (session.organization && !projectSlug) {
+  const redirectParam = searchParams.get("redirect");
+  if (redirectParam) {
+    navigate(redirectParam, { replace: true });
+  } else if (session.organization && !projectSlug) {
+    // if we're logged in but the URL doesn't have a project slug, redirect to
+    // the default project
     let preferredProject = localStorage.getItem(PREFERRED_PROJECT_KEY);
 
     if (
@@ -276,6 +242,51 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
       {children}
     </SessionContext.Provider>
   );
+};
+
+export const useSessionData = () => {
+  const {
+    data: sessionData,
+    error,
+    refetch,
+    status,
+  } = useSessionInfo(undefined, undefined, {
+    refetchOnWindowFocus: false,
+    retry: false,
+    throwOnError: false,
+  });
+
+  const asSession = (sessionData: SessionInfoResponse): Session => {
+    const sessionId = sessionData?.headers["gram-session"]?.[0];
+    const result = sessionData.result;
+
+    const organization =
+      result.organizations.find(
+        (org) => org.id === result.activeOrganizationId,
+      ) ?? result.organizations[0];
+
+    return {
+      ...result,
+      organization: organization ?? emptyOrganization,
+      user: {
+        id: result.userId,
+        email: result.userEmail,
+        isAdmin: result.isAdmin,
+        signature: result.userSignature,
+        displayName: result.userDisplayName,
+        photoUrl: result.userPhotoUrl,
+      },
+      session: sessionId ?? "",
+      refetch: async () => {
+        const newSession = await refetch();
+        return newSession.data ? asSession(newSession.data) : emptySession;
+      },
+    };
+  };
+
+  const session = sessionData ? asSession(sessionData) : null;
+
+  return { session, error, status };
 };
 
 export const useUser = () => {

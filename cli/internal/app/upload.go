@@ -48,6 +48,11 @@ Example:
 				Usage:    "The URL-friendly slug for the asset",
 				Required: true,
 			},
+			&cli.StringFlag{
+				Name:     "runtime",
+				Usage:    "Runtime to use for function execution (required for functions)",
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			ctx, cancel := signal.NotifyContext(
@@ -94,5 +99,6 @@ func parseSource(c *cli.Context) deploy.Source {
 		Location: c.String("location"),
 		Name:     c.String("name"),
 		Slug:     c.String("slug"),
+		Runtime:  c.String("runtime"),
 	}
 }

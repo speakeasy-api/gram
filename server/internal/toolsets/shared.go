@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/openapi"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -53,7 +52,7 @@ func (t *Toolsets) GetToolExecutionInfoByURN(ctx context.Context, toolUrn urn.To
 
 	case urn.ToolKindFunction:
 		tool, err := t.toolsRepo.GetFunctionToolDefinitionByURN(ctx, toolsRepo.GetFunctionToolDefinitionByURNParams{
-			ProjectID: uuid.NullUUID{UUID: projectID, Valid: true},
+			ProjectID: projectID,
 			Urn:       toolUrn,
 		})
 		if err != nil {
@@ -180,20 +179,15 @@ func (t *Toolsets) extractHTTPToolExecutionInfo(ctx context.Context, tool toolsR
 }
 
 func (t *Toolsets) extractFunctionToolExecutionInfo(ctx context.Context, tool toolsRepo.FunctionToolDefinition) (*ToolExecutionInfo, error) {
-	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, tool.ProjectID.UUID)
+	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, tool.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
-	}
-
-	project := ""
-	if projectID := conv.FromNullableUUID(tool.ProjectID); projectID != nil {
-		project = *projectID
 	}
 
 	gatewayTool := &gateway.FunctionTool{
 		ID:             tool.ID.String(),
 		DeploymentID:   tool.DeploymentID.String(),
-		ProjectID:      project,
+		ProjectID:      tool.ProjectID.String(),
 		OrganizationID: orgData.ID,
 		FunctionID:     tool.FunctionID.String(),
 		Name:           tool.Name,

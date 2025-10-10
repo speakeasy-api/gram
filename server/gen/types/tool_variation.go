@@ -20,12 +20,8 @@ type ToolVariation struct {
 	ConfirmPrompt *string
 	// The name of the tool variation
 	Name *string
-	// The summary of the tool variation
-	Summary *string
 	// The description of the tool variation
 	Description *string
-	// The tags of the tool variation
-	Tags []string
 	// The summarizer of the tool variation
 	Summarizer *string
 	// The creation date of the tool variation

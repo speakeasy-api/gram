@@ -13,16 +13,12 @@ type CanonicalToolAttributes struct {
 	VariationID string
 	// The name of the tool
 	Name string
-	// Summary of the tool
-	Summary *string
 	// Description of the tool
-	Description *string
+	Description string
 	// Confirmation mode for the tool
 	Confirm *string
 	// Prompt for the confirmation
 	ConfirmPrompt *string
 	// Summarizer for the tool
 	Summarizer *string
-	// The tags list for this http tool
-	Tags []string
 }
