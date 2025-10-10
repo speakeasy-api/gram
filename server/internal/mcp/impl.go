@@ -257,7 +257,7 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 	case toolset.OauthProxyServerID.Valid:
 		// Continue processing
 	default:
-		return oops.E(oops.CodeNotFound, nil, "no OAuth configuration found for this MCP server").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, nil, "not found").Log(ctx, s.logger)
 	}
 
 	baseURL := s.serverURL.String()
