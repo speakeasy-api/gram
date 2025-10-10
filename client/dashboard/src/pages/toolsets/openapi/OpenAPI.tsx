@@ -82,7 +82,8 @@ export default function OpenAPIAssets() {
 
   const addOpenAPIDialogRef = useRef<AddOpenAPIDialogRef>(null);
   const removeApiSourceDialogRef = useRef<RemoveAPISourceDialogRef>(null);
-  const removeFunctionSourceDialogRef = useRef<RemoveFunctionSourceDialogRef>(null);
+  const removeFunctionSourceDialogRef =
+    useRef<RemoveFunctionSourceDialogRef>(null);
 
   const finishUpload = () => {
     addOpenAPIDialogRef.current?.setOpen(false);
@@ -258,7 +259,9 @@ export default function OpenAPIAssets() {
               <OpenAPICard
                 key={asset.id}
                 asset={asset}
-                causingFailure={assetsCausingFailure.has(asset.deploymentAssetId)}
+                causingFailure={assetsCausingFailure.has(
+                  asset.deploymentAssetId,
+                )}
                 onClickRemove={() => {
                   removeApiSourceDialogRef.current?.open(asset);
                 }}
@@ -635,8 +638,8 @@ const RemoveFunctionSourceDialog = forwardRef<
         <Dialog.Header>
           <Dialog.Title>Delete Function Source</Dialog.Title>
           <Dialog.Description>
-            This will permanently delete the gram function source and related resources
-            such as tools within toolsets.
+            This will permanently delete the gram function source and related
+            resources such as tools within toolsets.
           </Dialog.Description>
         </Dialog.Header>
         <div className="grid gap-2">
