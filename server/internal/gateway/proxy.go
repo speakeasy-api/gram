@@ -26,6 +26,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -37,11 +38,6 @@ type ToolCallSource string
 const (
 	ToolCallSourceDirect ToolCallSource = "direct"
 	ToolCallSourceMCP    ToolCallSource = "mcp"
-)
-
-const (
-	HeaderProxiedResponse  = "X-Gram-Proxy-Response"
-	HeaderFilteredResponse = "X-Gram-Proxy-ResponseFiltered"
 )
 
 var proxiedHeaders = []string{
@@ -136,8 +132,14 @@ func (itp *ToolProxy) Do(
 	w http.ResponseWriter,
 	requestBody io.Reader,
 	env *CaseInsensitiveEnv,
-	tool *HTTPTool,
+	gatewayTool *Tool,
 ) error {
+	if !gatewayTool.IsHTTP() {
+		return fmt.Errorf("tool type not supported: %s", gatewayTool.Kind())
+	}
+
+	tool := gatewayTool.HTTPTool
+
 	ctx, span := itp.tracer.Start(ctx, "proxyToolCall", trace.WithAttributes(
 		attr.ToolName(tool.Name),
 		attr.ToolID(tool.ID),
@@ -530,7 +532,7 @@ func reverseProxyRequest(ctx context.Context,
 	}
 
 	span.SetAttributes(attr.HTTPResponseExternal(true))
-	w.Header().Set(HeaderProxiedResponse, "1")
+	w.Header().Set(constants.HeaderProxiedResponse, "1")
 
 	finalStatusCode := resp.StatusCode
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
@@ -567,7 +569,7 @@ func reverseProxyRequest(ctx context.Context,
 		result := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
 		if result != nil {
 			w.Header().Set("Content-Type", result.contentType)
-			w.Header().Set(HeaderFilteredResponse, "1")
+			w.Header().Set(constants.HeaderFilteredResponse, "1")
 			span.SetAttributes(attr.HTTPResponseFiltered(true))
 			finalStatusCode = result.statusCode
 			body = result.resp

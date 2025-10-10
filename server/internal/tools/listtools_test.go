@@ -690,3 +690,221 @@ func TestToolsService_ListTools_MultipleDeployments(t *testing.T) {
 	}
 	require.GreaterOrEqual(t, httpToolCount, 3, "should have at least 3 http tools")
 }
+
+func TestToolsService_ListTools_VerifyFunctionToolFields(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestToolsService(t, assetStorage)
+
+	// Upload functions file
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+
+	// Create deployment with function tools
+	deployment, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-list-tools-functions",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*dgen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "test-functions",
+				Slug:    "test-functions",
+				Runtime: "nodejs:22",
+			},
+		},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment with function tools")
+
+	// Test ListTools
+	result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Limit:            nil,
+	})
+	require.NoError(t, err, "list tools")
+	require.NotNil(t, result.Tools, "tools should not be nil")
+
+	// Count and verify function tools
+	functionToolCount := 0
+	for _, tool := range result.Tools {
+		if tool.FunctionToolDefinition != nil {
+			functionToolCount++
+			require.NotEmpty(t, tool.FunctionToolDefinition.ID, "function tool ID should not be empty")
+			require.Equal(t, deployment.Deployment.ID, tool.FunctionToolDefinition.DeploymentID, "deployment ID should match")
+			require.NotEmpty(t, tool.FunctionToolDefinition.ProjectID, "project ID should not be empty")
+			require.NotEmpty(t, tool.FunctionToolDefinition.Name, "function tool name should not be empty")
+			require.NotEmpty(t, tool.FunctionToolDefinition.CreatedAt, "created at should not be empty")
+			require.NotEmpty(t, tool.FunctionToolDefinition.UpdatedAt, "updated at should not be empty")
+			require.NotNil(t, tool.FunctionToolDefinition.Schema, "schema should not be nil")
+		}
+	}
+	require.GreaterOrEqual(t, functionToolCount, 1, "should have at least one function tool")
+}
+
+func TestToolsService_ListTools_WithMixedToolTypes(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestToolsService(t, assetStorage)
+
+	// Upload OpenAPI asset
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/petstore-valid.yaml"))
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi v3 asset")
+
+	// Upload functions file
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+
+	// Create deployment with HTTP tools and function tools
+	deployment, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey: "test-list-tools-mixed",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "petstore-doc",
+				Slug:    "petstore-doc",
+			},
+		},
+		Functions: []*dgen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "mixed-functions",
+				Slug:    "mixed-functions",
+				Runtime: "nodejs:22",
+			},
+		},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment with mixed tools")
+
+	// Create prompt template
+	template, err := ti.templates.CreateTemplate(ctx, &tgen.CreateTemplatePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Name:             types.Slug("mixed-template"),
+		Prompt:           "Process {{data}}",
+		Description:      conv.Ptr("A template for testing mixed types"),
+		Engine:           "mustache",
+		Kind:             "prompt",
+		ToolsHint:        []string{"assistant"},
+		Arguments:        conv.Ptr(`{"type": "object", "properties": {"data": {"type": "string"}}, "required": ["data"]}`),
+	})
+	require.NoError(t, err, "create template")
+
+	// Test ListTools
+	result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Limit:            nil,
+	})
+	require.NoError(t, err, "list tools")
+	require.NotNil(t, result.Tools, "tools should not be nil")
+
+	// Count each tool type
+	httpToolCount := 0
+	functionToolCount := 0
+	templateCount := 0
+
+	for _, tool := range result.Tools {
+		if tool.HTTPToolDefinition != nil {
+			httpToolCount++
+			require.Equal(t, deployment.Deployment.ID, tool.HTTPToolDefinition.DeploymentID, "http tool deployment ID should match")
+		} else if tool.FunctionToolDefinition != nil {
+			functionToolCount++
+			require.Equal(t, deployment.Deployment.ID, tool.FunctionToolDefinition.DeploymentID, "function tool deployment ID should match")
+		} else if tool.PromptTemplate != nil {
+			templateCount++
+			require.Equal(t, template.Template.ID, tool.PromptTemplate.ID, "template ID should match")
+		} else {
+			t.Fatal("tool has no type set")
+		}
+	}
+
+	require.GreaterOrEqual(t, httpToolCount, 1, "should have at least one http tool")
+	require.GreaterOrEqual(t, functionToolCount, 1, "should have at least one function tool")
+	require.Equal(t, 1, templateCount, "should have exactly 1 prompt template")
+}
+
+func TestToolsService_ListTools_WithDeploymentIDAndFunctionTools(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestToolsService(t, assetStorage)
+
+	// Upload functions file
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+
+	// Create deployment with function tools
+	deployment, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-list-tools-functions-with-deployment-id",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*dgen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "test-functions",
+				Slug:    "test-functions",
+				Runtime: "nodejs:22",
+			},
+		},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment")
+	require.Equal(t, "completed", deployment.Deployment.Status, "deployment should be completed")
+
+	// Test ListTools filtered by deployment ID
+	result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     &deployment.Deployment.ID,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Limit:            nil,
+	})
+	require.NoError(t, err, "list tools for deployment")
+	require.NotNil(t, result.Tools, "tools should not be nil")
+
+	// Verify function tools belong to this deployment
+	functionToolCount := 0
+	for _, tool := range result.Tools {
+		if tool.FunctionToolDefinition != nil {
+			functionToolCount++
+			require.Equal(t, deployment.Deployment.ID, tool.FunctionToolDefinition.DeploymentID, "function tool should belong to this deployment")
+		}
+	}
+	require.GreaterOrEqual(t, functionToolCount, 1, "should have at least one function tool")
+}
