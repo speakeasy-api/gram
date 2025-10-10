@@ -54,7 +54,7 @@ export function MCPDetailPage() {
     toolset?.securityVariables?.some(
       (secVar) =>
         (secVar.type === "oauth2" &&
-        secVar.oauthTypes?.includes("authorization_code")) ||
+          secVar.oauthTypes?.includes("authorization_code")) ||
         secVar.type === "openIdConnect",
     ) ?? false;
   const isOAuthConnected = !!(
@@ -855,7 +855,7 @@ function OAuthTabModal({
     toolset.securityVariables?.filter(
       (secVar) =>
         (secVar.type === "oauth2" &&
-        secVar.oauthTypes?.includes("authorization_code")) ||
+          secVar.oauthTypes?.includes("authorization_code")) ||
         secVar.type === "openIdConnect",
     ).length ?? 0;
 
