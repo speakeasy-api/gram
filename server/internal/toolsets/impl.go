@@ -110,12 +110,6 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		s.logger.ErrorContext(ctx, "error getting enabled server count", attr.SlogError(err), attr.SlogOrganizationID(authCtx.ActiveOrganizationID))
 	}
 
-	// Process tool URNs and split them by type, so that we still persist HTTP tool names for legacy read purposes
-	httpToolNames, err := s.extractToolNamesFromUrns(payload.ToolUrns, urn.ToolKindHTTP)
-	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URNs").Log(ctx, s.logger)
-	}
-
 	createToolParams := repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
@@ -123,7 +117,6 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		Slug:                   conv.ToSlug(payload.Name),
 		Description:            conv.PtrToPGText(payload.Description),
 		DefaultEnvironmentSlug: conv.PtrToPGText(nil),
-		HttpToolNames:          httpToolNames,
 		McpSlug:                conv.ToPGText(mcpSlug),
 		McpEnabled:             enabledServerCount == 0, // we automatically enable the first available toolset in an organization as an MCP server
 	}
@@ -231,7 +224,6 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		Name:                   existingToolset.Name,
 		DefaultEnvironmentSlug: existingToolset.DefaultEnvironmentSlug,
 		ProjectID:              *authCtx.ProjectID,
-		HttpToolNames:          existingToolset.HttpToolNames,
 		McpSlug:                existingToolset.McpSlug,
 		McpEnabled:             existingToolset.McpEnabled,
 		CustomDomainID:         existingToolset.CustomDomainID,
@@ -332,26 +324,6 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		}
 	}
 
-	// BELOW: Legacy logic to continue keeping the http_tool_definitions field up to date
-	// Process tool URNs and split them by type when ToolUrns are provided
-	if payload.ToolUrns != nil {
-		httpToolNames, err := s.extractToolNamesFromUrns(payload.ToolUrns, urn.ToolKindHTTP)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "invalid tool URNs").Log(ctx, logger)
-		}
-
-		// Update only the http_tool_names field
-		// This is done separately from the updateToolset call above because that call can't distinguish between setting the field to an empty array and not setting it at all
-		updatedToolset, err = tr.UpdateToolsetHttpToolNames(ctx, repo.UpdateToolsetHttpToolNamesParams{
-			Slug:          conv.ToLower(payload.Slug),
-			ProjectID:     *authCtx.ProjectID,
-			HttpToolNames: httpToolNames,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "error updating toolset http tool names").Log(ctx, logger)
-		}
-	}
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving updated toolset").Log(ctx, logger)
 	}
@@ -428,7 +400,6 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		ProjectID:              *authCtx.ProjectID,
 		Description:            originalToolset.Description,
 		DefaultEnvironmentSlug: originalToolset.DefaultEnvironmentSlug,
-		HttpToolNames:          originalToolset.HttpToolNames,
 		McpSlug:                conv.ToPGText(mcpSlug),
 		McpEnabled:             false, // Don't auto-enable MCP for cloned toolsets
 	}
@@ -715,27 +686,6 @@ func (s *Service) createToolsetVersion(ctx context.Context, urnStrings []string,
 	}
 
 	return nil
-}
-
-// extractToolNamesFromUrns extracts tool names of a specific kind from URN strings,
-func (s *Service) extractToolNamesFromUrns(toolUrns []string, kind urn.ToolKind) ([]string, error) {
-	if toolUrns == nil {
-		return nil, nil
-	}
-
-	var toolNames []string
-	for _, urnStr := range toolUrns {
-		var toolUrn urn.Tool
-		if err := toolUrn.UnmarshalText([]byte(urnStr)); err != nil {
-			return nil, fmt.Errorf("invalid tool URN %q: %w", urnStr, err)
-		}
-
-		if toolUrn.Kind == kind {
-			toolNames = append(toolNames, toolUrn.Name)
-		}
-	}
-
-	return toolNames, nil
 }
 
 // updatePromptTemplates updates the prompt templates for a toolset. NOTE: promptTemplates are NOT tools! These correspond to actual "prompts" in MCP

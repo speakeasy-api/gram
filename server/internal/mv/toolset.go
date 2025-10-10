@@ -68,7 +68,6 @@ func DescribeToolsetEntry(
 	}
 
 	// Get tool URNs from latest toolset version
-	// TODO: use this to power everything below rather than the http_tool_names field
 	var toolUrns []string
 	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
 	if err == nil {
@@ -268,7 +267,6 @@ func DescribeToolset(
 	}
 
 	// Get tool URNs from latest toolset version
-	// TODO: use this to power everything below rather than the http_tool_names field
 	var toolUrns []string
 	var toolsetVersion int64
 	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
@@ -307,7 +305,7 @@ func DescribeToolset(
 
 		promptTemplates = append(promptTemplates, &types.PromptTemplate{
 			ID:            pt.ID.String(),
-			ToolUrn:       pt.ToolUrn.String,
+			ToolUrn:       pt.ToolUrn,
 			HistoryID:     pt.HistoryID.String(),
 			PredecessorID: conv.FromNullableUUID(pt.PredecessorID),
 			Name:          pt.Name,
