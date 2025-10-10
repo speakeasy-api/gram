@@ -125,15 +125,8 @@ OTLP_GRPC_PORT = "4317"
 ####################################
 ## Gram Functions runner settings ##
 ####################################
-## ⚠️ IMPORTANT: Read note about FLY_IMAGE below before setting this variable.
 GRAM_FUNCTIONS_OCI_IMAGE = "gram-runner"
 GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 # GRAM_FUNCTIONS_FLYIO_API_TOKEN = "unset"
 # GRAM_FUNCTIONS_FLYIO_ORG = "unset"
 # GRAM_FUNCTIONS_FLYIO_REGION = "sea"
-
-## Fly.io app names must be globally unique. Apps also act as docker image
-## registries where Gram Functions runner images are pushed to.
-## ⚠️ IMPORTANT: If running Gram Functions on Fly.io, this variable MUST have
-## the same value as GRAM_FUNCTIONS_OCI_IMAGE.
-# FLY_IMAGE = "registry.fly.io/gram-46mq43kl"
