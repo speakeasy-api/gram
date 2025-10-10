@@ -525,46 +525,6 @@ func (q *Queries) GetToolsetByMcpSlugAndCustomDomain(ctx context.Context, arg Ge
 	return i, err
 }
 
-const getToolsetByMcpSlugAndOrganization = `-- name: GetToolsetByMcpSlugAndOrganization :one
-SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.created_at, t.updated_at, t.deleted_at, t.deleted
-FROM toolsets t
-JOIN projects p ON t.project_id = p.id
-WHERE t.mcp_slug = $1
-  AND p.organization_id = $2
-  AND t.deleted IS FALSE
-  AND p.deleted IS FALSE
-`
-
-type GetToolsetByMcpSlugAndOrganizationParams struct {
-	McpSlug        pgtype.Text
-	OrganizationID string
-}
-
-func (q *Queries) GetToolsetByMcpSlugAndOrganization(ctx context.Context, arg GetToolsetByMcpSlugAndOrganizationParams) (Toolset, error) {
-	row := q.db.QueryRow(ctx, getToolsetByMcpSlugAndOrganization, arg.McpSlug, arg.OrganizationID)
-	var i Toolset
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Slug,
-		&i.Description,
-		&i.DefaultEnvironmentSlug,
-		&i.McpSlug,
-		&i.McpIsPublic,
-		&i.McpEnabled,
-		&i.CustomDomainID,
-		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const getToolsetPromptTemplateNames = `-- name: GetToolsetPromptTemplateNames :many
 SELECT tp.prompt_name
 FROM toolset_prompts tp
@@ -772,46 +732,6 @@ type UpdateToolsetExternalOAuthServerParams struct {
 
 func (q *Queries) UpdateToolsetExternalOAuthServer(ctx context.Context, arg UpdateToolsetExternalOAuthServerParams) (Toolset, error) {
 	row := q.db.QueryRow(ctx, updateToolsetExternalOAuthServer, arg.ExternalOauthServerID, arg.Slug, arg.ProjectID)
-	var i Toolset
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Slug,
-		&i.Description,
-		&i.DefaultEnvironmentSlug,
-		&i.McpSlug,
-		&i.McpIsPublic,
-		&i.McpEnabled,
-		&i.CustomDomainID,
-		&i.ExternalOauthServerID,
-		&i.OauthProxyServerID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
-const updateToolsetHttpToolNames = `-- name: UpdateToolsetHttpToolNames :one
-UPDATE toolsets
-SET
-    http_tool_names = $1::text[]
-  , updated_at = clock_timestamp()
-WHERE slug = $2 AND project_id = $3
-RETURNING id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
-`
-
-type UpdateToolsetHttpToolNamesParams struct {
-	HttpToolNames []string
-	Slug          string
-	ProjectID     uuid.UUID
-}
-
-func (q *Queries) UpdateToolsetHttpToolNames(ctx context.Context, arg UpdateToolsetHttpToolNamesParams) (Toolset, error) {
-	row := q.db.QueryRow(ctx, updateToolsetHttpToolNames, arg.HttpToolNames, arg.Slug, arg.ProjectID)
 	var i Toolset
 	err := row.Scan(
 		&i.ID,
