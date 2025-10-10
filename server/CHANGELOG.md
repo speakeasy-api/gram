@@ -1,5 +1,11 @@
 # @gram/server
 
+## 0.4.1
+
+### Patch Changes
+
+- a3b4abe: feat: propogate through function environment variables on toolset
+
 ## 0.4.0
 
 ### Minor Changes
