@@ -1,0 +1,133 @@
+package testenv
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
+
+	"github.com/testcontainers/testcontainers-go"
+	clickhousecontainer "github.com/testcontainers/testcontainers-go/modules/clickhouse"
+)
+
+type ClickhouseClientFunc func(t *testing.T) (clickhouse.Conn, error)
+
+// NewTestClickhouse creates a new ClickHouse container with the schema initialized
+// from migration files. Returns a container reference and a function to create
+// test connections. The container is automatically cleaned up when the test ends.
+func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseContainer, ClickhouseClientFunc, error) {
+	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:25.8.3",
+		clickhousecontainer.WithUsername("gram"),
+		clickhousecontainer.WithPassword("gram"),
+		clickhousecontainer.WithDatabase("gram"),
+		testcontainers.WithLogger(NewTestcontainersLogger()),
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to start clickhouse container: %w", err)
+	}
+
+	// Get host and port
+	host, err := container.Host(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get clickhouse host: %w", err)
+	}
+
+	port, err := container.MappedPort(ctx, "9000/tcp")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get clickhouse port: %w", err)
+	}
+
+	// Connect and run schema
+	conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // third-party library struct with many optional fields
+		Addr: []string{fmt.Sprintf("%s:%s", host, port.Port())},
+		Auth: clickhouse.Auth{
+			Database: "gram",
+			Username: "gram",
+			Password: "gram",
+		},
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to clickhouse: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error {
+		return conn.Close()
+	})
+
+	if err = conn.Ping(ctx); err != nil {
+		return nil, nil, fmt.Errorf("failed to ping clickhouse: %w", err)
+	}
+
+	// Running the schema here because using clickhousecontainer.WithInitScripts() wasn't working for some reason.
+	// I'll add back when I figure out why.
+	// Get the schema file path relative to this file's location
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return nil, nil, fmt.Errorf("failed to get current file path")
+	}
+	schemaPath := filepath.Join(filepath.Dir(filename), "..", "..", "clickhouse", "schema.sql")
+
+	// Read and execute the schema
+	schemaSQL, err := os.ReadFile(schemaPath) //nolint:gosec // schemaPath is built from trusted runtime.Caller path
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read schema file at %s: %w", schemaPath, err)
+	}
+
+	if err = conn.Exec(ctx, string(schemaSQL)); err != nil {
+		return nil, nil, fmt.Errorf("failed to execute schema: %w", err)
+	}
+
+	// Verify table exists
+	var tableExists uint8
+	err = conn.QueryRow(ctx, "SELECT 1 FROM system.tables WHERE database = 'gram' AND name = 'http_requests_raw'").Scan(&tableExists)
+	if err != nil || tableExists != 1 {
+		return nil, nil, fmt.Errorf("http_requests_raw table not found after schema execution")
+	}
+
+	return container, newClickhouseClientFunc(container), nil
+}
+
+func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer) ClickhouseClientFunc {
+	return func(t *testing.T) (clickhouse.Conn, error) {
+		t.Helper()
+
+		ctx := t.Context()
+		host, err := container.Host(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get clickhouse host: %w", err)
+		}
+
+		port, err := container.MappedPort(ctx, "9000/tcp")
+		if err != nil {
+			return nil, fmt.Errorf("failed to get clickhouse port: %w", err)
+		}
+
+		conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // third-party library struct with many optional fields
+			Addr: []string{fmt.Sprintf("%s:%s", host, port.Port())},
+			Auth: clickhouse.Auth{
+				Database: "gram",
+				Username: "gram",
+				Password: "gram",
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to clickhouse: %w", err)
+		}
+
+		t.Cleanup(func() {
+			defer o11y.NoLogDefer(func() error {
+				if err2 := conn.Close(); err2 != nil {
+					t.Logf("failed to close clickhouse connection: %v", err2)
+					return fmt.Errorf("failed to close clickhouse connection: %w", err2)
+				}
+				return nil
+			})
+		})
+
+		return conn, nil
+	}
+}

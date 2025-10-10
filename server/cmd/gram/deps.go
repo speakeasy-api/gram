@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,6 +23,7 @@ import (
 	polargo "github.com/polarsource/polar-go"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/otel"
@@ -54,6 +56,46 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 		cfgLoader = altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc("config-file"))
 	}
 	return cfgLoader(c)
+}
+
+func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context, features feature.Provider) (tm.ToolMetricsClient, func(context.Context) error, error) {
+	conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // too many fields
+		Auth: clickhouse.Auth{
+			Database: c.String("clickhouse-database"),
+			Username: c.String("clickhouse-username"),
+			Password: c.String("clickhouse-password"),
+		},
+		Addr:     []string{fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-http-port"))},
+		Protocol: clickhouse.HTTP,
+		Settings: clickhouse.Settings{
+			"max_execution_time": 60, // query timeout
+		},
+	})
+	if err != nil {
+		logger.WarnContext(ctx, "error connecting to clickhouse; falling back to stub tool call metrics client")
+		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil
+	}
+
+	if err = conn.Ping(ctx); err != nil {
+		logger.WarnContext(ctx, "failed to ping clickhouse; falling back to stub tool call metrics client", attr.SlogError(err))
+		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil
+	}
+
+	cc := &tm.ClickhouseClient{
+		Conn:     conn,
+		Features: features,
+		Logger:   logger,
+	}
+
+	shutdown := func(ctx context.Context) error {
+		if err := cc.Close(); err != nil {
+			logger.ErrorContext(ctx, "failed to close tool metrics client connection", attr.SlogError(err))
+			return fmt.Errorf("close tool metrics client: %w", err)
+		}
+		return nil
+	}
+
+	return cc, shutdown, nil
 }
 
 type dbClientOptions struct {

@@ -14,9 +14,10 @@ import (
 )
 
 type Environment struct {
-	CloneTestDatabase PostgresDBCloneFunc
-	NewRedisClient    RedisClientFunc
-	NewTemporalClient func(t *testing.T) (client client.Client, server *testsuite.DevServer)
+	CloneTestDatabase   PostgresDBCloneFunc
+	NewRedisClient      RedisClientFunc
+	NewClickhouseClient ClickhouseClientFunc
+	NewTemporalClient   func(t *testing.T) (client client.Client, server *testsuite.DevServer)
 }
 
 func Launch(ctx context.Context) (*Environment, func() error, error) {
@@ -30,9 +31,15 @@ func Launch(ctx context.Context) (*Environment, func() error, error) {
 		return nil, nil, fmt.Errorf("start redis container: %w", err)
 	}
 
+	clickhousecontainer, chFactory, err := NewTestClickhouse(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("start clickhouse container: %w", err)
+	}
+
 	res := &Environment{
-		CloneTestDatabase: cloner,
-		NewRedisClient:    rcFactory,
+		CloneTestDatabase:   cloner,
+		NewRedisClient:      rcFactory,
+		NewClickhouseClient: chFactory,
 		NewTemporalClient: func(t *testing.T) (client.Client, *testsuite.DevServer) {
 			t.Helper()
 
@@ -59,6 +66,14 @@ func Launch(ctx context.Context) (*Environment, func() error, error) {
 			defer cancel()
 			if err := rediscontainer.Terminate(ctx); err != nil {
 				log.Printf("terminate redis container: %v", err)
+			}
+			return nil
+		})
+		eg.Go(func() error {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := clickhousecontainer.Terminate(ctx); err != nil {
+				log.Printf("terminate clickhouse container: %v", err)
 			}
 			return nil
 		})

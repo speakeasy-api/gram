@@ -203,6 +203,41 @@ func newWorkerCommand() *cli.Command {
 			EnvVars:  []string{"GRAM_CONFIG_FILE"},
 			Required: false,
 		},
+		&cli.StringFlag{
+			Name:     "clickhouse-host",
+			Usage:    "Clickhouse Host",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_HOST"},
+			Value:    "localhost",
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-database",
+			Usage:    "Clickhouse Database",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_DATABASE"},
+			Value:    "gram",
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-username",
+			Usage:    "Clickhouse Username",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_USERNAME"},
+			Value:    "gram",
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-password",
+			Usage:    "Clickhouse Password",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_PASSWORD"},
+			Value:    "gram",
+		},
+		&cli.StringFlag{
+			Name:     "clickhouse-http-port",
+			Usage:    "Clickhouse HTTP Port",
+			Required: false,
+			EnvVars:  []string{"CLICKHOUSE_HTTP_PORT"},
+			Value:    "8123",
+		},
 	}
 
 	return &cli.Command{
@@ -298,6 +333,12 @@ func newWorkerCommand() *cli.Command {
 				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
+			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c, features)
+			if err != nil {
+				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
@@ -334,7 +375,7 @@ func newWorkerCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, tcm)
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
 			if err != nil {

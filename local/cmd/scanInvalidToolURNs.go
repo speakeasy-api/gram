@@ -351,4 +351,3 @@ func updateToolsetsWithNewNames(ctx context.Context, tx pgx.Tx, project string, 
 
 	return len(toolsetsToUpdate), nil
 }
-

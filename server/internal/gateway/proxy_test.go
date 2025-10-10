@@ -5,18 +5,61 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+var (
+	infra *testenv.Environment
+)
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+
+	res, cleanup, err := testenv.Launch(ctx)
+	if err != nil {
+		log.Fatalf("Failed to launch test infrastructure: %v", err)
+	}
+
+	infra = res
+
+	code := m.Run()
+
+	if err = cleanup(); err != nil {
+		log.Fatalf("Failed to cleanup test infrastructure: %v", err)
+	}
+
+	os.Exit(code)
+}
+
+func newClickhouseClient(t *testing.T, orgId string) *toolmetrics.ClickhouseClient {
+	t.Helper()
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	fp := &feature.InMemory{}
+	fp.SetFlag(feature.FlagClickhouseToolMetrics, orgId, true)
+
+	return &toolmetrics.ClickhouseClient{
+		Conn:     chConn,
+		Features: fp,
+		Logger:   testenv.NewLogger(t),
+	}
+}
 
 func TestToolProxy_Do_PathParams(t *testing.T) {
 	t.Parallel()
@@ -192,6 +235,8 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				ResponseFilter:     nil,
 			}
 
+			chClient := newClickhouseClient(t, tool.OrganizationID)
+
 			// Add path parameter configuration for the parameter in the test
 			for paramName := range tt.pathParam {
 				tool.PathParams[paramName] = &HTTPParameter{
@@ -224,6 +269,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
+				chClient,
 			)
 
 			// Create response recorder
@@ -243,6 +289,19 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Verify the path was correctly constructed with the number
 			require.Equal(t, tt.expectedPath, capturedRequest.URL.Path)
+
+			// Wait for ClickHouse logs to be written asynchronously
+			logs := waitForClickHouseLogs(ctx, t, chClient, tool.ProjectID, 1, 5*time.Second)
+			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
+
+			toolHTTPRequest := logs.Logs[0]
+			require.Equal(t, tool.ProjectID, toolHTTPRequest.ProjectID)
+			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
+			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
+			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
+			require.Equal(t, tool.Method, toolHTTPRequest.HTTPMethod)
+			require.Equal(t, tool.Path, toolHTTPRequest.HTTPRoute)
+			require.Equal(t, uint16(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
@@ -319,6 +378,8 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				ResponseFilter:     nil,
 			}
 
+			chClient := newClickhouseClient(t, tool.OrganizationID)
+
 			// Add header parameter configuration for the parameter in the test
 			for paramName := range tt.headerParam {
 				tool.HeaderParams[paramName] = &HTTPParameter{
@@ -351,6 +412,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
+				chClient,
 			)
 
 			// Create response recorder
@@ -373,6 +435,19 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				actualHeaderValue := capturedRequest.Header.Get(headerName)
 				require.Equal(t, tt.expectedHeader, actualHeaderValue, "header %s value mismatch", headerName)
 			}
+
+			// Wait for ClickHouse logs to be written asynchronously
+			logs := waitForClickHouseLogs(ctx, t, chClient, tool.ProjectID, 1, 5*time.Second)
+			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
+
+			toolHTTPRequest := logs.Logs[0]
+			require.Equal(t, tool.ProjectID, toolHTTPRequest.ProjectID)
+			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
+			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
+			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
+			require.Equal(t, tool.Method, toolHTTPRequest.HTTPMethod)
+			require.Equal(t, tool.Path, toolHTTPRequest.HTTPRoute)
+			require.Equal(t, uint16(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
@@ -677,6 +752,8 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				ResponseFilter:     nil,
 			}
 
+			chClient := newClickhouseClient(t, tool.OrganizationID)
+
 			// Create request body with query parameters
 			requestBody := ToolCallBody{
 				PathParameters:       nil,
@@ -699,6 +776,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
+				chClient,
 			)
 
 			// Create response recorder
@@ -719,6 +797,19 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				require.True(t, exists, "expected query parameter %s not found", expectedKey)
 				require.Equal(t, expectedValues, actualValues, "query parameter %s has incorrect values", expectedKey)
 			}
+
+			// Wait for ClickHouse logs to be written asynchronously
+			logs := waitForClickHouseLogs(ctx, t, chClient, tool.ProjectID, 1, 5*time.Second)
+			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
+
+			toolHTTPRequest := logs.Logs[0]
+			require.Equal(t, tool.ProjectID, toolHTTPRequest.ProjectID)
+			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
+			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
+			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
+			require.Equal(t, tool.Method, toolHTTPRequest.HTTPMethod)
+			require.Equal(t, tool.Path, toolHTTPRequest.HTTPRoute)
+			require.Equal(t, uint16(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
@@ -891,6 +982,8 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				ResponseFilter:     nil,
 			}
 
+			chClient := newClickhouseClient(t, tool.OrganizationID)
+
 			// Marshal the test request body
 			bodyJSON, err := json.Marshal(tt.requestBody)
 			require.NoError(t, err)
@@ -917,6 +1010,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				ToolCallSourceDirect,
 				nil, // no cache needed for this test
 				policy,
+				chClient,
 			)
 
 			// Create response recorder
@@ -951,6 +1045,19 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, expectedJSON, actualJSON)
 			}
+
+			// Wait for ClickHouse logs to be written asynchronously
+			logs := waitForClickHouseLogs(ctx, t, chClient, tool.ProjectID, 1, 5*time.Second)
+			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
+
+			toolHTTPRequest := logs.Logs[0]
+			require.Equal(t, tool.ProjectID, toolHTTPRequest.ProjectID)
+			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
+			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
+			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
+			require.Equal(t, tool.Method, toolHTTPRequest.HTTPMethod)
+			require.Equal(t, tool.Path, toolHTTPRequest.HTTPRoute)
+			require.Equal(t, uint16(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
@@ -983,6 +1090,8 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 		Variables:      []byte(`{}`),
 	}
 
+	chClient := newClickhouseClient(t, functionTool.OrganizationID)
+
 	// Create request body
 	requestBody := ToolCallBody{
 		PathParameters:       nil,
@@ -1005,6 +1114,7 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 		ToolCallSourceDirect,
 		nil,
 		policy,
+		chClient,
 	)
 
 	// Create response recorder
@@ -1017,4 +1127,35 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 	// Verify that it fails
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "tool type not supported")
+}
+
+// waitForClickHouseLogs polls ClickHouse until the expected number of logs appear or timeout is reached
+func waitForClickHouseLogs(ctx context.Context, t *testing.T, chClient *toolmetrics.ClickhouseClient, projectID string, expectedCount int, timeout time.Duration) *toolmetrics.ListResult {
+	t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	pollInterval := 50 * time.Millisecond
+
+	pagination := &toolmetrics.PaginationRequest{
+		PerPage:    10,
+		Sort:       "DESC",
+		Direction:  toolmetrics.Next,
+		PrevCursor: "",
+		NextCursor: "",
+	}
+
+	for time.Now().Before(deadline) {
+		logs, err := chClient.List(ctx, projectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
+		require.NoError(t, err)
+		require.NotNil(t, logs)
+
+		if len(logs.Logs) >= expectedCount {
+			return logs
+		}
+
+		time.Sleep(pollInterval)
+	}
+
+	t.Fatalf("timeout waiting for ClickHouse logs: expected %d logs, got 0 after %v", expectedCount, timeout)
+	return nil
 }

@@ -18,6 +18,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
@@ -98,12 +101,13 @@ type InstanceToolProxyConfig struct {
 }
 
 type ToolProxy struct {
-	source  ToolCallSource
-	logger  *slog.Logger
-	tracer  trace.Tracer
-	metrics *metrics
-	cache   cache.Cache
-	policy  *guardian.Policy
+	source      ToolCallSource
+	logger      *slog.Logger
+	tracer      trace.Tracer
+	metrics     *metrics
+	cache       cache.Cache
+	policy      *guardian.Policy
+	toolMetrics tm.ToolMetricsClient
 }
 
 func NewToolProxy(
@@ -113,17 +117,19 @@ func NewToolProxy(
 	source ToolCallSource,
 	cache cache.Cache,
 	policy *guardian.Policy,
+	toolMetrics tm.ToolMetricsClient,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
 
 	return &ToolProxy{
-		source:  source,
-		logger:  logger,
-		tracer:  tracer,
-		metrics: newMetrics(meter, logger),
-		cache:   cache,
-		policy:  policy,
+		source:      source,
+		logger:      logger,
+		tracer:      tracer,
+		metrics:     newMetrics(meter, logger),
+		cache:       cache,
+		policy:      policy,
+		toolMetrics: toolMetrics,
 	}
 }
 
@@ -374,7 +380,7 @@ func (itp *ToolProxy) Do(
 
 	req.Header.Set("X-Gram-Proxy", "1")
 
-	return reverseProxyRequest(ctx, logger, itp.tracer, tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode)
+	return reverseProxyRequest(ctx, logger, itp.tracer, tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode, itp.toolMetrics)
 }
 
 type retryConfig struct {
@@ -441,6 +447,7 @@ func reverseProxyRequest(ctx context.Context,
 	req *http.Request,
 	policy *guardian.Policy,
 	responseStatusCodeCapture *int,
+	tcm tm.ToolMetricsClient,
 ) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
@@ -456,26 +463,72 @@ func reverseProxyRequest(ctx context.Context,
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 
-	client := &http.Client{
-		Timeout: 60 * time.Second,
-		Transport: otelhttp.NewTransport(
+	f := conv.Default[feature.Provider](tcm.Feature(), &feature.InMemory{})
+	isEnabled, err := f.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, tool.OrganizationID)
+	if err != nil {
+		logger.ErrorContext(
+			ctx, "error checking if clickhouse tool metrics is enabled",
+			attr.SlogError(err),
+			attr.SlogOrganizationSlug(tool.OrganizationID),
+			attr.SlogProjectID(tool.ProjectID),
+		)
+	}
+
+	var otelTransport *otelhttp.Transport
+	if isEnabled {
+		// Wrap with HTTP logging round tripper
+		loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, tcm, logger)
+		otelTransport = otelhttp.NewTransport(
+			loggingTransport,
+			otelhttp.WithPropagators(propagation.TraceContext{}),
+		)
+	} else {
+		otelTransport = otelhttp.NewTransport(
 			transport,
 			otelhttp.WithPropagators(propagation.TraceContext{}),
-		),
+		)
 	}
+
+	client := &http.Client{
+		Timeout:   60 * time.Second,
+		Transport: otelTransport,
+	}
+
+	// Add tool to context for the round tripper
+	toolInfo := &tm.ToolInfo{
+		ID:             tool.ID,
+		Urn:            tool.ID,
+		Name:           tool.Name,
+		ProjectID:      tool.ProjectID,
+		DeploymentID:   tool.DeploymentID,
+		OrganizationID: tool.OrganizationID,
+		HTTPRoute:      tool.Path,
+	}
+
+	ctx = context.WithValue(ctx, tm.ToolInfoContextKey, toolInfo)
+
+	// Track request body size
+	var requestBodySize uint64
 
 	executeRequest := func() (*http.Response, error) {
 		// Clone the request for each retry attempt
 		retryReq := req.Clone(ctx)
 
-		// Set fresh body on the cloned request
+		// Set the fresh body on the cloned request and wrap with counter
 		if req.Body != nil && req.GetBody != nil {
 			freshBody, err := req.GetBody()
 			if err != nil {
 				return nil, fmt.Errorf("retry: clone request body: %w", err)
 			}
-			retryReq.Body = freshBody
+
+			// Wrap body to count bytes as they're sent
+			retryReq.Body = tm.NewCountingReadCloser(freshBody, func(count uint64) {
+				requestBodySize = count
+			})
 		}
+
+		retryCtx := context.WithValue(retryReq.Context(), tm.RequestBodyContextKey, &requestBodySize)
+		retryReq = retryReq.WithContext(retryCtx)
 
 		return client.Do(retryReq)
 	}
