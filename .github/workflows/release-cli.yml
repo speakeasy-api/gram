@@ -4,7 +4,7 @@ on:
     branches:
       - main
     paths:
-      - 'cli/package.json'
+      - "cli/package.json"
   workflow_dispatch:
 permissions:
   contents: write
@@ -39,6 +39,16 @@ jobs:
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
           owner: speakeasy-api
           repositories: gram,homebrew-tap
+      - name: Create release tag
+        # GoReleaser expects a tag on HEAD before releasing. The newest tag
+        # will be on an old commit, specified by `changeset`, so this is a
+        # local-only tag to help GoReleaser publish.
+        shell: pwsh
+        run: |
+          $version = (Get-Content cli/package.json | ConvertFrom-Json).version
+          $tag = "@gram/cli@$version"
+          git tag $tag
+          Write-Host "Created local tag $tag"
       - name: goreleaser
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:
