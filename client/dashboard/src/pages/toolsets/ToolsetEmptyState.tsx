@@ -1,15 +1,17 @@
 import { EmptyState } from "@/components/page-layout";
 import { Button } from "@speakeasy-api/moonshine";
-import { useRoutes } from "@/routes";
 import { ToolsetsGraphic } from "./ToolsetsEmptyState";
 
-export function ToolsetEmptyState({ toolsetSlug }: { toolsetSlug: string }) {
-  const routes = useRoutes();
-
+export function ToolsetEmptyState({
+  onAddTools,
+}: {
+  toolsetSlug: string;
+  onAddTools: () => void;
+}) {
   const cta = (
-    <routes.toolsets.toolset.update.Link params={[toolsetSlug]}>
-      <Button size="sm">ADD TOOLS</Button>
-    </routes.toolsets.toolset.update.Link>
+    <Button size="sm" onClick={onAddTools}>
+      ADD TOOLS
+    </Button>
   );
 
   return (

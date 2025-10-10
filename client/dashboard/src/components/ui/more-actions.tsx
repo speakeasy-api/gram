@@ -17,7 +17,13 @@ export type Action = {
   destructive?: boolean;
 };
 
-export function MoreActions({ actions }: { actions: Action[] }) {
+export function MoreActions({
+  actions,
+  triggerLabel,
+}: {
+  actions: Action[];
+  triggerLabel?: string;
+}) {
   const [isOpen, setIsOpen] = useState(false);
 
   const wrapOnClick =
@@ -30,10 +36,17 @@ export function MoreActions({ actions }: { actions: Action[] }) {
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 mx-[-4px]">
-          <Icon name="ellipsis-vertical" className="size-4" />
-          <span className="sr-only">Open menu</span>
-        </Button>
+        {triggerLabel ? (
+          <Button size="sm">
+            {triggerLabel}
+            <Icon name="chevron-down" className="size-4 ml-1" />
+          </Button>
+        ) : (
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 mx-[-4px]">
+            <Icon name="ellipsis-vertical" className="size-4" />
+            <span className="sr-only">Open menu</span>
+          </Button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {actions.map((action, index) => (
