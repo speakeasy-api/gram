@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -57,11 +58,12 @@ type Service struct {
 	domainsRepo     *domainsRepo.Queries
 	usageRepo       *usageRepo.Queries
 	oauthRepo       *oauthRepo.Queries
+	toolsetCache    cache.TypedCacheObject[mv.ToolsetTools]
 }
 
 var _ gen.Service = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, cacheAdapter cache.Cache) *Service {
 	logger = logger.With(attr.SlogComponent("toolsets"))
 
 	return &Service{
@@ -75,6 +77,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		domainsRepo:     domainsRepo.New(db),
 		usageRepo:       usageRepo.New(db),
 		oauthRepo:       oauthRepo.New(db),
+		toolsetCache:    cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 	}
 }
 
@@ -156,7 +159,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, err
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug))
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug), &s.toolsetCache)
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +328,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving updated toolset").Log(ctx, logger)
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(updatedToolset.Slug))
+	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(updatedToolset.Slug), &s.toolsetCache)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +362,7 @@ func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	return mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug))
+	return mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
 }
 
 func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPayload) (*types.Toolset, error) {
@@ -472,7 +475,7 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		}
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(clonedToolset.Slug))
+	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(clonedToolset.Slug), &s.toolsetCache)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to describe cloned toolset", attr.SlogError(err))
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to describe cloned toolset").Log(ctx, logger)
@@ -509,7 +512,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, oops.E(oops.CodeForbidden, nil, "free accounts cannot add external OAuth servers").Log(ctx, s.logger)
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug))
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
 	if err != nil {
 		return nil, err
 	}
@@ -562,7 +565,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to associate external OAuth server with toolset").Log(ctx, s.logger)
 	}
 
-	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug))
+	toolsetDetails, err = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
 	if err != nil {
 		return nil, err
 	}
@@ -611,7 +614,7 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to remove OAuth server from toolset").Log(ctx, s.logger)
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug))
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(payload.Slug), &s.toolsetCache)
 	if err != nil {
 		return nil, err
 	}

@@ -31,9 +31,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -44,15 +45,16 @@ import (
 )
 
 type Service struct {
-	tracer      trace.Tracer
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	repo        *repo.Queries
-	toolsetRepo *toolsets_repo.Queries
-	orgsRepo    *organizations_repo.Queries
-	sessions    *sessions.Manager
-	auth        *auth.Auth
-	serverURL   *url.URL
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	repo         *repo.Queries
+	toolsetRepo  *toolsets_repo.Queries
+	orgsRepo     *organizations_repo.Queries
+	sessions     *sessions.Manager
+	auth         *auth.Auth
+	serverURL    *url.URL
+	toolsetCache cache.TypedCacheObject[mv.ToolsetTools]
 }
 
 //go:embed config_snippet.json.tmpl
@@ -84,19 +86,20 @@ type hostedPageData struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, cacheAdapter cache.Cache) *Service {
 	logger = logger.With(attr.SlogComponent("mcp_install_page"))
 
 	return &Service{
-		tracer:      otel.Tracer("github.com/speakeasy-api/gram/server/internal/mcpinstallpage"),
-		logger:      logger,
-		db:          db,
-		repo:        repo.New(db),
-		toolsetRepo: toolsets_repo.New(db),
-		orgsRepo:    organizations_repo.New(db),
-		sessions:    sessions,
-		auth:        auth.New(logger, db, sessions),
-		serverURL:   serverURL,
+		tracer:       otel.Tracer("github.com/speakeasy-api/gram/server/internal/mcpinstallpage"),
+		logger:       logger,
+		db:           db,
+		repo:         repo.New(db),
+		toolsetRepo:  toolsets_repo.New(db),
+		orgsRepo:     organizations_repo.New(db),
+		sessions:     sessions,
+		auth:         auth.New(logger, db, sessions),
+		serverURL:    serverURL,
+		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 	}
 }
 
@@ -243,7 +246,7 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 		organizationName = organization.Name
 	}
 
-	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug))
+	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to describe toolset").Log(ctx, s.logger)
 	}
@@ -269,12 +272,23 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	envHeaders := []string{}
 
 	// Collect environment variables from security variables
+	isOAuthEnabled := toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid
 	for _, secVar := range toolsetDetails.SecurityVariables {
 		for _, envVar := range secVar.EnvVariables {
-			if !strings.Contains(strings.ToLower(envVar), "token_url") {
-				envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")))
+			envVarLower := strings.ToLower(envVar)
+			if strings.HasSuffix(envVarLower, "token_url") {
+				continue
 			}
+			// Skip access_token env vars if OAuth is enabled
+			if isOAuthEnabled && strings.HasSuffix(envVarLower, "access_token") {
+				continue
+			}
+			envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")))
 		}
+	}
+
+	for _, functionEnvVar := range toolsetDetails.FunctionEnvironmentVariables {
+		envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(functionEnvVar.Name, "_", "-")))
 	}
 
 	toolNames := []string{}
@@ -366,11 +380,11 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
-func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *gateway.DomainContext, error) {
+func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *customdomains.Context, error) {
 	var toolset toolsets_repo.Toolset
 	var toolsetErr error
-	var customDomainCtx *gateway.DomainContext
-	if domainCtx := gateway.DomainFromContext(ctx); domainCtx != nil {
+	var customDomainCtx *customdomains.Context
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
 			McpSlug:        conv.ToPGText(mcpSlug),
 			CustomDomainID: uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true},

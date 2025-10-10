@@ -270,6 +270,9 @@ func marshalTypesToolToToolResponseBody(v *types.Tool) *ToolResponseBody {
 	if v.HTTPToolDefinition != nil {
 		res.HTTPToolDefinition = marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v.HTTPToolDefinition)
 	}
+	if v.FunctionToolDefinition != nil {
+		res.FunctionToolDefinition = marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody(v.FunctionToolDefinition)
+	}
 	if v.PromptTemplate != nil {
 		res.PromptTemplate = marshalTypesPromptTemplateToPromptTemplateResponseBody(v.PromptTemplate)
 	}
@@ -368,17 +371,10 @@ func marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v 
 	res := &CanonicalToolAttributesResponseBody{
 		VariationID:   v.VariationID,
 		Name:          v.Name,
-		Summary:       v.Summary,
 		Description:   v.Description,
 		Confirm:       v.Confirm,
 		ConfirmPrompt: v.ConfirmPrompt,
 		Summarizer:    v.Summarizer,
-	}
-	if v.Tags != nil {
-		res.Tags = make([]string, len(v.Tags))
-		for i, val := range v.Tags {
-			res.Tags[i] = val
-		}
 	}
 
 	return res
@@ -397,17 +393,46 @@ func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation
 		Confirm:       v.Confirm,
 		ConfirmPrompt: v.ConfirmPrompt,
 		Name:          v.Name,
-		Summary:       v.Summary,
 		Description:   v.Description,
 		Summarizer:    v.Summarizer,
 		CreatedAt:     v.CreatedAt,
 		UpdatedAt:     v.UpdatedAt,
 	}
-	if v.Tags != nil {
-		res.Tags = make([]string, len(v.Tags))
-		for i, val := range v.Tags {
-			res.Tags[i] = val
-		}
+
+	return res
+}
+
+// marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody
+// builds a value of type *FunctionToolDefinitionResponseBody from a value of
+// type *types.FunctionToolDefinition.
+func marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody(v *types.FunctionToolDefinition) *FunctionToolDefinitionResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &FunctionToolDefinitionResponseBody{
+		DeploymentID:  v.DeploymentID,
+		FunctionID:    v.FunctionID,
+		Runtime:       v.Runtime,
+		Variables:     v.Variables,
+		ID:            v.ID,
+		ToolUrn:       v.ToolUrn,
+		ProjectID:     v.ProjectID,
+		Name:          v.Name,
+		CanonicalName: v.CanonicalName,
+		Description:   v.Description,
+		SchemaVersion: v.SchemaVersion,
+		Schema:        v.Schema,
+		Confirm:       v.Confirm,
+		ConfirmPrompt: v.ConfirmPrompt,
+		Summarizer:    v.Summarizer,
+		CreatedAt:     v.CreatedAt,
+		UpdatedAt:     v.UpdatedAt,
+	}
+	if v.Canonical != nil {
+		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
+	}
+	if v.Variation != nil {
+		res.Variation = marshalTypesToolVariationToToolVariationResponseBody(v.Variation)
 	}
 
 	return res
@@ -506,6 +531,21 @@ func marshalTypesServerVariableToServerVariableResponseBody(v *types.ServerVaria
 		}
 	} else {
 		res.EnvVariables = []string{}
+	}
+
+	return res
+}
+
+// marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody
+// builds a value of type *FunctionEnvironmentVariableResponseBody from a value
+// of type *types.FunctionEnvironmentVariable.
+func marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(v *types.FunctionEnvironmentVariable) *FunctionEnvironmentVariableResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &FunctionEnvironmentVariableResponseBody{
+		Description: v.Description,
+		Name:        v.Name,
 	}
 
 	return res

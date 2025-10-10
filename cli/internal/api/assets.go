@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log/slog"
 
 	"github.com/speakeasy-api/gram/server/gen/assets"
 	assets_client "github.com/speakeasy-api/gram/server/gen/http/assets/client"
@@ -41,7 +40,7 @@ func NewAssetsClient(options *AssetsClientOptions) *AssetsClient {
 	return &AssetsClient{client: client}
 }
 
-type UploadOpenAPIv3Request struct {
+type UploadAssetForm struct {
 	APIKey        string
 	ProjectSlug   string
 	Reader        io.ReadCloser
@@ -51,9 +50,8 @@ type UploadOpenAPIv3Request struct {
 
 func (c *AssetsClient) UploadOpenAPIv3(
 	ctx context.Context,
-	logger *slog.Logger,
-	req *UploadOpenAPIv3Request,
-) (*assets.UploadOpenAPIv3Result, error) {
+	req *UploadAssetForm,
+) (*assets.Asset, error) {
 	payload := &assets.UploadOpenAPIv3Form{
 		ApikeyToken:      &req.APIKey,
 		ProjectSlugInput: &req.ProjectSlug,
@@ -67,5 +65,25 @@ func (c *AssetsClient) UploadOpenAPIv3(
 		return nil, fmt.Errorf("failed to upload OpenAPI asset: %w", err)
 	}
 
-	return result, nil
+	return result.Asset, nil
+}
+
+func (c *AssetsClient) UploadFunctions(
+	ctx context.Context,
+	req *UploadAssetForm,
+) (*assets.Asset, error) {
+	payload := &assets.UploadFunctionsForm{
+		ApikeyToken:      &req.APIKey,
+		ProjectSlugInput: &req.ProjectSlug,
+		SessionToken:     nil,
+		ContentType:      req.ContentType,
+		ContentLength:    req.ContentLength,
+	}
+
+	result, err := c.client.UploadFunctions(ctx, payload, req.Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to upload OpenAPI asset: %w", err)
+	}
+
+	return result.Asset, nil
 }

@@ -418,41 +418,6 @@ func (q *Queries) GetPromptTemplatesForToolset(ctx context.Context, arg GetPromp
 	return items, nil
 }
 
-const getToolUrnsByNames = `-- name: GetToolUrnsByNames :many
-SELECT DISTINCT tool_urn
-FROM http_tool_definitions
-WHERE name = ANY($1::TEXT[])
-  AND project_id = $2
-  AND deleted IS FALSE
-  AND tool_urn IS NOT NULL
-ORDER BY tool_urn
-`
-
-type GetToolUrnsByNamesParams struct {
-	ToolNames []string
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) GetToolUrnsByNames(ctx context.Context, arg GetToolUrnsByNamesParams) ([]urn.Tool, error) {
-	rows, err := q.db.Query(ctx, getToolUrnsByNames, arg.ToolNames, arg.ProjectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []urn.Tool
-	for rows.Next() {
-		var tool_urn urn.Tool
-		if err := rows.Scan(&tool_urn); err != nil {
-			return nil, err
-		}
-		items = append(items, tool_urn)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getToolset = `-- name: GetToolset :one
 SELECT id, organization_id, project_id, name, slug, description, default_environment_slug, mcp_slug, mcp_is_public, mcp_enabled, custom_domain_id, external_oauth_server_id, oauth_proxy_server_id, created_at, updated_at, deleted_at, deleted
 FROM toolsets

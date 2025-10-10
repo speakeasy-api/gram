@@ -78,6 +78,22 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Required("summary", "tags", "http_method", "path", "schema", "deployment_id")
 })
 
+// FunctionToolDefinition represents a function-based tool with all its attributes
+var FunctionToolDefinition = Type("FunctionToolDefinition", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("A function tool")
+
+	Extend(BaseToolAttributes)
+
+	Attribute("deployment_id", String, "The ID of the deployment")
+	Attribute("function_id", String, "The ID of the function")
+	Attribute("runtime", String, "Runtime environment (e.g., nodejs:22, python:3.12)")
+	Attribute("variables", Any, "Variables configuration for the function")
+
+	Required("deployment_id", "function_id", "runtime")
+})
+
 // Tool is a discriminated union of HTTP tools and prompt templates.
 // Custom JSON marshaling provided in goaext.
 var Tool = Type("Tool", func() {
@@ -85,12 +101,13 @@ var Tool = Type("Tool", func() {
 	Description("A polymorphic tool - can be an HTTP tool or a prompt template")
 
 	Attribute("http_tool_definition", HTTPToolDefinition, "The HTTP tool definition")
+	Attribute("function_tool_definition", FunctionToolDefinition, "The function tool definition")
 	Attribute("prompt_template", PromptTemplate, "The prompt template")
 })
 
 var ToolEntry = Type("ToolEntry", func() {
 	Attribute("type", String, func() {
-		Enum(string(urn.ToolKindHTTP), string(urn.ToolKindPrompt))
+		Enum(string(urn.ToolKindHTTP), string(urn.ToolKindPrompt), string(urn.ToolKindFunction))
 	})
 
 	Attribute("id", String, "The ID of the tool")
@@ -104,16 +121,14 @@ var CanonicalToolAttributes = Type("CanonicalToolAttributes", func() {
 	Meta("struct:pkg:path", "types")
 	Description("The original details of a tool")
 
-	Required("variation_id", "name")
+	Required("variation_id", "name", "description")
 
 	Attribute("variation_id", String, "The ID of the variation that was applied to the tool")
 	Attribute("name", String, "The name of the tool")
-	Attribute("summary", String, "Summary of the tool")
 	Attribute("description", String, "Description of the tool")
 	Attribute("confirm", String, "Confirmation mode for the tool")
 	Attribute("confirm_prompt", String, "Prompt for the confirmation")
 	Attribute("summarizer", String, "Summarizer for the tool")
-	Attribute("tags", ArrayOf(String), "The tags list for this http tool")
 })
 
 var Environment = Type("Environment", func() {

@@ -76,11 +76,9 @@ Please have a good title and description for your PR. Go nuts with streams of co
 └ [OpenRouter](https://openrouter.ai/) - LLM gateway.  
 └ [Speakeasy](https://www.speakeasy.com/) - Generated SDKs. Spec hosted [here](http://app.getgram.ai/openapi.yaml).  
 
-## `gram` (command line interface)
+## `gram` CLI
 
-`gram` is a tool for programmatic access to Gram.
-
-Get started at https://docs.getgram.ai/command-line/installation.
+The `gram` CLI a tool for programmatic access to Gram. Get started with documentation [here](https://docs.getgram.ai/command-line/installation).
 
 ### Local development
 
@@ -93,9 +91,10 @@ $ go run . --help
 
 ### Releases
 
-_Note: all CLI updates must follow the [changeset process](./docs/runbooks/version-management-with-changesets.md)._
+> [!NOTE]  
+> All CLI updates must follow the [changeset process](./docs/runbooks/version-management-with-changesets.md).
 
-New versions of the CLI are released automatically with GoReleaser ([.goreleaser.yaml](./.goreleaser.yaml)).
+New versions of the CLI are released automatically with [GoReleaser](./.goreleaser.yaml).
 
 Version bumps are determined by the git commit's prefix:
 
@@ -107,4 +106,4 @@ Version bumps are determined by the git commit's prefix:
 
 ## Documentation
 
-Documentation for Gram is also open source and can be found [here](https://docs.getgram.ai/).
+Documentation for Gram is also open source in this respository and can be found [here](https://docs.getgram.ai/).

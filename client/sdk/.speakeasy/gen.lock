@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: cc9edf681089c4ac13e4c97b34ebe998
+  docChecksum: b29208663209faa69219a321ed27e263
   docVersion: 0.0.1
   speakeasyVersion: 1.613.0
   generationVersion: 2.696.0
-  releaseVersion: 0.14.4
-  configChecksum: 36381da1eab65e520f3108530f6f1fe0
+  releaseVersion: 0.14.7
+  configChecksum: fda2150d37abf42c616965c7a2d5b5a9
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -77,6 +77,8 @@ generatedFiles:
   - docs/models/components/evolveresult.md
   - docs/models/components/externaloauthserver.md
   - docs/models/components/externaloauthserverform.md
+  - docs/models/components/functionenvironmentvariable.md
+  - docs/models/components/functiontooldefinition.md
   - docs/models/components/getactivedeploymentresult.md
   - docs/models/components/getdeploymentlogsresult.md
   - docs/models/components/getdeploymentresult.md
@@ -158,6 +160,9 @@ generatedFiles:
   - docs/models/components/upsertglobaltoolvariationform.md
   - docs/models/components/upsertglobaltoolvariationresult.md
   - docs/models/components/usagetiers.md
+  - docs/models/components/validatekeyorganization.md
+  - docs/models/components/validatekeyproject.md
+  - docs/models/components/validatekeyresult.md
   - docs/models/components/visibility.md
   - docs/models/errors/serviceerror.md
   - docs/models/operations/addexternaloauthserverrequest.md
@@ -375,6 +380,8 @@ generatedFiles:
   - docs/models/operations/upsertglobalvariationsecurity.md
   - docs/models/operations/upsertglobalvariationsecurityoption1.md
   - docs/models/operations/upsertglobalvariationsecurityoption2.md
+  - docs/models/operations/validateapikeyrequest.md
+  - docs/models/operations/validateapikeysecurity.md
   - docs/sdks/assets/README.md
   - docs/sdks/auth/README.md
   - docs/sdks/chat/README.md
@@ -438,6 +445,7 @@ generatedFiles:
   - src/funcs/keysCreate.ts
   - src/funcs/keysList.ts
   - src/funcs/keysRevokeById.ts
+  - src/funcs/keysValidate.ts
   - src/funcs/mcpMetadataGet.ts
   - src/funcs/mcpMetadataSet.ts
   - src/funcs/packagesCreate.ts
@@ -534,6 +542,8 @@ generatedFiles:
   - src/models/components/evolveresult.ts
   - src/models/components/externaloauthserver.ts
   - src/models/components/externaloauthserverform.ts
+  - src/models/components/functionenvironmentvariable.ts
+  - src/models/components/functiontooldefinition.ts
   - src/models/components/getactivedeploymentresult.ts
   - src/models/components/getdeploymentlogsresult.ts
   - src/models/components/getdeploymentresult.ts
@@ -609,6 +619,9 @@ generatedFiles:
   - src/models/components/upsertglobaltoolvariationform.ts
   - src/models/components/upsertglobaltoolvariationresult.ts
   - src/models/components/usagetiers.ts
+  - src/models/components/validatekeyorganization.ts
+  - src/models/components/validatekeyproject.ts
+  - src/models/components/validatekeyresult.ts
   - src/models/errors/apierror.ts
   - src/models/errors/gramerror.ts
   - src/models/errors/httpclienterrors.ts
@@ -691,6 +704,7 @@ generatedFiles:
   - src/models/operations/uploadimage.ts
   - src/models/operations/uploadopenapiv3asset.ts
   - src/models/operations/upsertglobalvariation.ts
+  - src/models/operations/validateapikey.ts
   - src/react-query/_context.tsx
   - src/react-query/_types.ts
   - src/react-query/activeDeployment.ts
@@ -765,6 +779,7 @@ generatedFiles:
   - src/react-query/uploadImage.ts
   - src/react-query/uploadOpenAPIv3.ts
   - src/react-query/upsertGlobalVariation.ts
+  - src/react-query/validateAPIKey.ts
   - src/sdk/assets.ts
   - src/sdk/auth.ts
   - src/sdk/chat.ts
@@ -1608,5 +1623,14 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  validateAPIKey:
+    speakeasy-default-validate-API-key:
+      responses:
+        "200":
+          application/json: {"organization": {"id": "<id>", "name": "<value>", "slug": "<value>"}, "projects": [{"id": "<id>", "name": "<value>", "slug": "<value>"}], "scopes": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

@@ -17,6 +17,7 @@ type AuthContext struct {
 	Email                *string
 	AccountType          string
 	ProjectSlug          *string
+	APIKeyScopes         []string
 }
 
 type RequestContext struct {

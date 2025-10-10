@@ -141,15 +141,6 @@ SET
 WHERE slug = @slug AND project_id = @project_id
 RETURNING *;
 
--- name: GetToolUrnsByNames :many
-SELECT DISTINCT tool_urn
-FROM http_tool_definitions
-WHERE name = ANY(@tool_names::TEXT[])
-  AND project_id = @project_id
-  AND deleted IS FALSE
-  AND tool_urn IS NOT NULL
-ORDER BY tool_urn;
-
 -- name: GetPromptTemplateUrnsByNames :many
 SELECT DISTINCT pt.tool_urn
 FROM prompt_templates pt

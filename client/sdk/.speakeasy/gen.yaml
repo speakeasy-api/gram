@@ -25,7 +25,8 @@ generation:
     generateNewTests: false
     skipResponseBodyAssertions: false
 typescript:
-  version: 0.14.4
+  version: 0.14.7
+  acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}
     devDependencies:
@@ -62,6 +63,7 @@ typescript:
   jsonpath: rfc9535
   maxMethodParams: 0
   methodArguments: infer-optional-args
+  modelPropertyCasing: camel
   moduleFormat: esm
   outputModelSuffix: output
   packageName: '@gram/client'

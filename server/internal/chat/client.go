@@ -28,18 +28,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
-	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
 type ChatClient struct {
-	logger     *slog.Logger
-	openRouter openrouter.Provisioner
-	chatClient *openrouter.ChatClient
-	db         *pgxpool.Pool
-	env        *environments.EnvironmentEntries
-	cache      cache.Cache
-	toolProxy  *gateway.ToolProxy
+	logger       *slog.Logger
+	openRouter   openrouter.Provisioner
+	chatClient   *openrouter.ChatClient
+	db           *pgxpool.Pool
+	env          *environments.EnvironmentEntries
+	cache        cache.Cache
+	toolProxy    *gateway.ToolProxy
+	toolsetCache cache.TypedCacheObject[mv.ToolsetTools]
 }
 
 func NewChatClient(logger *slog.Logger,
@@ -67,6 +67,7 @@ func NewChatClient(logger *slog.Logger,
 			cacheImpl,
 			guardianPolicy,
 		),
+		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}
 }
 
@@ -187,7 +188,7 @@ func (c *ChatClient) LoadToolsetTools(
 	toolsetSlug string,
 	addedEnvironmentEntries map[string]string,
 ) ([]AgentTool, error) {
-	toolset, err := mv.DescribeToolset(ctx, c.logger, c.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolsetSlug))
+	toolset, err := mv.DescribeToolset(ctx, c.logger, c.db, mv.ProjectID(projectID), mv.ToolsetSlug(toolsetSlug), &c.toolsetCache)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +198,6 @@ func (c *ChatClient) LoadToolsetTools(
 	}
 
 	envRepo := env_repo.New(c.db)
-	toolsRepo := tools_repo.New(c.db)
 	toolsetHelpers := toolsets.NewToolsets(c.db)
 	envSlug := string(*toolset.DefaultEnvironmentSlug)
 
@@ -233,25 +233,13 @@ func (c *ChatClient) LoadToolsetTools(
 		}
 
 		httpTool := tool.HTTPToolDefinition
-		
+
 		// Capture for closure
 		name := httpTool.Name
 		projID := projectID
 
 		executor := func(ctx context.Context, rawArgs string) (string, error) {
-			// Find tool by name
-			toolID, err := toolsRepo.PokeHTTPToolDefinitionByUrn(ctx, tools_repo.PokeHTTPToolDefinitionByUrnParams{
-				ProjectID: projectID,
-				Urn:       *toolURN,
-			})
-			if err != nil {
-				return "", fmt.Errorf("failed to load tool: %w", err)
-			}
-			if toolID == uuid.Nil {
-				return "", fmt.Errorf("tool not found")
-			}
-
-			executionPlan, err := toolsetHelpers.GetHTTPToolExecutionInfoByID(ctx, toolID, projID)
+			executionPlan, err := toolsetHelpers.GetToolExecutionInfoByURN(ctx, *toolURN, projID)
 			if err != nil {
 				return "", fmt.Errorf("failed to get tool execution info: %w", err)
 			}
@@ -263,18 +251,17 @@ func (c *ChatClient) LoadToolsetTools(
 				statusCode: http.StatusOK,
 			}
 
-			// Transform environment entries into a map
-			envVars := make(map[string]string)
+			ciEnv := gateway.NewCaseInsensitiveEnv()
 			for _, entry := range environmentEntries {
-				envVars[entry.Name] = entry.Value
+				ciEnv.Set(entry.Name, entry.Value)
 			}
 
 			// use environment overrides
 			for key, value := range addedEnvironmentEntries {
-				envVars[key] = value
+				ciEnv.Set(key, value)
 			}
 
-			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), envVars, executionPlan.Tool)
+			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), ciEnv, executionPlan.Tool)
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

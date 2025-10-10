@@ -7,16 +7,32 @@ import {
 } from "@speakeasy-api/moonshine";
 import { TooltipProvider as LocalTooltipProvider } from "@/components/ui/tooltip";
 import { useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Route, Routes } from "react-router";
+import {
+  BrowserRouter,
+  Route,
+  Routes,
+  useSearchParams,
+  useLocation,
+} from "react-router";
 import { AppLayout, LoginCheck } from "./components/app-layout.tsx";
 import { AuthProvider, ProjectProvider } from "./contexts/Auth.tsx";
 import { SdkProvider } from "./contexts/Sdk.tsx";
 import { TelemetryProvider } from "./contexts/Telemetry.tsx";
 import { AppRoute, useRoutes } from "./routes";
 import { Toaster } from "@/components/ui/sonner";
+import CliCallback from "./pages/cli/CliCallback";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
+
+  // Initialize Pylon widget in production only
+  useEffect(() => {
+    if (import.meta.env.PROD) {
+      import("./lib/pylon").then((module) => {
+        module.initializePylon();
+      });
+    }
+  }, []);
 
   const applyTheme = (theme: "light" | "dark") => {
     const root = document.documentElement;
@@ -63,18 +79,41 @@ export default function App() {
           <TelemetryProvider>
             <BrowserRouter>
               <SdkProvider>
-                <AuthProvider>
-                  <ProjectProvider>
-                    <RouteProvider />
-                  </ProjectProvider>
-                  <Toaster />
-                </AuthProvider>
+                <AppContent />
+                <Toaster />
               </SdkProvider>
             </BrowserRouter>
           </TelemetryProvider>
         </TooltipProvider>
       </LocalTooltipProvider>
     </MoonshineConfigProvider>
+  );
+}
+
+function AppContent() {
+  /**
+   * NOTE(cjea): Do not wrap CliCallback in an AuthProvider.
+   *
+   * CLI requests don't include a redirect URL, so AuthProvider wouldn't know
+   * where to send authenticated users. Instead, CliCallback handles the flow:
+   *
+   * 1. CliCallback receives an unauthenticated request.
+   * 2. Sets the redirect query param to its current URL.
+   * 3. Sends the user through the standard login flow via AuthHandler.
+   * 4. Authenticated user is redirected back to CliCallback.
+   */
+  const cliFlow = useCliAuthFlow();
+
+  if (cliFlow) {
+    return <CliCallback localCallbackUrl={cliFlow.cliCallbackUrl} />;
+  }
+
+  return (
+    <AuthProvider>
+      <ProjectProvider>
+        <RouteProvider />
+      </ProjectProvider>
+    </AuthProvider>
   );
 }
 
@@ -140,3 +179,17 @@ const routesWithSubroutes = (routes: AppRoute[]) => {
       </Route>
     ));
 };
+
+function useCliAuthFlow() {
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+
+  const fromCli = searchParams.get("from_cli") === "true";
+  const cliCallbackUrl = searchParams.get("cli_callback_url");
+
+  if (location.pathname === "/" && fromCli && cliCallbackUrl) {
+    return { cliCallbackUrl };
+  }
+
+  return null;
+}

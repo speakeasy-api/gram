@@ -51,6 +51,7 @@ type Service struct {
 	env              *environments.EnvironmentEntries
 	toolProxy        *gateway.ToolProxy
 	tracking         billing.Tracker
+	toolsetCache     cache.TypedCacheObject[mv.ToolsetTools]
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -87,6 +88,7 @@ func NewService(
 			cacheImpl,
 			guardianPolicy,
 		),
+		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}
 }
 
@@ -109,7 +111,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(conv.ToLower(payload.ToolsetSlug)))
+	toolset, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(conv.ToLower(payload.ToolsetSlug)), &s.toolsetCache)
 	if err != nil {
 		return nil, err
 	}
@@ -189,13 +191,14 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	}
 
 	return &gen.GetInstanceResult{
-		Name:              toolset.Name,
-		Description:       toolset.Description,
-		SecurityVariables: toolset.SecurityVariables,
-		ServerVariables:   toolset.ServerVariables,
-		Tools:             toolset.Tools,
-		PromptTemplates:   promptTemplates,
-		Environment:       environment,
+		Name:                         toolset.Name,
+		Description:                  toolset.Description,
+		SecurityVariables:            toolset.SecurityVariables,
+		ServerVariables:              toolset.ServerVariables,
+		FunctionEnvironmentVariables: toolset.FunctionEnvironmentVariables,
+		Tools:                        toolset.Tools,
+		PromptTemplates:              promptTemplates,
+		Environment:                  environment,
 	}, nil
 }
 
@@ -247,7 +250,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	toolsetSlug := r.URL.Query().Get("toolset_slug")
 	chatID := r.URL.Query().Get("chat_id")
 
-	envVars := make(map[string]string)
+	ciEnv := gateway.NewCaseInsensitiveEnv()
 	if environmentSlug := r.URL.Query().Get(environmentSlugQueryParam); environmentSlug != "" {
 		envModel, err := s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
 			ProjectID: *authCtx.ProjectID,
@@ -262,13 +265,12 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			return oops.E(oops.CodeUnexpected, err, "failed to load environment entries").Log(ctx, logger)
 		}
 
-		// Transform environment entries into a map
 		for _, entry := range environmentEntries {
-			envVars[entry.Name] = entry.Value
+			ciEnv.Set(entry.Name, entry.Value)
 		}
 	}
 
-	executionInfo, err := s.toolset.GetHTTPToolExecutionInfoByID(ctx, uuid.MustParse(toolID), *authCtx.ProjectID)
+	executionInfo, err := s.toolset.GetToolExecutionInfoByID(ctx, uuid.MustParse(toolID), *authCtx.ProjectID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load tool execution info").Log(ctx, logger)
 	}
@@ -277,7 +279,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	var toolset *types.Toolset
 	if chatID != "" && toolsetSlug != "" {
 		var toolsetErr error
-		toolset, toolsetErr = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolsetSlug))
+		toolset, toolsetErr = mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(toolsetSlug), &s.toolsetCache)
 		if toolsetErr != nil {
 			logger.ErrorContext(ctx, "failed to load toolset", attr.SlogError(err))
 		}
@@ -293,10 +295,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	requestBody = io.NopCloser(bytes.NewBuffer(requestBodyBytes))
 
-	// Use a response interceptor that completely captures the response
 	interceptor := newResponseInterceptor(w)
 
-	err = s.toolProxy.Do(ctx, interceptor, requestBody, envVars, executionInfo.Tool)
+	err = s.toolProxy.Do(ctx, interceptor, requestBody, ciEnv, executionInfo.Tool)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}
@@ -330,12 +331,19 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	if toolset != nil {
 		toolsetID = &toolset.ID
 	}
+	toolName := ""
+	switch executionInfo.Tool.Kind() {
+	case gateway.ToolKindHTTP:
+		toolName = executionInfo.Tool.HTTPTool.Name
+	case gateway.ToolKindFunction:
+		toolName = executionInfo.Tool.FunctionTool.Name
+	}
 	go s.tracking.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
 		OrganizationID:   organizationID,
 		RequestBytes:     requestNumBytes,
 		OutputBytes:      outputNumBytes,
 		ToolID:           toolID,
-		ToolName:         executionInfo.Tool.Name,
+		ToolName:         toolName,
 		ProjectID:        authCtx.ProjectID.String(),
 		ProjectSlug:      authCtx.ProjectSlug,
 		Type:             billing.ToolCallTypeHTTP,

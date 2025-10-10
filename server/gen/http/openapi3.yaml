@@ -3620,6 +3620,87 @@ paths:
             x-speakeasy-name-override: revokeById
             x-speakeasy-react-hook:
                 name: RevokeAPIKey
+    /rpc/keys.verify:
+        get:
+            description: Verify an api key
+            operationId: validateAPIKey
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ValidateKeyResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+            summary: verifyKey keys
+            tags:
+                - keys
+            x-speakeasy-name-override: validate
+            x-speakeasy-react-hook:
+                name: ValidateAPIKey
     /rpc/mcpMetadata.get:
         get:
             description: Fetch the metadata that powers the MCP install page.
@@ -7606,14 +7687,6 @@ components:
                 summarizer:
                     type: string
                     description: Summarizer for the tool
-                summary:
-                    type: string
-                    description: Summary of the tool
-                tags:
-                    type: array
-                    items:
-                        type: string
-                    description: The tags list for this http tool
                 variation_id:
                     type: string
                     description: The ID of the variation that was applied to the tool
@@ -7621,6 +7694,7 @@ components:
             required:
                 - variation_id
                 - name
+                - description
         Chat:
             type: object
             properties:
@@ -8483,6 +8557,90 @@ components:
             required:
                 - slug
                 - metadata
+        FunctionEnvironmentVariable:
+            type: object
+            properties:
+                description:
+                    type: string
+                    description: Description of the function environment variable
+                name:
+                    type: string
+                    description: The environment variables
+            required:
+                - name
+        FunctionToolDefinition:
+            type: object
+            properties:
+                canonical:
+                    $ref: '#/components/schemas/CanonicalToolAttributes'
+                canonical_name:
+                    type: string
+                    description: The canonical name of the tool. Will be the same as the name if there is no variation.
+                confirm:
+                    type: string
+                    description: Confirmation mode for the tool
+                confirm_prompt:
+                    type: string
+                    description: Prompt for the confirmation
+                created_at:
+                    type: string
+                    description: The creation date of the tool.
+                    format: date-time
+                deployment_id:
+                    type: string
+                    description: The ID of the deployment
+                description:
+                    type: string
+                    description: Description of the tool
+                function_id:
+                    type: string
+                    description: The ID of the function
+                id:
+                    type: string
+                    description: The ID of the tool
+                name:
+                    type: string
+                    description: The name of the tool
+                project_id:
+                    type: string
+                    description: The ID of the project
+                runtime:
+                    type: string
+                    description: Runtime environment (e.g., nodejs:22, python:3.12)
+                schema:
+                    type: string
+                    description: JSON schema for the request
+                schema_version:
+                    type: string
+                    description: Version of the schema
+                summarizer:
+                    type: string
+                    description: Summarizer for the tool
+                tool_urn:
+                    type: string
+                    description: The URN of this tool
+                updated_at:
+                    type: string
+                    description: The last update date of the tool.
+                    format: date-time
+                variables:
+                    description: Variables configuration for the function
+                variation:
+                    $ref: '#/components/schemas/ToolVariation'
+            description: A function tool
+            required:
+                - deployment_id
+                - function_id
+                - runtime
+                - id
+                - project_id
+                - name
+                - canonical_name
+                - description
+                - schema
+                - tool_urn
+                - created_at
+                - updated_at
         GetActiveDeploymentResult:
             type: object
             properties:
@@ -8637,6 +8795,11 @@ components:
                     description: The description of the toolset
                 environment:
                     $ref: '#/components/schemas/Environment'
+                function_environment_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/FunctionEnvironmentVariable'
+                    description: The function environment variables that are relevant to the toolset
                 name:
                     type: string
                     description: The name of the toolset
@@ -9914,6 +10077,8 @@ components:
         Tool:
             type: object
             properties:
+                function_tool_definition:
+                    $ref: '#/components/schemas/FunctionToolDefinition'
                 http_tool_definition:
                     $ref: '#/components/schemas/HTTPToolDefinition'
                 prompt_template:
@@ -9936,6 +10101,7 @@ components:
                     enum:
                         - http
                         - prompt
+                        - function
             required:
                 - type
                 - id
@@ -9971,14 +10137,6 @@ components:
                 summarizer:
                     type: string
                     description: The summarizer of the tool variation
-                summary:
-                    type: string
-                    description: The summary of the tool variation
-                tags:
-                    type: array
-                    items:
-                        type: string
-                    description: The tags of the tool variation
                 updated_at:
                     type: string
                     description: The last update date of the tool variation
@@ -10011,6 +10169,11 @@ components:
                     description: Description of the toolset
                 external_oauth_server:
                     $ref: '#/components/schemas/ExternalOAuthServer'
+                function_environment_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/FunctionEnvironmentVariable'
+                    description: The function environment variables that are relevant to the toolset
                 id:
                     type: string
                     description: The ID of the toolset
@@ -10100,6 +10263,11 @@ components:
                 description:
                     type: string
                     description: Description of the toolset
+                function_environment_variables:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/FunctionEnvironmentVariable'
+                    description: The function environment variables that are relevant to the toolset
                 id:
                     type: string
                     description: The ID of the toolset
@@ -10523,6 +10691,57 @@ components:
                 - free
                 - pro
                 - enterprise
+        ValidateKeyOrganization:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the organization
+                name:
+                    type: string
+                    description: The name of the organization
+                slug:
+                    type: string
+                    description: The slug of the organization
+            required:
+                - id
+                - name
+                - slug
+        ValidateKeyProject:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: The ID of the project
+                name:
+                    type: string
+                    description: The name of the project
+                slug:
+                    type: string
+                    description: The slug of the project
+            required:
+                - id
+                - name
+                - slug
+        ValidateKeyResult:
+            type: object
+            properties:
+                organization:
+                    $ref: '#/components/schemas/ValidateKeyOrganization'
+                projects:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ValidateKeyProject'
+                    description: The projects accessible with this key
+                scopes:
+                    type: array
+                    items:
+                        type: string
+                    description: List of permission scopes for this key
+            required:
+                - organization
+                - projects
+                - scopes
     securitySchemes:
         apikey_header_Gram-Key:
             type: apiKey

@@ -30,6 +30,8 @@ type GetInstanceResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
 	// The environment
 	Environment *EnvironmentResponseBody `form:"environment,omitempty" json:"environment,omitempty" xml:"environment,omitempty"`
 }
@@ -220,6 +222,8 @@ type GetInstanceGatewayErrorResponseBody struct {
 type ToolResponseBody struct {
 	// The HTTP tool definition
 	HTTPToolDefinition *HTTPToolDefinitionResponseBody `form:"http_tool_definition,omitempty" json:"http_tool_definition,omitempty" xml:"http_tool_definition,omitempty"`
+	// The function tool definition
+	FunctionToolDefinition *FunctionToolDefinitionResponseBody `form:"function_tool_definition,omitempty" json:"function_tool_definition,omitempty" xml:"function_tool_definition,omitempty"`
 	// The prompt template
 	PromptTemplate *PromptTemplateResponseBody `form:"prompt_template,omitempty" json:"prompt_template,omitempty" xml:"prompt_template,omitempty"`
 }
@@ -299,8 +303,6 @@ type CanonicalToolAttributesResponseBody struct {
 	VariationID *string `form:"variation_id,omitempty" json:"variation_id,omitempty" xml:"variation_id,omitempty"`
 	// The name of the tool
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// Summary of the tool
-	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// Description of the tool
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// Confirmation mode for the tool
@@ -309,8 +311,6 @@ type CanonicalToolAttributesResponseBody struct {
 	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
 	// Summarizer for the tool
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
-	// The tags list for this http tool
-	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 }
 
 // ToolVariationResponseBody is used to define fields on response body types.
@@ -327,18 +327,58 @@ type ToolVariationResponseBody struct {
 	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
 	// The name of the tool variation
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	// The summary of the tool variation
-	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// The description of the tool variation
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	// The tags of the tool variation
-	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// The summarizer of the tool variation
 	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
 	// The creation date of the tool variation
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the tool variation
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+}
+
+// FunctionToolDefinitionResponseBody is used to define fields on response body
+// types.
+type FunctionToolDefinitionResponseBody struct {
+	// The ID of the deployment
+	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// The ID of the function
+	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
+	// Runtime environment (e.g., nodejs:22, python:3.12)
+	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
+	// Variables configuration for the function
+	Variables any `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+	// The ID of the tool
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The URN of this tool
+	ToolUrn *string `form:"tool_urn,omitempty" json:"tool_urn,omitempty" xml:"tool_urn,omitempty"`
+	// The ID of the project
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The name of the tool
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The canonical name of the tool. Will be the same as the name if there is no
+	// variation.
+	CanonicalName *string `form:"canonical_name,omitempty" json:"canonical_name,omitempty" xml:"canonical_name,omitempty"`
+	// Description of the tool
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Version of the schema
+	SchemaVersion *string `form:"schema_version,omitempty" json:"schema_version,omitempty" xml:"schema_version,omitempty"`
+	// JSON schema for the request
+	Schema *string `form:"schema,omitempty" json:"schema,omitempty" xml:"schema,omitempty"`
+	// Confirmation mode for the tool
+	Confirm *string `form:"confirm,omitempty" json:"confirm,omitempty" xml:"confirm,omitempty"`
+	// Prompt for the confirmation
+	ConfirmPrompt *string `form:"confirm_prompt,omitempty" json:"confirm_prompt,omitempty" xml:"confirm_prompt,omitempty"`
+	// Summarizer for the tool
+	Summarizer *string `form:"summarizer,omitempty" json:"summarizer,omitempty" xml:"summarizer,omitempty"`
+	// The creation date of the tool.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+	// The last update date of the tool.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// The original details of a tool, excluding any variations
+	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
+	// The variation details of a tool. Only includes explicitly varied fields.
+	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
 }
 
 // PromptTemplateResponseBody is used to define fields on response body types.
@@ -416,6 +456,15 @@ type ServerVariableResponseBody struct {
 	EnvVariables []string `form:"env_variables,omitempty" json:"env_variables,omitempty" xml:"env_variables,omitempty"`
 }
 
+// FunctionEnvironmentVariableResponseBody is used to define fields on response
+// body types.
+type FunctionEnvironmentVariableResponseBody struct {
+	// Description of the function environment variable
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The environment variables
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // EnvironmentResponseBody is used to define fields on response body types.
 type EnvironmentResponseBody struct {
 	// The ID of the environment
@@ -477,6 +526,12 @@ func NewGetInstanceResultOK(body *GetInstanceResponseBody) *instances.GetInstanc
 		v.ServerVariables = make([]*types.ServerVariable, len(body.ServerVariables))
 		for i, val := range body.ServerVariables {
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
+		}
+	}
+	if body.FunctionEnvironmentVariables != nil {
+		v.FunctionEnvironmentVariables = make([]*types.FunctionEnvironmentVariable, len(body.FunctionEnvironmentVariables))
+		for i, val := range body.FunctionEnvironmentVariables {
+			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
 	v.Environment = unmarshalEnvironmentResponseBodyToTypesEnvironment(body.Environment)
@@ -670,6 +725,13 @@ func ValidateGetInstanceResponseBody(body *GetInstanceResponseBody) (err error) 
 	for _, e := range body.ServerVariables {
 		if e != nil {
 			if err2 := ValidateServerVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.FunctionEnvironmentVariables {
+		if e != nil {
+			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -929,6 +991,11 @@ func ValidateToolResponseBody(body *ToolResponseBody) (err error) {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.FunctionToolDefinition != nil {
+		if err2 := ValidateFunctionToolDefinitionResponseBody(body.FunctionToolDefinition); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.PromptTemplate != nil {
 		if err2 := ValidatePromptTemplateResponseBody(body.PromptTemplate); err2 != nil {
 			err = goa.MergeErrors(err, err2)
@@ -1030,6 +1097,9 @@ func ValidateCanonicalToolAttributesResponseBody(body *CanonicalToolAttributesRe
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
 	return
 }
 
@@ -1050,6 +1120,64 @@ func ValidateToolVariationResponseBody(body *ToolVariationResponseBody) (err err
 	}
 	if body.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	return
+}
+
+// ValidateFunctionToolDefinitionResponseBody runs the validations defined on
+// FunctionToolDefinitionResponseBody
+func ValidateFunctionToolDefinitionResponseBody(body *FunctionToolDefinitionResponseBody) (err error) {
+	if body.DeploymentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
+	}
+	if body.FunctionID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("function_id", "body"))
+	}
+	if body.Runtime == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runtime", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.CanonicalName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("canonical_name", "body"))
+	}
+	if body.Description == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("description", "body"))
+	}
+	if body.Schema == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("schema", "body"))
+	}
+	if body.ToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tool_urn", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.Canonical != nil {
+		if err2 := ValidateCanonicalToolAttributesResponseBody(body.Canonical); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Variation != nil {
+		if err2 := ValidateToolVariationResponseBody(body.Variation); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -1157,6 +1285,15 @@ func ValidateServerVariableResponseBody(body *ServerVariableResponseBody) (err e
 	}
 	if body.EnvVariables == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("env_variables", "body"))
+	}
+	return
+}
+
+// ValidateFunctionEnvironmentVariableResponseBody runs the validations defined
+// on FunctionEnvironmentVariableResponseBody
+func ValidateFunctionEnvironmentVariableResponseBody(body *FunctionEnvironmentVariableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }

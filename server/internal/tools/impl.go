@@ -76,7 +76,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	}
 
 	// Get HTTP tools
-	toolParams := repo.ListToolsParams{
+	toolParams := repo.ListHttpToolsParams{
 		ProjectID:    *authCtx.ProjectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
 		DeploymentID: uuid.NullUUID{Valid: false, UUID: uuid.Nil},
@@ -99,9 +99,19 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		toolParams.DeploymentID = uuid.NullUUID{UUID: deploymentUUID, Valid: true}
 	}
 
-	tools, err := s.repo.ListTools(ctx, toolParams)
+	tools, err := s.repo.ListHttpTools(ctx, toolParams)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools").Log(ctx, s.logger)
+	}
+
+	functionTools, err := s.repo.ListFunctionTools(ctx, repo.ListFunctionToolsParams{
+		ProjectID:    *authCtx.ProjectID,
+		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		DeploymentID: uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		Limit:        limit + 1,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to list function tools").Log(ctx, s.logger)
 	}
 
 	// Get prompt templates
@@ -116,33 +126,11 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		NextCursor: nil,
 	}
 
-	// Process HTTP tools with variations
-	names := make([]string, 0, len(tools))
-	for _, def := range tools {
-		names = append(names, def.Name)
-	}
-
-	allVariations, err := s.variationsRepo.FindGlobalVariationsByToolNames(ctx, vr.FindGlobalVariationsByToolNamesParams{
-		ProjectID: *authCtx.ProjectID,
-		ToolNames: names,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").Log(ctx, s.logger)
-	}
-
-	keyedVariations := make(map[string]vr.FindGlobalVariationsByToolNamesRow, len(allVariations))
-	for _, variation := range allVariations {
-		keyedVariations[variation.SrcToolName] = variation
-	}
-
 	for _, tool := range tools {
 		var pkg *string
 		if tool.PackageName != "" {
 			pkg = &tool.PackageName
 		}
-
-		var variation *types.ToolVariation
-		var canonical *types.CanonicalToolAttributes
 
 		name := tool.Name
 		summary := tool.Summary
@@ -150,50 +138,8 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		confirmRaw := conv.PtrValOr(conv.FromPGText[string](tool.Confirm), "")
 		confirmPrompt := conv.FromPGText[string](tool.ConfirmPrompt)
 		tags := tool.Tags
-		variations, ok := keyedVariations[tool.Name]
-		if ok {
-			name = conv.Default(variations.Name.String, name)
-			summary = conv.Default(variations.Summary.String, summary)
-			description = conv.Default(variations.Description.String, description)
-			confirmRaw = conv.Default(variations.Confirm.String, confirmRaw)
-			confirmPrompt = conv.Default(conv.FromPGText[string](variations.ConfirmPrompt), confirmPrompt)
-			if len(variations.Tags) > 0 {
-				tags = variations.Tags
-			}
-
-			canonical = &types.CanonicalToolAttributes{
-				VariationID:   variations.ID.String(),
-				Name:          tool.Name,
-				Summary:       conv.PtrEmpty(tool.Summary),
-				Description:   conv.PtrEmpty(tool.Description),
-				Tags:          tool.Tags,
-				Confirm:       conv.FromPGText[string](tool.Confirm),
-				ConfirmPrompt: conv.FromPGText[string](tool.ConfirmPrompt),
-				Summarizer:    conv.FromPGText[string](tool.Summarizer),
-			}
-
-			variation = &types.ToolVariation{
-				ID:            variations.ID.String(),
-				GroupID:       variations.GroupID.String(),
-				SrcToolName:   tool.Name,
-				Confirm:       conv.FromPGText[string](variations.Confirm),
-				ConfirmPrompt: conv.FromPGText[string](variations.ConfirmPrompt),
-				Name:          conv.PtrEmpty(variations.Name.String),
-				Summary:       conv.PtrEmpty(variations.Summary.String),
-				Description:   conv.PtrEmpty(variations.Description.String),
-				Tags:          variations.Tags,
-				Summarizer:    conv.FromPGText[string](variations.Summarizer),
-				CreatedAt:     variations.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:     variations.UpdatedAt.Time.Format(time.RFC3339),
-			}
-		}
 
 		confirm, _ := mv.SanitizeConfirm(confirmRaw)
-
-		canonicalName := name
-		if canonical != nil {
-			canonicalName = canonical.Name
-		}
 
 		var responseFilter *types.ResponseFilter
 		if tool.ResponseFilter != nil {
@@ -211,7 +157,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				DeploymentID:        tool.DeploymentID.String(),
 				ProjectID:           authCtx.ProjectID.String(),
 				Name:                name,
-				CanonicalName:       canonicalName,
+				CanonicalName:       name,
 				Summary:             summary,
 				Description:         description,
 				Confirm:             conv.Ptr(string(confirm)),
@@ -230,8 +176,35 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				PackageName:         pkg,
 				CreatedAt:           tool.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
-				Canonical:           canonical,
-				Variation:           variation,
+				Variation:           nil, // Applied later
+				Canonical:           nil,
+			},
+		})
+	}
+
+	for _, tool := range functionTools {
+		// TODO: Chase to look at what applies from variations here
+		result.Tools = append(result.Tools, &types.Tool{
+			FunctionToolDefinition: &types.FunctionToolDefinition{
+				ID:            tool.ID.String(),
+				ToolUrn:       tool.ToolUrn.String(),
+				DeploymentID:  tool.DeploymentID.String(),
+				ProjectID:     authCtx.ProjectID.String(),
+				FunctionID:    tool.FunctionID.String(),
+				Runtime:       tool.Runtime,
+				Name:          tool.Name,
+				CanonicalName: tool.Name,
+				Description:   tool.Description,
+				Variables:     tool.Variables,
+				SchemaVersion: nil,
+				Schema:        string(tool.InputSchema),
+				Confirm:       nil,
+				ConfirmPrompt: nil,
+				Summarizer:    nil,
+				CreatedAt:     tool.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:     tool.UpdatedAt.Time.Format(time.RFC3339),
+				Canonical:     nil,
+				Variation:     nil,
 			},
 		})
 	}
@@ -270,8 +243,11 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 		})
 	}
 
-	// For pagination, use the HTTP tools cursor since that's what the original API did
-	// TODO: this doesn't really make sense, but we also don't use the pagination at the moment
+	err = mv.ApplyVariations(ctx, s.logger, s.db, *authCtx.ProjectID, result.Tools)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to tools").Log(ctx, s.logger)
+	}
+
 	if len(tools) >= int(limit+1) {
 		lastID := tools[len(tools)-1].ID.String()
 		result.NextCursor = &lastID

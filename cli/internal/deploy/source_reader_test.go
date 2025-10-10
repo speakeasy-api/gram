@@ -32,12 +32,13 @@ info:
 		Location: testFile,
 		Name:     "Test API",
 		Slug:     "test-api",
+		Runtime:  "nodejs:22",
 	}
 
 	reader := NewSourceReader(source)
 
 	// Test type method
-	require.Equal(t, "openapiv3", string(reader.source.Type))
+	require.Equal(t, "openapiv3", string(reader.Source.Type))
 
 	// Test content type method
 	require.Equal(t, "application/yaml", reader.GetContentType())
@@ -73,6 +74,7 @@ func TestSourceReader_JSONFile(t *testing.T) {
 		Location: testFile,
 		Name:     "Test JSON API",
 		Slug:     "test-json-api",
+		Runtime:  "nodejs:22",
 	}
 
 	reader := NewSourceReader(source)
@@ -101,6 +103,7 @@ func TestSourceReader_NonexistentFile(t *testing.T) {
 		Location: "/nonexistent/path/file.yaml",
 		Name:     "Nonexistent API",
 		Slug:     "nonexistent-api",
+		Runtime:  "nodejs:22",
 	}
 
 	reader := NewSourceReader(source)
@@ -132,6 +135,7 @@ func TestSourceReader_RemoteURL(t *testing.T) {
 		Location: staticServer.URL + "/api-spec.yaml",
 		Name:     "Remote API",
 		Slug:     "remote-api",
+		Runtime:  "nodejs:22",
 	}
 
 	reader := NewSourceReader(source)
@@ -165,6 +169,7 @@ func TestSourceReader_RemoteURL_Error(t *testing.T) {
 		Location: server.URL + "/nonexistent.yaml",
 		Name:     "Remote API",
 		Slug:     "remote-api",
+		Runtime:  "nodejs:22",
 	}
 
 	reader := NewSourceReader(source)

@@ -26,6 +26,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -37,11 +38,6 @@ type ToolCallSource string
 const (
 	ToolCallSourceDirect ToolCallSource = "direct"
 	ToolCallSourceMCP    ToolCallSource = "mcp"
-)
-
-const (
-	HeaderProxiedResponse  = "X-Gram-Proxy-Response"
-	HeaderFilteredResponse = "X-Gram-Proxy-ResponseFiltered"
 )
 
 var proxiedHeaders = []string{
@@ -69,23 +65,23 @@ type ToolCallBody struct {
 	GramRequestSummary   string                 `json:"gram-request-summary"`
 }
 
-type caseInsensitiveEnv struct {
+// CaseInsensitiveEnv provides case-insensitive environment variable lookup.
+type CaseInsensitiveEnv struct {
 	data map[string]string
 }
 
-func newCaseInsensitiveEnv(m map[string]string) *caseInsensitiveEnv {
-	ci := &caseInsensitiveEnv{data: make(map[string]string, len(m))}
-	for k, v := range m {
-		ci.data[strings.ToLower(k)] = v
-	}
-	return ci
+// NewCaseInsensitiveEnv creates a new empty case-insensitive environment.
+func NewCaseInsensitiveEnv() *CaseInsensitiveEnv {
+	return &CaseInsensitiveEnv{data: make(map[string]string)}
 }
 
-func (c *caseInsensitiveEnv) Get(key string) string {
+// Get retrieves an environment variable value by key (case-insensitive).
+func (c *CaseInsensitiveEnv) Get(key string) string {
 	return c.data[strings.ToLower(key)]
 }
 
-func (c *caseInsensitiveEnv) Set(key, value string) {
+// Set sets an environment variable value by key (case-insensitive).
+func (c *CaseInsensitiveEnv) Set(key, value string) {
 	c.data[strings.ToLower(key)] = value
 }
 
@@ -135,9 +131,15 @@ func (itp *ToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,
 	requestBody io.Reader,
-	envVars map[string]string,
-	tool *HTTPTool,
+	env *CaseInsensitiveEnv,
+	gatewayTool *Tool,
 ) error {
+	if !gatewayTool.IsHTTP() {
+		return fmt.Errorf("tool type not supported: %s", gatewayTool.Kind())
+	}
+
+	tool := gatewayTool.HTTPTool
+
 	ctx, span := itp.tracer.Start(ctx, "proxyToolCall", trace.WithAttributes(
 		attr.ToolName(tool.Name),
 		attr.ToolID(tool.ID),
@@ -157,6 +159,10 @@ func (itp *ToolProxy) Do(
 		attr.SlogHTTPRoute(tool.Path), // this is just from the raw OpenAPI spec. It is not a path with any parameters filled in, so not identifiable.
 	)
 
+	if env == nil {
+		env = NewCaseInsensitiveEnv()
+	}
+
 	// Variable to capture status code for metrics
 	var responseStatusCode int
 	defer func() {
@@ -170,8 +176,6 @@ func (itp *ToolProxy) Do(
 
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
-
-	ciEnv := newCaseInsensitiveEnv(envVars)
 
 	bodyBytes, err := io.ReadAll(requestBody)
 	if err != nil {
@@ -188,13 +192,22 @@ func (itp *ToolProxy) Do(
 	}
 
 	if len(tool.Schema) > 0 {
-		if validateErr := validateToolCallBody(ctx, logger, bodyBytes, string(tool.Schema)); validateErr != nil {
-			logger.InfoContext(ctx, "tool call request schema failed validation", attr.SlogError(validateErr))
+		bodyBytes, err = validateAndAttemptHealing(ctx, logger, bodyBytes, string(tool.Schema))
+
+		// Extract the body field from healed bodyBytes
+		var healedToolCallBody ToolCallBody
+		if unmarshalErr := json.Unmarshal(bodyBytes, &healedToolCallBody); unmarshalErr == nil {
+			toolCallBody.Body = healedToolCallBody.Body
+		}
+
+		// If still invalid after healing attempt, return error
+		if err != nil {
+			logger.InfoContext(ctx, "tool call request schema failed validation", attr.SlogError(err))
 			responseStatusCode = http.StatusBadRequest
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			if err := json.NewEncoder(w).Encode(toolcallErrorSchema{
-				Error: fmt.Sprintf("The input to the tool is invalid with the attached error. Please review the tool schema closely: %s", validateErr.Error()),
+				Error: fmt.Sprintf("The input to the tool is invalid with the attached error. Please review the tool schema closely: %s", err.Error()),
 			}); err != nil {
 				logger.ErrorContext(ctx, "failed to encode tool call error", attr.SlogError(err))
 			}
@@ -205,7 +218,7 @@ func (itp *ToolProxy) Do(
 	// environment variable overrides on tool calls typically defined in the SDK
 	if toolCallBody.EnvironmentVariables != nil {
 		for k, v := range toolCallBody.EnvironmentVariables {
-			ciEnv.Set(k, v)
+			env.Set(k, v)
 		}
 	}
 
@@ -248,7 +261,7 @@ func (itp *ToolProxy) Do(
 		serverURL = tool.DefaultServerUrl.Value
 	}
 
-	if envServerURL := processServerEnvVars(ctx, logger, tool, ciEnv); envServerURL != "" {
+	if envServerURL := processServerEnvVars(ctx, logger, tool, env); envServerURL != "" {
 		serverURL = envServerURL
 	}
 
@@ -363,7 +376,7 @@ func (itp *ToolProxy) Do(
 		}
 	}
 
-	shouldContinue := processSecurity(ctx, logger, req, w, &responseStatusCode, tool, itp.cache, ciEnv, serverURL)
+	shouldContinue := processSecurity(ctx, logger, req, w, &responseStatusCode, tool, itp.cache, env, serverURL)
 	if !shouldContinue {
 		return nil
 	}
@@ -528,7 +541,7 @@ func reverseProxyRequest(ctx context.Context,
 	}
 
 	span.SetAttributes(attr.HTTPResponseExternal(true))
-	w.Header().Set(HeaderProxiedResponse, "1")
+	w.Header().Set(constants.HeaderProxiedResponse, "1")
 
 	finalStatusCode := resp.StatusCode
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
@@ -565,7 +578,7 @@ func reverseProxyRequest(ctx context.Context,
 		result := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
 		if result != nil {
 			w.Header().Set("Content-Type", result.contentType)
-			w.Header().Set(HeaderFilteredResponse, "1")
+			w.Header().Set(constants.HeaderFilteredResponse, "1")
 			span.SetAttributes(attr.HTTPResponseFiltered(true))
 			finalStatusCode = result.statusCode
 			body = result.resp
@@ -585,7 +598,7 @@ func reverseProxyRequest(ctx context.Context,
 	return nil
 }
 
-func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTool, envVars *caseInsensitiveEnv) string {
+func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTool, envVars *CaseInsensitiveEnv) string {
 	if tool.ServerEnvVar != "" {
 		envVar := envVars.Get(tool.ServerEnvVar)
 		if envVar != "" {

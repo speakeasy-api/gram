@@ -32,10 +32,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	oauth_repo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -63,6 +65,7 @@ type Service struct {
 	oauthRepo         *oauth_repo.Queries
 	billingTracker    billing.Tracker
 	billingRepository billing.Repository
+	toolsetCache      cache.TypedCacheObject[mv.ToolsetTools]
 }
 
 type oauthTokenInputs struct {
@@ -124,6 +127,7 @@ func NewService(
 		oauthRepo:         oauth_repo.New(db),
 		billingTracker:    billingTracker,
 		billingRepository: billingRepository,
+		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}
 }
 
@@ -431,11 +435,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *gateway.DomainContext, error) {
+func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *customdomains.Context, error) {
 	var toolset toolsets_repo.Toolset
 	var toolsetErr error
-	var customDomainCtx *gateway.DomainContext
-	if domainCtx := gateway.DomainFromContext(ctx); domainCtx != nil {
+	var customDomainCtx *customdomains.Context
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
 			McpSlug:        conv.ToPGText(mcpSlug),
 			CustomDomainID: uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true},
@@ -613,11 +617,11 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog)
+		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache)
 	case "prompts/list":
-		return handlePromptsList(ctx, s.logger, s.db, payload, req)
+		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
 		return handlePromptsGet(ctx, s.logger, s.db, payload, req)
 	default:
