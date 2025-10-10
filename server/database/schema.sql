@@ -349,7 +349,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS functions_access_project_deployment_function_s
 CREATE TABLE IF NOT EXISTS function_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   tool_urn TEXT NOT NULL,
-  project_id uuid,
+  project_id uuid NOT NULL,
 
   deployment_id uuid NOT NULL,
   function_id uuid NOT NULL,

@@ -293,7 +293,7 @@ func processManifestToolV0(
 		DeploymentID: deploymentID,
 		FunctionID:   attachementID,
 		ToolUrn:      urn.NewTool(urn.ToolKindFunction, string(attachementSlug), name),
-		ProjectID:    uuid.NullUUID{UUID: projectID, Valid: true},
+		ProjectID:    projectID,
 		Runtime:      runtime,
 		Name:         name,
 		Description:  description,
