@@ -1018,3 +1018,331 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "tool type not supported")
 }
+
+func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		toolCallBody   string
+		schema         string
+		expectedBody   map[string]any
+		expectError    bool
+		shouldValidate bool
+	}{
+		{
+			name: "nested stringified JSON",
+			toolCallBody: `{
+				"body": {
+					"benefitFields": {
+						"primaryFields": "{\"name\": \"Super-Duper Benefit\", \"description\": \"A benefit that is super-duper.\", \"type\": \"special\", \"category\": \"miscellaneous\"}"
+					}
+				}
+			}`,
+			schema: `{
+				"type": "object",
+				"properties": {
+					"body": {
+						"type": "object",
+						"properties": {
+							"benefitFields": {
+								"type": "object",
+								"properties": {
+									"primaryFields": {
+										"type": "object",
+										"properties": {
+											"name": {"type": "string"},
+											"description": {"type": "string"},
+											"type": {"type": "string"},
+											"category": {"type": "string"}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}`,
+			expectedBody: map[string]any{
+				"benefitFields": map[string]any{
+					"primaryFields": map[string]any{
+						"name":        "Super-Duper Benefit",
+						"description": "A benefit that is super-duper.",
+						"type":        "special",
+						"category":    "miscellaneous",
+					},
+				},
+			},
+			expectError:    false,
+			shouldValidate: true,
+		},
+		{
+			name: "top-level stringified JSON",
+			toolCallBody: `{
+				"body": "{\"type\": \"custom\", \"description\": \"Ryan\", \"properties\": {}}"
+			}`,
+			schema: `{
+				"type": "object",
+				"properties": {
+					"body": {
+						"type": "object",
+						"properties": {
+							"type": {"type": "string"},
+							"description": {"type": "string"},
+							"properties": {"type": "object"}
+						}
+					}
+				}
+			}`,
+			expectedBody: map[string]any{
+				"type":        "custom",
+				"description": "Ryan",
+				"properties":  map[string]any{},
+			},
+			expectError:    false,
+			shouldValidate: true,
+		},
+		{
+			name: "multiple levels of stringified JSON",
+			toolCallBody: `{
+				"body": {
+					"outer": {
+						"middle": "{\"inner\": \"{\\\"deepest\\\": \\\"value\\\"}\"}"
+					}
+				}
+			}`,
+			schema: `{
+				"type": "object",
+				"properties": {
+					"body": {
+						"type": "object",
+						"properties": {
+							"outer": {
+								"type": "object",
+								"properties": {
+									"middle": {
+										"type": "object",
+										"properties": {
+											"inner": {
+												"type": "object",
+												"properties": {
+													"deepest": {"type": "string"}
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}`,
+			expectedBody: map[string]any{
+				"outer": map[string]any{
+					"middle": map[string]any{
+						"inner": map[string]any{
+							"deepest": "value",
+						},
+					},
+				},
+			},
+			expectError:    false,
+			shouldValidate: true,
+		},
+		{
+			name: "no schema - body sent as-is",
+			toolCallBody: `{
+				"body": {"type": "custom", "description": "Ryan"}
+			}`,
+			schema: "",
+			expectedBody: map[string]any{
+				"type":        "custom",
+				"description": "Ryan",
+			},
+			expectError:    false,
+			shouldValidate: false,
+		},
+		{
+			name: "nested oneOf with stringified JSON - benefitFields case",
+			toolCallBody: `{
+				"body": {
+					"benefitFields": {
+						"primaryFields": "{\"name\": \"Super-Duper Benefit\", \"description\": \"A benefit that is super-duper.\", \"type\": \"special\", \"category\": \"miscellaneous\"}"
+					}
+				}
+			}`,
+			schema: `{
+				"type": "object",
+				"properties": {
+					"body": {
+						"type": "object",
+						"properties": {
+							"benefitFields": {
+								"type": "object",
+								"properties": {
+									"primaryFields": {
+										"oneOf": [
+											{
+												"type": "object",
+												"properties": {
+													"name": {"type": "string"},
+													"description": {"type": "string"},
+													"type": {"type": "string"},
+													"category": {"type": "string"}
+												},
+												"required": ["name"]
+											},
+											{
+												"type": "object",
+												"properties": {
+													"id": {"type": "string"}
+												},
+												"required": ["id"]
+											}
+										]
+									}
+								}
+							}
+						}
+					}
+				}
+			}`,
+			expectedBody: map[string]any{
+				"benefitFields": map[string]any{
+					"primaryFields": map[string]any{
+						"name":        "Super-Duper Benefit",
+						"description": "A benefit that is super-duper.",
+						"type":        "special",
+						"category":    "miscellaneous",
+					},
+				},
+			},
+			expectError:    false,
+			shouldValidate: true,
+		},
+		{
+			name: "array with stringified objects",
+			toolCallBody: `{
+				"body": {
+					"items": [
+						"{\"id\": 1, \"name\": \"Item 1\"}",
+						"{\"id\": 2, \"name\": \"Item 2\"}"
+					]
+				}
+			}`,
+			schema: `{
+				"type": "object",
+				"properties": {
+					"body": {
+						"type": "object",
+						"properties": {
+							"items": {
+								"type": "array",
+								"items": {
+									"type": "object",
+									"properties": {
+										"id": {"type": "number"},
+										"name": {"type": "string"}
+									}
+								}
+							}
+						}
+					}
+				}
+			}`,
+			expectedBody: map[string]any{
+				"items": []any{
+					map[string]any{"id": float64(1), "name": "Item 1"},
+					map[string]any{"id": float64(2), "name": "Item 2"},
+				},
+			},
+			expectError:    false,
+			shouldValidate: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Create a mock server that captures the request body
+			var capturedBody []byte
+			var capturedRequest *http.Request
+			mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				capturedRequest = r
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					http.Error(w, "failed to read body", http.StatusInternalServerError)
+					return
+				}
+				capturedBody = body
+				w.WriteHeader(http.StatusOK)
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"success": true}`))
+			}))
+			defer mockServer.Close()
+
+			// Setup test dependencies
+			ctx := context.Background()
+			logger := testenv.NewLogger(t)
+			tracerProvider := testenv.NewTracerProvider(t)
+			meterProvider := testenv.NewMeterProvider(t)
+			policy, err := guardian.NewUnsafePolicy([]string{})
+			require.NoError(t, err)
+
+			// Create tool configuration
+			tool := &HTTPTool{
+				ID:                 uuid.New().String(),
+				ProjectID:          uuid.New().String(),
+				DeploymentID:       uuid.New().String(),
+				OrganizationID:     uuid.New().String(),
+				Name:               "test_tool",
+				ServerEnvVar:       "TEST_SERVER_URL",
+				DefaultServerUrl:   NullString{Value: mockServer.URL, Valid: true},
+				Security:           []*HTTPToolSecurity{},
+				SecurityScopes:     map[string][]string{},
+				Method:             "POST",
+				Path:               "/api/test",
+				Schema:             []byte(tt.schema),
+				HeaderParams:       map[string]*HTTPParameter{},
+				QueryParams:        map[string]*HTTPParameter{},
+				PathParams:         map[string]*HTTPParameter{},
+				RequestContentType: NullString{Value: "application/json", Valid: true},
+				ResponseFilter:     nil,
+			}
+
+			// Create tool proxy
+			proxy := NewToolProxy(
+				logger,
+				tracerProvider,
+				meterProvider,
+				ToolCallSourceDirect,
+				nil,
+				policy,
+			)
+
+			// Create response recorder
+			recorder := httptest.NewRecorder()
+
+			// Execute the proxy call
+			ciEnv := NewCaseInsensitiveEnv()
+			err = proxy.Do(ctx, recorder, bytes.NewReader([]byte(tt.toolCallBody)), ciEnv, NewHTTPTool(tool))
+
+			if tt.expectError {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, capturedRequest)
+
+			// Verify the body was correctly de-stringified
+			var actualBody map[string]any
+			err = json.Unmarshal(capturedBody, &actualBody)
+			require.NoError(t, err)
+
+			// Compare the expected body structure
+			require.Equal(t, tt.expectedBody, actualBody)
+		})
+	}
+}
