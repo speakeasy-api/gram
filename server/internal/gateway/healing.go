@@ -10,7 +10,7 @@ import (
 )
 
 func validateAndAttemptHealing(ctx context.Context, logger *slog.Logger, bodyBytes []byte, toolSchema string) (json.RawMessage, error) {
-	err := validateToolCallBody(ctx, logger, bodyBytes, string(toolSchema))
+	err := validateToolCallBody(ctx, logger, bodyBytes, toolSchema)
 	if err == nil { // Validation passed, return the body as is
 		return bodyBytes, nil
 	}
@@ -20,10 +20,10 @@ func validateAndAttemptHealing(ctx context.Context, logger *slog.Logger, bodyByt
 		return bodyBytes, err
 	}
 
-	healed, didHeal := healStringifiedJSON(ctx, logger, bodyBytes, string(toolSchema))
+	healed, didHeal := healStringifiedJSON(ctx, logger, bodyBytes, toolSchema)
 	if didHeal {
 		// Re-validate after healing
-		if err = validateToolCallBody(ctx, logger, healed, string(toolSchema)); err == nil {
+		if err = validateToolCallBody(ctx, logger, healed, toolSchema); err == nil {
 			logger.InfoContext(ctx, "successfully healed stringified JSON body")
 			return healed, nil
 		}
