@@ -283,8 +283,8 @@ func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
 	insertDuration := time.Since(startTime)
 	span.SetAttributes(
 		attribute.Float64("insert_duration_ms", float64(insertDuration.Milliseconds())),
-		attribute.Int64("request_body_bytes", int64(log.RequestBodyBytes)),   //nolint:gosec // uint64 to int64 conversion is safe for body sizes
-		attribute.Int64("response_body_bytes", int64(log.ResponseBodyBytes)), //nolint:gosec // uint64 to int64 conversion is safe for body sizes
+		attribute.Int("request_body_bytes", int(log.RequestBodyBytes)),
+		attribute.Int("response_body_bytes", int(log.ResponseBodyBytes)),
 	)
 	span.SetStatus(codes.Ok, "")
 
@@ -340,11 +340,11 @@ type ToolHTTPRequest struct {
 	RequestHeaders   map[string]string `ch:"request_headers"`    // Map(String, String)
 	RequestBody      *string           `ch:"request_body"`       // Nullable(String)
 	RequestBodySkip  *string           `ch:"request_body_skip"`  // Nullable(String)
-	RequestBodyBytes uint64            `ch:"request_body_bytes"` // UInt64
+	RequestBodyBytes int64             `ch:"request_body_bytes"` // UInt64
 
 	// response payload
 	ResponseHeaders   map[string]string `ch:"response_headers"`    // Map(String, String)
 	ResponseBody      *string           `ch:"response_body"`       // Nullable(String)
 	ResponseBodySkip  *string           `ch:"response_body_skip"`  // Nullable(String)
-	ResponseBodyBytes uint64            `ch:"response_body_bytes"` // UInt64
+	ResponseBodyBytes int64             `ch:"response_body_bytes"` // UInt64
 }

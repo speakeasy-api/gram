@@ -1,3 +1,5 @@
+USE gram;
+
 create table if not exists http_requests_raw
 (
     ts                  DateTime64(3, 'UTC'),

@@ -3,7 +3,6 @@ package testenv
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -21,49 +20,6 @@ type ClickhouseClientFunc func(t *testing.T) (clickhouse.Conn, error)
 // from migration files. Returns a container reference and a function to create
 // test connections. The container is automatically cleaned up when the test ends.
 func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseContainer, ClickhouseClientFunc, error) {
-	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:25.8.3",
-		clickhousecontainer.WithUsername("gram"),
-		clickhousecontainer.WithPassword("gram"),
-		clickhousecontainer.WithDatabase("gram"),
-		testcontainers.WithLogger(NewTestcontainersLogger()),
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to start clickhouse container: %w", err)
-	}
-
-	// Get host and port
-	host, err := container.Host(ctx)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get clickhouse host: %w", err)
-	}
-
-	port, err := container.MappedPort(ctx, "9000/tcp")
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get clickhouse port: %w", err)
-	}
-
-	// Connect and run schema
-	conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // third-party library struct with many optional fields
-		Addr: []string{fmt.Sprintf("%s:%s", host, port.Port())},
-		Auth: clickhouse.Auth{
-			Database: "gram",
-			Username: "gram",
-			Password: "gram",
-		},
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to clickhouse: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error {
-		return conn.Close()
-	})
-
-	if err = conn.Ping(ctx); err != nil {
-		return nil, nil, fmt.Errorf("failed to ping clickhouse: %w", err)
-	}
-
-	// Running the schema here because using clickhousecontainer.WithInitScripts() wasn't working for some reason.
-	// I'll add back when I figure out why.
 	// Get the schema file path relative to this file's location
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
@@ -71,21 +27,15 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 	}
 	schemaPath := filepath.Join(filepath.Dir(filename), "..", "..", "clickhouse", "schema.sql")
 
-	// Read and execute the schema
-	schemaSQL, err := os.ReadFile(schemaPath) //nolint:gosec // schemaPath is built from trusted runtime.Caller path
+	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:25.8.3",
+		clickhousecontainer.WithUsername("gram"),
+		clickhousecontainer.WithPassword("gram"),
+		clickhousecontainer.WithDatabase("gram"),
+		clickhousecontainer.WithInitScripts(schemaPath),
+		testcontainers.WithLogger(NewTestcontainersLogger()),
+	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read schema file at %s: %w", schemaPath, err)
-	}
-
-	if err = conn.Exec(ctx, string(schemaSQL)); err != nil {
-		return nil, nil, fmt.Errorf("failed to execute schema: %w", err)
-	}
-
-	// Verify table exists
-	var tableExists uint8
-	err = conn.QueryRow(ctx, "SELECT 1 FROM system.tables WHERE database = 'gram' AND name = 'http_requests_raw'").Scan(&tableExists)
-	if err != nil || tableExists != 1 {
-		return nil, nil, fmt.Errorf("http_requests_raw table not found after schema execution")
+		return nil, nil, fmt.Errorf("failed to start clickhouse container: %w", err)
 	}
 
 	return container, newClickhouseClientFunc(container), nil
@@ -106,13 +56,36 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 			return nil, fmt.Errorf("failed to get clickhouse port: %w", err)
 		}
 
-		conn, err := clickhouse.Open(&clickhouse.Options{ //nolint:exhaustruct // third-party library struct with many optional fields
-			Addr: []string{fmt.Sprintf("%s:%s", host, port.Port())},
+		conn, err := clickhouse.Open(&clickhouse.Options{
+			Protocol:   0,
+			ClientInfo: clickhouse.ClientInfo{Products: nil},
+			TLS:        nil,
+			Addr:       []string{fmt.Sprintf("%s:%s", host, port.Port())},
 			Auth: clickhouse.Auth{
 				Database: "gram",
 				Username: "gram",
 				Password: "gram",
 			},
+			DialContext:          nil,
+			DialStrategy:         nil,
+			Debug:                false,
+			Debugf:               nil,
+			Settings:             nil,
+			Compression:          nil,
+			DialTimeout:          0,
+			MaxOpenConns:         0,
+			MaxIdleConns:         0,
+			ConnMaxLifetime:      0,
+			ConnOpenStrategy:     0,
+			FreeBufOnConnRelease: false,
+			HttpHeaders:          nil,
+			HttpUrlPath:          "",
+			HttpMaxConnsPerHost:  0,
+			BlockBufferSize:      0,
+			MaxCompressionBuffer: 0,
+			HTTPProxyURL:         nil,
+			GetJWT:               nil,
+			ReadTimeout:          0,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to clickhouse: %w", err)

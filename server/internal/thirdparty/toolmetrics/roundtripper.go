@@ -98,7 +98,8 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 
 	var clientIP string
 
-	httpTrace := &httptrace.ClientTrace{ //nolint:exhaustruct // only need the capture the server IP
+	httpTrace := &httptrace.ClientTrace{
+		GetConn: nil,
 		GotConn: func(info httptrace.GotConnInfo) {
 			if info.Conn != nil {
 				remote := info.Conn.RemoteAddr().String()
@@ -108,10 +109,24 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 				}
 			}
 		},
+		PutIdleConn:          nil,
+		GotFirstResponseByte: nil,
+		Got100Continue:       nil,
+		Got1xxResponse:       nil,
+		DNSStart:             nil,
+		DNSDone:              nil,
+		ConnectStart:         nil,
+		ConnectDone:          nil,
+		TLSHandshakeStart:    nil,
+		TLSHandshakeDone:     nil,
+		WroteHeaderField:     nil,
+		WroteHeaders:         nil,
+		Wait100Continue:      nil,
+		WroteRequest:         nil,
 	}
 	req = req.WithContext(httptrace.WithClientTrace(ctx, httpTrace))
 
-	requestBodyBytesPtr, ok := ctx.Value(RequestBodyContextKey).(*uint64)
+	requestBodyBytesPtr, ok := ctx.Value(RequestBodyContextKey).(*int)
 	if !ok {
 		requestBodyBytesPtr = nil
 	}
@@ -172,11 +187,11 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		spanID = spanCtx.SpanID().String()
 	}
 
-	statusCode := uint16(0)
+	statusCode := 0
 	if resp != nil {
-		statusCode = uint16(resp.StatusCode) //nolint:gosec // response codes aren't that large
+		statusCode = resp.StatusCode
 		span.SetAttributes(
-			attribute.Int("http.status_code", int(statusCode)),
+			attribute.Int("http.status_code", statusCode),
 			attribute.Float64("http.duration_ms", durationMs),
 		)
 
@@ -190,7 +205,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		h.logger.DebugContext(ctx, "HTTP request completed",
 			attr.SlogHTTPRequestMethod(req.Method),
 			attr.SlogURLOriginal(req.URL.String()),
-			attr.SlogHTTPResponseStatusCode(int(statusCode)),
+			attr.SlogHTTPResponseStatusCode(statusCode),
 			slog.Float64(attrDurationMs, durationMs),
 			attr.SlogToolURN(tool.Urn),
 		)
@@ -220,7 +235,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	method := req.Method
 	url := req.URL.String()
 
-	logHTTPRequest := func(respBodyBytes uint64) {
+	logHTTPRequest := func(respBodyBytes int) {
 		go func() {
 			defer func() {
 				if r := recover(); r != nil {
@@ -236,7 +251,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			logCtx := context.WithoutCancel(ctx)
 
 			// Get final request body size now that request body has been read and closed
-			var requestBodyBytes = conv.PtrValOr(requestBodyBytesPtr, uint64(0))
+			var requestBodyBytes = conv.PtrValOr(requestBodyBytesPtr, 0)
 
 			// We are not logging the request or response bodies for a number of reasons:
 			// - They may be too large and will inflate our ClickHouse table, making it slower to query and hard to estimate the size
@@ -253,18 +268,18 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 				SpanID:            spanID,
 				HTTPMethod:        req.Method,
 				HTTPRoute:         tool.HTTPRoute,
-				StatusCode:        statusCode,
+				StatusCode:        uint16(statusCode),
 				DurationMs:        durationMs,
 				UserAgent:         req.UserAgent(),
 				ClientIPv4:        clientIP,
 				RequestHeaders:    requestHeaders,
 				RequestBody:       nil,
 				RequestBodySkip:   nil,
-				RequestBodyBytes:  requestBodyBytes,
+				RequestBodyBytes:  int64(requestBodyBytes),
 				ResponseHeaders:   responseHeaders,
 				ResponseBody:      nil,
 				ResponseBodySkip:  nil,
-				ResponseBodyBytes: respBodyBytes,
+				ResponseBodyBytes: int64(respBodyBytes),
 			}
 
 			logErr := h.tcm.Log(logCtx, httpRequest)
@@ -281,8 +296,8 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 					attr.SlogURLOriginal(url),
 					attr.SlogToolURN(toolID),
 					attr.SlogHTTPRequestMethod(method),
-					slog.Uint64(attrRequestBytes, requestBodyBytes),
-					slog.Uint64(attrResponseBytes, respBodyBytes),
+					slog.Int(attrRequestBytes, requestBodyBytes),
+					slog.Int(attrResponseBytes, respBodyBytes),
 				)
 			}
 		}()

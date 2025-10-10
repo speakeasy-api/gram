@@ -110,6 +110,9 @@ func parseTimeOrDefault(s *string, defaultTime time.Time) time.Time {
 }
 
 func toHTTPToolLog(r tm.ToolHTTPRequest) *gen.HTTPToolLog {
+	var requestBodyBytes = uint64(r.RequestBodyBytes)
+	var responseBodyBytes = uint64(r.ResponseBodyBytes)
+
 	return &gen.HTTPToolLog{
 		Ts:                r.Ts.Format(time.RFC3339),
 		OrganizationID:    r.OrganizationID,
@@ -129,11 +132,11 @@ func toHTTPToolLog(r tm.ToolHTTPRequest) *gen.HTTPToolLog {
 		RequestHeaders:    r.RequestHeaders,
 		RequestBody:       r.RequestBody,
 		RequestBodySkip:   r.RequestBodySkip,
-		RequestBodyBytes:  &r.RequestBodyBytes,
+		RequestBodyBytes:  &requestBodyBytes,
 		ResponseHeaders:   r.ResponseHeaders,
 		ResponseBody:      r.ResponseBody,
 		ResponseBodySkip:  r.ResponseBodySkip,
-		ResponseBodyBytes: &r.ResponseBodyBytes,
+		ResponseBodyBytes: &responseBodyBytes,
 	}
 }
 

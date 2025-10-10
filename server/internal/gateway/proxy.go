@@ -512,7 +512,7 @@ func reverseProxyRequest(ctx context.Context,
 	ctx = context.WithValue(ctx, tm.ToolInfoContextKey, toolInfo)
 
 	// Track request body size
-	var requestBodySize uint64
+	var requestBodySize int
 
 	executeRequest := func() (*http.Response, error) {
 		// Clone the request for each retry attempt
@@ -526,7 +526,7 @@ func reverseProxyRequest(ctx context.Context,
 			}
 
 			// Wrap body to count bytes as they're sent
-			retryReq.Body = tm.NewCountingReadCloser(freshBody, func(count uint64) {
+			retryReq.Body = tm.NewCountingReadCloser(freshBody, func(count int) {
 				requestBodySize = count
 			})
 		}
