@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -13,7 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/o11y"
-	"github.com/speakeasy-api/gram/cli/internal/secret"
+	"github.com/speakeasy-api/gram/cli/internal/profile"
+	"github.com/speakeasy-api/gram/cli/internal/workflow"
 	"github.com/urfave/cli/v2"
 )
 
@@ -65,15 +65,11 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			defer cancel()
 
 			logger := logging.PullLogger(ctx)
-			projectSlug := c.String("project")
+			prof := profile.FromContext(ctx)
 
-			apiURL, err := url.Parse(c.String("api-url"))
+			workflowParams, err := workflow.ResolveParams(c, prof)
 			if err != nil {
-				return fmt.Errorf(
-					"failed to parse API URL '%s': %w",
-					c.String("api-url"),
-					err,
-				)
+				return fmt.Errorf("failed to resolve workflow params: %w", err)
 			}
 
 			configFilename, err := filepath.Abs(c.String("config"))
@@ -97,16 +93,11 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			logger.InfoContext(
 				ctx,
 				"Deploying to project",
-				slog.String("project", projectSlug),
+				slog.String("project", workflowParams.ProjectSlug),
 				slog.String("config", c.String("config")),
 			)
 
-			params := deploy.WorkflowParams{
-				APIKey:      secret.Secret(c.String("api-key")),
-				APIURL:      apiURL,
-				ProjectSlug: projectSlug,
-			}
-			result := deploy.NewWorkflow(ctx, logger, params).
+			result := workflow.New(ctx, logger, workflowParams).
 				UploadAssets(ctx, config.Sources).
 				CreateDeployment(ctx, c.String("idempotency-key"))
 
