@@ -1,31 +1,31 @@
-import { AutoSummarizeBadge } from "@/components/auto-summarize-badge";
+import { ChatInput } from "@/components/chat/ChatInput";
+import { ChatMessages } from "@/components/chat/ChatMessages";
 import { HttpRoute } from "@/components/http-route";
 import { ProjectAvatar } from "@/components/project-menu";
-import { Link } from "@/components/ui/link";
 import { Slider } from "@/components/ui/slider";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
-import { Telemetry, useTelemetry } from "@/contexts/Telemetry";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { asTool, filterHttpTools, filterPromptTools } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
-import { Message, useChat } from "@ai-sdk/react";
+import { useChat } from "@ai-sdk/react";
 import { HTTPToolDefinition } from "@gram/client/models/components";
 import { useInstance } from "@gram/client/react-query/index.js";
-import {
-  AIChatContainer,
-  Stack,
-  useToolCallApproval,
-} from "@speakeasy-api/moonshine";
+import { Stack } from "@speakeasy-api/moonshine";
 import {
   generateObject,
   jsonSchema,
-  smoothStream,
-  streamText,
-  Tool,
-  ToolCall,
+  UIMessage,
 } from "ai";
+import { CustomChatTransport } from "@/lib/CustomChatTransport";
+
+type CoreTool = {
+  description?: string;
+  inputSchema: unknown;
+  execute?: (input: unknown) => unknown | Promise<unknown>;
+};
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
@@ -37,6 +37,7 @@ import { useMiniModel, useModel } from "./Openrouter";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
 import { parseMentionedTools, Tool as MentionTool } from "./ToolMentions";
 import { ChatComposerWrapper } from "./ChatComposerWrapper";
+import { Combobox } from "@/components/ui/combobox";
 
 const defaultModel = {
   label: "Claude 4.5 Sonnet",
@@ -75,7 +76,7 @@ export function ChatWindow({
   configRef: ChatConfig;
   dynamicToolset?: boolean;
   additionalActions?: React.ReactNode;
-  initialMessages?: Message[];
+  initialMessages?: UIMessage[];
   initialPrompt?: string | null;
 }) {
   const [model, setModel] = useState(defaultModel.value);
@@ -101,7 +102,7 @@ export function ChatWindow({
 
 type Toolset = Record<
   string,
-  Tool & { id?: string; method?: string; path?: string }
+  CoreTool & { id?: string; method?: string; path?: string }
 >;
 
 function ChatInner({
@@ -121,7 +122,7 @@ function ChatInner({
   setTemperature: (temperature: number) => void;
   configRef: ChatConfig;
   dynamicToolset: boolean;
-  initialMessages?: Message[];
+  initialMessages?: UIMessage[];
   additionalActions?: React.ReactNode;
   initialPrompt?: string | null;
 }) {
@@ -136,7 +137,9 @@ function ChatInner({
     chat.id,
   );
 
-  const [displayOnlyMessages, setDisplayOnlyMessages] = useState<Message[]>([]);
+  const [displayOnlyMessages, setDisplayOnlyMessages] = useState<UIMessage[]>(
+    [],
+  );
   const selectedTools = useRef<string[]>([]);
   const [_mentionedToolIds, setMentionedToolIds] = useState<string[]>([]);
   const [_inputText, setInputText] = useState("");
@@ -165,7 +168,6 @@ function ChatInner({
         {
           id: uuidv7(),
           role: "system",
-          content: `unused`,
           parts: [
             {
               type: "text",
@@ -182,11 +184,9 @@ function ChatInner({
     (tool: HTTPToolDefinition, toolsetSlug: string) =>
     async (args: unknown) => {
       const response = await fetch(
-        `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
-          tool.id
-        }&environment_slug=${configRef.current.environmentSlug}&chat_id=${
-          chat.id
-        }&toolset_slug=${toolsetSlug}`,
+        `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${tool.id}&environment_slug=${
+          configRef.current.environmentSlug
+        }&chat_id=${chat.id}&toolset_slug=${toolsetSlug}`,
         {
           method: "POST",
           headers: {
@@ -210,6 +210,9 @@ function ChatInner({
     };
 
   const allTools: Toolset = useMemo(() => {
+    console.log("allTools: instance.data?.tools:", instance.data?.tools);
+    console.log("allTools: toolsetSlug:", configRef.current.toolsetSlug);
+    console.log("allTools: environmentSlug:", configRef.current.environmentSlug);
     const baseTools = instance.data?.tools.map(asTool);
 
     const tools: Toolset = Object.fromEntries(
@@ -221,7 +224,7 @@ function ChatInner({
             method: tool.httpMethod,
             path: tool.path,
             description: tool.description,
-            parameters: jsonSchema(tool.schema ? JSON.parse(tool.schema) : {}),
+            inputSchema: jsonSchema(tool.schema ? JSON.parse(tool.schema) : {}),
             execute: executeHttpToolFn(
               tool,
               configRef.current.toolsetSlug || "",
@@ -235,8 +238,8 @@ function ChatInner({
       tools[pt.name] = {
         id: pt.id as string,
         description: pt.description ?? "",
-        parameters: jsonSchema(JSON.parse(pt.schema ?? "{}")),
-        execute: async (args) => {
+        inputSchema: jsonSchema(JSON.parse(pt.schema ?? "{}")),
+        execute: async (args: unknown) => {
           const res = await client.templates.renderByID({
             id: pt.id as `${string}.${string}`,
             renderTemplateByIDRequestBody: {
@@ -255,7 +258,7 @@ function ChatInner({
   // Create a list of tools for the mention system
   const mentionTools: MentionTool[] = useMemo(() => {
     return Object.entries(allTools).map(([name, tool]) => {
-      const toolWithId = tool as Tool & { id?: string };
+      const toolWithId = tool as CoreTool & { id?: string };
       return {
         id: toolWithId.id || name,
         name,
@@ -273,18 +276,24 @@ function ChatInner({
 
   const openrouterBasic = useMiniModel();
 
-  const updateToolsTool: Tool & { name: string } = {
+  const updateToolsTool: CoreTool & { name: string } = {
     name: "refresh_tools",
     description: `If you are unable to fulfill the user's request with the current set of tools, use this tool to get a new set of tools.
-    The request is a description of the task you are trying to complete based on the conversation history. 
+    The request is a description of the task you are trying to complete based on the conversation history.
     Try to incorporate not just the most recent messages, but also the overall task the user has been trying to accomplish over the course of the chat.`,
-    parameters: z.object({
+    inputSchema: z.object({
       priorConversationSummary: z.string(),
       previouslyUsedTools: z.array(z.string()),
       newRequest: z.string(),
     }),
-    execute: async (args) => {
-      const parsedArgs = updateToolsTool.parameters.parse(args);
+    execute: async (args: unknown) => {
+      const parsedArgs = z
+        .object({
+          priorConversationSummary: z.string(),
+          previouslyUsedTools: z.array(z.string()),
+          newRequest: z.string(),
+        })
+        .parse(args);
       await updateSelectedTools(JSON.stringify(parsedArgs));
       return `Updated tool list: ${selectedTools.current.join(", ")}`;
     },
@@ -298,7 +307,8 @@ function ChatInner({
       .join("\n");
 
     const result = await generateObject({
-      model: openrouterBasic,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      model: openrouterBasic as any,
       mode: "json",
       prompt: `Below is a list of tools and a description of the task I want to complete. Please return a list of tool names that you think are relevant to the task.
       Include any tools that you think might be useful for answering follow-up questions, taking into account the conversation history.
@@ -318,103 +328,110 @@ function ChatInner({
     ];
 
     appendDisplayOnlyMessage(
-      `**Updated tool list:** *${(
-        result.object as { tools: string[] }
-      ).tools.join(", ")}*`,
+      `**Updated tool list:** *${(result.object as { tools: string[] }).tools.join(", ")}*`,
     );
   };
 
-  const updateSelectedToolsFromMessages = async (messages: Message[]) => {
-    const task = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
+  const updateSelectedToolsFromMessages = async (messages: UIMessage[]) => {
+    const task = messages
+      .map(
+        (m) =>
+          `${m.role}: ${m.parts.map((p) => (p.type === "text" ? p.text : "")).join("")}`,
+      )
+      .join("\n");
     await updateSelectedTools(task);
   };
 
-  const openaiFetch: typeof globalThis.fetch = async (_, init) => {
-    const messages = JSON.parse(init?.body as string).messages;
+  // Create a ref to access latest allTools without recreating transport
+  const allToolsRef = useRef<Toolset>(allTools);
+  useEffect(() => {
+    allToolsRef.current = allTools;
+  }, [allTools]);
 
-    let tools = allTools;
-
-    // Check if there are mentioned tools in the message (only if feature flag is enabled)
-    const lastUserMessage = messages
-      .filter((m: Message) => m.role === "user")
-      .pop();
-    let hasMentions = false;
-
-    if (isToolTaggingEnabled && lastUserMessage && lastUserMessage.content) {
-      const mentionedIds = parseMentionedTools(
-        lastUserMessage.content,
-        mentionTools,
-      );
-      if (mentionedIds.length > 0) {
-        hasMentions = true;
-        // Filter tools to only include mentioned ones
-        tools = Object.fromEntries(
-          Object.entries(allTools).filter(([_, tool]) => {
-            const toolWithId = tool as Tool & { id?: string };
-            return mentionedIds.includes(toolWithId.id || _);
-          }),
-        );
-
-        // Remove @ mentions from the message before sending to the model
-        const cleanedContent = lastUserMessage.content
-          .replace(/@\w+\s*/g, "")
-          .trim();
-        lastUserMessage.content = cleanedContent;
-      }
-    }
-
-    // Only use dynamic toolset if no mentions were found
-    if (!hasMentions) {
-      // On the first message, get the initial set of tools if we're using a dynamic toolset
-      if (dynamicToolset && selectedTools.current.length === 0) {
-        await updateSelectedToolsFromMessages(messages);
-      }
-
-      if (dynamicToolset) {
-        tools = Object.fromEntries(
-          Object.entries(allTools).filter(([tool]) =>
-            selectedTools.current.includes(tool),
-          ),
-        );
-      }
-    }
-
-    let systemPrompt = `You are a helpful assistant that can answer questions and help with tasks.
-        When using tools, ensure that the arguments match the provided schema. Note that the schema may update as the conversation progresses.
-        The current date is ${new Date().toISOString()}`;
-
-    if (hasMentions) {
-      const toolNames = Object.keys(tools).join(", ");
-      systemPrompt += `
-        The user has specifically selected the following tools for this request: ${toolNames}.
-        Please use only these tools to fulfill the request.`;
-    } else if (dynamicToolset) {
-      systemPrompt += `
-        If you are unable to fulfill the user's request with the current set of tools, use the refresh_tools tool to get a new set of tools before saying you can't do it.`;
-    }
-
-    const result = streamText({
-      model: openrouterChat,
-      messages,
-      tools: Object.fromEntries(
-        Object.entries(tools).map(([name, tool]) => [
-          name,
-          {
-            description: tool.description,
-            parameters: tool.parameters,
-            // Remove execute function - we handle execution in onToolCall
-          },
-        ]),
-      ),
+  // Create transport with dynamic configuration
+  const transport = useMemo(() => {
+    return new CustomChatTransport({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      model: openrouterChat as any,
       temperature,
-      system: systemPrompt,
-      experimental_transform: smoothStream({
-        delayInMs: 15, // Looks a little smoother
-      }),
+      getTools: async (messages: UIMessage[]) => {
+        // Use ref to get the latest allTools
+        const currentAllTools = allToolsRef.current;
+        console.log("getTools: allTools count:", Object.keys(currentAllTools).length);
+        console.log("getTools: dynamicToolset:", dynamicToolset);
+
+        let tools = currentAllTools;
+        let hasMentions = false;
+
+        // Check for tool mentions in the last user message
+        const lastUserMessage = messages.filter((m) => m.role === "user").pop();
+        if (isToolTaggingEnabled && lastUserMessage) {
+          const lastUserText = lastUserMessage.parts
+            .map((p) => (p.type === "text" ? p.text : ""))
+            .join("");
+          if (lastUserText) {
+            const mentionedIds = parseMentionedTools(lastUserText, mentionTools);
+            if (mentionedIds.length > 0) {
+              hasMentions = true;
+              tools = Object.fromEntries(
+                Object.entries(currentAllTools).filter(([_, tool]) => {
+                  const toolWithId = tool as CoreTool & { id?: string };
+                  return mentionedIds.includes(toolWithId.id || _);
+                }),
+              );
+              console.log("getTools: filtered to mentioned tools:", Object.keys(tools));
+            }
+          }
+        }
+
+        // Handle dynamic toolset if no mentions
+        if (!hasMentions && dynamicToolset) {
+          console.log("getTools: using dynamic toolset, selectedTools:", selectedTools.current);
+          if (selectedTools.current.length === 0) {
+            await updateSelectedToolsFromMessages(messages);
+            console.log("getTools: after updateSelectedToolsFromMessages, selectedTools:", selectedTools.current);
+          }
+          tools = Object.fromEntries(
+            Object.entries(currentAllTools).filter(([tool]) =>
+              selectedTools.current.includes(tool),
+            ),
+          );
+          console.log("getTools: filtered to dynamic tools:", Object.keys(tools));
+        }
+
+        console.log("getTools: final tools count:", Object.keys(tools).length);
+
+        // Build system prompt
+        let systemPrompt = `You are a helpful assistant that can answer questions and help with tasks.
+          When using tools, ensure that the arguments match the provided schema. Note that the schema may update as the conversation progresses.
+          The current date is ${new Date().toISOString()}`;
+
+        if (hasMentions) {
+          const toolNames = Object.keys(tools).join(", ");
+          systemPrompt += `
+          The user has specifically selected the following tools for this request: ${toolNames}.
+          Please use only these tools to fulfill the request.`;
+        } else if (dynamicToolset) {
+          systemPrompt += `
+          If you are unable to fulfill the user's request with the current set of tools, use the refresh_tools tool to get a new set of tools before saying you can't do it.`;
+        }
+
+        return {
+          tools: Object.fromEntries(
+            Object.entries(tools).map(([name, tool]) => [
+              name,
+              {
+                description: tool.description,
+                inputSchema: tool.inputSchema,
+              },
+            ]),
+          ),
+          systemPrompt,
+        };
+      },
       onError: (event: { error: unknown }) => {
         let displayMessage = extractStreamError(event);
         if (displayMessage) {
-          // some manipulation to promote summarization
           if (displayMessage.includes("maximum context length")) {
             const cutoffPhrase = "Please reduce the length of either one";
             const cutoffIndex = displayMessage.indexOf(cutoffPhrase);
@@ -424,68 +441,33 @@ function ChatInner({
             displayMessage +=
               " Please start a new chat history and consider enabling *Auto-Summarize* for your tool or revise your prompt.";
           }
-
-          // Improve the error message for the case where the model is out of credits
           if (displayMessage.includes("requires more credits")) {
             displayMessage =
               "You have reached your monthly credit limit. Reach out to the Speakeasy team to upgrade your account.";
           }
-
           appendDisplayOnlyMessage(`**Model Error:** *${displayMessage}*`);
         }
       },
     });
+  }, [openrouterChat, temperature, allTools, dynamicToolset, isToolTaggingEnabled, mentionTools]);
 
-    return result.toDataStreamResponse();
-  };
-
-  const initialMessagesInner: Message[] =
+  const initialMessagesInner: UIMessage[] =
     chatHistory.length > 0 ? chatHistory : (initialMessages ?? []);
-
-  const toolCallApproval = useToolCallApproval({
-    // Disclaimer: this is a bit weird, because the tool's execute function actually seems to be called by the useChat hook
-    executeToolCall: async (toolCall) => {
-      if (toolCall.toolName === updateToolsTool.name) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return updateToolsTool.execute!(toolCall.args, {} as any);
-      }
-
-      const tool = allTools[toolCall.toolName];
-      if (!tool) {
-        throw new Error(`Tool ${toolCall.toolName} not found`);
-      }
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return await tool.execute!(toolCall.args, {} as any);
-    },
-    requiresApproval: (toolCall) => {
-      const tool = allTools[toolCall.toolName];
-      if (tool?.method === "GET") {
-        return false;
-      }
-      return toolCall.toolName !== updateToolsTool.name;
-    },
-  });
-
-  const validateArgs = (_toolCall: ToolCall<string, unknown>) => {
-    // This is stubbed out at this time because we validate args on the backend
-    return null;
-  };
 
   const {
     messages: chatMessages,
     status,
-    append,
+    sendMessage,
+    addToolResult,
   } = useChat({
     id: chat.id,
-    fetch: openaiFetch,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    transport: transport as any,
     onError: (error) => {
       console.error("Chat error:", error.message, error.stack);
-      // don't write display message for non useful obscured onChat error. StreamText will handle it if it's a model error.
       if (error.message.trim() !== "An error occurred.") {
         appendDisplayOnlyMessage(`**Error:** *${error.message}*`);
       }
-
       telemetry.capture("chat_event", {
         action: "chat_error",
         error: error.message,
@@ -493,24 +475,62 @@ function ChatInner({
     },
     maxSteps: 5,
     initialMessages: initialMessagesInner,
-    onToolCall: (toolCall) => {
-      try {
-        const validationError = validateArgs(toolCall.toolCall);
-        if (validationError) {
-          appendDisplayOnlyMessage(`**Warning:** *${validationError}*`);
-        }
-      } catch (e) {
-        appendDisplayOnlyMessage(`**Warning:** *${e}*`);
+    onToolCall: async ({ toolCall }) => {
+      console.log("onToolCall received:", toolCall);
+      console.log("onToolCall keys:", Object.keys(toolCall));
+      console.log("onToolCall stringified:", JSON.stringify(toolCall, null, 2));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolName = (toolCall as any).toolName;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolArgs = (toolCall as any).args;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const toolCallId = (toolCall as any).toolCallId;
+
+      console.log("Executing tool:", toolName, "with args:", toolArgs);
+
+      const tool = allToolsRef.current[toolName];
+
+      if (!tool) {
+        console.error("Tool not found:", toolName, "Available tools:", Object.keys(allToolsRef.current));
+        appendDisplayOnlyMessage(`**Error:** *Tool ${toolName} not found*`);
+        return;
       }
 
-      return toolCallApproval.toolCallFn(toolCall);
+      const requiresApproval =
+        tool?.method !== "GET" && toolName !== updateToolsTool.name;
+
+      try {
+        const result = await executeTool(toolName, toolArgs);
+        console.log("Tool result:", result);
+
+        addToolResult({
+          toolCallId,
+          output: result,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any);
+      } catch (error) {
+        console.error("Tool execution error:", error);
+        appendDisplayOnlyMessage(`**Tool Error:** *${error instanceof Error ? error.message : "Unknown error"}*`);
+      }
     },
   });
+
+  const executeTool = async (toolName: string, input: unknown) => {
+    if (toolName === updateToolsTool.name) {
+      return updateToolsTool.execute!(input);
+    }
+
+    const tool = allTools[toolName];
+    if (!tool) {
+      throw new Error(`Tool ${toolName} not found`);
+    }
+
+    return await tool.execute!(input);
+  };
 
   const handleSend = useCallback(
     async (msg: string) => {
       const userMessages = chatMessages.filter((m) => m.role === "user");
-      // Capture chat_started event when the user sends their first message
       if (userMessages.length === 0) {
         telemetry.capture("chat_event", {
           action: "chat_started",
@@ -521,7 +541,6 @@ function ChatInner({
         localStorage.setItem(onboardingStepStorageKeys.test, "true");
       }
 
-      // Track if tools were mentioned (only if feature flag is enabled)
       if (isToolTaggingEnabled) {
         const mentionedIds = parseMentionedTools(msg, mentionTools);
         if (mentionedIds.length > 0) {
@@ -532,49 +551,30 @@ function ChatInner({
         }
       }
 
-      await append({
-        role: "user",
-        content: msg,
-      });
-
-      // Clear the input text after sending
+      sendMessage({ text: msg });
       setInputText("");
     },
-    [append, chatMessages, telemetry, model, mentionTools],
+    [chatMessages, telemetry, model, mentionTools, sendMessage],
   );
 
-  // This needs to be set so that the chat provider can append messages
   useEffect(() => {
-    chat.setAppendMessage(append);
-  }, []);
+    chat.setAppendMessage((message) => {
+      sendMessage({ text: message.content as string });
+    });
+  }, [sendMessage]);
 
   useEffect(() => {
     setMessages(chatMessages);
   }, [chatMessages]);
 
-  // If chatId changes, clear the display only messages
   useEffect(() => {
     setDisplayOnlyMessages([]);
   }, [chat.id]);
 
   const messagesToDisplay = [...displayOnlyMessages, ...chatMessages];
-  messagesToDisplay.sort((a, b) => {
-    if (a.createdAt && b.createdAt) {
-      if (a.createdAt.getTime() === b.createdAt.getTime()) {
-        return a.role === "system" ? -1 : 1;
-      }
-      return a.createdAt.getTime() - b.createdAt.getTime();
-    }
-    return 0;
-  });
 
-  // Enable message history navigation with up/down arrow keys
   const { isNavigating, historyIndex, totalMessages } =
     useMessageHistoryNavigation(chatMessages);
-
-  // TODO: fix this
-  /* eslint-disable  @typescript-eslint/no-explicit-any */
-  const m = messagesToDisplay as any;
 
   const temperatureSlider = (
     <div className="flex items-center gap-3 px-2">
@@ -594,39 +594,47 @@ function ChatInner({
     </div>
   );
 
+  const modelSelector = (
+    <Combobox
+      items={availableModels.map((m) => ({ label: m.label, value: m.value }))}
+      onSelectionChange={(item) => setModel(item.value)}
+      selected={model}
+      variant="ghost"
+      className="w-fit"
+    >
+      <Stack direction="horizontal" gap={2} align="center">
+        <Type variant="small" className="font-medium">
+          {availableModels.find((m) => m.value === model)?.label}
+        </Type>
+      </Stack>
+    </Combobox>
+  );
+
   const chatContent = (
-    <div className="relative h-full flex items-center justify-center">
-      <AIChatContainer
-        messages={m}
+    <div className="relative h-full flex flex-col">
+      <div className="flex items-center gap-2 border-b px-4 py-2">
+        {modelSelector}
+        {temperatureSlider}
+      </div>
+      <ChatMessages
+        messages={messagesToDisplay}
         isLoading={status === "streaming" || isChatHistoryLoading}
-        onSendMessage={handleSend}
-        className={"pb-4 w-3xl"} // Set width explicitly or else it will shrink to the size of the messages
-        toolCallApproval={toolCallApproval}
+        className="flex-1"
+        renderMessage={(message) => (
+          <CustomMessageRenderer
+            message={message}
+            project={project}
+            allTools={allTools}
+          />
+        )}
+      />
+      <ChatInput
+        onSend={handleSend}
+        disabled={status === "streaming"}
         initialInput={initialPrompt || undefined}
-        components={{
-          composer: {
-            additionalActions: (
-              <div className="flex items-center gap-2">
-                {temperatureSlider}
-                {additionalActions}
-              </div>
-            ),
-            modelSelector: "text-foreground",
-          },
-          message: {
-            avatar: {
-              user: () => (
-                <ProjectAvatar project={project} className="h-6 w-6" />
-              ),
-            },
-            toolCall: toolCallComponents(allTools, telemetry),
-          },
-        }}
-        modelSelector={{
-          model,
-          onModelChange: setModel,
-          availableModels,
-        }}
+        additionalActions={
+          <div className="flex items-center gap-2">{additionalActions}</div>
+        }
       />
       <MessageHistoryIndicator
         isNavigating={isNavigating}
@@ -649,127 +657,98 @@ function ChatInner({
   );
 }
 
-const toolCallComponents = (tools: Toolset, telemetry: Telemetry) => {
-  const JsonDisplay = ({ json }: { json: string }) => {
-    let pretty = json;
-    // Particularly when loading chat history from the database, the JSON formatting needs to be restored
-    if (json.startsWith('"') && json.endsWith('"')) {
-      pretty = json.slice(1, -1);
-      pretty = pretty.replace(/\\"/g, '"');
-      pretty = pretty.replace(/\\n/g, "\n");
-    }
-    try {
-      pretty = JSON.stringify(JSON.parse(pretty), null, 2);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    } catch (e) {
-      // If its not JSON, that's ok, we'll just return the string
-    }
+function CustomMessageRenderer({
+  message,
+  project,
+  allTools,
+}: {
+  message: UIMessage;
+  project: { slug: string; id: string };
+  allTools: Toolset;
+}) {
+  const isUser = message.role === "user";
 
-    return (
-      <pre className="typography-body-xs max-h-48 overflow-auto rounded bg-neutral-900 p-2 break-all whitespace-pre-wrap text-neutral-300">
-        {pretty}
-      </pre>
-    );
-  };
-
-  return {
-    toolName: ({
-      toolName,
-      result,
-      args,
-    }: {
-      toolName: string;
-      result?: unknown;
-      args?: Record<string, unknown>;
-    }) => {
-      const hasSummary = JSON.stringify(args)?.includes("gram-request-summary");
-      const validationError =
-        typeof result === "string" &&
-        result.includes("Schema validation error");
-
-      const isTooLong =
-        typeof result === "string" && result.includes("Response is too long");
-
-      return (
-        <Stack
-          direction="horizontal"
-          gap={2}
-          align="center"
-          className="mr-auto"
-        >
-          <Type
-            variant="small"
-            className={cn(
-              "font-medium",
-              validationError && "line-through text-muted-foreground",
-            )}
-          >
-            {toolName}
-          </Type>
-          {validationError && (
-            <Type variant="small" muted>
-              (invalid args)
-            </Type>
-          )}
-          {hasSummary && <AutoSummarizeBadge />}
-          {isTooLong && (
-            <SimpleTooltip tooltip="Response is too long and has been truncated to avoid bricking your playground's context window. Consider using reponse filtering (click to learn more).">
-              <Link
-                to="https://docs.getgram.ai/concepts/openapi#response-filtering"
-                target="_blank"
-                onClick={() => {
-                  telemetry.capture("feature_requested", {
-                    action: "response_filtering",
-                  });
-                }}
-              >
-                <Type variant="small" muted>
-                  (truncated)
-                </Type>
-              </Link>
-            </SimpleTooltip>
-          )}
-        </Stack>
-      );
-    },
-    input: (props: { toolName: string; args: string }) => {
-      const tool = tools[props.toolName];
-      return (
-        <Stack gap={2}>
-          {tool?.method && tool?.path && (
-            <HttpRoute method={tool.method} path={tool.path} />
-          )}
-          <JsonDisplay json={props.args} />
-        </Stack>
-      );
-    },
-    result: (props: {
-      toolName: string;
-      result: string;
-      args?: Record<string, unknown>;
-    }) => {
-      const tool = tools[props.toolName];
-      const hasSummary = JSON.stringify(props.args)?.includes(
-        "gram-request-summary",
-      );
-
-      return (
-        <Stack gap={2} className="mt-4">
-          <Type variant="small" className="font-medium text-muted-foreground">
-            {tool?.method ? "Response Body" : "Result"}
-            {hasSummary && (
-              <span className="text-muted-foreground/50">
-                {" "}
-                (auto-summarized)
-              </span>
-            )}
-          </Type>
-          <JsonDisplay json={props.result} />
-        </Stack>
-      );
-    },
-  };
-};
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-2 rounded-lg p-4",
+        isUser
+          ? "ml-auto max-w-[80%] bg-primary text-primary-foreground"
+          : "mr-auto max-w-[80%] bg-muted",
+      )}
+    >
+      <div className="flex items-center gap-2">
+        {isUser ? (
+          <ProjectAvatar project={project} className="h-6 w-6" />
+        ) : (
+          <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+            <span className="text-xs">AI</span>
+          </div>
+        )}
+        <Type variant="small" className="font-medium opacity-70">
+          {isUser ? "You" : "Assistant"}
+        </Type>
+      </div>
+      <div className="whitespace-pre-wrap">
+        {message.parts.map((part, index) => {
+          if (part.type === "text") {
+            return <span key={index}>{part.text}</span>;
+          }
+          if (part.type === "tool-call" || part.type === "tool-result") {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const toolPart = part as any;
+            if (part.type === "tool-call" && toolPart.toolName) {
+              const tool = allTools[toolPart.toolName];
+              return (
+                <div key={index} className="my-2 rounded border p-2 bg-blue-50/50 dark:bg-blue-950/20">
+                  <Stack direction="horizontal" gap={2} align="center">
+                    <Type variant="small" className="font-medium">
+                      🔧 {toolPart.toolName}
+                    </Type>
+                    {toolPart.state === "input-streaming" && (
+                      <span className="text-xs text-muted-foreground">Preparing...</span>
+                    )}
+                  </Stack>
+                  {tool?.method && tool?.path && (
+                    <HttpRoute method={tool.method} path={tool.path} />
+                  )}
+                  {toolPart.args && (
+                    <details className="mt-2">
+                      <summary className="text-xs font-medium cursor-pointer">Input</summary>
+                      <pre className="mt-1 text-xs opacity-70 overflow-auto max-h-40">
+                        {JSON.stringify(toolPart.args, null, 2)}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              );
+            }
+            if (part.type === "tool-result" && toolPart.toolName) {
+              return (
+                <div key={index} className="my-2 rounded border p-2 bg-green-50/50 dark:bg-green-950/20">
+                  <Type variant="small" className="font-medium text-green-700 dark:text-green-300">
+                    ✓ {toolPart.toolName} result
+                  </Type>
+                  {toolPart.result && (
+                    <details className="mt-2" open>
+                      <summary className="text-xs font-medium cursor-pointer">Output</summary>
+                      <pre className="mt-1 text-xs opacity-70 overflow-auto max-h-40">
+                        {typeof toolPart.result === "string"
+                          ? toolPart.result
+                          : JSON.stringify(toolPart.result, null, 2)}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              );
+            }
+          }
+          return null;
+        })}
+      </div>
+    </div>
+  );
+}
 
 const extractStreamError = (event: { error: unknown }) => {
   let message: string | undefined;
@@ -788,16 +767,13 @@ const extractStreamError = (event: { error: unknown }) => {
           parsedBody !== null &&
           parsedBody.error
         ) {
-          // Try to extract the raw error message which contains the actual error
           if (parsedBody.error.metadata?.raw) {
             try {
               const rawError = JSON.parse(parsedBody.error.metadata.raw);
               if (rawError.error?.message) {
                 message = rawError.error.message;
               }
-              // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            } catch (e) {
-              // If raw parsing fails, fall back to the main error message
+            } catch (_e) {
               if (typeof parsedBody.error.message === "string") {
                 message = parsedBody.error.message;
               }
