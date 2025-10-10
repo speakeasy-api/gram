@@ -69,20 +69,6 @@ func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (re
 	}
 	pagination.SetDefaults()
 
-	//nolint:sloglint // debug logging for pagination
-	s.logger.InfoContext(ctx, "request payload",
-		attr.SlogProjectID(payload.ProjectID),
-		slog.Int("pagination_per_page", pagination.PerPage),
-		slog.String("pagination_direction", string(pagination.Direction)),
-		slog.String("pagination_sort", pagination.Sort),
-		slog.String("pagination_cursor", pagination.Cursor()),
-		slog.String("pagination_prev_cursor", pagination.PrevCursor),
-		slog.String("pagination_next_cursor", pagination.NextCursor),
-		slog.Int("pagination_limit", pagination.Limit()),
-		slog.Time("ts_start", tsStart),
-		slog.Time("ts_end", tsEnd),
-		slog.Time("cursor", cursor))
-
 	// Query logs from ClickHouse
 	result, err := s.tcm.List(ctx, payload.ProjectID, tsStart, tsEnd, cursor, pagination)
 	if err != nil {

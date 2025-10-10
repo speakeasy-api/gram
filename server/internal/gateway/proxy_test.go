@@ -45,22 +45,20 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func newClickhouseClient(t *testing.T) *toolmetrics.ClickhouseClient {
+func newClickhouseClient(t *testing.T, orgId string) *toolmetrics.ClickhouseClient {
 	t.Helper()
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	return &toolmetrics.ClickhouseClient{
-		Conn:   chConn,
-		Logger: testenv.NewLogger(t),
-	}
-}
-
-func newFeatureProvider(projectID string) feature.Provider {
 	fp := &feature.InMemory{}
-	fp.SetFlag(feature.FlagClickhouseToolMetrics, projectID, true)
-	return fp
+	fp.SetFlag(feature.FlagClickhouseToolMetrics, orgId, true)
+
+	return &toolmetrics.ClickhouseClient{
+		Conn:     chConn,
+		Features: fp,
+		Logger:   testenv.NewLogger(t),
+	}
 }
 
 func TestToolProxy_Do_PathParams(t *testing.T) {
@@ -210,7 +208,6 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Setup test dependencies
 			ctx := context.Background()
-			chClient := newClickhouseClient(t)
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
@@ -237,6 +234,8 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				RequestContentType: NullString{Value: "application/json", Valid: true},
 				ResponseFilter:     nil,
 			}
+
+			chClient := newClickhouseClient(t, tool.OrganizationID)
 
 			// Add path parameter configuration for the parameter in the test
 			for paramName := range tt.pathParam {
@@ -271,7 +270,6 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				chClient,
-				newFeatureProvider(tool.ProjectID),
 			)
 
 			// Create response recorder
@@ -353,7 +351,6 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 
 			// Setup test dependencies
 			ctx := context.Background()
-			chClient := newClickhouseClient(t)
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
@@ -380,6 +377,8 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				RequestContentType: NullString{Value: "application/json", Valid: true},
 				ResponseFilter:     nil,
 			}
+
+			chClient := newClickhouseClient(t, tool.OrganizationID)
 
 			// Add header parameter configuration for the parameter in the test
 			for paramName := range tt.headerParam {
@@ -414,7 +413,6 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				chClient,
-				newFeatureProvider(tool.ProjectID),
 			)
 
 			// Create response recorder
@@ -727,7 +725,6 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 
 			// Setup test dependencies
 			ctx := context.Background()
-			chClient := newClickhouseClient(t)
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
@@ -755,6 +752,8 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				ResponseFilter:     nil,
 			}
 
+			chClient := newClickhouseClient(t, tool.OrganizationID)
+
 			// Create request body with query parameters
 			requestBody := ToolCallBody{
 				PathParameters:       nil,
@@ -778,7 +777,6 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				chClient,
-				newFeatureProvider(tool.ProjectID),
 			)
 
 			// Create response recorder
@@ -950,7 +948,6 @@ func TestToolProxy_Do_Body(t *testing.T) {
 
 			// Setup test dependencies
 			ctx := context.Background()
-			chClient := newClickhouseClient(t)
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
@@ -985,6 +982,8 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				ResponseFilter:     nil,
 			}
 
+			chClient := newClickhouseClient(t, tool.OrganizationID)
+
 			// Marshal the test request body
 			bodyJSON, err := json.Marshal(tt.requestBody)
 			require.NoError(t, err)
@@ -1012,7 +1011,6 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				chClient,
-				newFeatureProvider(tool.ProjectID),
 			)
 
 			// Create response recorder
@@ -1076,7 +1074,6 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	meterProvider := testenv.NewMeterProvider(t)
-	chClient := newClickhouseClient(t)
 	policy, err := guardian.NewUnsafePolicy([]string{})
 	require.NoError(t, err)
 
@@ -1092,6 +1089,8 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 		InputSchema:    []byte(`{"type": "object"}`),
 		Variables:      []byte(`{}`),
 	}
+
+	chClient := newClickhouseClient(t, functionTool.OrganizationID)
 
 	// Create request body
 	requestBody := ToolCallBody{
@@ -1116,7 +1115,6 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 		nil,
 		policy,
 		chClient,
-		newFeatureProvider(functionTool.ProjectID),
 	)
 
 	// Create response recorder

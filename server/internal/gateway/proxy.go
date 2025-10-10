@@ -112,7 +112,6 @@ type ToolProxy struct {
 	cache       cache.Cache
 	policy      *guardian.Policy
 	toolMetrics tm.ToolMetricsClient
-	features    feature.Provider
 }
 
 func NewToolProxy(
@@ -123,7 +122,6 @@ func NewToolProxy(
 	cache cache.Cache,
 	policy *guardian.Policy,
 	toolMetrics tm.ToolMetricsClient,
-	features feature.Provider,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
@@ -136,7 +134,6 @@ func NewToolProxy(
 		cache:       cache,
 		policy:      policy,
 		toolMetrics: toolMetrics,
-		features:    features,
 	}
 }
 
@@ -387,7 +384,7 @@ func (itp *ToolProxy) Do(
 
 	req.Header.Set("X-Gram-Proxy", "1")
 
-	return reverseProxyRequest(ctx, logger, itp.tracer, tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode, itp.toolMetrics, itp.features)
+	return reverseProxyRequest(ctx, logger, itp.tracer, tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode, itp.toolMetrics)
 }
 
 type retryConfig struct {
@@ -455,7 +452,6 @@ func reverseProxyRequest(ctx context.Context,
 	policy *guardian.Policy,
 	responseStatusCodeCapture *int,
 	tcm tm.ToolMetricsClient,
-	featureFlagProvider feature.Provider,
 ) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
@@ -471,8 +467,8 @@ func reverseProxyRequest(ctx context.Context,
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 
-	f := conv.Default[feature.Provider](featureFlagProvider, &feature.InMemory{})
-	isEnabled, err := f.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, tool.ProjectID)
+	f := conv.Default[feature.Provider](tcm.Feature(), &feature.InMemory{})
+	isEnabled, err := f.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, tool.OrganizationID)
 	if err != nil {
 		logger.ErrorContext(
 			ctx, "error checking if clickhouse tool metrics is enabled",

@@ -9,6 +9,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -57,6 +58,8 @@ type ToolMetricsClient interface {
 	List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) (*ListResult, error)
 	// Log tool call request/response
 	Log(context.Context, ToolHTTPRequest) error
+	// Feature feature flag provider
+	Feature() feature.Provider
 }
 
 type PaginationMetadata struct {
@@ -71,6 +74,10 @@ type ListResult struct {
 }
 
 type StubToolMetricsClient struct{}
+
+func (n *StubToolMetricsClient) Feature() feature.Provider {
+	return &feature.InMemory{}
+}
 
 func (n *StubToolMetricsClient) List(_ context.Context, _ string, _ time.Time, _ time.Time, _ time.Time, p Pageable) (*ListResult, error) {
 	return &ListResult{
@@ -92,8 +99,13 @@ func (n *StubToolMetricsClient) Close() error {
 }
 
 type ClickhouseClient struct {
-	Conn   clickhouse.Conn
-	Logger *slog.Logger
+	Conn     clickhouse.Conn
+	Logger   *slog.Logger
+	Features feature.Provider
+}
+
+func (c *ClickhouseClient) Feature() feature.Provider {
+	return c.Features
 }
 
 func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) (*ListResult, error) {

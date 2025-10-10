@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	logsvc "github.com/speakeasy-api/gram/server/internal/logs"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
@@ -73,8 +74,9 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	chClient := &toolmetrics.ClickhouseClient{
-		Conn:   chConn,
-		Logger: logger,
+		Conn:     chConn,
+		Logger:   logger,
+		Features: &feature.InMemory{},
 	}
 
 	svc := logsvc.NewService(logger, conn, sessionManager, chClient)

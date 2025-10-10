@@ -387,12 +387,6 @@ func newStartCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c)
-			if err != nil {
-				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
-			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
-
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -438,6 +432,12 @@ func newStartCommand() *cli.Command {
 			if c.String("environment") == "local" {
 				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
+
+			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c, features)
+			if err != nil {
+				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
 			if err != nil {
@@ -533,7 +533,7 @@ func newStartCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, tcm, features)
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, tcm)
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
@@ -561,7 +561,7 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger, db, sessionManager))
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env)
 			oauth.Attach(mux, oauthService)
-			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, billingTracker, tcm, features))
+			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, billingTracker, tcm))
 			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL)
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, oauthService, billingTracker, billingRepo, tcm), mcpMetadataService)

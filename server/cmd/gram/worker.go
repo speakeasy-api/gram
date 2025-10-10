@@ -285,12 +285,6 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c)
-			if err != nil {
-				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
-			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
-
 			db, err := newDBClient(ctx, logger, meterProvider, c.String("database-url"), dbClientOptions{
 				enableUnsafeLogging: c.Bool("unsafe-db-log"),
 			})
@@ -339,6 +333,12 @@ func newWorkerCommand() *cli.Command {
 				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
+			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c, features)
+			if err != nil {
+				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
 			{
 				controlServer := control.Server{
 					Address:          c.String("control-address"),
@@ -375,7 +375,7 @@ func newWorkerCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, tcm, features)
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, tcm)
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
 			if err != nil {

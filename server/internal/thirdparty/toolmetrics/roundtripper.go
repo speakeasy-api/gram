@@ -238,6 +238,9 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			// Get final request body size now that request body has been read and closed
 			var requestBodyBytes = conv.PtrValOr(requestBodyBytesPtr, uint64(0))
 
+			// We are not logging the request or response bodies for a number of reasons:
+			// - They may be too large and will inflate our ClickHouse table, making it slower to query and hard to estimate the size
+			// - They might contain sensitive information such as PII or API keys, then we'd have to redact them
 			httpRequest := ToolHTTPRequest{
 				Ts:                time.Now().UTC(),
 				OrganizationID:    tool.OrganizationID,
