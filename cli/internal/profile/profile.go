@@ -3,6 +3,7 @@
 package profile
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -77,4 +78,25 @@ func Load(path string) (*Profile, error) {
 	}
 
 	return profile, nil
+}
+
+type contextKey string
+
+const profileContextKey contextKey = "profile"
+
+// FromContext retrieves the loaded profile from the context. Returns nil if no
+// profile was loaded.
+func FromContext(ctx context.Context) *Profile {
+	if prof, ok := ctx.Value(profileContextKey).(*Profile); ok {
+		return prof
+	}
+	return nil
+}
+
+// WithProfile adds the incoming profile to ctx. No-ops if prof is nil.
+func WithProfile(ctx context.Context, prof *Profile) context.Context {
+	if prof != nil {
+		return context.WithValue(ctx, profileContextKey, prof)
+	}
+	return ctx
 }

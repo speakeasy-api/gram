@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
+	"github.com/speakeasy-api/gram/cli/internal/profile"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/urfave/cli/v2"
@@ -40,7 +41,7 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 			defer cancel()
 
 			logger := logging.PullLogger(ctx)
-			prof := ProfileFromContext(ctx)
+			prof := profile.FromContext(ctx)
 			deploymentID := c.String("id")
 			jsonOutput := c.Bool("json")
 

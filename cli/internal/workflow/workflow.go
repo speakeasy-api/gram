@@ -126,14 +126,14 @@ func (s *Workflow) UploadAssets(
 		}
 
 		switch source.Type {
-		case SourceTypeOpenAPIV3:
+		case deploy.SourceTypeOpenAPIV3:
 			form := &deployments.AddOpenAPIv3DeploymentAssetForm{
 				AssetID: asset.AssetID,
 				Name:    asset.Name,
 				Slug:    asset.Slug,
 			}
 			newOpenAPIAssets = append(newOpenAPIAssets, form)
-		case SourceTypeFunction:
+		case deploy.SourceTypeFunction:
 			form := &deployments.AddFunctionsForm{
 				AssetID: asset.AssetID,
 				Name:    asset.Name,
