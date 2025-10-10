@@ -183,7 +183,7 @@ type ExternalOauthServerMetadatum struct {
 type FunctionToolDefinition struct {
 	ID           uuid.UUID
 	ToolUrn      urn.Tool
-	ProjectID    uuid.NullUUID
+	ProjectID    uuid.UUID
 	DeploymentID uuid.UUID
 	FunctionID   uuid.UUID
 	Runtime      string
@@ -464,7 +464,6 @@ type Toolset struct {
 	Slug                   string
 	Description            pgtype.Text
 	DefaultEnvironmentSlug pgtype.Text
-	HttpToolNames          []string
 	McpSlug                pgtype.Text
 	McpIsPublic            bool
 	McpEnabled             bool

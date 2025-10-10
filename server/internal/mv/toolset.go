@@ -68,7 +68,6 @@ func DescribeToolsetEntry(
 	}
 
 	// Get tool URNs from latest toolset version
-	// TODO: use this to power everything below rather than the http_tool_names field
 	var toolUrns []string
 	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
 	if err == nil {
@@ -268,7 +267,6 @@ func DescribeToolset(
 	}
 
 	// Get tool URNs from latest toolset version
-	// TODO: use this to power everything below rather than the http_tool_names field
 	var toolUrns []string
 	var toolsetVersion int64
 	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
@@ -307,7 +305,7 @@ func DescribeToolset(
 
 		promptTemplates = append(promptTemplates, &types.PromptTemplate{
 			ID:            pt.ID.String(),
-			ToolUrn:       pt.ToolUrn.String,
+			ToolUrn:       pt.ToolUrn,
 			HistoryID:     pt.HistoryID.String(),
 			PredecessorID: conv.FromNullableUUID(pt.PredecessorID),
 			Name:          pt.Name,
@@ -582,14 +580,10 @@ func readToolsetTools(
 		}
 
 		for _, def := range functionDefinitions {
-			project := ""
-			if projectID := conv.FromNullableUUID(def.FunctionToolDefinition.ProjectID); projectID != nil {
-				project = *projectID
-			}
 			functionTool := &types.FunctionToolDefinition{
 				ID:            def.FunctionToolDefinition.ID.String(),
 				ToolUrn:       def.FunctionToolDefinition.ToolUrn.String(),
-				ProjectID:     project,
+				ProjectID:     def.FunctionToolDefinition.ProjectID.String(),
 				DeploymentID:  def.FunctionToolDefinition.DeploymentID.String(),
 				FunctionID:    def.FunctionToolDefinition.FunctionID.String(),
 				Runtime:       def.FunctionToolDefinition.Runtime,
