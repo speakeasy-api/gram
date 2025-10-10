@@ -15,6 +15,7 @@ import (
 )
 
 func TestHandleGetServer_ContentNegotiation(t *testing.T) {
+	t.Parallel()
 	ctx, testInstance := newTestMCPService(t)
 
 	// Create metadata service using the same dependencies
@@ -58,6 +59,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create a test request
 			req := httptest.NewRequest("GET", "/mcp/test-slug", nil)
 			req = req.WithContext(ctx)
@@ -79,7 +81,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 
 			if tt.shouldReturnJSON {
 				// For JSON responses, we expect the handler to write the response and return nil (success)
-				assert.NoError(t, err, "Expected no error for successful JSON response")
+				require.NoError(t, err, "Expected no error for successful JSON response")
 				assert.Equal(t, tt.expectedStatusCode, rr.Code)
 				assert.Equal(t, tt.expectedContentType, rr.Header().Get("Content-Type"))
 

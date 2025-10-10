@@ -163,7 +163,10 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	// Check if this is a browser request (HTML Accept header)
 	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
 		if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
-			return metadataService.ServeInstallPage(w, r)
+			if err := metadataService.ServeInstallPage(w, r); err != nil {
+				return fmt.Errorf("failed to serve install page: %w", err)
+			}
+			return nil
 		}
 	}
 
@@ -176,7 +179,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	if err != nil {
 		s.logger.ErrorContext(r.Context(), "failed to marshal MCP 405 response", attr.SlogError(err))
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return err
+		return fmt.Errorf("failed to marshal MCP 405 response: %w", err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -184,7 +187,7 @@ func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metada
 	_, writeErr := w.Write(body)
 	if writeErr != nil {
 		s.logger.ErrorContext(r.Context(), "failed to write response body", attr.SlogError(writeErr))
-		return writeErr
+		return fmt.Errorf("failed to write response body: %w", writeErr)
 	}
 
 	return nil

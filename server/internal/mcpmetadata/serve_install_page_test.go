@@ -16,6 +16,7 @@ import (
 )
 
 func TestServeInstallPage_Authentication(t *testing.T) {
+	t.Parallel()
 	ctx, testInstance := newTestMCPMetadataService(t)
 
 	// Get auth context from the setup (which creates org and project)
@@ -32,18 +33,21 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 		shouldContain string
 	}{
 		{
-			name:    "public toolset renders page without authentication",
-			mcpSlug: "public-test-toolset",
+			name:          "public toolset renders page without authentication",
+			mcpSlug:       "public-test-toolset",
+			shouldContain: "",
 			setupToolset: func(t *testing.T, ctx context.Context) (toolsetOrgID string) {
+				t.Helper()
 				// Create a public toolset using the same organization from auth context
 				toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-					OrganizationID: authCtx.ActiveOrganizationID,
-					ProjectID:      *authCtx.ProjectID,
-					Name:           "Public Test MCP Server",
-					Slug:           "public-test-toolset",
-					McpSlug:        conv.ToPGText("public-test-toolset"),
-					Description:    conv.ToPGText("A public test MCP server"),
-					McpEnabled:     true,
+					OrganizationID:         authCtx.ActiveOrganizationID,
+					ProjectID:              *authCtx.ProjectID,
+					Name:                   "Public Test MCP Server",
+					Slug:                   "public-test-toolset",
+					McpSlug:                conv.ToPGText("public-test-toolset"),
+					Description:            conv.ToPGText("A public test MCP server"),
+					DefaultEnvironmentSlug: conv.ToPGText(""),
+					McpEnabled:             true,
 				})
 				require.NoError(t, err)
 
@@ -55,6 +59,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 				return authCtx.ActiveOrganizationID
 			},
 			setupAuth: func(t *testing.T, toolsetOrgID string) context.Context {
+				t.Helper()
 				// Return context with no auth - public toolsets should work
 				return context.Background()
 			},
@@ -64,15 +69,17 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			name:    "private toolset redirects to login without authentication",
 			mcpSlug: "private-test-toolset",
 			setupToolset: func(t *testing.T, ctx context.Context) (toolsetOrgID string) {
+				t.Helper()
 				// Create a private toolset using the same organization from auth context
 				_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-					OrganizationID: authCtx.ActiveOrganizationID,
-					ProjectID:      *authCtx.ProjectID,
-					Name:           "Private Test MCP Server",
-					Slug:           "private-test-toolset",
-					McpSlug:        conv.ToPGText("private-test-toolset"),
-					Description:    conv.ToPGText("A private test MCP server"),
-					McpEnabled:     true,
+					OrganizationID:         authCtx.ActiveOrganizationID,
+					ProjectID:              *authCtx.ProjectID,
+					Name:                   "Private Test MCP Server",
+					Slug:                   "private-test-toolset",
+					McpSlug:                conv.ToPGText("private-test-toolset"),
+					Description:            conv.ToPGText("A private test MCP server"),
+					DefaultEnvironmentSlug: conv.ToPGText(""),
+					McpEnabled:             true,
 				})
 				require.NoError(t, err)
 				// Toolset is private by default (mcp_is_public = false)
@@ -80,6 +87,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 				return authCtx.ActiveOrganizationID
 			},
 			setupAuth: func(t *testing.T, toolsetOrgID string) context.Context {
+				t.Helper()
 				// Return context with no auth - should redirect to login
 				return context.Background()
 			},
@@ -87,18 +95,21 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			shouldContain: "",
 		},
 		{
-			name:    "private toolset renders page with correct organization authentication",
-			mcpSlug: "private-org-toolset",
+			name:          "private toolset renders page with correct organization authentication",
+			mcpSlug:       "private-org-toolset",
+			shouldContain: "",
 			setupToolset: func(t *testing.T, ctx context.Context) (toolsetOrgID string) {
+				t.Helper()
 				// Create a private toolset using the same organization from auth context
 				_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-					OrganizationID: authCtx.ActiveOrganizationID,
-					ProjectID:      *authCtx.ProjectID,
-					Name:           "Private Org Test MCP Server",
-					Slug:           "private-org-toolset",
-					McpSlug:        conv.ToPGText("private-org-toolset"),
-					Description:    conv.ToPGText("A private org test MCP server"),
-					McpEnabled:     true,
+					OrganizationID:         authCtx.ActiveOrganizationID,
+					ProjectID:              *authCtx.ProjectID,
+					Name:                   "Private Org Test MCP Server",
+					Slug:                   "private-org-toolset",
+					McpSlug:                conv.ToPGText("private-org-toolset"),
+					Description:            conv.ToPGText("A private org test MCP server"),
+					DefaultEnvironmentSlug: conv.ToPGText(""),
+					McpEnabled:             true,
 				})
 				require.NoError(t, err)
 				// Toolset is private by default (mcp_is_public = false)
@@ -106,11 +117,18 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 				return authCtx.ActiveOrganizationID
 			},
 			setupAuth: func(t *testing.T, toolsetOrgID string) context.Context {
+				t.Helper()
 				// Set up authentication with the SAME organization as the toolset
 				correctAuthCtx := &contextvalues.AuthContext{
 					ActiveOrganizationID: toolsetOrgID,
 					UserID:               "test-user-123",
 					SessionID:            stringPtr("test-session-123"),
+					ProjectID:            nil,
+					OrganizationSlug:     "",
+					Email:                nil,
+					AccountType:          "",
+					ProjectSlug:          nil,
+					APIKeyScopes:         nil,
 				}
 				return contextvalues.SetAuthContext(context.Background(), correctAuthCtx)
 			},
@@ -120,15 +138,17 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			name:    "private toolset returns 404 with wrong organization authentication",
 			mcpSlug: "wrong-org-toolset",
 			setupToolset: func(t *testing.T, ctx context.Context) (toolsetOrgID string) {
+				t.Helper()
 				// Create a private toolset using the same organization from auth context
 				_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-					OrganizationID: authCtx.ActiveOrganizationID,
-					ProjectID:      *authCtx.ProjectID,
-					Name:           "Wrong Org Test MCP Server",
-					Slug:           "wrong-org-toolset",
-					McpSlug:        conv.ToPGText("wrong-org-toolset"),
-					Description:    conv.ToPGText("A wrong org test MCP server"),
-					McpEnabled:     true,
+					OrganizationID:         authCtx.ActiveOrganizationID,
+					ProjectID:              *authCtx.ProjectID,
+					Name:                   "Wrong Org Test MCP Server",
+					Slug:                   "wrong-org-toolset",
+					McpSlug:                conv.ToPGText("wrong-org-toolset"),
+					Description:            conv.ToPGText("A wrong org test MCP server"),
+					DefaultEnvironmentSlug: conv.ToPGText(""),
+					McpEnabled:             true,
 				})
 				require.NoError(t, err)
 				// Toolset is private by default (mcp_is_public = false)
@@ -136,11 +156,18 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 				return authCtx.ActiveOrganizationID
 			},
 			setupAuth: func(t *testing.T, toolsetOrgID string) context.Context {
+				t.Helper()
 				// Set up authentication with a DIFFERENT organization
 				wrongAuthCtx := &contextvalues.AuthContext{
 					ActiveOrganizationID: "different-org-id",
 					UserID:               "test-user-456",
 					SessionID:            stringPtr("test-session-456"),
+					ProjectID:            nil,
+					OrganizationSlug:     "",
+					Email:                nil,
+					AccountType:          "",
+					ProjectSlug:          nil,
+					APIKeyScopes:         nil,
 				}
 				return contextvalues.SetAuthContext(context.Background(), wrongAuthCtx)
 			},
@@ -151,6 +178,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Setup toolset data
 			toolsetOrgID := tt.setupToolset(t, ctx)
 
@@ -172,7 +200,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			err := testInstance.service.ServeInstallPage(rr, req)
 
 			if tt.expectedError {
-				assert.Error(t, err, "Expected error for test case: %s", tt.name)
+				require.Error(t, err, "Expected error for test case: %s", tt.name)
 				if tt.shouldContain != "" {
 					assert.Contains(t, err.Error(), tt.shouldContain, "Error message should contain expected text")
 				}
@@ -180,7 +208,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 				// For successful cases, check if we got a redirect or successful rendering
 				if tt.name == "private toolset redirects to login without authentication" {
 					// This specific test should redirect
-					assert.NoError(t, err, "Should not error on redirect")
+					require.NoError(t, err, "Should not error on redirect")
 					assert.Equal(t, http.StatusFound, rr.Code, "Should redirect with 302")
 					location := rr.Header().Get("Location")
 					assert.Contains(t, location, "/login", "Should redirect to login page")
@@ -196,7 +224,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 						// If no error, verify we got a successful response
 						assert.Equal(t, http.StatusOK, rr.Code, "Expected successful response")
 						assert.Equal(t, "text/html", rr.Header().Get("Content-Type"), "Expected HTML content type")
-						assert.Greater(t, len(rr.Body.Bytes()), 0, "Expected non-empty response body")
+						assert.NotEmpty(t, rr.Body.Bytes(), "Expected non-empty response body")
 					}
 				}
 			}

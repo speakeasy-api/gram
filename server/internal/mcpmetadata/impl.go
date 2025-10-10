@@ -335,11 +335,6 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnexpected, err, "failed to execute config snippet template").Log(ctx, s.logger)
 	}
 
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok {
-		return oops.E(oops.CodeUnexpected, err, "failed to get auth context").Log(ctx, s.logger)
-	}
-
 	data := hostedPageData{
 		jsonSnippetData:     configSnippetData,
 		MCPConfig:           configSnippet.String(),
@@ -379,7 +374,7 @@ func resolveMCPURLFromContext(ctx context.Context, serverUrl string, mcpSlug str
 	}
 	MCPURL, err := url.JoinPath(baseURL, mcpSlug)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to join URL path: %w", err)
 	}
 	return MCPURL, nil
 }
