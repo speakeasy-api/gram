@@ -251,7 +251,9 @@ export default function EnvironmentPage() {
   useEffect(() => {
     if (
       selectedToolset &&
-      (selectedToolset.securityVariables || selectedToolset.serverVariables || selectedToolset.functionEnvironmentVariables)
+      (selectedToolset.securityVariables ||
+        selectedToolset.serverVariables ||
+        selectedToolset.functionEnvironmentVariables)
     ) {
       const newValues = { ...envValues };
       const newEdited = new Set(editedFields);
@@ -272,12 +274,12 @@ export default function EnvironmentPage() {
       // Process function environment variables
       selectedToolset.functionEnvironmentVariables?.forEach((entry) => {
         const existingEntry = environment?.entries?.find(
-            (e) => e.name === entry.name,
-          );
-          if (!existingEntry) {
-            newValues[entry.name] = "";
-            newEdited.add(entry.name);
-          }
+          (e) => e.name === entry.name,
+        );
+        if (!existingEntry) {
+          newValues[entry.name] = "";
+          newEdited.add(entry.name);
+        }
       });
 
       // Process server variables

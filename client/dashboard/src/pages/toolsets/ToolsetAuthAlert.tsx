@@ -12,7 +12,7 @@ function useRelevantEnvVars(toolset: Toolset) {
     const securityVars =
       toolset?.securityVariables?.flatMap((secVar) => secVar.envVariables) ??
       [];
-    const functionEnvironmentVariables = 
+    const functionEnvironmentVariables =
       toolset?.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? [];
     const serverVars =
       toolset?.serverVariables?.flatMap((serverVar) =>
