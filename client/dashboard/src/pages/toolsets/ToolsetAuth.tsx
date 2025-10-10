@@ -157,9 +157,11 @@ export function ToolsetAuth({
           (v) => !v.toLowerCase().includes("server_url") || requiresServerURL,
         ),
       ) ?? [];
+    const functionEnvVars =
+      toolset?.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? [];
 
-    return [...securityVars, ...serverVars];
-  }, [toolset?.securityVariables, toolset?.serverVariables, requiresServerURL]);
+    return [...securityVars, ...serverVars, ...functionEnvVars];
+  }, [toolset?.securityVariables, toolset?.serverVariables, toolset.functionEnvironmentVariables, requiresServerURL]);
 
   const environmentVariableInputs = useMemo(() => {
     return relevantEnvVars.map((varName) => {

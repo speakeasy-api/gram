@@ -12,6 +12,8 @@ function useRelevantEnvVars(toolset: Toolset) {
     const securityVars =
       toolset?.securityVariables?.flatMap((secVar) => secVar.envVariables) ??
       [];
+    const functionEnvironmentVariables = 
+      toolset?.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? [];
     const serverVars =
       toolset?.serverVariables?.flatMap((serverVar) =>
         serverVar.envVariables.filter(
@@ -19,7 +21,7 @@ function useRelevantEnvVars(toolset: Toolset) {
         ),
       ) ?? [];
 
-    return [...securityVars, ...serverVars];
+    return [...securityVars, ...serverVars, ...functionEnvironmentVariables];
   }, [toolset]);
 }
 
