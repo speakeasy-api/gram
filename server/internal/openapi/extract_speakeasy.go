@@ -657,6 +657,10 @@ func extractToolDefSpeakeasy(ctx context.Context, logger *slog.Logger, doc *open
 		speakeasyMCPExtension: op.GetExtensions().GetOrZero("x-speakeasy-mcp"),
 	})
 
+	if defs.Len() > 0 {
+		schema.Defs = defs
+	}
+
 	responseFilter, responseFilterSchema, err := getResponseFilterSpeakeasy(ctx, logger, doc, schemaCache, op, descriptor.responseFilterType)
 	if err != nil {
 		return empty, deploymentEvents, fmt.Errorf("error getting response filter: %w", err)
