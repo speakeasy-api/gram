@@ -32,7 +32,6 @@ func validateAndAttemptHealing(ctx context.Context, logger *slog.Logger, bodyByt
 	return bodyBytes, err
 }
 
-
 // healStringifiedJSON recursively attempts to parse stringified JSON in a body,
 // using the JSON schema to identify where objects are expected but strings are provided.
 // Returns the healed body and a boolean indicating if any healing was performed.

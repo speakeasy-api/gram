@@ -14,6 +14,12 @@ import {
   Environment$outboundSchema,
 } from "./environment.js";
 import {
+  FunctionEnvironmentVariable,
+  FunctionEnvironmentVariable$inboundSchema,
+  FunctionEnvironmentVariable$Outbound,
+  FunctionEnvironmentVariable$outboundSchema,
+} from "./functionenvironmentvariable.js";
+import {
   PromptTemplate,
   PromptTemplate$inboundSchema,
   PromptTemplate$Outbound,
@@ -48,6 +54,10 @@ export type GetInstanceResult = {
    */
   environment: Environment;
   /**
+   * The function environment variables that are relevant to the toolset
+   */
+  functionEnvironmentVariables?: Array<FunctionEnvironmentVariable> | undefined;
+  /**
    * The name of the toolset
    */
   name: string;
@@ -77,6 +87,9 @@ export const GetInstanceResult$inboundSchema: z.ZodType<
 > = z.object({
   description: z.string().optional(),
   environment: Environment$inboundSchema,
+  function_environment_variables: z.array(
+    FunctionEnvironmentVariable$inboundSchema,
+  ).optional(),
   name: z.string(),
   prompt_templates: z.array(PromptTemplate$inboundSchema).optional(),
   security_variables: z.array(SecurityVariable$inboundSchema).optional(),
@@ -84,6 +97,7 @@ export const GetInstanceResult$inboundSchema: z.ZodType<
   tools: z.array(Tool$inboundSchema),
 }).transform((v) => {
   return remap$(v, {
+    "function_environment_variables": "functionEnvironmentVariables",
     "prompt_templates": "promptTemplates",
     "security_variables": "securityVariables",
     "server_variables": "serverVariables",
@@ -94,6 +108,9 @@ export const GetInstanceResult$inboundSchema: z.ZodType<
 export type GetInstanceResult$Outbound = {
   description?: string | undefined;
   environment: Environment$Outbound;
+  function_environment_variables?:
+    | Array<FunctionEnvironmentVariable$Outbound>
+    | undefined;
   name: string;
   prompt_templates?: Array<PromptTemplate$Outbound> | undefined;
   security_variables?: Array<SecurityVariable$Outbound> | undefined;
@@ -109,6 +126,9 @@ export const GetInstanceResult$outboundSchema: z.ZodType<
 > = z.object({
   description: z.string().optional(),
   environment: Environment$outboundSchema,
+  functionEnvironmentVariables: z.array(
+    FunctionEnvironmentVariable$outboundSchema,
+  ).optional(),
   name: z.string(),
   promptTemplates: z.array(PromptTemplate$outboundSchema).optional(),
   securityVariables: z.array(SecurityVariable$outboundSchema).optional(),
@@ -116,6 +136,7 @@ export const GetInstanceResult$outboundSchema: z.ZodType<
   tools: z.array(Tool$outboundSchema),
 }).transform((v) => {
   return remap$(v, {
+    functionEnvironmentVariables: "function_environment_variables",
     promptTemplates: "prompt_templates",
     securityVariables: "security_variables",
     serverVariables: "server_variables",

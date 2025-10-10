@@ -490,7 +490,7 @@ func (p *Client) readPeriodUsage(ctx context.Context, orgID string, customer *po
 		// In that case, we fall back on reading the meter directly below.
 		if toolCallMeter != nil {
 			usage.ToolCalls = int(toolCallMeter.ConsumedUnits)
-			
+
 			// Don't set these if they are 0. This can happen for orgs that subscribed but then cancelled.
 			// For those, we want to fall back to the free tier limits which will be pulled below if the maxes are still unset.
 			if toolCallMeter.CreditedUnits > 0 {

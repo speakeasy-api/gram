@@ -14,8 +14,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	deploymentR "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -154,24 +156,12 @@ func DescribeToolsetEntry(
 				Name:    tool.Name,
 				ToolUrn: tool.ToolUrn.String(),
 			})
-			if tool.Variables != nil {
-				var variables map[string]*functionManifestVariable
-				if err := json.Unmarshal(tool.Variables, &variables); err != nil {
-					logger.ErrorContext(ctx, "failed to unmarshal function tool variables", attr.SlogError(err))
-				} else {
-					for k, v := range variables {
-						var description *string
-						if v != nil && v.Description != nil {
-							description = v.Description
-						}
-						functionEnvVars = append(functionEnvVars, &types.FunctionEnvironmentVariable{
-							Name:        k,
-							Description: description,
-						})
-					}
 
-				}
+			envVars, err := extractFunctionEnvVars(ctx, logger, tool.Variables)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
 			}
+			functionEnvVars = append(functionEnvVars, envVars...)
 		}
 
 		promptTools, err := templatesRepo.PeekTemplatesByUrns(ctx, templatesR.PeekTemplatesByUrnsParams{
@@ -243,14 +233,13 @@ func DescribeToolset(
 	tx DBTX,
 	projectID ProjectID,
 	toolsetSlug ToolsetSlug,
+	toolsetCache *cache.TypedCacheObject[ToolsetTools],
 ) (*types.Toolset, error) {
 	toolsetRepo := tsr.New(tx)
 	orgRepo := org.New(tx)
-	toolsRepo := tr.New(tx)
-	variationsRepo := vr.New(tx)
-	templatesRepo := templatesR.New(tx)
 	pid := uuid.UUID(projectID)
 	oauthRepo := oauth.New(tx)
+	deploymentRepo := deploymentR.New(tx)
 
 	if err := inv.Check(
 		"describe toolset inputs",
@@ -271,274 +260,34 @@ func DescribeToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
 	}
 
+	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
+	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
+	if err != nil {
+		// We only log this because we only need to know this for the cache
+		logger.ErrorContext(ctx, "failed to get active deployment id", attr.SlogError(err))
+	}
+
 	// Get tool URNs from latest toolset version
 	// TODO: use this to power everything below rather than the http_tool_names field
 	var toolUrns []string
+	var toolsetVersion int64
 	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
 	if err == nil {
 		toolUrns = make([]string, len(latestVersion.ToolUrns))
 		for i, urn := range latestVersion.ToolUrns {
 			toolUrns[i] = urn.String()
 		}
+		toolsetVersion = latestVersion.Version
 	}
 
-	var tools []*types.Tool
-	var securityVars []*types.SecurityVariable
-	var serverVars []*types.ServerVariable
-	var functionEnvVars []*types.FunctionEnvironmentVariable
-	if len(toolUrns) > 0 {
-		definitions, err := toolsRepo.FindHttpToolsByUrn(ctx, tr.FindHttpToolsByUrnParams{
-			ProjectID: pid,
-			Urns:      toolUrns,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
-		}
+	toolsetTools, err := readToolsetTools(ctx, logger, tx, pid, activeDeploymentID, toolset.ID, toolsetVersion, toolUrns, toolsetCache)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset tools").Log(ctx, logger)
+	}
 
-		names := make([]string, 0, len(definitions))
-		for _, def := range definitions {
-			names = append(names, def.HttpToolDefinition.Name)
-		}
-
-		// TODO variations by urns
-		allVariations, err := variationsRepo.FindGlobalVariationsByToolNames(ctx, vr.FindGlobalVariationsByToolNamesParams{
-			ProjectID: pid,
-			ToolNames: names,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").Log(ctx, logger)
-		}
-
-		keyedVariations := make(map[string]types.ToolVariation, len(allVariations))
-		for _, variation := range allVariations {
-			keyedVariations[variation.SrcToolName] = types.ToolVariation{
-				ID:            variation.ID.String(),
-				GroupID:       variation.GroupID.String(),
-				SrcToolName:   variation.SrcToolName,
-				Confirm:       conv.FromPGText[string](variation.Confirm),
-				ConfirmPrompt: conv.FromPGText[string](variation.ConfirmPrompt),
-				Name:          conv.FromPGText[string](variation.Name),
-				Summary:       conv.FromPGText[string](variation.Summary),
-				Description:   conv.FromPGText[string](variation.Description),
-				Tags:          variation.Tags,
-				Summarizer:    conv.FromPGText[string](variation.Summarizer),
-				CreatedAt:     variation.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:     variation.UpdatedAt.Time.Format(time.RFC3339),
-			}
-		}
-
-		tools = make([]*types.Tool, 0, len(definitions))
-		seen := make(map[string]bool, 0)
-		envQueries := make([]toolEnvLookupParams, 0, len(definitions))
-		for _, def := range definitions {
-			if _, ok := seen[def.HttpToolDefinition.Name]; ok {
-				continue
-			}
-			seen[def.HttpToolDefinition.ID.String()] = true
-
-			var variation *types.ToolVariation
-			var canonical *types.CanonicalToolAttributes
-
-			name := def.HttpToolDefinition.Name
-			summary := def.HttpToolDefinition.Summary
-			description := def.HttpToolDefinition.Description
-			confirmRaw := conv.PtrValOr(conv.FromPGText[string](def.HttpToolDefinition.Confirm), "")
-			confirmPrompt := conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt)
-			summarizer := conv.FromPGText[string](def.HttpToolDefinition.Summarizer)
-			tags := def.HttpToolDefinition.Tags
-
-			variations, ok := keyedVariations[def.HttpToolDefinition.Name]
-			if ok {
-				name = conv.PtrValOrEmpty(variations.Name, name)
-				summary = conv.PtrValOr(variations.Summary, summary)
-				description = conv.PtrValOr(variations.Description, description)
-				confirmRaw = conv.PtrValOrEmpty(variations.Confirm, confirmRaw)
-				confirmPrompt = conv.Default(variations.ConfirmPrompt, confirmPrompt)
-				summarizer = conv.Default(variations.Summarizer, summarizer)
-				if len(variations.Tags) > 0 {
-					tags = variations.Tags
-				}
-
-				variation = &variations
-				canonical = &types.CanonicalToolAttributes{
-					VariationID:   variations.ID,
-					Name:          def.HttpToolDefinition.Name,
-					Summary:       conv.PtrEmpty(def.HttpToolDefinition.Summary),
-					Description:   conv.PtrEmpty(def.HttpToolDefinition.Description),
-					Tags:          def.HttpToolDefinition.Tags,
-					Confirm:       conv.FromPGText[string](def.HttpToolDefinition.Confirm),
-					ConfirmPrompt: conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt),
-					Summarizer:    conv.FromPGText[string](def.HttpToolDefinition.Summarizer),
-				}
-			}
-
-			canonicalName := name
-			if canonical != nil {
-				canonicalName = canonical.Name
-			}
-
-			confirm, _ := SanitizeConfirm(confirmRaw)
-
-			var responseFilter *types.ResponseFilter
-			if def.HttpToolDefinition.ResponseFilter != nil {
-				responseFilter = &types.ResponseFilter{
-					Type:         string(def.HttpToolDefinition.ResponseFilter.Type),
-					StatusCodes:  def.HttpToolDefinition.ResponseFilter.StatusCodes,
-					ContentTypes: def.HttpToolDefinition.ResponseFilter.ContentTypes,
-				}
-			}
-
-			tool := &types.HTTPToolDefinition{
-				ID:                  def.HttpToolDefinition.ID.String(),
-				ToolUrn:             def.HttpToolDefinition.ToolUrn.String(),
-				ProjectID:           def.HttpToolDefinition.Description,
-				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
-				Openapiv3DocumentID: conv.FromNullableUUID(def.HttpToolDefinition.Openapiv3DocumentID),
-				Name:                name,
-				CanonicalName:       canonicalName,
-				Summary:             summary,
-				Description:         description,
-				Confirm:             conv.Ptr(string(confirm)),
-				ConfirmPrompt:       confirmPrompt,
-				Summarizer:          summarizer,
-				Tags:                tags,
-				Openapiv3Operation:  conv.FromPGText[string](def.HttpToolDefinition.Openapiv3Operation),
-				Security:            conv.FromBytes(def.HttpToolDefinition.Security),
-				DefaultServerURL:    conv.FromPGText[string](def.HttpToolDefinition.DefaultServerUrl),
-				HTTPMethod:          def.HttpToolDefinition.HttpMethod,
-				Path:                def.HttpToolDefinition.Path,
-				SchemaVersion:       &def.HttpToolDefinition.SchemaVersion,
-				Schema:              string(def.HttpToolDefinition.Schema),
-				CreatedAt:           def.HttpToolDefinition.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:           def.HttpToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
-				Canonical:           canonical,
-				Variation:           variation,
-				PackageName:         &def.PackageName,
-				ResponseFilter:      responseFilter,
-			}
-
-			if newSchema, err := variedToolSchema(ctx, logger, tool); err == nil {
-				tool.Schema = newSchema
-			}
-
-			// models like claude expect schema to never be empty but be a valid json schema
-			if tool.Schema == "" {
-				tool.Schema = constants.DefaultEmptyToolSchema
-			}
-
-			envQueries = append(envQueries, toolEnvLookupParams{
-				deploymentID: def.HttpToolDefinition.DeploymentID,
-				security:     def.HttpToolDefinition.Security,
-				serverEnvVar: def.HttpToolDefinition.ServerEnvVar,
-			})
-
-			tools = append(tools, &types.Tool{
-				HTTPToolDefinition: tool,
-			})
-		}
-
-		functionDefinitions, err := toolsRepo.FindFunctionToolsByUrn(ctx, tr.FindFunctionToolsByUrnParams{
-			ProjectID: pid,
-			Urns:      toolUrns,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get function tools for toolset").Log(ctx, logger)
-		}
-
-		for _, def := range functionDefinitions {
-			// TODO: Chase to look at what applies from variations here
-			project := ""
-			if projectID := conv.FromNullableUUID(def.FunctionToolDefinition.ProjectID); projectID != nil {
-				project = *projectID
-			}
-			functionTool := &types.FunctionToolDefinition{
-				ID:            def.FunctionToolDefinition.ID.String(),
-				ToolUrn:       def.FunctionToolDefinition.ToolUrn.String(),
-				ProjectID:     project,
-				DeploymentID:  def.FunctionToolDefinition.DeploymentID.String(),
-				FunctionID:    def.FunctionToolDefinition.FunctionID.String(),
-				Runtime:       def.FunctionToolDefinition.Runtime,
-				Name:          def.FunctionToolDefinition.Name,
-				CanonicalName: def.FunctionToolDefinition.Name,
-				Description:   def.FunctionToolDefinition.Description,
-				Variables:     def.FunctionToolDefinition.Variables,
-				SchemaVersion: nil,
-				Schema:        string(def.FunctionToolDefinition.InputSchema),
-				Confirm:       nil,
-				ConfirmPrompt: nil,
-				Summarizer:    nil,
-				CreatedAt:     def.FunctionToolDefinition.CreatedAt.Time.Format(time.RFC3339),
-				UpdatedAt:     def.FunctionToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
-				Canonical:     nil,
-				Variation:     nil,
-			}
-			if functionTool.Schema == "" {
-				functionTool.Schema = constants.DefaultEmptyToolSchema
-			}
-			tools = append(tools, &types.Tool{
-				FunctionToolDefinition: functionTool,
-			})
-
-			if def.FunctionToolDefinition.Variables != nil {
-				var variables map[string]*functionManifestVariable
-				if err := json.Unmarshal(def.FunctionToolDefinition.Variables, &variables); err != nil {
-					logger.ErrorContext(ctx, "failed to unmarshal function tool variables", attr.SlogError(err))
-				} else {
-					for k, v := range variables {
-						var description *string
-						if v != nil && v.Description != nil {
-							description = v.Description
-						}
-						functionEnvVars = append(functionEnvVars, &types.FunctionEnvironmentVariable{
-							Name:        k,
-							Description: description,
-						})
-					}
-
-				}
-			}
-		}
-
-		promptTools, err := templatesRepo.FindPromptTemplatesByUrns(ctx, templatesR.FindPromptTemplatesByUrnsParams{
-			ProjectID: pid,
-			Urns:      toolUrns,
-		})
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").Log(ctx, logger)
-		}
-
-		for _, pt := range promptTools {
-			tools = append(tools, &types.Tool{
-				PromptTemplate: &types.PromptTemplate{
-					ID:            pt.ID.String(),
-					ToolUrn:       pt.ToolUrn.String(),
-					HistoryID:     pt.HistoryID.String(),
-					PredecessorID: conv.FromNullableUUID(pt.PredecessorID),
-					Name:          pt.Name,
-					Prompt:        pt.Prompt,
-					Description:   conv.PtrValOrEmpty(conv.FromPGText[string](pt.Description), ""),
-					Schema:        string(pt.Arguments),
-					SchemaVersion: nil,
-					Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
-					Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
-					ToolsHint:     pt.ToolsHint,
-					CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
-					UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
-					ProjectID:     pt.ProjectID.String(),
-					CanonicalName: pt.Name,
-					Confirm:       nil,
-					ConfirmPrompt: nil,
-					Summarizer:    nil,
-					Canonical:     nil,
-					Variation:     nil,
-				},
-			})
-		}
-
-		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, envQueries)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").Log(ctx, logger)
-		}
+	err = ApplyVariations(ctx, logger, tx, pid, toolsetTools.Tools)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to toolset").Log(ctx, logger)
 	}
 
 	ptrows, err := toolsetRepo.GetPromptTemplatesForToolset(ctx, tsr.GetPromptTemplatesForToolsetParams{
@@ -657,7 +406,7 @@ func DescribeToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get organization metadata").Log(ctx, logger)
 	}
 
-	return &types.Toolset{
+	result := &types.Toolset{
 		ID:                           toolset.ID.String(),
 		OrganizationID:               toolset.OrganizationID,
 		AccountType:                  orgMetadata.GramAccountType,
@@ -665,11 +414,11 @@ func DescribeToolset(
 		Name:                         toolset.Name,
 		Slug:                         types.Slug(toolset.Slug),
 		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
-		SecurityVariables:            securityVars,
-		ServerVariables:              serverVars,
-		FunctionEnvironmentVariables: functionEnvVars,
+		SecurityVariables:            toolsetTools.SecurityVars,
+		ServerVariables:              toolsetTools.ServerVars,
+		FunctionEnvironmentVariables: toolsetTools.FunctionEnvVars,
 		Description:                  conv.FromPGText[string](toolset.Description),
-		Tools:                        tools,
+		Tools:                        toolsetTools.Tools,
 		PromptTemplates:              promptTemplates,
 		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
 		McpEnabled:                   &toolset.McpEnabled,
@@ -680,7 +429,296 @@ func DescribeToolset(
 		ToolUrns:                     toolUrns,
 		ExternalOauthServer:          externalOAuthServer,
 		OauthProxyServer:             oauthProxyServer,
-	}, nil
+	}
+
+	return result, nil
+}
+
+func readToolsetTools(
+	ctx context.Context,
+	logger *slog.Logger,
+	tx DBTX,
+	pid uuid.UUID,
+	activeDeploymentID uuid.UUID,
+	toolsetID uuid.UUID,
+	toolsetVersion int64,
+	toolUrns []string,
+	toolsetCache *cache.TypedCacheObject[ToolsetTools],
+) (*ToolsetTools, error) {
+	toolsRepo := tr.New(tx)
+	templatesRepo := templatesR.New(tx)
+
+	var tools []*types.Tool
+	var securityVars []*types.SecurityVariable
+	var serverVars []*types.ServerVariable
+	var functionEnvVars []*types.FunctionEnvironmentVariable
+
+	// NOTE: A slight shortcoming here is that the cache is keyed by the active deployment id, but the queries below don't strictly depend on
+	// the deployment ID fetched above. Technically the deployment could change at just the right time to mess up the cache.
+	if toolsetCache != nil && activeDeploymentID != uuid.Nil {
+		if cached, cacheErr := toolsetCache.Get(ctx, ToolsetCacheKey(toolsetID.String(), activeDeploymentID.String(), toolsetVersion)); cacheErr == nil {
+			return &cached, nil
+		}
+	}
+
+	if len(toolUrns) > 0 {
+		definitions, err := toolsRepo.FindHttpToolsByUrn(ctx, tr.FindHttpToolsByUrnParams{
+			ProjectID: pid,
+			Urns:      toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
+		}
+
+		tools = make([]*types.Tool, 0, len(definitions))
+		seen := make(map[string]bool, 0)
+		envQueries := make([]toolEnvLookupParams, 0, len(definitions))
+		for _, def := range definitions {
+			if _, ok := seen[def.HttpToolDefinition.Name]; ok {
+				continue
+			}
+			seen[def.HttpToolDefinition.ID.String()] = true
+
+			name := def.HttpToolDefinition.Name
+			description := def.HttpToolDefinition.Description
+			confirmRaw := conv.PtrValOr(conv.FromPGText[string](def.HttpToolDefinition.Confirm), "")
+			confirmPrompt := conv.FromPGText[string](def.HttpToolDefinition.ConfirmPrompt)
+			summarizer := conv.FromPGText[string](def.HttpToolDefinition.Summarizer)
+			tags := def.HttpToolDefinition.Tags
+
+			confirm, _ := SanitizeConfirm(confirmRaw)
+
+			var responseFilter *types.ResponseFilter
+			if def.HttpToolDefinition.ResponseFilter != nil {
+				responseFilter = &types.ResponseFilter{
+					Type:         string(def.HttpToolDefinition.ResponseFilter.Type),
+					StatusCodes:  def.HttpToolDefinition.ResponseFilter.StatusCodes,
+					ContentTypes: def.HttpToolDefinition.ResponseFilter.ContentTypes,
+				}
+			}
+
+			tool := &types.HTTPToolDefinition{
+				ID:                  def.HttpToolDefinition.ID.String(),
+				ToolUrn:             def.HttpToolDefinition.ToolUrn.String(),
+				ProjectID:           def.HttpToolDefinition.Description,
+				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
+				Openapiv3DocumentID: conv.FromNullableUUID(def.HttpToolDefinition.Openapiv3DocumentID),
+				Name:                name,
+				CanonicalName:       name,
+				Summary:             "", // Slowly phasing this out
+				Description:         description,
+				Confirm:             conv.Ptr(string(confirm)),
+				ConfirmPrompt:       confirmPrompt,
+				Summarizer:          summarizer,
+				Tags:                tags,
+				Openapiv3Operation:  conv.FromPGText[string](def.HttpToolDefinition.Openapiv3Operation),
+				Security:            conv.FromBytes(def.HttpToolDefinition.Security),
+				DefaultServerURL:    conv.FromPGText[string](def.HttpToolDefinition.DefaultServerUrl),
+				HTTPMethod:          def.HttpToolDefinition.HttpMethod,
+				Path:                def.HttpToolDefinition.Path,
+				SchemaVersion:       &def.HttpToolDefinition.SchemaVersion,
+				Schema:              string(def.HttpToolDefinition.Schema),
+				CreatedAt:           def.HttpToolDefinition.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:           def.HttpToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
+				PackageName:         &def.PackageName,
+				ResponseFilter:      responseFilter,
+				Variation:           nil, // Applied later
+				Canonical:           nil,
+			}
+
+			envQueries = append(envQueries, toolEnvLookupParams{
+				deploymentID: def.HttpToolDefinition.DeploymentID,
+				security:     def.HttpToolDefinition.Security,
+				serverEnvVar: def.HttpToolDefinition.ServerEnvVar,
+			})
+
+			tools = append(tools, &types.Tool{
+				HTTPToolDefinition: tool,
+			})
+		}
+
+		promptTools, err := templatesRepo.FindPromptTemplatesByUrns(ctx, templatesR.FindPromptTemplatesByUrnsParams{
+			ProjectID: pid,
+			Urns:      toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get prompt templates for toolset").Log(ctx, logger)
+		}
+
+		for _, pt := range promptTools {
+			tools = append(tools, &types.Tool{
+				PromptTemplate: &types.PromptTemplate{
+					ID:            pt.ID.String(),
+					ToolUrn:       pt.ToolUrn.String(),
+					HistoryID:     pt.HistoryID.String(),
+					PredecessorID: conv.FromNullableUUID(pt.PredecessorID),
+					Name:          pt.Name,
+					Prompt:        pt.Prompt,
+					Description:   conv.PtrValOrEmpty(conv.FromPGText[string](pt.Description), ""),
+					Schema:        string(pt.Arguments),
+					SchemaVersion: nil,
+					Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
+					Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
+					ToolsHint:     pt.ToolsHint,
+					CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
+					UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
+					ProjectID:     pt.ProjectID.String(),
+					CanonicalName: pt.Name,
+					Confirm:       nil,
+					ConfirmPrompt: nil,
+					Summarizer:    nil,
+					Canonical:     nil,
+					Variation:     nil,
+				},
+			})
+		}
+
+		functionDefinitions, err := toolsRepo.FindFunctionToolsByUrn(ctx, tr.FindFunctionToolsByUrnParams{
+			ProjectID: pid,
+			Urns:      toolUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get function tools for toolset").Log(ctx, logger)
+		}
+
+		for _, def := range functionDefinitions {
+			project := ""
+			if projectID := conv.FromNullableUUID(def.FunctionToolDefinition.ProjectID); projectID != nil {
+				project = *projectID
+			}
+			functionTool := &types.FunctionToolDefinition{
+				ID:            def.FunctionToolDefinition.ID.String(),
+				ToolUrn:       def.FunctionToolDefinition.ToolUrn.String(),
+				ProjectID:     project,
+				DeploymentID:  def.FunctionToolDefinition.DeploymentID.String(),
+				FunctionID:    def.FunctionToolDefinition.FunctionID.String(),
+				Runtime:       def.FunctionToolDefinition.Runtime,
+				Name:          def.FunctionToolDefinition.Name,
+				CanonicalName: def.FunctionToolDefinition.Name,
+				Description:   def.FunctionToolDefinition.Description,
+				Variables:     def.FunctionToolDefinition.Variables,
+				SchemaVersion: nil,
+				Schema:        string(def.FunctionToolDefinition.InputSchema),
+				Confirm:       nil,
+				ConfirmPrompt: nil,
+				Summarizer:    nil,
+				CreatedAt:     def.FunctionToolDefinition.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:     def.FunctionToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
+				Canonical:     nil,
+				Variation:     nil,
+			}
+			if functionTool.Schema == "" {
+				functionTool.Schema = constants.DefaultEmptyToolSchema
+			}
+
+			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionToolDefinition.Variables)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
+			}
+			functionEnvVars = append(functionEnvVars, envVars...)
+
+			tools = append(tools, &types.Tool{
+				FunctionToolDefinition: functionTool,
+			})
+		}
+
+		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, envQueries)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment variables for toolset").Log(ctx, logger)
+		}
+	}
+
+	toolsetTools := ToolsetTools{
+		DeploymentID:    activeDeploymentID.String(),
+		ToolsetID:       toolsetID.String(),
+		Version:         toolsetVersion,
+		Tools:           tools,
+		SecurityVars:    securityVars,
+		ServerVars:      serverVars,
+		FunctionEnvVars: functionEnvVars,
+	}
+
+	if toolsetCache != nil && activeDeploymentID != uuid.Nil {
+		if err := toolsetCache.Store(ctx, toolsetTools); err != nil {
+			logger.ErrorContext(ctx, "failed to cache toolset", attr.SlogError(err))
+		}
+	}
+
+	return &toolsetTools, nil
+}
+
+func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectID uuid.UUID, tools []*types.Tool) error {
+	variationsRepo := vr.New(tx)
+
+	names := make([]string, 0, len(tools))
+	for _, def := range tools {
+		baseTool := conv.ToBaseTool(def)
+		names = append(names, baseTool.Name)
+	}
+
+	// TODO variations by urns
+	allVariations, err := variationsRepo.FindGlobalVariationsByToolNames(ctx, vr.FindGlobalVariationsByToolNamesParams{
+		ProjectID: projectID,
+		ToolNames: names,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").Log(ctx, logger)
+	}
+
+	keyedVariations := make(map[string]types.ToolVariation, len(allVariations))
+	for _, variation := range allVariations {
+		keyedVariations[variation.SrcToolName] = types.ToolVariation{
+			ID:            variation.ID.String(),
+			GroupID:       variation.GroupID.String(),
+			SrcToolName:   variation.SrcToolName,
+			Confirm:       conv.FromPGText[string](variation.Confirm),
+			ConfirmPrompt: conv.FromPGText[string](variation.ConfirmPrompt),
+			Name:          conv.FromPGText[string](variation.Name),
+			Description:   conv.FromPGText[string](variation.Description),
+			Summarizer:    conv.FromPGText[string](variation.Summarizer),
+			CreatedAt:     variation.CreatedAt.Time.Format(time.RFC3339),
+			UpdatedAt:     variation.UpdatedAt.Time.Format(time.RFC3339),
+		}
+	}
+
+	for _, tool := range tools {
+		if tool == nil {
+			continue
+		}
+		baseTool := conv.ToBaseTool(tool)
+
+		v, ok := keyedVariations[baseTool.Name]
+		if ok {
+			conv.ApplyVariation(*tool, v)
+		}
+	}
+
+	return nil
+}
+
+func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableData []byte) ([]*types.FunctionEnvironmentVariable, error) {
+	var functionEnvVars []*types.FunctionEnvironmentVariable
+
+	if variableData != nil {
+		var variables map[string]*functionManifestVariable
+		if err := json.Unmarshal(variableData, &variables); err != nil {
+			logger.ErrorContext(ctx, "failed to unmarshal function tool variables", attr.SlogError(err))
+		} else {
+			for k, v := range variables {
+				var description *string
+				if v != nil && v.Description != nil {
+					description = v.Description
+				}
+				functionEnvVars = append(functionEnvVars, &types.FunctionEnvironmentVariable{
+					Name:        k,
+					Description: description,
+				})
+			}
+
+		}
+	}
+
+	return functionEnvVars, nil
 }
 
 type toolEnvLookupParams struct {
@@ -761,47 +799,6 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []toolEnvL
 	}
 
 	return slices.Collect(maps.Values(securityVarsMap)), serverVars, nil
-}
-
-func variedToolSchema(ctx context.Context, logger *slog.Logger, tool *types.HTTPToolDefinition) (string, error) {
-	schema := tool.Schema
-	if tool.Summarizer != nil {
-		var jsonSchema map[string]interface{}
-		err := json.Unmarshal([]byte(schema), &jsonSchema)
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to unmarshal schema").Log(ctx, logger)
-		}
-
-		properties, ok := jsonSchema["properties"].(map[string]interface{})
-		if !ok {
-			properties = make(map[string]interface{})
-		}
-
-		properties["gram-request-summary"] = map[string]interface{}{
-			"type":        "string",
-			"description": "REQUIRED: A summary of the request to the tool. Distill the user's intention in order to ensure the response contains all the necessary information, without unnecessary details.",
-		}
-
-		jsonSchema["properties"] = properties
-
-		var required []string
-		required, ok = jsonSchema["required"].([]string)
-		if !ok {
-			required = []string{}
-		}
-
-		required = append(required, "gram-request-summary")
-		jsonSchema["required"] = required
-
-		newSchema, err := json.Marshal(jsonSchema)
-		if err != nil {
-			return "", oops.E(oops.CodeUnexpected, err, "failed to marshal schema").Log(ctx, logger)
-		}
-
-		schema = string(newSchema)
-	}
-
-	return schema, nil
 }
 
 const defaultPromptTemplateKind = "prompt"
