@@ -24,7 +24,7 @@ function yn(val: string | undefined) {
 function parseImageName(image: string): [registry: string, appName: string] {
   const parts = image.split("/");
   halt(
-    parts.length !== 2,
+    parts.length === 2,
     `Expected image name to be in the format <registry>/<appName>: ${image}`,
   );
 
