@@ -340,14 +340,14 @@
       cursor: pointer;
       max-width: 100%;
     }
-    
+
     .code-container code {
       user-select: all;
       overflow: auto;
       max-width: 100%;
       padding-right: 4rem;
     }
-    
+
     .copy-button {
       --transition-length: 1000ms;
       position: absolute;
@@ -564,7 +564,7 @@
       --mouse-center-offset-x: 0;
       --mouse-center-offset-y: 0;
       --gradient-rotation: calc(-1 * atan2(var(--mouse-center-offset-x),var(--mouse-center-offset-y)) - 90deg);
-      
+
       --border-radius-px: 2px;
       --border-px: 1px;
       --gradient-stops: hsl(334,54%,13%),hsl(4,67%,47%),hsl(23,96%,62%),hsl(68,52%,72%),hsl(108,24%,41%),hsl(154,100%,7%),hsl(220,100%,12%),hsl(214,69%,50%),hsl(216,100%,80%),hsl(334,54%,13%);
@@ -676,11 +676,11 @@
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh">claude mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range $i, $header := .Headers }} \
-  --header '{{ $header }}:{{ printf "${%s}" (index $.EnvHeaders $i) }}'{{- end }}</code>
+              <code class="code-snippet language-sh">claude mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range .SecurityInputs }} \
+  --header '{{ .SystemName | asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>
             </div>
           </li>
-          {{- if .Headers }}
+          {{- if .SecurityInputs }}
           <li class="instruction-item">After installation, set these environment variables in your shell:
             <div class="card code-container">
               <button class="copy-button waiting">
@@ -691,8 +691,8 @@
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh">{{- range .EnvHeaders -}}
-export {{ . }}="your-{{ . }}-value"{{- end }}</code>
+              <code class="code-snippet language-sh">{{- range .SecurityInputs -}}
+export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{- end }}</code>
             </div>
             <p>The MCP configuration supports environment variable expansion using
               <code>${VAR}</code>
@@ -762,11 +762,11 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh">gemini mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range $i, $header := .Headers }} \
-  --header '{{ $header }}:{{ printf "${%s}" (index $.EnvHeaders $i) }}'{{- end }}</code>
+              <code class="code-snippet language-sh">gemini mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range .SecurityInputs }} \
+  --header '{{ .SystemName | asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>
             </div>
           </li>
-          {{- if .Headers }}
+          {{- if .SecurityInputs }}
           <li class="instruction-item">Set these environment variables in your shell before running the command above:
             <div class="card code-container">
               <button class="copy-button waiting">
@@ -777,8 +777,8 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh">{{- range .EnvHeaders -}}
-export {{ . }}="your-{{ . }}-value"{{- end }}</code>
+              <code class="code-snippet language-sh">{{- range .SecurityInputs -}}
+export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{- end }}</code>
             </div></li>
           {{- end }}
           <li class="instruction-item">Restart Gemini CLI to load the new configuration</li>
@@ -802,11 +802,11 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
               </button>
               <code class="code-snippet language-toml">[mcp_servers.{{ .MCPSlug }}]
 command = "npx"
-args = ["-y", "mcp-remote", "{{ .MCPURL }}"{{- range $i, $header := .Headers }}, "--header", "{{ $header }}:${{ "{" }}{{ index $.EnvHeaders $i }}{{ "}" }}"{{- end }}]{{- if .Headers }}
-env = { {{- range $i, $header := .EnvHeaders }}{{- if $i }}, {{ end }}"{{ $header }}" = "your-{{ $header }}-value"{{- end }} }{{- end }}</code>
+args = ["-y", "mcp-remote", "{{ .MCPURL }}"{{- range .SecurityInputs }}, "--header", "{{ .SystemName | asHTTPHeader }}:${{ "{" }}{{ .DisplayName | asPosixName }}{{ "}" }}"{{- end }}]{{- if .SecurityInputs }}
+env = { {{- range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.DisplayName | asPosixName }}" = "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }} }{{- end }}</code>
             </div>
           </li>
-          {{- if .Headers }}
+          {{- if .SecurityInputs }}
           <li class="instruction-item">(optional) If you'd rather set variables in your shell, you can remove the env key from the config above and set these environment variables in your shell:
             <div class="card code-container">
               <button class="copy-button waiting">
@@ -817,8 +817,8 @@ env = { {{- range $i, $header := .EnvHeaders }}{{- if $i }}, {{ end }}"{{ $heade
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh">{{- range .EnvHeaders -}}
-export {{ . }}="your-{{ . }}-value"{{- end }}</code>
+              <code class="code-snippet language-sh">{{- range .SecurityInputs -}}
+export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{- end }}</code>
             </div></li>
           {{- end }}
           <li class="instruction-item">
@@ -1038,17 +1038,17 @@ export {{ . }}="your-{{ . }}-value"{{- end }}</code>
       "command": "npx",
       "args": [
         "mcp-remote",
-        "{{ .MCPURL }}"{{- range $i, $header := .Headers }},
+        "{{ .MCPURL }}"{{- range .SecurityInputs }},
         "--header",
-        "{{ printf "%s:${user_config.%s}" $header (index $.EnvHeaders $i) }}"{{- end }}
+        "{{ printf "%s:${user_config.%s}" (.SystemName | asHTTPHeader) (.DisplayName | asPosixName) }}"{{- end }}
       ]
     }
   },
   "user_config": {
-    {{- range $i, $header := .EnvHeaders }}{{- if $i }},{{ end }}
-    "{{ $header }}": {
+    {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
+    "{{ $input.DisplayName | asPosixName }}": {
       "type": "string",
-      "title": "{{ $header }}",
+      "title": "{{ $input.DisplayName | asPosixName }}",
       "description": "Get this value from your gram env",
       "sensitive": true,
       "required": true
