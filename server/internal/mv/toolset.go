@@ -156,24 +156,12 @@ func DescribeToolsetEntry(
 				Name:    tool.Name,
 				ToolUrn: tool.ToolUrn.String(),
 			})
-			if tool.Variables != nil {
-				var variables map[string]*functionManifestVariable
-				if err := json.Unmarshal(tool.Variables, &variables); err != nil {
-					logger.ErrorContext(ctx, "failed to unmarshal function tool variables", attr.SlogError(err))
-				} else {
-					for k, v := range variables {
-						var description *string
-						if v != nil && v.Description != nil {
-							description = v.Description
-						}
-						functionEnvVars = append(functionEnvVars, &types.FunctionEnvironmentVariable{
-							Name:        k,
-							Description: description,
-						})
-					}
 
-				}
+			envVars, err := extractFunctionEnvVars(ctx, logger, tool.Variables)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
 			}
+			functionEnvVars = append(functionEnvVars, envVars...)
 		}
 
 		promptTools, err := templatesRepo.PeekTemplatesByUrns(ctx, templatesR.PeekTemplatesByUrnsParams{
@@ -419,39 +407,51 @@ func DescribeToolset(
 	}
 
 	result := &types.Toolset{
-		ID:                     toolset.ID.String(),
-		OrganizationID:         toolset.OrganizationID,
-		AccountType:            orgMetadata.GramAccountType,
-		ProjectID:              toolset.ProjectID.String(),
-		Name:                   toolset.Name,
-		Slug:                   types.Slug(toolset.Slug),
-		DefaultEnvironmentSlug: conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
-		SecurityVariables:      toolsetTools.SecurityVars,
-		ServerVariables:        toolsetTools.ServerVars,
-		Description:            conv.FromPGText[string](toolset.Description),
-		Tools:                  toolsetTools.Tools,
-		PromptTemplates:        promptTemplates,
-		McpSlug:                conv.FromPGText[types.Slug](toolset.McpSlug),
-		McpEnabled:             &toolset.McpEnabled,
-		CustomDomainID:         conv.FromNullableUUID(toolset.CustomDomainID),
-		McpIsPublic:            &toolset.McpIsPublic,
-		CreatedAt:              toolset.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              toolset.UpdatedAt.Time.Format(time.RFC3339),
-		ToolUrns:               toolUrns,
-		ExternalOauthServer:    externalOAuthServer,
-		OauthProxyServer:       oauthProxyServer,
+		ID:                           toolset.ID.String(),
+		OrganizationID:               toolset.OrganizationID,
+		AccountType:                  orgMetadata.GramAccountType,
+		ProjectID:                    toolset.ProjectID.String(),
+		Name:                         toolset.Name,
+		Slug:                         types.Slug(toolset.Slug),
+		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
+		SecurityVariables:            toolsetTools.SecurityVars,
+		ServerVariables:              toolsetTools.ServerVars,
+		FunctionEnvironmentVariables: toolsetTools.FunctionEnvVars,
+		Description:                  conv.FromPGText[string](toolset.Description),
+		Tools:                        toolsetTools.Tools,
+		PromptTemplates:              promptTemplates,
+		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
+		McpEnabled:                   &toolset.McpEnabled,
+		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
+		McpIsPublic:                  &toolset.McpIsPublic,
+		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
+		ToolUrns:                     toolUrns,
+		ExternalOauthServer:          externalOAuthServer,
+		OauthProxyServer:             oauthProxyServer,
 	}
 
 	return result, nil
 }
 
-func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uuid.UUID, activeDeploymentID uuid.UUID, toolsetID uuid.UUID, toolsetVersion int64, toolUrns []string, toolsetCache *cache.TypedCacheObject[ToolsetTools]) (*ToolsetTools, error) {
+func readToolsetTools(
+	ctx context.Context,
+	logger *slog.Logger,
+	tx DBTX,
+	pid uuid.UUID,
+	activeDeploymentID uuid.UUID,
+	toolsetID uuid.UUID,
+	toolsetVersion int64,
+	toolUrns []string,
+	toolsetCache *cache.TypedCacheObject[ToolsetTools],
+) (*ToolsetTools, error) {
 	toolsRepo := tr.New(tx)
 	templatesRepo := templatesR.New(tx)
 
 	var tools []*types.Tool
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
+	var functionEnvVars []*types.FunctionEnvironmentVariable
 
 	// NOTE: A slight shortcoming here is that the cache is keyed by the active deployment id, but the queries below don't strictly depend on
 	// the deployment ID fetched above. Technically the deployment could change at just the right time to mess up the cache.
@@ -610,11 +610,17 @@ func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uui
 			if functionTool.Schema == "" {
 				functionTool.Schema = constants.DefaultEmptyToolSchema
 			}
+
+			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionToolDefinition.Variables)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
+			}
+			functionEnvVars = append(functionEnvVars, envVars...)
+
 			tools = append(tools, &types.Tool{
 				FunctionToolDefinition: functionTool,
 			})
 		}
-
 
 		securityVars, serverVars, err = environmentVariablesForTools(ctx, tx, envQueries)
 		if err != nil {
@@ -623,12 +629,13 @@ func readToolsetTools(ctx context.Context, logger *slog.Logger, tx DBTX, pid uui
 	}
 
 	toolsetTools := ToolsetTools{
-		DeploymentID: activeDeploymentID.String(),
-		ToolsetID:    toolsetID.String(),
-		Version:      toolsetVersion,
-		Tools:        tools,
-		SecurityVars: securityVars,
-		ServerVars:   serverVars,
+		DeploymentID:    activeDeploymentID.String(),
+		ToolsetID:       toolsetID.String(),
+		Version:         toolsetVersion,
+		Tools:           tools,
+		SecurityVars:    securityVars,
+		ServerVars:      serverVars,
+		FunctionEnvVars: functionEnvVars,
 	}
 
 	if toolsetCache != nil && activeDeploymentID != uuid.Nil {
@@ -687,6 +694,31 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 	}
 
 	return nil
+}
+
+func extractFunctionEnvVars(ctx context.Context, logger *slog.Logger, variableData []byte) ([]*types.FunctionEnvironmentVariable, error) {
+	var functionEnvVars []*types.FunctionEnvironmentVariable
+
+	if variableData != nil {
+		var variables map[string]*functionManifestVariable
+		if err := json.Unmarshal(variableData, &variables); err != nil {
+			logger.ErrorContext(ctx, "failed to unmarshal function tool variables", attr.SlogError(err))
+		} else {
+			for k, v := range variables {
+				var description *string
+				if v != nil && v.Description != nil {
+					description = v.Description
+				}
+				functionEnvVars = append(functionEnvVars, &types.FunctionEnvironmentVariable{
+					Name:        k,
+					Description: description,
+				})
+			}
+
+		}
+	}
+
+	return functionEnvVars, nil
 }
 
 type toolEnvLookupParams struct {

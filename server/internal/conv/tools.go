@@ -162,7 +162,7 @@ func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
 		tool.FunctionToolDefinition.Confirm = Default(variation.Confirm, tool.FunctionToolDefinition.Confirm)
 		tool.FunctionToolDefinition.ConfirmPrompt = Default(variation.ConfirmPrompt, tool.FunctionToolDefinition.ConfirmPrompt)
 		tool.FunctionToolDefinition.Summarizer = Default(variation.Summarizer, tool.FunctionToolDefinition.Summarizer)
-		
+
 		tool.FunctionToolDefinition.Canonical = &canonicalAttributes
 		tool.FunctionToolDefinition.Variation = &variation
 
