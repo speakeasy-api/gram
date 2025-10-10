@@ -189,13 +189,14 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 	}
 
 	return &gen.GetInstanceResult{
-		Name:              toolset.Name,
-		Description:       toolset.Description,
-		SecurityVariables: toolset.SecurityVariables,
-		ServerVariables:   toolset.ServerVariables,
-		Tools:             toolset.Tools,
-		PromptTemplates:   promptTemplates,
-		Environment:       environment,
+		Name:                         toolset.Name,
+		Description:                  toolset.Description,
+		SecurityVariables:            toolset.SecurityVariables,
+		ServerVariables:              toolset.ServerVariables,
+		FunctionEnvironmentVariables: toolset.FunctionEnvironmentVariables,
+		Tools:                        toolset.Tools,
+		PromptTemplates:              promptTemplates,
+		Environment:                  environment,
 	}, nil
 }
 
@@ -267,7 +268,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	executionInfo, err := s.toolset.GetHTTPToolExecutionInfoByID(ctx, uuid.MustParse(toolID), *authCtx.ProjectID)
+	executionInfo, err := s.toolset.GetToolExecutionInfoByID(ctx, uuid.MustParse(toolID), *authCtx.ProjectID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load tool execution info").Log(ctx, logger)
 	}
@@ -328,12 +329,19 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	if toolset != nil {
 		toolsetID = &toolset.ID
 	}
+	toolName := ""
+	switch executionInfo.Tool.Kind() {
+	case gateway.ToolKindHTTP:
+		toolName = executionInfo.Tool.HTTPTool.Name
+	case gateway.ToolKindFunction:
+		toolName = executionInfo.Tool.FunctionTool.Name
+	}
 	go s.tracking.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
 		OrganizationID:   organizationID,
 		RequestBytes:     requestNumBytes,
 		OutputBytes:      outputNumBytes,
 		ToolID:           toolID,
-		ToolName:         executionInfo.Tool.Name,
+		ToolName:         toolName,
 		ProjectID:        authCtx.ProjectID.String(),
 		ProjectSlug:      authCtx.ProjectSlug,
 		Type:             billing.ToolCallTypeHTTP,

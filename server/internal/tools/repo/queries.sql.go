@@ -14,6 +14,132 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const findFunctionToolEntriesByUrn = `-- name: FindFunctionToolEntriesByUrn :many
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = $2
+    AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+)
+SELECT
+  ftd.id, ftd.tool_urn, ftd.deployment_id, ftd.name, ftd.variables
+FROM function_tool_definitions ftd
+WHERE
+  ftd.deployment_id = (SELECT id FROM deployment)
+  AND ftd.deleted IS FALSE
+  AND ftd.tool_urn = ANY ($1::text[])
+ORDER BY ftd.id DESC
+`
+
+type FindFunctionToolEntriesByUrnParams struct {
+	Urns      []string
+	ProjectID uuid.UUID
+}
+
+type FindFunctionToolEntriesByUrnRow struct {
+	ID           uuid.UUID
+	ToolUrn      urn.Tool
+	DeploymentID uuid.UUID
+	Name         string
+	Variables    []byte
+}
+
+func (q *Queries) FindFunctionToolEntriesByUrn(ctx context.Context, arg FindFunctionToolEntriesByUrnParams) ([]FindFunctionToolEntriesByUrnRow, error) {
+	rows, err := q.db.Query(ctx, findFunctionToolEntriesByUrn, arg.Urns, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindFunctionToolEntriesByUrnRow
+	for rows.Next() {
+		var i FindFunctionToolEntriesByUrnRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ToolUrn,
+			&i.DeploymentID,
+			&i.Name,
+			&i.Variables,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const findFunctionToolsByUrn = `-- name: FindFunctionToolsByUrn :many
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = $2
+    AND ds.status = 'completed'
+    ORDER BY d.seq DESC
+    LIMIT 1
+)
+SELECT
+  function_tool_definitions.id, function_tool_definitions.tool_urn, function_tool_definitions.project_id, function_tool_definitions.deployment_id, function_tool_definitions.function_id, function_tool_definitions.runtime, function_tool_definitions.name, function_tool_definitions.description, function_tool_definitions.input_schema, function_tool_definitions.variables, function_tool_definitions.created_at, function_tool_definitions.updated_at, function_tool_definitions.deleted_at, function_tool_definitions.deleted,
+  (select id from deployment) as owning_deployment_id
+FROM function_tool_definitions
+WHERE
+  function_tool_definitions.deployment_id = (SELECT id FROM deployment)
+  AND function_tool_definitions.deleted IS FALSE
+  AND function_tool_definitions.tool_urn = ANY ($1::text[])
+ORDER BY function_tool_definitions.id DESC
+`
+
+type FindFunctionToolsByUrnParams struct {
+	Urns      []string
+	ProjectID uuid.UUID
+}
+
+type FindFunctionToolsByUrnRow struct {
+	FunctionToolDefinition FunctionToolDefinition
+	OwningDeploymentID     uuid.UUID
+}
+
+func (q *Queries) FindFunctionToolsByUrn(ctx context.Context, arg FindFunctionToolsByUrnParams) ([]FindFunctionToolsByUrnRow, error) {
+	rows, err := q.db.Query(ctx, findFunctionToolsByUrn, arg.Urns, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FindFunctionToolsByUrnRow
+	for rows.Next() {
+		var i FindFunctionToolsByUrnRow
+		if err := rows.Scan(
+			&i.FunctionToolDefinition.ID,
+			&i.FunctionToolDefinition.ToolUrn,
+			&i.FunctionToolDefinition.ProjectID,
+			&i.FunctionToolDefinition.DeploymentID,
+			&i.FunctionToolDefinition.FunctionID,
+			&i.FunctionToolDefinition.Runtime,
+			&i.FunctionToolDefinition.Name,
+			&i.FunctionToolDefinition.Description,
+			&i.FunctionToolDefinition.InputSchema,
+			&i.FunctionToolDefinition.Variables,
+			&i.FunctionToolDefinition.CreatedAt,
+			&i.FunctionToolDefinition.UpdatedAt,
+			&i.FunctionToolDefinition.DeletedAt,
+			&i.FunctionToolDefinition.Deleted,
+			&i.OwningDeploymentID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const findHttpToolEntriesByUrn = `-- name: FindHttpToolEntriesByUrn :many
 WITH deployment AS (
     SELECT d.id
@@ -182,6 +308,87 @@ func (q *Queries) FindHttpToolsByUrn(ctx context.Context, arg FindHttpToolsByUrn
 	return items, nil
 }
 
+const getFunctionToolDefinitionByID = `-- name: GetFunctionToolDefinitionByID :one
+SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
+FROM function_tool_definitions
+WHERE function_tool_definitions.id = $1
+  AND function_tool_definitions.project_id = $2
+  AND function_tool_definitions.deleted IS FALSE
+LIMIT 1
+`
+
+type GetFunctionToolDefinitionByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) GetFunctionToolDefinitionByID(ctx context.Context, arg GetFunctionToolDefinitionByIDParams) (FunctionToolDefinition, error) {
+	row := q.db.QueryRow(ctx, getFunctionToolDefinitionByID, arg.ID, arg.ProjectID)
+	var i FunctionToolDefinition
+	err := row.Scan(
+		&i.ID,
+		&i.ToolUrn,
+		&i.ProjectID,
+		&i.DeploymentID,
+		&i.FunctionID,
+		&i.Runtime,
+		&i.Name,
+		&i.Description,
+		&i.InputSchema,
+		&i.Variables,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getFunctionToolDefinitionByURN = `-- name: GetFunctionToolDefinitionByURN :one
+WITH deployment AS (
+  SELECT d.id
+  FROM deployments d
+  JOIN deployment_statuses ds ON d.id = ds.deployment_id
+  WHERE d.project_id = $2
+  AND ds.status = 'completed'
+  ORDER BY d.seq DESC LIMIT 1
+)
+SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
+FROM function_tool_definitions
+WHERE function_tool_definitions.tool_urn = $1
+  AND function_tool_definitions.project_id = $2
+  AND function_tool_definitions.deleted IS FALSE
+  AND function_tool_definitions.deployment_id = (SELECT id FROM deployment)
+LIMIT 1
+`
+
+type GetFunctionToolDefinitionByURNParams struct {
+	Urn       urn.Tool
+	ProjectID uuid.NullUUID
+}
+
+func (q *Queries) GetFunctionToolDefinitionByURN(ctx context.Context, arg GetFunctionToolDefinitionByURNParams) (FunctionToolDefinition, error) {
+	row := q.db.QueryRow(ctx, getFunctionToolDefinitionByURN, arg.Urn, arg.ProjectID)
+	var i FunctionToolDefinition
+	err := row.Scan(
+		&i.ID,
+		&i.ToolUrn,
+		&i.ProjectID,
+		&i.DeploymentID,
+		&i.FunctionID,
+		&i.Runtime,
+		&i.Name,
+		&i.Description,
+		&i.InputSchema,
+		&i.Variables,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getHTTPToolDefinitionByID = `-- name: GetHTTPToolDefinitionByID :one
 WITH first_party AS (
   SELECT id
@@ -320,7 +527,154 @@ func (q *Queries) GetHTTPToolDefinitionByURN(ctx context.Context, arg GetHTTPToo
 	return i, err
 }
 
-const listTools = `-- name: ListTools :many
+const getToolUrnByID = `-- name: GetToolUrnByID :one
+WITH first_party_http AS (
+  SELECT tool_urn::text as tool_urn
+  FROM http_tool_definitions
+  WHERE http_tool_definitions.id = $1
+    AND http_tool_definitions.project_id = $2
+    AND http_tool_definitions.deleted IS FALSE
+  LIMIT 1
+),
+third_party_http AS (
+  SELECT htd.tool_urn::text as tool_urn
+  FROM deployments d
+  INNER JOIN deployments_packages dp ON d.id = dp.deployment_id
+  INNER JOIN package_versions pv ON dp.version_id = pv.id
+  INNER JOIN http_tool_definitions htd ON htd.deployment_id = pv.deployment_id
+  WHERE d.project_id = $2
+    AND htd.id = $1
+    AND NOT EXISTS(SELECT 1 FROM first_party_http)
+  LIMIT 1
+),
+function_tools AS (
+  SELECT tool_urn::text as tool_urn
+  FROM function_tool_definitions
+  WHERE function_tool_definitions.id = $1
+    AND function_tool_definitions.project_id = $2
+    AND function_tool_definitions.deleted IS FALSE
+    AND NOT EXISTS(SELECT 1 FROM first_party_http)
+    AND NOT EXISTS(SELECT 1 FROM third_party_http)
+  LIMIT 1
+)
+SELECT
+  COALESCE(
+    (SELECT tool_urn FROM first_party_http),
+    (SELECT tool_urn FROM third_party_http),
+    (SELECT tool_urn FROM function_tools)
+  )::text AS tool_urn
+`
+
+type GetToolUrnByIDParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// This CTE is for integrating third party tools by checking for tool definitions from external deployments/packages.
+func (q *Queries) GetToolUrnByID(ctx context.Context, arg GetToolUrnByIDParams) (string, error) {
+	row := q.db.QueryRow(ctx, getToolUrnByID, arg.ID, arg.ProjectID)
+	var tool_urn string
+	err := row.Scan(&tool_urn)
+	return tool_urn, err
+}
+
+const listFunctionTools = `-- name: ListFunctionTools :many
+WITH deployment AS (
+    SELECT d.id
+    FROM deployments d
+    JOIN deployment_statuses ds ON d.id = ds.deployment_id
+    WHERE d.project_id = $3
+      AND ($4::uuid IS NOT NULL OR ds.status = 'completed')
+      AND (
+        $4::uuid IS NULL
+        OR d.id = $4::uuid
+      )
+    ORDER BY d.seq DESC
+    LIMIT 1
+)
+SELECT
+  (SELECT id FROM deployment) as deployment_id,
+  ftd.id,
+  ftd.tool_urn,
+  ftd.name,
+  ftd.description,
+  ftd.input_schema,
+  ftd.variables,
+  ftd.runtime,
+  ftd.function_id,
+  ftd.created_at,
+  ftd.updated_at
+FROM function_tool_definitions ftd
+WHERE
+  ftd.deployment_id = (SELECT id FROM deployment)
+  AND ftd.deleted IS FALSE
+  AND ($2::uuid IS NULL OR ftd.id < $2)
+ORDER BY ftd.id DESC
+LIMIT $1
+`
+
+type ListFunctionToolsParams struct {
+	Limit        int32
+	Cursor       uuid.NullUUID
+	ProjectID    uuid.UUID
+	DeploymentID uuid.NullUUID
+}
+
+type ListFunctionToolsRow struct {
+	DeploymentID uuid.UUID
+	ID           uuid.UUID
+	ToolUrn      urn.Tool
+	Name         string
+	Description  string
+	InputSchema  []byte
+	Variables    []byte
+	Runtime      string
+	FunctionID   uuid.UUID
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+}
+
+// Two use cases:
+// 1. List all tools from the latest successful deployment (when deployment_id is NULL)
+// 2. List all tools for a specific deployment by ID (when deployment_id is provided)
+func (q *Queries) ListFunctionTools(ctx context.Context, arg ListFunctionToolsParams) ([]ListFunctionToolsRow, error) {
+	rows, err := q.db.Query(ctx, listFunctionTools,
+		arg.Limit,
+		arg.Cursor,
+		arg.ProjectID,
+		arg.DeploymentID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFunctionToolsRow
+	for rows.Next() {
+		var i ListFunctionToolsRow
+		if err := rows.Scan(
+			&i.DeploymentID,
+			&i.ID,
+			&i.ToolUrn,
+			&i.Name,
+			&i.Description,
+			&i.InputSchema,
+			&i.Variables,
+			&i.Runtime,
+			&i.FunctionID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listHttpTools = `-- name: ListHttpTools :many
 WITH deployment AS (
     SELECT d.id
     FROM deployments d
@@ -379,14 +733,14 @@ ORDER BY htd.id DESC
 LIMIT $1
 `
 
-type ListToolsParams struct {
+type ListHttpToolsParams struct {
 	Limit        int32
 	ProjectID    uuid.UUID
 	Cursor       uuid.NullUUID
 	DeploymentID uuid.NullUUID
 }
 
-type ListToolsRow struct {
+type ListHttpToolsRow struct {
 	DeploymentID        uuid.UUID
 	ID                  uuid.UUID
 	ToolUrn             urn.Tool
@@ -414,8 +768,8 @@ type ListToolsRow struct {
 // Two use cases:
 // 1. List all tools from the latest successful deployment (when deployment_id is NULL)
 // 2. List all tools for a specific deployment by ID (when deployment_id is provided)
-func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToolsRow, error) {
-	rows, err := q.db.Query(ctx, listTools,
+func (q *Queries) ListHttpTools(ctx context.Context, arg ListHttpToolsParams) ([]ListHttpToolsRow, error) {
+	rows, err := q.db.Query(ctx, listHttpTools,
 		arg.Limit,
 		arg.ProjectID,
 		arg.Cursor,
@@ -425,9 +779,9 @@ func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToo
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListToolsRow
+	var items []ListHttpToolsRow
 	for rows.Next() {
-		var i ListToolsRow
+		var i ListHttpToolsRow
 		if err := rows.Scan(
 			&i.DeploymentID,
 			&i.ID,
@@ -462,7 +816,7 @@ func (q *Queries) ListTools(ctx context.Context, arg ListToolsParams) ([]ListToo
 	return items, nil
 }
 
-const pokeHTTPToolDefinitionByUrn = `-- name: PokeHTTPToolDefinitionByUrn :one
+const pokeToolDefinitionByUrn = `-- name: PokeToolDefinitionByUrn :one
 WITH first_party AS (
   SELECT id
   FROM http_tool_definitions
@@ -481,21 +835,34 @@ third_party AS (
     AND htd.tool_urn = $1
     AND NOT EXISTS(SELECT 1 FROM first_party)
   LIMIT 1
+),
+function_tools AS (
+  SELECT id
+  FROM function_tool_definitions
+  WHERE function_tool_definitions.tool_urn = $1
+    AND function_tool_definitions.project_id = $2
+    AND function_tool_definitions.deleted IS FALSE
+    AND NOT EXISTS(SELECT 1 FROM first_party)
+    AND NOT EXISTS(SELECT 1 FROM third_party)
+  LIMIT 1
 )
-SELECT id
-FROM http_tool_definitions
-WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party))
+SELECT
+  COALESCE(
+    (SELECT id FROM first_party),
+    (SELECT id FROM third_party),
+    (SELECT id FROM function_tools)
+  ) AS id
 `
 
-type PokeHTTPToolDefinitionByUrnParams struct {
+type PokeToolDefinitionByUrnParams struct {
 	Urn       urn.Tool
 	ProjectID uuid.UUID
 }
 
 // This CTE is for integrating third party tools by checking for tool definitions from external deployments/packages.
-func (q *Queries) PokeHTTPToolDefinitionByUrn(ctx context.Context, arg PokeHTTPToolDefinitionByUrnParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, pokeHTTPToolDefinitionByUrn, arg.Urn, arg.ProjectID)
-	var id uuid.UUID
+func (q *Queries) PokeToolDefinitionByUrn(ctx context.Context, arg PokeToolDefinitionByUrnParams) (interface{}, error) {
+	row := q.db.QueryRow(ctx, pokeToolDefinitionByUrn, arg.Urn, arg.ProjectID)
+	var id interface{}
 	err := row.Scan(&id)
 	return id, err
 }

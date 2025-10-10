@@ -1,5 +1,33 @@
 # @gram/server
 
+## 0.4.0
+
+### Minor Changes
+
+- 276d265: Support API key validation (/rpc/keys.verify)
+- 7912397: Add endpoint to expose a project's active deployment
+
+### Patch Changes
+
+- e76199f: fill default schema for prompt templates
+- 004e017: fix: consistent environment overrides"
+- 148c86f: install page reflects pure toolset name
+- 85ceb4c: Add JSON schema validation to tool schema generation
+- 6a331ac: feat: connection function tools to toolset concept
+- 6f11e8e: add ability to configure install pages and render configurations onto pages
+- ae5a041: Add clickhouse dependency
+- 094c3ee: Extract tools concurrently from incoming specs.
+- 5a32fd7: fix: ensure custom domain ingress has proper regex annotation
+- 41b5a22: feat: add consistent trace id to tool call requests
+- 4fd085a: Update sanitization logic to properly coerce into the regex
+- 8d7852e: add table for install page metadata
+- 40ef4c9: feat: add project id to function tools model
+- 663c572: omit access token which overrides intended oauth behavior
+- 36454a3: patch nil dereference
+- c40d9c0: fix: adjust cors policy for mcp oauth routes
+- 180bfca: restore old location for install page (no /install)
+- dcd0055: feat: billing usage tracking federation
+
 ## 0.3.0
 
 ### Minor Changes

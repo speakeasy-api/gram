@@ -71,6 +71,8 @@ type GetInstanceResult struct {
 	SecurityVariables []*types.SecurityVariable
 	// The server variables that are relevant to the toolset
 	ServerVariables []*types.ServerVariable
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*types.FunctionEnvironmentVariable
 	// The environment
 	Environment *types.Environment
 }

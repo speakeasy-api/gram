@@ -33,7 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/gateway"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -269,12 +269,23 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	envHeaders := []string{}
 
 	// Collect environment variables from security variables
+	isOAuthEnabled := toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid
 	for _, secVar := range toolsetDetails.SecurityVariables {
 		for _, envVar := range secVar.EnvVariables {
-			if !strings.Contains(strings.ToLower(envVar), "token_url") {
-				envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")))
+			envVarLower := strings.ToLower(envVar)
+			if strings.HasSuffix(envVarLower, "token_url") {
+				continue
 			}
+			// Skip access_token env vars if OAuth is enabled
+			if isOAuthEnabled && strings.HasSuffix(envVarLower, "access_token") {
+				continue
+			}
+			envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")))
 		}
+	}
+
+	for _, functionEnvVar := range toolsetDetails.FunctionEnvironmentVariables {
+		envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(functionEnvVar.Name, "_", "-")))
 	}
 
 	toolNames := []string{}
@@ -366,11 +377,11 @@ func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
-func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *gateway.DomainContext, error) {
+func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *customdomains.Context, error) {
 	var toolset toolsets_repo.Toolset
 	var toolsetErr error
-	var customDomainCtx *gateway.DomainContext
-	if domainCtx := gateway.DomainFromContext(ctx); domainCtx != nil {
+	var customDomainCtx *customdomains.Context
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
 			McpSlug:        conv.ToPGText(mcpSlug),
 			CustomDomainID: uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true},
