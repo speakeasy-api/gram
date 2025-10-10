@@ -1,4 +1,4 @@
-package middleware_test
+package customdomains_test
 
 import (
 	"context"
@@ -13,9 +13,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -215,7 +214,7 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 			}
 
 			// Create the middleware
-			middlewareFunc := middleware.CustomDomainsMiddleware(logger, instance.conn, tt.env, serverURL)
+			middlewareFunc := customdomains.Middleware(logger, instance.conn, tt.env, serverURL)
 
 			// Create a test handler that captures context and responds
 			var capturedCtx context.Context
@@ -243,7 +242,7 @@ func TestCustomDomainsMiddleware(t *testing.T) {
 
 			// Verify context if request was successful
 			if tt.expectedStatus == http.StatusOK {
-				domainCtx := gateway.DomainFromContext(capturedCtx)
+				domainCtx := customdomains.FromContext(capturedCtx)
 
 				if tt.expectedCtx {
 					require.NotNil(t, domainCtx, "Expected domain context to be set")
@@ -279,7 +278,7 @@ func TestCustomDomainsMiddleware_DeletedDomain(t *testing.T) {
 	err = instance.domainsRepo.DeleteCustomDomain(ctx, "org-deleted")
 	require.NoError(t, err)
 
-	middlewareFunc := middleware.CustomDomainsMiddleware(logger, instance.conn, "prod", serverURL)
+	middlewareFunc := customdomains.Middleware(logger, instance.conn, "prod", serverURL)
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("Handler should not be called for deleted domain")
@@ -311,7 +310,7 @@ func TestCustomDomainsMiddleware_DatabaseErrors(t *testing.T) {
 	require.NoError(t, err)
 	closedConn.Close()
 
-	middlewareFunc := middleware.CustomDomainsMiddleware(logger, closedConn, "prod", serverURL)
+	middlewareFunc := customdomains.Middleware(logger, closedConn, "prod", serverURL)
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("Handler should not be called when database error occurs")
@@ -340,7 +339,7 @@ func TestCustomDomainsMiddleware_MissingHost(t *testing.T) {
 	serverURL, err := url.Parse("https://api.speakeasyapi.dev")
 	require.NoError(t, err)
 
-	middlewareFunc := middleware.CustomDomainsMiddleware(logger, instance.conn, "prod", serverURL)
+	middlewareFunc := customdomains.Middleware(logger, instance.conn, "prod", serverURL)
 
 	testHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Error("Handler should not be called with empty host")
