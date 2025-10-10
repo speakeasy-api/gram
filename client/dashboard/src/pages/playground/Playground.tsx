@@ -8,23 +8,38 @@ import {
   useTelemetry,
 } from "@/contexts/Telemetry";
 import { dateTimeFormatters } from "@/lib/dates";
-import { capitalize, cn } from "@/lib/utils";
+import { capitalize } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import {
   useListChats,
   useListToolsets,
+  useInstance,
 } from "@gram/client/react-query/index.js";
 import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useLatestDeployment } from "@/hooks/toolTypes";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { v7 as uuidv7 } from "uuid";
-import { ToolsetView } from "../toolsets/Toolset";
-import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
+import { asTool, Tool } from "@/lib/toolTypes";
 import { ToolsetsEmptyState } from "../toolsets/ToolsetsEmptyState";
+import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ChatProvider, useChatContext } from "./ChatContext";
+import { ManageToolsDialog } from "./ManageToolsDialog";
+import { EditToolDialog } from "./EditToolDialog";
+import { PlaygroundAuth, getAuthStatus } from "./PlaygroundAuth";
 import { ChatConfig } from "./ChatWindow";
 import { PlaygroundRHS } from "./PlaygroundRHS";
+import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";
+import { PlaygroundLogsPanel } from "./PlaygroundLogsPanel";
+import { ScrollTextIcon } from "lucide-react";
 
 export default function Playground() {
   return (
@@ -46,6 +61,10 @@ function PlaygroundInner() {
   const [selectedEnvironment, setSelectedEnvironment] = useState<string | null>(
     searchParams.get("environment") ?? null,
   );
+  const [showLogs, setShowLogs] = useState(false);
+  const [temperature, setTemperature] = useState(0.5);
+  const [model, setModel] = useState("anthropic/claude-sonnet-4.5");
+  const [maxTokens, setMaxTokens] = useState(4096);
 
   // Get prompt from URL params if available
   const initialPrompt = searchParams.get("prompt");
@@ -62,6 +81,36 @@ function PlaygroundInner() {
     environmentSlug: selectedEnvironment,
     isOnboarding: false,
   };
+
+  // Fetch toolsets and instance data
+  const { data: toolsetsData } = useListToolsets();
+  const toolsets = toolsetsData?.toolsets;
+  const toolset = toolsets?.find((ts) => ts.slug === selectedToolset);
+
+  const { data: instanceData } = useInstance(
+    {
+      toolsetSlug: selectedToolset ?? "",
+      environmentSlug: selectedEnvironment ?? undefined,
+    },
+    undefined,
+    {
+      enabled: !!selectedToolset && !!selectedEnvironment,
+    },
+  );
+
+  // Check auth status
+  const authStatus = useMemo(() => {
+    if (!toolset || !instanceData?.environment) {
+      return null;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return getAuthStatus(toolset as any, {
+      entries: instanceData.environment.entries?.map((e) => ({
+        name: e.name,
+        value: e.value,
+      })),
+    });
+  }, [toolset, instanceData?.environment]);
 
   useRegisterToolsetTelemetry({
     toolsetSlug: selectedToolset ?? "",
@@ -125,34 +174,76 @@ function PlaygroundInner() {
     </Button>
   );
 
+  const logsButton = (
+    <Button size="sm" variant="ghost" onClick={() => setShowLogs(!showLogs)}>
+      <ScrollTextIcon className="size-4 mr-2" />
+      {showLogs ? "Hide" : "Show"} Logs
+    </Button>
+  );
+
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs fullWidth />
-        <Stack direction="horizontal" gap={2} align="center">
-          {shareChatButton}
-          {chatHistoryButton}
-        </Stack>
       </Page.Header>
       <Page.Body fullWidth fullHeight className="p-0">
         <ResizablePanel
           direction="horizontal"
-          className="h-full [&>[role='separator']]:border-border [&>[role='separator']]:border-1"
+          className="h-full [&>[role='separator']]:w-px [&>[role='separator']]:bg-neutral-softest [&>[role='separator']]:border-0 [&>[role='separator']]:hover:bg-primary [&>[role='separator']]:relative [&>[role='separator']]:before:absolute [&>[role='separator']]:before:inset-y-0 [&>[role='separator']]:before:-left-1 [&>[role='separator']]:before:-right-1 [&>[role='separator']]:before:cursor-col-resize"
         >
-          <ResizablePanel.Pane minSize={35}>
+          <ResizablePanel.Pane minSize={20} defaultSize={25}>
             <ToolsetPanel
               configRef={chatConfigRef}
               setSelectedToolset={setSelectedToolset}
               setSelectedEnvironment={setSelectedEnvironment}
+              temperature={temperature}
+              setTemperature={setTemperature}
+              model={model}
+              setModel={setModel}
+              maxTokens={maxTokens}
+              setMaxTokens={setMaxTokens}
             />
           </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={35} order={0}>
-            <PlaygroundRHS
-              configRef={chatConfigRef}
-              setSelectedEnvironment={setSelectedEnvironment}
-              initialPrompt={initialPrompt}
-            />
+            <div className="h-full flex flex-col">
+              {/* Action buttons below header */}
+              <div className="flex items-center justify-between px-8 py-3">
+                <div className="flex items-center gap-2">
+                  {chatHistoryButton}
+                </div>
+                <div className="flex items-center gap-2">
+                  {logsButton}
+                  {shareChatButton}
+                </div>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <PlaygroundRHS
+                  configRef={chatConfigRef}
+                  initialPrompt={initialPrompt}
+                  temperature={temperature}
+                  model={model}
+                  maxTokens={maxTokens}
+                  authWarning={
+                    authStatus?.hasMissingAuth && toolset
+                      ? {
+                          missingCount: authStatus.missingCount,
+                          toolsetSlug: toolset.slug,
+                        }
+                      : null
+                  }
+                />
+              </div>
+            </div>
           </ResizablePanel.Pane>
+          {showLogs && (
+            <ResizablePanel.Pane minSize={20} defaultSize={30}>
+              <PlaygroundLogsPanel
+                chatId={chat.id}
+                toolsetSlug={selectedToolset ?? undefined}
+                onClose={() => setShowLogs(false)}
+              />
+            </ResizablePanel.Pane>
+          )}
         </ResizablePanel>
       </Page.Body>
     </Page>
@@ -163,11 +254,29 @@ export function ToolsetPanel({
   configRef,
   setSelectedToolset,
   setSelectedEnvironment,
+  temperature,
+  setTemperature,
+  model,
+  setModel,
+  maxTokens,
+  setMaxTokens,
 }: {
   configRef: ChatConfig;
   setSelectedToolset: (toolset: string) => void;
   setSelectedEnvironment: (environment: string) => void;
+  temperature: number;
+  setTemperature: (temp: number) => void;
+  model: string;
+  setModel: (model: string) => void;
+  maxTokens: number;
+  setMaxTokens: (tokens: number) => void;
 }) {
+  const [showManageToolsDialog, setShowManageToolsDialog] = useState(false);
+  const [manageToolsGroup, setManageToolsGroup] = useState<
+    string | undefined
+  >();
+  const [editingTool, setEditingTool] = useState<Tool | null>(null);
+
   const { data: toolsetsData } = useListToolsets();
   const routes = useRoutes();
 
@@ -177,6 +286,40 @@ export function ToolsetPanel({
   const selectedEnvironment = configRef.current.environmentSlug;
 
   const toolset = toolsets?.find((toolset) => toolset.slug === selectedToolset);
+
+  // Fetch instance data to get tools
+  const { data: instanceData } = useInstance(
+    {
+      toolsetSlug: selectedToolset ?? "",
+      environmentSlug: selectedEnvironment ?? undefined,
+    },
+    undefined,
+    {
+      enabled: !!selectedToolset && !!selectedEnvironment,
+    },
+  );
+
+  const { data: deployment } = useLatestDeployment();
+
+  const documentIdToName = useMemo(() => {
+    return deployment?.deployment?.openapiv3Assets?.reduce(
+      (acc, asset) => {
+        acc[asset.id] = asset.name;
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
+  }, [deployment]);
+
+  const functionIdToName = useMemo(() => {
+    return deployment?.deployment?.functionsAssets?.reduce(
+      (acc, asset) => {
+        acc[asset.id] = asset.name;
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
+  }, [deployment]);
 
   useEffect(() => {
     if (toolsets?.[0] && configRef.current.toolsetSlug === null) {
@@ -196,62 +339,157 @@ export function ToolsetPanel({
     }
   }, [configRef, setSelectedEnvironment, toolset]);
 
-  let content = (
-    <ToolsetView
-      toolsetSlug={selectedToolset ?? ""}
-      className="p-8 2xl:p-12"
-      environmentSlug={selectedEnvironment ?? undefined}
-      addToolsStyle={"modal"}
-      showEnvironmentBadge
-      noGrid
-      onEnvironmentChange={setSelectedEnvironment}
-      context="playground"
-    />
-  );
+  // Transform tools data for the config panel
+  const tools = instanceData?.tools?.map(asTool) ?? [];
+
+  // Track which tools are selected for bulk actions
+  const [enabledTools, setEnabledTools] = useState<Set<string>>(new Set());
 
   // If listToolsets has completed and there's nothing there, show the onboarding panel
   if (toolsets !== undefined && !configRef.current.toolsetSlug) {
-    // This should only be reachable if the user has an OpenAPI document but no toolsets
-    content = (
-      <div className="h-[600px] p-8">
+    return (
+      <div className="h-full flex items-center justify-center p-8">
         <ToolsetsEmptyState onCreateToolset={() => routes.toolsets.goTo()} />
       </div>
     );
   }
 
   return (
-    <div className="max-h-full overflow-auto relative">
-      <PanelHeader side="left">
-        <Stack direction="horizontal" gap={2} justify="space-between">
-          <Stack direction="horizontal" gap={2} align="center">
-            <ToolsetDropdown
-              selectedToolset={toolset}
-              setSelectedToolset={(toolset) => setSelectedToolset(toolset.slug)}
+    <>
+      <PlaygroundConfigPanel
+        tools={tools}
+        selectedTools={enabledTools}
+        onToolToggle={(toolId) => {
+          setEnabledTools((prev) => {
+            const next = new Set(prev);
+            if (next.has(toolId)) {
+              next.delete(toolId);
+            } else {
+              next.add(toolId);
+            }
+            return next;
+          });
+        }}
+        temperature={temperature}
+        onTemperatureChange={setTemperature}
+        model={model}
+        onModelChange={setModel}
+        maxTokens={maxTokens}
+        onMaxTokensChange={setMaxTokens}
+        toolsetSelector={
+          <Select
+            value={selectedToolset ?? undefined}
+            onValueChange={setSelectedToolset}
+          >
+            <SelectTrigger size="sm" className="w-full">
+              <SelectValue placeholder="Select toolset" />
+            </SelectTrigger>
+            <SelectContent>
+              {toolsets?.map((ts) => (
+                <SelectItem key={ts.slug} value={ts.slug}>
+                  {ts.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+        environmentSelector={
+          <EnvironmentDropdown
+            selectedEnvironment={selectedEnvironment}
+            setSelectedEnvironment={setSelectedEnvironment}
+          />
+        }
+        authSettings={
+          toolset && instanceData?.environment ? (
+            <PlaygroundAuth
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              toolset={toolset as any}
+              environment={{
+                slug: instanceData.environment.slug,
+                entries: instanceData.environment.entries?.map((e) => ({
+                  name: e.name,
+                  value: e.value,
+                })),
+              }}
             />
-          </Stack>
-        </Stack>
-      </PanelHeader>
-      {content}
-    </div>
+          ) : undefined
+        }
+        toolsetInfo={
+          toolset
+            ? {
+                name: toolset.name,
+                slug: toolset.slug,
+                description: toolset.description,
+                toolCount: tools.length,
+                updatedAt: toolset.updatedAt,
+              }
+            : undefined
+        }
+        onToolsetUpdate={(updates) => {
+          // TODO: Wire this up to update toolset
+          console.log("Update toolset:", updates);
+        }}
+        documentIdToName={documentIdToName}
+        functionIdToName={functionIdToName}
+        onOpenToolsModal={() => {
+          setManageToolsGroup(undefined);
+          setShowManageToolsDialog(true);
+        }}
+        onOpenGroupModal={(groupTitle) => {
+          setManageToolsGroup(groupTitle);
+          setShowManageToolsDialog(true);
+        }}
+        onToolClick={(tool) => {
+          setEditingTool(tool);
+        }}
+      />
+
+      {/* ManageToolsDialog */}
+      {toolset && (
+        <ManageToolsDialog
+          open={showManageToolsDialog}
+          onOpenChange={setShowManageToolsDialog}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          toolset={toolset as any}
+          currentTools={tools}
+          onAddTools={(toolUrns) => {
+            // TODO: Add tools to working state
+            console.log("Add tools:", toolUrns);
+            toast.success(
+              `Added ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
+            );
+          }}
+          onRemoveTools={(toolUrns) => {
+            // TODO: Remove tools from working state
+            console.log("Remove tools:", toolUrns);
+            toast.success(
+              `Removed ${toolUrns.length} tool${toolUrns.length !== 1 ? "s" : ""}`,
+            );
+          }}
+          initialGroup={manageToolsGroup}
+        />
+      )}
+
+      {/* EditToolDialog */}
+      <EditToolDialog
+        open={!!editingTool}
+        onOpenChange={(open) => !open && setEditingTool(null)}
+        tool={editingTool}
+        documentIdToName={documentIdToName}
+        functionIdToName={functionIdToName}
+        onSave={(updates) => {
+          // TODO: Update tool in working state
+          console.log("Update tool:", updates);
+          toast.success("Tool updated");
+          setEditingTool(null);
+        }}
+        onRemove={() => {
+          // TODO: Remove tool from working state
+          console.log("Remove tool:", editingTool?.toolUrn);
+          toast.success("Tool removed");
+          setEditingTool(null);
+        }}
+      />
+    </>
   );
 }
-
-export const PanelHeader = ({
-  side,
-  children,
-}: {
-  side: "left" | "right";
-  children?: React.ReactNode;
-}) => {
-  return (
-    <div
-      className={cn(
-        "sticky top-0 bg-stone-100 dark:bg-card py-3 px-8 border-b z-10 h-[61px]",
-        side === "left" && "dark:border-l-2 dark:border-l-background",
-        side === "right" && "dark:border-r-2 dark:border-r-background",
-      )}
-    >
-      {children}
-    </div>
-  );
-};
