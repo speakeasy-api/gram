@@ -665,6 +665,7 @@ func TestDoProcess_RecursiveSchema_LibOpenAPI(t *testing.T) {
 }
 
 func testRecursiveSchema(t *testing.T, parser string) {
+	t.Helper()
 	logger := testenv.NewLogger(t)
 	tracer := testenv.NewTracerProvider(t).Tracer("github.com/speakeasy-api/gram/server/internal/openapi")
 
@@ -768,12 +769,12 @@ components:
 			ID:      "a",
 			AssetID: "b",
 		},
-		ProjectID:          projectID,
-		DeploymentID:       deploymentID,
-		DocumentID:         openapiDocID,
-		DocURL:             nil,
-		ProjectSlug:        "c",
-		OrgSlug:            "d",
+		ProjectID:    projectID,
+		DeploymentID: deploymentID,
+		DocumentID:   openapiDocID,
+		DocURL:       nil,
+		ProjectSlug:  "c",
+		OrgSlug:      "d",
 		OnOperationSkipped: func(err error) {
 			skippedErr = err
 		},
