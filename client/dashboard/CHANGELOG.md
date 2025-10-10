@@ -1,5 +1,16 @@
 # @gram/dashboard
 
+## 0.13.0
+
+### Minor Changes
+
+- 3cb955a: Dashboard support for the CLI authentication flow.
+
+### Patch Changes
+
+- 8148897: makes gram functions environments variables now account for in the MCP and gram environments UX
+- 0f75503: adds a very basic few for displaying gram functions sources
+
 ## 0.12.0
 
 ### Minor Changes
