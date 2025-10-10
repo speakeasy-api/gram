@@ -117,7 +117,6 @@ export default defineConfig({
           },
           {
             label: "Guides",
-            link: "/guides",
             items: [
               {
                 label: "Guides",
