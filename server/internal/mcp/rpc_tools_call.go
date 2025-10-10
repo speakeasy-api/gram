@@ -166,7 +166,7 @@ func handleToolsCall(
 	if executionPlan.Tool.IsHTTP() {
 		for _, security := range executionPlan.Tool.HTTPTool.Security {
 			for _, token := range payload.oauthTokenInputs {
-				if slices.Contains(security.OAuthTypes, "authorization_code") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
+				if (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
 					for _, envVar := range security.EnvVariables {
 						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
 							ciEnv.Set(envVar, token.Token)
