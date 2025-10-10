@@ -158,8 +158,8 @@ func backfillPromptTemplates(ctx context.Context, conn *pgx.Conn) error {
 
 		// Skip if kind is null
 		if !tmpl.Kind.Valid || tmpl.Kind.String == "" {
-			slog.WarnContext(ctx, "skipping prompt template with null/empty kind",
-				slog.String("id", tmpl.ID.String()),
+			slog.WarnContext(ctx, "skipping prompt template with null/empty kind", 
+				slog.String("id", tmpl.ID.String()), 
 				slog.String("name", tmpl.Name))
 			continue
 		}

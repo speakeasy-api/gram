@@ -21,6 +21,7 @@ func main() {
 		os.Exit(1)
 	}
 
+
 	// Connect to database
 	conn, err := pgx.Connect(ctx, dbURL)
 	if err != nil {
@@ -41,11 +42,11 @@ func main() {
 }
 
 type toolsetData struct {
-	ID              uuid.UUID
-	Slug            string
-	HTTPToolNames   []string
-	PromptTemplates []string
-	ProjectID       uuid.UUID
+	ID               uuid.UUID
+	Slug             string
+	HTTPToolNames    []string
+	PromptTemplates  []string
+	ProjectID        uuid.UUID
 }
 
 func backfillToolsetVersions(ctx context.Context, conn *pgx.Conn) error {
@@ -107,7 +108,7 @@ func backfillToolsetVersions(ctx context.Context, conn *pgx.Conn) error {
 	created := 0
 	for i, toolset := range toolsets {
 		if err := createToolsetVersion(ctx, tx, toolset); err != nil {
-			slog.WarnContext(ctx, "failed to create toolset version",
+			slog.WarnContext(ctx, "failed to create toolset version", 
 				slog.String("toolset_id", toolset.ID.String()),
 				slog.String("toolset_slug", toolset.Slug),
 				slog.String("error", err.Error()))
@@ -117,8 +118,8 @@ func backfillToolsetVersions(ctx context.Context, conn *pgx.Conn) error {
 
 		// Progress report every 10 records
 		if (i+1)%10 == 0 {
-			slog.InfoContext(ctx, "toolset versions progress",
-				slog.Int("completed", i+1),
+			slog.InfoContext(ctx, "toolset versions progress", 
+				slog.Int("completed", i+1), 
 				slog.Int("total", len(toolsets)))
 		}
 	}
@@ -167,7 +168,7 @@ func createToolsetVersion(ctx context.Context, tx pgx.Tx, toolset toolsetData) e
 			if err := rows.Scan(&toolURN); err != nil {
 				return fmt.Errorf("scan HTTP tool URN: %w", err)
 			}
-
+			
 			allToolURNs = append(allToolURNs, toolURN)
 		}
 
@@ -200,7 +201,7 @@ func createToolsetVersion(ctx context.Context, tx pgx.Tx, toolset toolsetData) e
 			if err := rows.Scan(&toolURN); err != nil {
 				return fmt.Errorf("scan prompt template URN: %w", err)
 			}
-
+			
 			allToolURNs = append(allToolURNs, toolURN)
 		}
 
@@ -227,7 +228,7 @@ func createToolsetVersion(ctx context.Context, tx pgx.Tx, toolset toolsetData) e
 	`
 
 	var versionID uuid.UUID
-	err := tx.QueryRow(ctx, insertQuery,
+	err := tx.QueryRow(ctx, insertQuery, 
 		toolset.ID,
 		int64(1), // First version
 		urnStrings,
@@ -238,7 +239,7 @@ func createToolsetVersion(ctx context.Context, tx pgx.Tx, toolset toolsetData) e
 		return fmt.Errorf("create toolset version: %w", err)
 	}
 
-	slog.InfoContext(ctx, "created toolset version",
+	slog.InfoContext(ctx, "created toolset version", 
 		slog.String("toolset_id", toolset.ID.String()),
 		slog.String("toolset_slug", toolset.Slug),
 		slog.String("version_id", versionID.String()),

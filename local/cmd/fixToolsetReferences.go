@@ -78,7 +78,7 @@ func parseFixedToolLog(filename string) (map[string]map[string]string, error) {
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		line := scanner.Text()
-
+		
 		// Skip non-log lines
 		if !strings.Contains(line, "fixed invalid tool") {
 			continue
@@ -126,7 +126,7 @@ func updateToolsetsWithNewNamesFixed(ctx context.Context, pool *pgxpool.Pool, pr
 		SELECT ts.id, ts.name, ts.slug, ts.http_tool_names
 		FROM gram.toolsets ts
 		JOIN gram.projects p ON ts.project_id = p.id
-		WHERE p.slug = $1
+		WHERE p.slug = $1 
 		  AND ts.deleted IS FALSE
 		  AND ts.http_tool_names && $2
 	`
@@ -170,7 +170,7 @@ func updateToolsetsWithNewNamesFixed(ctx context.Context, pool *pgxpool.Pool, pr
 		if hasChanges {
 			// Update the toolset with new tool names
 			updateQuery := `
-				UPDATE gram.toolsets
+				UPDATE gram.toolsets 
 				SET http_tool_names = $1, updated_at = now()
 				WHERE id = $2
 			`
