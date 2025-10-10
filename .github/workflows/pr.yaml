@@ -625,7 +625,7 @@ jobs:
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-          FLY_IMAGE: ${{ secrets.FLY_IMAGE_DEV }}
+          FLY_IMAGE: ${{ vars.FLY_IMAGE_DEV }}
         run: |
           mise run fly:init-runner \
             --org ${{ secrets.FLY_ORG_DEV }} \
@@ -639,7 +639,7 @@ jobs:
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-          FLY_IMAGE: ${{ secrets.FLY_IMAGE_PROD }}
+          FLY_IMAGE: ${{ vars.FLY_IMAGE_PROD }}
         run: |
           mise run fly:init-runner \
             --org ${{ secrets.FLY_ORG_PROD }} \
