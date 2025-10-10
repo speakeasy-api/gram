@@ -293,10 +293,6 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	securityMode := s.resolveSecurityMode(toolset)
 	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails)
 
-	for _, functionEnvVar := range toolsetDetails.FunctionEnvironmentVariables {
-		envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(functionEnvVar.Name, "_", "-")))
-	}
-
 	toolNames := []string{}
 
 	for _, toolDesc := range toolsetDetails.Tools {
@@ -468,6 +464,14 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 					Sensitive:   true,
 				})
 			}
+		}
+
+		for _, functionEnvVar := range toolsetDetails.FunctionEnvironmentVariables {
+			inputs = append(inputs, securityInput{
+				SystemName:  fmt.Sprintf("MCP-%s", functionEnvVar.Name),
+				DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(functionEnvVar.Name, "_", "-")),
+				Sensitive:   true,
+			})
 		}
 
 		return inputs
