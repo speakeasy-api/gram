@@ -261,6 +261,17 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	}
 
 	if !toolset.McpIsPublic {
+		// If no auth context, redirect to login page
+		if authCtx == nil {
+			if s.serverURL != nil {
+				loginURL := s.serverURL.String() + "/login"
+				http.Redirect(w, r, loginURL, http.StatusFound)
+				return nil
+			}
+			// Fallback if serverURL is nil
+			return oops.E(oops.CodeNotFound, nil, "mcp server not found").Log(ctx, s.logger)
+		}
+
 		// Ought one to check if the user has access to the organization rather than just if the org is active?
 		if !authOk || authCtx.ActiveOrganizationID != toolset.OrganizationID {
 			return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)

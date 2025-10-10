@@ -61,7 +61,7 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name:    "private toolset returns 404 without authentication",
+			name:    "private toolset redirects to login without authentication",
 			mcpSlug: "private-test-toolset",
 			setupToolset: func(t *testing.T, ctx context.Context) (toolsetOrgID string) {
 				// Create a private toolset using the same organization from auth context
@@ -80,11 +80,11 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 				return authCtx.ActiveOrganizationID
 			},
 			setupAuth: func(t *testing.T, toolsetOrgID string) context.Context {
-				// Return context with no auth - should fail for private toolsets
+				// Return context with no auth - should redirect to login
 				return context.Background()
 			},
-			expectedError: true,
-			shouldContain: "mcp server not found",
+			expectedError: false, // No error - it redirects instead
+			shouldContain: "",
 		},
 		{
 			name:    "private toolset renders page with correct organization authentication",
@@ -177,18 +177,27 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 					assert.Contains(t, err.Error(), tt.shouldContain, "Error message should contain expected text")
 				}
 			} else {
-				// For successful cases, we might get errors due to incomplete test data setup
-				// but the important thing is we didn't get an auth error
-				if err != nil {
-					// Check that it's NOT an auth error
-					assert.NotContains(t, err.Error(), "mcp server not found",
-						"Should not get auth error for valid access: %v", err)
-					t.Logf("Non-auth error (may be due to incomplete test setup): %v", err)
+				// For successful cases, check if we got a redirect or successful rendering
+				if tt.name == "private toolset redirects to login without authentication" {
+					// This specific test should redirect
+					assert.NoError(t, err, "Should not error on redirect")
+					assert.Equal(t, http.StatusFound, rr.Code, "Should redirect with 302")
+					location := rr.Header().Get("Location")
+					assert.Contains(t, location, "/login", "Should redirect to login page")
 				} else {
-					// If no error, verify we got a successful response
-					assert.Equal(t, http.StatusOK, rr.Code, "Expected successful response")
-					assert.Equal(t, "text/html", rr.Header().Get("Content-Type"), "Expected HTML content type")
-					assert.Greater(t, len(rr.Body.Bytes()), 0, "Expected non-empty response body")
+					// Other successful cases might get errors due to incomplete test data setup
+					// but the important thing is we didn't get an auth error
+					if err != nil {
+						// Check that it's NOT an auth error
+						assert.NotContains(t, err.Error(), "mcp server not found",
+							"Should not get auth error for valid access: %v", err)
+						t.Logf("Non-auth error (may be due to incomplete test setup): %v", err)
+					} else {
+						// If no error, verify we got a successful response
+						assert.Equal(t, http.StatusOK, rr.Code, "Expected successful response")
+						assert.Equal(t, "text/html", rr.Header().Get("Content-Type"), "Expected HTML content type")
+						assert.Greater(t, len(rr.Body.Bytes()), 0, "Expected non-empty response body")
+					}
 				}
 			}
 		})
