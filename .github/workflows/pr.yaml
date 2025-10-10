@@ -630,7 +630,6 @@ jobs:
           mise run fly:init-runner \
             --org ${{ secrets.FLY_ORG_DEV }} \
             --image $FLY_IMAGE \
-            --name ${{ matrix.runtime }} \
             --force
 
       - name: "[PROD] Create fly app"
@@ -644,7 +643,6 @@ jobs:
           mise run fly:init-runner \
             --org ${{ secrets.FLY_ORG_PROD }} \
             --image $FLY_IMAGE \
-            --name ${{ matrix.runtime }} \
             --force
 
       - name: Set up Docker Buildx

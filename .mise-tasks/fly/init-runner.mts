@@ -49,13 +49,13 @@ function halt(condition: unknown, message: string): asserts condition {
 
 async function main() {
   const accessToken = process.env["FLY_API_TOKEN"];
-  halt(accessToken, "❌ FLY_API_TOKEN is required.");
+  halt(accessToken, "FLY_API_TOKEN is required.");
 
   const image = process.env["usage_image"] ?? process.env["FLY_IMAGE"] ?? "";
-  halt(image, "❌ --image or FLY_IMAGE are required.");
+  halt(image, "--image or FLY_IMAGE are required.");
 
   const org = process.env["usage_org"];
-  halt(org, "❌ --org is required.");
+  halt(org, "--org is required.");
 
   const [, appName] = parseImageName(image);
 
