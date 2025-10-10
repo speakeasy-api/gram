@@ -52,6 +52,17 @@ type ListKeysResponseBody struct {
 	Keys []*KeyResponseBody `form:"keys" json:"keys" xml:"keys"`
 }
 
+// VerifyKeyResponseBody is the type of the "keys" service "verifyKey" endpoint
+// HTTP response body.
+type VerifyKeyResponseBody struct {
+	// The organization the key belongs to
+	Organization *ValidateKeyOrganizationResponseBody `form:"organization" json:"organization" xml:"organization"`
+	// The projects accessible with this key
+	Projects []*ValidateKeyProjectResponseBody `form:"projects" json:"projects" xml:"projects"`
+	// List of permission scopes for this key
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+}
+
 // CreateKeyUnauthorizedResponseBody is the type of the "keys" service
 // "createKey" endpoint HTTP response body for the "unauthorized" error.
 type CreateKeyUnauthorizedResponseBody struct {
@@ -592,6 +603,186 @@ type RevokeKeyGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// VerifyKeyUnauthorizedResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "unauthorized" error.
+type VerifyKeyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyKeyForbiddenResponseBody is the type of the "keys" service "verifyKey"
+// endpoint HTTP response body for the "forbidden" error.
+type VerifyKeyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyKeyBadRequestResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "bad_request" error.
+type VerifyKeyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyKeyNotFoundResponseBody is the type of the "keys" service "verifyKey"
+// endpoint HTTP response body for the "not_found" error.
+type VerifyKeyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyKeyConflictResponseBody is the type of the "keys" service "verifyKey"
+// endpoint HTTP response body for the "conflict" error.
+type VerifyKeyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyKeyUnsupportedMediaResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "unsupported_media" error.
+type VerifyKeyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyKeyInvalidResponseBody is the type of the "keys" service "verifyKey"
+// endpoint HTTP response body for the "invalid" error.
+type VerifyKeyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyKeyInvariantViolationResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "invariant_violation" error.
+type VerifyKeyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyKeyUnexpectedResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "unexpected" error.
+type VerifyKeyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyKeyGatewayErrorResponseBody is the type of the "keys" service
+// "verifyKey" endpoint HTTP response body for the "gateway_error" error.
+type VerifyKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // KeyResponseBody is used to define fields on response body types.
 type KeyResponseBody struct {
 	// The ID of the key
@@ -614,6 +805,28 @@ type KeyResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// When the key was last updated.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// ValidateKeyOrganizationResponseBody is used to define fields on response
+// body types.
+type ValidateKeyOrganizationResponseBody struct {
+	// The ID of the organization
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the organization
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the organization
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+}
+
+// ValidateKeyProjectResponseBody is used to define fields on response body
+// types.
+type ValidateKeyProjectResponseBody struct {
+	// The ID of the project
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the project
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the project
+	Slug string `form:"slug" json:"slug" xml:"slug"`
 }
 
 // NewCreateKeyResponseBody builds the HTTP response body from the result of
@@ -652,6 +865,32 @@ func NewListKeysResponseBody(res *keys.ListKeysResult) *ListKeysResponseBody {
 		}
 	} else {
 		body.Keys = []*KeyResponseBody{}
+	}
+	return body
+}
+
+// NewVerifyKeyResponseBody builds the HTTP response body from the result of
+// the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyResponseBody(res *keys.ValidateKeyResult) *VerifyKeyResponseBody {
+	body := &VerifyKeyResponseBody{}
+	if res.Organization != nil {
+		body.Organization = marshalKeysValidateKeyOrganizationToValidateKeyOrganizationResponseBody(res.Organization)
+	}
+	if res.Projects != nil {
+		body.Projects = make([]*ValidateKeyProjectResponseBody, len(res.Projects))
+		for i, val := range res.Projects {
+			body.Projects[i] = marshalKeysValidateKeyProjectToValidateKeyProjectResponseBody(val)
+		}
+	} else {
+		body.Projects = []*ValidateKeyProjectResponseBody{}
+	}
+	if res.Scopes != nil {
+		body.Scopes = make([]string, len(res.Scopes))
+		for i, val := range res.Scopes {
+			body.Scopes[i] = val
+		}
+	} else {
+		body.Scopes = []string{}
 	}
 	return body
 }
@@ -1076,6 +1315,146 @@ func NewRevokeKeyGatewayErrorResponseBody(res *goa.ServiceError) *RevokeKeyGatew
 	return body
 }
 
+// NewVerifyKeyUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyUnauthorizedResponseBody(res *goa.ServiceError) *VerifyKeyUnauthorizedResponseBody {
+	body := &VerifyKeyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyKeyForbiddenResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyForbiddenResponseBody(res *goa.ServiceError) *VerifyKeyForbiddenResponseBody {
+	body := &VerifyKeyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyKeyBadRequestResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyBadRequestResponseBody(res *goa.ServiceError) *VerifyKeyBadRequestResponseBody {
+	body := &VerifyKeyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyKeyNotFoundResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyNotFoundResponseBody(res *goa.ServiceError) *VerifyKeyNotFoundResponseBody {
+	body := &VerifyKeyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyKeyConflictResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyConflictResponseBody(res *goa.ServiceError) *VerifyKeyConflictResponseBody {
+	body := &VerifyKeyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyKeyUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyUnsupportedMediaResponseBody(res *goa.ServiceError) *VerifyKeyUnsupportedMediaResponseBody {
+	body := &VerifyKeyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyKeyInvalidResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyInvalidResponseBody(res *goa.ServiceError) *VerifyKeyInvalidResponseBody {
+	body := &VerifyKeyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyKeyInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyInvariantViolationResponseBody(res *goa.ServiceError) *VerifyKeyInvariantViolationResponseBody {
+	body := &VerifyKeyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyKeyUnexpectedResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyUnexpectedResponseBody(res *goa.ServiceError) *VerifyKeyUnexpectedResponseBody {
+	body := &VerifyKeyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyKeyGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "keys" service.
+func NewVerifyKeyGatewayErrorResponseBody(res *goa.ServiceError) *VerifyKeyGatewayErrorResponseBody {
+	body := &VerifyKeyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateKeyPayload builds a keys service createKey endpoint payload.
 func NewCreateKeyPayload(body *CreateKeyRequestBody, sessionToken *string) *keys.CreateKeyPayload {
 	v := &keys.CreateKeyPayload{
@@ -1103,6 +1482,14 @@ func NewRevokeKeyPayload(id string, sessionToken *string) *keys.RevokeKeyPayload
 	v := &keys.RevokeKeyPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewVerifyKeyPayload builds a keys service verifyKey endpoint payload.
+func NewVerifyKeyPayload(apikeyToken *string) *keys.VerifyKeyPayload {
+	v := &keys.VerifyKeyPayload{}
+	v.ApikeyToken = apikeyToken
 
 	return v
 }

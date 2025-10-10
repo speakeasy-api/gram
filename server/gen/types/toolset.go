@@ -29,6 +29,8 @@ type Toolset struct {
 	SecurityVariables []*SecurityVariable
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariable
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariable
 	// The tools in this toolset
 	Tools []*Tool
 	// The tool URNs in this toolset

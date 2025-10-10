@@ -1,13 +1,11 @@
 package main
 
 import (
-	"archive/zip"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -20,12 +18,12 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
+	"github.com/speakeasy-api/gram/functions/buildinfo"
 	"github.com/speakeasy-api/gram/functions/internal/attr"
+	"github.com/speakeasy-api/gram/functions/internal/bootstrap"
 	"github.com/speakeasy-api/gram/functions/internal/encryption"
-	"github.com/speakeasy-api/gram/functions/internal/javascript"
 	"github.com/speakeasy-api/gram/functions/internal/middleware"
 	"github.com/speakeasy-api/gram/functions/internal/o11y"
-	"github.com/speakeasy-api/gram/functions/internal/python"
 	"github.com/speakeasy-api/gram/functions/internal/runner"
 	"github.com/speakeasy-api/gram/functions/internal/svc"
 )
@@ -33,7 +31,9 @@ import (
 var (
 	language = flag.String("language", "javascript", "Programming language for the function. Can be 'javascript', 'typescript', or 'python'.")
 	codePath = flag.String("codePath", "/data/code.zip", "Path to the code zip file")
-	workDir  = flag.String("workDir", "/srv/app", "Working directory for the application")
+	workDir  = flag.String("workDir", "/var/task", "Working directory for the application")
+	version  = flag.Bool("version", false, "Print version information and exit")
+	doinit   = flag.Bool("init", false, "Initialize the filesystem and exit")
 )
 
 type ToolCallRequest struct {
@@ -59,7 +59,6 @@ func main() {
 
 	flag.CommandLine.SetOutput(os.Stderr)
 	flag.Parse()
-
 	if err := run(ctx, logger); err != nil {
 		logger.ErrorContext(ctx, "fatal error", attr.SlogError(err))
 		os.Exit(1)
@@ -67,28 +66,43 @@ func main() {
 }
 
 func run(ctx context.Context, logger *slog.Logger) error {
+	if *version {
+		fmt.Printf("version: %s\ncommit: %s\ndate: %s\n",
+			buildinfo.Version, buildinfo.Commit, buildinfo.Date)
+		return nil
+	}
+
 	ctx, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 
 	o11y.SetupOTelSDK(ctx, logger)
 
-	args, err := validateArgs()
+	args, err := sanitizeArgs()
 	if err != nil {
 		return fmt.Errorf("invalid arguments: %w", err)
 	}
 
-	if err := unzipCode(ctx, logger, args.codePath, args.workDir); err != nil {
-		return fmt.Errorf("unzip code: %w", err)
+	if *doinit {
+		logger.InfoContext(ctx, "initializing function runtime")
+		if _, _, err := bootstrap.InitializeMachine(ctx, logger, args.language, args.codePath, args.workDir); err != nil {
+			return fmt.Errorf("initialize machine: %w", err)
+		}
+		logger.InfoContext(ctx, "initialized function runtime")
+		return nil
 	}
 
-	command, program, err := prepareProgram(args.workDir, args.language)
+	if os.Geteuid() == 0 {
+		return fmt.Errorf("refusing to run as root")
+	}
+
+	command, program, err := bootstrap.ResolveProgram(args.language, args.workDir)
 	if err != nil {
-		return fmt.Errorf("prepare program: %w", err)
+		return fmt.Errorf("resolve program: %w", err)
 	}
 
-	authSecret := os.Getenv("GRAM_FUNCTIONS_SECRET")
+	authSecret := os.Getenv("GRAM_FUNCTION_AUTH_SECRET")
 	if authSecret == "" {
-		return fmt.Errorf("GRAM_FUNCTIONS_SECRET is required")
+		return fmt.Errorf("GRAM_FUNCTION_AUTH_SECRET is required")
 	}
 
 	enc, err := encryption.New(authSecret)
@@ -112,10 +126,15 @@ func run(ctx context.Context, logger *slog.Logger) error {
 
 	runner.NewService(logger, enc, args.workDir, command, program).Attach(mux)
 
+	var handler http.Handler = mux
+	handler = middleware.NewVersion(handler)
+	handler = middleware.NewRecovery(logger, handler)
+	handler = otelhttp.NewHandler(handler, "http.server")
+
 	idle := svc.NewIdleTracker(time.Minute)
 	srv := &http.Server{
 		Addr:              ":8888",
-		Handler:           middleware.NewRecovery(logger, otelhttp.NewHandler(mux, "http.server")),
+		Handler:           handler,
 		ReadHeaderTimeout: 30 * time.Second,
 		BaseContext: func(net.Listener) context.Context {
 			return ctx
@@ -154,67 +173,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	return nil
 }
 
-func unzipCode(ctx context.Context, logger *slog.Logger, zipPath string, dest string) error {
-	zipFile, err := zip.OpenReader(zipPath)
-	if err != nil {
-		if zipFile != nil {
-			_ = zipFile.Close()
-		}
-		return fmt.Errorf("%s: open zip file: %w", zipPath, err)
-	}
-	defer o11y.LogDefer(ctx, logger, func() error { return zipFile.Close() })
-
-	for _, file := range zipFile.File {
-		if err := handleZipFile(ctx, logger, file, dest); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func handleZipFile(ctx context.Context, logger *slog.Logger, file *zip.File, dest string) error {
-	path := filepath.Clean(filepath.Join(dest, filepath.Clean(file.Name)))
-
-	if file.FileInfo().IsDir() {
-		if err := os.MkdirAll(path, 0750); err != nil {
-			return fmt.Errorf("%s: create directory: %w", path, err)
-		}
-		return nil
-	}
-
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0750); err != nil {
-		return fmt.Errorf("%s: failed to create directory: %w", dir, err)
-	}
-
-	fileReader, err := file.Open()
-	if err != nil {
-		return fmt.Errorf("%s: open file in zip: %w", file.Name, err)
-	}
-	defer o11y.LogDefer(ctx, logger, func() error { return fileReader.Close() })
-
-	targetFile, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		return fmt.Errorf("%s: create target file: %w", path, err)
-	}
-	defer o11y.LogDefer(ctx, logger, func() error { return targetFile.Close() })
-
-	// Limit extraction to 10MiB per file to prevent decompression bombs
-	const maxFileSize = 10 * 1024 * 1024
-	written, err := io.Copy(targetFile, io.LimitReader(fileReader, maxFileSize))
-	if err != nil {
-		return fmt.Errorf("%s: extract file: %w", file.Name, err)
-	}
-
-	if written < 0 || file.UncompressedSize64 > uint64(written) {
-		return fmt.Errorf("%s: file too large (>%d bytes, wrote %d bytes)", file.Name, maxFileSize, written)
-	}
-
-	return nil
-}
-
-func validateArgs() (*runnerArgs, error) {
+func sanitizeArgs() (*runnerArgs, error) {
 	if language == nil || *language == "" {
 		return nil, fmt.Errorf("language is required")
 	}
@@ -240,68 +199,30 @@ func validateArgs() (*runnerArgs, error) {
 		return nil, fmt.Errorf("workDir is required")
 	}
 
-	wdStat, err := os.Stat(*workDir)
+	wd, err := filepath.Abs(*workDir)
+	if err != nil {
+		return nil, fmt.Errorf("get absolute path: %s: %w", *workDir, err)
+	}
+
+	wdStat, err := os.Stat(wd)
 	switch {
 	case err == nil:
 		if !wdStat.IsDir() {
-			return nil, fmt.Errorf("stat: %s: not a directory", *workDir)
+			return nil, fmt.Errorf("stat: %s: not a directory", wd)
 		}
 	case errors.Is(err, os.ErrNotExist):
-		if err := os.MkdirAll(*workDir, 0750); err != nil {
-			return nil, fmt.Errorf("create dir: %s: %w", *workDir, err)
+		if err := os.MkdirAll(wd, 0750); err != nil {
+			return nil, fmt.Errorf("create dir: %s: %w", wd, err)
 		}
 	default:
-		return nil, fmt.Errorf("stat: %s: %w", *workDir, err)
+		return nil, fmt.Errorf("stat: %s: %w", wd, err)
 	}
 
 	return &runnerArgs{
 		codePath: *codePath,
-		workDir:  *workDir,
+		workDir:  wd,
 		language: *language,
 	}, nil
-}
-
-func prepareProgram(workDir string, language string) (string, string, error) {
-	switch language {
-	case "javascript", "typescript":
-		entryPath := filepath.Join(workDir, "gram-start.js")
-		if err := os.WriteFile(entryPath, javascript.Entrypoint, 0600); err != nil {
-			return "", "", fmt.Errorf("write %s entrypoint (%s): %w", language, entryPath, err)
-		}
-
-		functionsPath := filepath.Join(workDir, "functions.js")
-		stat, err := os.Stat(functionsPath)
-		switch {
-		case errors.Is(err, os.ErrNotExist), err == nil && stat.Size() == 0:
-			if err := os.WriteFile(functionsPath, javascript.DefaultFunctions, 0600); err != nil {
-				return "", "", fmt.Errorf("write %s default functions (%s): %w", language, functionsPath, err)
-			}
-		case err != nil:
-			return "", "", fmt.Errorf("stat %s: %w", functionsPath, err)
-		}
-
-		return "node", entryPath, nil
-	case "python":
-		entryPath := filepath.Join(workDir, "gram_start.py")
-		if err := os.WriteFile(entryPath, python.Entrypoint, 0600); err != nil {
-			return "", "", fmt.Errorf("write %s entrypoint (%s): %w", language, entryPath, err)
-		}
-
-		functionsPath := filepath.Join(workDir, "functions.py")
-		stat, err := os.Stat(functionsPath)
-		switch {
-		case errors.Is(err, os.ErrNotExist) || (err == nil && stat.Size() == 0):
-			if err := os.WriteFile(functionsPath, python.DefaultFunctions, 0600); err != nil {
-				return "", "", fmt.Errorf("write %s default functions (%s): %w", language, functionsPath, err)
-			}
-		case err != nil:
-			return "", "", fmt.Errorf("stat %s: %w", functionsPath, err)
-		}
-
-		return "python", entryPath, nil
-	default:
-		return "", "", fmt.Errorf("unsupported language: %s", language)
-	}
 }
 
 func enrichLogger(logger *slog.Logger) *slog.Logger {

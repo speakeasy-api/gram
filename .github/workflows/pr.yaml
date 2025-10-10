@@ -612,18 +612,24 @@ jobs:
             --tarball-name ${{ matrix.runtime }} \
             --out oci/${{ matrix.runtime }}
 
+      - name: Run safety checks
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: |
+          mise run test:apko-functions \
+            --image ${{ steps.apko.outputs.image }} \
+            --tarball ${{ steps.apko.outputs.tarball }}
+
       - name: "[DEV] Create fly app"
         id: flyCreateDev
         if: ${{ needs.changes.outputs.functions == 'true' }}
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
-          FLY_IMAGE_PREFIX: ${{ secrets.FLY_IMAGE_PREFIX_DEV }}
+          FLY_IMAGE: ${{ vars.FLY_IMAGE_DEV }}
         run: |
           mise run fly:init-runner \
             --org ${{ secrets.FLY_ORG_DEV }} \
-            --image-prefix $FLY_IMAGE_PREFIX \
-            --name ${{ matrix.runtime }} \
+            --image $FLY_IMAGE \
             --force
 
       - name: "[PROD] Create fly app"
@@ -632,12 +638,11 @@ jobs:
         shell: bash
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
-          FLY_IMAGE_PREFIX: ${{ secrets.FLY_IMAGE_PREFIX_PROD }}
+          FLY_IMAGE: ${{ vars.FLY_IMAGE_PROD }}
         run: |
           mise run fly:init-runner \
             --org ${{ secrets.FLY_ORG_PROD }} \
-            --image-prefix $FLY_IMAGE_PREFIX \
-            --name ${{ matrix.runtime }} \
+            --image $FLY_IMAGE \
             --force
 
       - name: Set up Docker Buildx
@@ -653,12 +658,11 @@ jobs:
             ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
             ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
           tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=ref,event=pr
-            type=schedule,pattern=nightly
-            type=sha
-            type=sha,format=long
+            type=ref,event=branch,prefix=,suffix=-${{ matrix.runtime }}
+            type=ref,event=tag,prefix=,suffix=-${{ matrix.runtime }}
+            type=schedule,pattern=nightly,prefix=,suffix=-${{ matrix.runtime }}
+            type=sha,prefix=,suffix=-${{ matrix.runtime }}
+            type=sha,format=long,prefix=,suffix=-${{ matrix.runtime }}
 
       - name: Tag images
         if: ${{ needs.changes.outputs.functions == 'true' }}

@@ -1,0 +1,183 @@
+{
+  "version": "0.0.0",
+  "tools": [
+    {
+      "name": "list_all_pets",
+      "description": "List all pets in the store"
+    },
+    {
+      "name": "get_pet",
+      "description": "Get a pet by ID",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The ID of the pet"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "create_pet",
+      "description": "Add a new pet to the store",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "The name of the pet"
+          },
+          "category": {
+            "type": "string",
+            "description": "The category of the pet (e.g., dog, cat, bird)"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "pending",
+              "sold"
+            ],
+            "description": "The status of the pet in the store"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Tags associated with the pet"
+          }
+        },
+        "required": [
+          "name",
+          "category"
+        ]
+      },
+      "variables": {
+        "INVENTORY_API_KEY": {
+          "description": "API key for the inventory management service"
+        },
+        "NOTIFICATION_API_KEY": {
+          "description": "API key for customer notifications"
+        }
+      }
+    },
+    {
+      "name": "update_pet",
+      "description": "Update an existing pet in the store",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The ID of the pet to update"
+          },
+          "name": {
+            "type": "string",
+            "description": "The updated name of the pet"
+          },
+          "category": {
+            "type": "string",
+            "description": "The updated category of the pet"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "pending",
+              "sold"
+            ],
+            "description": "The updated status of the pet"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Updated tags associated with the pet"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      }
+    },
+    {
+      "name": "delete_pet",
+      "description": "Remove a pet from the store",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The ID of the pet to delete"
+          }
+        },
+        "required": [
+          "id"
+        ]
+      },
+      "variables": {
+        "AUDIT_API_KEY": {
+          "description": "API key for audit logging service"
+        }
+      }
+    },
+    {
+      "name": "find_pets_by_status",
+      "description": "Find pets by their status",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "available",
+              "pending",
+              "sold"
+            ],
+            "description": "The status to filter pets by"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      }
+    },
+    {
+      "name": "upload_pet_image",
+      "description": "Upload an image for a pet",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "pet_id": {
+            "type": "string",
+            "description": "The ID of the pet to upload image for"
+          },
+          "image_url": {
+            "type": "string",
+            "format": "uri",
+            "description": "The URL of the image to upload"
+          },
+          "metadata": {
+            "type": "string",
+            "description": "Additional metadata about the image"
+          }
+        },
+        "required": [
+          "pet_id",
+          "image_url"
+        ]
+      },
+      "variables": {
+        "IMAGE_STORAGE_API_KEY": {
+          "description": "API key for image storage service"
+        }
+      }
+    }
+  ]
+}

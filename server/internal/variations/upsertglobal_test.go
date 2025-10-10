@@ -250,6 +250,7 @@ func TestVariationsService_UpsertGlobal_NoProjectID(t *testing.T) {
 		Email:                nil,
 		AccountType:          "free",
 		ProjectSlug:          nil,
+		APIKeyScopes:         nil,
 	}
 	ctx = contextvalues.SetAuthContext(ctx, authCtx)
 

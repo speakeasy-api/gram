@@ -2,6 +2,7 @@ import { AutoSummarizeBadge } from "@/components/auto-summarize-badge";
 import { HttpRoute } from "@/components/http-route";
 import { ProjectAvatar } from "@/components/project-menu";
 import { Link } from "@/components/ui/link";
+import { Slider } from "@/components/ui/slider";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
@@ -34,6 +35,8 @@ import { useChatHistory } from "./ChatHistory";
 import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useMiniModel, useModel } from "./Openrouter";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
+import { parseMentionedTools, Tool as MentionTool } from "./ToolMentions";
+import { ChatComposerWrapper } from "./ChatComposerWrapper";
 
 const defaultModel = {
   label: "Claude 4.5 Sonnet",
@@ -76,6 +79,7 @@ export function ChatWindow({
   initialPrompt?: string | null;
 }) {
   const [model, setModel] = useState(defaultModel.value);
+  const [temperature, setTemperature] = useState(0.5);
   const chatKey = `chat-${model}`;
 
   // We do this because we want the chat to reset when the model changes
@@ -84,6 +88,8 @@ export function ChatWindow({
       key={chatKey}
       model={model}
       setModel={setModel}
+      temperature={temperature}
+      setTemperature={setTemperature}
       configRef={configRef}
       dynamicToolset={dynamicToolset}
       initialMessages={initialMessages}
@@ -93,11 +99,16 @@ export function ChatWindow({
   );
 }
 
-type Toolset = Record<string, Tool & { method?: string; path?: string }>;
+type Toolset = Record<
+  string,
+  Tool & { id?: string; method?: string; path?: string }
+>;
 
 function ChatInner({
   model,
   setModel,
+  temperature,
+  setTemperature,
   configRef,
   dynamicToolset,
   initialMessages,
@@ -106,6 +117,8 @@ function ChatInner({
 }: {
   model: string;
   setModel: (model: string) => void;
+  temperature: number;
+  setTemperature: (temperature: number) => void;
   configRef: ChatConfig;
   dynamicToolset: boolean;
   initialMessages?: Message[];
@@ -125,6 +138,13 @@ function ChatInner({
 
   const [displayOnlyMessages, setDisplayOnlyMessages] = useState<Message[]>([]);
   const selectedTools = useRef<string[]>([]);
+  const [_mentionedToolIds, setMentionedToolIds] = useState<string[]>([]);
+  const [_inputText, setInputText] = useState("");
+
+  // Feature flag for experimental tool tagging syntax
+  const isToolTaggingEnabled = telemetry.isFeatureEnabled(
+    "gram-experimental-chat",
+  );
 
   const instance = useInstance(
     {
@@ -197,6 +217,7 @@ function ChatInner({
         return [
           tool.name,
           {
+            id: tool.id,
             method: tool.httpMethod,
             path: tool.path,
             description: tool.description,
@@ -212,13 +233,14 @@ function ChatInner({
 
     filterPromptTools(baseTools).forEach((pt) => {
       tools[pt.name] = {
+        id: pt.id as string,
         description: pt.description ?? "",
         parameters: jsonSchema(JSON.parse(pt.schema ?? "{}")),
         execute: async (args) => {
           const res = await client.templates.renderByID({
-            id: pt.id,
+            id: pt.id as `${string}.${string}`,
             renderTemplateByIDRequestBody: {
-              arguments: args,
+              arguments: args as Record<string, unknown>,
             },
           });
 
@@ -229,6 +251,21 @@ function ChatInner({
 
     return tools;
   }, [instance.data]);
+
+  // Create a list of tools for the mention system
+  const mentionTools: MentionTool[] = useMemo(() => {
+    return Object.entries(allTools).map(([name, tool]) => {
+      const toolWithId = tool as Tool & { id?: string };
+      return {
+        id: toolWithId.id || name,
+        name,
+        description: tool.description,
+        type: tool.method ? "http" : "prompt",
+        httpMethod: tool.method,
+        path: tool.path,
+      };
+    });
+  }, [allTools]);
 
   const openrouterChat = useModel(model, {
     "Gram-Chat-ID": chat.id,
@@ -297,27 +334,63 @@ function ChatInner({
 
     let tools = allTools;
 
-    // On the first message, get the initial set of tools if we're using a dynamic toolset
-    if (dynamicToolset && selectedTools.current.length === 0) {
-      await updateSelectedToolsFromMessages(messages);
+    // Check if there are mentioned tools in the message (only if feature flag is enabled)
+    const lastUserMessage = messages
+      .filter((m: Message) => m.role === "user")
+      .pop();
+    let hasMentions = false;
+
+    if (isToolTaggingEnabled && lastUserMessage && lastUserMessage.content) {
+      const mentionedIds = parseMentionedTools(
+        lastUserMessage.content,
+        mentionTools,
+      );
+      if (mentionedIds.length > 0) {
+        hasMentions = true;
+        // Filter tools to only include mentioned ones
+        tools = Object.fromEntries(
+          Object.entries(allTools).filter(([_, tool]) => {
+            const toolWithId = tool as Tool & { id?: string };
+            return mentionedIds.includes(toolWithId.id || _);
+          }),
+        );
+
+        // Remove @ mentions from the message before sending to the model
+        const cleanedContent = lastUserMessage.content
+          .replace(/@\w+\s*/g, "")
+          .trim();
+        lastUserMessage.content = cleanedContent;
+      }
     }
 
-    if (dynamicToolset) {
-      tools = Object.fromEntries(
-        Object.entries(allTools).filter(([tool]) =>
-          selectedTools.current.includes(tool),
-        ),
-      );
+    // Only use dynamic toolset if no mentions were found
+    if (!hasMentions) {
+      // On the first message, get the initial set of tools if we're using a dynamic toolset
+      if (dynamicToolset && selectedTools.current.length === 0) {
+        await updateSelectedToolsFromMessages(messages);
+      }
+
+      if (dynamicToolset) {
+        tools = Object.fromEntries(
+          Object.entries(allTools).filter(([tool]) =>
+            selectedTools.current.includes(tool),
+          ),
+        );
+      }
     }
 
     let systemPrompt = `You are a helpful assistant that can answer questions and help with tasks.
         When using tools, ensure that the arguments match the provided schema. Note that the schema may update as the conversation progresses.
         The current date is ${new Date().toISOString()}`;
 
-    if (dynamicToolset) {
+    if (hasMentions) {
+      const toolNames = Object.keys(tools).join(", ");
       systemPrompt += `
-        If you are unable to fulfill the user's request with the current set of tools, use the refresh_tools tool to get a new set of tools before saying you can't do it. 
-        The current date is ${new Date().toISOString()}`;
+        The user has specifically selected the following tools for this request: ${toolNames}.
+        Please use only these tools to fulfill the request.`;
+    } else if (dynamicToolset) {
+      systemPrompt += `
+        If you are unable to fulfill the user's request with the current set of tools, use the refresh_tools tool to get a new set of tools before saying you can't do it.`;
     }
 
     const result = streamText({
@@ -333,7 +406,7 @@ function ChatInner({
           },
         ]),
       ),
-      temperature: 0.5,
+      temperature,
       system: systemPrompt,
       experimental_transform: smoothStream({
         delayInMs: 15, // Looks a little smoother
@@ -448,12 +521,26 @@ function ChatInner({
         localStorage.setItem(onboardingStepStorageKeys.test, "true");
       }
 
+      // Track if tools were mentioned (only if feature flag is enabled)
+      if (isToolTaggingEnabled) {
+        const mentionedIds = parseMentionedTools(msg, mentionTools);
+        if (mentionedIds.length > 0) {
+          telemetry.capture("chat_event", {
+            action: "tools_mentioned",
+            tool_count: mentionedIds.length,
+          });
+        }
+      }
+
       await append({
         role: "user",
         content: msg,
       });
+
+      // Clear the input text after sending
+      setInputText("");
     },
-    [append, chatMessages, telemetry, model],
+    [append, chatMessages, telemetry, model, mentionTools],
   );
 
   // This needs to be set so that the chat provider can append messages
@@ -489,7 +576,25 @@ function ChatInner({
   /* eslint-disable  @typescript-eslint/no-explicit-any */
   const m = messagesToDisplay as any;
 
-  return (
+  const temperatureSlider = (
+    <div className="flex items-center gap-3 px-2">
+      <SimpleTooltip tooltip="Controls randomness in responses. Lower values (0.0-0.3) make outputs more focused and deterministic. Higher values (0.7-1.0) increase creativity and variety. Default: 0.5">
+        <span className="text-xs text-muted-foreground whitespace-nowrap cursor-help">
+          Temp: {temperature.toFixed(1)}
+        </span>
+      </SimpleTooltip>
+      <Slider
+        value={temperature}
+        onChange={setTemperature}
+        min={0}
+        max={1}
+        step={0.1}
+        className="w-24"
+      />
+    </div>
+  );
+
+  const chatContent = (
     <div className="relative h-full flex items-center justify-center">
       <AIChatContainer
         messages={m}
@@ -500,7 +605,12 @@ function ChatInner({
         initialInput={initialPrompt || undefined}
         components={{
           composer: {
-            additionalActions,
+            additionalActions: (
+              <div className="flex items-center gap-2">
+                {temperatureSlider}
+                {additionalActions}
+              </div>
+            ),
             modelSelector: "text-foreground",
           },
           message: {
@@ -524,6 +634,18 @@ function ChatInner({
         totalMessages={totalMessages}
       />
     </div>
+  );
+
+  return isToolTaggingEnabled ? (
+    <ChatComposerWrapper
+      tools={mentionTools}
+      onToolsSelected={setMentionedToolIds}
+      onInputChange={setInputText}
+    >
+      {chatContent}
+    </ChatComposerWrapper>
+  ) : (
+    chatContent
   );
 }
 

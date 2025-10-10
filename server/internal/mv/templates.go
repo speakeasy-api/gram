@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -97,7 +98,7 @@ func fromPromptTemplateRow(row repo.PromptTemplate) *types.PromptTemplate {
 		Name:          row.Name,
 		Prompt:        row.Prompt,
 		Description:   conv.PtrValOrEmpty(conv.FromPGText[string](row.Description), ""),
-		Schema:        string(row.Arguments),
+		Schema:        conv.Default(string(row.Arguments), constants.DefaultEmptyToolSchema),
 		SchemaVersion: nil,
 		Engine:        conv.PtrValOr(conv.FromPGText[string](row.Engine), ""),
 		Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](row.Kind), "prompt"),

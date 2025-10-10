@@ -5,6 +5,7 @@
 import { keysCreate } from "../funcs/keysCreate.js";
 import { keysList } from "../funcs/keysList.js";
 import { keysRevokeById } from "../funcs/keysRevokeById.js";
+import { keysValidate } from "../funcs/keysValidate.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import * as components from "../models/components/index.js";
 import * as operations from "../models/operations/index.js";
@@ -61,6 +62,25 @@ export class Keys extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(keysRevokeById(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * verifyKey keys
+   *
+   * @remarks
+   * Verify an api key
+   */
+  async validate(
+    request?: operations.ValidateAPIKeyRequest | undefined,
+    security?: operations.ValidateAPIKeySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<components.ValidateKeyResult> {
+    return unwrapAsync(keysValidate(
       this,
       request,
       security,

@@ -169,11 +169,11 @@ func (c *DeploymentsClient) GetActiveDeployment(
 
 // EvolveRequest lists the assets to add to a deployment.
 type EvolveRequest struct {
-	Assets       []*deployments.AddOpenAPIv3DeploymentAssetForm
-	Functions    []*deployments.AddFunctionsForm
-	APIKey       secret.Secret
-	DeploymentID string
-	ProjectSlug  string
+	OpenAPIv3Assets []*deployments.AddOpenAPIv3DeploymentAssetForm
+	Functions       []*deployments.AddFunctionsForm
+	APIKey          secret.Secret
+	DeploymentID    string
+	ProjectSlug     string
 }
 
 // Evolve adds assets to an existing deployment.
@@ -186,7 +186,7 @@ func (c *DeploymentsClient) Evolve(
 		ApikeyToken:            &key,
 		ProjectSlugInput:       &req.ProjectSlug,
 		DeploymentID:           &req.DeploymentID,
-		UpsertOpenapiv3Assets:  req.Assets,
+		UpsertOpenapiv3Assets:  req.OpenAPIv3Assets,
 		UpsertFunctions:        req.Functions,
 		ExcludeOpenapiv3Assets: []string{},
 		ExcludeFunctions:       []string{},

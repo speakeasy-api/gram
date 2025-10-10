@@ -17,8 +17,19 @@ environment:
   environment:
     GOMODCACHE: '/var/cache/melange' 
 
+vars:
+  version: dev
+  commit: unset
+  date: unset
+
 pipeline:
   - uses: go/build
     with:
       packages: cmd/runner/main.go
       output: gram-runner
+      extra-args: -trimpath
+      ldflags: >-
+        -s -w
+        -X github.com/speakeasy-api/gram/functions/buildinfo.Version=${{ vars.version }}
+        -X github.com/speakeasy-api/gram/functions/buildinfo.Commit=${{ vars.commit }}
+        -X github.com/speakeasy-api/gram/functions/buildinfo.Date=${{ vars.date }}

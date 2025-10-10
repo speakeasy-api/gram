@@ -21,3 +21,8 @@ func ListKeysKeysPath() string {
 func RevokeKeyKeysPath() string {
 	return "/rpc/keys.revoke"
 }
+
+// VerifyKeyKeysPath returns the URL path to the keys service verifyKey HTTP endpoint.
+func VerifyKeyKeysPath() string {
+	return "/rpc/keys.verify"
+}

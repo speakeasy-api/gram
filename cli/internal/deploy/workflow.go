@@ -164,11 +164,11 @@ func (s *Workflow) EvolveDeployment(
 		slog.String("deployment_id", s.Deployment.ID),
 	)
 	evolved, err := s.DeploymentsClient.Evolve(ctx, api.EvolveRequest{
-		Assets:       s.NewOpenAPIAssets,
-		Functions:    s.NewFunctionAssets,
-		APIKey:       s.Params.APIKey,
-		DeploymentID: s.Deployment.ID,
-		ProjectSlug:  s.Params.ProjectSlug,
+		OpenAPIv3Assets: s.NewOpenAPIAssets,
+		Functions:       s.NewFunctionAssets,
+		APIKey:          s.Params.APIKey,
+		DeploymentID:    s.Deployment.ID,
+		ProjectSlug:     s.Params.ProjectSlug,
 	})
 	if err != nil {
 		return s.Fail(fmt.Errorf("failed to evolve deployment: %w", err))
