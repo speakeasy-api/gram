@@ -1,5 +1,37 @@
 # @gram/server
 
+## 0.5.0
+
+### Minor Changes
+
+- 31d661e: Add cache in front of describe toolset
+
+### Patch Changes
+
+- 2905669: Improve fallbacks when reading period usage. Fixes a minor race condition when a customer has only just subscribed
+- 36d7a3a: Properly set schema $defs when extracting tool schemas. Resolves an issue where recursive schemas were being created invalid.
+- e768e4d: Introduce “healing” of invalid tool call arguments. For certain large tool input JSON schemas, LLMs can sometimes pass in stringified JSON where literal JSON is expected. We can unpack the correct json object out of this, even after the LLM mistake.
+
+  **Before healing**
+
+  ```json
+  {
+    "name": "get_weather",
+    "input": "{\"lat\": 123, \"lng\": 456}"
+  }
+  ```
+
+  **After healing**
+
+  ```json
+  {
+    "name": "get_weather",
+    "input": { "lat": 123, "lng": 456 }
+  }
+  ```
+
+- a3b4abe: feat: propogate through function environment variables on toolset
+
 ## 0.4.0
 
 ### Minor Changes
