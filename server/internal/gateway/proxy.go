@@ -26,6 +26,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -37,11 +38,6 @@ type ToolCallSource string
 const (
 	ToolCallSourceDirect ToolCallSource = "direct"
 	ToolCallSourceMCP    ToolCallSource = "mcp"
-)
-
-const (
-	HeaderProxiedResponse  = "X-Gram-Proxy-Response"
-	HeaderFilteredResponse = "X-Gram-Proxy-ResponseFiltered"
 )
 
 var proxiedHeaders = []string{
@@ -139,7 +135,7 @@ func (itp *ToolProxy) Do(
 	gatewayTool *Tool,
 ) error {
 	if !gatewayTool.IsHTTP() {
-		return fmt.Errorf("tool type not supported: %s", gatewayTool.Kind)
+		return fmt.Errorf("tool type not supported: %s", gatewayTool.Kind())
 	}
 
 	tool := gatewayTool.HTTPTool
@@ -196,13 +192,22 @@ func (itp *ToolProxy) Do(
 	}
 
 	if len(tool.Schema) > 0 {
-		if validateErr := validateToolCallBody(ctx, logger, bodyBytes, string(tool.Schema)); validateErr != nil {
-			logger.InfoContext(ctx, "tool call request schema failed validation", attr.SlogError(validateErr))
+		bodyBytes, err = validateAndAttemptHealing(ctx, logger, bodyBytes, string(tool.Schema))
+
+		// Extract the body field from healed bodyBytes
+		var healedToolCallBody ToolCallBody
+		if unmarshalErr := json.Unmarshal(bodyBytes, &healedToolCallBody); unmarshalErr == nil {
+			toolCallBody.Body = healedToolCallBody.Body
+		}
+
+		// If still invalid after healing attempt, return error
+		if err != nil {
+			logger.InfoContext(ctx, "tool call request schema failed validation", attr.SlogError(err))
 			responseStatusCode = http.StatusBadRequest
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			if err := json.NewEncoder(w).Encode(toolcallErrorSchema{
-				Error: fmt.Sprintf("The input to the tool is invalid with the attached error. Please review the tool schema closely: %s", validateErr.Error()),
+				Error: fmt.Sprintf("The input to the tool is invalid with the attached error. Please review the tool schema closely: %s", err.Error()),
 			}); err != nil {
 				logger.ErrorContext(ctx, "failed to encode tool call error", attr.SlogError(err))
 			}
@@ -536,7 +541,7 @@ func reverseProxyRequest(ctx context.Context,
 	}
 
 	span.SetAttributes(attr.HTTPResponseExternal(true))
-	w.Header().Set(HeaderProxiedResponse, "1")
+	w.Header().Set(constants.HeaderProxiedResponse, "1")
 
 	finalStatusCode := resp.StatusCode
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
@@ -573,7 +578,7 @@ func reverseProxyRequest(ctx context.Context,
 		result := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
 		if result != nil {
 			w.Header().Set("Content-Type", result.contentType)
-			w.Header().Set(HeaderFilteredResponse, "1")
+			w.Header().Set(constants.HeaderFilteredResponse, "1")
 			span.SetAttributes(attr.HTTPResponseFiltered(true))
 			finalStatusCode = result.statusCode
 			body = result.resp

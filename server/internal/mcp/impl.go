@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -434,11 +435,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *gateway.DomainContext, error) {
+func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *customdomains.Context, error) {
 	var toolset toolsets_repo.Toolset
 	var toolsetErr error
-	var customDomainCtx *gateway.DomainContext
-	if domainCtx := gateway.DomainFromContext(ctx); domainCtx != nil {
+	var customDomainCtx *customdomains.Context
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		toolset, toolsetErr = s.toolsetsRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
 			McpSlug:        conv.ToPGText(mcpSlug),
 			CustomDomainID: uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true},

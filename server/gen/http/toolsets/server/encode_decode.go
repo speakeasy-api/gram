@@ -2057,6 +2057,21 @@ func marshalTypesServerVariableToServerVariableResponseBody(v *types.ServerVaria
 	return res
 }
 
+// marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody
+// builds a value of type *FunctionEnvironmentVariableResponseBody from a value
+// of type *types.FunctionEnvironmentVariable.
+func marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(v *types.FunctionEnvironmentVariable) *FunctionEnvironmentVariableResponseBody {
+	if v == nil {
+		return nil
+	}
+	res := &FunctionEnvironmentVariableResponseBody{
+		Description: v.Description,
+		Name:        v.Name,
+	}
+
+	return res
+}
+
 // marshalTypesToolToToolResponseBody builds a value of type *ToolResponseBody
 // from a value of type *types.Tool.
 func marshalTypesToolToToolResponseBody(v *types.Tool) *ToolResponseBody {
@@ -2390,6 +2405,12 @@ func marshalTypesToolsetEntryToToolsetEntryResponseBody(v *types.ToolsetEntry) *
 		res.ServerVariables = make([]*ServerVariableResponseBody, len(v.ServerVariables))
 		for i, val := range v.ServerVariables {
 			res.ServerVariables[i] = marshalTypesServerVariableToServerVariableResponseBody(val)
+		}
+	}
+	if v.FunctionEnvironmentVariables != nil {
+		res.FunctionEnvironmentVariables = make([]*FunctionEnvironmentVariableResponseBody, len(v.FunctionEnvironmentVariables))
+		for i, val := range v.FunctionEnvironmentVariables {
+			res.FunctionEnvironmentVariables[i] = marshalTypesFunctionEnvironmentVariableToFunctionEnvironmentVariableResponseBody(val)
 		}
 	}
 	if v.Tools != nil {

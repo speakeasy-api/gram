@@ -26,6 +26,14 @@ var ServerVariable = Type("ServerVariable", func() {
 	Required("description", "env_variables")
 })
 
+var FunctionEnvironmentVariable = Type("FunctionEnvironmentVariable", func() {
+	Meta("struct:pkg:path", "types")
+
+	Attribute("description", String, "Description of the function environment variable")
+	Attribute("name", String, "The environment variables")
+	Required("name")
+})
+
 var Toolset = Type("Toolset", func() {
 	Meta("struct:pkg:path", "types")
 
@@ -39,6 +47,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("default_environment_slug", Slug, "The slug of the environment to use as the default for the toolset")
 	Attribute("security_variables", ArrayOf(SecurityVariable), "The security variables that are relevant to the toolset")
 	Attribute("server_variables", ArrayOf(ServerVariable), "The server variables that are relevant to the toolset")
+	Attribute("function_environment_variables", ArrayOf(FunctionEnvironmentVariable), "The function environment variables that are relevant to the toolset")
 	Attribute("tools", ArrayOf(Tool), "The tools in this toolset")
 	Attribute("tool_urns", ArrayOf(String), "The tool URNs in this toolset")
 
@@ -72,9 +81,10 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 	Attribute("default_environment_slug", Slug, "The slug of the environment to use as the default for the toolset")
 	Attribute("security_variables", ArrayOf(SecurityVariable), "The security variables that are relevant to the toolset")
 	Attribute("server_variables", ArrayOf(ServerVariable), "The server variables that are relevant to the toolset")
+	Attribute("function_environment_variables", ArrayOf(FunctionEnvironmentVariable), "The function environment variables that are relevant to the toolset")
 	Attribute("tools", ArrayOf(ToolEntry), "The tools in this toolset")
 	Attribute("tool_urns", ArrayOf(String), "The tool URNs in this toolset")
-	
+
 	Attribute("prompt_templates", ArrayOf(PromptTemplateEntry), "The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts")
 	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
 	Attribute("mcp_is_public", Boolean, "Whether the toolset is public in MCP")

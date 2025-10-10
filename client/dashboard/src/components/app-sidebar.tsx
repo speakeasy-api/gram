@@ -51,16 +51,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem className="group/logo">
             <routes.home.Link className="hover:no-underline!">
-              <SidebarMenuButton
-                asChild
-                className="data-[slot=sidebar-menu-button]:!p-1.5 h-12"
-              >
-                <Stack direction={"horizontal"} align={"center"} gap={2}>
-                  <GramLogo className="w-25" />
-                  <Type variant="small" muted>
-                    v0.8.7 (beta)
-                  </Type>
-                </Stack>
+              <SidebarMenuButton className="data-[slot=sidebar-menu-button]:!p-1.5 h-12">
+                <GramLogo className="w-25" />
               </SidebarMenuButton>
             </routes.home.Link>
           </SidebarMenuItem>

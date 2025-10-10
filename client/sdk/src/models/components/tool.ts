@@ -8,6 +8,12 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  FunctionToolDefinition,
+  FunctionToolDefinition$inboundSchema,
+  FunctionToolDefinition$Outbound,
+  FunctionToolDefinition$outboundSchema,
+} from "./functiontooldefinition.js";
+import {
   HTTPToolDefinition,
   HTTPToolDefinition$inboundSchema,
   HTTPToolDefinition$Outbound,
@@ -25,6 +31,10 @@ import {
  */
 export type Tool = {
   /**
+   * A function tool
+   */
+  functionToolDefinition?: FunctionToolDefinition | undefined;
+  /**
    * An HTTP tool
    */
   httpToolDefinition?: HTTPToolDefinition | undefined;
@@ -37,10 +47,12 @@ export type Tool = {
 /** @internal */
 export const Tool$inboundSchema: z.ZodType<Tool, z.ZodTypeDef, unknown> = z
   .object({
+    function_tool_definition: FunctionToolDefinition$inboundSchema.optional(),
     http_tool_definition: HTTPToolDefinition$inboundSchema.optional(),
     prompt_template: PromptTemplate$inboundSchema.optional(),
   }).transform((v) => {
     return remap$(v, {
+      "function_tool_definition": "functionToolDefinition",
       "http_tool_definition": "httpToolDefinition",
       "prompt_template": "promptTemplate",
     });
@@ -48,6 +60,7 @@ export const Tool$inboundSchema: z.ZodType<Tool, z.ZodTypeDef, unknown> = z
 
 /** @internal */
 export type Tool$Outbound = {
+  function_tool_definition?: FunctionToolDefinition$Outbound | undefined;
   http_tool_definition?: HTTPToolDefinition$Outbound | undefined;
   prompt_template?: PromptTemplate$Outbound | undefined;
 };
@@ -55,10 +68,12 @@ export type Tool$Outbound = {
 /** @internal */
 export const Tool$outboundSchema: z.ZodType<Tool$Outbound, z.ZodTypeDef, Tool> =
   z.object({
+    functionToolDefinition: FunctionToolDefinition$outboundSchema.optional(),
     httpToolDefinition: HTTPToolDefinition$outboundSchema.optional(),
     promptTemplate: PromptTemplate$outboundSchema.optional(),
   }).transform((v) => {
     return remap$(v, {
+      functionToolDefinition: "function_tool_definition",
       httpToolDefinition: "http_tool_definition",
       promptTemplate: "prompt_template",
     });

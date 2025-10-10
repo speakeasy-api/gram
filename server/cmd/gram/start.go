@@ -481,7 +481,7 @@ func newStartCommand() *cli.Command {
 
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
 			mux.Use(middleware.NewHTTPLoggingMiddleware(logger))
-			mux.Use(middleware.CustomDomainsMiddleware(logger, db, c.String("environment"), serverURL))
+			mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 

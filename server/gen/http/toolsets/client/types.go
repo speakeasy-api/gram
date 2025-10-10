@@ -82,6 +82,8 @@ type CreateToolsetResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -137,6 +139,8 @@ type UpdateToolsetResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -185,6 +189,8 @@ type GetToolsetResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -233,6 +239,8 @@ type CloneToolsetResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -281,6 +289,8 @@ type AddExternalOAuthServerResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -329,6 +339,8 @@ type RemoveOAuthServerResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -2039,6 +2051,15 @@ type ServerVariableResponseBody struct {
 	EnvVariables []string `form:"env_variables,omitempty" json:"env_variables,omitempty" xml:"env_variables,omitempty"`
 }
 
+// FunctionEnvironmentVariableResponseBody is used to define fields on response
+// body types.
+type FunctionEnvironmentVariableResponseBody struct {
+	// Description of the function environment variable
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The environment variables
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // ToolResponseBody is used to define fields on response body types.
 type ToolResponseBody struct {
 	// The HTTP tool definition
@@ -2325,6 +2346,8 @@ type ToolsetEntryResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
 	// The tools in this toolset
 	Tools []*ToolEntryResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
 	// The tool URNs in this toolset
@@ -2475,6 +2498,12 @@ func NewCreateToolsetToolsetOK(body *CreateToolsetResponseBody) *types.Toolset {
 		v.ServerVariables = make([]*types.ServerVariable, len(body.ServerVariables))
 		for i, val := range body.ServerVariables {
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
+		}
+	}
+	if body.FunctionEnvironmentVariables != nil {
+		v.FunctionEnvironmentVariables = make([]*types.FunctionEnvironmentVariable, len(body.FunctionEnvironmentVariables))
+		for i, val := range body.FunctionEnvironmentVariables {
+			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
 	v.Tools = make([]*types.Tool, len(body.Tools))
@@ -2848,6 +2877,12 @@ func NewUpdateToolsetToolsetOK(body *UpdateToolsetResponseBody) *types.Toolset {
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
+	if body.FunctionEnvironmentVariables != nil {
+		v.FunctionEnvironmentVariables = make([]*types.FunctionEnvironmentVariable, len(body.FunctionEnvironmentVariables))
+		for i, val := range body.FunctionEnvironmentVariables {
+			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
+		}
+	}
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
 		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
@@ -3205,6 +3240,12 @@ func NewGetToolsetToolsetOK(body *GetToolsetResponseBody) *types.Toolset {
 		v.ServerVariables = make([]*types.ServerVariable, len(body.ServerVariables))
 		for i, val := range body.ServerVariables {
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
+		}
+	}
+	if body.FunctionEnvironmentVariables != nil {
+		v.FunctionEnvironmentVariables = make([]*types.FunctionEnvironmentVariable, len(body.FunctionEnvironmentVariables))
+		for i, val := range body.FunctionEnvironmentVariables {
+			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
 	v.Tools = make([]*types.Tool, len(body.Tools))
@@ -3566,6 +3607,12 @@ func NewCloneToolsetToolsetOK(body *CloneToolsetResponseBody) *types.Toolset {
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
+	if body.FunctionEnvironmentVariables != nil {
+		v.FunctionEnvironmentVariables = make([]*types.FunctionEnvironmentVariable, len(body.FunctionEnvironmentVariables))
+		for i, val := range body.FunctionEnvironmentVariables {
+			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
+		}
+	}
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
 		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
@@ -3775,6 +3822,12 @@ func NewAddExternalOAuthServerToolsetOK(body *AddExternalOAuthServerResponseBody
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
 		}
 	}
+	if body.FunctionEnvironmentVariables != nil {
+		v.FunctionEnvironmentVariables = make([]*types.FunctionEnvironmentVariable, len(body.FunctionEnvironmentVariables))
+		for i, val := range body.FunctionEnvironmentVariables {
+			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
+		}
+	}
 	v.Tools = make([]*types.Tool, len(body.Tools))
 	for i, val := range body.Tools {
 		v.Tools[i] = unmarshalToolResponseBodyToTypesTool(val)
@@ -3982,6 +4035,12 @@ func NewRemoveOAuthServerToolsetOK(body *RemoveOAuthServerResponseBody) *types.T
 		v.ServerVariables = make([]*types.ServerVariable, len(body.ServerVariables))
 		for i, val := range body.ServerVariables {
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
+		}
+	}
+	if body.FunctionEnvironmentVariables != nil {
+		v.FunctionEnvironmentVariables = make([]*types.FunctionEnvironmentVariable, len(body.FunctionEnvironmentVariables))
+		for i, val := range body.FunctionEnvironmentVariables {
+			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
 	v.Tools = make([]*types.Tool, len(body.Tools))
@@ -4222,6 +4281,13 @@ func ValidateCreateToolsetResponseBody(body *CreateToolsetResponseBody) (err err
 			}
 		}
 	}
+	for _, e := range body.FunctionEnvironmentVariables {
+		if e != nil {
+			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	for _, e := range body.Tools {
 		if e != nil {
 			if err2 := ValidateToolResponseBody(e); err2 != nil {
@@ -4345,6 +4411,13 @@ func ValidateUpdateToolsetResponseBody(body *UpdateToolsetResponseBody) (err err
 			}
 		}
 	}
+	for _, e := range body.FunctionEnvironmentVariables {
+		if e != nil {
+			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	for _, e := range body.Tools {
 		if e != nil {
 			if err2 := ValidateToolResponseBody(e); err2 != nil {
@@ -4448,6 +4521,13 @@ func ValidateGetToolsetResponseBody(body *GetToolsetResponseBody) (err error) {
 	for _, e := range body.ServerVariables {
 		if e != nil {
 			if err2 := ValidateServerVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.FunctionEnvironmentVariables {
+		if e != nil {
+			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -4559,6 +4639,13 @@ func ValidateCloneToolsetResponseBody(body *CloneToolsetResponseBody) (err error
 			}
 		}
 	}
+	for _, e := range body.FunctionEnvironmentVariables {
+		if e != nil {
+			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	for _, e := range body.Tools {
 		if e != nil {
 			if err2 := ValidateToolResponseBody(e); err2 != nil {
@@ -4666,6 +4753,13 @@ func ValidateAddExternalOAuthServerResponseBody(body *AddExternalOAuthServerResp
 			}
 		}
 	}
+	for _, e := range body.FunctionEnvironmentVariables {
+		if e != nil {
+			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	for _, e := range body.Tools {
 		if e != nil {
 			if err2 := ValidateToolResponseBody(e); err2 != nil {
@@ -4769,6 +4863,13 @@ func ValidateRemoveOAuthServerResponseBody(body *RemoveOAuthServerResponseBody) 
 	for _, e := range body.ServerVariables {
 		if e != nil {
 			if err2 := ValidateServerVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.FunctionEnvironmentVariables {
+		if e != nil {
+			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -7007,6 +7108,15 @@ func ValidateServerVariableResponseBody(body *ServerVariableResponseBody) (err e
 	return
 }
 
+// ValidateFunctionEnvironmentVariableResponseBody runs the validations defined
+// on FunctionEnvironmentVariableResponseBody
+func ValidateFunctionEnvironmentVariableResponseBody(body *FunctionEnvironmentVariableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	return
+}
+
 // ValidateToolResponseBody runs the validations defined on ToolResponseBody
 func ValidateToolResponseBody(body *ToolResponseBody) (err error) {
 	if body.HTTPToolDefinition != nil {
@@ -7459,6 +7569,13 @@ func ValidateToolsetEntryResponseBody(body *ToolsetEntryResponseBody) (err error
 	for _, e := range body.ServerVariables {
 		if e != nil {
 			if err2 := ValidateServerVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.FunctionEnvironmentVariables {
+		if e != nil {
+			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}

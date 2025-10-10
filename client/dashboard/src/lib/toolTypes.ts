@@ -5,6 +5,7 @@ import {
   PromptTemplate,
   PromptTemplateEntry,
   PromptTemplateKind,
+  FunctionToolDefinition,
 } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
@@ -20,7 +21,8 @@ export type Toolset = Omit<GeneratedToolset, "tools"> & {
 
 export type Tool =
   | ({ type: "http" } & HTTPToolDefinition)
-  | ({ type: "prompt" } & PromptTemplate);
+  | ({ type: "prompt" } & PromptTemplate)
+  | ({ type: "function" } & FunctionToolDefinition);
 
 export type ToolGroup = {
   key: string;
@@ -37,6 +39,8 @@ export const asTool = (tool: GeneratedTool): Tool => {
     return { type: "http", ...tool.httpToolDefinition };
   } else if (tool.promptTemplate) {
     return { type: "prompt", ...tool.promptTemplate };
+  } else if (tool.functionToolDefinition) {
+    return { type: "function", ...tool.functionToolDefinition };
   } else {
     throw new Error("Unexpected tool type");
   }
@@ -81,6 +85,9 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
           ? documentIdToSlug?.[tool.openapiv3DocumentId]
           : undefined;
         groupKey = documentSlug || "unknown";
+      } else if (tool.type === "function") {
+        // TODO: As the UX gets built out this should get more granular, tying to which function asset
+        groupKey = "function";
       } else {
         groupKey = "custom";
       }
@@ -120,6 +127,7 @@ export const promptNames = (promptTemplates: PromptTemplateEntry[]): string[] =>
 
 export const isHttpTool = (tool: Tool) => tool.type === "http";
 export const isPromptTool = (tool: Tool) => tool.type === "prompt";
+export const isFunctionTool = (tool: Tool) => tool.type === "function";
 
 export const filterHttpTools = (
   tools: Tool[] | undefined,

@@ -512,6 +512,21 @@ func unmarshalServerVariableResponseBodyToTypesServerVariable(v *ServerVariableR
 	return res
 }
 
+// unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable
+// builds a value of type *types.FunctionEnvironmentVariable from a value of
+// type *FunctionEnvironmentVariableResponseBody.
+func unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(v *FunctionEnvironmentVariableResponseBody) *types.FunctionEnvironmentVariable {
+	if v == nil {
+		return nil
+	}
+	res := &types.FunctionEnvironmentVariable{
+		Description: v.Description,
+		Name:        *v.Name,
+	}
+
+	return res
+}
+
 // unmarshalEnvironmentResponseBodyToTypesEnvironment builds a value of type
 // *types.Environment from a value of type *EnvironmentResponseBody.
 func unmarshalEnvironmentResponseBodyToTypesEnvironment(v *EnvironmentResponseBody) *types.Environment {

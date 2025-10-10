@@ -9,7 +9,7 @@ let value: ToolEntry = {
   id: "<id>",
   name: "<value>",
   toolUrn: "<value>",
-  type: "prompt",
+  type: "function",
 };
 ```
 

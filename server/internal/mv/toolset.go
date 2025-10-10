@@ -30,6 +30,11 @@ import (
 	vr "github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
+// functionManifestVariable represents a variable definition from a function manifest.
+type functionManifestVariable struct {
+	Description *string `json:"description"`
+}
+
 func DescribeToolsetEntry(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -76,6 +81,7 @@ func DescribeToolsetEntry(
 	var tools []*types.ToolEntry
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
+	var functionEnvVars []*types.FunctionEnvironmentVariable
 	if len(toolUrns) > 0 {
 		definitions, err := toolsRepo.FindHttpToolEntriesByUrn(ctx, tr.FindHttpToolEntriesByUrnParams{
 			ProjectID: pid,
@@ -150,6 +156,24 @@ func DescribeToolsetEntry(
 				Name:    tool.Name,
 				ToolUrn: tool.ToolUrn.String(),
 			})
+			if tool.Variables != nil {
+				var variables map[string]*functionManifestVariable
+				if err := json.Unmarshal(tool.Variables, &variables); err != nil {
+					logger.ErrorContext(ctx, "failed to unmarshal function tool variables", attr.SlogError(err))
+				} else {
+					for k, v := range variables {
+						var description *string
+						if v != nil && v.Description != nil {
+							description = v.Description
+						}
+						functionEnvVars = append(functionEnvVars, &types.FunctionEnvironmentVariable{
+							Name:        k,
+							Description: description,
+						})
+					}
+
+				}
+			}
 		}
 
 		promptTools, err := templatesRepo.PeekTemplatesByUrns(ctx, templatesR.PeekTemplatesByUrnsParams{
@@ -193,24 +217,25 @@ func DescribeToolsetEntry(
 	}
 
 	return &types.ToolsetEntry{
-		ID:                     toolset.ID.String(),
-		OrganizationID:         toolset.OrganizationID,
-		ProjectID:              toolset.ProjectID.String(),
-		Name:                   toolset.Name,
-		Slug:                   types.Slug(toolset.Slug),
-		DefaultEnvironmentSlug: conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
-		SecurityVariables:      securityVars,
-		ServerVariables:        serverVars,
-		Description:            conv.FromPGText[string](toolset.Description),
-		McpSlug:                conv.FromPGText[types.Slug](toolset.McpSlug),
-		McpEnabled:             &toolset.McpEnabled,
-		CustomDomainID:         conv.FromNullableUUID(toolset.CustomDomainID),
-		McpIsPublic:            &toolset.McpIsPublic,
-		CreatedAt:              toolset.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:              toolset.UpdatedAt.Time.Format(time.RFC3339),
-		Tools:                  tools,
-		PromptTemplates:        promptTemplates,
-		ToolUrns:               toolUrns,
+		ID:                           toolset.ID.String(),
+		OrganizationID:               toolset.OrganizationID,
+		ProjectID:                    toolset.ProjectID.String(),
+		Name:                         toolset.Name,
+		Slug:                         types.Slug(toolset.Slug),
+		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
+		SecurityVariables:            securityVars,
+		ServerVariables:              serverVars,
+		FunctionEnvironmentVariables: functionEnvVars,
+		Description:                  conv.FromPGText[string](toolset.Description),
+		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
+		McpEnabled:                   &toolset.McpEnabled,
+		CustomDomainID:               conv.FromNullableUUID(toolset.CustomDomainID),
+		McpIsPublic:                  &toolset.McpIsPublic,
+		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
+		Tools:                        tools,
+		PromptTemplates:              promptTemplates,
+		ToolUrns:                     toolUrns,
 	}, nil
 }
 

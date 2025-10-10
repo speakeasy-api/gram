@@ -30,6 +30,8 @@ type GetInstanceResponseBody struct {
 	SecurityVariables []*SecurityVariableResponseBody `form:"security_variables,omitempty" json:"security_variables,omitempty" xml:"security_variables,omitempty"`
 	// The server variables that are relevant to the toolset
 	ServerVariables []*ServerVariableResponseBody `form:"server_variables,omitempty" json:"server_variables,omitempty" xml:"server_variables,omitempty"`
+	// The function environment variables that are relevant to the toolset
+	FunctionEnvironmentVariables []*FunctionEnvironmentVariableResponseBody `form:"function_environment_variables,omitempty" json:"function_environment_variables,omitempty" xml:"function_environment_variables,omitempty"`
 	// The environment
 	Environment *EnvironmentResponseBody `form:"environment,omitempty" json:"environment,omitempty" xml:"environment,omitempty"`
 }
@@ -454,6 +456,15 @@ type ServerVariableResponseBody struct {
 	EnvVariables []string `form:"env_variables,omitempty" json:"env_variables,omitempty" xml:"env_variables,omitempty"`
 }
 
+// FunctionEnvironmentVariableResponseBody is used to define fields on response
+// body types.
+type FunctionEnvironmentVariableResponseBody struct {
+	// Description of the function environment variable
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// The environment variables
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // EnvironmentResponseBody is used to define fields on response body types.
 type EnvironmentResponseBody struct {
 	// The ID of the environment
@@ -515,6 +526,12 @@ func NewGetInstanceResultOK(body *GetInstanceResponseBody) *instances.GetInstanc
 		v.ServerVariables = make([]*types.ServerVariable, len(body.ServerVariables))
 		for i, val := range body.ServerVariables {
 			v.ServerVariables[i] = unmarshalServerVariableResponseBodyToTypesServerVariable(val)
+		}
+	}
+	if body.FunctionEnvironmentVariables != nil {
+		v.FunctionEnvironmentVariables = make([]*types.FunctionEnvironmentVariable, len(body.FunctionEnvironmentVariables))
+		for i, val := range body.FunctionEnvironmentVariables {
+			v.FunctionEnvironmentVariables[i] = unmarshalFunctionEnvironmentVariableResponseBodyToTypesFunctionEnvironmentVariable(val)
 		}
 	}
 	v.Environment = unmarshalEnvironmentResponseBodyToTypesEnvironment(body.Environment)
@@ -708,6 +725,13 @@ func ValidateGetInstanceResponseBody(body *GetInstanceResponseBody) (err error) 
 	for _, e := range body.ServerVariables {
 		if e != nil {
 			if err2 := ValidateServerVariableResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.FunctionEnvironmentVariables {
+		if e != nil {
+			if err2 := ValidateFunctionEnvironmentVariableResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -1261,6 +1285,15 @@ func ValidateServerVariableResponseBody(body *ServerVariableResponseBody) (err e
 	}
 	if body.EnvVariables == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("env_variables", "body"))
+	}
+	return
+}
+
+// ValidateFunctionEnvironmentVariableResponseBody runs the validations defined
+// on FunctionEnvironmentVariableResponseBody
+func ValidateFunctionEnvironmentVariableResponseBody(body *FunctionEnvironmentVariableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
 	return
 }
