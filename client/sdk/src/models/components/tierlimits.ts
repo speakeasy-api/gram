@@ -82,68 +82,6 @@ export const TierLimits$inboundSchema: z.ZodType<
   });
 });
 
-/** @internal */
-export type TierLimits$Outbound = {
-  add_on_bullets?: Array<string> | undefined;
-  base_price: number;
-  feature_bullets: Array<string>;
-  included_bullets: Array<string>;
-  included_credits: number;
-  included_servers: number;
-  included_tool_calls: number;
-  price_per_additional_credit: number;
-  price_per_additional_server: number;
-  price_per_additional_tool_call: number;
-};
-
-/** @internal */
-export const TierLimits$outboundSchema: z.ZodType<
-  TierLimits$Outbound,
-  z.ZodTypeDef,
-  TierLimits
-> = z.object({
-  addOnBullets: z.array(z.string()).optional(),
-  basePrice: z.number(),
-  featureBullets: z.array(z.string()),
-  includedBullets: z.array(z.string()),
-  includedCredits: z.number().int(),
-  includedServers: z.number().int(),
-  includedToolCalls: z.number().int(),
-  pricePerAdditionalCredit: z.number(),
-  pricePerAdditionalServer: z.number(),
-  pricePerAdditionalToolCall: z.number(),
-}).transform((v) => {
-  return remap$(v, {
-    addOnBullets: "add_on_bullets",
-    basePrice: "base_price",
-    featureBullets: "feature_bullets",
-    includedBullets: "included_bullets",
-    includedCredits: "included_credits",
-    includedServers: "included_servers",
-    includedToolCalls: "included_tool_calls",
-    pricePerAdditionalCredit: "price_per_additional_credit",
-    pricePerAdditionalServer: "price_per_additional_server",
-    pricePerAdditionalToolCall: "price_per_additional_tool_call",
-  });
-});
-
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace TierLimits$ {
-  /** @deprecated use `TierLimits$inboundSchema` instead. */
-  export const inboundSchema = TierLimits$inboundSchema;
-  /** @deprecated use `TierLimits$outboundSchema` instead. */
-  export const outboundSchema = TierLimits$outboundSchema;
-  /** @deprecated use `TierLimits$Outbound` instead. */
-  export type Outbound = TierLimits$Outbound;
-}
-
-export function tierLimitsToJSON(tierLimits: TierLimits): string {
-  return JSON.stringify(TierLimits$outboundSchema.parse(tierLimits));
-}
-
 export function tierLimitsFromJSON(
   jsonString: string,
 ): SafeParseResult<TierLimits, SDKValidationError> {

@@ -106,11 +106,12 @@ export const AgentifyProvider = ({
     const example = await fetch(exampleUrl!).then((res) => res.text());
 
     const result = await generateObject({
-      model,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      model: model as any,
       mode: "json",
       prompt: `
 <instructions>
-  You will be given a chat history, a statement of intent, and a basic skeleton of an agent. 
+  You will be given a chat history, a statement of intent, and a basic skeleton of an agent.
   Using the statement of intent and details from the chat history, produce a complete agent in ${lang} using ${framework} that performs the task.
   The agent should use LLM calls and toolsets to solve the generic version of the task as described in the statement of intent, not just the specific example given.
   Note that the toolset provides tools and handles their execution and authentication. For example, any tool call present in the chat history will be available to the agent.
@@ -134,7 +135,7 @@ export const AgentifyProvider = ({
 </values-to-use>
 
 <chat-history>
-  ${messages.map((m) => `${m.role}: ${m.content}`).join("\n\t")}
+  ${messages.map((m) => `${m.role}: ${m.parts.map((p) => (p.type === "text" ? p.text : "")).join("")}`).join("\n\t")}
 </chat-history>
 
 <example-agent>
@@ -227,18 +228,19 @@ export const AgentifyButton = ({
     });
 
     generateObject({
-      model: openrouter.chat("openai/gpt-4o-mini"),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      model: openrouter.chat("openai/gpt-4o-mini") as any,
       mode: "json",
       prompt: `
           <instructions>
-            You will be given a chat history. 
+            You will be given a chat history.
             Your job is to distill the user's intent from the chat history to produce a few sentences that describe the function the agent should perform, based on the user's intent from the chat history.
             This prompt will be used to generate an agent that can reusably and extensibly solve the task.
             Phrase the prompt as instructions, e.g. "Find all new users from the last 30 days and send them a welcome email".
           </instructions>
 
           <chat-history>
-            ${messages.map((m) => `${m.role}: ${m.content}`).join("\n\t")}
+            ${messages.map((m) => `${m.role}: ${m.parts.map((p) => (p.type === "text" ? p.text : "")).join("")}`).join("\n\t")}
           </chat-history>
           `,
       temperature: 0.5,
