@@ -1050,7 +1050,7 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
       "type": "string",
       "title": "{{ $input.DisplayName | asPosixName }}",
       "description": "Get this value from your gram env",
-      "sensitive": true,
+      "sensitive": {{ $input.Sensitive }},
       "required": true
     }{{- end }}
   }
