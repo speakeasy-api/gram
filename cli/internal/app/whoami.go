@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss/table"
 	"github.com/speakeasy-api/gram/cli/internal/api"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
+	"github.com/speakeasy-api/gram/cli/internal/profile"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
 	"github.com/urfave/cli/v2"
 )
@@ -35,7 +36,7 @@ If no profile is configured, the command will indicate that no profile is set up
 			)
 			defer cancel()
 
-			prof := ProfileFromContext(ctx)
+			prof := profile.FromContext(ctx)
 
 			workflowParams, err := workflow.ResolveParams(c, prof)
 			if err != nil {
