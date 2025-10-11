@@ -213,7 +213,8 @@ export function useMcpUrl(
   const { domain } = useCustomDomain();
   const project = useProject();
 
-  if (!toolset) return { url: undefined, customServerURL: undefined };
+  if (!toolset)
+    return { url: undefined, customServerURL: undefined, pageUrl: undefined };
 
   // Determine which server URL to use
   let customServerURL: string | undefined;
@@ -228,10 +229,14 @@ export function useMcpUrl(
     toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
   }/mcp/${urlSuffix}`;
 
+  // Always use our URL for install page, even for custom domains to ensure cookie
+  // is present
+  const installPageUrl = `${getServerURL()}/mcp/${urlSuffix}/install`;
+
   return {
     url: mcpUrl,
     customServerURL,
-    pageUrl: `${mcpUrl}/install`,
+    pageUrl: installPageUrl,
   };
 }
 
@@ -524,18 +529,16 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       >
         <PublicToggle isPublic={mcpIsPublic ?? false} />
       </PageSection>
-      {toolset.mcpIsPublic && (
-        <PageSection
-          heading="MCP Install Documentation"
-          description="Share this page with your users to give simple instructions
-            for gettings started with your MCP to their client like Cursor or
-            Claude Desktop."
-        >
-          <Stack className="mt-2" gap={1}>
-            <ConfigForm toolset={toolset} />
-          </Stack>
-        </PageSection>
-      )}
+      <PageSection
+        heading="MCP Install Documentation"
+        description="Share this page with your users to give simple instructions
+          for gettings started with your MCP to their client like Cursor or
+          Claude Desktop."
+      >
+        <Stack className="mt-2" gap={1}>
+          <ConfigForm toolset={toolset} />
+        </Stack>
+      </PageSection>
       <PageSection
         heading="Configuration"
         description="Configuration blocks for this server"
