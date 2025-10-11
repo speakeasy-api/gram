@@ -527,7 +527,9 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 
 	oauth2AuthCodeSecurityCount := 0
 	for _, securityVariable := range toolsetDetails.SecurityVariables {
-		if securityVariable.Type != nil && *securityVariable.Type == "oauth2" && securityVariable.OauthTypes != nil && slices.Contains(securityVariable.OauthTypes, "authorization_code") {
+		isAuthorizationCode := securityVariable.Type != nil && *securityVariable.Type == "oauth2" && securityVariable.OauthTypes != nil && slices.Contains(securityVariable.OauthTypes, "authorization_code")
+		isOpenIdConnect := securityVariable.Type != nil && *securityVariable.Type == "openIdConnect"
+		if isAuthorizationCode || isOpenIdConnect {
 			oauth2AuthCodeSecurityCount++
 		}
 	}
