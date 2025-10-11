@@ -69,25 +69,6 @@ func TestService_ServeImage_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestService_ServeImage_Unauthorized(t *testing.T) {
-	t.Parallel()
-
-	_, ti := newTestAssetsService(t)
-
-	// Create context without auth
-	ctx := t.Context()
-
-	_, _, err := ti.service.ServeImage(ctx, &assets.ServeImageForm{
-		SessionToken: nil,
-		ApikeyToken:  nil,
-		ID:           uuid.New().String(),
-	})
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeUnauthorized, oopsErr.Code)
-}
-
 func TestService_ServeImage_InvalidAssetID(t *testing.T) {
 	t.Parallel()
 

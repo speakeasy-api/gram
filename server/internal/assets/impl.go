@@ -114,11 +114,6 @@ func (s *Service) ListAssets(ctx context.Context, payload *gen.ListAssetsPayload
 }
 
 func (s *Service) ServeImage(ctx context.Context, payload *gen.ServeImageForm) (*gen.ServeImageResult, io.ReadCloser, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, nil, oops.C(oops.CodeUnauthorized)
-	}
-
 	assetID, err := uuid.Parse(payload.ID)
 	if err != nil || assetID == uuid.Nil {
 		return nil, nil, oops.E(oops.CodeBadRequest, fmt.Errorf("parse asset id: %w", err), "invalid asset id")
