@@ -107,6 +107,7 @@ func NewFlyRunner(
 			UserAgent: ua,
 			Tokens:    o.FlyTokens,
 		},
+		Logger: &flyLogger{logger: logger.With(attr.SlogComponent("flyio-client"))},
 	})
 
 	return &FlyRunner{
@@ -284,6 +285,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		UserAgent: f.ua,
 		OrgSlug:   orgSlug,
 		Tokens:    f.tokens,
+		Logger:    &flyLogger{logger: logger.With(attr.SlogComponent("flyio-flaps"))},
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create flaps client").Log(ctx, logger)
@@ -571,4 +573,18 @@ func (f *FlyRunner) tryMarkDeployFailed(
 			)
 		}
 	}
+}
+
+// flyLogger adapts slog.Logger to the fly.Logger interface	for use with the fly-go client.
+type flyLogger struct {
+	logger      *slog.Logger
+	contextFunc func() context.Context
+}
+
+func (f *flyLogger) Debug(v ...interface{}) {
+	f.logger.DebugContext(f.contextFunc(), fmt.Sprint(v...))
+}
+
+func (f *flyLogger) Debugf(format string, v ...interface{}) {
+	f.logger.DebugContext(f.contextFunc(), fmt.Sprintf(format, v...))
 }
