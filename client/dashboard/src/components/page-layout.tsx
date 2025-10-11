@@ -81,7 +81,7 @@ function PageSectionComponent({ children }: { children: PageSectionChild[] }) {
   });
 
   return (
-    <Stack gap={2} className="mb-8 mt-3">
+    <Stack gap={2} className="mb-6 mt-3">
       {/* Render header with title, description, and CTA if they exist */}
       {(slots.title || slots.description || slots.ctas.length > 0) && (
         <Stack

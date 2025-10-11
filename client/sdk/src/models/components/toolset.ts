@@ -14,6 +14,12 @@ import {
   ExternalOAuthServer$outboundSchema,
 } from "./externaloauthserver.js";
 import {
+  FunctionEnvironmentVariable,
+  FunctionEnvironmentVariable$inboundSchema,
+  FunctionEnvironmentVariable$Outbound,
+  FunctionEnvironmentVariable$outboundSchema,
+} from "./functionenvironmentvariable.js";
+import {
   OAuthProxyServer,
   OAuthProxyServer$inboundSchema,
   OAuthProxyServer$Outbound,
@@ -66,6 +72,10 @@ export type Toolset = {
    */
   description?: string | undefined;
   externalOauthServer?: ExternalOAuthServer | undefined;
+  /**
+   * The function environment variables that are relevant to the toolset
+   */
+  functionEnvironmentVariables?: Array<FunctionEnvironmentVariable> | undefined;
   /**
    * The ID of the toolset
    */
@@ -136,6 +146,9 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
     default_environment_slug: z.string().optional(),
     description: z.string().optional(),
     external_oauth_server: ExternalOAuthServer$inboundSchema.optional(),
+    function_environment_variables: z.array(
+      FunctionEnvironmentVariable$inboundSchema,
+    ).optional(),
     id: z.string(),
     mcp_enabled: z.boolean().optional(),
     mcp_is_public: z.boolean().optional(),
@@ -160,6 +173,7 @@ export const Toolset$inboundSchema: z.ZodType<Toolset, z.ZodTypeDef, unknown> =
       "custom_domain_id": "customDomainId",
       "default_environment_slug": "defaultEnvironmentSlug",
       "external_oauth_server": "externalOauthServer",
+      "function_environment_variables": "functionEnvironmentVariables",
       "mcp_enabled": "mcpEnabled",
       "mcp_is_public": "mcpIsPublic",
       "mcp_slug": "mcpSlug",
@@ -182,6 +196,9 @@ export type Toolset$Outbound = {
   default_environment_slug?: string | undefined;
   description?: string | undefined;
   external_oauth_server?: ExternalOAuthServer$Outbound | undefined;
+  function_environment_variables?:
+    | Array<FunctionEnvironmentVariable$Outbound>
+    | undefined;
   id: string;
   mcp_enabled?: boolean | undefined;
   mcp_is_public?: boolean | undefined;
@@ -211,6 +228,9 @@ export const Toolset$outboundSchema: z.ZodType<
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
   externalOauthServer: ExternalOAuthServer$outboundSchema.optional(),
+  functionEnvironmentVariables: z.array(
+    FunctionEnvironmentVariable$outboundSchema,
+  ).optional(),
   id: z.string(),
   mcpEnabled: z.boolean().optional(),
   mcpIsPublic: z.boolean().optional(),
@@ -233,6 +253,7 @@ export const Toolset$outboundSchema: z.ZodType<
     customDomainId: "custom_domain_id",
     defaultEnvironmentSlug: "default_environment_slug",
     externalOauthServer: "external_oauth_server",
+    functionEnvironmentVariables: "function_environment_variables",
     mcpEnabled: "mcp_enabled",
     mcpIsPublic: "mcp_is_public",
     mcpSlug: "mcp_slug",

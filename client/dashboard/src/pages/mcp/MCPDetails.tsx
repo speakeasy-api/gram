@@ -664,6 +664,8 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
         (v) => !v.toLowerCase().includes("token_url"), // direct token url is always a hidden option right now
       ),
     ) ?? []),
+    // Function environment variables
+    ...(toolset.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? []),
     // Server variables (filter server_url unless required)
     ...(toolset.serverVariables?.flatMap((serverVar) =>
       serverVar.envVariables.filter(

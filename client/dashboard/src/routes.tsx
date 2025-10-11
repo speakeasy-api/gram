@@ -355,7 +355,7 @@ export const useRoutes = (): RoutesWithGoTo => {
         }
       }
 
-      return "/" + finalParts.join("/");
+      return ("/" + finalParts.join("/")).replace(/\/+/g, "/");
     };
 
     const goTo = (...params: string[]) => {

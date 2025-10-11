@@ -99,9 +99,7 @@ func newApp() *cli.App {
 					slog.String("profile path", profilePath),
 				)
 			}
-			if prof != nil {
-				ctx = context.WithValue(ctx, profileContextKey, prof)
-			}
+			ctx = profile.WithProfile(ctx, prof)
 
 			c.Context = ctx
 			return nil

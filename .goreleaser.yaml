@@ -25,6 +25,9 @@ snapshot:
 changelog:
   disable: true
 
+release:
+  mode: keep-existing
+
 monorepo:
   tag_prefix: "@gram/cli@"
 

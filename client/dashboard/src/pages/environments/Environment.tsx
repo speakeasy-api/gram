@@ -251,7 +251,9 @@ export default function EnvironmentPage() {
   useEffect(() => {
     if (
       selectedToolset &&
-      (selectedToolset.securityVariables || selectedToolset.serverVariables)
+      (selectedToolset.securityVariables ||
+        selectedToolset.serverVariables ||
+        selectedToolset.functionEnvironmentVariables)
     ) {
       const newValues = { ...envValues };
       const newEdited = new Set(editedFields);
@@ -267,6 +269,17 @@ export default function EnvironmentPage() {
             newEdited.add(varName);
           }
         });
+      });
+
+      // Process function environment variables
+      selectedToolset.functionEnvironmentVariables?.forEach((entry) => {
+        const existingEntry = environment?.entries?.find(
+          (e) => e.name === entry.name,
+        );
+        if (!existingEntry) {
+          newValues[entry.name] = "";
+          newEdited.add(entry.name);
+        }
       });
 
       // Process server variables

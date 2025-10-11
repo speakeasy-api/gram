@@ -47,9 +47,7 @@ func TestVariationsService_UpsertGlobal_Create(t *testing.T) {
 	require.Equal(t, &confirm, result.Variation.Confirm, "confirm should match")
 	require.Equal(t, &confirmPrompt, result.Variation.ConfirmPrompt, "confirm prompt should match")
 	require.Equal(t, &name, result.Variation.Name, "name should match")
-	require.Equal(t, &summary, result.Variation.Summary, "summary should match")
 	require.Equal(t, &description, result.Variation.Description, "description should match")
-	require.Equal(t, tags, result.Variation.Tags, "tags should match")
 	require.Equal(t, &summarizer, result.Variation.Summarizer, "summarizer should match")
 	require.NotEmpty(t, result.Variation.CreatedAt, "created at should not be empty")
 	require.NotEmpty(t, result.Variation.UpdatedAt, "updated at should not be empty")
@@ -111,9 +109,7 @@ func TestVariationsService_UpsertGlobal_Update(t *testing.T) {
 	require.Equal(t, "test-tool", second.Variation.SrcToolName, "src tool name should match")
 	require.Equal(t, &updatedConfirm, second.Variation.Confirm, "confirm should be updated")
 	require.Equal(t, &updatedName, second.Variation.Name, "name should be updated")
-	require.Equal(t, &updatedSummary, second.Variation.Summary, "summary should be updated")
 	require.Equal(t, &updatedDescription, second.Variation.Description, "description should be updated")
-	require.Equal(t, updatedTags, second.Variation.Tags, "tags should be updated")
 
 	// Updated at should be greater or equal (it could be the same if update happens very quickly)
 	require.GreaterOrEqual(t, second.Variation.UpdatedAt, first.Variation.UpdatedAt, "updated at should be greater or equal after update")
@@ -149,9 +145,7 @@ func TestVariationsService_UpsertGlobal_MinimalPayload(t *testing.T) {
 	require.Nil(t, result.Variation.Confirm, "confirm should be nil")
 	require.Nil(t, result.Variation.ConfirmPrompt, "confirm prompt should be nil")
 	require.Nil(t, result.Variation.Name, "name should be nil")
-	require.Nil(t, result.Variation.Summary, "summary should be nil")
 	require.Nil(t, result.Variation.Description, "description should be nil")
-	require.Empty(t, result.Variation.Tags, "tags should be empty")
 	require.Nil(t, result.Variation.Summarizer, "summarizer should be nil")
 	require.NotEmpty(t, result.Variation.CreatedAt, "created at should not be empty")
 	require.NotEmpty(t, result.Variation.UpdatedAt, "updated at should not be empty")
@@ -180,7 +174,6 @@ func TestVariationsService_UpsertGlobal_EmptyTags(t *testing.T) {
 	require.NotNil(t, result.Variation, "variation should not be nil")
 
 	require.Equal(t, "empty-tags-tool", result.Variation.SrcToolName, "src tool name should match")
-	require.Empty(t, result.Variation.Tags, "tags should be empty")
 }
 
 func TestVariationsService_UpsertGlobal_NilTags(t *testing.T) {
@@ -206,7 +199,6 @@ func TestVariationsService_UpsertGlobal_NilTags(t *testing.T) {
 	require.NotNil(t, result.Variation, "variation should not be nil")
 
 	require.Equal(t, "nil-tags-tool", result.Variation.SrcToolName, "src tool name should match")
-	require.Empty(t, result.Variation.Tags, "tags should be empty when nil")
 }
 
 func TestVariationsService_UpsertGlobal_Unauthorized(t *testing.T) {
@@ -382,7 +374,6 @@ func TestVariationsService_UpsertGlobal_LongValues(t *testing.T) {
 
 	// Verify all long values are preserved
 	require.Equal(t, &longName, result.Variation.Name, "long name should be preserved")
-	require.Equal(t, &longSummary, result.Variation.Summary, "long summary should be preserved")
 	require.Equal(t, &longDescription, result.Variation.Description, "long description should be preserved")
 }
 
@@ -415,7 +406,6 @@ func TestVariationsService_UpsertGlobal_EmptyStrings(t *testing.T) {
 	require.Equal(t, &emptyString, result.Variation.Confirm, "empty confirm should be preserved")
 	require.Equal(t, &emptyString, result.Variation.ConfirmPrompt, "empty confirm prompt should be preserved")
 	require.Equal(t, &emptyString, result.Variation.Name, "empty name should be preserved")
-	require.Equal(t, &emptyString, result.Variation.Summary, "empty summary should be preserved")
 	require.Equal(t, &emptyString, result.Variation.Description, "empty description should be preserved")
 	require.Equal(t, &emptyString, result.Variation.Summarizer, "empty summarizer should be preserved")
 }

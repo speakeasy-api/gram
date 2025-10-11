@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/o11y"
+	"github.com/speakeasy-api/gram/cli/internal/profile"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
 	"github.com/urfave/cli/v2"
 )
@@ -64,7 +65,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			defer cancel()
 
 			logger := logging.PullLogger(ctx)
-			prof := ProfileFromContext(ctx)
+			prof := profile.FromContext(ctx)
 
 			workflowParams, err := workflow.ResolveParams(c, prof)
 			if err != nil {

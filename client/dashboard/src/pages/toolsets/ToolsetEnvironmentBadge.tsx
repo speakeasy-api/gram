@@ -60,6 +60,8 @@ export const ToolsetEnvironmentBadge = ({
     // Security variables (no filtering)
     ...(toolset.securityVariables?.flatMap((secVar) => secVar.envVariables) ??
       []),
+    // Function environment variables
+    ...(toolset.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? []),
     // Server variables (filter server_url unless required)
     ...(toolset.serverVariables?.flatMap((serverVar) =>
       serverVar.envVariables.filter(

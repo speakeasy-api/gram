@@ -82,6 +82,8 @@ export default function OpenAPIAssets() {
 
   const addOpenAPIDialogRef = useRef<AddOpenAPIDialogRef>(null);
   const removeApiSourceDialogRef = useRef<RemoveAPISourceDialogRef>(null);
+  const removeFunctionSourceDialogRef =
+    useRef<RemoveFunctionSourceDialogRef>(null);
 
   const finishUpload = () => {
     addOpenAPIDialogRef.current?.setOpen(false);
@@ -158,6 +160,25 @@ export default function OpenAPIAssets() {
     });
   }, [deployment, assets]);
 
+  const functionAssets: NamedAsset[] = useMemo(() => {
+    if (!deployment || !assets) {
+      return [];
+    }
+
+    return (deployment.functionsAssets ?? []).map((deploymentAsset) => {
+      const asset = assets.assets.find((a) => a.id === deploymentAsset.assetId);
+      if (!asset) {
+        throw new Error(`Asset ${deploymentAsset.assetId} not found`);
+      }
+      return {
+        ...asset,
+        deploymentAssetId: deploymentAsset.id,
+        name: deploymentAsset.name,
+        slug: deploymentAsset.slug,
+      };
+    });
+  }, [deployment, assets]);
+
   if (!isLoading && deploymentIsEmpty) {
     return (
       <>
@@ -187,6 +208,24 @@ export default function OpenAPIAssets() {
     }
   };
 
+  const removeFunctionSource = async (assetId: string) => {
+    try {
+      await client.deployments.evolveDeployment({
+        evolveForm: {
+          deploymentId: deployment?.id,
+          excludeFunctions: [assetId],
+        },
+      });
+
+      await Promise.all([refetch(), refetchAssets()]);
+
+      toast.success("Function source deleted successfully");
+    } catch (error) {
+      console.error("Failed to delete function source:", error);
+      toast.error("Failed to delete function source. Please try again.");
+    }
+  };
+
   const deploySpecUpdate = async (documentSlug: string) => {
     setIsDeploying(true);
     await createDeployment(documentSlug); // Make sure we overwrite the current document by slug
@@ -196,93 +235,123 @@ export default function OpenAPIAssets() {
   };
 
   return (
-    <Page.Section>
-      <Page.Section.Title>API Sources</Page.Section.Title>
-      <Page.Section.Description>
-        OpenAPI documents providing tools for your toolsets
-      </Page.Section.Description>
-      {logsCta}
-      <Page.Section.CTA>
-        <Button
-          onClick={() => addOpenAPIDialogRef.current?.setOpen(true)}
-          variant="secondary"
-        >
-          <Button.LeftIcon>
-            <Plus className="w-4 h-4" />
-          </Button.LeftIcon>
-          <Button.Text>Add API</Button.Text>
-        </Button>
-      </Page.Section.CTA>
-      <Page.Section.Body>
-        <MiniCards isLoading={isLoading}>
-          {deploymentAssets?.map((asset: NamedAsset) => (
-            <OpenAPICard
-              key={asset.id}
-              asset={asset}
-              causingFailure={assetsCausingFailure.has(asset.deploymentAssetId)}
-              onClickRemove={() => {
-                removeApiSourceDialogRef.current?.open(asset);
-              }}
-              setChangeDocumentTargetSlug={setChangeDocumentTargetSlug}
-            />
-          ))}
-        </MiniCards>
-        <Dialog
-          open={changeDocumentTargetSlug !== null}
-          onOpenChange={(open) => {
-            if (!open) {
-              setChangeDocumentTargetSlug(null);
-              undoSpecUpload(); // Reset the file state when dialog closes
-            }
-          }}
-        >
-          <Dialog.Content className="max-w-2xl!">
-            <Dialog.Header>
-              <Dialog.Title>New OpenAPI Version</Dialog.Title>
-              <Dialog.Description>
-                You are creating a new version of document{" "}
-                {changeDocumentTargetSlug}
-              </Dialog.Description>
-            </Dialog.Header>
-            {!file ? (
-              <FullWidthUpload
-                onUpload={handleSpecUpload}
-                allowedExtensions={["yaml", "yml", "json"]}
-              />
-            ) : (
-              <UploadedDocument
-                file={file}
-                onReset={undoSpecUpload}
-                defaultExpanded
-              />
-            )}
-            <Dialog.Footer>
-              <Button
-                variant="tertiary"
-                onClick={() => {
-                  setChangeDocumentTargetSlug(null);
-                  undoSpecUpload(); // Reset the file state when dialog closes
+    <>
+      <Page.Section>
+        <Page.Section.Title>API Sources</Page.Section.Title>
+        <Page.Section.Description>
+          OpenAPI documents providing tools for your toolsets
+        </Page.Section.Description>
+        {logsCta}
+        <Page.Section.CTA>
+          <Button
+            onClick={() => addOpenAPIDialogRef.current?.setOpen(true)}
+            variant="secondary"
+          >
+            <Button.LeftIcon>
+              <Plus className="w-4 h-4" />
+            </Button.LeftIcon>
+            <Button.Text>Add API</Button.Text>
+          </Button>
+        </Page.Section.CTA>
+        <Page.Section.Body>
+          <MiniCards isLoading={isLoading}>
+            {deploymentAssets?.map((asset: NamedAsset) => (
+              <OpenAPICard
+                key={asset.id}
+                asset={asset}
+                causingFailure={assetsCausingFailure.has(
+                  asset.deploymentAssetId,
+                )}
+                onClickRemove={() => {
+                  removeApiSourceDialogRef.current?.open(asset);
                 }}
-              >
-                Back
-              </Button>
-              <Button
-                onClick={() => deploySpecUpdate(changeDocumentTargetSlug!)}
-                disabled={!file || isDeploying || !changeDocumentTargetSlug}
-              >
-                {isDeploying && <Spinner />}
-                {isDeploying ? "Deploying..." : "Deploy"}
-              </Button>
-            </Dialog.Footer>
-          </Dialog.Content>
-        </Dialog>
-        <RemoveAPISourceDialog
-          ref={removeApiSourceDialogRef}
-          onConfirmRemoval={removeDocument}
-        />
-        <AddOpenAPIDialog ref={addOpenAPIDialogRef} />
-      </Page.Section.Body>
-    </Page.Section>
+                setChangeDocumentTargetSlug={setChangeDocumentTargetSlug}
+              />
+            ))}
+          </MiniCards>
+          <Dialog
+            open={changeDocumentTargetSlug !== null}
+            onOpenChange={(open) => {
+              if (!open) {
+                setChangeDocumentTargetSlug(null);
+                undoSpecUpload(); // Reset the file state when dialog closes
+              }
+            }}
+          >
+            <Dialog.Content className="max-w-2xl!">
+              <Dialog.Header>
+                <Dialog.Title>New OpenAPI Version</Dialog.Title>
+                <Dialog.Description>
+                  You are creating a new version of document{" "}
+                  {changeDocumentTargetSlug}
+                </Dialog.Description>
+              </Dialog.Header>
+              {!file ? (
+                <FullWidthUpload
+                  onUpload={handleSpecUpload}
+                  allowedExtensions={["yaml", "yml", "json"]}
+                />
+              ) : (
+                <UploadedDocument
+                  file={file}
+                  onReset={undoSpecUpload}
+                  defaultExpanded
+                />
+              )}
+              <Dialog.Footer>
+                <Button
+                  variant="tertiary"
+                  onClick={() => {
+                    setChangeDocumentTargetSlug(null);
+                    undoSpecUpload(); // Reset the file state when dialog closes
+                  }}
+                >
+                  Back
+                </Button>
+                <Button
+                  onClick={() => deploySpecUpdate(changeDocumentTargetSlug!)}
+                  disabled={!file || isDeploying || !changeDocumentTargetSlug}
+                >
+                  {isDeploying && <Spinner />}
+                  {isDeploying ? "Deploying..." : "Deploy"}
+                </Button>
+              </Dialog.Footer>
+            </Dialog.Content>
+          </Dialog>
+          <RemoveAPISourceDialog
+            ref={removeApiSourceDialogRef}
+            onConfirmRemoval={removeDocument}
+          />
+          <AddOpenAPIDialog ref={addOpenAPIDialogRef} />
+        </Page.Section.Body>
+      </Page.Section>
+
+      {functionAssets.length > 0 && (
+        <Page.Section>
+          <Page.Section.Title>Function Sources</Page.Section.Title>
+          <Page.Section.Description>
+            Custom gram functions providing tools for your toolsets
+          </Page.Section.Description>
+          <Page.Section.Body>
+            <MiniCards isLoading={isLoading}>
+              {functionAssets.map((asset: NamedAsset) => (
+                <FunctionCard
+                  key={asset.id}
+                  asset={asset}
+                  onClickRemove={() => {
+                    removeFunctionSourceDialogRef.current?.open(asset);
+                  }}
+                />
+              ))}
+            </MiniCards>
+            <RemoveFunctionSourceDialog
+              ref={removeFunctionSourceDialogRef}
+              onConfirmRemoval={removeFunctionSource}
+            />
+          </Page.Section.Body>
+        </Page.Section>
+      )}
+    </>
   );
 }
 
@@ -455,6 +524,151 @@ function OpenAPICard({
     </MiniCard>
   );
 }
+
+function FunctionCard({
+  asset,
+  onClickRemove,
+}: {
+  asset: NamedAsset;
+  onClickRemove: (assetId: string) => void;
+}) {
+  return (
+    <MiniCard key={asset.id} className="bg-secondary">
+      <MiniCard.Title className="flex items-center">
+        {asset.name}
+      </MiniCard.Title>
+
+      <MiniCard.Description className="flex gap-1.5 items-center">
+        <UpdatedAt date={asset.updatedAt} italic={false} className="text-xs" />
+      </MiniCard.Description>
+      <MiniCard.Actions
+        actions={[
+          {
+            label: "Delete",
+            onClick: () => onClickRemove(asset.id),
+            icon: "trash",
+            destructive: true,
+          },
+        ]}
+      />
+    </MiniCard>
+  );
+}
+
+interface RemoveFunctionSourceDialogRef {
+  open: (asset: NamedAsset) => void;
+  close: () => void;
+}
+
+interface RemoveFunctionSourceDialogProps {
+  onConfirmRemoval: (assetId: string) => Promise<void>;
+}
+
+const RemoveFunctionSourceDialog = forwardRef<
+  RemoveFunctionSourceDialogRef,
+  RemoveFunctionSourceDialogProps
+>(({ onConfirmRemoval }, ref) => {
+  const [open, setOpen] = useState(false);
+  const [asset, setAsset] = useState<NamedAsset>({} as NamedAsset);
+  const [pending, setPending] = useState(false);
+  const [inputMatches, setInputMatches] = useState(false);
+
+  const functionSourceSlug = slugify(asset.name);
+
+  const resetState = () => {
+    setAsset({} as NamedAsset);
+    setInputMatches(false);
+    setPending(false);
+  };
+
+  useImperativeHandle(ref, () => ({
+    open: (assetToDelete: NamedAsset) => {
+      setAsset(assetToDelete);
+      setOpen(true);
+      setInputMatches(false);
+      setPending(false);
+    },
+    close: () => {
+      resetState();
+    },
+  }));
+
+  const handleOpenChange = (newOpen: boolean) => {
+    setOpen(newOpen);
+    if (!newOpen) {
+      resetState();
+    }
+  };
+
+  const handleConfirm = async () => {
+    setPending(true);
+    await onConfirmRemoval(asset.id);
+    setPending(false);
+
+    setOpen(false);
+    setInputMatches(false);
+  };
+
+  const DeleteButton = () => {
+    if (pending) {
+      return (
+        <Button disabled variant="destructive-primary">
+          <Button.LeftIcon>
+            <Loader2Icon className="size-4 animate-spin" />
+          </Button.LeftIcon>
+          <Button.Text>Deleting Function Source</Button.Text>
+        </Button>
+      );
+    }
+
+    return (
+      <Button
+        disabled={!inputMatches}
+        variant="destructive-primary"
+        onClick={handleConfirm}
+      >
+        Delete Function Source
+      </Button>
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog.Content>
+        <Dialog.Header>
+          <Dialog.Title>Delete Function Source</Dialog.Title>
+          <Dialog.Description>
+            This will permanently delete the gram function source and related
+            resources such as tools within toolsets.
+          </Dialog.Description>
+        </Dialog.Header>
+        <div className="grid gap-2">
+          <Label>
+            <span>
+              To confirm, type "<strong>{functionSourceSlug}</strong>"
+            </span>
+          </Label>
+          <Input onChange={(v) => setInputMatches(v === functionSourceSlug)} />
+        </div>
+
+        <Alert variant="error" dismissible={false}>
+          Deleting {asset.name} cannot be undone.
+        </Alert>
+
+        <Dialog.Footer>
+          <Button
+            hidden={pending}
+            onClick={() => handleOpenChange(false)}
+            variant="tertiary"
+          >
+            Cancel
+          </Button>
+          <DeleteButton />
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
+  );
+});
 
 const AssetIsCausingFailureNotice = () => {
   const latestDeployment = useLatestDeployment();

@@ -38,7 +38,8 @@ type Workflow struct {
 	Params            Params
 	AssetsClient      *api.AssetsClient
 	DeploymentsClient *api.DeploymentsClient
-	NewAssets         []*deployments.AddOpenAPIv3DeploymentAssetForm
+	NewOpenAPIAssets  []*deployments.AddOpenAPIv3DeploymentAssetForm
+	NewFunctionAssets []*deployments.AddFunctionsForm
 	Deployment        *types.Deployment
 	Err               error
 }
@@ -64,7 +65,8 @@ func New(
 		Params:            params,
 		AssetsClient:      nil,
 		DeploymentsClient: nil,
-		NewAssets:         nil,
+		NewOpenAPIAssets:  nil,
+		NewFunctionAssets: nil,
 		Deployment:        nil,
 		Err:               nil,
 	}
@@ -95,13 +97,20 @@ func (s *Workflow) UploadAssets(
 		return s
 	}
 
-	s.Logger.InfoContext(ctx, "uploading files")
-	newAssets := make(
+	s.Logger.InfoContext(ctx, "uploading assets")
+
+	newOpenAPIAssets := make(
 		[]*deployments.AddOpenAPIv3DeploymentAssetForm,
+		0,
+		len(sources),
+	)
+	newFunctionAssets := make(
+		[]*deployments.AddFunctionsForm,
+		0,
 		len(sources),
 	)
 
-	for idx, source := range sources {
+	for _, source := range sources {
 		if err := source.Validate(); err != nil {
 			return s.Fail(fmt.Errorf("invalid source: %w", err))
 		}
@@ -116,9 +125,27 @@ func (s *Workflow) UploadAssets(
 			return s.Fail(fmt.Errorf("failed to upload asset: %w", err))
 		}
 
-		newAssets[idx] = asset
+		switch source.Type {
+		case deploy.SourceTypeOpenAPIV3:
+			form := &deployments.AddOpenAPIv3DeploymentAssetForm{
+				AssetID: asset.AssetID,
+				Name:    asset.Name,
+				Slug:    asset.Slug,
+			}
+			newOpenAPIAssets = append(newOpenAPIAssets, form)
+		case deploy.SourceTypeFunction:
+			form := &deployments.AddFunctionsForm{
+				AssetID: asset.AssetID,
+				Name:    asset.Name,
+				Slug:    asset.Slug,
+				Runtime: asset.Runtime,
+			}
+			newFunctionAssets = append(newFunctionAssets, form)
+		}
 	}
-	s.NewAssets = newAssets
+
+	s.NewOpenAPIAssets = newOpenAPIAssets
+	s.NewFunctionAssets = newFunctionAssets
 	return s
 }
 
@@ -138,10 +165,11 @@ func (s *Workflow) EvolveDeployment(
 		slog.String("deployment_id", s.Deployment.ID),
 	)
 	evolved, err := s.DeploymentsClient.Evolve(ctx, api.EvolveRequest{
-		Assets:       s.NewAssets,
-		APIKey:       s.Params.APIKey,
-		DeploymentID: s.Deployment.ID,
-		ProjectSlug:  s.Params.ProjectSlug,
+		OpenAPIv3Assets: s.NewOpenAPIAssets,
+		Functions:       s.NewFunctionAssets,
+		APIKey:          s.Params.APIKey,
+		DeploymentID:    s.Deployment.ID,
+		ProjectSlug:     s.Params.ProjectSlug,
 	})
 	if err != nil {
 		return s.Fail(fmt.Errorf("failed to evolve deployment: %w", err))
@@ -170,7 +198,8 @@ func (s *Workflow) CreateDeployment(
 	createReq := api.CreateDeploymentRequest{
 		APIKey:          s.Params.APIKey,
 		IdempotencyKey:  idem,
-		OpenAPIv3Assets: s.NewAssets,
+		OpenAPIv3Assets: s.NewOpenAPIAssets,
+		Functions:       s.NewFunctionAssets,
 		ProjectSlug:     s.Params.ProjectSlug,
 	}
 	result, err := s.DeploymentsClient.CreateDeployment(ctx, createReq)

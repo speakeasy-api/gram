@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 2f284e41de0bb0b4538286bf23360192
+  docChecksum: b29208663209faa69219a321ed27e263
   docVersion: 0.0.1
-  speakeasyVersion: 1.636.2
-  generationVersion: 2.723.8
-  releaseVersion: 0.14.6
-  configChecksum: f673d20fcfc260c3a9d39dcbe5c3cf8a
+  speakeasyVersion: 1.636.3
+  generationVersion: 2.723.11
+  releaseVersion: 0.14.8
+  configChecksum: ea78099f68f6b0a77bff301390e58564
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -77,6 +77,7 @@ generatedFiles:
   - docs/models/components/evolveresult.md
   - docs/models/components/externaloauthserver.md
   - docs/models/components/externaloauthserverform.md
+  - docs/models/components/functionenvironmentvariable.md
   - docs/models/components/functiontooldefinition.md
   - docs/models/components/getactivedeploymentresult.md
   - docs/models/components/getdeploymentlogsresult.md
@@ -540,6 +541,7 @@ generatedFiles:
   - src/models/components/evolveresult.ts
   - src/models/components/externaloauthserver.ts
   - src/models/components/externaloauthserverform.ts
+  - src/models/components/functionenvironmentvariable.ts
   - src/models/components/functiontooldefinition.ts
   - src/models/components/getactivedeploymentresult.ts
   - src/models/components/getdeploymentlogsresult.ts
