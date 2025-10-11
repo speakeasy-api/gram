@@ -13,19 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 )
 
-type contextKey string
-
-const profileContextKey contextKey = "profile"
-
-// ProfileFromContext retrieves the loaded profile from the context.
-// Returns nil if no profile was loaded.
-func ProfileFromContext(ctx context.Context) *profile.Profile {
-	if prof, ok := ctx.Value(profileContextKey).(*profile.Profile); ok {
-		return prof
-	}
-	return nil
-}
-
 func newApp() *cli.App {
 	shortSha := GitSHA
 	if len(GitSHA) > 7 {
