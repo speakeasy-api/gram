@@ -1,5 +1,11 @@
 # @gram/functions
 
+## 0.0.2
+
+### Patch Changes
+
+- 3001e53: Fix the entrypoint script for Gram Functions runner images to correctly invoke the desired command with its arguments.
+
 ## 0.0.1
 
 ### Patch Changes
