@@ -76,7 +76,7 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 }
 
 const getAssetURLs = `-- name: GetAssetURLs :many
-SELECT id, url
+SELECT id, url, sha256
 FROM assets
 WHERE project_id = $1
   AND id = ANY($2::uuid[])
@@ -89,8 +89,9 @@ type GetAssetURLsParams struct {
 }
 
 type GetAssetURLsRow struct {
-	ID  uuid.UUID
-	Url string
+	ID     uuid.UUID
+	Url    string
+	Sha256 string
 }
 
 func (q *Queries) GetAssetURLs(ctx context.Context, arg GetAssetURLsParams) ([]GetAssetURLsRow, error) {
@@ -102,7 +103,7 @@ func (q *Queries) GetAssetURLs(ctx context.Context, arg GetAssetURLsParams) ([]G
 	var items []GetAssetURLsRow
 	for rows.Next() {
 		var i GetAssetURLsRow
-		if err := rows.Scan(&i.ID, &i.Url); err != nil {
+		if err := rows.Scan(&i.ID, &i.Url, &i.Sha256); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

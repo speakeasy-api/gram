@@ -41,7 +41,7 @@ type RunnerDeployRequest struct {
 	FunctionID   uuid.UUID
 
 	Runtime Runtime
-	Assets  []RunnerAssetMount
+	Assets  []RunnerAsset
 
 	BearerSecret string
 }
@@ -61,12 +61,14 @@ type RunnerDestroyRequest struct {
 	FunctionsID  uuid.UUID
 }
 
-type RunnerAssetMount struct {
+type RunnerAsset struct {
 	AssetURL *url.URL
 
 	GuestPath string
 	// Mode is a string representation of file mode, e.g. 0444
 	Mode uint32
+
+	SHA256Sum string
 }
 
 type RunnerToolCallRequest struct {

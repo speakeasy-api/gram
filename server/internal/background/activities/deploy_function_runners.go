@@ -110,9 +110,9 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		return oops.E(oops.CodeUnexpected, err, "error reading function asset URLs").Log(ctx, d.logger)
 	}
 
-	assetURLs := make(map[uuid.UUID]string, len(urlrows))
+	assetURLs := make(map[uuid.UUID][2]string, len(urlrows))
 	for _, row := range urlrows {
-		assetURLs[row.ID] = row.Url
+		assetURLs[row.ID] = [2]string{row.Url, row.Sha256}
 	}
 
 	tasks := make([]deployFunctionRunnerTask, 0, len(depfuncs))
@@ -129,19 +129,20 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 	}
 
 	for _, task := range tasks {
-		version := d.resolveRunnerVersion(ctx, logger, task.ProjectID, task.DeploymentID, task.FunctionID)
+		version := d.resolveRunnerVersion(ctx, logger, task.projectID, task.deploymentID, task.functionID)
 		_, err := d.deployer.Deploy(ctx, functions.RunnerDeployRequest{
 			Version:      version,
-			ProjectID:    task.ProjectID,
-			DeploymentID: task.DeploymentID,
-			FunctionID:   task.FunctionID,
-			Runtime:      task.Runtime,
-			Assets: []functions.RunnerAssetMount{{
-				AssetURL:  task.AssetURL,
+			ProjectID:    task.projectID,
+			DeploymentID: task.deploymentID,
+			FunctionID:   task.functionID,
+			Runtime:      task.runtime,
+			Assets: []functions.RunnerAsset{{
+				AssetURL:  task.assetURL,
 				GuestPath: "/data/code.zip",
 				Mode:      0444,
+				SHA256Sum: task.assetSHA256,
 			}},
-			BearerSecret: task.BearerSecret,
+			BearerSecret: task.bearerSecret,
 		})
 		var serr *oops.ShareableError
 		switch {
@@ -160,12 +161,13 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 }
 
 type deployFunctionRunnerTask struct {
-	ProjectID    uuid.UUID
-	DeploymentID uuid.UUID
-	FunctionID   uuid.UUID
-	Runtime      functions.Runtime
-	BearerSecret string
-	AssetURL     *url.URL
+	projectID    uuid.UUID
+	deploymentID uuid.UUID
+	functionID   uuid.UUID
+	runtime      functions.Runtime
+	bearerSecret string
+	assetURL     *url.URL
+	assetSHA256  string
 }
 
 func (d *DeployFunctionRunners) preflightFunction(
@@ -174,7 +176,7 @@ func (d *DeployFunctionRunners) preflightFunction(
 	args DeployFunctionRunnersRequest,
 	fnc repo.DeploymentsFunction,
 	credentials map[uuid.UUID]repo.GetFunctionCredentialsBatchRow,
-	assetURLs map[uuid.UUID]string,
+	assetURLs map[uuid.UUID][2]string,
 ) (deployFunctionRunnerTask, error) {
 	var empty deployFunctionRunnerTask
 
@@ -183,10 +185,17 @@ func (d *DeployFunctionRunners) preflightFunction(
 	}
 
 	aurl, ok := assetURLs[fnc.AssetID]
-	if !ok || aurl == "" {
+	if !ok {
 		return empty, oops.E(oops.CodeInvariantViolation, nil, "function is missing asset URL").Log(ctx, logger)
 	}
-	assetURL, err := url.Parse(aurl)
+	if aurl[0] == "" {
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has empty asset URL").Log(ctx, logger)
+	}
+	if aurl[1] == "" {
+		return empty, oops.E(oops.CodeInvariantViolation, nil, "function has empty asset integrity hash").Log(ctx, logger)
+	}
+
+	assetURL, err := url.Parse(aurl[0])
 	if err != nil {
 		return empty, oops.E(oops.CodeInvariantViolation, err, "function has malformed asset URL").Log(ctx, logger)
 	}
@@ -210,12 +219,13 @@ func (d *DeployFunctionRunners) preflightFunction(
 	}
 
 	return deployFunctionRunnerTask{
-		ProjectID:    args.ProjectID,
-		DeploymentID: args.DeploymentID,
-		FunctionID:   fnc.ID,
-		Runtime:      functions.Runtime(fnc.Runtime),
-		BearerSecret: base64.StdEncoding.EncodeToString([]byte(sec)),
-		AssetURL:     assetURL,
+		projectID:    args.ProjectID,
+		deploymentID: args.DeploymentID,
+		functionID:   fnc.ID,
+		runtime:      functions.Runtime(fnc.Runtime),
+		bearerSecret: base64.StdEncoding.EncodeToString([]byte(sec)),
+		assetURL:     assetURL,
+		assetSHA256:  aurl[1],
 	}, nil
 }
 
