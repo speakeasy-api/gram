@@ -42,6 +42,7 @@ func newApp() *cli.App {
 			newPushCommand(),
 			newUploadCommand(),
 			newStatusCommand(),
+			newWhoAmICommand(),
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
