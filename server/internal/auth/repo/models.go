@@ -10,13 +10,14 @@ import (
 )
 
 type Project struct {
-	ID             uuid.UUID
-	Name           string
-	Slug           string
-	OrganizationID string
-	LogoAssetID    uuid.NullUUID
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                     uuid.UUID
+	Name                   string
+	Slug                   string
+	OrganizationID         string
+	LogoAssetID            uuid.NullUUID
+	FunctionsRunnerVersion pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }

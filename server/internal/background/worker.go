@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -42,14 +43,24 @@ type WorkerOptions struct {
 	BillingRepository   billing.Repository
 	RedisClient         *redis.Client
 	PosthogClient       *posthog.Posthog
+	FunctionsDeployer   functions.Deployer
+	FunctionsVersion    functions.RunnerVersion
 }
 
-func ForDeploymentProcessing(db *pgxpool.Pool, f feature.Provider, assetStorage assets.BlobStore, enc *encryption.Client) *WorkerOptions {
+func ForDeploymentProcessing(
+	db *pgxpool.Pool,
+	f feature.Provider,
+	assetStorage assets.BlobStore,
+	enc *encryption.Client,
+	deployer functions.Deployer,
+) *WorkerOptions {
 	return &WorkerOptions{
 		DB:                  db,
 		EncryptionClient:    enc,
 		FeatureProvider:     f,
 		AssetStorage:        assetStorage,
+		FunctionsDeployer:   deployer,
+		FunctionsVersion:    "local", // Test deployers don't use baked versions
 		SlackClient:         nil,
 		ChatClient:          nil,
 		OpenRouter:          nil,
@@ -83,6 +94,8 @@ func NewTemporalWorker(
 		BillingRepository:   nil,
 		RedisClient:         nil,
 		PosthogClient:       nil,
+		FunctionsDeployer:   nil,
+		FunctionsVersion:    "",
 	}
 
 	for _, o := range options {
@@ -100,6 +113,8 @@ func NewTemporalWorker(
 			BillingRepository:   conv.Default(o.BillingRepository, opts.BillingRepository),
 			RedisClient:         conv.Default(o.RedisClient, opts.RedisClient),
 			PosthogClient:       conv.Default(o.PosthogClient, opts.PosthogClient),
+			FunctionsDeployer:   conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
+			FunctionsVersion:    conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
 		}
 	}
 
@@ -127,11 +142,14 @@ func NewTemporalWorker(
 		opts.BillingTracker,
 		opts.BillingRepository,
 		opts.PosthogClient,
+		opts.FunctionsDeployer,
+		opts.FunctionsVersion,
 	)
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
 	temporalWorker.RegisterActivity(activities.TransitionDeployment)
 	temporalWorker.RegisterActivity(activities.ProvisionFunctionsAccess)
+	temporalWorker.RegisterActivity(activities.DeployFunctionRunners)
 	temporalWorker.RegisterActivity(activities.GetSlackProjectContext)
 	temporalWorker.RegisterActivity(activities.PostSlackMessage)
 	temporalWorker.RegisterActivity(activities.SlackChatCompletion)

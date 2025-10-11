@@ -134,13 +134,17 @@ func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...a
 	return e
 }
 
+func (e *ShareableError) IsTemporary() bool {
+	return !errors.Is(e.cause, ErrPermanent) && e.Code.IsTemporary()
+}
+
 // AsGoa converts the ShareableError to a goa.ServiceError, preserving the error
 // code, id, and cause. It also sets the timeout, temporary, and fault flags
 // based on the error code and cause.
 func (e *ShareableError) AsGoa() *goa.ServiceError {
 	var timeout, temporary, fault bool
 
-	temporary = !errors.Is(e.cause, ErrPermanent) && e.Code.IsTemporary()
+	temporary = e.IsTemporary()
 
 	switch e.Code {
 	case CodeUnexpected, CodeInvariantViolation:

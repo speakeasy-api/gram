@@ -84,7 +84,17 @@ func (s *Service) callTool(ctx context.Context, payload CallToolPayload, w http.
 	cmd.Dir = s.workDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+
+	// 🚨🚨🚨🚨🚨
+	// <NOTICE>
+	// YOU MUST ALWAYS SET CMD.ENV TO A NON-NIL VALUE SO THE PROCESS DOES NOT
+	// INHERIT THE PARENT PROCESS'S ENVIRONMENT.
+	// 🚨🚨🚨🚨🚨
 	cmd.Env = make([]string, 0, len(payload.Environment))
+	// 🚨🚨🚨🚨🚨
+	// </NOTICE>
+	// 🚨🚨🚨🚨🚨
+
 	for key, value := range payload.Environment {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
 	}

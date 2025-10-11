@@ -114,6 +114,24 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 		)
 	}
 
+	err = workflow.ExecuteActivity(
+		ctx,
+		a.DeployFunctionRunners,
+		activities.DeployFunctionRunnersRequest{
+			ProjectID:    params.ProjectID,
+			DeploymentID: params.DeploymentID,
+		},
+	).Get(ctx, nil)
+	if err != nil {
+		finalStatus = "failed"
+		logger.Error(
+			"failed to deploy function runners",
+			"error", err.Error(),
+			string(attr.ProjectIDKey), params.ProjectID,
+			string(attr.DeploymentIDKey), params.DeploymentID,
+		)
+	}
+
 	var finalTransition activities.TransitionDeploymentResult
 	err = workflow.ExecuteActivity(
 		ctx,
