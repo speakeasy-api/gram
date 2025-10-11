@@ -1,18 +1,16 @@
 import { Heading } from "@/components/ui/heading";
 import { useProject, useSession } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
-import { Toolset } from "@gram/client/models/components";
-import { useToolset } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router";
 import { useMcpUrl } from "./MCPDetails";
+import { Toolset } from "@/lib/toolTypes";
+import { useToolset } from "@/hooks/toolTypes";
 
 export function MCPHostedPage() {
   const { toolsetSlug } = useParams();
-  const { data: toolset } = useToolset({ slug: toolsetSlug ?? "" }, undefined, {
-    enabled: !!toolsetSlug,
-  });
+  const { data: toolset } = useToolset(toolsetSlug);
 
   return (
     <Stack className="w-full h-full">
@@ -52,8 +50,8 @@ export function MCPPagePreview({
     setError(null);
 
     fetch(pageUrl, {
+      credentials: "include",
       headers: {
-        "Gram-Session": session.session,
         "Gram-Project": project.slug,
         Accept: "text/html,application/xhtml+xml",
       },
@@ -99,7 +97,7 @@ export function MCPPagePreview({
             if (doc && doc.body) {
               const contentWidth = doc.body.scrollWidth;
               const contentHeight = doc.body.scrollHeight;
-              const iframeWidth = iframe.offsetWidth * 0.7;
+              const iframeWidth = iframe.offsetWidth;
               const iframeHeight = iframe.offsetHeight;
 
               // Calculate scale based on both width and height constraints

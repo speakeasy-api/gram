@@ -1,14 +1,19 @@
+import { CodeBlock } from "@/components/code";
+import { Dialog } from "@/components/ui/dialog";
+import { Label as Heading } from "@/components/ui/label";
+import { Link } from "@/components/ui/link";
+import { Type } from "@/components/ui/type";
+import { Toolset } from "@/lib/toolTypes";
+import { useMcpUrl } from "@/pages/mcp/MCPDetails";
 import type { McpMetadata } from "@gram/client/models/components";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
 import {
+  invalidateGetMcpMetadata,
   useGetMcpMetadata,
   useMcpMetadataSetMutation,
-  invalidateGetMcpMetadata,
 } from "@gram/client/react-query";
-import { Button, Stack, Input, cn, Icon } from "@speakeasy-api/moonshine";
-import { Link } from "@/components/ui/link";
-import { CompactUpload, useAssetImageUploadHandler } from "../upload";
-import { Label as Heading } from "@/components/ui/label";
-import { Type } from "@/components/ui/type";
+import { Button, cn, Icon, Input, Stack } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   type ChangeEventHandler,
   type JSX,
@@ -18,12 +23,8 @@ import {
   useState,
 } from "react";
 import { AssetImage } from "../asset-image";
-import { useQueryClient } from "@tanstack/react-query";
-import { CodeBlock } from "@/components/code";
-import { useMcpUrl } from "@/pages/mcp/MCPDetails";
-import { Dialog } from "@/components/ui/dialog";
-import { Toolset } from "@/lib/toolTypes";
-import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { SimpleTooltip } from "../ui/tooltip";
+import { CompactUpload, useAssetImageUploadHandler } from "../upload";
 
 interface ConfigFormProps {
   toolset: Toolset;
@@ -229,29 +230,33 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
   const isLoading = result.isLoading || form.isLoading;
 
   return (
-    <Stack direction="vertical" justify="space-between" align="start" gap={2}>
+    <Stack direction="horizontal" align="center" gap={2}>
       <CodeBlock
         copyable={toolset.mcpIsPublic}
+        className="w-full border-1"
       >{`${mcpUrl}/install`}</CodeBlock>
       <Stack direction="horizontal" gap={2}>
         <Link external to={`${mcpUrl}/install`} noIcon>
-          <Button
-            variant="secondary"
-            className="px-4"
-            disabled={!toolset.mcpIsPublic}
-          >
-            <Button.Text>View</Button.Text>
-            <Button.RightIcon>
-              <Icon name="external-link" className="w-4 h-4" />
-            </Button.RightIcon>
-          </Button>
+          <SimpleTooltip tooltip={toolset.mcpIsPublic ? "View the install page" : "Make this "}>
+            <Button
+              variant="secondary"
+              className="px-4"
+              disabled={!toolset.mcpIsPublic}
+            >
+              <Button.Text>View</Button.Text>
+              <Button.RightIcon>
+                <Icon name="external-link" className="w-4 h-4" />
+              </Button.RightIcon>
+            </Button>
+          </SimpleTooltip>
         </Link>
         <Dialog open={open} onOpenChange={setOpen}>
           <Dialog.Trigger asChild>
-            <Button variant="tertiary">
-              <Button.Text>
-                <Icon name="settings" />
-              </Button.Text>
+            <Button variant="secondary">
+              <Button.Text>Edit</Button.Text>
+              <Button.RightIcon>
+                <Icon name="settings" className="w-4 h-4" />
+              </Button.RightIcon>
             </Button>
           </Dialog.Trigger>
           <Dialog.Content>
