@@ -483,7 +483,7 @@ func (f *FlyRunner) setSecrets(ctx context.Context, logger *slog.Logger, appName
 func (f *FlyRunner) serializeAssets(
 	ctx context.Context,
 	logger *slog.Logger,
-	assets []RunnerAssetMount,
+	assets []RunnerAsset,
 ) ([]*fly.File, error) {
 	total := 0
 
