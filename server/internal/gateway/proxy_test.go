@@ -15,8 +15,23 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func newTestToolDescriptor() *ToolDescriptor {
+	return &ToolDescriptor{
+		ID:               uuid.New().String(),
+		URN:              urn.NewTool(urn.ToolKindHTTP, "doc", "test_tool"),
+		ProjectID:        uuid.New().String(),
+		ProjectSlug:      "test-project",
+		DeploymentID:     uuid.New().String(),
+		OrganizationID:   uuid.New().String(),
+		OrganizationSlug: "test-org",
+		Name:             "test_tool",
+	}
+}
 
 func TestToolProxy_Do_PathParams(t *testing.T) {
 	t.Parallel()
@@ -171,13 +186,9 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
-			// Create tool with path parameter configuration
-			tool := &HTTPTool{
-				ID:                 uuid.New().String(),
-				ProjectID:          uuid.New().String(),
-				DeploymentID:       uuid.New().String(),
-				OrganizationID:     uuid.New().String(),
-				Name:               "test_tool",
+			tool := newTestToolDescriptor()
+			// Create plan with path parameter configuration
+			plan := &HTTPToolCallPlan{
 				ServerEnvVar:       "TEST_SERVER_URL",
 				DefaultServerUrl:   NullString{Value: mockServer.URL, Valid: true},
 				Security:           []*HTTPToolSecurity{},
@@ -194,7 +205,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Add path parameter configuration for the parameter in the test
 			for paramName := range tt.pathParam {
-				tool.PathParams[paramName] = &HTTPParameter{
+				plan.PathParams[paramName] = &HTTPParameter{
 					Name:            paramName,
 					Style:           "simple",
 					Explode:         boolPtr(false),
@@ -231,7 +242,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPTool(tool))
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPToolCallPlan(tool, plan))
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -298,13 +309,9 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
-			// Create tool with header parameter configuration
-			tool := &HTTPTool{
-				ID:                 uuid.New().String(),
-				ProjectID:          uuid.New().String(),
-				DeploymentID:       uuid.New().String(),
-				OrganizationID:     uuid.New().String(),
-				Name:               "test_tool",
+			tool := newTestToolDescriptor()
+			// Create plan with header parameter configuration
+			plan := &HTTPToolCallPlan{
 				ServerEnvVar:       "TEST_SERVER_URL",
 				DefaultServerUrl:   NullString{Value: mockServer.URL, Valid: true},
 				Security:           []*HTTPToolSecurity{},
@@ -321,7 +328,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 
 			// Add header parameter configuration for the parameter in the test
 			for paramName := range tt.headerParam {
-				tool.HeaderParams[paramName] = &HTTPParameter{
+				plan.HeaderParams[paramName] = &HTTPParameter{
 					Name:            paramName,
 					Style:           "simple",
 					Explode:         boolPtr(false),
@@ -358,7 +365,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPTool(tool))
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPToolCallPlan(tool, plan))
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -656,13 +663,9 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
-			// Create tool with query parameter configuration
-			tool := &HTTPTool{
-				ID:                 uuid.New().String(),
-				ProjectID:          uuid.New().String(),
-				DeploymentID:       uuid.New().String(),
-				OrganizationID:     uuid.New().String(),
-				Name:               "test_tool",
+			tool := newTestToolDescriptor()
+			// Create plan with query parameter configuration
+			plan := &HTTPToolCallPlan{
 				ServerEnvVar:       "TEST_SERVER_URL",
 				DefaultServerUrl:   NullString{Value: mockServer.URL, Valid: true},
 				Security:           []*HTTPToolSecurity{},
@@ -706,7 +709,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPTool(tool))
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPToolCallPlan(tool, plan))
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -871,12 +874,8 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				path = "/api/users"
 			}
 
-			tool := &HTTPTool{
-				ID:                 uuid.New().String(),
-				ProjectID:          uuid.New().String(),
-				DeploymentID:       uuid.New().String(),
-				OrganizationID:     uuid.New().String(),
-				Name:               "test_tool",
+			tool := newTestToolDescriptor()
+			plan := &HTTPToolCallPlan{
 				ServerEnvVar:       "TEST_SERVER_URL",
 				DefaultServerUrl:   NullString{Value: mockServer.URL, Valid: true},
 				Security:           []*HTTPToolSecurity{},
@@ -924,7 +923,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), ciEnv, NewHTTPTool(tool))
+			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), ciEnv, NewHTTPToolCallPlan(tool, plan))
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -970,17 +969,13 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 	policy, err := guardian.NewUnsafePolicy([]string{})
 	require.NoError(t, err)
 
+	tool := newTestToolDescriptor()
 	// Create a function tool
-	functionTool := &FunctionTool{
-		ID:             uuid.New().String(),
-		ProjectID:      uuid.New().String(),
-		DeploymentID:   uuid.New().String(),
-		OrganizationID: uuid.New().String(),
-		FunctionID:     uuid.New().String(),
-		Name:           "test_function",
-		Runtime:        "nodejs:22",
-		InputSchema:    []byte(`{"type": "object"}`),
-		Variables:      []byte(`{}`),
+	plan := &FunctionToolCallPlan{
+		FunctionID:  uuid.New().String(),
+		Runtime:     "nodejs:22",
+		InputSchema: []byte(`{"type": "object"}`),
+		Variables:   []byte(`{}`),
 	}
 
 	// Create request body
@@ -1012,11 +1007,12 @@ func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
 
 	// Execute the proxy call with a function tool
 	ciEnv := NewCaseInsensitiveEnv()
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewFunctionTool(functionTool))
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewFunctionToolCallPlan(tool, plan))
 
 	// Verify that it fails
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "tool type not supported")
+	var serr *oops.ShareableError
+	require.ErrorAs(t, err, &serr)
+	require.Equal(t, oops.CodeNotImplemented, serr.Code)
 }
 
 func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
@@ -1290,13 +1286,9 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
-			// Create tool configuration
-			tool := &HTTPTool{
-				ID:                 uuid.New().String(),
-				ProjectID:          uuid.New().String(),
-				DeploymentID:       uuid.New().String(),
-				OrganizationID:     uuid.New().String(),
-				Name:               "test_tool",
+			tool := newTestToolDescriptor()
+			// Create plan configuration
+			plan := &HTTPToolCallPlan{
 				ServerEnvVar:       "TEST_SERVER_URL",
 				DefaultServerUrl:   NullString{Value: mockServer.URL, Valid: true},
 				Security:           []*HTTPToolSecurity{},
@@ -1326,7 +1318,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader([]byte(tt.toolCallBody)), ciEnv, NewHTTPTool(tool))
+			err = proxy.Do(ctx, recorder, bytes.NewReader([]byte(tt.toolCallBody)), ciEnv, NewHTTPToolCallPlan(tool, plan))
 
 			if tt.expectError {
 				require.Error(t, err)

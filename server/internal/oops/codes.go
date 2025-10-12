@@ -15,6 +15,7 @@ const (
 	CodeUnexpected         Code = "unexpected"
 	CodeInvariantViolation Code = "invariant_violation"
 	CodeGatewayError       Code = "gateway_error"
+	CodeNotImplemented     Code = "not_implemented"
 )
 
 var StatusCodes = map[Code]int{
@@ -28,6 +29,7 @@ var StatusCodes = map[Code]int{
 	CodeUnexpected:         http.StatusInternalServerError,
 	CodeInvariantViolation: http.StatusUnprocessableEntity,
 	CodeGatewayError:       http.StatusBadGateway,
+	CodeNotImplemented:     http.StatusNotImplemented,
 }
 
 func (c Code) UserMessage() string {
@@ -46,6 +48,8 @@ func (c Code) UserMessage() string {
 		return "unsupported media type"
 	case CodeInvalid:
 		return "request contains one or more invalidation fields"
+	case CodeNotImplemented:
+		return "requested feature is not implemented"
 	default:
 		return "an unexpected error occurred"
 	}

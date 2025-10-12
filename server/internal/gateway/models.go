@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"errors"
+
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type FilterType string
@@ -22,15 +24,20 @@ func NewFilterType(s string) (FilterType, error) {
 	}
 }
 
-// HTTPTool describes how to translate a tool call into an HTTP request to be
-// proxied to some downstream server.
-type HTTPTool struct {
-	ID             string `json:"id" yaml:"id"`
-	DeploymentID   string `json:"deployment_id" yaml:"deployment_id"`
-	ProjectID      string `json:"project_id" yaml:"project_id"`
-	OrganizationID string `json:"organization_id" yaml:"organization_id"`
-	Name           string `json:"name" yaml:"name"`
+type ToolDescriptor struct {
+	ID               string   `json:"id" yaml:"id"`
+	URN              urn.Tool `json:"urn" yaml:"urn"`
+	Name             string   `json:"name" yaml:"name"`
+	DeploymentID     string   `json:"deployment_id" yaml:"deployment_id"`
+	ProjectID        string   `json:"project_id" yaml:"project_id"`
+	ProjectSlug      string   `json:"project_slug" yaml:"project_slug"`
+	OrganizationID   string   `json:"organization_id" yaml:"organization_id"`
+	OrganizationSlug string   `json:"organization_slug" yaml:"organization_slug"`
+}
 
+// HTTPToolCallPlan describes how to translate a tool call into an HTTP request to be
+// proxied to some downstream server.
+type HTTPToolCallPlan struct {
 	DefaultServerUrl   NullString                `json:"default_server_url" yaml:"default_server_url"`
 	ServerEnvVar       string                    `json:"server_env_var" yaml:"server_env_var"`
 	Method             string                    `json:"method" yaml:"method"`
@@ -42,8 +49,7 @@ type HTTPTool struct {
 	RequestContentType NullString                `json:"request_content_type" yaml:"request_content_type"`
 	Security           []*HTTPToolSecurity       `json:"security" yaml:"security"`
 	SecurityScopes     map[string][]string       `json:"security_scopes" yaml:"security_scopes"`
-
-	ResponseFilter *ResponseFilter `json:"response_filter" yaml:"response_filter"`
+	ResponseFilter     *ResponseFilter           `json:"response_filter" yaml:"response_filter"`
 }
 
 // HTTPParameter holds the settings for encoding a parameter into an HTTP
@@ -83,17 +89,19 @@ type ResponseFilter struct {
 	ContentTypes []string   `json:"content_types" yaml:"content_types"`
 }
 
-// FunctionTool describes a serverless function that can be invoked as a tool.
-type FunctionTool struct {
-	ID             string `json:"id" yaml:"id"`
-	DeploymentID   string `json:"deployment_id" yaml:"deployment_id"`
-	ProjectID      string `json:"project_id" yaml:"project_id"`
-	OrganizationID string `json:"organization_id" yaml:"organization_id"`
-	FunctionID     string `json:"function_id" yaml:"function_id"`
-	Name           string `json:"name" yaml:"name"`
-	Runtime        string `json:"runtime" yaml:"runtime"`
-	InputSchema    []byte `json:"input_schema" yaml:"input_schema"`
-	Variables      []byte `json:"variables" yaml:"variables"`
+var DisableResponseFiltering = &ResponseFilter{
+	Type:         FilterTypeNone,
+	Schema:       []byte{},
+	StatusCodes:  []string{},
+	ContentTypes: []string{},
+}
+
+// FunctionToolCallPlan describes a serverless function that can be invoked as a tool.
+type FunctionToolCallPlan struct {
+	FunctionID  string `json:"function_id" yaml:"function_id"`
+	Runtime     string `json:"runtime" yaml:"runtime"`
+	InputSchema []byte `json:"input_schema" yaml:"input_schema"`
+	Variables   []byte `json:"variables" yaml:"variables"`
 }
 
 type ToolKind string
@@ -103,43 +111,32 @@ const (
 	ToolKindFunction ToolKind = "function"
 )
 
-// Tool is a polymorphic type that can represent either an HTTPTool or a FunctionTool.
+// ToolCallPlan is a polymorphic type that can represent either an HTTPTool or a FunctionTool.
 // Use NewHTTPTool or NewFunctionTool to create instances.
-type Tool struct {
-	kind         ToolKind
-	HTTPTool     *HTTPTool
-	FunctionTool *FunctionTool
+type ToolCallPlan struct {
+	Kind       ToolKind
+	Descriptor *ToolDescriptor
+
+	HTTP     *HTTPToolCallPlan
+	Function *FunctionToolCallPlan
 }
 
-// Kind returns the tool kind.
-func (t *Tool) Kind() ToolKind {
-	return t.kind
-}
-
-// NewHTTPTool creates a new Tool wrapping an HTTPTool.
-func NewHTTPTool(httpTool *HTTPTool) *Tool {
-	return &Tool{
-		kind:         ToolKindHTTP,
-		HTTPTool:     httpTool,
-		FunctionTool: nil,
+// NewHTTPToolCallPlan creates a new Tool wrapping an HTTPTool.
+func NewHTTPToolCallPlan(tool *ToolDescriptor, plan *HTTPToolCallPlan) *ToolCallPlan {
+	return &ToolCallPlan{
+		Kind:       ToolKindHTTP,
+		Descriptor: tool,
+		HTTP:       plan,
+		Function:   nil,
 	}
 }
 
-// NewFunctionTool creates a new Tool wrapping a FunctionTool.
-func NewFunctionTool(functionTool *FunctionTool) *Tool {
-	return &Tool{
-		kind:         ToolKindFunction,
-		HTTPTool:     nil,
-		FunctionTool: functionTool,
+// NewFunctionToolCallPlan creates a new Tool wrapping a FunctionTool.
+func NewFunctionToolCallPlan(tool *ToolDescriptor, plan *FunctionToolCallPlan) *ToolCallPlan {
+	return &ToolCallPlan{
+		Kind:       ToolKindFunction,
+		Descriptor: tool,
+		HTTP:       nil,
+		Function:   plan,
 	}
-}
-
-// IsHTTP returns true if this tool is an HTTP tool.
-func (t *Tool) IsHTTP() bool {
-	return t.HTTPTool != nil && t.kind == ToolKindHTTP
-}
-
-// IsFunction returns true if this tool is a function tool.
-func (t *Tool) IsFunction() bool {
-	return t.FunctionTool != nil && t.kind == ToolKindFunction
 }
