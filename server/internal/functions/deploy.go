@@ -39,6 +39,7 @@ type RunnerDeployRequest struct {
 	ProjectID    uuid.UUID
 	DeploymentID uuid.UUID
 	FunctionID   uuid.UUID
+	AccessID     uuid.UUID
 
 	Runtime Runtime
 	Assets  []RunnerAsset

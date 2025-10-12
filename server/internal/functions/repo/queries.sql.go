@@ -89,6 +89,7 @@ INSERT INTO fly_apps (
     project_id
   , deployment_id
   , function_id
+  , access_id
   , fly_org_id
   , fly_org_slug
   , app_name
@@ -106,6 +107,7 @@ INSERT INTO fly_apps (
   , $7
   , $8
   , $9
+  , $10
   , 'pending'
 ) RETURNING id
 `
@@ -114,6 +116,7 @@ type InitFlyAppParams struct {
 	ProjectID     uuid.UUID
 	DeploymentID  uuid.UUID
 	FunctionID    uuid.UUID
+	AccessID      uuid.UUID
 	FlyOrgID      string
 	FlyOrgSlug    string
 	AppName       string
@@ -127,6 +130,7 @@ func (q *Queries) InitFlyApp(ctx context.Context, arg InitFlyAppParams) (uuid.UU
 		arg.ProjectID,
 		arg.DeploymentID,
 		arg.FunctionID,
+		arg.AccessID,
 		arg.FlyOrgID,
 		arg.FlyOrgSlug,
 		arg.AppName,

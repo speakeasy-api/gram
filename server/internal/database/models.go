@@ -187,6 +187,7 @@ type FlyApp struct {
 	ProjectID     uuid.UUID
 	DeploymentID  uuid.UUID
 	FunctionID    uuid.UUID
+	AccessID      uuid.UUID
 	FlyOrgID      string
 	FlyOrgSlug    string
 	AppName       string

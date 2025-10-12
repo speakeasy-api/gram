@@ -141,6 +141,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		attr.SlogProjectID(req.ProjectID.String()),
 		attr.SlogDeploymentID(req.DeploymentID.String()),
 		attr.SlogDeploymentFunctionsID(req.FunctionID.String()),
+		attr.SlogDeploymentFunctionsAccessID(req.AccessID.String()),
 		attr.SlogFunctionsRuntime(req.Runtime),
 	}
 
@@ -251,6 +252,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		ProjectID:     req.ProjectID,
 		DeploymentID:  req.DeploymentID,
 		FunctionID:    req.FunctionID,
+		AccessID:      req.AccessID,
 		FlyOrgID:      org.ID,
 		FlyOrgSlug:    orgSlug,
 		AppName:       appName,

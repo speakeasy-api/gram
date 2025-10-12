@@ -556,6 +556,7 @@ LIMIT 1;
 
 -- name: GetFunctionCredentialsBatch :many
 SELECT DISTINCT ON (function_id)
+  id,
   function_id,
   encryption_key,
   bearer_format

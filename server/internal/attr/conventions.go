@@ -73,6 +73,7 @@ const (
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
 	DeploymentIDKey                = attribute.Key("gram.deployment.id")
+	DeploymentFunctionsAccessIDKey = attribute.Key("gram.deployment.functions.access_id")
 	DeploymentFunctionsIDKey       = attribute.Key("gram.deployment.functions.id")
 	DeploymentFunctionsNameKey     = attribute.Key("gram.deployment.functions.name")
 	DeploymentFunctionsSlugKey     = attribute.Key("gram.deployment.functions.slug")
@@ -316,6 +317,13 @@ func SlogDBDeletedRowsCount(v int64) slog.Attr      { return slog.Int64(string(D
 
 func DeploymentID(v string) attribute.KeyValue { return DeploymentIDKey.String(v) }
 func SlogDeploymentID(v string) slog.Attr      { return slog.String(string(DeploymentIDKey), v) }
+
+func DeploymentFunctionsAccessID(v string) attribute.KeyValue {
+	return DeploymentFunctionsAccessIDKey.String(v)
+}
+func SlogDeploymentFunctionsAccessID(v string) slog.Attr {
+	return slog.String(string(DeploymentFunctionsAccessIDKey), v)
+}
 
 func DeploymentFunctionsID(v string) attribute.KeyValue { return DeploymentFunctionsIDKey.String(v) }
 func SlogDeploymentFunctionsID(v string) slog.Attr {

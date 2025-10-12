@@ -1203,6 +1203,7 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 
 const getFunctionCredentialsBatch = `-- name: GetFunctionCredentialsBatch :many
 SELECT DISTINCT ON (function_id)
+  id,
   function_id,
   encryption_key,
   bearer_format
@@ -1221,6 +1222,7 @@ type GetFunctionCredentialsBatchParams struct {
 }
 
 type GetFunctionCredentialsBatchRow struct {
+	ID            uuid.UUID
 	FunctionID    uuid.UUID
 	EncryptionKey []byte
 	BearerFormat  pgtype.Text
@@ -1235,7 +1237,12 @@ func (q *Queries) GetFunctionCredentialsBatch(ctx context.Context, arg GetFuncti
 	var items []GetFunctionCredentialsBatchRow
 	for rows.Next() {
 		var i GetFunctionCredentialsBatchRow
-		if err := rows.Scan(&i.FunctionID, &i.EncryptionKey, &i.BearerFormat); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.FunctionID,
+			&i.EncryptionKey,
+			&i.BearerFormat,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

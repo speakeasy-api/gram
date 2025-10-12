@@ -25,6 +25,7 @@ INSERT INTO fly_apps (
     project_id
   , deployment_id
   , function_id
+  , access_id
   , fly_org_id
   , fly_org_slug
   , app_name
@@ -36,6 +37,7 @@ INSERT INTO fly_apps (
     @project_id
   , @deployment_id
   , @function_id
+  , @access_id
   , @fly_org_id
   , @fly_org_slug
   , @app_name

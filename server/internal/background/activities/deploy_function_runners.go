@@ -135,6 +135,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 			ProjectID:    task.projectID,
 			DeploymentID: task.deploymentID,
 			FunctionID:   task.functionID,
+			AccessID:     task.accessID,
 			Runtime:      task.runtime,
 			Assets: []functions.RunnerAsset{{
 				AssetURL:  task.assetURL,
@@ -164,6 +165,7 @@ type deployFunctionRunnerTask struct {
 	projectID    uuid.UUID
 	deploymentID uuid.UUID
 	functionID   uuid.UUID
+	accessID     uuid.UUID
 	runtime      functions.Runtime
 	bearerSecret string
 	assetURL     *url.URL
@@ -222,6 +224,7 @@ func (d *DeployFunctionRunners) preflightFunction(
 		projectID:    args.ProjectID,
 		deploymentID: args.DeploymentID,
 		functionID:   fnc.ID,
+		accessID:     c.ID,
 		runtime:      functions.Runtime(fnc.Runtime),
 		bearerSecret: base64.StdEncoding.EncodeToString([]byte(sec)),
 		assetURL:     assetURL,
