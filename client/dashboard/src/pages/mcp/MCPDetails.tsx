@@ -206,14 +206,23 @@ export function useMcpUrl(
   toolset:
     | Pick<
         ToolsetEntry,
-        "slug" | "customDomainId" | "mcpSlug" | "defaultEnvironmentSlug"
+        | "slug"
+        | "customDomainId"
+        | "mcpSlug"
+        | "defaultEnvironmentSlug"
+        | "mcpIsPublic"
       >
     | undefined,
-) {
+): {
+  url: string | undefined;
+  customServerURL: string | undefined;
+  installPageUrl: string;
+} {
   const { domain } = useCustomDomain();
   const project = useProject();
 
-  if (!toolset) return { url: undefined, customServerURL: undefined };
+  if (!toolset)
+    return { url: undefined, customServerURL: undefined, installPageUrl: "" };
 
   // Determine which server URL to use
   let customServerURL: string | undefined;
@@ -228,10 +237,16 @@ export function useMcpUrl(
     toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
   }/mcp/${urlSuffix}`;
 
+  // Always use our URL for install page when server is private, even for
+  // custom domains to ensure cookie is present
+  const installPageUrl = toolset.mcpIsPublic
+    ? `${mcpUrl}/install`
+    : `${getServerURL()}/mcp/${urlSuffix}/install`;
+
   return {
     url: mcpUrl,
     customServerURL,
-    pageUrl: `${mcpUrl}/install`,
+    installPageUrl,
   };
 }
 
@@ -461,7 +476,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         description="The URL you or your users will use to access this MCP server."
       >
         <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
-        <Block label="Custom Slug" error={mcpSlugError}>
+        <Block label="Custom Slug" error={mcpSlugError} className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Type muted mono variant="small">
@@ -500,7 +515,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
             </Stack>
           </BlockInner>
         </Block>
-        <Block label="Custom Domain">
+        <Block label="Custom Domain" className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Type mono small>
@@ -524,18 +539,22 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
       >
         <PublicToggle isPublic={mcpIsPublic ?? false} />
       </PageSection>
-      {toolset.mcpIsPublic && (
-        <PageSection
-          heading="MCP Install Documentation"
-          description="Share this page with your users to give simple instructions
-            for gettings started with your MCP to their client like Cursor or
-            Claude Desktop."
-        >
-          <Stack className="mt-2" gap={1}>
-            <ConfigForm toolset={toolset} />
-          </Stack>
-        </PageSection>
-      )}
+      <PageSection
+        heading="MCP Install Documentation"
+        description="Share this page with your users to give simple instructions
+          for gettings started with your MCP to their client like Cursor or
+          Claude Desktop."
+      >
+        {!toolset.mcpIsPublic && (
+          <Type small italic destructive>
+            Your server is private. To share with external users, you must make
+            it public.
+          </Type>
+        )}
+        <Stack className="mt-2" gap={1}>
+          <ConfigForm toolset={toolset} />
+        </Stack>
+      </PageSection>
       <PageSection
         heading="Configuration"
         description="Configuration blocks for this server"

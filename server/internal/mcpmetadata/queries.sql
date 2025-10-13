@@ -7,7 +7,7 @@ SELECT id,
        created_at,
        updated_at
 FROM mcp_metadata
-WHERE toolset_id = $1
+WHERE toolset_id = @toolset_id
 ORDER BY updated_at DESC
 LIMIT 1;
 
@@ -17,7 +17,7 @@ INSERT INTO mcp_metadata (
     project_id,
     external_documentation_url,
     logo_id
-) VALUES ($1, $2, $3, $4)
+) VALUES (@toolset_id, @project_id, @external_documentation_url, @logo_id)
 ON CONFLICT (toolset_id)
 DO UPDATE SET project_id = EXCLUDED.project_id,
               external_documentation_url = EXCLUDED.external_documentation_url,
@@ -30,4 +30,3 @@ RETURNING id,
           logo_id,
           created_at,
           updated_at;
-
