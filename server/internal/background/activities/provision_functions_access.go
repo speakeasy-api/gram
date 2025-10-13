@@ -81,7 +81,7 @@ func (p *ProvisionFunctionsAccess) Do(ctx context.Context, projectID uuid.UUID, 
 			ProjectID:     projectID,
 			DeploymentID:  deploymentID,
 			FunctionID:    aid,
-			EncryptionKey: []byte(sealedKey),
+			EncryptionKey: conv.NewSecret([]byte(sealedKey)),
 			BearerFormat:  conv.ToPGText("GramV1"),
 		})
 		if err != nil {
