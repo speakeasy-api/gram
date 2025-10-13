@@ -1,7 +1,13 @@
 name: Sync Gram Docs → Marketing Site (PR)
 
 on:
-  workflow_dispatch: 
+  push:
+    branches: [ main ]
+    paths:
+      - "docs/src/content/docs/**"
+      - "docs/public/**"
+  workflow_dispatch:
+  pull_request:
 
 permissions:
   contents: write
