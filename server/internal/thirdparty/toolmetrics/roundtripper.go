@@ -129,7 +129,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		attribute.String("tool.project_id", tool.ProjectID),
 		attribute.String("tool.deployment_id", tool.DeploymentID),
 		attribute.String("tool.organization_id", tool.OrganizationID),
-		attribute.String("http.route", tool.HTTPRoute),
+		attribute.String("http.route", req.URL.Path),
 	)
 
 	// If the request failed, wrap and return the error; E.g., request timeout, etc.
@@ -247,7 +247,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 				TraceID:           traceID,
 				SpanID:            spanID,
 				HTTPMethod:        req.Method,
-				HTTPRoute:         tool.HTTPRoute,
+				HTTPRoute:         req.URL.Path,
 				StatusCode:        int64(statusCode), // #nosec G115 -- We're bounding an int into a uint16
 				DurationMs:        durationMs,
 				UserAgent:         req.UserAgent(),
@@ -303,5 +303,4 @@ type ToolInfo struct {
 	ProjectID      string
 	DeploymentID   string
 	OrganizationID string
-	HTTPRoute      string
 }

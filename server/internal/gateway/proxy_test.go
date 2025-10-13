@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -18,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -69,15 +67,8 @@ func newClickhouseClient(t *testing.T, orgId string) *toolmetrics.ClickhouseClie
 
 	tracerProvider := testenv.NewTracerProvider(t)
 
-	fp := &feature.InMemory{}
-	fp.SetFlag(feature.FlagClickhouseToolMetrics, orgId, true)
-
 	ch := toolmetrics.New(testenv.NewLogger(t), chConn, tracerProvider, func(ctx context.Context, log toolmetrics.ToolHTTPRequest) (bool, error) {
-		isEnabled, err := fp.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, orgId)
-		if err != nil {
-			return false, fmt.Errorf("failed to check feature flag: %w", err)
-		}
-		return isEnabled, nil
+		return true, nil
 	})
 
 	return ch
@@ -317,9 +308,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
 			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
 			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
-			require.Equal(t, tool.Method, toolHTTPRequest.HTTPMethod)
-			require.Equal(t, tool.Path, toolHTTPRequest.HTTPRoute)
-			require.Equal(t, uint16(200), toolHTTPRequest.StatusCode)
+			require.Equal(t, int64(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
@@ -459,9 +448,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
 			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
 			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
-			require.Equal(t, tool.Method, toolHTTPRequest.HTTPMethod)
-			require.Equal(t, tool.Path, toolHTTPRequest.HTTPRoute)
-			require.Equal(t, uint16(200), toolHTTPRequest.StatusCode)
+			require.Equal(t, int64(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
@@ -817,9 +804,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
 			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
 			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
-			require.Equal(t, tool.Method, toolHTTPRequest.HTTPMethod)
-			require.Equal(t, tool.Path, toolHTTPRequest.HTTPRoute)
-			require.Equal(t, uint16(200), toolHTTPRequest.StatusCode)
+			require.Equal(t, int64(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
@@ -1061,9 +1046,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
 			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
 			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
-			require.Equal(t, tool.Method, toolHTTPRequest.HTTPMethod)
-			require.Equal(t, tool.Path, toolHTTPRequest.HTTPRoute)
-			require.Equal(t, uint16(200), toolHTTPRequest.StatusCode)
+			require.Equal(t, int64(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }

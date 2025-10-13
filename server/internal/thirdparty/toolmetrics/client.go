@@ -232,6 +232,7 @@ func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
 	startTime := time.Now()
 
 	args := []any{
+		log.ID,
 		log.Ts,
 		log.OrganizationID,
 		log.ProjectID,
@@ -288,15 +289,9 @@ func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
 }
 
 func (c *ClickhouseClient) Close() error {
-	c.Logger.InfoContext(context.Background(), "closing ClickHouse connection")
-	err := c.Conn.Close()
-	if err != nil {
-		c.Logger.ErrorContext(context.Background(), "failed to close ClickHouse connection",
-			attr.SlogError(err),
-		)
-		return fmt.Errorf("close: %w", err)
+	if err := c.Conn.Close(); err != nil {
+		return fmt.Errorf("close clickhouse client: %w", err)
 	}
-	c.Logger.InfoContext(context.Background(), "successfully closed ClickHouse connection")
 	return nil
 }
 

@@ -153,6 +153,9 @@ linters:
         - "errors.Join("
         - "fmt.Errorf("
 
+        - "(io.Reader).Read("
+        - "(io.Closer).Close("
+
         - "(*github.com/sourcegraph/conc/pool.ErrorPool).Wait("
         - "go.temporal.io/sdk/temporal.NewApplicationErrorWithOptions("
         - "go.temporal.io/sdk/temporal.NewNonRetryableApplicationError("

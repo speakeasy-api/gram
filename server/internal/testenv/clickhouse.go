@@ -68,6 +68,10 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 			return nil, fmt.Errorf("failed to connect to clickhouse: %w", err)
 		}
 
+		if err = conn.Ping(ctx); err != nil {
+			return nil, fmt.Errorf("failed to ping clickhouse: %w", err)
+		}
+
 		t.Cleanup(func() {
 			defer o11y.NoLogDefer(func() error {
 				if err2 := conn.Close(); err2 != nil {

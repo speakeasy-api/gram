@@ -24,6 +24,7 @@ import (
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
@@ -63,23 +64,16 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 	nilFunc := func(context.Context) error { return nil }
 
 	// validate cli args
-	if c.String("clickhouse-host") == "" {
-		return nil, nilFunc, fmt.Errorf("clickhouse-host is required")
-	}
-	if c.String("clickhouse-native-port") == "" {
-		return nil, nilFunc, fmt.Errorf("clickhouse-native-port is required")
-	}
-	if c.String("clickhouse-database") == "" {
-		return nil, nilFunc, fmt.Errorf("clickhouse-database is required")
-	}
-	if c.String("clickhouse-username") == "" {
-		return nil, nilFunc, fmt.Errorf("clickhouse-username is required")
-	}
-	if c.String("clickhouse-password") == "" {
-		return nil, nilFunc, fmt.Errorf("clickhouse-password is required")
-	}
-	if c.Bool("clickhouse-insecure") {
-		return nil, nilFunc, fmt.Errorf("clickhouse-insecure is required")
+	err := inv.Check("clickhouse config options",
+		"clickhouse host is not set", c.String("clickhouse-host") == "",
+		"clickhouse database is not set", c.String("clickhouse-database") == "",
+		"clickhouse username is not set", c.String("clickhouse-username") == "",
+		"clickhouse password is not set", c.String("clickhouse-password") == "",
+		"clickhouse native port is not set", c.String("clickhouse-native-port") == "",
+		"clickhouse http port is not set", c.String("clickhouse-http-port") == "",
+	)
+	if err != nil {
+		return nil, nilFunc, fmt.Errorf("clickhouse insecure flag is not set: %w", err)
 	}
 
 	conn, err := clickhouse.Open(&clickhouse.Options{
