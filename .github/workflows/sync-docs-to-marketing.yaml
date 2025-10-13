@@ -44,7 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           src_path="docs/src/content/docs"
-          dest_path="marketing-repo/src/content/gram"
+          dest_path="marketing-repo/src/content/docs/gram"
           if [ -d "$src_path" ]; then
             mkdir -p "$dest_path"
             rsync -a --delete --exclude='.DS_Store' "$src_path/" "$dest_path/"
