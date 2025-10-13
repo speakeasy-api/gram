@@ -79,6 +79,11 @@ func SanitizeName(name string) string {
 		return res
 	}
 
+	// Trim to 128 characters to comply with `SlugPatternRE`.
+	if len(res) > 128 {
+		res = res[:128]
+	}
+
 	if !constants.SlugPatternRE.MatchString(res) {
 		panic(fmt.Sprintf("SanitizeName: '%s' does not match regular expression: %s", res, constants.SlugPattern))
 	}
