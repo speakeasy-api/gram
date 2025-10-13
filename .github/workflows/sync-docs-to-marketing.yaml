@@ -59,7 +59,19 @@ jobs:
           dest_assets="marketing-repo/public/assets/docs/gram"
           if [ -d "$src_assets" ]; then
             mkdir -p "$dest_assets"
-            rsync -a --delete --exclude='.DS_Store' "$src_assets/" "$dest_assets/"
+            EXCLUDES=(
+              '.DS_Store'
+              'well-known/security.txt'
+              '.well-known/security.txt'
+              'favicon-dark.ico'
+              'favicon-dark.png'
+              'favicon.ico'
+              'favicon.png'
+            )
+
+            rsync -a --delete \
+              "${EXCLUDES[@]/#/--exclude=}" \
+              "$src_assets/" "$dest_assets/"
           else
             echo "Warning: $src_assets does not exist; no assets to sync."
           fi
@@ -98,7 +110,7 @@ jobs:
           path: marketing-repo
           commit-message: "Sync marketing docs from Gram 🐝 (source ${{ github.sha }})"
           branch: chore/gram-to-marketing-sync-${{ github.sha }}
-          title: "Sync docs from Gram"
+          title: "chore: sync docs from Gram"
           body-path: PR_BODY.md
           committer: "Beezy the bot <beezy-bot@users.noreply.github.com>"
           author: "Beezy the bot <beezy-bot@users.noreply.github.com>"
