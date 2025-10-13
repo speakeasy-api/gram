@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -329,7 +330,7 @@ type CreateDeploymentFunctionsAccessParams struct {
 	ProjectID     uuid.UUID
 	DeploymentID  uuid.UUID
 	FunctionID    uuid.UUID
-	EncryptionKey []byte
+	EncryptionKey conv.Secret
 	BearerFormat  pgtype.Text
 }
 
