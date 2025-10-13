@@ -12,6 +12,8 @@ type ToolVariation struct {
 	ID string
 	// The ID of the tool variation group
 	GroupID string
+	// The URN of the source tool
+	SrcToolUrn string
 	// The name of the source tool
 	SrcToolName string
 	// The confirmation mode for the tool variation

@@ -1,18 +1,18 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: b29208663209faa69219a321ed27e263
+  docChecksum: a3a1926b815df1d99ef053f0a00c1b5f
   docVersion: 0.0.1
-  speakeasyVersion: 1.636.3
-  generationVersion: 2.723.11
-  releaseVersion: 0.14.8
-  configChecksum: ea78099f68f6b0a77bff301390e58564
+  speakeasyVersion: 1.613.0
+  generationVersion: 2.696.0
+  releaseVersion: 0.14.9
+  configChecksum: 7cc0154927ec14183e72e088b3df6547
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.26
+    core: 3.21.22
     defaultEnabledRetries: 0.1.0
-    devContainers: 2.90.1
+    devContainers: 2.90.0
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
@@ -388,6 +388,7 @@ generatedFiles:
   - docs/sdks/deployments/README.md
   - docs/sdks/domains/README.md
   - docs/sdks/environments/README.md
+  - docs/sdks/gram/README.md
   - docs/sdks/instances/README.md
   - docs/sdks/integrations/README.md
   - docs/sdks/keys/README.md
@@ -1385,10 +1386,10 @@ examples:
   upsertGlobalVariation:
     speakeasy-default-upsert-global-variation:
       requestBody:
-        application/json: {"src_tool_name": "<value>"}
+        application/json: {"src_tool_name": "<value>", "src_tool_urn": "<value>"}
       responses:
         "200":
-          application/json: {"variation": {"created_at": "1727504584138", "group_id": "<id>", "id": "<id>", "src_tool_name": "<value>", "updated_at": "1735639497584"}}
+          application/json: {"variation": {"created_at": "1727504584138", "group_id": "<id>", "id": "<id>", "src_tool_name": "<value>", "src_tool_urn": "<value>", "updated_at": "1735639497584"}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

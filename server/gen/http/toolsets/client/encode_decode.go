@@ -2317,6 +2317,7 @@ func unmarshalToolVariationResponseBodyToTypesToolVariation(v *ToolVariationResp
 	res := &types.ToolVariation{
 		ID:            *v.ID,
 		GroupID:       *v.GroupID,
+		SrcToolUrn:    *v.SrcToolUrn,
 		SrcToolName:   *v.SrcToolName,
 		Confirm:       v.Confirm,
 		ConfirmPrompt: v.ConfirmPrompt,

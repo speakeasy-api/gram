@@ -66,8 +66,8 @@ func UsageCommands() []string {
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + ` about openapi` + "\n" +
-		os.Args[0] + ` assets serve-image --id "Sunt vitae ducimus consequatur iste." --session-token "Saepe ut reiciendis ut alias." --apikey-token "At est dolores alias consequuntur quis."` + "\n" +
-		os.Args[0] + ` auth callback --code "Qui aut reprehenderit occaecati ratione quia rerum."` + "\n" +
+		os.Args[0] + ` assets serve-image --id "Saepe ut reiciendis ut alias." --session-token "At est dolores alias consequuntur quis." --apikey-token "A ut facere voluptatibus et est."` + "\n" +
+		os.Args[0] + ` auth callback --code "Quia rerum."` + "\n" +
 		os.Args[0] + ` chat list-chats --session-token "Ratione aut delectus in." --project-slug-input "Ratione harum porro est non."` + "\n" +
 		os.Args[0] + ` deployments get-deployment --id "Dolor quae." --apikey-token "Iste est esse voluptas." --session-token "Deleniti sed laudantium saepe dolorem fugit." --project-slug-input "Corporis numquam est nisi natus."` + "\n" +
 		""
@@ -1408,7 +1408,7 @@ func assetsServeImageUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets serve-image --id "Sunt vitae ducimus consequatur iste." --session-token "Saepe ut reiciendis ut alias." --apikey-token "At est dolores alias consequuntur quis."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets serve-image --id "Saepe ut reiciendis ut alias." --session-token "At est dolores alias consequuntur quis." --apikey-token "A ut facere voluptatibus et est."`)
 }
 
 func assetsUploadImageUsage() {
@@ -1437,7 +1437,7 @@ func assetsUploadImageUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-image --content-type "Beatae maiores." --content-length 1928115064462278596 --apikey-token "Est eum." --project-slug-input "Non occaecati suscipit." --session-token "Reprehenderit eligendi cupiditate id doloremque." --stream "goa.png"`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-image --content-type "Eum vel non occaecati." --content-length 2453692172174098935 --apikey-token "Reprehenderit eligendi cupiditate id doloremque." --project-slug-input "Minima error." --session-token "Eos aliquam rerum consequatur." --stream "goa.png"`)
 }
 
 func assetsUploadFunctionsUsage() {
@@ -1466,7 +1466,7 @@ func assetsUploadFunctionsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-functions --content-type "Quasi quia et consequatur et." --content-length 8582752028403083083 --apikey-token "Voluptates tenetur." --project-slug-input "Quia maxime voluptatem occaecati nisi molestias." --session-token "Blanditiis sed." --stream "goa.png"`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-functions --content-type "Tenetur qui quia." --content-length 5693643887517783892 --apikey-token "Occaecati nisi molestias." --project-slug-input "Blanditiis sed." --session-token "Laudantium qui autem est." --stream "goa.png"`)
 }
 
 func assetsUploadOpenAPIv3Usage() {
@@ -1495,7 +1495,7 @@ func assetsUploadOpenAPIv3Usage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-open-ap-iv3 --content-type "Non libero quam." --content-length 6703424368550982409 --apikey-token "Dolorum ut." --project-slug-input "Nihil rerum repellat qui saepe." --session-token "Ut asperiores laudantium." --stream "goa.png"`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-open-ap-iv3 --content-type "Dolorum ut." --content-length 5700286408571016797 --apikey-token "Rerum repellat." --project-slug-input "Saepe quia ut asperiores laudantium perspiciatis." --session-token "Dolor quasi est enim." --stream "goa.png"`)
 }
 
 func assetsServeOpenAPIv3Usage() {
@@ -1520,7 +1520,7 @@ func assetsServeOpenAPIv3Usage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets serve-open-ap-iv3 --id "Autem id laborum sequi ad aut praesentium." --project-id "Facere illo laboriosam sunt eum consequatur ut." --apikey-token "Necessitatibus laudantium dignissimos." --session-token "Iusto voluptas quo laboriosam quae."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets serve-open-ap-iv3 --id "Praesentium tempora facere illo laboriosam sunt eum." --project-id "Ut consequuntur necessitatibus laudantium dignissimos similique." --apikey-token "Voluptas quo laboriosam quae aut." --session-token "Cumque et."`)
 }
 
 func assetsListAssetsUsage() {
@@ -1543,7 +1543,7 @@ func assetsListAssetsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets list-assets --session-token "Reiciendis nulla exercitationem aut aut quos." --project-slug-input "Dicta libero at corrupti recusandae." --apikey-token "Asperiores nihil fugiat ut."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets list-assets --session-token "Dicta libero at corrupti recusandae." --project-slug-input "Asperiores nihil fugiat ut." --apikey-token "Sit quasi et omnis."`)
 }
 
 // authUsage displays the usage of the auth command and its subcommands.
@@ -1577,7 +1577,7 @@ func authCallbackUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth callback --code "Qui aut reprehenderit occaecati ratione quia rerum."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth callback --code "Quia rerum."`)
 }
 
 func authLoginUsage() {
@@ -3651,18 +3651,18 @@ func variationsUpsertGlobalUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations upsert-global --body '{
       "confirm": "session",
-      "confirm_prompt": "Et culpa autem.",
-      "description": "Consequatur harum repudiandae est molestias.",
-      "name": "Quam omnis eligendi.",
-      "src_tool_name": "Molestiae aliquam ipsum sint in doloribus.",
-      "summarizer": "Quas quas.",
-      "summary": "Modi occaecati.",
+      "confirm_prompt": "Ut modi occaecati id consequatur harum.",
+      "description": "Suscipit dolor excepturi rerum in.",
+      "name": "Est molestias odit minima expedita dolore sint.",
+      "src_tool_name": "Mollitia et culpa autem ipsa quam.",
+      "src_tool_urn": "Molestiae aliquam ipsum sint in doloribus.",
+      "summarizer": "Voluptas qui saepe quasi consectetur similique.",
+      "summary": "Qui necessitatibus ut similique.",
       "tags": [
-         "Expedita dolore.",
-         "Maxime qui necessitatibus ut similique nostrum suscipit.",
-         "Excepturi rerum in omnis."
+         "Quas quas.",
+         "Recusandae voluptatem autem non et nostrum eveniet."
       ]
-   }' --session-token "Recusandae voluptatem autem non et nostrum eveniet." --apikey-token "Voluptas qui saepe quasi consectetur similique." --project-slug-input "Exercitationem repudiandae sed corrupti tempora nulla ea."`)
+   }' --session-token "Exercitationem repudiandae sed corrupti tempora nulla ea." --apikey-token "Velit sint eveniet at." --project-slug-input "Odit velit voluptas iste."`)
 }
 
 func variationsDeleteGlobalUsage() {
@@ -3687,7 +3687,7 @@ func variationsDeleteGlobalUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations delete-global --variation-id "Ut in et in in ut ratione." --session-token "A animi praesentium fugiat nemo." --apikey-token "Quaerat doloribus dicta." --project-slug-input "Ut odio dicta ullam architecto quibusdam est."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations delete-global --variation-id "Praesentium fugiat nemo soluta." --session-token "Doloribus dicta voluptatem ut odio dicta." --apikey-token "Architecto quibusdam est odit." --project-slug-input "Beatae blanditiis nostrum hic non."`)
 }
 
 func variationsListGlobalUsage() {
@@ -3710,5 +3710,5 @@ func variationsListGlobalUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations list-global --session-token "Libero sunt quos ad eos." --apikey-token "Eligendi perspiciatis quaerat explicabo." --project-slug-input "Consequatur reprehenderit."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `variations list-global --session-token "Explicabo consequatur consequatur reprehenderit quae autem." --apikey-token "Est nam facere." --project-slug-input "Ut libero."`)
 }
