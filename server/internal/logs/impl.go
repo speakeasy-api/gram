@@ -22,7 +22,7 @@ import (
 )
 
 type Service struct {
-	tcm    tm.ToolMetricsClient
+	tcm    tm.ToolMetricsProvider
 	db     *pgxpool.Pool
 	tracer trace.Tracer
 	logger *slog.Logger
@@ -32,7 +32,7 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, tcm tm.ToolMetricsClient) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, tcm tm.ToolMetricsProvider) *Service {
 	logger = logger.With(attr.SlogComponent("logs"))
 
 	return &Service{

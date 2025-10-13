@@ -105,7 +105,7 @@ type ToolProxy struct {
 	metrics     *metrics
 	cache       cache.Cache
 	policy      *guardian.Policy
-	toolMetrics tm.ToolMetricsClient
+	toolMetrics tm.ToolMetricsProvider
 }
 
 func NewToolProxy(
@@ -115,7 +115,7 @@ func NewToolProxy(
 	source ToolCallSource,
 	cache cache.Cache,
 	policy *guardian.Policy,
-	toolMetrics tm.ToolMetricsClient,
+	toolMetrics tm.ToolMetricsProvider,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
@@ -506,7 +506,7 @@ func reverseProxyRequest(
 	filterConfig *ResponseFilter,
 	policy *guardian.Policy,
 	responseStatusCodeCapture *int,
-	tcm tm.ToolMetricsClient,
+	tcm tm.ToolMetricsProvider,
 ) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
@@ -523,7 +523,7 @@ func reverseProxyRequest(
 	}
 
 	// Wrap with HTTP logging round tripper
-	loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, tcm, logger)
+	loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, tcm, logger, tracer)
 
 	otelTransport := otelhttp.NewTransport(
 		loggingTransport,

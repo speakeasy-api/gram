@@ -67,7 +67,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	tracking billing.Tracker,
-	tcm tm.ToolMetricsClient,
+	tcm tm.ToolMetricsProvider,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")

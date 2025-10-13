@@ -11,8 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -56,31 +54,32 @@ func filterSensitiveHeaders(headers map[string]string) map[string]string {
 // HTTPLoggingRoundTripper wraps an http.RoundTripper and logs HTTP requests to ClickHouse
 type HTTPLoggingRoundTripper struct {
 	rt     http.RoundTripper
-	tcm    ToolMetricsClient
+	tcm    ToolMetricsProvider
 	logger *slog.Logger
+	tracer trace.Tracer
 }
 
 // NewHTTPLoggingRoundTripper creates a new RoundTripper that logs HTTP requests to ClickHouse
-func NewHTTPLoggingRoundTripper(rt http.RoundTripper, tcm ToolMetricsClient, logger *slog.Logger) *HTTPLoggingRoundTripper {
+func NewHTTPLoggingRoundTripper(rt http.RoundTripper, tcm ToolMetricsProvider, logger *slog.Logger, tracer trace.Tracer) *HTTPLoggingRoundTripper {
+	// t := otel.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics")
 	return &HTTPLoggingRoundTripper{
 		rt:     rt,
 		tcm:    tcm,
 		logger: logger,
+		tracer: tracer,
 	}
 }
 
 // RoundTrip implements http.RoundTripper interface
 func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
-	tracer := otel.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics")
 
 	// Start a span for the HTTP logging round trip
-	ctx, span := tracer.Start(ctx, "tool.http.roundtrip",
+	ctx, span := h.tracer.Start(ctx, "tool.http.roundtrip",
 		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
-			attribute.String("http.method", req.Method),
-			attribute.String("http.url", req.URL.String()),
-			attribute.String("http.host", req.URL.Host),
+			attr.HTTPRequestMethod(req.Method),
+			attr.URLFull(req.URL.String()),
 		),
 	)
 	defer span.End()
@@ -123,13 +122,13 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 
 	// Add tool attributes to span
 	span.SetAttributes(
-		attribute.String("tool.id", tool.ID),
-		attribute.String("tool.urn", tool.Urn),
-		attribute.String("tool.name", tool.Name),
-		attribute.String("tool.project_id", tool.ProjectID),
-		attribute.String("tool.deployment_id", tool.DeploymentID),
-		attribute.String("tool.organization_id", tool.OrganizationID),
-		attribute.String("http.route", req.URL.Path),
+		attr.ToolID(tool.ID),
+		attr.ToolURN(tool.Urn),
+		attr.ToolName(tool.Name),
+		attr.ProjectID(tool.ProjectID),
+		attr.DeploymentID(tool.DeploymentID),
+		attr.OrganizationID(tool.OrganizationID),
+		attr.HTTPRoute(req.URL.Path),
 	)
 
 	// If the request failed, wrap and return the error; E.g., request timeout, etc.
@@ -141,7 +140,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			attr.SlogURLOriginal(req.URL.String()),
 			attr.SlogHTTPRequestMethod(req.Method),
 			attr.SlogToolURN(tool.Urn),
-			slog.Float64(attrDurationMs, durationMs),
+			attr.SlogHTTPRequestDuration(durationMs),
 		)
 		return resp, fmt.Errorf("roundtrip: %w", err)
 	}
@@ -160,8 +159,8 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	if resp != nil {
 		statusCode = resp.StatusCode
 		span.SetAttributes(
-			attribute.Int("http.status_code", statusCode),
-			attribute.Float64("http.duration_ms", durationMs),
+			attr.HTTPResponseStatusCode(statusCode),
+			attr.HTTPRequestDurationMs(durationMs),
 		)
 
 		// Set span status based on HTTP status code
@@ -175,7 +174,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			attr.SlogHTTPRequestMethod(req.Method),
 			attr.SlogURLOriginal(req.URL.String()),
 			attr.SlogHTTPResponseStatusCode(statusCode),
-			slog.Float64(attrDurationMs, durationMs),
+			attr.SlogHTTPRequestDuration(durationMs),
 			attr.SlogToolURN(tool.Urn),
 		)
 	}
@@ -200,7 +199,6 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		responseHeaders = filterSensitiveHeaders(responseHeaders)
 	}
 
-	toolID := tool.ID
 	method := req.Method
 	url := req.URL.String()
 
@@ -209,9 +207,9 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			defer func() {
 				if r := recover(); r != nil {
 					h.logger.ErrorContext(ctx, "panic in HTTP request logging goroutine",
-						slog.Any(attrPanic, r),
+						attr.SlogErrorMessage(fmt.Sprintf("%v", r)),
 						attr.SlogURLOriginal(url),
-						attr.SlogToolURN(toolID),
+						attr.SlogToolURN(tool.Urn),
 						attr.SlogHTTPRequestMethod(method),
 					)
 				}
@@ -226,7 +224,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			if err != nil {
 				h.logger.ErrorContext(logCtx, "failed to generate UUID for HTTP request logging",
 					attr.SlogURLOriginal(url),
-					attr.SlogToolURN(toolID),
+					attr.SlogToolURN(tool.Urn),
 					attr.SlogHTTPRequestMethod(method),
 				)
 				return
@@ -248,7 +246,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 				SpanID:            spanID,
 				HTTPMethod:        req.Method,
 				HTTPRoute:         req.URL.Path,
-				StatusCode:        int64(statusCode), // #nosec G115 -- We're bounding an int into a uint16
+				StatusCode:        int64(statusCode),
 				DurationMs:        durationMs,
 				UserAgent:         req.UserAgent(),
 				RequestHeaders:    requestHeaders,
@@ -262,17 +260,17 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 				h.logger.ErrorContext(logCtx, "failed to log HTTP attempt to ClickHouse",
 					attr.SlogError(logErr),
 					attr.SlogURLOriginal(url),
-					attr.SlogToolURN(toolID),
-					attr.SlogToolName(tool.ProjectID),
+					attr.SlogToolURN(tool.Urn),
+					attr.SlogToolName(tool.Name),
 					attr.SlogHTTPRequestMethod(method),
 				)
 			} else {
 				h.logger.DebugContext(logCtx, "successfully logged HTTP request to ClickHouse",
 					attr.SlogURLOriginal(url),
-					attr.SlogToolURN(toolID),
+					attr.SlogToolURN(tool.Urn),
 					attr.SlogHTTPRequestMethod(method),
-					slog.Int(attrRequestBytes, requestBodyBytes),
-					slog.Int(attrResponseBytes, respBodyBytes),
+					attr.SlogHTTPRequestBodyBytes(requestBodyBytes),
+					attr.SlogHTTPResponseBodyBytes(respBodyBytes),
 				)
 			}
 		}()

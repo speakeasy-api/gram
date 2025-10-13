@@ -98,7 +98,7 @@ func NewService(
 	oauthService *oauth.Service,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
-	tcm tm.ToolMetricsClient,
+	tcm tm.ToolMetricsProvider,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")

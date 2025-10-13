@@ -60,7 +60,7 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	return cfgLoader(c)
 }
 
-func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context, tracerProvider trace.TracerProvider, features feature.Provider) (tm.ToolMetricsClient, func(context.Context) error, error) {
+func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context, tracerProvider trace.TracerProvider, features feature.Provider) (tm.ToolMetricsProvider, func(context.Context) error, error) {
 	nilFunc := func(context.Context) error { return nil }
 
 	// validate cli args

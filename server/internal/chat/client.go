@@ -52,7 +52,7 @@ func NewChatClient(logger *slog.Logger,
 	env *environments.EnvironmentEntries,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
-	tcm tm.ToolMetricsClient,
+	tcm tm.ToolMetricsProvider,
 ) *ChatClient {
 	return &ChatClient{
 		logger:     logger,
