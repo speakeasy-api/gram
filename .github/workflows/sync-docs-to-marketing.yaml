@@ -97,8 +97,8 @@ jobs:
                 # 2) Prefix any other root-relative internal links with /docs/gram/ using a wildcard
                 #    Skips already-correct, assets, images, anchors, and URLs with a scheme (mailto:, https:, etc.)
                 perl -0777 -i -pe \
-                  "s{(href=)([\\\"'])/(?!docs/gram/|assets/|img/|static/|#|[a-z]+:)}{\\$1.\\$2.\"/docs/gram/\"}ge;" \
-                  -e  "s{(\\\]\()/(?!docs/gram/|assets/|img/|static/|#|[a-z]+:)}{\\$1.\"/docs/gram/\"}ge" \
+                  's{(href=)(["\x27])/(?!docs/gram/|assets/|img/|static/|#|[a-z]+:)}{\1\2/docs/gram/}g;' \
+                  -e 's{(\]\()/(?!docs/gram/|assets/|img/|static/|#|[a-z]+:)}{\1/docs/gram/}g' \
                   "$f"
               done
             fi
