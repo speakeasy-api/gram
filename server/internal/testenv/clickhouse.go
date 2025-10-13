@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
-	"github.com/speakeasy-api/gram/server/internal/o11y"
-
 	"github.com/testcontainers/testcontainers-go"
 	clickhousecontainer "github.com/testcontainers/testcontainers-go/modules/clickhouse"
 )
@@ -73,13 +71,9 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 		}
 
 		t.Cleanup(func() {
-			defer o11y.NoLogDefer(func() error {
-				if err2 := conn.Close(); err2 != nil {
-					t.Logf("failed to close clickhouse connection: %v", err2)
-					return fmt.Errorf("failed to close clickhouse connection: %w", err2)
-				}
-				return nil
-			})
+			if err := conn.Close(); err != nil {
+				t.Logf("failed to close clickhouse connection: %v", err)
+			}
 		})
 
 		return conn, nil
