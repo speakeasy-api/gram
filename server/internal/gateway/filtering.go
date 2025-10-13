@@ -27,8 +27,8 @@ type responseFilteringResult struct {
 	contentType string
 }
 
-func handleResponseFiltering(ctx context.Context, logger *slog.Logger, tool *HTTPTool, responseFilterRequest *ResponseFilterRequest, resp *http.Response) *responseFilteringResult {
-	if tool.ResponseFilter == nil || responseFilterRequest == nil {
+func handleResponseFiltering(ctx context.Context, logger *slog.Logger, filterConfig *ResponseFilter, responseFilterRequest *FilterRequest, resp *http.Response) *responseFilteringResult {
+	if responseFilterRequest == nil || filterConfig == nil || filterConfig.Type == FilterTypeNone {
 		return nil
 	}
 
@@ -44,7 +44,7 @@ func handleResponseFiltering(ctx context.Context, logger *slog.Logger, tool *HTT
 		return nil
 	}
 
-	if !slices.Contains(tool.ResponseFilter.ContentTypes, mediaType) || !slices.Contains(tool.ResponseFilter.StatusCodes, fmt.Sprintf("%d", statusCode)) {
+	if !slices.Contains(filterConfig.ContentTypes, mediaType) || !slices.Contains(filterConfig.StatusCodes, fmt.Sprintf("%d", statusCode)) {
 		return nil
 	}
 

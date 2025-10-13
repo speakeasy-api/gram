@@ -121,6 +121,7 @@ const (
 	SlackEventTypeKey              = attribute.Key("gram.slack.event.type")
 	SlackTeamIDKey                 = attribute.Key("gram.slack.team.id")
 	ToolCallDurationKey            = attribute.Key("gram.tool_call.duration")
+	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
 	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
 	ToolHTTPResponseContentTypeKey = attribute.Key("gram.tool.http.response.content_type")
 	ToolIDKey                      = attribute.Key("gram.tool.id")
@@ -478,6 +479,11 @@ func SlogSlackEventType(v string) slog.Attr      { return slog.String(string(Sla
 
 func SlackTeamID(v string) attribute.KeyValue { return SlackTeamIDKey.String(v) }
 func SlogSlackTeamID(v string) slog.Attr      { return slog.String(string(SlackTeamIDKey), v) }
+
+func ToolCallKind[V string](v V) attribute.KeyValue { return ToolCallKindKey.String(string(v)) }
+func SlogToolCallKind[V string](v V) slog.Attr {
+	return slog.String(string(ToolCallKindKey), string(v))
+}
 
 func ToolCallSource(v string) attribute.KeyValue { return ToolCallSourceKey.String(v) }
 func SlogToolCallSource(v string) slog.Attr      { return slog.String(string(ToolCallSourceKey), v) }

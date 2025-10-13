@@ -32,13 +32,7 @@ func NewToolsets(tx repo.DBTX) *Toolsets {
 	}
 }
 
-type ToolExecutionInfo struct {
-	Tool             *gateway.Tool
-	OrganizationSlug string
-	ProjectSlug      string
-}
-
-func (t *Toolsets) GetToolExecutionInfoByURN(ctx context.Context, toolUrn urn.Tool, projectID uuid.UUID) (*ToolExecutionInfo, error) {
+func (t *Toolsets) GetToolCallPlanByURN(ctx context.Context, toolUrn urn.Tool, projectID uuid.UUID) (*gateway.ToolCallPlan, error) {
 	switch toolUrn.Kind {
 	case urn.ToolKindHTTP:
 		tool, err := t.toolsRepo.GetHTTPToolDefinitionByURN(ctx, toolsRepo.GetHTTPToolDefinitionByURNParams{
@@ -48,7 +42,7 @@ func (t *Toolsets) GetToolExecutionInfoByURN(ctx context.Context, toolUrn urn.To
 		if err != nil {
 			return nil, fmt.Errorf("get http tool definition by urn: %w", err)
 		}
-		return t.extractHTTPToolExecutionInfo(ctx, tool)
+		return t.extractHTTPToolCallPlan(ctx, tool)
 
 	case urn.ToolKindFunction:
 		tool, err := t.toolsRepo.GetFunctionToolDefinitionByURN(ctx, toolsRepo.GetFunctionToolDefinitionByURNParams{
@@ -58,7 +52,7 @@ func (t *Toolsets) GetToolExecutionInfoByURN(ctx context.Context, toolUrn urn.To
 		if err != nil {
 			return nil, fmt.Errorf("get function tool definition by urn: %w", err)
 		}
-		return t.extractFunctionToolExecutionInfo(ctx, tool)
+		return t.extractFunctionToolCallPlan(ctx, tool)
 
 	default:
 		return nil, fmt.Errorf("unsupported tool kind: %s", toolUrn.Kind)
@@ -66,7 +60,7 @@ func (t *Toolsets) GetToolExecutionInfoByURN(ctx context.Context, toolUrn urn.To
 }
 
 // TODO: should we consider moving /rpc/instances.invoke/tool onto URNs, only the playground uses it right now.
-func (t *Toolsets) GetToolExecutionInfoByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*ToolExecutionInfo, error) {
+func (t *Toolsets) GetToolCallPlanByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*gateway.ToolCallPlan, error) {
 	toolUrnStr, err := t.toolsRepo.GetToolUrnByID(ctx, toolsRepo.GetToolUrnByIDParams{
 		ProjectID: projectID,
 		ID:        id,
@@ -81,10 +75,10 @@ func (t *Toolsets) GetToolExecutionInfoByID(ctx context.Context, id uuid.UUID, p
 		return nil, fmt.Errorf("unmarshal tool urn: %w", err)
 	}
 
-	return t.GetToolExecutionInfoByURN(ctx, toolURN, projectID)
+	return t.GetToolCallPlanByURN(ctx, toolURN, projectID)
 }
 
-func (t *Toolsets) extractHTTPToolExecutionInfo(ctx context.Context, tool toolsRepo.HttpToolDefinition) (*ToolExecutionInfo, error) {
+func (t *Toolsets) extractHTTPToolCallPlan(ctx context.Context, tool toolsRepo.HttpToolDefinition) (*gateway.ToolCallPlan, error) {
 	securityKeysMap := make(map[string]bool)
 	securityKeys, securityScopes, err := security.ParseHTTPToolSecurityKeys(tool.Security)
 	if err != nil {
@@ -151,12 +145,17 @@ func (t *Toolsets) extractHTTPToolExecutionInfo(ctx context.Context, tool toolsR
 		return nil, fmt.Errorf("parse path settings: %w", err)
 	}
 
-	gatewayTool := &gateway.HTTPTool{
-		ID:                 tool.ID.String(),
-		DeploymentID:       tool.DeploymentID.String(),
-		ProjectID:          tool.ProjectID.String(),
-		OrganizationID:     orgData.ID,
-		Name:               tool.Name,
+	descriptor := &gateway.ToolDescriptor{
+		ID:               tool.ID.String(),
+		URN:              tool.ToolUrn,
+		DeploymentID:     tool.DeploymentID.String(),
+		ProjectID:        tool.ProjectID.String(),
+		ProjectSlug:      orgData.ProjectSlug,
+		OrganizationID:   orgData.ID,
+		OrganizationSlug: orgData.Slug,
+		Name:             tool.Name,
+	}
+	plan := &gateway.HTTPToolCallPlan{
 		DefaultServerUrl:   gateway.NullString{Valid: tool.DefaultServerUrl.Valid, Value: tool.DefaultServerUrl.String},
 		ServerEnvVar:       tool.ServerEnvVar,
 		Method:             tool.HttpMethod,
@@ -171,36 +170,33 @@ func (t *Toolsets) extractHTTPToolExecutionInfo(ctx context.Context, tool toolsR
 		ResponseFilter:     filter,
 	}
 
-	return &ToolExecutionInfo{
-		Tool:             gateway.NewHTTPTool(gatewayTool),
-		OrganizationSlug: orgData.Slug,
-		ProjectSlug:      orgData.ProjectSlug,
-	}, nil
+	return gateway.NewHTTPToolCallPlan(descriptor, plan), nil
 }
 
-func (t *Toolsets) extractFunctionToolExecutionInfo(ctx context.Context, tool toolsRepo.FunctionToolDefinition) (*ToolExecutionInfo, error) {
+func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRepo.FunctionToolDefinition) (*gateway.ToolCallPlan, error) {
 	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, tool.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
 	}
 
-	gatewayTool := &gateway.FunctionTool{
-		ID:             tool.ID.String(),
-		DeploymentID:   tool.DeploymentID.String(),
-		ProjectID:      tool.ProjectID.String(),
-		OrganizationID: orgData.ID,
-		FunctionID:     tool.FunctionID.String(),
-		Name:           tool.Name,
-		Runtime:        tool.Runtime,
-		InputSchema:    tool.InputSchema,
-		Variables:      tool.Variables,
+	descriptor := &gateway.ToolDescriptor{
+		ID:               tool.ID.String(),
+		URN:              tool.ToolUrn,
+		DeploymentID:     tool.DeploymentID.String(),
+		ProjectID:        tool.ProjectID.String(),
+		ProjectSlug:      orgData.Slug,
+		OrganizationID:   orgData.ID,
+		OrganizationSlug: orgData.Slug,
+		Name:             tool.Name,
+	}
+	plan := &gateway.FunctionToolCallPlan{
+		FunctionID:  tool.FunctionID.String(),
+		Runtime:     tool.Runtime,
+		InputSchema: tool.InputSchema,
+		Variables:   tool.Variables,
 	}
 
-	return &ToolExecutionInfo{
-		Tool:             gateway.NewFunctionTool(gatewayTool),
-		OrganizationSlug: orgData.Slug,
-		ProjectSlug:      orgData.ProjectSlug,
-	}, nil
+	return gateway.NewFunctionToolCallPlan(descriptor, plan), nil
 }
 
 func UnmarshalParameterSettings(settings []byte) (map[string]*gateway.HTTPParameter, error) {

@@ -25,14 +25,15 @@ func processSecurity(
 	req *http.Request,
 	w http.ResponseWriter,
 	responseStatusCodeCapture *int,
-	tool *HTTPTool,
+	tool *ToolDescriptor,
+	plan *HTTPToolCallPlan,
 	cacheImpl cache.Cache,
 	envVars *CaseInsensitiveEnv,
 	serverURL string,
 ) bool {
-	for _, security := range tool.Security {
+	for _, security := range plan.Security {
 		if !security.Type.Valid {
-			logger.ErrorContext(ctx, "invalid security type in tool definition", attr.SlogToolName(tool.Name))
+			logger.ErrorContext(ctx, "invalid security type in tool definition")
 			continue
 		}
 
@@ -111,7 +112,7 @@ func processSecurity(
 						}
 					}
 				case "client_credentials":
-					if err := processClientCredentials(ctx, logger, req, cacheImpl, tool, security, envVars, serverURL); err != nil {
+					if err := processClientCredentials(ctx, logger, req, cacheImpl, tool, plan.SecurityScopes, security, envVars, serverURL); err != nil {
 						logger.ErrorContext(ctx, "could not process client credentials", attr.SlogError(err))
 						if strings.Contains(err.Error(), "failed to make client credentials token request") {
 							w.Header().Set("Content-Type", "application/json")
@@ -199,7 +200,7 @@ type clientCredentialsTokenResponseCamelCase struct {
 	ExpiresIn   int    `json:"expiresIn"`
 }
 
-func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *HTTPTool, security *HTTPToolSecurity, envVars *CaseInsensitiveEnv, serverURL string) error {
+func processClientCredentials(ctx context.Context, logger *slog.Logger, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, envVars *CaseInsensitiveEnv, serverURL string) error {
 	// To discuss, currently we are taking the approach of exact scope match for reused tokens
 	// We could look into enabling a prefix match feature for caches where we return multiple entries matching the projectID, clientID, tokenURL and then check scopes against all returned values
 	// We would want to make sure any underlying cache implementation supports this feature
@@ -231,7 +232,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, req *htt
 	}
 
 	var requestedScopes []string
-	if scopes, ok := tool.SecurityScopes[security.Key]; ok {
+	if scopes, ok := planScopes[security.Key]; ok {
 		requestedScopes = scopes
 	}
 
