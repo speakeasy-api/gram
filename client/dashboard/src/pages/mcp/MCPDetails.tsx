@@ -206,15 +206,23 @@ export function useMcpUrl(
   toolset:
     | Pick<
         ToolsetEntry,
-        "slug" | "customDomainId" | "mcpSlug" | "defaultEnvironmentSlug"
+        | "slug"
+        | "customDomainId"
+        | "mcpSlug"
+        | "defaultEnvironmentSlug"
+        | "mcpIsPublic"
       >
     | undefined,
-) {
+): {
+  url: string | undefined;
+  customServerURL: string | undefined;
+  installPageUrl: string;
+} {
   const { domain } = useCustomDomain();
   const project = useProject();
 
   if (!toolset)
-    return { url: undefined, customServerURL: undefined, pageUrl: undefined };
+    return { url: undefined, customServerURL: undefined, installPageUrl: "" };
 
   // Determine which server URL to use
   let customServerURL: string | undefined;
@@ -229,14 +237,16 @@ export function useMcpUrl(
     toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
   }/mcp/${urlSuffix}`;
 
-  // Always use our URL for install page, even for custom domains to ensure cookie
-  // is present
-  const installPageUrl = `${getServerURL()}/mcp/${urlSuffix}/install`;
+  // Always use our URL for install page when server is private, even for
+  // custom domains to ensure cookie is present
+  const installPageUrl = toolset.mcpIsPublic
+    ? `${mcpUrl}/install`
+    : `${getServerURL()}/mcp/${urlSuffix}/install`;
 
   return {
     url: mcpUrl,
     customServerURL,
-    pageUrl: installPageUrl,
+    installPageUrl,
   };
 }
 
@@ -466,7 +476,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         description="The URL you or your users will use to access this MCP server."
       >
         <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
-        <Block label="Custom Slug" error={mcpSlugError}>
+        <Block label="Custom Slug" error={mcpSlugError} className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Type muted mono variant="small">
@@ -505,7 +515,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
             </Stack>
           </BlockInner>
         </Block>
-        <Block label="Custom Domain">
+        <Block label="Custom Domain" className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Type mono small>

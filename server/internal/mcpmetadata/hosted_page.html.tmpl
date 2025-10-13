@@ -756,13 +756,9 @@
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh"
-                >claude mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL
-                }}"{{- range .SecurityInputs }} \ --header '{{ .SystemName |
-                asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName)
-                }}'{{- end }}</code
-              >
-            </div>
+              <!-- prettier-ignore -->
+              <code class="code-snippet language-sh">claude mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range .SecurityInputs }} \
+                --header '{{ .SystemName | asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>            </div>
           </li>
           {{- if .SecurityInputs }}
           <li class="instruction-item">
@@ -786,11 +782,9 @@
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh"
-                >{{- range .SecurityInputs -}} export {{ .DisplayName |
-                asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{-
-                end }}</code
-              >
+              <!-- prettier-ignore -->
+              <code class="code-snippet language-sh">{{- range .SecurityInputs -}}
+export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{- end }}</code>
             </div>
             <p>
               The MCP configuration supports environment variable expansion
@@ -888,10 +882,11 @@
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-json"
-                >{ "mcpServers": { "{{ .MCPSlug }}": {{ indent 4 .MCPConfig -}}
-                } }</code
-              >
+              <code class="code-snippet language-json">{
+  "mcpServers": {
+    "{{ .MCPSlug }}": {{ indent 4 .MCPConfig -}}
+  }
+}</code>
             </div>
           </li>
           <li class="instruction-item">
@@ -950,12 +945,9 @@
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh"
-                >gemini mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL
-                }}"{{- range .SecurityInputs }} \ --header '{{ .SystemName |
-                asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName)
-                }}'{{- end }}</code
-              >
+              <!-- prettier-ignore -->
+              <code class="code-snippet language-sh">gemini mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range .SecurityInputs }} \
+  --header '{{ .SystemName | asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>
             </div>
           </li>
           {{- if .SecurityInputs }}
@@ -981,11 +973,9 @@
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh"
-                >{{- range .SecurityInputs -}} export {{ .DisplayName |
-                asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{-
-                end }}</code
-              >
+              <!-- prettier-ignore -->
+              <code class="code-snippet language-sh">{{- range .SecurityInputs -}}
+export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{- end }}</code>
             </div>
           </li>
           {{- end }}
@@ -1020,16 +1010,12 @@
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-toml"
-                >[mcp_servers.{{ .MCPSlug }}] command = "npx" args = ["-y",
-                "mcp-remote", "{{ .MCPURL }}"{{- range .SecurityInputs }},
-                "--header", "{{ .SystemName | asHTTPHeader }}:${{ "{" }}{{
-                .DisplayName | asPosixName }}{{ "}" }}"{{- end }}]{{- if
-                .SecurityInputs }} env = { {{- range $i, $input :=
-                .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.DisplayName
-                | asPosixName }}" = "your-{{ $input.DisplayName | asPosixName
-                }}-value"{{- end }} }{{- end }}</code
-              >
+              <!-- prettier-ignore -->
+              <code class="code-snippet language-toml">[mcp_servers.{{ .MCPSlug }}]
+command = "npx"
+args = ["-y", "mcp-remote", "{{ .MCPURL }}"{{- range .SecurityInputs }}, "--header", "{{ .SystemName | asHTTPHeader }}:${{ "{" }}{{ .DisplayName | asPosixName }}{{ "}" }}"{{- end }}]{{- if .SecurityInputs }}
+env = { {{- range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.DisplayName | asPosixName }}" = "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }} }{{- end }}</code>
+            </div>
             </div>
           </li>
           {{- if .SecurityInputs }}
@@ -1056,10 +1042,9 @@
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh"
-                >{{- range .SecurityInputs -}} export {{ .DisplayName |
-                asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{-
-                end }}</code
+              <!-- prettier-ignore -->
+              <code class="code-snippet language-sh">{{- range .SecurityInputs -}}
+export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{- end }}</code>
               >
             </div>
           </li>
@@ -1428,24 +1413,43 @@
             </button>
             <code class="code-snippet language-json">{{- .MCPConfig -}}</code>
           </div>
+          <!-- prettier-ignore -->
           <code
             id="manifest-json-blob"
             type="application/json"
             style="display: none"
-          >
-            { "dxt_version": "0.1", "name": "{{ .MCPName }}", "version":
-            "1.0.0", "description": "{{ .MCPDescription }}", "author": { "name":
-            "{{ .OrganizationName }} with Gram" }, "server": { "type": "node",
-            "entry_point": "npx", "mcp_config": { "command": "npx", "args": [
-            "mcp-remote", "{{ .MCPURL }}"{{- range .SecurityInputs }},
-            "--header", "{{ printf "%s:${user_config.%s}" (.SystemName |
-            asHTTPHeader) (.DisplayName | asPosixName) }}"{{- end }} ] } },
-            "user_config": { {{- range $i, $input := .SecurityInputs }}{{- if $i
-            }},{{ end }} "{{ $input.DisplayName | asPosixName }}": { "type":
-            "string", "title": "{{ $input.DisplayName | asPosixName }}",
-            "description": "Get this value from your gram env", "sensitive": {{
-            $input.Sensitive }}, "required": true }{{- end }} } }
-          </code>
+          >{
+    "dxt_version": "0.1",
+    "name": "{{ .MCPName }}",
+    "version": "1.0.0",
+    "description": "{{ .MCPDescription }}",
+    "author": {
+       "name": "{{ .OrganizationName }} with Gram"
+    },
+    "server": {
+      "type": "node",
+      "entry_point": "npx",
+      "mcp_config": {
+        "command": "npx",
+        "args": [
+          "mcp-remote",
+          "{{ .MCPURL }}"{{- range $i, $header := .Headers }},
+          "--header",
+          "{{ printf "%s:${user_config.%s}" $header (index $.EnvHeaders $i) }}"{{- end }}
+        ]
+      }
+    },
+    "user_config": {
+      {{- range $i, $header := .EnvHeaders }}{{- if $i }},{{ end }}
+      "{{ $header }}": {
+        "type": "string",
+        "title": "{{ $header }}",
+        "description": "Get this value from your gram env",
+        "sensitive": true,
+        "required": true
+      }{{- end }}
+    }
+  }          </code>
         </section>
       </div>
     </main>
