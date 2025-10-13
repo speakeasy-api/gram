@@ -96,6 +96,7 @@ type hostedPageData struct {
 	SiteURL             string
 	LogoAssetURL        string
 	DocsURL             string
+	IsPublic            bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -343,6 +344,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		SiteURL:             os.Getenv("GRAM_SITE_URL"),
 		LogoAssetURL:        logoAssetURL,
 		DocsURL:             docsURL,
+		IsPublic:            toolset.McpIsPublic,
 	}
 
 	hostedPageTmpl, err := template.New("hosted_page").Funcs(templatefuncs.FuncMap()).Parse(hostedPageTmplData)

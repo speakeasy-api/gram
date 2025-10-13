@@ -1,659 +1,729 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{{ .MCPName }}</title>
-    <meta name="description" content="Install {{ .MCPName }} MCP server by {{ .OrganizationName }}.">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="{{ .SiteURL }}/mcp/{{ .MCPSlug }}">
-    <meta property="og:title" content="{{ .MCPName }} - MCP Server">
-    <meta property="og:description" content="Install {{ .MCPName }} MCP server by {{ .OrganizationName }}.">
-    <meta property="og:site_name" content="Gram MCP">
-    <meta property="twitter:card" content="summary">
-    <meta property="twitter:url" content="{{ .SiteURL }}/mcp/{{ .MCPSlug }}">
-    <meta property="twitter:title" content="{{ .MCPName }} - MCP Server">
-    <meta property="twitter:description" content="Install {{ .MCPName }} MCP server by {{ .OrganizationName }}.">
-    <meta name="robots" content="index, follow">
-    <meta name="author" content="{{ .OrganizationName }}">
-    <meta name="generator" content="Gram MCP">
-    <link rel="canonical" href="{{ .SiteURL }}/mcp/{{ .MCPSlug }}">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&display=swap" rel="stylesheet">
+    <meta
+      name="description"
+      content="Install {{ .MCPName }} MCP server by {{ .OrganizationName }}."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="{{ .SiteURL }}/mcp/{{ .MCPSlug }}" />
+    <meta property="og:title" content="{{ .MCPName }} - MCP Server" />
+    <meta
+      property="og:description"
+      content="Install {{ .MCPName }} MCP server by {{ .OrganizationName }}."
+    />
+    <meta property="og:site_name" content="Gram MCP" />
+    <meta property="twitter:card" content="summary" />
+    <meta property="twitter:url" content="{{ .SiteURL }}/mcp/{{ .MCPSlug }}" />
+    <meta property="twitter:title" content="{{ .MCPName }} - MCP Server" />
+    <meta
+      property="twitter:description"
+      content="Install {{ .MCPName }} MCP server by {{ .OrganizationName }}."
+    />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="{{ .OrganizationName }}" />
+    <meta name="generator" content="Gram MCP" />
+    <link rel="canonical" href="{{ .SiteURL }}/mcp/{{ .MCPSlug }}" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&display=swap"
+      rel="stylesheet"
+    />
     <style>
       /**************/
-    /* PAGE SETUP */
-    /**************/
+      /* PAGE SETUP */
+      /**************/
 
-    html,
-    body {
-      /* Font Families */
-      --font-diatype: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI',
-        Roboto, Helvetica, Arial, sans-serif;
-      --font-diatype-mono: 'Geist Mono', SFMono-Regular, Menlo, Monaco, Consolas,
-        'Liberation Mono', 'Courier New', monospace;
+      html,
+      body {
+        /* Font Families */
+        --font-diatype:
+          "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        --font-diatype-mono:
+          "Geist Mono", SFMono-Regular, Menlo, Monaco, Consolas,
+          "Liberation Mono", "Courier New", monospace;
 
-      /* Color Values */
+        /* Color Values */
 
-      --color-base-white: hsl(0 0% 100%);
-      --color-base-black: hsl(0 0% 0%);
+        --color-base-white: hsl(0 0% 100%);
+        --color-base-black: hsl(0 0% 0%);
 
-      --color-neutral-50: hsl(0, 0%, 99%);
-      --color-neutral-100: hsl(0, 0%, 98%);
-      --color-neutral-200: hsl(0, 0%, 92%);
-      --color-neutral-700: hsl(0, 0%, 33%);
-      --color-neutral-800: hsl(0, 0%, 20%);
+        --color-neutral-50: hsl(0, 0%, 99%);
+        --color-neutral-100: hsl(0, 0%, 98%);
+        --color-neutral-200: hsl(0, 0%, 92%);
+        --color-neutral-700: hsl(0, 0%, 33%);
+        --color-neutral-800: hsl(0, 0%, 20%);
 
-      --color-feedback-green-100: hsl(102, 35%, 93%);
-      --color-feedback-green-300: hsl(99, 30%, 73%);
-      --color-feedback-green-700: hsl(105, 24%, 27%);
-      --color-brand-blue-600: hsl(215, 71%, 40%);
-      --color-feedback-violet-600: 	hsl(268, 75%, 31%);
+        --color-feedback-green-100: hsl(102, 35%, 93%);
+        --color-feedback-green-300: hsl(99, 30%, 73%);
+        --color-feedback-green-700: hsl(105, 24%, 27%);
+        --color-brand-blue-600: hsl(215, 71%, 40%);
+        --color-feedback-violet-600: hsl(268, 75%, 31%);
 
-      /* Color Tokens */
+        /* Color Tokens */
 
-      --text-default-success: var(--color-feedback-green-700);
-      --border-success-softest: var(--color-feedback-green-300);
+        --text-default-success: var(--color-feedback-green-700);
+        --border-success-softest: var(--color-feedback-green-300);
 
-      --color-link-default: var(--color-brand-blue-600);
-      --color-link-visited-primary: var(--color-feedback-violet-600);
+        --color-link-default: var(--color-brand-blue-600);
+        --color-link-visited-primary: var(--color-feedback-violet-600);
 
-      --fill-neutral-highlight: var(--color-base-black);
-      --fill-neutral-default: var(--color-neutral-800);
-      --fill-neutral-highlight-inverse: var(--color-base-white);
-      --fill-neutral-default-inverse: var(--color-neutral-50);
+        --fill-neutral-highlight: var(--color-base-black);
+        --fill-neutral-default: var(--color-neutral-800);
+        --fill-neutral-highlight-inverse: var(--color-base-white);
+        --fill-neutral-default-inverse: var(--color-neutral-50);
 
-      --bg-surface-primary-default: var(--color-base-white);
-      --bg-surface-secondary-default: var(--color-neutral-100);
-      --bg-surface-primary-inverse: var(--color-base-black);
-      --bg-success-softest: var(--color-feedback-green-100);
+        --bg-surface-primary-default: var(--color-base-white);
+        --bg-surface-secondary-default: var(--color-neutral-100);
+        --bg-surface-primary-inverse: var(--color-base-black);
+        --bg-success-softest: var(--color-feedback-green-100);
 
-      --bg-surface-primary-fixed-dark: var(--color-base-black);
-      --bg-surface-transparent: hsl(0, 0%, 0%, 0.5);
+        --bg-surface-primary-fixed-dark: var(--color-base-black);
+        --bg-surface-transparent: hsl(0, 0%, 0%, 0.5);
 
-      --border-neutral-softest: var(--color-neutral-200);
+        --border-neutral-softest: var(--color-neutral-200);
 
-      --text-default: var(--color-neutral-700);
-      --text-default-inverse: var(--color-neutral-100);
+        --text-default: var(--color-neutral-700);
+        --text-default-inverse: var(--color-neutral-100);
 
-      --z-index-modal: 200;
-      --z-index-hover: 100;
+        --z-index-modal: 200;
+        --z-index-hover: 100;
 
-      --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+        --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
 
+        font-family: var(--font-diatype);
+        color: var(--text-default);
+        background: var(--bg-surface-secondary-default);
 
-      font-family: var(--font-diatype);
-      color: var(--text-default);
-      background: var(--bg-surface-secondary-default);
+        margin: 0;
+        padding: 0;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        font-weight: 300;
+      }
 
-      margin: 0;
-      padding: 0;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      font-weight: 300;
-    }
+      @keyframes fade-in {
+        from {
+          opacity: 0;
+        }
 
-    @keyframes fade-in {
-      from {
+        to {
+          opacity: 1;
+        }
+      }
+
+      .fade-in {
+        animation: fade-in 200ms var(--ease-in-out-quad) forwards;
+        animation-iteration-count: 1;
+      }
+
+      .fade-out {
         opacity: 0;
       }
 
-      to {
-        opacity: 1;
-      }
-    }
-
-    .fade-in {
-      animation: fade-in 200ms var(--ease-in-out-quad) forwards;
-      animation-iteration-count: 1;
-    }
-
-    .fade-out {
-      opacity: 0;
-    }
-
-    .main {
-      padding: 6rem 1rem;
-    }
-
-    @media (min-width: 768px) {
       .main {
-        padding: 6rem 6rem;
+        padding: 6rem 1rem;
       }
-    }
 
-    @media (min-width: 1024px) {
-      .main {
-        padding: 6rem 13rem;
+      @media (min-width: 768px) {
+        .main {
+          padding: 6rem 6rem;
+        }
       }
-    }
 
-    /**************/
-    /* PAGE TITLE */
-    /**************/
+      @media (min-width: 1024px) {
+        .main {
+          padding: 6rem 13rem;
+        }
+      }
 
-    .content-container {
-      display: flex;
-      flex-direction: column;
-      gap: 2rem;
-    }
+      /**************/
+      /* PAGE TITLE */
+      /**************/
 
-    .header.container {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: space-between;
-      align-items: center;
-      gap: 1.5rem;
-    }
+      .content-container {
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+      }
 
-    .mcp-meta {
-      display: flex;
-      gap: 1.5rem;
-    }
-
-    .header-content {
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-    }
-
-    .section-description {
-      margin-bottom: 1rem;
-    }
-
-    .logo-container {
-      width: 5rem;
-      height: 5rem;
-      border-radius: 0.5rem;
-      padding: 0.625rem;
-      border: solid 1px var(--border-neutral-softest);
-
-      & svg {
+      section.header {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
         width: 100%;
-        height: 100%;
+        align-items: flex-start;
       }
 
-      & img {
+      .header.container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
         width: 100%;
-        height: 100%;
-        object-fit: contain;
-      }
-    }
-
-    .mcp-name {
-      font-size: 2rem;
-      line-height: 150%;
-      text-wrap-style: balance;
-    }
-
-    .mcp-description {
-      font-size: 1rem;
-      line-height: 175%;
-      text-wrap-style: balance;
-    }
-
-    .popover {
-      position: relative;
-    }
-
-    .action-button {
-      background: var(--fill-neutral-default);
-      color: var(--text-default-inverse);
-    }
-
-    .header-actions {
-      display: flex;
-      gap: 0.5rem;
-      font-weight: 400;
-      font-size: calc(1rem - 2px);
-      text-transform: uppercase;
-    }
-
-    .header-action {
-      border-radius: 6px;
-      padding: 0.5rem 1rem;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      transition: background-color 300ms var(--ease-in-out-quad);
-      text-transform: uppercase;
-    }
-
-    .action-button:hover {
-      background: var(--fill-neutral-highlight);
-    }
-
-    .popover-menu {
-      position: absolute;
-      overflow: hidden;
-      top: calc(100% + 0.25rem);
-      left: 0;
-      display: flex;
-      flex-direction: column;
-      width: 100%;
-      align-items: stretch;
-
-      border-radius: 0.5rem;
-      background: var(--fill-neutral-default);
-      color: var(--text-default-inverse);
-      box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25);
-    }
-
-    .popover-menu.hidden {
-      display: none;
-    }
-
-    .popover-button {
-      padding: 0.75rem 1rem;
-      transition: background-color 300ms var(--ease-in-out-quad);
-    }
-
-    .popover-button:hover {
-      background: var(--fill-neutral-highlight);
-    }
-
-    .external-docs {
-      background: var(--color-neutral-200);
-      text-transform: uppercase;
-      color: var(--color-neutral-900);
-      box-shadow: rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(255, 255, 255, 0.2) 0px 2px 1px 0px inset, rgba(0, 0, 0, 0.15) 0px -2px 1px 0px inset;
-    }
-
-    /***********/
-    /* INSTALL */
-    /***********/
-
-    .install.container {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .install-targets {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 1.25rem;
-    }
-
-    @media (max-width: 768px) {
-      .install-targets {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .install-target {
-      font-weight: 400;
-      display: flex;
-      cursor: pointer;
-      gap: 1rem;
-    }
-
-    .install-target .target {
-      grid-area: target;
-      display: flex;
-      gap: 1rem;
-      align-items: center;
-    }
-
-    .install-target svg,
-    .install-target img {
-      width: 1.5rem;
-      height: 1.5rem;
-    }
-
-    /******************
-    * AVAILABLE TOOLS *
-    *******************/
-
-    .tool-names {
-      display: flex;
-      gap: 0.75rem;
-      row-gap: 0.5rem;
-      flex-wrap: wrap;
-    }
-
-    .tool-name {
-      font-family: var(--font-diatype-mono);
-      font-weight: 300;
-      display: inline-block;
-      border-radius: 0.125rem;
-      background: var(--bg-surface-primary-default);
-      border: solid 1px var(--border-neutral-softest);
-      padding: 0.125rem 0.25rem;
-      text-transform: UPPERCASE;
-    }
-
-    .tool-name.hidden {
-      display: none;
-    }
-
-
-    /******************
-    * CODE CONTAINERS *
-    ******************/
-
-    .code-container {
-      position: relative;
-      cursor: pointer;
-      max-width: 100%;
-    }
-
-    .code-container code {
-      user-select: all;
-      overflow: auto;
-      max-width: 100%;
-      padding-right: 4rem;
-    }
-
-    .copy-button {
-      --transition-length: 1000ms;
-      position: absolute;
-      top: 1.5rem;
-      right: 1.5rem;
-      border-radius: 4px;
-      border: 1px var(--border-neutral-softest) solid;
-      cursor: pointer;
-      z-index: 10;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 1.5rem;
-      height: 1.5rem;
-      padding: 4px;
-      background: var(--bg-surface-primary-default);
-      transition: border var(--transition-length) var(--ease-in-out-quad),
-                  background-color var(--transition-length) var(--ease-in-out-quad);
-    }
-
-    .copy-button.success {
-      border: 1px var(--border-success-softest) solid;
-      background: var(--bg-success-softest);
-    }
-
-    .copy-button svg {
-      pointer-events: none;
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      height: calc(100% - 8px);
-      aspect-ratio: 1 / 1;
-    }
-
-    .icon {
-      transition: opacity var(--transition-length) var(--ease-in-out-quad), color var(--transition-length) var(--ease-in-out-quad);
-    }
-
-    .copy-button.success .icon-copy-success {
-      opacity: 1;
-      color: var(--text-default-success);
-    }
-
-    .copy-button.waiting .icon-copy {
-      opacity: 1;
-    }
-
-    .copy-button.waiting .icon-copy-success {
-      opacity: 0;
-    }
-
-    .copy-button.success .icon-copy {
-      opacity: 0;
-    }
-
-
-    pre, code {
-      white-space: pre;
-      font-size: 1rem;
-      line-height: 150%;
-      font-family: var(--font-diatype-mono);
-      overflow-x: auto;
-      margin: 0;
-    }
-
-    .code-snippet {
-      display: inline-block;
-    }
-
-    /********
-    * MODAL *
-    ********/
-
-    .modal {
-      position: fixed;
-      left: 50%;
-      top: 8rem;
-      transform: translateX(-50%);
-      background-color: var(--bg-surface-primary-default);
-      max-height: calc(100% - 16rem);
-      max-width: min(calc(100% - 4rem), 54rem);
-      z-index: var(--z-index-modal);
-
-      padding: 1.5rem;
-      border-radius: 0.5rem;
-      border: 1px solid var(--border-neutral-softest);
-      display: flex;
-      flex-direction: column;
-      transition: opacity 200ms var(--ease-in-out-quad);
-
-      & h1 {
-        font-size: 26px;
-        line-height: 42px;
-        margin: 0;
+        gap: 1.5rem;
       }
 
-      & li {
+      .mcp-meta {
+        display: flex;
+        gap: 1.5rem;
+      }
+
+      .header-content {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+
+      .section-description {
+        margin-bottom: 1rem;
+      }
+
+      .logo-container {
+        width: 5rem;
+        height: 5rem;
+        border-radius: 0.5rem;
+        padding: 0.625rem;
+        border: solid 1px var(--border-neutral-softest);
+
+        & svg {
+          width: 100%;
+          height: 100%;
+        }
+
+        & img {
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+        }
+      }
+
+      .badge-private {
+        display: inline-block;
+      }
+
+      .mcp-name {
+        font-size: 2rem;
+        line-height: 150%;
+        text-wrap-style: balance;
+      }
+
+      .mcp-description {
+        font-size: 1rem;
         line-height: 175%;
+        text-wrap-style: balance;
+      }
+
+      .popover {
+        position: relative;
+      }
+
+      .action-button {
+        background: var(--fill-neutral-default);
+        color: var(--text-default-inverse);
+      }
+
+      .header-right {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        align-items: flex-end;
+      }
+
+      .header-actions {
+        display: flex;
+        gap: 0.5rem;
         font-weight: 400;
-        margin: 0;
+        font-size: calc(1rem - 2px);
+        text-transform: uppercase;
       }
 
-      & ol {
-        padding: 0;
-        list-style-position: inside;
+      .header-action {
+        border-radius: 6px;
+        padding: 0.5rem 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        transition: background-color 300ms var(--ease-in-out-quad);
+        text-transform: uppercase;
       }
 
-      & .code-container {
-        margin: 1rem 0;
+      .action-button:hover {
+        background: var(--fill-neutral-highlight);
       }
-    }
 
-    .content-slot {
-      flex: 1 1 auto;
-      overflow: auto;
-    }
+      .popover-menu {
+        position: absolute;
+        overflow: hidden;
+        top: calc(100% + 0.25rem);
+        left: 0;
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        align-items: stretch;
 
-    .modal-backdrop {
-      width: 100%;
-      height: 100%;
-      position: fixed;
-      z-index: calc(var(--z-index-modal) - 1);
-      background: var(--bg-surface-transparent);
-      transition: opacity 200ms var(--ease-in-out-quad);
-    }
+        border-radius: 0.5rem;
+        background: var(--fill-neutral-default);
+        color: var(--text-default-inverse);
+        box-shadow: 0 4px 4px 0 rgba(0, 0, 0, 0.25);
+      }
 
-    .modal-close {
-      position: absolute;
-      top: 1.5rem;
-      right: 1.5rem;
-      padding: 0.5rem;
-      z-index: var(--z-index-hover);
-      border-radius: 4px;
-      transition: background-color 300ms var(--ease-in-out-quad),
-                  color 300ms var(--ease-in-out-quad)
-                  border 300ms var(--ease-in-out-quad);
-      border: 1px #00000000 solid;
+      .popover-menu.hidden {
+        display: none;
+      }
 
-      & svg {
-        display: block;
+      .popover-button {
+        padding: 0.75rem 1rem;
+        transition: background-color 300ms var(--ease-in-out-quad);
+      }
+
+      .popover-button:hover {
+        background: var(--fill-neutral-highlight);
+      }
+
+      .external-docs {
+        background: var(--color-neutral-200);
+        text-transform: uppercase;
+        color: var(--color-neutral-900);
+        box-shadow:
+          rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+          rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+          rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+          rgba(0, 0, 0, 0) 0px 0px 0px 0px,
+          rgba(255, 255, 255, 0.2) 0px 2px 1px 0px inset,
+          rgba(0, 0, 0, 0.15) 0px -2px 1px 0px inset;
+      }
+
+      /***********/
+      /* INSTALL */
+      /***********/
+
+      .install.container {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .install-targets {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.25rem;
+      }
+
+      @media (max-width: 768px) {
+        .install-targets {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .install-target {
+        font-weight: 400;
+        display: flex;
+        cursor: pointer;
+        gap: 1rem;
+      }
+
+      .install-target .target {
+        grid-area: target;
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+      }
+
+      .install-target svg,
+      .install-target img {
         width: 1.5rem;
         height: 1.5rem;
       }
-    }
 
-    .modal-close:hover {
-      color: var(--fill-neutral-highlight);
-      background: var(--fill-neutral-highlight-inverse);
-      border: 1px var(--border-neutral-softest) solid;
-    }
+      /******************
+    * AVAILABLE TOOLS *
+    *******************/
 
-    .instruction-item {
-      margin: 1rem 0;
-    }
-
-    .instruction-item svg {
-      width: 1rem;
-      height: 1rem;
-    }
-
-    .section-title {
-      font-size: 26px;
-      font-weight: 300;
-      margin-bottom: 0.5em;
-    }
-
-    h1 {
-      font-weight: 300;
-    }
-
-    h2, .modal-sub-heading {
-      font-weight: 300;
-    }
-
-    /***************
-    * Brand Button *
-    ***************/
-    @property --gradient-rotation {
-      syntax: "<angle>";
-      inherits: true;
-      initial-value: 0deg;
-    }
-
-    .gram-brand-badge::before {
-      position: absolute;
-      content: '';
-      background: conic-gradient(from var(--gradient-rotation), var(--gradient-stops));
-      z-index: -1;
-      border-radius: var(--border-radius-px);
-      width: calc(100% + 2 * var(--border-px));
-      height: calc(100% + 2 * var(--border-px));
-      left: calc(-1 * var(--border-px));
-      top: calc(-1 * var(--border-px));
-    }
-
-    .gram-brand-badge {
-      position: fixed;
-      bottom: 1.25rem;
-      right: 1rem;
-      transition: --gradient-rotation 250ms var(--ease-in-out-quad);
-      & div {
+      .tool-names {
         display: flex;
-        gap: 4px;
-        align-items: center;
-        background: var(--bg-surface-primary-default);
-        z-index: 0;
-        width: 100%;
-        height: 100%;
-        border-radius: var(--border-radius-px);
-        padding: 0.25rem 0.5rem;
+        gap: 0.75rem;
+        row-gap: 0.5rem;
+        flex-wrap: wrap;
       }
 
-      --mouse-center-offset-x: 0;
-      --mouse-center-offset-y: 0;
-      --gradient-rotation: calc(-1 * atan2(var(--mouse-center-offset-x),var(--mouse-center-offset-y)) - 90deg);
+      .badge {
+        font-family: var(--font-diatype-mono);
+        font-weight: 300;
+        display: inline-block;
+        border-radius: 0.125rem;
+        background: var(--bg-surface-primary-default);
+        border: solid 1px var(--border-neutral-softest);
+        padding: 0.125rem 0.25rem;
+        text-transform: UPPERCASE;
+      }
 
-      --border-radius-px: 2px;
-      --border-px: 1px;
-      --gradient-stops: hsl(334,54%,13%),hsl(4,67%,47%),hsl(23,96%,62%),hsl(68,52%,72%),hsl(108,24%,41%),hsl(154,100%,7%),hsl(220,100%,12%),hsl(214,69%,50%),hsl(216,100%,80%),hsl(334,54%,13%);
-    }
+      .tool-name.hidden {
+        display: none;
+      }
 
-    .gram-brand-badge:hover::after {
-      filter: blur(2px);
-    }
+      /******************
+    * CODE CONTAINERS *
+    ******************/
 
-    .gram-brand-badge::after {
-      content: '';
-      position: absolute;
-      border-radius: var(--border-radius-px);
-      width: calc(100% + 2 * var(--border-px));
-      height: calc(100% + 2 * var(--border-px));
-      left: calc(-1 * var(--border-px));
-      top: calc(-1 * var(--border-px));
+      .code-container {
+        position: relative;
+        cursor: pointer;
+        max-width: 100%;
+      }
 
-      background: conic-gradient(from var(--gradient-rotation), var(--gradient-stops));
-      filter: blur(0px);
-      transition: filter 250ms var(--ease-in-out-quad);
-      z-index: -2;
-    }
+      .code-container code {
+        user-select: all;
+        overflow: auto;
+        max-width: 100%;
+        padding-right: 4rem;
+      }
 
-    /********
+      .copy-button {
+        --transition-length: 1000ms;
+        position: absolute;
+        top: 1.5rem;
+        right: 1.5rem;
+        border-radius: 4px;
+        border: 1px var(--border-neutral-softest) solid;
+        cursor: pointer;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.5rem;
+        height: 1.5rem;
+        padding: 4px;
+        background: var(--bg-surface-primary-default);
+        transition:
+          border var(--transition-length) var(--ease-in-out-quad),
+          background-color var(--transition-length) var(--ease-in-out-quad);
+      }
+
+      .copy-button.success {
+        border: 1px var(--border-success-softest) solid;
+        background: var(--bg-success-softest);
+      }
+
+      .copy-button svg {
+        pointer-events: none;
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        height: calc(100% - 8px);
+        aspect-ratio: 1 / 1;
+      }
+
+      .icon {
+        transition:
+          opacity var(--transition-length) var(--ease-in-out-quad),
+          color var(--transition-length) var(--ease-in-out-quad);
+      }
+
+      .copy-button.success .icon-copy-success {
+        opacity: 1;
+        color: var(--text-default-success);
+      }
+
+      .copy-button.waiting .icon-copy {
+        opacity: 1;
+      }
+
+      .copy-button.waiting .icon-copy-success {
+        opacity: 0;
+      }
+
+      .copy-button.success .icon-copy {
+        opacity: 0;
+      }
+
+      pre,
+      code {
+        white-space: pre;
+        font-size: 1rem;
+        line-height: 150%;
+        font-family: var(--font-diatype-mono);
+        overflow-x: auto;
+        margin: 0;
+      }
+
+      .code-snippet {
+        display: inline-block;
+      }
+
+      /********
+    * MODAL *
+    ********/
+
+      .modal {
+        position: fixed;
+        left: 50%;
+        top: 8rem;
+        transform: translateX(-50%);
+        background-color: var(--bg-surface-primary-default);
+        max-height: calc(100% - 16rem);
+        max-width: min(calc(100% - 4rem), 54rem);
+        z-index: var(--z-index-modal);
+
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--border-neutral-softest);
+        display: flex;
+        flex-direction: column;
+        transition: opacity 200ms var(--ease-in-out-quad);
+
+        & h1 {
+          font-size: 26px;
+          line-height: 42px;
+          margin: 0;
+        }
+
+        & li {
+          line-height: 175%;
+          font-weight: 400;
+          margin: 0;
+        }
+
+        & ol {
+          padding: 0;
+          list-style-position: inside;
+        }
+
+        & .code-container {
+          margin: 1rem 0;
+        }
+      }
+
+      .content-slot {
+        flex: 1 1 auto;
+        overflow: auto;
+      }
+
+      .modal-backdrop {
+        width: 100%;
+        height: 100%;
+        position: fixed;
+        z-index: calc(var(--z-index-modal) - 1);
+        background: var(--bg-surface-transparent);
+        transition: opacity 200ms var(--ease-in-out-quad);
+      }
+
+      .modal-close {
+        position: absolute;
+        top: 1.5rem;
+        right: 1.5rem;
+        padding: 0.5rem;
+        z-index: var(--z-index-hover);
+        border-radius: 4px;
+        transition:
+          background-color 300ms var(--ease-in-out-quad),
+          color 300ms var(--ease-in-out-quad) border 300ms
+            var(--ease-in-out-quad);
+        border: 1px #00000000 solid;
+
+        & svg {
+          display: block;
+          width: 1.5rem;
+          height: 1.5rem;
+        }
+      }
+
+      .modal-close:hover {
+        color: var(--fill-neutral-highlight);
+        background: var(--fill-neutral-highlight-inverse);
+        border: 1px var(--border-neutral-softest) solid;
+      }
+
+      .instruction-item {
+        margin: 1rem 0;
+      }
+
+      .instruction-item svg {
+        width: 1rem;
+        height: 1rem;
+      }
+
+      .section-title {
+        font-size: 26px;
+        font-weight: 300;
+        margin-bottom: 0.5em;
+      }
+
+      h1 {
+        font-weight: 300;
+      }
+
+      h2,
+      .modal-sub-heading {
+        font-weight: 300;
+      }
+
+      /***************
+    * Brand Button *
+    ***************/
+      @property --gradient-rotation {
+        syntax: "<angle>";
+        inherits: true;
+        initial-value: 0deg;
+      }
+
+      .gram-brand-badge::before {
+        position: absolute;
+        content: "";
+        background: conic-gradient(
+          from var(--gradient-rotation),
+          var(--gradient-stops)
+        );
+        z-index: -1;
+        border-radius: var(--border-radius-px);
+        width: calc(100% + 2 * var(--border-px));
+        height: calc(100% + 2 * var(--border-px));
+        left: calc(-1 * var(--border-px));
+        top: calc(-1 * var(--border-px));
+      }
+
+      .gram-brand-badge {
+        position: fixed;
+        bottom: 1.25rem;
+        right: 1rem;
+        transition: --gradient-rotation 250ms var(--ease-in-out-quad);
+        & div {
+          display: flex;
+          gap: 4px;
+          align-items: center;
+          background: var(--bg-surface-primary-default);
+          z-index: 0;
+          width: 100%;
+          height: 100%;
+          border-radius: var(--border-radius-px);
+          padding: 0.25rem 0.5rem;
+        }
+
+        --mouse-center-offset-x: 0;
+        --mouse-center-offset-y: 0;
+        --gradient-rotation: calc(
+          -1 *
+            atan2(var(--mouse-center-offset-x), var(--mouse-center-offset-y)) -
+            90deg
+        );
+
+        --border-radius-px: 2px;
+        --border-px: 1px;
+        --gradient-stops:
+          hsl(334, 54%, 13%), hsl(4, 67%, 47%), hsl(23, 96%, 62%),
+          hsl(68, 52%, 72%), hsl(108, 24%, 41%), hsl(154, 100%, 7%),
+          hsl(220, 100%, 12%), hsl(214, 69%, 50%), hsl(216, 100%, 80%),
+          hsl(334, 54%, 13%);
+      }
+
+      .gram-brand-badge:hover::after {
+        filter: blur(2px);
+      }
+
+      .gram-brand-badge::after {
+        content: "";
+        position: absolute;
+        border-radius: var(--border-radius-px);
+        width: calc(100% + 2 * var(--border-px));
+        height: calc(100% + 2 * var(--border-px));
+        left: calc(-1 * var(--border-px));
+        top: calc(-1 * var(--border-px));
+
+        background: conic-gradient(
+          from var(--gradient-rotation),
+          var(--gradient-stops)
+        );
+        filter: blur(0px);
+        transition: filter 250ms var(--ease-in-out-quad);
+        z-index: -2;
+      }
+
+      /********
     * SHARE *
     *********/
 
-    .card {
-      border-radius: 0.5rem;
-      background: var(--fill-neutral-default-inverse);
-      border: solid 1px var(--border-neutral-softest);
-      padding: 1.5rem;
-      transition: background-color 300ms var(--ease-in-out-quad);
-    }
+      .card {
+        border-radius: 0.5rem;
+        background: var(--fill-neutral-default-inverse);
+        border: solid 1px var(--border-neutral-softest);
+        padding: 1.5rem;
+        transition: background-color 300ms var(--ease-in-out-quad);
+      }
 
-    .card:hover {
-      background: var(--fill-neutral-highlight-inverse);
-    }
+      .card:hover {
+        background: var(--fill-neutral-highlight-inverse);
+      }
 
-    button {
-      border: none;
-      margin: 0;
-      padding: 0;
-      width: auto;
-      overflow: visible;
-      cursor: pointer;
-      text-align: inherit;
+      button {
+        border: none;
+        margin: 0;
+        padding: 0;
+        width: auto;
+        overflow: visible;
+        cursor: pointer;
+        text-align: inherit;
 
-      background: transparent;
+        background: transparent;
 
-      color: inherit;
-      font: inherit;
+        color: inherit;
+        font: inherit;
 
-      -webkit-font-smoothing: inherit;
-      -moz-osx-font-smoothing: inherit;
+        -webkit-font-smoothing: inherit;
+        -moz-osx-font-smoothing: inherit;
 
-      -webkit-appearance: none;
-    }
+        -webkit-appearance: none;
+      }
 
-    a {
-      text-decoration: unset;
-      color: var(--color-link-default);
-    }
+      a {
+        text-decoration: unset;
+        color: var(--color-link-default);
+      }
 
-    a:visited {
-      color: var(--color-link-visited-primary);
-    }
+      a:visited {
+        color: var(--color-link-visited-primary);
+      }
 
-    .install-link {
-      text-decoration: unset;
-      color: unset;
-    }
+      .install-link {
+        text-decoration: unset;
+        color: unset;
+      }
 
-    .install-link:visited {
-      color: unset;
-    }
+      .install-link:visited {
+        color: unset;
+      }
 
-    * {
-      box-sizing: border-box;
-    }
+      * {
+        box-sizing: border-box;
+      }
     </style>
     <template id="modal-template">
       <div class="modal">
         <button class="modal-close">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon lucide-x"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            class="lucide lucide-x-icon lucide-x"
+          >
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+          </svg>
         </button>
-        <div class="content-slot">
-        </div>
+        <div class="content-slot"></div>
       </div>
       <div class="modal-backdrop"></div>
     </template>
@@ -669,36 +739,68 @@
             Execute the following snippet in your shell:
             <div class="card code-container">
               <button class="copy-button waiting">
-                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy"></use>
                 </svg>
-                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh">claude mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range .SecurityInputs }} \
-  --header '{{ .SystemName | asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>
+              <code class="code-snippet language-sh"
+                >claude mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL
+                }}"{{- range .SecurityInputs }} \ --header '{{ .SystemName |
+                asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName)
+                }}'{{- end }}</code
+              >
             </div>
           </li>
           {{- if .SecurityInputs }}
-          <li class="instruction-item">After installation, set these environment variables in your shell:
+          <li class="instruction-item">
+            After installation, set these environment variables in your shell:
             <div class="card code-container">
               <button class="copy-button waiting">
-                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy"></use>
                 </svg>
-                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh">{{- range .SecurityInputs -}}
-export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{- end }}</code>
+              <code class="code-snippet language-sh"
+                >{{- range .SecurityInputs -}} export {{ .DisplayName |
+                asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{-
+                end }}</code
+              >
             </div>
-            <p>The MCP configuration supports environment variable expansion using
+            <p>
+              The MCP configuration supports environment variable expansion
+              using
               <code>${VAR}</code>
               syntax. You can also provide default values using
               <code>${VAR:-default}</code>
-              format.</p></li>
+              format.
+            </p>
+          </li>
           {{- end }}
         </ol>
       </div>
@@ -712,34 +814,110 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
             Open Windsurf and navigate to the Cascade panel
           </li>
           <li class="instruction-item">
-            Click
-            "<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-package-icon lucide-package"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><polyline points="3.29 7 12 12 20.71 7"/><path d="m7.5 4.27 9 5.15"/></svg>"
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-right-icon lucide-arrow-right"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
-            "<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-settings2-icon lucide-settings-2"><path d="M14 17H5"/><path d="M19 7h-9"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>"
-            in order to open your mcp_config.json
+            Click "<svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="lucide lucide-package-icon lucide-package"
+            >
+              <path
+                d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"
+              />
+              <path d="M12 22V12" />
+              <polyline points="3.29 7 12 12 20.71 7" />
+              <path d="m7.5 4.27 9 5.15" /></svg
+            >"
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="lucide lucide-arrow-right-icon lucide-arrow-right"
+            >
+              <path d="M5 12h14" />
+              <path d="m12 5 7 7-7 7" />
+            </svg>
+            "<svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="lucide lucide-settings2-icon lucide-settings-2"
+            >
+              <path d="M14 17H5" />
+              <path d="M19 7h-9" />
+              <circle cx="17" cy="17" r="3" />
+              <circle cx="7" cy="7" r="3" /></svg
+            >" in order to open your mcp_config.json
           </li>
-          <li>Add this configuration to your mcp_config.json (don't forget to add
-          your values for any environment variables):
+          <li>
+            Add this configuration to your mcp_config.json (don't forget to add
+            your values for any environment variables):
             <div class="card code-container">
               <button class="copy-button waiting">
-                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy"></use>
                 </svg>
-                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-json">{
-  "mcpServers": {
-    "{{ .MCPSlug }}": {{ indent 4 .MCPConfig -}}
-  }
-}</code>
-            </div></li>
-          <li class="instruction-item">Back in the Manage plugins tab, click
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-refresh-cw-icon lucide-refresh-cw"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-            to connect</li>
+              <code class="code-snippet language-json"
+                >{ "mcpServers": { "{{ .MCPSlug }}": {{ indent 4 .MCPConfig -}}
+                } }</code
+              >
+            </div>
+          </li>
           <li class="instruction-item">
-            Verify installation by checking for "1 available MCP server" in the MCP toolbar and a green dot next to the server name
+            Back in the Manage plugins tab, click
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              class="lucide lucide-refresh-cw-icon lucide-refresh-cw"
+            >
+              <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+              <path d="M21 3v5h-5" />
+              <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+              <path d="M8 16H3v5" />
+            </svg>
+            to connect
+          </li>
+          <li class="instruction-item">
+            Verify installation by checking for "1 available MCP server" in the
+            MCP toolbar and a green dot next to the server name
           </li>
         </ol>
       </div>
@@ -755,33 +933,65 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
             Execute the following snippet in your shell:
             <div class="card code-container">
               <button class="copy-button waiting">
-                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy"></use>
                 </svg>
-                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh">gemini mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range .SecurityInputs }} \
-  --header '{{ .SystemName | asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>
+              <code class="code-snippet language-sh"
+                >gemini mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL
+                }}"{{- range .SecurityInputs }} \ --header '{{ .SystemName |
+                asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName)
+                }}'{{- end }}</code
+              >
             </div>
           </li>
           {{- if .SecurityInputs }}
-          <li class="instruction-item">Set these environment variables in your shell before running the command above:
+          <li class="instruction-item">
+            Set these environment variables in your shell before running the
+            command above:
             <div class="card code-container">
               <button class="copy-button waiting">
-                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy"></use>
                 </svg>
-                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh">{{- range .SecurityInputs -}}
-export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{- end }}</code>
-            </div></li>
+              <code class="code-snippet language-sh"
+                >{{- range .SecurityInputs -}} export {{ .DisplayName |
+                asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{-
+                end }}</code
+              >
+            </div>
+          </li>
           {{- end }}
-          <li class="instruction-item">Restart Gemini CLI to load the new configuration</li>
+          <li class="instruction-item">
+            Restart Gemini CLI to load the new configuration
+          </li>
         </ol>
       </div>
     </template>
@@ -793,33 +1003,66 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
             Add this configuration to your ~/.codex/config.toml:
             <div class="card code-container">
               <button class="copy-button waiting">
-                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy"></use>
                 </svg>
-                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-toml">[mcp_servers.{{ .MCPSlug }}]
-command = "npx"
-args = ["-y", "mcp-remote", "{{ .MCPURL }}"{{- range .SecurityInputs }}, "--header", "{{ .SystemName | asHTTPHeader }}:${{ "{" }}{{ .DisplayName | asPosixName }}{{ "}" }}"{{- end }}]{{- if .SecurityInputs }}
-env = { {{- range $i, $input := .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.DisplayName | asPosixName }}" = "your-{{ $input.DisplayName | asPosixName }}-value"{{- end }} }{{- end }}</code>
+              <code class="code-snippet language-toml"
+                >[mcp_servers.{{ .MCPSlug }}] command = "npx" args = ["-y",
+                "mcp-remote", "{{ .MCPURL }}"{{- range .SecurityInputs }},
+                "--header", "{{ .SystemName | asHTTPHeader }}:${{ "{" }}{{
+                .DisplayName | asPosixName }}{{ "}" }}"{{- end }}]{{- if
+                .SecurityInputs }} env = { {{- range $i, $input :=
+                .SecurityInputs }}{{- if $i }}, {{ end }}"{{ $input.DisplayName
+                | asPosixName }}" = "your-{{ $input.DisplayName | asPosixName
+                }}-value"{{- end }} }{{- end }}</code
+              >
             </div>
           </li>
           {{- if .SecurityInputs }}
-          <li class="instruction-item">(optional) If you'd rather set variables in your shell, you can remove the env key from the config above and set these environment variables in your shell:
+          <li class="instruction-item">
+            (optional) If you'd rather set variables in your shell, you can
+            remove the env key from the config above and set these environment
+            variables in your shell:
             <div class="card code-container">
               <button class="copy-button waiting">
-                <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy"></use>
                 </svg>
-                <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+                <svg
+                  class="icon icon-copy-success"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                >
                   <use href="#icon-copy-check"></use>
                 </svg>
               </button>
-              <code class="code-snippet language-sh">{{- range .SecurityInputs -}}
-export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{- end }}</code>
-            </div></li>
+              <code class="code-snippet language-sh"
+                >{{- range .SecurityInputs -}} export {{ .DisplayName |
+                asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{-
+                end }}</code
+              >
+            </div>
+          </li>
           {{- end }}
           <li class="instruction-item">
             Restart Codex CLI to load the new configuration
@@ -831,63 +1074,122 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
   <body>
     <main class="main">
       <div class="content-container">
-        <div class="header container">
-          <div class="mcp-meta">
-            <div class="logo-container">
-              {{- if .LogoAssetURL }}
-              <img src="{{ .LogoAssetURL }}" alt="{{ .MCPName }} logo" />
-              {{- else }}
-              <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <g clip-path="url(#clip0_2142_1883)">
-                  <path fill-rule="evenodd" clip-rule="evenodd" d="M31.3759 4.68693C30.4096 3.74646 29.1144 3.22023 27.7659 3.22023C26.4175 3.22023 25.1223 3.74646 24.1559 4.68693L4.90394 23.5669C4.58178 23.8801 4.15021 24.0552 3.70094 24.0552C3.25167 24.0552 2.82011 23.8801 2.49794 23.5669C2.34022 23.4135 2.21484 23.2301 2.12923 23.0274C2.04362 22.8247 1.99951 22.607 1.99951 22.3869C1.99951 22.1669 2.04362 21.9491 2.12923 21.7465C2.21484 21.5438 2.34022 21.3603 2.49794 21.2069L21.7499 2.32693C23.3604 0.75972 25.5188 -0.117187 27.7659 -0.117188C30.0131 -0.117187 32.1715 0.75972 33.7819 2.32693C34.7138 3.23314 35.4178 4.34713 35.8363 5.57771C36.2548 6.8083 36.376 8.12051 36.1899 9.40693C37.4934 9.22154 38.8221 9.33791 40.0735 9.74708C41.325 10.1562 42.4657 10.8473 43.4079 11.7669L43.5079 11.8669C44.2966 12.6339 44.9234 13.5512 45.3515 14.5646C45.7795 15.5779 46.0001 16.6669 46.0001 17.7669C46.0001 18.867 45.7795 19.9559 45.3515 20.9693C44.9234 21.9827 44.2966 22.9 43.5079 23.6669L26.0959 40.7409C26.0434 40.792 26.0016 40.8531 25.9731 40.9206C25.9446 40.9881 25.9299 41.0606 25.9299 41.1339C25.9299 41.2072 25.9446 41.2798 25.9731 41.3473C26.0016 41.4148 26.0434 41.4759 26.0959 41.5269L29.6719 45.0349C29.8297 45.1883 29.955 45.3718 30.0407 45.5745C30.1263 45.7771 30.1704 45.9949 30.1704 46.2149C30.1704 46.435 30.1263 46.6527 30.0407 46.8554C29.955 47.0581 29.8297 47.2415 29.6719 47.3949C29.3498 47.7081 28.9182 47.8832 28.4689 47.8832C28.0197 47.8832 27.5881 47.7081 27.2659 47.3949L23.6899 43.8889C23.3216 43.531 23.0288 43.1029 22.8289 42.6299C22.629 42.1568 22.526 41.6485 22.526 41.1349C22.526 40.6214 22.629 40.113 22.8289 39.64C23.0288 39.167 23.3216 38.7388 23.6899 38.3809L41.1019 21.3049C41.5749 20.8446 41.9508 20.2942 42.2075 19.6862C42.4641 19.0782 42.5964 18.4249 42.5964 17.7649C42.5964 17.105 42.4641 16.4517 42.2075 15.8437C41.9508 15.2357 41.5749 14.6853 41.1019 14.2249L41.0019 14.1269C40.0367 13.1874 38.7432 12.6613 37.3962 12.6601C36.0492 12.659 34.7548 13.1831 33.7879 14.1209L19.4439 28.1889L19.4399 28.1929L19.2439 28.3869C18.9217 28.7007 18.4897 28.8762 18.0399 28.8762C17.5902 28.8762 17.1582 28.7007 16.8359 28.3869C16.6782 28.2335 16.5528 28.0501 16.4672 27.8474C16.3816 27.6447 16.3375 27.427 16.3375 27.2069C16.3375 26.9869 16.3816 26.7691 16.4672 26.5665C16.5528 26.3638 16.6782 26.1803 16.8359 26.0269L31.3819 11.7609C31.8536 11.3003 32.2282 10.7499 32.4838 10.1423C32.7395 9.5346 32.8708 8.88191 32.8703 8.22267C32.8697 7.56343 32.7372 6.91096 32.4806 6.30372C32.2239 5.69649 31.8483 5.14676 31.3759 4.68693Z" fill="black"/>
-                  <path fill-rule="evenodd" clip-rule="evenodd" d="M28.9699 9.40593C29.1277 9.25254 29.253 9.06908 29.3386 8.8664C29.4243 8.66373 29.4684 8.44594 29.4684 8.22593C29.4684 8.00591 29.4243 7.78813 29.3386 7.58545C29.253 7.38278 29.1277 7.19932 28.9699 7.04593C28.6477 6.73219 28.2157 6.55664 27.7659 6.55664C27.3162 6.55664 26.8842 6.73219 26.5619 7.04593L12.3239 21.0099C11.5353 21.7769 10.9084 22.6942 10.4804 23.7076C10.0523 24.7209 9.83179 25.8098 9.83179 26.9099C9.83179 28.01 10.0523 29.0989 10.4804 30.1123C10.9084 31.1257 11.5353 32.043 12.3239 32.8099C13.9346 34.3767 16.093 35.2533 18.3399 35.2533C20.5869 35.2533 22.7453 34.3767 24.3559 32.8099L38.5959 18.8459C38.7537 18.6925 38.879 18.5091 38.9646 18.3064C39.0503 18.1037 39.0944 17.8859 39.0944 17.6659C39.0944 17.4459 39.0503 17.2281 38.9646 17.0255C38.879 16.8228 38.7537 16.6393 38.5959 16.4859C38.2737 16.1722 37.8417 15.9966 37.3919 15.9966C36.9422 15.9966 36.5102 16.1722 36.1879 16.4859L21.9499 30.4499C20.9836 31.3904 19.6884 31.9166 18.3399 31.9166C16.9915 31.9166 15.6963 31.3904 14.7299 30.4499C14.257 29.9896 13.8811 29.4392 13.6244 28.8312C13.3678 28.2232 13.2355 27.5699 13.2355 26.9099C13.2355 26.25 13.3678 25.5967 13.6244 24.9887C13.8811 24.3807 14.257 23.8302 14.7299 23.3699L28.9699 9.40593Z" fill="black"/>
-                </g>
-                <defs>
-                  <clipPath id="clip0_2142_1883">
-                    <rect width="48" height="48" fill="white"/>
-                  </clipPath>
-                </defs>
-              </svg>
-              {{- end }}
-            </div>
-            <div class="header-content">
-              <div class="mcp-name">{{ .MCPName }}</div>
-              <div class="mcp-description">{{ .MCPDescription }}</div>
-            </div>
-          </div>
-          <div class="header-actions">
-            {{- if .DocsURL }}
-            <a class="external-docs header-action" href="{{ .DocsURL }}" target="_blank" rel="noopener noreferrer">
-              View Docs
-            </a>
-            {{- end }}
-            <div class="popover">
-              <button class="action-button header-action" id="action-button">
-                Add to Client
-                <svg class="chevron-down" width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M4.00049 6L8.00049 10L12.0005 6" stroke="currentColor" stroke-width="1.3334" stroke-linecap="round" stroke-linejoin="round"/>
+        <section class="header">
+          <div class="header container">
+            <div class="mcp-meta">
+              <div class="logo-container">
+                {{- if .LogoAssetURL }}
+                <img src="{{ .LogoAssetURL }}" alt="{{ .MCPName }} logo" />
+                {{- else }}
+                <svg
+                  width="48"
+                  height="48"
+                  viewBox="0 0 48 48"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <g clip-path="url(#clip0_2142_1883)">
+                    <path
+                      fill-rule="evenodd"
+                      clip-rule="evenodd"
+                      d="M31.3759 4.68693C30.4096 3.74646 29.1144 3.22023 27.7659 3.22023C26.4175 3.22023 25.1223 3.74646 24.1559 4.68693L4.90394 23.5669C4.58178 23.8801 4.15021 24.0552 3.70094 24.0552C3.25167 24.0552 2.82011 23.8801 2.49794 23.5669C2.34022 23.4135 2.21484 23.2301 2.12923 23.0274C2.04362 22.8247 1.99951 22.607 1.99951 22.3869C1.99951 22.1669 2.04362 21.9491 2.12923 21.7465C2.21484 21.5438 2.34022 21.3603 2.49794 21.2069L21.7499 2.32693C23.3604 0.75972 25.5188 -0.117187 27.7659 -0.117188C30.0131 -0.117187 32.1715 0.75972 33.7819 2.32693C34.7138 3.23314 35.4178 4.34713 35.8363 5.57771C36.2548 6.8083 36.376 8.12051 36.1899 9.40693C37.4934 9.22154 38.8221 9.33791 40.0735 9.74708C41.325 10.1562 42.4657 10.8473 43.4079 11.7669L43.5079 11.8669C44.2966 12.6339 44.9234 13.5512 45.3515 14.5646C45.7795 15.5779 46.0001 16.6669 46.0001 17.7669C46.0001 18.867 45.7795 19.9559 45.3515 20.9693C44.9234 21.9827 44.2966 22.9 43.5079 23.6669L26.0959 40.7409C26.0434 40.792 26.0016 40.8531 25.9731 40.9206C25.9446 40.9881 25.9299 41.0606 25.9299 41.1339C25.9299 41.2072 25.9446 41.2798 25.9731 41.3473C26.0016 41.4148 26.0434 41.4759 26.0959 41.5269L29.6719 45.0349C29.8297 45.1883 29.955 45.3718 30.0407 45.5745C30.1263 45.7771 30.1704 45.9949 30.1704 46.2149C30.1704 46.435 30.1263 46.6527 30.0407 46.8554C29.955 47.0581 29.8297 47.2415 29.6719 47.3949C29.3498 47.7081 28.9182 47.8832 28.4689 47.8832C28.0197 47.8832 27.5881 47.7081 27.2659 47.3949L23.6899 43.8889C23.3216 43.531 23.0288 43.1029 22.8289 42.6299C22.629 42.1568 22.526 41.6485 22.526 41.1349C22.526 40.6214 22.629 40.113 22.8289 39.64C23.0288 39.167 23.3216 38.7388 23.6899 38.3809L41.1019 21.3049C41.5749 20.8446 41.9508 20.2942 42.2075 19.6862C42.4641 19.0782 42.5964 18.4249 42.5964 17.7649C42.5964 17.105 42.4641 16.4517 42.2075 15.8437C41.9508 15.2357 41.5749 14.6853 41.1019 14.2249L41.0019 14.1269C40.0367 13.1874 38.7432 12.6613 37.3962 12.6601C36.0492 12.659 34.7548 13.1831 33.7879 14.1209L19.4439 28.1889L19.4399 28.1929L19.2439 28.3869C18.9217 28.7007 18.4897 28.8762 18.0399 28.8762C17.5902 28.8762 17.1582 28.7007 16.8359 28.3869C16.6782 28.2335 16.5528 28.0501 16.4672 27.8474C16.3816 27.6447 16.3375 27.427 16.3375 27.2069C16.3375 26.9869 16.3816 26.7691 16.4672 26.5665C16.5528 26.3638 16.6782 26.1803 16.8359 26.0269L31.3819 11.7609C31.8536 11.3003 32.2282 10.7499 32.4838 10.1423C32.7395 9.5346 32.8708 8.88191 32.8703 8.22267C32.8697 7.56343 32.7372 6.91096 32.4806 6.30372C32.2239 5.69649 31.8483 5.14676 31.3759 4.68693Z"
+                      fill="black"
+                    />
+                    <path
+                      fill-rule="evenodd"
+                      clip-rule="evenodd"
+                      d="M28.9699 9.40593C29.1277 9.25254 29.253 9.06908 29.3386 8.8664C29.4243 8.66373 29.4684 8.44594 29.4684 8.22593C29.4684 8.00591 29.4243 7.78813 29.3386 7.58545C29.253 7.38278 29.1277 7.19932 28.9699 7.04593C28.6477 6.73219 28.2157 6.55664 27.7659 6.55664C27.3162 6.55664 26.8842 6.73219 26.5619 7.04593L12.3239 21.0099C11.5353 21.7769 10.9084 22.6942 10.4804 23.7076C10.0523 24.7209 9.83179 25.8098 9.83179 26.9099C9.83179 28.01 10.0523 29.0989 10.4804 30.1123C10.9084 31.1257 11.5353 32.043 12.3239 32.8099C13.9346 34.3767 16.093 35.2533 18.3399 35.2533C20.5869 35.2533 22.7453 34.3767 24.3559 32.8099L38.5959 18.8459C38.7537 18.6925 38.879 18.5091 38.9646 18.3064C39.0503 18.1037 39.0944 17.8859 39.0944 17.6659C39.0944 17.4459 39.0503 17.2281 38.9646 17.0255C38.879 16.8228 38.7537 16.6393 38.5959 16.4859C38.2737 16.1722 37.8417 15.9966 37.3919 15.9966C36.9422 15.9966 36.5102 16.1722 36.1879 16.4859L21.9499 30.4499C20.9836 31.3904 19.6884 31.9166 18.3399 31.9166C16.9915 31.9166 15.6963 31.3904 14.7299 30.4499C14.257 29.9896 13.8811 29.4392 13.6244 28.8312C13.3678 28.2232 13.2355 27.5699 13.2355 26.9099C13.2355 26.25 13.3678 25.5967 13.6244 24.9887C13.8811 24.3807 14.257 23.8302 14.7299 23.3699L28.9699 9.40593Z"
+                      fill="black"
+                    />
+                  </g>
+                  <defs>
+                    <clipPath id="clip0_2142_1883">
+                      <rect width="48" height="48" fill="white" />
+                    </clipPath>
+                  </defs>
                 </svg>
-              </button>
-              <div class="popover-menu hidden">
-                <a class="popover-button install-link" href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}" data-install-target="cursor">
-                  Cursor
-                </a>
-                <button class="popover-button" data-install-method="modal" data-install-target="claude-code">
-                  Claude Code
+                {{- end }}
+              </div>
+              <div class="header-content">
+                <div class="mcp-name">{{ .MCPName }}</div>
+                <div class="mcp-description">{{ .MCPDescription }}</div>
+              </div>
+            </div>
+            <div class="header-actions">
+              {{- if .DocsURL }}
+              <a
+                class="external-docs header-action"
+                href="{{ .DocsURL }}"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                View Docs
+              </a>
+              {{- end }}
+              <div class="popover">
+                <button class="action-button header-action" id="action-button">
+                  Add to Client
+                  <svg
+                    class="chevron-down"
+                    width="16"
+                    height="16"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M4.00049 6L8.00049 10L12.0005 6"
+                      stroke="currentColor"
+                      stroke-width="1.3334"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
                 </button>
-                <button class="popover-button" data-install-method="dxt-download" data-install-target="claude-desktop">
-                  Claude Desktop
-                </button>
-                <button class="popover-button" data-install-method="modal" data-install-target="gemini-cli">
-                  Gemini CLI
-                </button>
-                <button class="popover-button" data-install-method="modal" data-install-target="codex-cli">
-                  Codex CLI
-                </button>
+                <div class="popover-menu hidden">
+                  <a
+                    class="popover-button install-link"
+                    href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}"
+                    data-install-target="cursor"
+                  >
+                    Cursor
+                  </a>
+                  <button
+                    class="popover-button"
+                    data-install-method="modal"
+                    data-install-target="claude-code"
+                  >
+                    Claude Code
+                  </button>
+                  <button
+                    class="popover-button"
+                    data-install-method="dxt-download"
+                    data-install-target="claude-desktop"
+                  >
+                    Claude Desktop
+                  </button>
+                  <button
+                    class="popover-button"
+                    data-install-method="modal"
+                    data-install-target="gemini-cli"
+                  >
+                    Gemini CLI
+                  </button>
+                  <button
+                    class="popover-button"
+                    data-install-method="modal"
+                    data-install-target="codex-cli"
+                  >
+                    Codex CLI
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+          {{- if not .IsPublic }}
+          <div class="badge private-badge">private</div>
+          {{- end }}
+        </section>
         <section class="install container">
           <header>
             <h1 class="section-title">Install</h1>
@@ -896,69 +1198,158 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
             </div>
           </header>
           <div class="install-targets">
-            <a tabindex="0" class="card install-target install-link" href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}">
-              <div
-                class="target"
-              >
-                <img src="https://cursor.com/assets/images/logo.svg">
+            <a
+              tabindex="0"
+              class="card install-target install-link"
+              href="cursor://anysphere.cursor-deeplink/mcp/install?name={{ .MCPName }}&config={{ .MCPConfigURIEncoded }}"
+            >
+              <div class="target">
+                <img src="https://cursor.com/assets/images/logo.svg" />
                 Cursor
               </div>
             </a>
-            <div tabindex="0" class="card install-target" data-install-method="modal" data-install-target="claude-code">
+            <div
+              tabindex="0"
+              class="card install-target"
+              data-install-method="modal"
+              data-install-target="claude-code"
+            >
               <div class="target">
-                <svg width="250" height="251" viewBox="0 0 250 251" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M49.0541 166.749L98.2432 139.166L99.0541 136.75L98.2432 135.405H95.8108L87.5676 134.903L59.4595 134.151L35.1351 133.148L11.4865 131.894L5.54054 130.64L0 123.243L0.540541 119.607L5.54054 116.222L12.7027 116.849L28.5135 117.977L52.2973 119.607L69.4595 120.61L95 123.243H99.0541L99.5946 121.613L98.2432 120.61L97.1622 119.607L72.5676 102.932L45.9459 85.3796L32.027 75.2242L24.5946 70.0837L20.8108 65.3195L19.1892 54.7879L25.9459 47.2653L35.1351 47.8922L37.4324 48.5191L46.7568 55.6655L66.6216 71.0868L92.5676 90.1439L96.3514 93.2783L97.875 92.25L98.1081 91.5231L96.3514 88.6394L82.2973 63.1881L67.2973 37.2352L60.5405 26.4529L58.7838 20.0587C58.1033 17.3753 57.7027 15.1553 57.7027 12.4107L65.4054 1.87914L69.7297 0.5L80.1351 1.87914L84.4595 5.64042L90.9459 20.4348L101.351 43.6294L117.568 75.2242L122.297 84.6274L124.865 93.2783L125.811 95.9112H127.432V94.4067L128.784 76.6033L131.216 54.7879L133.649 26.7036L134.459 18.8049L138.378 9.27633L146.216 4.13591L152.297 7.01956L157.297 14.166L156.622 18.8049L153.649 38.1128L147.838 68.3285L144.054 88.6394H146.216L148.784 86.0065L159.054 72.4659L176.216 50.9012L183.784 42.3756L192.703 32.9724L198.378 28.4589H209.189L217.027 40.2442L213.514 52.4057L202.432 66.4478L193.243 78.3586L180.068 96.011L171.892 110.204L172.625 111.375L174.595 111.207L204.324 104.813L220.405 101.929L239.595 98.6695L248.243 102.682L249.189 106.819L245.811 115.219L225.27 120.234L201.216 125.124L165.397 133.556L165 133.875L165.468 134.569L181.622 136.032L188.514 136.408H205.405L236.892 138.79L245.135 144.181L250 150.826L249.189 155.966L236.486 162.361L219.459 158.349L179.595 148.82L165.946 145.435H164.054V146.563L175.405 157.722L196.351 176.528L222.432 200.851L223.784 206.869L220.405 211.633L216.892 211.132L193.919 193.83L185 186.057L165 169.131H163.649V170.886L168.243 177.656L192.703 214.392L193.919 225.676L192.162 229.311L185.811 231.568L178.919 230.314L164.459 210.129L149.73 187.561L137.838 167.25L136.402 168.157L129.324 243.73L126.081 247.616L118.514 250.5L112.162 245.736L108.784 237.962L112.162 222.541L116.216 202.481L119.459 186.558L122.432 166.749L124.248 160.131L124.088 159.688L122.637 159.932L107.703 180.415L85 211.132L67.027 230.314L62.7027 232.07L55.2703 228.183L55.9459 221.287L60.1351 215.144L85 183.549L100 163.865L109.668 152.566L109.573 150.932L109.04 150.886L42.973 193.955L31.2162 195.46L26.0811 190.696L26.7568 182.922L29.1892 180.415L49.0541 166.749Z" fill="#D97757"/>
+                <svg
+                  width="250"
+                  height="251"
+                  viewBox="0 0 250 251"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M49.0541 166.749L98.2432 139.166L99.0541 136.75L98.2432 135.405H95.8108L87.5676 134.903L59.4595 134.151L35.1351 133.148L11.4865 131.894L5.54054 130.64L0 123.243L0.540541 119.607L5.54054 116.222L12.7027 116.849L28.5135 117.977L52.2973 119.607L69.4595 120.61L95 123.243H99.0541L99.5946 121.613L98.2432 120.61L97.1622 119.607L72.5676 102.932L45.9459 85.3796L32.027 75.2242L24.5946 70.0837L20.8108 65.3195L19.1892 54.7879L25.9459 47.2653L35.1351 47.8922L37.4324 48.5191L46.7568 55.6655L66.6216 71.0868L92.5676 90.1439L96.3514 93.2783L97.875 92.25L98.1081 91.5231L96.3514 88.6394L82.2973 63.1881L67.2973 37.2352L60.5405 26.4529L58.7838 20.0587C58.1033 17.3753 57.7027 15.1553 57.7027 12.4107L65.4054 1.87914L69.7297 0.5L80.1351 1.87914L84.4595 5.64042L90.9459 20.4348L101.351 43.6294L117.568 75.2242L122.297 84.6274L124.865 93.2783L125.811 95.9112H127.432V94.4067L128.784 76.6033L131.216 54.7879L133.649 26.7036L134.459 18.8049L138.378 9.27633L146.216 4.13591L152.297 7.01956L157.297 14.166L156.622 18.8049L153.649 38.1128L147.838 68.3285L144.054 88.6394H146.216L148.784 86.0065L159.054 72.4659L176.216 50.9012L183.784 42.3756L192.703 32.9724L198.378 28.4589H209.189L217.027 40.2442L213.514 52.4057L202.432 66.4478L193.243 78.3586L180.068 96.011L171.892 110.204L172.625 111.375L174.595 111.207L204.324 104.813L220.405 101.929L239.595 98.6695L248.243 102.682L249.189 106.819L245.811 115.219L225.27 120.234L201.216 125.124L165.397 133.556L165 133.875L165.468 134.569L181.622 136.032L188.514 136.408H205.405L236.892 138.79L245.135 144.181L250 150.826L249.189 155.966L236.486 162.361L219.459 158.349L179.595 148.82L165.946 145.435H164.054V146.563L175.405 157.722L196.351 176.528L222.432 200.851L223.784 206.869L220.405 211.633L216.892 211.132L193.919 193.83L185 186.057L165 169.131H163.649V170.886L168.243 177.656L192.703 214.392L193.919 225.676L192.162 229.311L185.811 231.568L178.919 230.314L164.459 210.129L149.73 187.561L137.838 167.25L136.402 168.157L129.324 243.73L126.081 247.616L118.514 250.5L112.162 245.736L108.784 237.962L112.162 222.541L116.216 202.481L119.459 186.558L122.432 166.749L124.248 160.131L124.088 159.688L122.637 159.932L107.703 180.415L85 211.132L67.027 230.314L62.7027 232.07L55.2703 228.183L55.9459 221.287L60.1351 215.144L85 183.549L100 163.865L109.668 152.566L109.573 150.932L109.04 150.886L42.973 193.955L31.2162 195.46L26.0811 190.696L26.7568 182.922L29.1892 180.415L49.0541 166.749Z"
+                    fill="#D97757"
+                  />
                 </svg>
                 <span>Claude Code</span>
               </div>
             </div>
-            <div tabindex="0" class="card install-target" data-install-method="dxt-download" data-install-target="claude-desktop">
+            <div
+              tabindex="0"
+              class="card install-target"
+              data-install-method="dxt-download"
+              data-install-target="claude-desktop"
+            >
               <div class="target">
-                <svg width="250" height="251" viewBox="0 0 250 251" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M49.0541 166.749L98.2432 139.166L99.0541 136.75L98.2432 135.405H95.8108L87.5676 134.903L59.4595 134.151L35.1351 133.148L11.4865 131.894L5.54054 130.64L0 123.243L0.540541 119.607L5.54054 116.222L12.7027 116.849L28.5135 117.977L52.2973 119.607L69.4595 120.61L95 123.243H99.0541L99.5946 121.613L98.2432 120.61L97.1622 119.607L72.5676 102.932L45.9459 85.3796L32.027 75.2242L24.5946 70.0837L20.8108 65.3195L19.1892 54.7879L25.9459 47.2653L35.1351 47.8922L37.4324 48.5191L46.7568 55.6655L66.6216 71.0868L92.5676 90.1439L96.3514 93.2783L97.875 92.25L98.1081 91.5231L96.3514 88.6394L82.2973 63.1881L67.2973 37.2352L60.5405 26.4529L58.7838 20.0587C58.1033 17.3753 57.7027 15.1553 57.7027 12.4107L65.4054 1.87914L69.7297 0.5L80.1351 1.87914L84.4595 5.64042L90.9459 20.4348L101.351 43.6294L117.568 75.2242L122.297 84.6274L124.865 93.2783L125.811 95.9112H127.432V94.4067L128.784 76.6033L131.216 54.7879L133.649 26.7036L134.459 18.8049L138.378 9.27633L146.216 4.13591L152.297 7.01956L157.297 14.166L156.622 18.8049L153.649 38.1128L147.838 68.3285L144.054 88.6394H146.216L148.784 86.0065L159.054 72.4659L176.216 50.9012L183.784 42.3756L192.703 32.9724L198.378 28.4589H209.189L217.027 40.2442L213.514 52.4057L202.432 66.4478L193.243 78.3586L180.068 96.011L171.892 110.204L172.625 111.375L174.595 111.207L204.324 104.813L220.405 101.929L239.595 98.6695L248.243 102.682L249.189 106.819L245.811 115.219L225.27 120.234L201.216 125.124L165.397 133.556L165 133.875L165.468 134.569L181.622 136.032L188.514 136.408H205.405L236.892 138.79L245.135 144.181L250 150.826L249.189 155.966L236.486 162.361L219.459 158.349L179.595 148.82L165.946 145.435H164.054V146.563L175.405 157.722L196.351 176.528L222.432 200.851L223.784 206.869L220.405 211.633L216.892 211.132L193.919 193.83L185 186.057L165 169.131H163.649V170.886L168.243 177.656L192.703 214.392L193.919 225.676L192.162 229.311L185.811 231.568L178.919 230.314L164.459 210.129L149.73 187.561L137.838 167.25L136.402 168.157L129.324 243.73L126.081 247.616L118.514 250.5L112.162 245.736L108.784 237.962L112.162 222.541L116.216 202.481L119.459 186.558L122.432 166.749L124.248 160.131L124.088 159.688L122.637 159.932L107.703 180.415L85 211.132L67.027 230.314L62.7027 232.07L55.2703 228.183L55.9459 221.287L60.1351 215.144L85 183.549L100 163.865L109.668 152.566L109.573 150.932L109.04 150.886L42.973 193.955L31.2162 195.46L26.0811 190.696L26.7568 182.922L29.1892 180.415L49.0541 166.749Z" fill="#D97757"/>
+                <svg
+                  width="250"
+                  height="251"
+                  viewBox="0 0 250 251"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M49.0541 166.749L98.2432 139.166L99.0541 136.75L98.2432 135.405H95.8108L87.5676 134.903L59.4595 134.151L35.1351 133.148L11.4865 131.894L5.54054 130.64L0 123.243L0.540541 119.607L5.54054 116.222L12.7027 116.849L28.5135 117.977L52.2973 119.607L69.4595 120.61L95 123.243H99.0541L99.5946 121.613L98.2432 120.61L97.1622 119.607L72.5676 102.932L45.9459 85.3796L32.027 75.2242L24.5946 70.0837L20.8108 65.3195L19.1892 54.7879L25.9459 47.2653L35.1351 47.8922L37.4324 48.5191L46.7568 55.6655L66.6216 71.0868L92.5676 90.1439L96.3514 93.2783L97.875 92.25L98.1081 91.5231L96.3514 88.6394L82.2973 63.1881L67.2973 37.2352L60.5405 26.4529L58.7838 20.0587C58.1033 17.3753 57.7027 15.1553 57.7027 12.4107L65.4054 1.87914L69.7297 0.5L80.1351 1.87914L84.4595 5.64042L90.9459 20.4348L101.351 43.6294L117.568 75.2242L122.297 84.6274L124.865 93.2783L125.811 95.9112H127.432V94.4067L128.784 76.6033L131.216 54.7879L133.649 26.7036L134.459 18.8049L138.378 9.27633L146.216 4.13591L152.297 7.01956L157.297 14.166L156.622 18.8049L153.649 38.1128L147.838 68.3285L144.054 88.6394H146.216L148.784 86.0065L159.054 72.4659L176.216 50.9012L183.784 42.3756L192.703 32.9724L198.378 28.4589H209.189L217.027 40.2442L213.514 52.4057L202.432 66.4478L193.243 78.3586L180.068 96.011L171.892 110.204L172.625 111.375L174.595 111.207L204.324 104.813L220.405 101.929L239.595 98.6695L248.243 102.682L249.189 106.819L245.811 115.219L225.27 120.234L201.216 125.124L165.397 133.556L165 133.875L165.468 134.569L181.622 136.032L188.514 136.408H205.405L236.892 138.79L245.135 144.181L250 150.826L249.189 155.966L236.486 162.361L219.459 158.349L179.595 148.82L165.946 145.435H164.054V146.563L175.405 157.722L196.351 176.528L222.432 200.851L223.784 206.869L220.405 211.633L216.892 211.132L193.919 193.83L185 186.057L165 169.131H163.649V170.886L168.243 177.656L192.703 214.392L193.919 225.676L192.162 229.311L185.811 231.568L178.919 230.314L164.459 210.129L149.73 187.561L137.838 167.25L136.402 168.157L129.324 243.73L126.081 247.616L118.514 250.5L112.162 245.736L108.784 237.962L112.162 222.541L116.216 202.481L119.459 186.558L122.432 166.749L124.248 160.131L124.088 159.688L122.637 159.932L107.703 180.415L85 211.132L67.027 230.314L62.7027 232.07L55.2703 228.183L55.9459 221.287L60.1351 215.144L85 183.549L100 163.865L109.668 152.566L109.573 150.932L109.04 150.886L42.973 193.955L31.2162 195.46L26.0811 190.696L26.7568 182.922L29.1892 180.415L49.0541 166.749Z"
+                    fill="#D97757"
+                  />
                 </svg>
                 <span>Claude Desktop</span>
               </div>
             </div>
-            <div tabindex="0" class="card install-target" data-install-method="modal" data-install-target="windsurf">
+            <div
+              tabindex="0"
+              class="card install-target"
+              data-install-method="modal"
+              data-install-target="windsurf"
+            >
               <div class="target">
-                <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M897.246 286.869H889.819C850.735 286.808 819.017 318.46 819.017 357.539V515.589C819.017 547.15 792.93 572.716 761.882 572.716C743.436 572.716 725.02 563.433 714.093 547.85L552.673 317.304C539.28 298.16 517.486 286.747 493.895 286.747C457.094 286.747 423.976 318.034 423.976 356.657V515.619C423.976 547.181 398.103 572.746 366.842 572.746C348.335 572.746 329.949 563.463 319.021 547.881L138.395 289.882C134.316 284.038 125.154 286.93 125.154 294.052V431.892C125.154 438.862 127.285 445.619 131.272 451.34L309.037 705.2C319.539 720.204 335.033 731.344 352.9 735.392C397.616 745.557 438.77 711.135 438.77 667.278V508.406C438.77 476.845 464.339 451.279 495.904 451.279H495.995C515.02 451.279 532.857 460.562 543.785 476.145L705.235 706.661C718.659 725.835 739.327 737.218 763.983 737.218C801.606 737.218 833.841 705.9 833.841 667.308V508.376C833.841 476.815 859.41 451.249 890.975 451.249H897.276C901.233 451.249 904.43 448.053 904.43 444.097V294.021C904.43 290.065 901.233 286.869 897.276 286.869H897.246Z" fill="#0B100F"/>
+                <svg
+                  width="1024"
+                  height="1024"
+                  viewBox="0 0 1024 1024"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M897.246 286.869H889.819C850.735 286.808 819.017 318.46 819.017 357.539V515.589C819.017 547.15 792.93 572.716 761.882 572.716C743.436 572.716 725.02 563.433 714.093 547.85L552.673 317.304C539.28 298.16 517.486 286.747 493.895 286.747C457.094 286.747 423.976 318.034 423.976 356.657V515.619C423.976 547.181 398.103 572.746 366.842 572.746C348.335 572.746 329.949 563.463 319.021 547.881L138.395 289.882C134.316 284.038 125.154 286.93 125.154 294.052V431.892C125.154 438.862 127.285 445.619 131.272 451.34L309.037 705.2C319.539 720.204 335.033 731.344 352.9 735.392C397.616 745.557 438.77 711.135 438.77 667.278V508.406C438.77 476.845 464.339 451.279 495.904 451.279H495.995C515.02 451.279 532.857 460.562 543.785 476.145L705.235 706.661C718.659 725.835 739.327 737.218 763.983 737.218C801.606 737.218 833.841 705.9 833.841 667.308V508.376C833.841 476.815 859.41 451.249 890.975 451.249H897.276C901.233 451.249 904.43 448.053 904.43 444.097V294.021C904.43 290.065 901.233 286.869 897.276 286.869H897.246Z"
+                    fill="#0B100F"
+                  />
                 </svg>
                 <span>Windsurf</span>
               </div>
             </div>
-            <div tabindex="0" class="card install-target" data-install-method="modal" data-install-target="gemini-cli">
+            <div
+              tabindex="0"
+              class="card install-target"
+              data-install-method="modal"
+              data-install-target="gemini-cli"
+            >
               <div class="target">
-                <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M16 2L19.5 12.5L30 16L19.5 19.5L16 30L12.5 19.5L2 16L12.5 12.5L16 2Z" fill="url(#gemini-gradient)"/>
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 32 32"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M16 2L19.5 12.5L30 16L19.5 19.5L16 30L12.5 19.5L2 16L12.5 12.5L16 2Z"
+                    fill="url(#gemini-gradient)"
+                  />
                   <defs>
-                    <linearGradient id="gemini-gradient" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-                      <stop offset="0%" stop-color="#4285F4"/>
-                      <stop offset="25%" stop-color="#34A853"/>
-                      <stop offset="50%" stop-color="#FBBC04"/>
-                      <stop offset="75%" stop-color="#EA4335"/>
-                      <stop offset="100%" stop-color="#4285F4"/>
+                    <linearGradient
+                      id="gemini-gradient"
+                      x1="2"
+                      y1="2"
+                      x2="30"
+                      y2="30"
+                      gradientUnits="userSpaceOnUse"
+                    >
+                      <stop offset="0%" stop-color="#4285F4" />
+                      <stop offset="25%" stop-color="#34A853" />
+                      <stop offset="50%" stop-color="#FBBC04" />
+                      <stop offset="75%" stop-color="#EA4335" />
+                      <stop offset="100%" stop-color="#4285F4" />
                     </linearGradient>
                   </defs>
                 </svg>
                 <span>Gemini CLI</span>
               </div>
             </div>
-            <div tabindex="0" class="card install-target" data-install-method="modal" data-install-target="codex-cli">
+            <div
+              tabindex="0"
+              class="card install-target"
+              data-install-method="modal"
+              data-install-target="codex-cli"
+            >
               <div class="target">
-                <svg width="721" height="721" viewBox="0 0 721 721" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <svg
+                  width="721"
+                  height="721"
+                  viewBox="0 0 721 721"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
                   <g clip-path="url(#clip0_1637_2934)">
                     <g clip-path="url(#clip1_1637_2934)">
-                      <path d="M304.246 294.611V249.028C304.246 245.189 305.687 242.309 309.044 240.392L400.692 187.612C413.167 180.415 428.042 177.058 443.394 177.058C500.971 177.058 537.44 221.682 537.44 269.182C537.44 272.54 537.44 276.379 536.959 280.218L441.954 224.558C436.197 221.201 430.437 221.201 424.68 224.558L304.246 294.611ZM518.245 472.145V363.224C518.245 356.505 515.364 351.707 509.608 348.349L389.174 278.296L428.519 255.743C431.877 253.826 434.757 253.826 438.115 255.743L529.762 308.523C556.154 323.879 573.905 356.505 573.905 388.171C573.905 424.636 552.315 458.225 518.245 472.141V472.145ZM275.937 376.182L236.592 353.152C233.235 351.235 231.794 348.354 231.794 344.515V238.956C231.794 187.617 271.139 148.749 324.4 148.749C344.555 148.749 363.264 155.468 379.102 167.463L284.578 222.164C278.822 225.521 275.942 230.319 275.942 237.039V376.186L275.937 376.182ZM360.626 425.122L304.246 393.455V326.283L360.626 294.616L417.002 326.283V393.455L360.626 425.122ZM396.852 570.989C376.698 570.989 357.989 564.27 342.151 552.276L436.674 497.574C442.431 494.217 445.311 489.419 445.311 482.699V343.552L485.138 366.582C488.495 368.499 489.936 371.379 489.936 375.219V480.778C489.936 532.117 450.109 570.985 396.852 570.985V570.989ZM283.134 463.99L191.486 411.211C165.094 395.854 147.343 363.229 147.343 331.562C147.343 294.616 169.415 261.509 203.48 247.593V356.991C203.48 363.71 206.361 368.508 212.117 371.866L332.074 441.437L292.729 463.99C289.372 465.907 286.491 465.907 283.134 463.99ZM277.859 542.68C223.639 542.68 183.813 501.895 183.813 451.514C183.813 447.675 184.294 443.836 184.771 439.997L279.295 494.698C285.051 498.056 290.812 498.056 296.568 494.698L417.002 425.127V470.71C417.002 474.549 415.562 477.429 412.204 479.346L320.557 532.126C308.081 539.323 293.206 542.68 277.854 542.68H277.859ZM396.852 599.776C454.911 599.776 503.37 558.513 514.41 503.812C568.149 489.896 602.696 439.515 602.696 388.176C602.696 354.587 588.303 321.962 562.392 298.45C564.791 288.373 566.231 278.296 566.231 268.224C566.231 199.611 510.571 148.267 446.274 148.267C433.322 148.267 420.846 150.184 408.37 154.505C386.775 133.392 357.026 119.958 324.4 119.958C266.342 119.958 217.883 161.22 206.843 215.921C153.104 229.837 118.557 280.218 118.557 331.557C118.557 365.146 132.95 397.771 158.861 421.283C156.462 431.36 155.022 441.437 155.022 451.51C155.022 520.123 210.682 571.466 274.978 571.466C287.931 571.466 300.407 569.549 312.883 565.228C334.473 586.341 364.222 599.776 396.852 599.776Z" fill="black"/>
+                      <path
+                        d="M304.246 294.611V249.028C304.246 245.189 305.687 242.309 309.044 240.392L400.692 187.612C413.167 180.415 428.042 177.058 443.394 177.058C500.971 177.058 537.44 221.682 537.44 269.182C537.44 272.54 537.44 276.379 536.959 280.218L441.954 224.558C436.197 221.201 430.437 221.201 424.68 224.558L304.246 294.611ZM518.245 472.145V363.224C518.245 356.505 515.364 351.707 509.608 348.349L389.174 278.296L428.519 255.743C431.877 253.826 434.757 253.826 438.115 255.743L529.762 308.523C556.154 323.879 573.905 356.505 573.905 388.171C573.905 424.636 552.315 458.225 518.245 472.141V472.145ZM275.937 376.182L236.592 353.152C233.235 351.235 231.794 348.354 231.794 344.515V238.956C231.794 187.617 271.139 148.749 324.4 148.749C344.555 148.749 363.264 155.468 379.102 167.463L284.578 222.164C278.822 225.521 275.942 230.319 275.942 237.039V376.186L275.937 376.182ZM360.626 425.122L304.246 393.455V326.283L360.626 294.616L417.002 326.283V393.455L360.626 425.122ZM396.852 570.989C376.698 570.989 357.989 564.27 342.151 552.276L436.674 497.574C442.431 494.217 445.311 489.419 445.311 482.699V343.552L485.138 366.582C488.495 368.499 489.936 371.379 489.936 375.219V480.778C489.936 532.117 450.109 570.985 396.852 570.985V570.989ZM283.134 463.99L191.486 411.211C165.094 395.854 147.343 363.229 147.343 331.562C147.343 294.616 169.415 261.509 203.48 247.593V356.991C203.48 363.71 206.361 368.508 212.117 371.866L332.074 441.437L292.729 463.99C289.372 465.907 286.491 465.907 283.134 463.99ZM277.859 542.68C223.639 542.68 183.813 501.895 183.813 451.514C183.813 447.675 184.294 443.836 184.771 439.997L279.295 494.698C285.051 498.056 290.812 498.056 296.568 494.698L417.002 425.127V470.71C417.002 474.549 415.562 477.429 412.204 479.346L320.557 532.126C308.081 539.323 293.206 542.68 277.854 542.68H277.859ZM396.852 599.776C454.911 599.776 503.37 558.513 514.41 503.812C568.149 489.896 602.696 439.515 602.696 388.176C602.696 354.587 588.303 321.962 562.392 298.45C564.791 288.373 566.231 278.296 566.231 268.224C566.231 199.611 510.571 148.267 446.274 148.267C433.322 148.267 420.846 150.184 408.37 154.505C386.775 133.392 357.026 119.958 324.4 119.958C266.342 119.958 217.883 161.22 206.843 215.921C153.104 229.837 118.557 280.218 118.557 331.557C118.557 365.146 132.95 397.771 158.861 421.283C156.462 431.36 155.022 441.437 155.022 451.51C155.022 520.123 210.682 571.466 274.978 571.466C287.931 571.466 300.407 569.549 312.883 565.228C334.473 586.341 364.222 599.776 396.852 599.776Z"
+                        fill="black"
+                      />
                     </g>
                   </g>
                   <defs>
                     <clipPath id="clip0_1637_2934">
-                      <rect width="720" height="720" fill="white" transform="translate(0.606934 0.0999756)"/>
+                      <rect
+                        width="720"
+                        height="720"
+                        fill="white"
+                        transform="translate(0.606934 0.0999756)"
+                      />
                     </clipPath>
                     <clipPath id="clip1_1637_2934">
-                      <rect width="484.139" height="479.818" fill="white" transform="translate(118.557 119.958)"/>
+                      <rect
+                        width="484.139"
+                        height="479.818"
+                        fill="white"
+                        transform="translate(118.557 119.958)"
+                      />
                     </clipPath>
                   </defs>
                 </svg>
@@ -970,18 +1361,12 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
         <section class="available-tools container">
           <header class="section-title">Available Tools</header>
           <span class="tool-names container">
-            {{- range $i, $toolName := .ToolNames }}
-          {{- if lt $i 10 }}
-            <span class="tool-name">
+            {{- range $i, $toolName := .ToolNames }} {{- if lt $i 10 }}
+            <span class="badge">
               {{ else }}
-              <span class="tool-name hidden">
-                {{- end }}
-              {{ $toolName }}
-              </span>
-              {{- end }}
-
-            {{- if gt (len .ToolNames) 10 }}
-              <div class="tool-name more-tools">
+              <span class="badge hidden"> {{- end }} {{ $toolName }} </span>
+              {{- end }} {{- if gt (len .ToolNames) 10 }}
+              <div class="tool-name badge more-tools">
                 And {{ diff (len .ToolNames) 10 }} more
               </div>
               {{- end }}
@@ -992,10 +1377,20 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
           <header class="section-title">Server URL</header>
           <div class="code-container card">
             <button class="copy-button waiting">
-              <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+              <svg
+                class="icon icon-copy"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+              >
                 <use href="#icon-copy"></use>
               </svg>
-              <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+              <svg
+                class="icon icon-copy-success"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+              >
                 <use href="#icon-copy-check"></use>
               </svg>
             </button>
@@ -1005,7 +1400,8 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
         <section class="raw-configuration container">
           <header class="section-title">Raw Configuration</header>
           <div class="section-description">
-            If you have a client that's not listed above, access the raw MCP configuration below. Check out
+            If you have a client that's not listed above, access the raw MCP
+            configuration below. Check out
             <a href="https://docs.getgram.ai/clients/troubleshooting">
               the troubleshooting documentation
             </a>
@@ -1013,68 +1409,96 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
           </div>
           <div class="code-container card">
             <button class="copy-button waiting">
-              <svg class="icon icon-copy" width="24" height="24" viewBox="0 0 24 24">
+              <svg
+                class="icon icon-copy"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+              >
                 <use href="#icon-copy"></use>
               </svg>
-              <svg class="icon icon-copy-success" width="24" height="24" viewBox="0 0 24 24">
+              <svg
+                class="icon icon-copy-success"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+              >
                 <use href="#icon-copy-check"></use>
               </svg>
             </button>
             <code class="code-snippet language-json">{{- .MCPConfig -}}</code>
           </div>
-          <code id="manifest-json-blob" type="application/json" style="display: none;">
-            {
-  "dxt_version": "0.1",
-  "name": "{{ .MCPName }}",
-  "version": "1.0.0",
-  "description": "{{ .MCPDescription }}",
-  "author": {
-     "name": "{{ .OrganizationName }} with Gram"
-  },
-  "server": {
-    "type": "node",
-    "entry_point": "npx",
-    "mcp_config": {
-      "command": "npx",
-      "args": [
-        "mcp-remote",
-        "{{ .MCPURL }}"{{- range .SecurityInputs }},
-        "--header",
-        "{{ printf "%s:${user_config.%s}" (.SystemName | asHTTPHeader) (.DisplayName | asPosixName) }}"{{- end }}
-      ]
-    }
-  },
-  "user_config": {
-    {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
-    "{{ $input.DisplayName | asPosixName }}": {
-      "type": "string",
-      "title": "{{ $input.DisplayName | asPosixName }}",
-      "description": "Get this value from your gram env",
-      "sensitive": {{ $input.Sensitive }},
-      "required": true
-    }{{- end }}
-  }
-}
+          <code
+            id="manifest-json-blob"
+            type="application/json"
+            style="display: none"
+          >
+            { "dxt_version": "0.1", "name": "{{ .MCPName }}", "version":
+            "1.0.0", "description": "{{ .MCPDescription }}", "author": { "name":
+            "{{ .OrganizationName }} with Gram" }, "server": { "type": "node",
+            "entry_point": "npx", "mcp_config": { "command": "npx", "args": [
+            "mcp-remote", "{{ .MCPURL }}"{{- range .SecurityInputs }},
+            "--header", "{{ printf "%s:${user_config.%s}" (.SystemName |
+            asHTTPHeader) (.DisplayName | asPosixName) }}"{{- end }} ] } },
+            "user_config": { {{- range $i, $input := .SecurityInputs }}{{- if $i
+            }},{{ end }} "{{ $input.DisplayName | asPosixName }}": { "type":
+            "string", "title": "{{ $input.DisplayName | asPosixName }}",
+            "description": "Get this value from your gram env", "sensitive": {{
+            $input.Sensitive }}, "required": true }{{- end }} } }
           </code>
         </section>
       </div>
     </main>
     <footer>
-      <a class="gram-brand-badge" href="https://getgram.ai" target="_blank" rel="noopener noreferrer">
+      <a
+        class="gram-brand-badge"
+        href="https://getgram.ai"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
         <div>
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path fill-rule="evenodd" clip-rule="evenodd" d="M7.56199 0.117067C7.83268 -0.0383304 8.16706 -0.0401451 8.4406 0.118361L15.5335 3.84566L15.5413 3.84955L15.5445 3.85149L15.5503 3.85537C15.8322 4.02542 15.9992 4.33425 15.9994 4.65893V5.44502C15.9993 5.76868 15.8339 6.0786 15.5536 6.24729L15.5452 6.25246L15.5426 6.25376L15.5342 6.25829L15.0101 6.52549L15.5374 6.81017L15.5439 6.8134L15.5471 6.81534L15.5516 6.81858C15.8312 6.98808 16 7.29656 16 7.62149V8.60362C15.9999 8.92696 15.8347 9.23581 15.5549 9.40459L15.5555 9.40524L15.549 9.40912L15.5445 9.41236L15.5374 9.41559L15.5368 9.41494L15.0405 9.67568L15.5355 9.93577L15.5426 9.93965L15.5452 9.94159L15.5523 9.94548C15.8342 10.1155 15.9999 10.4243 16 10.749V11.3384C16 11.6621 15.8346 11.972 15.5542 12.1407L15.5478 12.1446L15.5452 12.1465L15.5381 12.1498L8.43801 15.881L8.40566 15.8984L8.40437 15.8971C8.34506 15.9279 8.28347 15.9513 8.21998 15.9677L8.21868 15.9709L8.2051 16H8.00065C7.8499 16 7.69766 15.9606 7.56005 15.8803L0.464537 12.153L0.45742 12.1491L0.454832 12.1478L0.448362 12.1439C0.166336 11.9739 5.24173e-05 11.6645 0 11.3397V4.65893C0.000108839 4.33533 0.165439 4.02595 0.445774 3.85731L0.452244 3.85278L0.454832 3.85149L0.461949 3.8476L7.56199 0.117067ZM7.95665 0.753704C7.94566 0.757075 7.93491 0.762196 7.9243 0.768585L7.91654 0.773113L7.9146 0.77376L7.90748 0.777642L0.821027 4.50042C0.776271 4.52943 0.740157 4.58945 0.740154 4.66022V11.341C0.740313 11.412 0.777427 11.4724 0.824262 11.5021L7.90489 15.2223L7.90554 15.223L7.91201 15.2262L7.91395 15.2275L7.92107 15.2314C7.97097 15.2614 8.02767 15.2604 8.07246 15.2333L8.07893 15.2288L8.08928 15.2236L15.1744 11.5002C15.2197 11.4715 15.2565 11.4121 15.2566 11.341V10.751C15.2565 10.6808 15.2208 10.6213 15.1751 10.5912L14.2383 10.0988L8.43607 13.1481L8.43542 13.1474C8.16461 13.3027 7.83223 13.303 7.5607 13.1481L2.10983 10.3686L2.10077 10.3641L2.09753 10.3621L2.08977 10.357C1.89083 10.2369 1.77413 10.0216 1.77404 9.79537V9.64786C1.77407 9.42152 1.88965 9.20705 2.08524 9.08757L2.09171 9.08369L2.09559 9.0811L2.10336 9.07722L4.06567 8.04527L2.10659 7.01073L2.09947 7.0075L2.09495 7.00491L2.08848 7.00038C1.8917 6.88047 1.77478 6.66679 1.77469 6.43944V6.29193C1.77472 6.0657 1.89039 5.85116 2.08589 5.73164L2.09559 5.72581L2.09947 5.72323L2.10983 5.7187L7.56522 2.98193C7.83645 2.82643 8.17018 2.82805 8.44189 2.98582L14.2143 6.09848L15.1796 5.60418C15.2217 5.57625 15.2585 5.51804 15.2586 5.44696V4.66152C15.2586 4.59004 15.2219 4.52876 15.1751 4.49912L8.09446 0.779583L8.0867 0.775701L8.08346 0.77376L8.07634 0.769231C8.05271 0.755028 8.02569 0.747881 7.99935 0.747881H7.98965L7.95665 0.753704ZM2.51484 9.70091V9.73715L7.90101 12.4856H7.90231L7.91072 12.4901L7.91266 12.4914L7.92107 12.4966C7.97213 12.5274 8.02939 12.5254 8.07376 12.4985L8.08087 12.4946L8.08281 12.4933L8.09058 12.4894L13.4379 9.67892L11.1748 8.48975L8.43283 9.89307L8.43219 9.89242C8.1615 10.0466 7.82842 10.0456 7.55746 9.88854L4.8647 8.46581L2.51484 9.70091ZM8.07829 6.86063C8.02838 6.8306 7.96914 6.8326 7.92754 6.85804L7.92107 6.86257L7.91654 6.86516L7.90813 6.86904L5.66632 8.04656L7.90554 9.22926L7.91719 9.23508L7.92366 9.23896C7.97357 9.2689 8.02965 9.26739 8.0744 9.24026L8.08217 9.23508L8.0854 9.23314L8.09446 9.22926L10.3693 8.06468L8.09446 6.86969L8.09381 6.86904L8.0867 6.86581L8.0854 6.86516L8.07829 6.86063ZM11.9867 8.07374L14.2383 9.25708L15.179 8.76278C15.2227 8.73318 15.2579 8.67485 15.2579 8.60556V7.62343C15.2579 7.55213 15.2207 7.4914 15.1738 7.46169L14.204 6.93827L11.9867 8.07374ZM8.07699 3.6341C8.02703 3.60408 7.97021 3.60461 7.9256 3.63151L7.92624 3.63216L7.91719 3.63798L7.91201 3.64057L7.90231 3.64445L2.51613 6.34692V6.38315L4.86664 7.62473L7.56134 6.20847C7.69513 6.13082 7.84794 6.09136 8.00065 6.09136C8.15492 6.09156 8.30567 6.13343 8.43801 6.20976L11.1799 7.64996L13.4088 6.50996L8.09058 3.64186L8.08993 3.64122L8.08411 3.63798L8.08281 3.63733L8.07699 3.6341Z" fill="#111111"/>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+          >
+            <path
+              fill-rule="evenodd"
+              clip-rule="evenodd"
+              d="M7.56199 0.117067C7.83268 -0.0383304 8.16706 -0.0401451 8.4406 0.118361L15.5335 3.84566L15.5413 3.84955L15.5445 3.85149L15.5503 3.85537C15.8322 4.02542 15.9992 4.33425 15.9994 4.65893V5.44502C15.9993 5.76868 15.8339 6.0786 15.5536 6.24729L15.5452 6.25246L15.5426 6.25376L15.5342 6.25829L15.0101 6.52549L15.5374 6.81017L15.5439 6.8134L15.5471 6.81534L15.5516 6.81858C15.8312 6.98808 16 7.29656 16 7.62149V8.60362C15.9999 8.92696 15.8347 9.23581 15.5549 9.40459L15.5555 9.40524L15.549 9.40912L15.5445 9.41236L15.5374 9.41559L15.5368 9.41494L15.0405 9.67568L15.5355 9.93577L15.5426 9.93965L15.5452 9.94159L15.5523 9.94548C15.8342 10.1155 15.9999 10.4243 16 10.749V11.3384C16 11.6621 15.8346 11.972 15.5542 12.1407L15.5478 12.1446L15.5452 12.1465L15.5381 12.1498L8.43801 15.881L8.40566 15.8984L8.40437 15.8971C8.34506 15.9279 8.28347 15.9513 8.21998 15.9677L8.21868 15.9709L8.2051 16H8.00065C7.8499 16 7.69766 15.9606 7.56005 15.8803L0.464537 12.153L0.45742 12.1491L0.454832 12.1478L0.448362 12.1439C0.166336 11.9739 5.24173e-05 11.6645 0 11.3397V4.65893C0.000108839 4.33533 0.165439 4.02595 0.445774 3.85731L0.452244 3.85278L0.454832 3.85149L0.461949 3.8476L7.56199 0.117067ZM7.95665 0.753704C7.94566 0.757075 7.93491 0.762196 7.9243 0.768585L7.91654 0.773113L7.9146 0.77376L7.90748 0.777642L0.821027 4.50042C0.776271 4.52943 0.740157 4.58945 0.740154 4.66022V11.341C0.740313 11.412 0.777427 11.4724 0.824262 11.5021L7.90489 15.2223L7.90554 15.223L7.91201 15.2262L7.91395 15.2275L7.92107 15.2314C7.97097 15.2614 8.02767 15.2604 8.07246 15.2333L8.07893 15.2288L8.08928 15.2236L15.1744 11.5002C15.2197 11.4715 15.2565 11.4121 15.2566 11.341V10.751C15.2565 10.6808 15.2208 10.6213 15.1751 10.5912L14.2383 10.0988L8.43607 13.1481L8.43542 13.1474C8.16461 13.3027 7.83223 13.303 7.5607 13.1481L2.10983 10.3686L2.10077 10.3641L2.09753 10.3621L2.08977 10.357C1.89083 10.2369 1.77413 10.0216 1.77404 9.79537V9.64786C1.77407 9.42152 1.88965 9.20705 2.08524 9.08757L2.09171 9.08369L2.09559 9.0811L2.10336 9.07722L4.06567 8.04527L2.10659 7.01073L2.09947 7.0075L2.09495 7.00491L2.08848 7.00038C1.8917 6.88047 1.77478 6.66679 1.77469 6.43944V6.29193C1.77472 6.0657 1.89039 5.85116 2.08589 5.73164L2.09559 5.72581L2.09947 5.72323L2.10983 5.7187L7.56522 2.98193C7.83645 2.82643 8.17018 2.82805 8.44189 2.98582L14.2143 6.09848L15.1796 5.60418C15.2217 5.57625 15.2585 5.51804 15.2586 5.44696V4.66152C15.2586 4.59004 15.2219 4.52876 15.1751 4.49912L8.09446 0.779583L8.0867 0.775701L8.08346 0.77376L8.07634 0.769231C8.05271 0.755028 8.02569 0.747881 7.99935 0.747881H7.98965L7.95665 0.753704ZM2.51484 9.70091V9.73715L7.90101 12.4856H7.90231L7.91072 12.4901L7.91266 12.4914L7.92107 12.4966C7.97213 12.5274 8.02939 12.5254 8.07376 12.4985L8.08087 12.4946L8.08281 12.4933L8.09058 12.4894L13.4379 9.67892L11.1748 8.48975L8.43283 9.89307L8.43219 9.89242C8.1615 10.0466 7.82842 10.0456 7.55746 9.88854L4.8647 8.46581L2.51484 9.70091ZM8.07829 6.86063C8.02838 6.8306 7.96914 6.8326 7.92754 6.85804L7.92107 6.86257L7.91654 6.86516L7.90813 6.86904L5.66632 8.04656L7.90554 9.22926L7.91719 9.23508L7.92366 9.23896C7.97357 9.2689 8.02965 9.26739 8.0744 9.24026L8.08217 9.23508L8.0854 9.23314L8.09446 9.22926L10.3693 8.06468L8.09446 6.86969L8.09381 6.86904L8.0867 6.86581L8.0854 6.86516L8.07829 6.86063ZM11.9867 8.07374L14.2383 9.25708L15.179 8.76278C15.2227 8.73318 15.2579 8.67485 15.2579 8.60556V7.62343C15.2579 7.55213 15.2207 7.4914 15.1738 7.46169L14.204 6.93827L11.9867 8.07374ZM8.07699 3.6341C8.02703 3.60408 7.97021 3.60461 7.9256 3.63151L7.92624 3.63216L7.91719 3.63798L7.91201 3.64057L7.90231 3.64445L2.51613 6.34692V6.38315L4.86664 7.62473L7.56134 6.20847C7.69513 6.13082 7.84794 6.09136 8.00065 6.09136C8.15492 6.09156 8.30567 6.13343 8.43801 6.20976L11.1799 7.64996L13.4088 6.50996L8.09058 3.64186L8.08993 3.64122L8.08411 3.63798L8.08281 3.63733L8.07699 3.6341Z"
+              fill="#111111"
+            />
           </svg>
-          <svg xmlns="http://www.w3.org/2000/svg" width="39" height="14" viewBox="0 0 39 14" fill="none">
-            <path d="M24.5254 9.86307V0.444787H25.8366L26.0397 1.70056C26.4829 1.03574 27.3509 0.333984 28.7913 0.333984C30.1025 0.333984 31.229 0.924935 31.7645 2.1253C32.337 1.10961 33.3527 0.333984 35.0332 0.333984C36.9908 0.333984 38.5974 1.40508 38.5974 4.17517V9.86307H37.0831V4.2675C37.0831 2.62392 36.2705 1.71903 34.8486 1.71903C33.2789 1.71903 32.3186 2.82706 32.3186 4.56298V9.86307H30.8042V4.2675C30.8042 2.62392 29.9732 1.71903 28.5328 1.71903C26.9815 1.71903 26.0397 2.93786 26.0397 4.63685V9.86307H24.5254Z" fill="#111111"/>
-            <path d="M18.5231 9.97387C16.4548 9.97387 15.0513 8.93971 15.0513 7.22226C15.0513 5.3386 16.3624 4.28597 18.8371 4.28597H21.6071V3.63962C21.6071 2.36538 20.7392 1.68209 19.2618 1.68209C17.8768 1.68209 17.0457 2.30998 16.8611 3.27027H15.3467C15.5684 1.42355 17.0642 0.333984 19.3357 0.333984C21.7364 0.333984 23.1214 1.53435 23.1214 3.73195V7.85014C23.1214 8.34876 23.3061 8.47803 23.7309 8.47803H25.7124V9.86307H23.38C22.1796 9.86307 21.681 9.30905 21.681 8.44109V8.40416C21.127 9.25365 20.1482 9.97387 18.5231 9.97387ZM18.6339 8.68117C20.5176 8.68117 21.6071 7.5916 21.6071 6.02189V5.56021H18.6893C17.3412 5.56021 16.584 6.05882 16.584 7.12992C16.584 8.12715 17.3781 8.68117 18.6339 8.68117Z" fill="#111111"/>
-            <path d="M10.5562 9.8636V0.445312H11.8673L12.0705 1.86729C12.5137 1.14707 13.2339 0.445312 14.9144 0.445312H15.3392V1.92269H14.582C12.606 1.92269 12.0705 3.56627 12.0705 5.06212V9.8636H10.5562Z" fill="#111111"/>
-            <path d="M4.59834 13.6673C2.1976 13.6673 0.517082 12.5408 0.277008 10.4725H1.82826C2.0868 11.6544 3.13943 12.3192 4.70914 12.3192C6.68513 12.3192 7.75623 11.3959 7.75623 9.34599V8.34876C7.12835 9.21672 6.11265 9.97387 4.52447 9.97387C1.92059 9.97387 0 8.21949 0 5.15393C0 2.27304 1.92059 0.333984 4.52447 0.333984C6.11265 0.333984 7.18375 0.980337 7.75623 1.88523L7.95937 0.444787H9.27055V9.40139C9.27055 12.1161 7.8301 13.6673 4.59834 13.6673ZM4.67221 8.62577C6.51893 8.62577 7.7747 7.20379 7.7747 5.19086C7.7747 3.12253 6.51893 1.68209 4.67221 1.68209C2.80702 1.68209 1.55125 3.10407 1.55125 5.15393C1.55125 7.20379 2.80702 8.62577 4.67221 8.62577Z" fill="#111111"/>
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="39"
+            height="14"
+            viewBox="0 0 39 14"
+            fill="none"
+          >
+            <path
+              d="M24.5254 9.86307V0.444787H25.8366L26.0397 1.70056C26.4829 1.03574 27.3509 0.333984 28.7913 0.333984C30.1025 0.333984 31.229 0.924935 31.7645 2.1253C32.337 1.10961 33.3527 0.333984 35.0332 0.333984C36.9908 0.333984 38.5974 1.40508 38.5974 4.17517V9.86307H37.0831V4.2675C37.0831 2.62392 36.2705 1.71903 34.8486 1.71903C33.2789 1.71903 32.3186 2.82706 32.3186 4.56298V9.86307H30.8042V4.2675C30.8042 2.62392 29.9732 1.71903 28.5328 1.71903C26.9815 1.71903 26.0397 2.93786 26.0397 4.63685V9.86307H24.5254Z"
+              fill="#111111"
+            />
+            <path
+              d="M18.5231 9.97387C16.4548 9.97387 15.0513 8.93971 15.0513 7.22226C15.0513 5.3386 16.3624 4.28597 18.8371 4.28597H21.6071V3.63962C21.6071 2.36538 20.7392 1.68209 19.2618 1.68209C17.8768 1.68209 17.0457 2.30998 16.8611 3.27027H15.3467C15.5684 1.42355 17.0642 0.333984 19.3357 0.333984C21.7364 0.333984 23.1214 1.53435 23.1214 3.73195V7.85014C23.1214 8.34876 23.3061 8.47803 23.7309 8.47803H25.7124V9.86307H23.38C22.1796 9.86307 21.681 9.30905 21.681 8.44109V8.40416C21.127 9.25365 20.1482 9.97387 18.5231 9.97387ZM18.6339 8.68117C20.5176 8.68117 21.6071 7.5916 21.6071 6.02189V5.56021H18.6893C17.3412 5.56021 16.584 6.05882 16.584 7.12992C16.584 8.12715 17.3781 8.68117 18.6339 8.68117Z"
+              fill="#111111"
+            />
+            <path
+              d="M10.5562 9.8636V0.445312H11.8673L12.0705 1.86729C12.5137 1.14707 13.2339 0.445312 14.9144 0.445312H15.3392V1.92269H14.582C12.606 1.92269 12.0705 3.56627 12.0705 5.06212V9.8636H10.5562Z"
+              fill="#111111"
+            />
+            <path
+              d="M4.59834 13.6673C2.1976 13.6673 0.517082 12.5408 0.277008 10.4725H1.82826C2.0868 11.6544 3.13943 12.3192 4.70914 12.3192C6.68513 12.3192 7.75623 11.3959 7.75623 9.34599V8.34876C7.12835 9.21672 6.11265 9.97387 4.52447 9.97387C1.92059 9.97387 0 8.21949 0 5.15393C0 2.27304 1.92059 0.333984 4.52447 0.333984C6.11265 0.333984 7.18375 0.980337 7.75623 1.88523L7.95937 0.444787H9.27055V9.40139C9.27055 12.1161 7.8301 13.6673 4.59834 13.6673ZM4.67221 8.62577C6.51893 8.62577 7.7747 7.20379 7.7747 5.19086C7.7747 3.12253 6.51893 1.68209 4.67221 1.68209C2.80702 1.68209 1.55125 3.10407 1.55125 5.15393C1.55125 7.20379 2.80702 8.62577 4.67221 8.62577Z"
+              fill="#111111"
+            />
           </svg>
         </div>
       </a>
     </footer>
-    <svg style="display: none;">
+    <svg style="display: none">
       <defs>
         <symbol
           id="icon-copy"
@@ -1087,8 +1511,8 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
           height="24"
           viewBox="0 0 24 24"
         >
-          <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/>
-          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+          <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
         </symbol>
         <symbol
           id="icon-copy-check"
@@ -1101,7 +1525,9 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
           height="24"
           viewBox="0 0 24 24"
         >
-          <path d="m12 15 2 2 4-4"/><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+          <path d="m12 15 2 2 4-4" />
+          <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+          <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
         </symbol>
       </defs>
     </svg>
