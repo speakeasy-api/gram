@@ -34,7 +34,7 @@ ORDER BY created_at DESC;
 
 -- name: UpdateToolset :one
 UPDATE toolsets
-SET
+SET 
     name = COALESCE(@name, name)
   , description = COALESCE(@description, description)
   , default_environment_slug = COALESCE(@default_environment_slug, default_environment_slug)
@@ -73,7 +73,7 @@ WHERE mcp_slug = @mcp_slug
 
 -- name: GetPromptTemplatesForToolset :many
 WITH ranked_templates AS (
-  SELECT
+  SELECT 
     pt.*,
     ROW_NUMBER() OVER (PARTITION BY pt.history_id ORDER BY pt.id DESC) as rn
   FROM prompt_templates pt
@@ -84,7 +84,7 @@ SELECT rel.id as tp_id, rt.*
 FROM toolset_prompts rel
 JOIN ranked_templates rt ON (
   (rel.prompt_template_id IS NOT NULL AND rt.id = rel.prompt_template_id)
-  OR
+  OR 
   (rel.prompt_template_id IS NULL AND rt.history_id = rel.prompt_history_id AND rt.rn = 1)
 )
 WHERE rel.toolset_id = @toolset_id
@@ -126,7 +126,7 @@ ORDER BY t.created_at DESC;
 
 -- name: UpdateToolsetExternalOAuthServer :one
 UPDATE toolsets
-SET
+SET 
     external_oauth_server_id = @external_oauth_server_id
   , updated_at = clock_timestamp()
 WHERE slug = @slug AND project_id = @project_id
@@ -134,7 +134,7 @@ RETURNING *;
 
 -- name: ClearToolsetOAuthServers :one
 UPDATE toolsets
-SET
+SET 
     external_oauth_server_id = NULL
   , oauth_proxy_server_id = NULL
   , updated_at = clock_timestamp()

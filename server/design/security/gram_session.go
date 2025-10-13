@@ -23,7 +23,6 @@ var WriteSessionCookie = func() {
 	CookieMaxAge(2592000) // 30 days in seconds
 	CookieSecure()
 	CookieHTTPOnly()
-	CookiePath("/")
 }
 
 var DeleteSessionCookie = func() {
@@ -32,7 +31,6 @@ var DeleteSessionCookie = func() {
 	CookieMaxAge(0)
 	CookieSecure()
 	CookieHTTPOnly()
-	CookiePath("/")
 }
 
 var SessionHeader = func() {
