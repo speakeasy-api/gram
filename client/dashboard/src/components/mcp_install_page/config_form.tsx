@@ -234,7 +234,7 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
   }
 
   return (
-    <Block label="Install URL" className="p-0">
+    <Block label="Install Page" className="p-0">
       <BlockInner>
         <Stack direction="horizontal" align="center" gap={2}>
           <CodeBlock
