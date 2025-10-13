@@ -181,7 +181,47 @@ func (tp *ToolProxy) doFunction(
 	descriptor *ToolDescriptor,
 	plan *FunctionToolCallPlan,
 ) error {
-	return oops.E(oops.CodeNotImplemented, nil, "function tool calls are not implemented yet").Log(ctx, logger)
+	method := http.MethodPost
+	route := "/tool-call"
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attr.HTTPRoute(route),
+	)
+	logger = logger.With(
+		attr.SlogHTTPRoute(route),
+	)
+
+	var statusCode int
+	var contentType string
+	defer func() {
+		logger.InfoContext(ctx, "http tool call",
+			attr.SlogHTTPResponseStatusCode(statusCode),
+			attr.SlogHTTPRequestMethod(method),
+			attr.SlogHTTPResponseHeaderContentType(contentType),
+		)
+		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
+		tp.metrics.RecordToolCall(ctx, descriptor.OrganizationID, descriptor.URN, statusCode)
+
+		span.SetAttributes(attr.HTTPResponseStatusCode(statusCode))
+	}()
+
+	req, err := http.NewRequestWithContext(ctx, method, plan.URL, requestBody)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "create function tool request").Log(ctx, logger)
+	}
+
+	return reverseProxyRequest(
+		ctx,
+		logger,
+		tp.tracer,
+		w,
+		req,
+		descriptor,
+		&FilterRequest{Type: "none", Filter: ""},
+		DisableResponseFiltering,
+		tp.policy,
+		&statusCode,
+	)
 }
 
 func (tp *ToolProxy) doHTTP(
@@ -210,7 +250,7 @@ func (tp *ToolProxy) doHTTP(
 			attr.SlogHTTPResponseHeaderContentType(plan.RequestContentType.Value),
 		)
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
-		tp.metrics.RecordHTTPToolCall(ctx, descriptor.OrganizationID, descriptor.Name, responseStatusCode)
+		tp.metrics.RecordToolCall(ctx, descriptor.OrganizationID, descriptor.URN, responseStatusCode)
 
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()

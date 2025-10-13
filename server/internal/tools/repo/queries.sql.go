@@ -319,6 +319,8 @@ WITH deployment AS (
 )
 SELECT
     tool.id
+  , tool.tool_urn
+  , tool.project_id
   , tool.deployment_id
   , tool.function_id
   , tool.runtime
@@ -358,6 +360,8 @@ type GetFunctionToolByURNParams struct {
 
 type GetFunctionToolByURNRow struct {
 	ID               uuid.UUID
+	ToolUrn          urn.Tool
+	ProjectID        uuid.UUID
 	DeploymentID     uuid.UUID
 	FunctionID       uuid.UUID
 	Runtime          string
@@ -379,6 +383,8 @@ func (q *Queries) GetFunctionToolByURN(ctx context.Context, arg GetFunctionToolB
 	var i GetFunctionToolByURNRow
 	err := row.Scan(
 		&i.ID,
+		&i.ToolUrn,
+		&i.ProjectID,
 		&i.DeploymentID,
 		&i.FunctionID,
 		&i.Runtime,
@@ -413,51 +419,6 @@ type GetFunctionToolDefinitionByIDParams struct {
 
 func (q *Queries) GetFunctionToolDefinitionByID(ctx context.Context, arg GetFunctionToolDefinitionByIDParams) (FunctionToolDefinition, error) {
 	row := q.db.QueryRow(ctx, getFunctionToolDefinitionByID, arg.ID, arg.ProjectID)
-	var i FunctionToolDefinition
-	err := row.Scan(
-		&i.ID,
-		&i.ToolUrn,
-		&i.ProjectID,
-		&i.DeploymentID,
-		&i.FunctionID,
-		&i.Runtime,
-		&i.Name,
-		&i.Description,
-		&i.InputSchema,
-		&i.Variables,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
-const getFunctionToolDefinitionByURN = `-- name: GetFunctionToolDefinitionByURN :one
-WITH deployment AS (
-  SELECT d.id
-  FROM deployments d
-  JOIN deployment_statuses ds ON d.id = ds.deployment_id
-  WHERE d.project_id = $2
-  AND ds.status = 'completed'
-  ORDER BY d.seq DESC LIMIT 1
-)
-SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
-FROM function_tool_definitions
-WHERE function_tool_definitions.tool_urn = $1
-  AND function_tool_definitions.project_id = $2
-  AND function_tool_definitions.deleted IS FALSE
-  AND function_tool_definitions.deployment_id = (SELECT id FROM deployment)
-LIMIT 1
-`
-
-type GetFunctionToolDefinitionByURNParams struct {
-	Urn       urn.Tool
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) GetFunctionToolDefinitionByURN(ctx context.Context, arg GetFunctionToolDefinitionByURNParams) (FunctionToolDefinition, error) {
-	row := q.db.QueryRow(ctx, getFunctionToolDefinitionByURN, arg.Urn, arg.ProjectID)
 	var i FunctionToolDefinition
 	err := row.Scan(
 		&i.ID,

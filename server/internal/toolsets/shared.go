@@ -45,7 +45,7 @@ func (t *Toolsets) GetToolCallPlanByURN(ctx context.Context, toolUrn urn.Tool, p
 		return t.extractHTTPToolCallPlan(ctx, tool)
 
 	case urn.ToolKindFunction:
-		tool, err := t.toolsRepo.GetFunctionToolDefinitionByURN(ctx, toolsRepo.GetFunctionToolDefinitionByURNParams{
+		tool, err := t.toolsRepo.GetFunctionToolByURN(ctx, toolsRepo.GetFunctionToolByURNParams{
 			ProjectID: projectID,
 			Urn:       toolUrn,
 		})
@@ -173,10 +173,15 @@ func (t *Toolsets) extractHTTPToolCallPlan(ctx context.Context, tool toolsRepo.H
 	return gateway.NewHTTPToolCallPlan(descriptor, plan), nil
 }
 
-func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRepo.FunctionToolDefinition) (*gateway.ToolCallPlan, error) {
+func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRepo.GetFunctionToolByURNRow) (*gateway.ToolCallPlan, error) {
 	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, tool.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
+	}
+
+	flyURL := tool.FlyAppUrl.String
+	if flyURL == "" {
+		return nil, fmt.Errorf("no app url available for function tool")
 	}
 
 	descriptor := &gateway.ToolDescriptor{
@@ -191,6 +196,7 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 	}
 	plan := &gateway.FunctionToolCallPlan{
 		FunctionID:  tool.FunctionID.String(),
+		ServerURL:   flyURL,
 		Runtime:     tool.Runtime,
 		InputSchema: tool.InputSchema,
 		Variables:   tool.Variables,

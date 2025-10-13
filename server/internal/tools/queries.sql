@@ -234,23 +234,6 @@ WHERE
   AND ftd.tool_urn = ANY (@urns::text[])
 ORDER BY ftd.id DESC;
 
--- name: GetFunctionToolDefinitionByURN :one
-WITH deployment AS (
-  SELECT d.id
-  FROM deployments d
-  JOIN deployment_statuses ds ON d.id = ds.deployment_id
-  WHERE d.project_id = @project_id
-  AND ds.status = 'completed'
-  ORDER BY d.seq DESC LIMIT 1
-)
-SELECT *
-FROM function_tool_definitions
-WHERE function_tool_definitions.tool_urn = @urn
-  AND function_tool_definitions.project_id = @project_id
-  AND function_tool_definitions.deleted IS FALSE
-  AND function_tool_definitions.deployment_id = (SELECT id FROM deployment)
-LIMIT 1;
-
 -- name: GetFunctionToolByURN :one
 WITH deployment AS (
   SELECT d.id
@@ -262,6 +245,8 @@ WITH deployment AS (
 )
 SELECT
     tool.id
+  , tool.tool_urn
+  , tool.project_id
   , tool.deployment_id
   , tool.function_id
   , tool.runtime

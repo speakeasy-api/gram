@@ -37,6 +37,10 @@ overrides:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Tool
           slice: true
+      - column: functions_access.encryption_key
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/conv
+          type: Secret
 
 sql:
   - schema: schema.sql

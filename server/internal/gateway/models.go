@@ -99,6 +99,8 @@ var DisableResponseFiltering = &ResponseFilter{
 // FunctionToolCallPlan describes a serverless function that can be invoked as a tool.
 type FunctionToolCallPlan struct {
 	FunctionID  string `json:"function_id" yaml:"function_id"`
+	ServerURL   string `json:"server_url" yaml:"server_url"`
+	AuthSecret  string `json:"auth_secret" yaml:"auth_secret"`
 	Runtime     string `json:"runtime" yaml:"runtime"`
 	InputSchema []byte `json:"input_schema" yaml:"input_schema"`
 	Variables   []byte `json:"variables" yaml:"variables"`
