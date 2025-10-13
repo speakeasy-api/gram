@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 var (
@@ -46,7 +45,6 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	serverURL      *url.URL
-	toolsetRepo    *toolsets_repo.Queries
 }
 
 func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
@@ -74,6 +72,7 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 	require.NoError(t, err)
 
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
+
 	svc := mcpmetadata.NewService(logger, conn, sessionManager, serverURL, cacheAdapter)
 
 	return ctx, &testInstance{
@@ -81,6 +80,5 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 		conn:           conn,
 		sessionManager: sessionManager,
 		serverURL:      serverURL,
-		toolsetRepo:    toolsets_repo.New(conn),
 	}
 }

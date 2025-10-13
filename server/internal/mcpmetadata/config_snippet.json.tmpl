@@ -2,12 +2,12 @@
   "command": "npx",
   "args": [
     "mcp-remote",
-    "{{ .MCPURL }}"{{- range .SecurityInputs }},
+    "{{ .MCPURL }}"{{- range $i, $header := .Headers }},
     "--header",
-    "{{ .SystemName | asHTTPHeader }}:${{ "{" }}{{ .DisplayName | asPosixName }}{{ "}" }}"{{- end }}
-  ]{{- if (gt (len .SecurityInputs) 0) }},
+    "{{ $header }}:${{ "{" }}{{ index $.EnvHeaders $i }}{{ "}" }}"{{- end }}
+  ]{{- if (gt (len .Headers) 0) }},
   "env": {
-    {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
-    "{{ $input.DisplayName | asPosixName }}": "<your-value-here>"{{- end }}
+    {{- range $i, $header := .Headers }}{{- if $i }},{{ end }}
+    "{{ index $.EnvHeaders $i }}": "<your-value-here>"{{- end }}
   }{{- end }}
 }
