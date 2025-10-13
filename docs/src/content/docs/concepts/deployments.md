@@ -6,7 +6,7 @@ sidebar:
 ---
 
 Deployments represent a snapshot of your Gram project at a specific point in
-time. This snapshot includes all the "inputs" for a Gram project (uploaded
+time. This snapshot includes all the "sources" for a Gram project (uploaded
 assets), and the generated "outputs", such as logs and tool definitions. The
 tools in use by your MCP servers are always based on the most recent successful
 deployment.
