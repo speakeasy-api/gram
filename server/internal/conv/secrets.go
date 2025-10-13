@@ -1,15 +1,48 @@
 package conv
 
 import (
+	"database/sql"
 	"database/sql/driver"
+	"encoding"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 )
 
-type Secret struct{ value string }
+type Secret struct{ value []byte }
 
-func (s Secret) Reveal() string {
+var _ interface {
+	fmt.Stringer
+
+	sql.Scanner
+	driver.Valuer
+
+	json.Marshaler
+	json.Unmarshaler
+
+	encoding.TextMarshaler
+	encoding.TextUnmarshaler
+
+	slog.LogValuer
+} = (*Secret)(nil)
+
+var _ interface {
+	fmt.Stringer
+
+	driver.Valuer
+
+	json.Marshaler
+
+	encoding.TextMarshaler
+
+	slog.LogValuer
+} = Secret{value: []byte{}}
+
+func NewSecret(value []byte) Secret {
+	return Secret{value: value}
+}
+
+func (s Secret) Reveal() []byte {
 	return s.value
 }
 
@@ -23,11 +56,11 @@ func (s Secret) MarshalText() ([]byte, error) {
 
 func (s *Secret) UnmarshalText(text []byte) error {
 	if len(text) == 0 {
-		*s = Secret{value: ""}
+		*s = NewSecret([]byte{})
 		return nil
 	}
 
-	val := Secret{value: string(text)}
+	val := NewSecret(text)
 	*s = val
 	return nil
 }
@@ -42,12 +75,17 @@ func (s Secret) MarshalJSON() ([]byte, error) {
 }
 
 func (s *Secret) UnmarshalJSON(data []byte) error {
-	var val string
+	if len(data) == 0 {
+		*s = NewSecret([]byte{})
+		return nil
+	}
+
+	var val []byte
 	if err := json.Unmarshal(data, &val); err != nil {
 		return fmt.Errorf("unmarshal secret from json: %w", err)
 	}
 
-	*s = Secret{value: val}
+	*s = NewSecret(val)
 	return nil
 }
 
@@ -56,17 +94,17 @@ func (s *Secret) Scan(value any) error {
 		return nil
 	}
 
-	var val string
+	var val []byte
 	switch v := value.(type) {
 	case string:
-		val = v
+		val = []byte(v)
 	case []byte:
-		val = string(v)
+		val = v
 	default:
 		return fmt.Errorf("cannot scan %T into Secret", value)
 	}
 
-	*s = Secret{value: val}
+	*s = NewSecret(val)
 
 	return nil
 }
