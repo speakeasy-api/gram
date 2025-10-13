@@ -545,6 +545,12 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           for gettings started with your MCP to their client like Cursor or
           Claude Desktop."
       >
+        {!toolset.mcpIsPublic && (
+          <Type small italic destructive>
+            Your server is private. To share with external users, you must make
+            it public.
+          </Type>
+        )}
         <Stack className="mt-2" gap={1}>
           <ConfigForm toolset={toolset} />
         </Stack>
