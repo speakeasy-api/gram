@@ -357,6 +357,16 @@ func newWorkerCommand() *cli.Command {
 				PosthogClient:       posthogClient,
 			})
 
+			defer func() {
+				if r := recover(); r != nil {
+					logger.ErrorContext(
+						ctx,
+						"panic in temporal worker",
+						attr.SlogError(fmt.Errorf("%v", r)),
+					)
+				}
+			}()
+
 			return temporalWorker.Run(worker.InterruptCh())
 		},
 		Before: func(ctx *cli.Context) error {

@@ -542,6 +542,16 @@ func newStartCommand() *cli.Command {
 					close(workerInterruptCh)
 				})
 				group.Go(func() {
+					defer func() {
+						if r := recover(); r != nil {
+							logger.ErrorContext(
+								ctx,
+								"panic in temporal worker",
+								attr.SlogError(fmt.Errorf("%v", r)),
+							)
+						}
+					}()
+
 					temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						DB:                  db,
 						EncryptionClient:    encryptionClient,
