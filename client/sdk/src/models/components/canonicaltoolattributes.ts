@@ -23,7 +23,7 @@ export type CanonicalToolAttributes = {
   /**
    * Description of the tool
    */
-  description?: string | undefined;
+  description: string;
   /**
    * The name of the tool
    */
@@ -32,14 +32,6 @@ export type CanonicalToolAttributes = {
    * Summarizer for the tool
    */
   summarizer?: string | undefined;
-  /**
-   * Summary of the tool
-   */
-  summary?: string | undefined;
-  /**
-   * The tags list for this http tool
-   */
-  tags?: Array<string> | undefined;
   /**
    * The ID of the variation that was applied to the tool
    */
@@ -54,11 +46,9 @@ export const CanonicalToolAttributes$inboundSchema: z.ZodType<
 > = z.object({
   confirm: z.string().optional(),
   confirm_prompt: z.string().optional(),
-  description: z.string().optional(),
+  description: z.string(),
   name: z.string(),
   summarizer: z.string().optional(),
-  summary: z.string().optional(),
-  tags: z.array(z.string()).optional(),
   variation_id: z.string(),
 }).transform((v) => {
   return remap$(v, {
@@ -71,11 +61,9 @@ export const CanonicalToolAttributes$inboundSchema: z.ZodType<
 export type CanonicalToolAttributes$Outbound = {
   confirm?: string | undefined;
   confirm_prompt?: string | undefined;
-  description?: string | undefined;
+  description: string;
   name: string;
   summarizer?: string | undefined;
-  summary?: string | undefined;
-  tags?: Array<string> | undefined;
   variation_id: string;
 };
 
@@ -87,11 +75,9 @@ export const CanonicalToolAttributes$outboundSchema: z.ZodType<
 > = z.object({
   confirm: z.string().optional(),
   confirmPrompt: z.string().optional(),
-  description: z.string().optional(),
+  description: z.string(),
   name: z.string(),
   summarizer: z.string().optional(),
-  summary: z.string().optional(),
-  tags: z.array(z.string()).optional(),
   variationId: z.string(),
 }).transform((v) => {
   return remap$(v, {

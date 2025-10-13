@@ -266,7 +266,7 @@ func (s *Service) UpdateSlackConnection(ctx context.Context, payload *gen.Update
 	sanitizedSlug := conv.ToLower(payload.DefaultToolsetSlug)
 
 	// Ensure the toolset exists for the given slug and project
-	if _, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(sanitizedSlug)); err != nil {
+	if _, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(sanitizedSlug), nil); err != nil {
 		return nil, err
 	}
 

@@ -57,35 +57,12 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 		}
 
 		conn, err := clickhouse.Open(&clickhouse.Options{
-			Protocol:   0,
-			ClientInfo: clickhouse.ClientInfo{Products: nil},
-			TLS:        nil,
-			Addr:       []string{fmt.Sprintf("%s:%s", host, port.Port())},
+			Addr: []string{fmt.Sprintf("%s:%s", host, port.Port())},
 			Auth: clickhouse.Auth{
 				Database: "gram",
 				Username: "gram",
 				Password: "gram",
 			},
-			DialContext:          nil,
-			DialStrategy:         nil,
-			Debug:                false,
-			Debugf:               nil,
-			Settings:             nil,
-			Compression:          nil,
-			DialTimeout:          0,
-			MaxOpenConns:         0,
-			MaxIdleConns:         0,
-			ConnMaxLifetime:      0,
-			ConnOpenStrategy:     0,
-			FreeBufOnConnRelease: false,
-			HttpHeaders:          nil,
-			HttpUrlPath:          "",
-			HttpMaxConnsPerHost:  0,
-			BlockBufferSize:      0,
-			MaxCompressionBuffer: 0,
-			HTTPProxyURL:         nil,
-			GetJWT:               nil,
-			ReadTimeout:          0,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to clickhouse: %w", err)

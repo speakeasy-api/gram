@@ -1,4 +1,4 @@
-package gateway
+package customdomains
 
 import (
 	"context"
@@ -12,23 +12,23 @@ const (
 	domainKey ctxKey = iota
 )
 
-type DomainContext struct {
+type Context struct {
 	OrganizationID string
 	Domain         string
 	DomainID       uuid.UUID
 }
 
-func DomainWithContext(ctx context.Context, value *DomainContext) context.Context {
+func WithContext(ctx context.Context, value *Context) context.Context {
 	return context.WithValue(ctx, domainKey, value)
 }
 
-func DomainFromContext(ctx context.Context) *DomainContext {
+func FromContext(ctx context.Context) *Context {
 	val := ctx.Value(domainKey)
 	if val == nil {
 		return nil
 	}
 
-	domain, ok := val.(*DomainContext)
+	domain, ok := val.(*Context)
 	if !ok || domain == nil {
 		return nil
 	}

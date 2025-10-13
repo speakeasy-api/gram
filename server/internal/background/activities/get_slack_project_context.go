@@ -76,11 +76,16 @@ func (s *GetSlackProjectContext) Do(ctx context.Context, event types.SlackEvent)
 
 	toolsetSummaries := make([]SlackToolsetSummary, len(toolsets))
 	for i, toolset := range toolsets {
+		toolsetVersion, err := s.toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "error getting toolset version").Log(ctx, s.logger)
+		}
+
 		toolsetSummaries[i] = SlackToolsetSummary{
 			ID:            toolset.ID,
 			Slug:          toolset.Slug,
 			Description:   conv.FromPGText[string](toolset.Description),
-			NumberOfTools: len(toolset.HttpToolNames),
+			NumberOfTools: len(toolsetVersion.ToolUrns),
 			CreatedAt:     toolset.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:     toolset.UpdatedAt.Time.Format(time.RFC3339),
 		}

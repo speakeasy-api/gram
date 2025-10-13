@@ -123,11 +123,11 @@ OTLP_GRPC_PORT = "4317"
 ## For a list of feature flags, check `server/internal/feature/flags.go`.
 # GRAM_LOCAL_FEATURE_FLAGS_CSV = "{{config_root}}/flags.csv"
 
-#####################
-## Fly.io settings ##
-#####################
-## Fly.io app names must be globally unique. Apps also act as docker image
-## registries where Gram Functions runner images are pushed to. This config
-## variable acts as a prefix for those image names and correspoding fly apps.
-## IT MUST MATCH SET BOTH IN GITHUB ACTIONS AND IN PRODUCTION. 
-# FLY_IMAGE_PREFIX = "gram-46mq43kl"
+####################################
+## Gram Functions runner settings ##
+####################################
+GRAM_FUNCTIONS_OCI_IMAGE = "gram-runner"
+GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
+# GRAM_FUNCTIONS_FLYIO_API_TOKEN = "unset"
+# GRAM_FUNCTIONS_FLYIO_ORG = "unset"
+# GRAM_FUNCTIONS_FLYIO_REGION = "sea"

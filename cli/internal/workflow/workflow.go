@@ -1,4 +1,4 @@
-package deploy
+package workflow
 
 import (
 	"context"
@@ -8,18 +8,19 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
+	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/deployments"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
 
-type WorkflowParams struct {
+type Params struct {
 	APIKey      secret.Secret
 	APIURL      *url.URL
 	ProjectSlug string
 }
 
-func (p WorkflowParams) Validate() error {
+func (p Params) Validate() error {
 	if p.ProjectSlug == "" {
 		return fmt.Errorf("project slug is required")
 	}
@@ -34,10 +35,11 @@ func (p WorkflowParams) Validate() error {
 
 type Workflow struct {
 	Logger            *slog.Logger
-	Params            WorkflowParams
+	Params            Params
 	AssetsClient      *api.AssetsClient
 	DeploymentsClient *api.DeploymentsClient
-	NewAssets         []*deployments.AddOpenAPIv3DeploymentAssetForm
+	NewOpenAPIAssets  []*deployments.AddOpenAPIv3DeploymentAssetForm
+	NewFunctionAssets []*deployments.AddFunctionsForm
 	Deployment        *types.Deployment
 	Err               error
 }
@@ -53,17 +55,18 @@ func (s *Workflow) Failed() bool {
 	return s.Err != nil
 }
 
-func NewWorkflow(
+func New(
 	ctx context.Context,
 	logger *slog.Logger,
-	params WorkflowParams,
+	params Params,
 ) *Workflow {
 	state := &Workflow{
 		Logger:            logger,
 		Params:            params,
 		AssetsClient:      nil,
 		DeploymentsClient: nil,
-		NewAssets:         nil,
+		NewOpenAPIAssets:  nil,
+		NewFunctionAssets: nil,
 		Deployment:        nil,
 		Err:               nil,
 	}
@@ -88,36 +91,61 @@ func NewWorkflow(
 
 func (s *Workflow) UploadAssets(
 	ctx context.Context,
-	sources []Source,
+	sources []deploy.Source,
 ) *Workflow {
 	if s.Failed() {
 		return s
 	}
 
-	s.Logger.InfoContext(ctx, "uploading files")
-	newAssets := make(
+	s.Logger.InfoContext(ctx, "uploading assets")
+
+	newOpenAPIAssets := make(
 		[]*deployments.AddOpenAPIv3DeploymentAssetForm,
+		0,
+		len(sources),
+	)
+	newFunctionAssets := make(
+		[]*deployments.AddFunctionsForm,
+		0,
 		len(sources),
 	)
 
-	for idx, source := range sources {
+	for _, source := range sources {
 		if err := source.Validate(); err != nil {
 			return s.Fail(fmt.Errorf("invalid source: %w", err))
 		}
 
-		upReq := &UploadRequest{
+		upReq := &deploy.UploadRequest{
 			APIKey:       s.Params.APIKey,
 			ProjectSlug:  s.Params.ProjectSlug,
-			SourceReader: NewSourceReader(source),
+			SourceReader: deploy.NewSourceReader(source),
 		}
-		asset, err := Upload(ctx, s.AssetsClient, upReq)
+		asset, err := deploy.Upload(ctx, s.AssetsClient, upReq)
 		if err != nil {
 			return s.Fail(fmt.Errorf("failed to upload asset: %w", err))
 		}
 
-		newAssets[idx] = asset
+		switch source.Type {
+		case deploy.SourceTypeOpenAPIV3:
+			form := &deployments.AddOpenAPIv3DeploymentAssetForm{
+				AssetID: asset.AssetID,
+				Name:    asset.Name,
+				Slug:    asset.Slug,
+			}
+			newOpenAPIAssets = append(newOpenAPIAssets, form)
+		case deploy.SourceTypeFunction:
+			form := &deployments.AddFunctionsForm{
+				AssetID: asset.AssetID,
+				Name:    asset.Name,
+				Slug:    asset.Slug,
+				Runtime: asset.Runtime,
+			}
+			newFunctionAssets = append(newFunctionAssets, form)
+		}
 	}
-	s.NewAssets = newAssets
+
+	s.NewOpenAPIAssets = newOpenAPIAssets
+	s.NewFunctionAssets = newFunctionAssets
 	return s
 }
 
@@ -137,10 +165,11 @@ func (s *Workflow) EvolveDeployment(
 		slog.String("deployment_id", s.Deployment.ID),
 	)
 	evolved, err := s.DeploymentsClient.Evolve(ctx, api.EvolveRequest{
-		Assets:       s.NewAssets,
-		APIKey:       s.Params.APIKey,
-		DeploymentID: s.Deployment.ID,
-		ProjectSlug:  s.Params.ProjectSlug,
+		OpenAPIv3Assets: s.NewOpenAPIAssets,
+		Functions:       s.NewFunctionAssets,
+		APIKey:          s.Params.APIKey,
+		DeploymentID:    s.Deployment.ID,
+		ProjectSlug:     s.Params.ProjectSlug,
 	})
 	if err != nil {
 		return s.Fail(fmt.Errorf("failed to evolve deployment: %w", err))
@@ -169,7 +198,8 @@ func (s *Workflow) CreateDeployment(
 	createReq := api.CreateDeploymentRequest{
 		APIKey:          s.Params.APIKey,
 		IdempotencyKey:  idem,
-		OpenAPIv3Assets: s.NewAssets,
+		OpenAPIv3Assets: s.NewOpenAPIAssets,
+		Functions:       s.NewFunctionAssets,
 		ProjectSlug:     s.Params.ProjectSlug,
 	}
 	result, err := s.DeploymentsClient.CreateDeployment(ctx, createReq)

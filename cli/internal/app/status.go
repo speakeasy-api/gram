@@ -3,15 +3,14 @@ package app
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
-	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
-	"github.com/speakeasy-api/gram/cli/internal/secret"
+	"github.com/speakeasy-api/gram/cli/internal/profile"
+	"github.com/speakeasy-api/gram/cli/internal/workflow"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/urfave/cli/v2"
 )
@@ -42,25 +41,16 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 			defer cancel()
 
 			logger := logging.PullLogger(ctx)
-			projectSlug := c.String("project")
+			prof := profile.FromContext(ctx)
 			deploymentID := c.String("id")
 			jsonOutput := c.Bool("json")
 
-			apiURL, err := url.Parse(c.String("api-url"))
+			workflowParams, err := workflow.ResolveParams(c, prof)
 			if err != nil {
-				return fmt.Errorf(
-					"failed to parse API URL '%s': %w",
-					c.String("api-url"),
-					err,
-				)
+				return fmt.Errorf("failed to resolve workflow params: %w", err)
 			}
 
-			params := deploy.WorkflowParams{
-				APIKey:      secret.Secret(c.String("api-key")),
-				APIURL:      apiURL,
-				ProjectSlug: projectSlug,
-			}
-			result := deploy.NewWorkflow(ctx, logger, params)
+			result := workflow.New(ctx, logger, workflowParams)
 
 			if deploymentID != "" {
 				result.LoadDeploymentByID(ctx, deploymentID)

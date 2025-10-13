@@ -3,7 +3,6 @@ package app
 import (
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,7 +10,8 @@ import (
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
 	"github.com/speakeasy-api/gram/cli/internal/flags"
-	"github.com/speakeasy-api/gram/cli/internal/secret"
+	"github.com/speakeasy-api/gram/cli/internal/profile"
+	"github.com/speakeasy-api/gram/cli/internal/workflow"
 	"github.com/urfave/cli/v2"
 )
 
@@ -49,6 +49,11 @@ Example:
 				Usage:    "The URL-friendly slug for the asset",
 				Required: true,
 			},
+			&cli.StringFlag{
+				Name:     "runtime",
+				Usage:    "Runtime to use for function execution (required for functions)",
+				Required: false,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			ctx, cancel := signal.NotifyContext(
@@ -59,21 +64,14 @@ Example:
 			defer cancel()
 
 			logger := logging.PullLogger(ctx)
-			apiURL, err := url.Parse(c.String("api-url"))
+			prof := profile.FromContext(ctx)
+
+			workflowParams, err := workflow.ResolveParams(c, prof)
 			if err != nil {
-				return fmt.Errorf(
-					"failed to parse API URL '%s': %w",
-					c.String("api-url"),
-					err,
-				)
-			}
-			params := deploy.WorkflowParams{
-				APIKey:      secret.Secret(c.String("api-key")),
-				APIURL:      apiURL,
-				ProjectSlug: c.String("project"),
+				return fmt.Errorf("failed to resolve workflow params: %w", err)
 			}
 
-			result := deploy.NewWorkflow(ctx, logger, params).
+			result := workflow.New(ctx, logger, workflowParams).
 				UploadAssets(ctx, []deploy.Source{parseSource(c)}).
 				LoadLatestDeployment(ctx)
 			if result.Deployment == nil {
@@ -102,5 +100,6 @@ func parseSource(c *cli.Context) deploy.Source {
 		Location: c.String("location"),
 		Name:     c.String("name"),
 		Slug:     c.String("slug"),
+		Runtime:  c.String("runtime"),
 	}
 }

@@ -27,6 +27,4 @@ let value: ToolVariation = {
 | `name`                                         | *string*                                       | :heavy_minus_sign:                             | The name of the tool variation                 |
 | `srcToolName`                                  | *string*                                       | :heavy_check_mark:                             | The name of the source tool                    |
 | `summarizer`                                   | *string*                                       | :heavy_minus_sign:                             | The summarizer of the tool variation           |
-| `summary`                                      | *string*                                       | :heavy_minus_sign:                             | The summary of the tool variation              |
-| `tags`                                         | *string*[]                                     | :heavy_minus_sign:                             | The tags of the tool variation                 |
 | `updatedAt`                                    | *string*                                       | :heavy_check_mark:                             | The last update date of the tool variation     |

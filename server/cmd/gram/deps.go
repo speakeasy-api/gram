@@ -60,10 +60,10 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 
 func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context, features feature.Provider) (tm.ToolMetricsClient, func(context.Context) error, error) {
 	conn, err := clickhouse.Open(&clickhouse.Options{
-		Protocol:   clickhouse.HTTP,
+		Protocol:   clickhouse.Native,
 		ClientInfo: clickhouse.ClientInfo{Products: nil},
 		TLS:        nil,
-		Addr:       []string{fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-http-port"))},
+		Addr:       []string{fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-native-port"))},
 		Auth: clickhouse.Auth{
 			Database: c.String("clickhouse-database"),
 			Username: c.String("clickhouse-username"),
@@ -76,21 +76,6 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
 		},
-		Compression:          nil,
-		DialTimeout:          0,
-		MaxOpenConns:         0,
-		MaxIdleConns:         0,
-		ConnMaxLifetime:      0,
-		ConnOpenStrategy:     0,
-		FreeBufOnConnRelease: false,
-		HttpHeaders:          nil,
-		HttpUrlPath:          "",
-		HttpMaxConnsPerHost:  0,
-		BlockBufferSize:      0,
-		MaxCompressionBuffer: 0,
-		HTTPProxyURL:         nil,
-		GetJWT:               nil,
-		ReadTimeout:          0,
 	})
 	if err != nil {
 		logger.WarnContext(ctx, "error connecting to clickhouse; falling back to stub tool call metrics client")

@@ -257,7 +257,7 @@ CREATE TABLE IF NOT EXISTS deployments_packages (
 
 CREATE TABLE IF NOT EXISTS http_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  tool_urn TEXT,
+  tool_urn TEXT NOT NULL,
 
   project_id uuid NOT NULL,
   deployment_id uuid NOT NULL,
@@ -349,7 +349,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS functions_access_project_deployment_function_s
 CREATE TABLE IF NOT EXISTS function_tool_definitions (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   tool_urn TEXT NOT NULL,
-  project_id uuid,
+  project_id uuid NOT NULL,
 
   deployment_id uuid NOT NULL,
   function_id uuid NOT NULL,
@@ -516,7 +516,6 @@ CREATE TABLE IF NOT EXISTS toolsets (
   slug TEXT NOT NULL CHECK (slug <> '' AND CHAR_LENGTH(slug) <= 60),
   description TEXT CHECK (description <> '' AND CHAR_LENGTH(description) <= 250),
   default_environment_slug TEXT CHECK (default_environment_slug <> '' AND CHAR_LENGTH(default_environment_slug) <= 60),
-  http_tool_names TEXT[] DEFAULT ARRAY[]::TEXT[] CHECK (array_length(http_tool_names, 1) <= 5000),
   mcp_slug TEXT CHECK (
     mcp_slug IS NULL OR (mcp_slug <> '' AND CHAR_LENGTH(mcp_slug) <= 60)
   ),
@@ -743,7 +742,7 @@ WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS prompt_templates (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  tool_urn TEXT,
+  tool_urn TEXT NOT NULL,
   project_id uuid NOT NULL,
 
   history_id uuid NOT NULL,

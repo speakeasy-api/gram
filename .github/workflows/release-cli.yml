@@ -4,7 +4,7 @@ on:
     branches:
       - main
     paths:
-      - "cli/**/*.go"
+      - "cli/package.json"
   workflow_dispatch:
 permissions:
   contents: write
@@ -14,8 +14,6 @@ jobs:
     # NOTE(cjea): Using Windows runner for future Chocolatey/Winget
     # compatibility.
     runs-on: windows-latest
-    if: |
-      startsWith(github.event.head_commit.message, 'feat') || startsWith(github.event.head_commit.message, 'fix')
     steps:
       - name: Setup environment
         run: |-
@@ -24,16 +22,6 @@ jobs:
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
         with:
           fetch-depth: 0
-      - name: Conventional Commits
-        id: changelog
-        uses: TriPSs/conventional-changelog-action@5f00b899ccbbcbc112bd6d715d5e76e7a9e4501d # v6.1.0
-        with:
-          github-token: ${{ secrets.github_token }}
-          skip-commit: "true"
-          output-file: "false"
-          skip-on-empty: "false"
-          preset: conventionalcommits
-          tag-prefix: "@gram/cli@"
       - uses: actions/setup-go@44694675825211faa026b3c33043df3e48a5fa00 # v6.0.0
         with:
           go-version-file: "cli/go.mod"
@@ -51,6 +39,16 @@ jobs:
           private-key: ${{ secrets.GRAM_BOT_PRIVATE_KEY }}
           owner: speakeasy-api
           repositories: gram,homebrew-tap
+      - name: Create release tag
+        # GoReleaser expects a tag on HEAD before releasing. The newest tag
+        # will be on an old commit, specified by `changeset`, so this is a
+        # local-only tag to help GoReleaser publish.
+        shell: pwsh
+        run: |
+          $version = (Get-Content cli/package.json | ConvertFrom-Json).version
+          $tag = "@gram/cli@$version"
+          git tag $tag
+          Write-Host "Created local tag $tag"
       - name: goreleaser
         uses: goreleaser/goreleaser-action@e435ccd777264be153ace6237001ef4d979d3a7a # v6.4.0
         with:

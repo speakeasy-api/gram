@@ -112,6 +112,7 @@ linters:
         - '^github\.com/speakeasy-api/openapi/.*'
         - '^github\.com/polarsource/polar-go/.*'
         - '^github\.com/speakeasy-api/gram/server/gen/types\.Tool$'
+        - '^github\.com/ClickHouse/clickhouse-go/v2\.Options$'
     exhaustive:
       check:
         - switch
