@@ -76,6 +76,36 @@ jobs:
             echo "Warning: $src_assets does not exist; no assets to sync."
           fi
 
+      - name: Transform asset paths in synced content
+        run: |
+          set -euo pipefail
+          content_dir="marketing-repo/src/content/gram"
+          if [ -d "$content_dir" ]; then
+            # Target common content file extensions
+            mapfile -t files < <(find "$content_dir" -type f \( -name '*.md' -o -name '*.mdx' -o -name '*.markdown' -o -name '*.astro' -o -name '*.html' \))
+            if [ "${#files[@]}" -gt 0 ]; then
+              for f in "${files[@]}"; do
+                # 1) Rewrite root-relative image/video URLs to point to marketing assets location
+                sed -i -E \
+                  -e 's#href="/img/#href="/assets/docs/gram/img/#g' \
+                  -e 's#src="/img/#src="/assets/docs/gram/img/#g' \
+                  -e "s#src='/img/#src='/assets/docs/gram/img/#g" \
+                  -e 's#\]\(/img/#](/assets/docs/gram/img/#g' \
+                  -e 's#url\(/img/#url(/assets/docs/gram/img/#g' \
+                  "$f"
+
+                # 2) Prefix any other root-relative internal links with /docs/gram/ using a wildcard
+                #    Skips already-correct, assets, images, anchors, and URLs with a scheme (mailto:, https:, etc.)
+                perl -0777 -i -pe \
+                  "s{(href=)([\\\"'])/(?!docs/gram/|assets/|img/|static/|#|[a-z]+:)}{\\$1.\\$2.\"/docs/gram/\"}ge;" \
+                  -e  "s{(\\\]\()/(?!docs/gram/|assets/|img/|static/|#|[a-z]+:)}{\\$1.\"/docs/gram/\"}ge" \
+                  "$f"
+              done
+            fi
+          else
+            echo "Warning: $content_dir does not exist; nothing to transform."
+          fi
+
       - name: Build PR body with grouped changes
         run: |
           set -euo pipefail
