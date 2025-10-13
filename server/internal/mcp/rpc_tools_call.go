@@ -127,7 +127,7 @@ func handleToolsCall(
 	}
 
 	// At this point, non-http tools have already been handled
-	if tool.HTTPToolDefinition == nil {
+	if tool.HTTPToolDefinition == nil && tool.FunctionToolDefinition == nil {
 		return nil, oops.E(oops.CodeUnexpected, errors.New("tool is not an HTTP tool"), "tool is not an HTTP tool").Log(ctx, logger)
 	}
 
@@ -209,9 +209,8 @@ func handleToolsCall(
 			MCPURL:           &mcpURL,
 			MCPSessionID:     &payload.sessionID,
 			ChatID:           nil,
-			Type:             billing.ToolCallTypeHTTP,
+			Type:             plan.BillingType,
 		})
-
 	}()
 
 	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), ciEnv, plan)

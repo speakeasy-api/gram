@@ -10,6 +10,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type metrics struct {
@@ -19,7 +20,7 @@ type metrics struct {
 func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 	toolCallsCounter, err := meter.Int64Counter(
 		"tool.call",
-		metric.WithDescription("Number of HTTP tool calls"),
+		metric.WithDescription("Number of tool calls"),
 		metric.WithUnit("{call}"),
 	)
 	if err != nil {
@@ -31,13 +32,14 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 	}
 }
 
-func (m *metrics) RecordHTTPToolCall(ctx context.Context, orgID string, toolName string, statusCode int) {
+func (m *metrics) RecordToolCall(ctx context.Context, orgID string, toolURN urn.Tool, statusCode int) {
 	if m.toolCallsCounter == nil {
 		return
 	}
 
 	kv := []attribute.KeyValue{
-		attr.ToolName(toolName),
+		attr.ToolCallKind(string(toolURN.Kind)),
+		attr.ToolName(toolURN.Name),
 		attr.OrganizationID(orgID),
 		semconv.HTTPResponseStatusCode(statusCode),
 	}

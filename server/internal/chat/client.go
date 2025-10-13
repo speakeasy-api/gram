@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	env_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -49,6 +50,7 @@ func NewChatClient(logger *slog.Logger,
 	openRouter openrouter.Provisioner,
 	chatClient *openrouter.ChatClient,
 	env *environments.EnvironmentEntries,
+	enc *encryption.Client,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 ) *ChatClient {
@@ -64,6 +66,7 @@ func NewChatClient(logger *slog.Logger,
 			tracerProvider,
 			meterProvider,
 			gateway.ToolCallSourceDirect,
+			enc,
 			cacheImpl,
 			guardianPolicy,
 		),

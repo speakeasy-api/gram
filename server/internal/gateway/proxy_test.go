@@ -14,8 +14,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -183,6 +183,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
+			enc := testenv.NewEncryptionClient(t)
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
@@ -208,7 +209,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				plan.PathParams[paramName] = &HTTPParameter{
 					Name:            paramName,
 					Style:           "simple",
-					Explode:         boolPtr(false),
+					Explode:         conv.Ptr(false),
 					AllowEmptyValue: false,
 				}
 			}
@@ -233,6 +234,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				tracerProvider,
 				meterProvider,
 				ToolCallSourceDirect,
+				enc,
 				nil, // no cache needed for this test
 				policy,
 			)
@@ -306,6 +308,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
+			enc := testenv.NewEncryptionClient(t)
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
@@ -331,7 +334,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				plan.HeaderParams[paramName] = &HTTPParameter{
 					Name:            paramName,
 					Style:           "simple",
-					Explode:         boolPtr(false),
+					Explode:         conv.Ptr(false),
 					AllowEmptyValue: true,
 				}
 			}
@@ -356,6 +359,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				tracerProvider,
 				meterProvider,
 				ToolCallSourceDirect,
+				enc,
 				nil, // no cache needed for this test
 				policy,
 			)
@@ -406,7 +410,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"page": {
 					Name:            "page",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -423,7 +427,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"price": {
 					Name:            "price",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -442,19 +446,19 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"min": {
 					Name:            "min",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 				"max": {
 					Name:            "max",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 				"rate": {
 					Name:            "rate",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -473,7 +477,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"timestamp": {
 					Name:            "timestamp",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -490,7 +494,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"value": {
 					Name:            "value",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -507,7 +511,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"offset": {
 					Name:            "offset",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -524,7 +528,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"amount": {
 					Name:            "amount",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -543,19 +547,19 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"name": {
 					Name:            "name",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 				"category": {
 					Name:            "category",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 				"status": {
 					Name:            "status",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -575,13 +579,13 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"created_at": {
 					Name:            "created_at",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 				"expires": {
 					Name:            "expires",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -603,31 +607,31 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				"id": {
 					Name:            "id",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 				"name": {
 					Name:            "name",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 				"created_at": {
 					Name:            "created_at",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 				"price": {
 					Name:            "price",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 				"active": {
 					Name:            "active",
 					Style:           "form",
-					Explode:         boolPtr(true),
+					Explode:         conv.Ptr(true),
 					AllowEmptyValue: false,
 				},
 			},
@@ -660,6 +664,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
+			enc := testenv.NewEncryptionClient(t)
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
@@ -700,6 +705,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				tracerProvider,
 				meterProvider,
 				ToolCallSourceDirect,
+				enc,
 				nil, // no cache needed for this test
 				policy,
 			)
@@ -863,6 +869,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
+			enc := testenv.NewEncryptionClient(t)
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
@@ -914,6 +921,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				tracerProvider,
 				meterProvider,
 				ToolCallSourceDirect,
+				enc,
 				nil, // no cache needed for this test
 				policy,
 			)
@@ -952,67 +960,6 @@ func TestToolProxy_Do_Body(t *testing.T) {
 			}
 		})
 	}
-}
-
-// boolPtr is a helper function to create a pointer to a boolean value
-func boolPtr(b bool) *bool {
-	return &b
-}
-
-func TestToolProxy_Do_FunctionToolFails(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	logger := testenv.NewLogger(t)
-	tracerProvider := testenv.NewTracerProvider(t)
-	meterProvider := testenv.NewMeterProvider(t)
-	policy, err := guardian.NewUnsafePolicy([]string{})
-	require.NoError(t, err)
-
-	tool := newTestToolDescriptor()
-	// Create a function tool
-	plan := &FunctionToolCallPlan{
-		FunctionID:  uuid.New().String(),
-		Runtime:     "nodejs:22",
-		InputSchema: []byte(`{"type": "object"}`),
-		Variables:   []byte(`{}`),
-	}
-
-	// Create request body
-	requestBody := ToolCallBody{
-		PathParameters:       nil,
-		QueryParameters:      nil,
-		HeaderParameters:     nil,
-		Body:                 json.RawMessage(`{}`),
-		ResponseFilter:       nil,
-		EnvironmentVariables: nil,
-		GramRequestSummary:   "test function call",
-	}
-
-	bodyBytes, err := json.Marshal(requestBody)
-	require.NoError(t, err)
-
-	// Create tool proxy
-	proxy := NewToolProxy(
-		logger,
-		tracerProvider,
-		meterProvider,
-		ToolCallSourceDirect,
-		nil,
-		policy,
-	)
-
-	// Create response recorder
-	recorder := httptest.NewRecorder()
-
-	// Execute the proxy call with a function tool
-	ciEnv := NewCaseInsensitiveEnv()
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewFunctionToolCallPlan(tool, plan))
-
-	// Verify that it fails
-	var serr *oops.ShareableError
-	require.ErrorAs(t, err, &serr)
-	require.Equal(t, oops.CodeNotImplemented, serr.Code)
 }
 
 func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
@@ -1283,6 +1230,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 			logger := testenv.NewLogger(t)
 			tracerProvider := testenv.NewTracerProvider(t)
 			meterProvider := testenv.NewMeterProvider(t)
+			enc := testenv.NewEncryptionClient(t)
 			policy, err := guardian.NewUnsafePolicy([]string{})
 			require.NoError(t, err)
 
@@ -1309,6 +1257,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				tracerProvider,
 				meterProvider,
 				ToolCallSourceDirect,
+				enc,
 				nil,
 				policy,
 			)
