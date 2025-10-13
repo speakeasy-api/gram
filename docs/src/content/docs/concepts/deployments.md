@@ -31,7 +31,7 @@ tags a particular deployment with a semantic version.
 ## Troubleshooting
 
 Information about each deployment can be accessed from the "Deployments" page of
-a Gram project. Logs, assets, and tool definitions can be viewed after clicking
+a Gram project. Deployment logs, assets, and tool definitions can be viewed after clicking
 on a specific deployment. Logs are especially useful for debugging issues with assets
 that caused a deployment to fail, or discovering why a tool was skipped.
 
