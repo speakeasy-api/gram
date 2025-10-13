@@ -23,6 +23,7 @@ import (
 	polargo "github.com/polarsource/polar-go"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
@@ -58,40 +59,70 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	return cfgLoader(c)
 }
 
-func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context, features feature.Provider) (tm.ToolMetricsClient, func(context.Context) error, error) {
+func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context, tracerProvider trace.TracerProvider, features feature.Provider) (tm.ToolMetricsClient, func(context.Context) error, error) {
+	nilFunc := func(context.Context) error { return nil }
+
+	// validate cli args
+	if c.String("clickhouse-host") == "" {
+		return nil, nilFunc, fmt.Errorf("clickhouse-host is required")
+	}
+	if c.String("clickhouse-native-port") == "" {
+		return nil, nilFunc, fmt.Errorf("clickhouse-native-port is required")
+	}
+	if c.String("clickhouse-database") == "" {
+		return nil, nilFunc, fmt.Errorf("clickhouse-database is required")
+	}
+	if c.String("clickhouse-username") == "" {
+		return nil, nilFunc, fmt.Errorf("clickhouse-username is required")
+	}
+	if c.String("clickhouse-password") == "" {
+		return nil, nilFunc, fmt.Errorf("clickhouse-password is required")
+	}
+	if c.Bool("clickhouse-insecure") {
+		return nil, nilFunc, fmt.Errorf("clickhouse-insecure is required")
+	}
+
 	conn, err := clickhouse.Open(&clickhouse.Options{
-		Protocol:   clickhouse.Native,
-		ClientInfo: clickhouse.ClientInfo{Products: nil},
-		TLS:        nil,
-		Addr:       []string{fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-native-port"))},
+		Protocol: clickhouse.Native,
+		TLS: &tls.Config{
+			// #nosec G402 -- this will be false by default and only set to true if the user explicitly wants to use an insecure connection
+			InsecureSkipVerify: c.Bool("clickhouse-insecure"),
+		},
+		Addr: []string{fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-native-port"))},
 		Auth: clickhouse.Auth{
 			Database: c.String("clickhouse-database"),
 			Username: c.String("clickhouse-username"),
 			Password: c.String("clickhouse-password"),
 		},
-		DialContext:  nil,
-		DialStrategy: nil,
-		Debug:        false,
-		Debugf:       nil,
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
 		},
 	})
 	if err != nil {
 		logger.WarnContext(ctx, "error connecting to clickhouse; falling back to stub tool call metrics client")
-		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil
+		return nil, nilFunc, fmt.Errorf("failed to connect to clickhouse: %w", err)
 	}
 
 	if err = conn.Ping(ctx); err != nil {
 		logger.WarnContext(ctx, "failed to ping clickhouse; falling back to stub tool call metrics client", attr.SlogError(err))
-		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil
+		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse: %w", err)
 	}
 
-	cc := &tm.ClickhouseClient{
-		Conn:     conn,
-		Features: features,
-		Logger:   logger,
-	}
+	cc := tm.New(logger, conn, tracerProvider, func(ctx context.Context, log tm.ToolHTTPRequest) (bool, error) {
+		f := conv.Default[feature.Provider](features, &feature.InMemory{})
+		isEnabled, err := f.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, log.OrganizationID)
+		if err != nil {
+			logger.ErrorContext(
+				ctx, "an error occurred when fetching clickhouse feature flag",
+				attr.SlogError(err),
+				attr.SlogOrganizationSlug(log.OrganizationID),
+				attr.SlogProjectID(log.ProjectID),
+			)
+			return false, fmt.Errorf("an error occurred when fetching clickhouse feature flag: %w", err)
+		}
+
+		return isEnabled, nil
+	})
 
 	shutdown := func(ctx context.Context) error {
 		if err := cc.Close(); err != nil {

@@ -317,6 +317,7 @@ func marshalLogsHTTPToolLogToHTTPToolLogResponseBody(v *logs.HTTPToolLog) *HTTPT
 		return nil
 	}
 	res := &HTTPToolLogResponseBody{
+		ID:                v.ID,
 		Ts:                v.Ts,
 		OrganizationID:    v.OrganizationID,
 		ProjectID:         v.ProjectID,
@@ -331,12 +332,7 @@ func marshalLogsHTTPToolLogToHTTPToolLogResponseBody(v *logs.HTTPToolLog) *HTTPT
 		StatusCode:        v.StatusCode,
 		DurationMs:        v.DurationMs,
 		UserAgent:         v.UserAgent,
-		ClientIpv4:        v.ClientIpv4,
-		RequestBody:       v.RequestBody,
-		RequestBodySkip:   v.RequestBodySkip,
 		RequestBodyBytes:  v.RequestBodyBytes,
-		ResponseBody:      v.ResponseBody,
-		ResponseBodySkip:  v.ResponseBodySkip,
 		ResponseBodyBytes: v.ResponseBodyBytes,
 	}
 	if v.RequestHeaders != nil {

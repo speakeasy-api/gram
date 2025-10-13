@@ -44,6 +44,8 @@ var MethodNames = [1]string{"listLogs"}
 
 // HTTP tool request and response log entry
 type HTTPToolLog struct {
+	// Id of the request
+	ID *string
 	// Timestamp of the request
 	Ts string
 	// Organization UUID
@@ -67,29 +69,19 @@ type HTTPToolLog struct {
 	// HTTP route
 	HTTPRoute string
 	// HTTP status code
-	StatusCode uint32
+	StatusCode int64
 	// Duration in milliseconds
 	DurationMs float64
 	// User agent
 	UserAgent string
-	// Client IPv4 address
-	ClientIpv4 string
 	// Request headers
 	RequestHeaders map[string]string
-	// Request body
-	RequestBody *string
-	// Reason for skipping request body
-	RequestBodySkip *string
 	// Request body size in bytes
-	RequestBodyBytes *uint64
+	RequestBodyBytes *int64
 	// Response headers
 	ResponseHeaders map[string]string
-	// Response body
-	ResponseBody *string
-	// Reason for skipping response body
-	ResponseBodySkip *string
 	// Response body size in bytes
-	ResponseBodyBytes *uint64
+	ResponseBodyBytes *int64
 }
 
 // ListLogsPayload is the payload type of the logs service listLogs method.

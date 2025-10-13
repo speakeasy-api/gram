@@ -18,8 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
@@ -472,31 +470,13 @@ func reverseProxyRequest(ctx context.Context,
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 
-	f := conv.Default[feature.Provider](tcm.Feature(), &feature.InMemory{})
-	isEnabled, err := f.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, tool.OrganizationID)
-	if err != nil {
-		logger.ErrorContext(
-			ctx, "error checking if clickhouse tool metrics is enabled",
-			attr.SlogError(err),
-			attr.SlogOrganizationSlug(tool.OrganizationID),
-			attr.SlogProjectID(tool.ProjectID),
-		)
-	}
+	// Wrap with HTTP logging round tripper
+	loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, tcm, logger)
 
-	var otelTransport *otelhttp.Transport
-	if isEnabled {
-		// Wrap with HTTP logging round tripper
-		loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, tcm, logger)
-		otelTransport = otelhttp.NewTransport(
-			loggingTransport,
-			otelhttp.WithPropagators(propagation.TraceContext{}),
-		)
-	} else {
-		otelTransport = otelhttp.NewTransport(
-			transport,
-			otelhttp.WithPropagators(propagation.TraceContext{}),
-		)
-	}
+	otelTransport := otelhttp.NewTransport(
+		loggingTransport,
+		otelhttp.WithPropagators(propagation.TraceContext{}),
+	)
 
 	client := &http.Client{
 		Timeout:   60 * time.Second,

@@ -333,7 +333,7 @@ func newWorkerCommand() *cli.Command {
 				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
 
-			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c, features)
+			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c, tracerProvider, features)
 			if err != nil {
 				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
 			}

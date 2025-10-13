@@ -9156,9 +9156,6 @@ components:
         HTTPToolLog:
             type: object
             properties:
-                client_ipv4:
-                    type: string
-                    description: Client IPv4 address
                 deployment_id:
                     type: string
                     description: Deployment UUID
@@ -9173,6 +9170,10 @@ components:
                 http_route:
                     type: string
                     description: HTTP route
+                id:
+                    type: string
+                    description: Id of the request
+                    format: uuid
                 organization_id:
                     type: string
                     description: Organization UUID
@@ -9181,31 +9182,19 @@ components:
                     type: string
                     description: Project UUID
                     format: uuid
-                request_body:
-                    type: string
-                    description: Request body
                 request_body_bytes:
                     type: integer
                     description: Request body size in bytes
                     format: int64
-                request_body_skip:
-                    type: string
-                    description: Reason for skipping request body
                 request_headers:
                     type: object
                     description: Request headers
                     additionalProperties:
                         type: string
-                response_body:
-                    type: string
-                    description: Response body
                 response_body_bytes:
                     type: integer
                     description: Response body size in bytes
                     format: int64
-                response_body_skip:
-                    type: string
-                    description: Reason for skipping response body
                 response_headers:
                     type: object
                     description: Response headers
@@ -9217,7 +9206,7 @@ components:
                 status_code:
                     type: integer
                     description: HTTP status code
-                    format: int32
+                    format: int64
                 tool_id:
                     type: string
                     description: Tool UUID
@@ -9258,7 +9247,6 @@ components:
                 - status_code
                 - duration_ms
                 - user_agent
-                - client_ipv4
         InfoResponseBody:
             type: object
             properties:

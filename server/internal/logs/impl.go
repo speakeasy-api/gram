@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
@@ -110,12 +111,8 @@ func parseTimeOrDefault(s *string, defaultTime time.Time) time.Time {
 }
 
 func toHTTPToolLog(r tm.ToolHTTPRequest) *gen.HTTPToolLog {
-	// #nosec G115 -- A positive "int64" will fit in a "uint64"
-	var requestBodyBytes = uint64(max(0, r.RequestBodyBytes))
-	// #nosec G115 -- A positive "int64" will fit in a "uint64"
-	var responseBodyBytes = uint64(max(0, r.ResponseBodyBytes))
-
 	return &gen.HTTPToolLog{
+		ID:                conv.Ptr(r.ID),
 		Ts:                r.Ts.Format(time.RFC3339),
 		OrganizationID:    r.OrganizationID,
 		ProjectID:         r.ProjectID,
@@ -127,18 +124,13 @@ func toHTTPToolLog(r tm.ToolHTTPRequest) *gen.HTTPToolLog {
 		SpanID:            r.SpanID,
 		HTTPMethod:        r.HTTPMethod,
 		HTTPRoute:         r.HTTPRoute,
-		StatusCode:        uint32(r.StatusCode),
+		StatusCode:        r.StatusCode,
 		DurationMs:        r.DurationMs,
 		UserAgent:         r.UserAgent,
-		ClientIpv4:        r.ClientIPv4,
 		RequestHeaders:    r.RequestHeaders,
-		RequestBody:       r.RequestBody,
-		RequestBodySkip:   r.RequestBodySkip,
-		RequestBodyBytes:  &requestBodyBytes,
+		RequestBodyBytes:  conv.Ptr(r.RequestBodyBytes),
 		ResponseHeaders:   r.ResponseHeaders,
-		ResponseBody:      r.ResponseBody,
-		ResponseBodySkip:  r.ResponseBodySkip,
-		ResponseBodyBytes: &responseBodyBytes,
+		ResponseBodyBytes: conv.Ptr(r.ResponseBodyBytes),
 	}
 }
 

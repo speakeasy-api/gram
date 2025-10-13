@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -51,14 +52,20 @@ func newClickhouseClient(t *testing.T, orgId string) *toolmetrics.ClickhouseClie
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
+	tracerProvider := testenv.NewTracerProvider(t)
+
 	fp := &feature.InMemory{}
 	fp.SetFlag(feature.FlagClickhouseToolMetrics, orgId, true)
 
-	return &toolmetrics.ClickhouseClient{
-		Conn:     chConn,
-		Features: fp,
-		Logger:   testenv.NewLogger(t),
-	}
+	ch := toolmetrics.New(testenv.NewLogger(t), chConn, tracerProvider, func(ctx context.Context, log toolmetrics.ToolHTTPRequest) (bool, error) {
+		isEnabled, err := fp.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, orgId)
+		if err != nil {
+			return false, fmt.Errorf("failed to check feature flag: %w", err)
+		}
+		return isEnabled, nil
+	})
+
+	return ch
 }
 
 func TestToolProxy_Do_PathParams(t *testing.T) {
@@ -1420,6 +1427,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				RequestContentType: NullString{Value: "application/json", Valid: true},
 				ResponseFilter:     nil,
 			}
+			chClient := newClickhouseClient(t, tool.OrganizationID)
 
 			// Create tool proxy
 			proxy := NewToolProxy(
@@ -1429,6 +1437,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				ToolCallSourceDirect,
 				nil,
 				policy,
+				chClient,
 			)
 
 			// Create response recorder

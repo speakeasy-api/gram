@@ -282,6 +282,7 @@ func unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(v *HTTPToolLogResponseBod
 		return nil
 	}
 	res := &logs.HTTPToolLog{
+		ID:                v.ID,
 		Ts:                *v.Ts,
 		OrganizationID:    *v.OrganizationID,
 		ProjectID:         *v.ProjectID,
@@ -296,12 +297,7 @@ func unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(v *HTTPToolLogResponseBod
 		StatusCode:        *v.StatusCode,
 		DurationMs:        *v.DurationMs,
 		UserAgent:         *v.UserAgent,
-		ClientIpv4:        *v.ClientIpv4,
-		RequestBody:       v.RequestBody,
-		RequestBodySkip:   v.RequestBodySkip,
 		RequestBodyBytes:  v.RequestBodyBytes,
-		ResponseBody:      v.ResponseBody,
-		ResponseBodySkip:  v.ResponseBodySkip,
 		ResponseBodyBytes: v.ResponseBodyBytes,
 	}
 	if v.RequestHeaders != nil {

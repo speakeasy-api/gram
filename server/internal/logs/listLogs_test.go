@@ -13,7 +13,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	logsvc "github.com/speakeasy-api/gram/server/internal/logs"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
@@ -73,11 +72,11 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	chClient := &toolmetrics.ClickhouseClient{
-		Conn:     chConn,
-		Logger:   logger,
-		Features: &feature.InMemory{},
-	}
+	tracerProvider := testenv.NewTracerProvider(t)
+
+	chClient := toolmetrics.New(logger, chConn, tracerProvider, func(ctx context.Context, log toolmetrics.ToolHTTPRequest) (bool, error) {
+		return true, nil
+	})
 
 	svc := logsvc.NewService(logger, conn, sessionManager, chClient)
 
@@ -140,6 +139,7 @@ func insertTestLogs(ctx context.Context, t *testing.T, chClient *toolmetrics.Cli
 
 	for i := 0; i < opts.count; i++ {
 		err := chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
+			ID:                uuid.New().String(),
 			Ts:                opts.baseTime.Add(time.Duration(i) * time.Minute),
 			OrganizationID:    opts.orgID,
 			ProjectID:         opts.projectID,
@@ -151,17 +151,12 @@ func insertTestLogs(ctx context.Context, t *testing.T, chClient *toolmetrics.Cli
 			SpanID:            uuid.New().String()[:16],
 			HTTPMethod:        opts.httpMethod,
 			HTTPRoute:         opts.httpRoute,
-			StatusCode:        opts.statusCode,
+			StatusCode:        int64(opts.statusCode),
 			DurationMs:        opts.durationMs,
 			UserAgent:         "test-agent",
-			ClientIPv4:        "127.0.0.1",
 			RequestHeaders:    opts.reqHeaders,
-			RequestBody:       opts.reqBody,
-			RequestBodySkip:   opts.reqSkip,
 			RequestBodyBytes:  12,
 			ResponseHeaders:   opts.respHeaders,
-			ResponseBody:      opts.respBody,
-			ResponseBodySkip:  opts.respSkip,
 			ResponseBodyBytes: 13,
 		})
 		require.NoError(t, err)
@@ -398,9 +393,11 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 
 	// Insert 10 logs over 10 minutes
 	for i := 0; i < 10; i++ {
-		reqBody := "request body"
-		respBody := "response body"
-		err := ti.chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
+		id, err := uuid.NewV7()
+		require.NoError(t, err)
+
+		err = ti.chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
+			ID:                id.String(),
 			Ts:                baseTime.Add(time.Duration(i) * time.Minute),
 			OrganizationID:    orgID,
 			ProjectID:         projectID,
@@ -415,14 +412,9 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 			StatusCode:        200,
 			DurationMs:        100.0,
 			UserAgent:         "test-agent",
-			ClientIPv4:        "127.0.0.1",
 			RequestHeaders:    map[string]string{"Content-Type": "application/json"},
-			RequestBody:       &reqBody,
-			RequestBodySkip:   nil,
 			RequestBodyBytes:  12,
 			ResponseHeaders:   map[string]string{"Content-Type": "application/json"},
-			ResponseBody:      &respBody,
-			ResponseBodySkip:  nil,
 			ResponseBodyBytes: 13,
 		})
 		require.NoError(t, err)
@@ -554,12 +546,12 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 	spanID := "0123456789abcdef"
 
 	baseTime := time.Now().UTC().Add(-10 * time.Minute)
-	reqBody := "test request body"
-	respBody := "test response body"
-	reqSkip := "too large"
-	respSkip := "too large"
 
-	err := ti.chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	err = ti.chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
+		ID:                id.String(),
 		Ts:                baseTime,
 		OrganizationID:    orgID,
 		ProjectID:         projectID,
@@ -574,14 +566,9 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 		StatusCode:        201,
 		DurationMs:        250.5,
 		UserAgent:         "Mozilla/5.0",
-		ClientIPv4:        "192.168.1.1",
 		RequestHeaders:    map[string]string{"Content-Type": "application/json", "Authorization": "Bearer token"},
-		RequestBody:       &reqBody,
-		RequestBodySkip:   &reqSkip,
 		RequestBodyBytes:  17,
 		ResponseHeaders:   map[string]string{"Content-Type": "application/json"},
-		ResponseBody:      &respBody,
-		ResponseBodySkip:  &respSkip,
 		ResponseBodyBytes: 18,
 	})
 	require.NoError(t, err)
@@ -619,17 +606,8 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 	require.Equal(t, uint32(201), toolLog.StatusCode)
 	require.InEpsilon(t, 250.5, toolLog.DurationMs, 0.001)
 	require.Equal(t, "Mozilla/5.0", toolLog.UserAgent)
-	require.Equal(t, "192.168.1.1", toolLog.ClientIpv4)
-	require.NotNil(t, toolLog.RequestBody)
-	require.Equal(t, reqBody, *toolLog.RequestBody)
-	require.NotNil(t, toolLog.RequestBodySkip)
-	require.Equal(t, reqSkip, *toolLog.RequestBodySkip)
 	require.NotNil(t, toolLog.RequestBodyBytes)
 	require.Equal(t, uint64(17), *toolLog.RequestBodyBytes)
-	require.NotNil(t, toolLog.ResponseBody)
-	require.Equal(t, respBody, *toolLog.ResponseBody)
-	require.NotNil(t, toolLog.ResponseBodySkip)
-	require.Equal(t, respSkip, *toolLog.ResponseBodySkip)
 	require.NotNil(t, toolLog.ResponseBodyBytes)
 	require.Equal(t, uint64(18), *toolLog.ResponseBodyBytes)
 	require.Len(t, toolLog.RequestHeaders, 2)

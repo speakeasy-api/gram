@@ -201,6 +201,8 @@ type ListLogsGatewayErrorResponseBody struct {
 
 // HTTPToolLogResponseBody is used to define fields on response body types.
 type HTTPToolLogResponseBody struct {
+	// Id of the request
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// Timestamp of the request
 	Ts string `form:"ts" json:"ts" xml:"ts"`
 	// Organization UUID
@@ -224,29 +226,19 @@ type HTTPToolLogResponseBody struct {
 	// HTTP route
 	HTTPRoute string `form:"http_route" json:"http_route" xml:"http_route"`
 	// HTTP status code
-	StatusCode uint32 `form:"status_code" json:"status_code" xml:"status_code"`
+	StatusCode int64 `form:"status_code" json:"status_code" xml:"status_code"`
 	// Duration in milliseconds
 	DurationMs float64 `form:"duration_ms" json:"duration_ms" xml:"duration_ms"`
 	// User agent
 	UserAgent string `form:"user_agent" json:"user_agent" xml:"user_agent"`
-	// Client IPv4 address
-	ClientIpv4 string `form:"client_ipv4" json:"client_ipv4" xml:"client_ipv4"`
 	// Request headers
 	RequestHeaders map[string]string `form:"request_headers,omitempty" json:"request_headers,omitempty" xml:"request_headers,omitempty"`
-	// Request body
-	RequestBody *string `form:"request_body,omitempty" json:"request_body,omitempty" xml:"request_body,omitempty"`
-	// Reason for skipping request body
-	RequestBodySkip *string `form:"request_body_skip,omitempty" json:"request_body_skip,omitempty" xml:"request_body_skip,omitempty"`
 	// Request body size in bytes
-	RequestBodyBytes *uint64 `form:"request_body_bytes,omitempty" json:"request_body_bytes,omitempty" xml:"request_body_bytes,omitempty"`
+	RequestBodyBytes *int64 `form:"request_body_bytes,omitempty" json:"request_body_bytes,omitempty" xml:"request_body_bytes,omitempty"`
 	// Response headers
 	ResponseHeaders map[string]string `form:"response_headers,omitempty" json:"response_headers,omitempty" xml:"response_headers,omitempty"`
-	// Response body
-	ResponseBody *string `form:"response_body,omitempty" json:"response_body,omitempty" xml:"response_body,omitempty"`
-	// Reason for skipping response body
-	ResponseBodySkip *string `form:"response_body_skip,omitempty" json:"response_body_skip,omitempty" xml:"response_body_skip,omitempty"`
 	// Response body size in bytes
-	ResponseBodyBytes *uint64 `form:"response_body_bytes,omitempty" json:"response_body_bytes,omitempty" xml:"response_body_bytes,omitempty"`
+	ResponseBodyBytes *int64 `form:"response_body_bytes,omitempty" json:"response_body_bytes,omitempty" xml:"response_body_bytes,omitempty"`
 }
 
 // PaginationResultResponseBody is used to define fields on response body types.

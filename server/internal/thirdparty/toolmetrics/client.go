@@ -9,8 +9,6 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/feature"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -53,13 +51,10 @@ func (t *ToolType) Scan(src interface{}) error {
 }
 
 type ToolMetricsClient interface {
-	Close() error
 	// List tool call logs
 	List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) (*ListResult, error)
 	// Log tool call request/response
 	Log(context.Context, ToolHTTPRequest) error
-	// Feature feature flag provider
-	Feature() feature.Provider
 }
 
 type PaginationMetadata struct {
@@ -73,51 +68,39 @@ type ListResult struct {
 	Pagination PaginationMetadata `json:"pagination"`
 }
 
-type StubToolMetricsClient struct{}
+func New(logger *slog.Logger, conn clickhouse.Conn, traceProvider trace.TracerProvider, shouldFlag func(ctx context.Context, log ToolHTTPRequest) (bool, error)) *ClickhouseClient {
+	if shouldFlag == nil {
+		shouldFlag = func(ctx context.Context, log ToolHTTPRequest) (bool, error) {
+			return true, nil
+		}
+	}
 
-func (n *StubToolMetricsClient) Feature() feature.Provider {
-	return &feature.InMemory{}
-}
+	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics")
 
-func (n *StubToolMetricsClient) List(_ context.Context, _ string, _ time.Time, _ time.Time, _ time.Time, p Pageable) (*ListResult, error) {
-	return &ListResult{
-		Logs: []ToolHTTPRequest{},
-		Pagination: PaginationMetadata{
-			PerPage:        p.Limit() - 1, // Remove the +1 we added for detection
-			HasNextPage:    false,
-			NextPageCursor: nil,
-		},
-	}, nil
-}
-
-func (n *StubToolMetricsClient) Log(_ context.Context, _ ToolHTTPRequest) error {
-	return nil
-}
-
-func (n *StubToolMetricsClient) Close() error {
-	return nil
+	return &ClickhouseClient{
+		Logger:     logger,
+		Conn:       conn,
+		Tracer:     tracer,
+		ShouldFlag: shouldFlag,
+	}
 }
 
 type ClickhouseClient struct {
-	Conn     clickhouse.Conn
-	Logger   *slog.Logger
-	Features feature.Provider
-}
-
-func (c *ClickhouseClient) Feature() feature.Provider {
-	return c.Features
+	Logger     *slog.Logger
+	Conn       clickhouse.Conn
+	Tracer     trace.Tracer
+	ShouldFlag func(ctx context.Context, log ToolHTTPRequest) (bool, error)
 }
 
 func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) (*ListResult, error) {
-	tracer := otel.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics")
-	ctx, span := tracer.Start(ctx, "clickhouse.list_logs",
+	ctx, span := c.Tracer.Start(ctx, "clickhouse.list_logs",
 		trace.WithAttributes(
-			attribute.String("project_id", projectID),
-			attribute.String("ts_start", tsStart.Format(time.RFC3339)),
-			attribute.String("ts_end", tsEnd.Format(time.RFC3339)),
-			attribute.String("cursor", cursor.Format(time.RFC3339)),
-			attribute.Int("limit", pagination.Limit()),
-			attribute.String("sort_order", pagination.SortOrder()),
+			attr.ProjectID(projectID),
+			attr.TsStart(tsStart),
+			attr.TsEnd(tsEnd),
+			attr.Cursor(cursor),
+			attr.Limit(pagination.Limit()),
+			attr.SortOrder(pagination.SortOrder()),
 		),
 	)
 	defer span.End()
@@ -222,8 +205,17 @@ func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, 
 }
 
 func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
-	tracer := otel.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics")
-	ctx, span := tracer.Start(ctx, "clickhouse.log_http_request",
+	allow, err := c.ShouldFlag(ctx, log)
+	if err != nil {
+		c.Logger.ErrorContext(ctx, "failed to fetch feature flag", attr.SlogError(err))
+		return nil
+	}
+
+	if !allow {
+		return nil
+	}
+
+	ctx, span := c.Tracer.Start(ctx, "clickhouse.log_http_request",
 		trace.WithAttributes(
 			attribute.String("tool_id", log.ToolID),
 			attribute.String("tool_urn", log.ToolURN),
@@ -254,18 +246,13 @@ func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
 		log.StatusCode,
 		log.DurationMs,
 		log.UserAgent,
-		log.ClientIPv4,
 		log.RequestHeaders,
-		log.RequestBody,
-		log.RequestBodySkip,
 		log.RequestBodyBytes,
 		log.ResponseHeaders,
-		log.ResponseBody,
-		log.ResponseBodySkip,
 		log.ResponseBodyBytes,
 	}
 
-	err := c.Conn.Exec(ctx, insertHttpRaw, args...)
+	err = c.Conn.Exec(ctx, insertHttpRaw, args...)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to insert log")
@@ -314,6 +301,7 @@ func (c *ClickhouseClient) Close() error {
 }
 
 type ToolHTTPRequest struct {
+	ID string    `ch:"id"` // UUID
 	Ts time.Time `ch:"ts"` // DateTime64(3, 'UTC')
 
 	// required multi-tenant keys
@@ -331,20 +319,15 @@ type ToolHTTPRequest struct {
 	// request metadata
 	HTTPMethod string  `ch:"http_method"` // LowCardinality(String)
 	HTTPRoute  string  `ch:"http_route"`  // String
-	StatusCode uint16  `ch:"status_code"` // UInt16
+	StatusCode int64   `ch:"status_code"` // Int64
 	DurationMs float64 `ch:"duration_ms"` // Float64
 	UserAgent  string  `ch:"user_agent"`  // LowCardinality(String)
-	ClientIPv4 string  `ch:"client_ipv4"` // IPv4
 
 	// request payload
 	RequestHeaders   map[string]string `ch:"request_headers"`    // Map(String, String)
-	RequestBody      *string           `ch:"request_body"`       // Nullable(String)
-	RequestBodySkip  *string           `ch:"request_body_skip"`  // Nullable(String)
-	RequestBodyBytes int64             `ch:"request_body_bytes"` // UInt64
+	RequestBodyBytes int64             `ch:"request_body_bytes"` // Int64
 
 	// response payload
 	ResponseHeaders   map[string]string `ch:"response_headers"`    // Map(String, String)
-	ResponseBody      *string           `ch:"response_body"`       // Nullable(String)
-	ResponseBodySkip  *string           `ch:"response_body_skip"`  // Nullable(String)
-	ResponseBodyBytes int64             `ch:"response_body_bytes"` // UInt64
+	ResponseBodyBytes int64             `ch:"response_body_bytes"` // Int64
 }

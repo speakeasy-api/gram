@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
-	"net/http/httptrace"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"go.opentelemetry.io/otel"
@@ -95,36 +94,6 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	if base == nil {
 		base = http.DefaultTransport
 	}
-
-	var clientIP string
-
-	httpTrace := &httptrace.ClientTrace{
-		GetConn: nil,
-		GotConn: func(info httptrace.GotConnInfo) {
-			if info.Conn != nil {
-				remote := info.Conn.RemoteAddr().String()
-				if host, _, err := net.SplitHostPort(remote); err == nil {
-					clientIP = host
-					span.SetAttributes(attribute.String("net.peer.ip", clientIP))
-				}
-			}
-		},
-		PutIdleConn:          nil,
-		GotFirstResponseByte: nil,
-		Got100Continue:       nil,
-		Got1xxResponse:       nil,
-		DNSStart:             nil,
-		DNSDone:              nil,
-		ConnectStart:         nil,
-		ConnectDone:          nil,
-		TLSHandshakeStart:    nil,
-		TLSHandshakeDone:     nil,
-		WroteHeaderField:     nil,
-		WroteHeaders:         nil,
-		Wait100Continue:      nil,
-		WroteRequest:         nil,
-	}
-	req = req.WithContext(httptrace.WithClientTrace(ctx, httpTrace))
 
 	requestBodyBytesPtr, ok := ctx.Value(RequestBodyContextKey).(*int)
 	if !ok {
@@ -253,33 +222,38 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			// Get final request body size now that request body has been read and closed
 			var requestBodyBytes = conv.PtrValOr(requestBodyBytesPtr, 0)
 
+			id, err := uuid.NewV7()
+			if err != nil {
+				h.logger.ErrorContext(logCtx, "failed to generate UUID for HTTP request logging",
+					attr.SlogURLOriginal(url),
+					attr.SlogToolURN(toolID),
+					attr.SlogHTTPRequestMethod(method),
+				)
+				return
+			}
+
 			// We are not logging the request or response bodies for a number of reasons:
 			// - They may be too large and will inflate our ClickHouse table, making it slower to query and hard to estimate the size
 			// - They might contain sensitive information such as PII or API keys, then we'd have to redact them
 			httpRequest := ToolHTTPRequest{
-				Ts:             time.Now().UTC(),
-				OrganizationID: tool.OrganizationID,
-				ProjectID:      tool.ProjectID,
-				DeploymentID:   tool.DeploymentID,
-				ToolID:         tool.ID,
-				ToolURN:        tool.Urn,
-				ToolType:       HTTPToolType,
-				TraceID:        traceID,
-				SpanID:         spanID,
-				HTTPMethod:     req.Method,
-				HTTPRoute:      tool.HTTPRoute,
-				// #nosec G115 -- We're bounding an int into a uint16
-				StatusCode:        uint16(min(599, max(0, statusCode))),
+				ID:                id.String(),
+				Ts:                time.Now().UTC(),
+				OrganizationID:    tool.OrganizationID,
+				ProjectID:         tool.ProjectID,
+				DeploymentID:      tool.DeploymentID,
+				ToolID:            tool.ID,
+				ToolURN:           tool.Urn,
+				ToolType:          HTTPToolType,
+				TraceID:           traceID,
+				SpanID:            spanID,
+				HTTPMethod:        req.Method,
+				HTTPRoute:         tool.HTTPRoute,
+				StatusCode:        int64(statusCode), // #nosec G115 -- We're bounding an int into a uint16
 				DurationMs:        durationMs,
 				UserAgent:         req.UserAgent(),
-				ClientIPv4:        clientIP,
 				RequestHeaders:    requestHeaders,
-				RequestBody:       nil,
-				RequestBodySkip:   nil,
 				RequestBodyBytes:  int64(requestBodyBytes),
 				ResponseHeaders:   responseHeaders,
-				ResponseBody:      nil,
-				ResponseBodySkip:  nil,
 				ResponseBodyBytes: int64(respBodyBytes),
 			}
 

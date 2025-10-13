@@ -128,6 +128,11 @@ const (
 	ToolNameKey                    = attribute.Key("gram.tool.name")
 	ToolsetIDKey                   = attribute.Key("gram.toolset.id")
 	ToolsetSlugKey                 = attribute.Key("gram.toolset.slug")
+	TsStartKey                     = attribute.Key("gram.pagination.ts_start")
+	TsEndKey                       = attribute.Key("gram.pagination.ts_end")
+	CursorKey                      = attribute.Key("gram.pagination.cursor")
+	LimitKey                       = attribute.Key("gram.pagination.limit")
+	SortOrderKey                   = attribute.Key("gram.pagination.sort_order")
 )
 
 func Error(v error) attribute.KeyValue { return ErrorMessageKey.String(v.Error()) }
@@ -508,4 +513,29 @@ func ToolCallDuration(v time.Duration) attribute.KeyValue {
 }
 func SlogToolCallDuration(v time.Duration) slog.Attr {
 	return slog.Float64(string(ToolCallDurationKey), v.Seconds())
+}
+
+func TsStart(v time.Time) attribute.KeyValue { return TsStartKey.String(v.Format(time.RFC3339)) }
+func SlogTsStart(v time.Time) slog.Attr {
+	return slog.Time(string(TsStartKey), v)
+}
+
+func TsEnd(v time.Time) attribute.KeyValue { return TsEndKey.String(v.Format(time.RFC3339)) }
+func SlogTsEnd(v time.Time) slog.Attr {
+	return slog.Time(string(TsEndKey), v)
+}
+
+func Cursor(v time.Time) attribute.KeyValue { return CursorKey.String(v.Format(time.RFC3339)) }
+func SlogCursor(v time.Time) slog.Attr {
+	return slog.Time(string(CursorKey), v)
+}
+
+func Limit(v int) attribute.KeyValue { return LimitKey.Int(v) }
+func SlogLimit(v int) slog.Attr {
+	return slog.Int(string(LimitKey), v)
+}
+
+func SortOrder(v string) attribute.KeyValue { return SortOrderKey.String(v) }
+func SlogSortOrder(v string) slog.Attr {
+	return slog.String(string(SortOrderKey), v)
 }
