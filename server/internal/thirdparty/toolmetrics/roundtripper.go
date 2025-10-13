@@ -15,14 +15,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// Log attribute keys for HTTP round trip operations
-const (
-	attrDurationMs    = "duration_ms"
-	attrPanic         = "panic"
-	attrRequestBytes  = "request_bytes"
-	attrResponseBytes = "response_bytes"
-)
-
 // sensitiveHeaders is a list of header names that should be redacted from logs
 var sensitiveHeaders = map[string]bool{
 	"authorization":       true,
