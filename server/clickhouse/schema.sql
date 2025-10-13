@@ -1,5 +1,6 @@
 create table if not exists http_requests_raw
 (
+    id                  UUID DEFAULT generateUUIDv7(),
     ts                  DateTime64(3, 'UTC'),
     organization_id     UUID,
     project_id          UUID,
@@ -13,23 +14,18 @@ create table if not exists http_requests_raw
 
     http_method         LowCardinality(String),
     http_route          String,
-    status_code         UInt16,
+    status_code         Int64,
     duration_ms         Float64,
     user_agent          LowCardinality(String),
-    client_ipv4         IPv4,
 
     request_headers     Map(String, String) CODEC (ZSTD),
-    request_body        Nullable(String) CODEC (ZSTD),
-    request_body_skip   Nullable(String),
-    request_body_bytes  UInt64,
+    request_body_bytes  Int64,
 
     response_headers    Map(String, String) CODEC (ZSTD),
-    response_body       Nullable(String) CODEC (ZSTD),
-    response_body_skip  Nullable(String),
-    response_body_bytes UInt64
+    response_body_bytes Int64
 ) engine = MergeTree
       PARTITION BY toDate(ts)
-      ORDER BY (toUInt128(project_id), toUInt128(tool_id), ts)
+      ORDER BY (toUInt128(project_id), ts)
       TTL ts + toIntervalDay(60)
       SETTINGS index_granularity = 8192
       COMMENT 'Stores raw HTTP tool call requests and responses';
