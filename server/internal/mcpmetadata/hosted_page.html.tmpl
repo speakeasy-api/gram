@@ -1418,38 +1418,38 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
             id="manifest-json-blob"
             type="application/json"
             style="display: none"
-          >{
-    "dxt_version": "0.1",
-    "name": "{{ .MCPName }}",
-    "version": "1.0.0",
-    "description": "{{ .MCPDescription }}",
-    "author": {
-       "name": "{{ .OrganizationName }} with Gram"
-    },
-    "server": {
-      "type": "node",
-      "entry_point": "npx",
-      "mcp_config": {
-        "command": "npx",
-        "args": [
-          "mcp-remote",
-          "{{ .MCPURL }}"{{- range $i, $header := .Headers }},
-          "--header",
-          "{{ printf "%s:${user_config.%s}" $header (index $.EnvHeaders $i) }}"{{- end }}
-        ]
-      }
-    },
-    "user_config": {
-      {{- range $i, $header := .EnvHeaders }}{{- if $i }},{{ end }}
-      "{{ $header }}": {
-        "type": "string",
-        "title": "{{ $header }}",
-        "description": "Get this value from your gram env",
-        "sensitive": true,
-        "required": true
-      }{{- end }}
-    }
-  }          </code>
+          >            {
+"dxt_version": "0.1",
+"name": "{{ .MCPName }}",
+"version": "1.0.0",
+"description": "{{ .MCPDescription }}",
+"author": {
+   "name": "{{ .OrganizationName }} with Gram"
+},
+"server": {
+  "type": "node",
+  "entry_point": "npx",
+  "mcp_config": {
+    "command": "npx",
+    "args": [
+      "mcp-remote",
+      "{{ .MCPURL }}"{{- range .SecurityInputs }},
+      "--header",
+      "{{ printf "%s:${user_config.%s}" (.SystemName | asHTTPHeader) (.DisplayName | asPosixName) }}"{{- end }}
+    ]
+  }
+},
+"user_config": {
+  {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
+  "{{ $input.DisplayName | asPosixName }}": {
+    "type": "string",
+    "title": "{{ $input.DisplayName | asPosixName }}",
+    "description": "Get this value from your gram env",
+    "sensitive": {{ $input.Sensitive }},
+    "required": true
+  }{{- end }}
+}
+</code>
         </section>
       </div>
     </main>
