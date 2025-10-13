@@ -13,15 +13,19 @@ import (
 )
 
 func TestSecret_String(t *testing.T) {
+	t.Parallel()
+
 	s := conv.NewSecret([]byte("my-secret-value"))
 
 	require.Equal(t, "****", s.String())
-	require.Equal(t, "****", fmt.Sprintf("%s", s))
-	require.Equal(t, "****", fmt.Sprintf("%v", s))
-	require.Equal(t, "****", fmt.Sprintf("%+v", s))
+	require.Equal(t, "secret is: ****", fmt.Sprintf("secret is: %s", s))
+	require.Equal(t, "secret is: ****", fmt.Sprintf("secret is: %v", s))
+	require.Equal(t, "secret is: ****", fmt.Sprintf("secret is: %+v", s))
 }
 
 func TestSecret_Reveal(t *testing.T) {
+	t.Parallel()
+
 	s := conv.NewSecret([]byte("my-secret-value"))
 
 	// Reveal should return the actual secret value
@@ -29,6 +33,8 @@ func TestSecret_Reveal(t *testing.T) {
 }
 
 func TestSecret_MarshalText(t *testing.T) {
+	t.Parallel()
+
 	s := conv.NewSecret([]byte("my-secret-value"))
 
 	// MarshalText should return "****" to hide the secret
@@ -38,6 +44,8 @@ func TestSecret_MarshalText(t *testing.T) {
 }
 
 func TestSecret_UnmarshalText(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    []byte
@@ -57,6 +65,8 @@ func TestSecret_UnmarshalText(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			s := conv.Secret{}
 			err := s.UnmarshalText(tt.input)
 			require.NoError(t, err)
@@ -66,6 +76,8 @@ func TestSecret_UnmarshalText(t *testing.T) {
 }
 
 func TestSecret_MarshalJSON(t *testing.T) {
+	t.Parallel()
+
 	s := conv.NewSecret([]byte("my-secret-value"))
 
 	// MarshalJSON should return "****" to hide the secret
@@ -75,6 +87,8 @@ func TestSecret_MarshalJSON(t *testing.T) {
 }
 
 func TestSecret_MarshalJSON_InStruct(t *testing.T) {
+	t.Parallel()
+
 	type TestStruct struct {
 		APIKey conv.Secret `json:"api_key"`
 		Name   string      `json:"name"`
@@ -88,10 +102,12 @@ func TestSecret_MarshalJSON_InStruct(t *testing.T) {
 	// When marshaled as part of a struct, the secret should be hidden
 	data, err := json.Marshal(ts)
 	require.NoError(t, err)
-	require.Equal(t, `{"api_key":"****","name":"test-service"}`, string(data))
+	require.JSONEq(t, `{"api_key":"****","name":"test-service"}`, string(data))
 }
 
 func TestSecret_UnmarshalJSON(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    string
@@ -120,6 +136,8 @@ func TestSecret_UnmarshalJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			s := conv.Secret{}
 			err := s.UnmarshalJSON([]byte(tt.input))
 			if tt.wantErr {
@@ -133,6 +151,8 @@ func TestSecret_UnmarshalJSON(t *testing.T) {
 }
 
 func TestSecret_UnmarshalJSON_InStruct(t *testing.T) {
+	t.Parallel()
+
 	val := []byte("secret-api-key")
 	valB64 := base64.StdEncoding.EncodeToString(val)
 
@@ -151,6 +171,8 @@ func TestSecret_UnmarshalJSON_InStruct(t *testing.T) {
 }
 
 func TestSecret_Scan(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		value    any
@@ -185,6 +207,8 @@ func TestSecret_Scan(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			s := conv.Secret{}
 			err := s.Scan(tt.value)
 			if tt.wantErr {
@@ -198,6 +222,8 @@ func TestSecret_Scan(t *testing.T) {
 }
 
 func TestSecret_Value(t *testing.T) {
+	t.Parallel()
+
 	s := conv.NewSecret([]byte("my-secret-value"))
 
 	// Value should return the actual secret for database storage
@@ -207,6 +233,8 @@ func TestSecret_Value(t *testing.T) {
 }
 
 func TestSecret_Value_DatabaseRoundtrip(t *testing.T) {
+	t.Parallel()
+
 	// Simulate database write
 	s1 := conv.NewSecret([]byte("my-secret-value"))
 
@@ -223,6 +251,8 @@ func TestSecret_Value_DatabaseRoundtrip(t *testing.T) {
 }
 
 func TestSecret_LogValue(t *testing.T) {
+	t.Parallel()
+
 	s := conv.NewSecret([]byte("my-secret-value"))
 
 	// LogValue should return a masked value
@@ -231,16 +261,17 @@ func TestSecret_LogValue(t *testing.T) {
 }
 
 func TestSecret_LogValue_InLogger(t *testing.T) {
+	t.Parallel()
+
 	s := conv.NewSecret([]byte("my-secret-value"))
 
-	// Create a logger that writes to a buffer
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
 
-	// Log the secret
-	logger.Info("test message", "api_key", s)
+	const apilogkey = "api_key"
+	logger.InfoContext(t.Context(), "test message", slog.Any(apilogkey, s))
+	logger.InfoContext(t.Context(), "test message", "other_key", s) //nolint:sloglint // we want to specifically test all forms of logging even if our codebase lint rules mandate otherwise
 
-	// The secret should be masked in the log output
 	output := buf.String()
 	require.Contains(t, output, "****")
 	require.NotContains(t, output, "my-secret-value")
