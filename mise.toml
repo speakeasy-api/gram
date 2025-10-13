@@ -127,7 +127,7 @@ OTLP_GRPC_PORT = "4317"
 ####################################
 ## Where to deploy functions.
 ## Allowed values: local, flyio.
-GRAM_FUNCTION_PROVIDER = "local"
+GRAM_FUNCTIONS_PROVIDER = "local"
 GRAM_FUNCTIONS_RUNNER_OCI_IMAGE = "gram-runner"
 ## By default, the runner version is inferred from the version of the
 ## server/worker. If needed, you can pin the version with the following
