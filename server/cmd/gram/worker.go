@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -341,7 +342,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
-			runnerVersion := functions.RunnerVersion(conv.Default(c.String("functions-runner-version"), GitSHA))
+			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)

@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -483,7 +484,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
-			runnerVersion := functions.RunnerVersion(conv.Default(c.String("functions-runner-version"), GitSHA))
+			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
