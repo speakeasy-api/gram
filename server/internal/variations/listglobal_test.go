@@ -63,6 +63,7 @@ func TestVariationsService_ListGlobal_WithVariations(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
+		SrcToolUrn:       "tool:http:test:test-tool",
 		SrcToolName:      "test-tool",
 		Confirm:          &confirm,
 		ConfirmPrompt:    &confirmPrompt,
@@ -99,6 +100,7 @@ func TestVariationsService_ListGlobal_WithVariations(t *testing.T) {
 	// Verify variation fields
 	require.Equal(t, created.Variation.ID, foundVar.ID, "variation ID should match")
 	require.Equal(t, created.Variation.GroupID, foundVar.GroupID, "group ID should match")
+	require.Equal(t, created.Variation.SrcToolUrn, foundVar.SrcToolUrn, "src tool urn should match")
 	require.Equal(t, created.Variation.SrcToolName, foundVar.SrcToolName, "src tool name should match")
 	require.Equal(t, created.Variation.Confirm, foundVar.Confirm, "confirm should match")
 	require.Equal(t, created.Variation.ConfirmPrompt, foundVar.ConfirmPrompt, "confirm prompt should match")
@@ -174,6 +176,7 @@ func TestVariationsService_ListGlobal_MultipleVariations(t *testing.T) {
 			ApikeyToken:      nil,
 			SessionToken:     nil,
 			ProjectSlugInput: nil,
+			SrcToolUrn:       "tool:http:test:" + toolName,
 			SrcToolName:      toolName,
 			Confirm:          nil,
 			ConfirmPrompt:    nil,
@@ -205,6 +208,7 @@ func TestVariationsService_ListGlobal_MultipleVariations(t *testing.T) {
 			if v.ID == created.Variation.ID {
 				foundVars[created.Variation.ID] = true
 				// Verify the variation fields
+				require.Equal(t, created.Variation.SrcToolUrn, v.SrcToolUrn, "src tool urn should match for variation %s", created.Variation.ID)
 				require.Equal(t, created.Variation.SrcToolName, v.SrcToolName, "src tool name should match for variation %s", created.Variation.ID)
 				require.Equal(t, created.Variation.Name, v.Name, "name should match for variation %s", created.Variation.ID)
 				require.Equal(t, created.Variation.Description, v.Description, "description should match for variation %s", created.Variation.ID)
@@ -228,6 +232,7 @@ func TestVariationsService_ListGlobal_OrderedByID(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
+		SrcToolUrn:       "tool:http:test:first-tool",
 		SrcToolName:      "first-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
@@ -245,6 +250,7 @@ func TestVariationsService_ListGlobal_OrderedByID(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
+		SrcToolUrn:       "tool:http:test:second-tool",
 		SrcToolName:      "second-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
