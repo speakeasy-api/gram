@@ -153,7 +153,7 @@ func (q *Queries) InitGlobalToolVariationsGroup(ctx context.Context, arg InitGlo
 }
 
 const listGlobalToolVariations = `-- name: ListGlobalToolVariations :many
-SELECT tool_variations.id, tool_variations.group_id, tool_variations.src_tool_name, tool_variations.confirm, tool_variations.confirm_prompt, tool_variations.name, tool_variations.summary, tool_variations.description, tool_variations.tags, tool_variations.summarizer, tool_variations.created_at, tool_variations.updated_at, tool_variations.deleted_at, tool_variations.deleted
+SELECT tool_variations.id, tool_variations.group_id, tool_variations.src_tool_urn, tool_variations.src_tool_name, tool_variations.confirm, tool_variations.confirm_prompt, tool_variations.name, tool_variations.summary, tool_variations.description, tool_variations.tags, tool_variations.summarizer, tool_variations.created_at, tool_variations.updated_at, tool_variations.deleted_at, tool_variations.deleted
 FROM tool_variations
 INNER JOIN tool_variations_groups
   ON tool_variations.group_id = tool_variations_groups.id
@@ -181,6 +181,7 @@ func (q *Queries) ListGlobalToolVariations(ctx context.Context, projectID uuid.U
 		if err := rows.Scan(
 			&i.ToolVariation.ID,
 			&i.ToolVariation.GroupID,
+			&i.ToolVariation.SrcToolUrn,
 			&i.ToolVariation.SrcToolName,
 			&i.ToolVariation.Confirm,
 			&i.ToolVariation.ConfirmPrompt,
@@ -248,7 +249,7 @@ INSERT INTO tool_variations (
   tags = EXCLUDED.tags,
   summarizer = EXCLUDED.summarizer,
   updated_at = clock_timestamp()
-RETURNING id, group_id, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
+RETURNING id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
 `
 
 type UpsertToolVariationParams struct {
@@ -279,6 +280,7 @@ func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariati
 	err := row.Scan(
 		&i.ID,
 		&i.GroupID,
+		&i.SrcToolUrn,
 		&i.SrcToolName,
 		&i.Confirm,
 		&i.ConfirmPrompt,
