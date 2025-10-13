@@ -1,0 +1,108 @@
+name: Sync Gram Docs → Marketing Site (PR)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "docs/src/content/docs/**"
+      - "docs/public/**"
+  workflow_dispatch: 
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: gram-to-marketing-pr-sync-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MARKETING_REPO: speakeasy-api/marketing-site
+  BRANCH: main
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Gram repo (source)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout Marketing repo (destination)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.MARKETING_REPO }}
+          ref: ${{ env.BRANCH }}
+          token: ${{ secrets.SERVICE_BOT_TOKEN }}
+          path: marketing-repo
+          fetch-depth: 0
+
+      - name: Sync docs content into Marketing working tree
+        run: |
+          set -euo pipefail
+          src_path="docs/src/content/docs"
+          dest_path="marketing-repo/src/content/gram"
+          if [ -d "$src_path" ]; then
+            mkdir -p "$dest_path"
+            rsync -a --delete --exclude='.DS_Store' "$src_path/" "$dest_path/"
+          else
+            echo "Warning: $src_path does not exist; nothing to sync."
+          fi
+
+      - name: Sync public assets into Marketing working tree
+        run: |
+          set -euo pipefail
+          src_assets="docs/public"
+          dest_assets="marketing-repo/public/assets/docs/gram"
+          if [ -d "$src_assets" ]; then
+            mkdir -p "$dest_assets"
+            rsync -a --delete --exclude='.DS_Store' "$src_assets/" "$dest_assets/"
+          else
+            echo "Warning: $src_assets does not exist; no assets to sync."
+          fi
+
+      - name: Build PR body with grouped changes
+        run: |
+          set -euo pipefail
+          cd marketing-repo
+          echo "### Sync from Gram" > ../PR_BODY.md
+          echo "" >> ../PR_BODY.md
+          echo "**Source commit:** \`${GITHUB_SHA}\`" >> ../PR_BODY.md
+          echo "" >> ../PR_BODY.md
+          echo "**Grouped file changes:**" >> ../PR_BODY.md
+          if git diff --name-status | grep -q .; then
+            git diff --name-status | awk '
+              {
+                split($2, parts, "/");
+                key = parts[1];
+                if (length(parts) >= 2) key = key "/" parts[2];
+                if (current != key) {
+                  if (current != "") print "" >> "../PR_BODY.md";
+                  print "#### `" key "/`" >> "../PR_BODY.md";
+                  current = key;
+                }
+                print $0 >> "../PR_BODY.md";
+              }
+            '
+          else
+            echo "_No file changes detected after sync._" >> ../PR_BODY.md
+          fi
+
+      - name: Create pull request in Marketing
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.SERVICE_BOT_TOKEN }}
+          path: marketing-repo
+          commit-message: "Sync marketing docs from Gram 🐝 (source ${{ github.sha }})"
+          branch: chore/gram-to-marketing-sync-${{ github.sha }}
+          title: "Sync docs from Gram"
+          body-path: PR_BODY.md
+          committer: "Beezy the bot <beezy-bot@users.noreply.github.com>"
+          author: "Beezy the bot <beezy-bot@users.noreply.github.com>"
+          labels: |
+            automation
+            docs
+            sync
+          signoff: false
