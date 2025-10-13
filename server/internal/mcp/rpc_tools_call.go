@@ -165,7 +165,7 @@ func handleToolsCall(
 
 	descriptor := plan.Descriptor
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
-	if plan.Kind == gateway.ToolKindFunction {
+	if plan.Kind == gateway.ToolKindHTTP {
 		for _, security := range plan.HTTP.Security {
 			for _, token := range payload.oauthTokenInputs {
 				if slices.Contains(security.OAuthTypes, "authorization_code") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
