@@ -12,7 +12,7 @@ import (
 )
 
 const listProjectsByOrganization = `-- name: ListProjectsByOrganization :many
-SELECT id, name, slug, organization_id, logo_asset_id, created_at, updated_at, deleted_at, deleted
+SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects
 WHERE organization_id = $1
   AND deleted IS FALSE
@@ -34,6 +34,7 @@ func (q *Queries) ListProjectsByOrganization(ctx context.Context, organizationID
 			&i.Slug,
 			&i.OrganizationID,
 			&i.LogoAssetID,
+			&i.FunctionsRunnerVersion,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
