@@ -31,11 +31,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/control"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/instances"
 	"github.com/speakeasy-api/gram/server/internal/integrations"
@@ -305,6 +307,8 @@ func newStartCommand() *cli.Command {
 		},
 	}
 
+	flags = append(flags, functionsFlags...)
+
 	return &cli.Command{
 		Name:  "start",
 		Usage: "Start the Gram API server",
@@ -474,6 +478,13 @@ func newStartCommand() *cli.Command {
 				}
 			}
 
+			functionsOrchestrator, shutdown, err := newFunctionOrchestrator(c, logger, tracerProvider, db, assetStorage, encryptionClient)
+			if err != nil {
+				return fmt.Errorf("failed to create functions orchestrator: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+			runnerVersion := functions.RunnerVersion(conv.Default(c.String("functions-runner-version"), GitSHA))
+
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, cache.NewRedisCacheAdapter(redisClient), guardianPolicy)
@@ -556,6 +567,8 @@ func newStartCommand() *cli.Command {
 						BillingRepository:   billingRepo,
 						RedisClient:         redisClient,
 						PosthogClient:       posthogClient,
+						FunctionsDeployer:   functionsOrchestrator,
+						FunctionsVersion:    runnerVersion,
 					})
 					if err := temporalWorker.Run(workerInterruptCh); err != nil {
 						logger.ErrorContext(ctx, "temporal worker failed", attr.SlogError(err))

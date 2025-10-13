@@ -75,6 +75,45 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 	return i, err
 }
 
+const getAssetURLs = `-- name: GetAssetURLs :many
+SELECT id, url, sha256
+FROM assets
+WHERE project_id = $1
+  AND id = ANY($2::uuid[])
+  AND deleted IS FALSE
+`
+
+type GetAssetURLsParams struct {
+	ProjectID uuid.UUID
+	Ids       []uuid.UUID
+}
+
+type GetAssetURLsRow struct {
+	ID     uuid.UUID
+	Url    string
+	Sha256 string
+}
+
+func (q *Queries) GetAssetURLs(ctx context.Context, arg GetAssetURLsParams) ([]GetAssetURLsRow, error) {
+	rows, err := q.db.Query(ctx, getAssetURLs, arg.ProjectID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAssetURLsRow
+	for rows.Next() {
+		var i GetAssetURLsRow
+		if err := rows.Scan(&i.ID, &i.Url, &i.Sha256); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getImageAssetURL = `-- name: GetImageAssetURL :one
 SELECT url, content_type, content_length, updated_at FROM assets WHERE id = $1 AND kind = 'image'
 `

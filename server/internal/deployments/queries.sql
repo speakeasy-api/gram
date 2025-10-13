@@ -545,6 +545,28 @@ WHERE
   AND (deployment_id = @deployment_id AND deployment_id IS NOT NULL)
   AND (openapiv3_document_id = @openapiv3_document_id AND openapiv3_document_id IS NOT NULL);
 
+-- name: GetDeploymentFunctions :many
+SELECT df.*
+FROM deployments_functions df
+INNER JOIN deployments d ON df.deployment_id = d.id
+WHERE 
+  d.project_id = @project_id
+  AND df.deployment_id = @deployment_id
+LIMIT 1;
+
+-- name: GetFunctionCredentialsBatch :many
+SELECT DISTINCT ON (function_id)
+  id,
+  function_id,
+  encryption_key,
+  bearer_format
+FROM functions_access
+WHERE project_id = @project_id
+  AND deployment_id = @deployment_id
+  AND function_id = ANY(@function_ids::uuid[])
+  AND deleted IS FALSE
+ORDER BY function_id, seq DESC;
+
 -- name: GetDeploymentFunctionsWithoutAccess :many
 SELECT df.id
 FROM deployments_functions df
@@ -570,4 +592,3 @@ INSERT INTO functions_access (
   , @bearer_format
 )
 RETURNING id;
-

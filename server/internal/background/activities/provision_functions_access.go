@@ -51,7 +51,7 @@ func (p *ProvisionFunctionsAccess) Do(ctx context.Context, projectID uuid.UUID, 
 
 	dbtx, err := p.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error accessing deployments").Log(ctx, p.logger)
+		return oops.E(oops.CodeUnexpected, err, "error accessing database").Log(ctx, p.logger)
 	}
 	defer o11y.NoLogDefer(func() error {
 		return dbtx.Rollback(ctx)
@@ -82,7 +82,7 @@ func (p *ProvisionFunctionsAccess) Do(ctx context.Context, projectID uuid.UUID, 
 			DeploymentID:  deploymentID,
 			FunctionID:    aid,
 			EncryptionKey: conv.NewSecret([]byte(sealedKey)),
-			BearerFormat:  conv.ToPGText("GramV1"),
+			BearerFormat:  conv.ToPGText("v01"),
 		})
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to create functions access").Log(ctx, logger, attr.SlogDeploymentFunctionsID(aid.String()))
