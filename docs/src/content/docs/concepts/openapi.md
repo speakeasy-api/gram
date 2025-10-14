@@ -61,10 +61,10 @@ paths:
 
 Without the `x-gram` extension, the generated tool would be named `ecommerce_e_commerce_v1_product`, and have the description `"Get a product by its ID"`, resulting in a poor quality tool. The `x-gram` extension allows you to customize a tool's name and description without altering the original information in the OpenAPI document.
 
-The `x-gram` extension also supports [response filtering](/build-mcp/response-filtering) through the `responseFilterType` property, which helps LLMs process API responses more effectively.
+The `x-gram` extension also supports [response filtering](build-mcp/response-filtering) through the `responseFilterType` property, which helps LLMs process API responses more effectively.
 
 
-Using the `x-gram` extension is optional. With Gram's [tool variations](/concepts/tool-variations) feature, you can modify a tool's name and description when curating tools into toolsets. However, it might be worth using the `x-gram` extension to make your OpenAPI document clean, descriptive, and LLM-ready before bringing it into Gram, so your team doesn't need to fix tool names and descriptions later.
+Using the `x-gram` extension is optional. With Gram's [tool variations](concepts/tool-variations) feature, you can modify a tool's name and description when curating tools into toolsets. However, it might be worth using the `x-gram` extension to make your OpenAPI document clean, descriptive, and LLM-ready before bringing it into Gram, so your team doesn't need to fix tool names and descriptions later.
 
 ## Limitations of OpenAPI 3.0.x
 

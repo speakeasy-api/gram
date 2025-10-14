@@ -9,7 +9,7 @@ sidebar:
 
 When combined with [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers, n8n can leverage AI agents that have access to your tools and infrastructure, enabling intelligent automation workflows that can interact with your APIs, databases, and other services.
 
-This guide will show you how to connect n8n to a [Gram-hosted MCP server](/blog/the-easiest-way-to-host-mcp-servers) using the example Push Advisor API from the [Gram concepts guide](/blog/gram-concepts). You'll learn how to set up the connection, test it, and use natural language to perform vibe checks before running automated deployments.
+This guide will show you how to connect n8n to a [Gram-hosted MCP server](https://www.speakeasy.com/blog/release-gram-beta) using the example Push Advisor API from the [Gram concepts guide](https://www.speakeasy.com/mcp/core-concepts). You'll learn how to set up the connection, test it, and use natural language to perform vibe checks before running automated deployments.
 
 Find the full code and OpenAPI document in the [Push Advisor API repository](https://github.com/ritza-co/gram-examples/tree/main/push-advisor-api).
 
@@ -23,7 +23,7 @@ To follow this tutorial, you need:
 
 ## Creating a Gram MCP server
 
-If you already have a Gram MCP server configured, you can skip to [connecting n8n to your Gram-hosted MCP server](#connecting-n8n-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and more details on how to create a Gram-hosted MCP server, check out the [Gram concepts guide](/blog/gram-concepts).
+If you already have a Gram MCP server configured, you can skip to [connecting n8n to your Gram-hosted MCP server](#connecting-n8n-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and more details on how to create a Gram-hosted MCP server, check out the [Gram concepts guide](https://www.speakeasy.com/mcp/core-concepts).
 
 ### Setting up a Gram project
 
@@ -63,7 +63,7 @@ Click **Toolsets** in the sidebar to view the Push Advisor toolset.
 
 ### Configuring environment variables
 
-[Environments](/concepts/environments) store API keys and configuration separate from your toolset logic.
+[Environments](concepts/environments) store API keys and configuration separate from your toolset logic.
 
 In the **Environments** tab, click the **Default** environment. Click **Edit** and then **Fill for Toolset**. Select the **Push Advisor** toolset and click **Fill Variables** to automatically populate the required variables.
 
@@ -105,7 +105,7 @@ The configuration will look something like this:
 
 Use the **Authenticated Server** configuration if you want to use the MCP server in a private environment.
 
-You'll need an API key to use an authenticated server. [Generate an API key](/concepts/api-keys) in the **Settings** tab and copy it to the `GRAM_KEY` environment variable in place of `<your-key-here>`.
+You'll need an API key to use an authenticated server. [Generate an API key](concepts/api-keys) in the **Settings** tab and copy it to the `GRAM_KEY` environment variable in place of `<your-key-here>`.
 
 The authenticated server configuration looks something like this:
 

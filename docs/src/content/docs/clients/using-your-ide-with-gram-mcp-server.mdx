@@ -18,11 +18,11 @@ Find the full code and OpenAPI document in the [Taskmaster repository](https://g
 To follow this guide, you need:
 
 - A [Gram account](https://app.getgram.ai)
-- An MCP client (This guide covers Cursor, VS Code with Copilot, Windsurf, and Amp. For Claude Desktop, see the [dedicated Claude Desktop guide](/clients/using-claude-desktop-with-gram-mcp-server).)
+- An MCP client (This guide covers Cursor, VS Code with Copilot, Windsurf, and Amp. For Claude Desktop, see the [dedicated Claude Desktop guide](clients/using-claude-desktop-with-gram-mcp-server).)
 
 ## Creating an MCP server
 
-Before connecting your IDE to a Taskmaster MCP server, you first need to create one. Follow our guide to [creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server).
+Before connecting your IDE to a Taskmaster MCP server, you first need to create one. Follow our guide to [creating a Taskmaster MCP server](examples/creating-taskmaster-mcp-server).
 
 Once your Taskmaster MCP server is ready, you can connect it to your IDE. The following sections show you how to add the MCP server configuration to the most popular IDE-based MCP clients.
 
@@ -43,7 +43,7 @@ In Cursor, navigate to **Settings -> Cursor Settings** and open **Tools & Integr
 
 ### 2. Add the MCP server configuration
 
-Cursor's global MCP configuration file will open. Add your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server) guide.
+Cursor's global MCP configuration file will open. Add your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](examples/creating-taskmaster-mcp-server) guide.
 
 For a public server, the configuration looks like this:
 
@@ -105,7 +105,7 @@ Open the VS Code command palette with `Ctrl/Cmd + Shift + P` and search for `Add
 
 ![Screenshot showing the VS Code Add HTTP MCP Server dialog](/img/guides/mcp-installing-ide/vscode-add-http-server.png)
 
-Paste in the URL of your Taskmaster MCP server from the [Creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server) guide and enter the server name.
+Paste in the URL of your Taskmaster MCP server from the [Creating a Taskmaster MCP server](examples/creating-taskmaster-mcp-server) guide and enter the server name.
 
 ![Screenshot showing pasting the MCP server URL](/img/guides/mcp-installing-ide/vscode-paste-mcp-url.png)
 
@@ -168,7 +168,7 @@ Under the **Plugins (MCP Servers)** section, click **Manage plugins** to access 
 
 ### 2. Add the MCP server configuration
 
-In the `mcp_config.json` file that opens, replace the contents with your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server) guide:
+In the `mcp_config.json` file that opens, replace the contents with your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](examples/creating-taskmaster-mcp-server) guide:
 
 ```json
 {
@@ -268,7 +268,7 @@ The location of the Amp CLI configuration file varies by operating system:
 
 ### 2. Add the MCP server configuration
 
-Add the `amp.mcpServers` setting with your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server) guide to the configuration file.
+Add the `amp.mcpServers` setting with your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](examples/creating-taskmaster-mcp-server) guide to the configuration file.
 
 For a public server, the configuration will look like this:
 
