@@ -664,6 +664,7 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 		keyedVariations[variation.SrcToolName] = types.ToolVariation{
 			ID:            variation.ID.String(),
 			GroupID:       variation.GroupID.String(),
+			SrcToolUrn:    variation.SrcToolUrn.String,
 			SrcToolName:   variation.SrcToolName,
 			Confirm:       conv.FromPGText[string](variation.Confirm),
 			ConfirmPrompt: conv.FromPGText[string](variation.ConfirmPrompt),

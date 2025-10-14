@@ -15,6 +15,8 @@ import (
 // UpsertGlobalRequestBody is the type of the "variations" service
 // "upsertGlobal" endpoint HTTP request body.
 type UpsertGlobalRequestBody struct {
+	// The URN of the source tool
+	SrcToolUrn *string `form:"src_tool_urn,omitempty" json:"src_tool_urn,omitempty" xml:"src_tool_urn,omitempty"`
 	// The name of the source tool
 	SrcToolName *string `form:"src_tool_name,omitempty" json:"src_tool_name,omitempty" xml:"src_tool_name,omitempty"`
 	// The confirmation mode for the tool variation
@@ -604,6 +606,8 @@ type ToolVariationResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the tool variation group
 	GroupID string `form:"group_id" json:"group_id" xml:"group_id"`
+	// The URN of the source tool
+	SrcToolUrn string `form:"src_tool_urn" json:"src_tool_urn" xml:"src_tool_urn"`
 	// The name of the source tool
 	SrcToolName string `form:"src_tool_name" json:"src_tool_name" xml:"src_tool_name"`
 	// The confirmation mode for the tool variation
@@ -1080,6 +1084,7 @@ func NewListGlobalGatewayErrorResponseBody(res *goa.ServiceError) *ListGlobalGat
 // payload.
 func NewUpsertGlobalPayload(body *UpsertGlobalRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *variations.UpsertGlobalPayload {
 	v := &variations.UpsertGlobalPayload{
+		SrcToolUrn:    *body.SrcToolUrn,
 		SrcToolName:   *body.SrcToolName,
 		Confirm:       body.Confirm,
 		ConfirmPrompt: body.ConfirmPrompt,
@@ -1128,6 +1133,9 @@ func NewListGlobalPayload(sessionToken *string, apikeyToken *string, projectSlug
 func ValidateUpsertGlobalRequestBody(body *UpsertGlobalRequestBody) (err error) {
 	if body.SrcToolName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("src_tool_name", "body"))
+	}
+	if body.SrcToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("src_tool_urn", "body"))
 	}
 	if body.Confirm != nil {
 		if !(*body.Confirm == "always" || *body.Confirm == "never" || *body.Confirm == "session") {

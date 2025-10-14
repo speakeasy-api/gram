@@ -1708,6 +1708,7 @@ func marshalTypesToolVariationToToolVariationResponseBody(v *types.ToolVariation
 	res := &ToolVariationResponseBody{
 		ID:            v.ID,
 		GroupID:       v.GroupID,
+		SrcToolUrn:    v.SrcToolUrn,
 		SrcToolName:   v.SrcToolName,
 		Confirm:       v.Confirm,
 		ConfirmPrompt: v.ConfirmPrompt,

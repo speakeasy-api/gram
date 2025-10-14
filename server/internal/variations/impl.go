@@ -80,6 +80,7 @@ func (s *Service) ListGlobal(ctx context.Context, payload *gen.ListGlobalPayload
 		variations = append(variations, &types.ToolVariation{
 			ID:            row.ToolVariation.ID.String(),
 			GroupID:       row.ToolVariation.GroupID.String(),
+			SrcToolUrn:    row.ToolVariation.SrcToolUrn.String,
 			SrcToolName:   row.ToolVariation.SrcToolName,
 			Confirm:       conv.FromPGText[string](row.ToolVariation.Confirm),
 			ConfirmPrompt: conv.FromPGText[string](row.ToolVariation.ConfirmPrompt),
@@ -130,6 +131,7 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 
 	row, err := tx.UpsertToolVariation(ctx, repo.UpsertToolVariationParams{
 		GroupID:       groupID,
+		SrcToolUrn:    conv.ToPGTextEmpty(payload.SrcToolUrn),
 		SrcToolName:   payload.SrcToolName,
 		Confirm:       conv.PtrToPGText(payload.Confirm),
 		ConfirmPrompt: conv.PtrToPGText(payload.ConfirmPrompt),
@@ -151,6 +153,7 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 		Variation: &types.ToolVariation{
 			ID:            row.ID.String(),
 			GroupID:       row.GroupID.String(),
+			SrcToolUrn:    row.SrcToolUrn.String,
 			SrcToolName:   row.SrcToolName,
 			Confirm:       conv.FromPGText[string](row.Confirm),
 			ConfirmPrompt: conv.FromPGText[string](row.ConfirmPrompt),

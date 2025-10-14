@@ -37,10 +37,11 @@ export function ToolCard({
     if (tool.type === "http") {
       await client.variations.upsertGlobal({
         upsertGlobalToolVariationForm: {
-          srcToolName: tool.name,
           ...tool.variation,
           confirm: tool.variation?.confirm as Confirm, // TODO: Should the server return the same type?
           ...vals,
+          srcToolUrn: tool.toolUrn,
+          srcToolName: tool.canonicalName,
         },
       });
     } else {
@@ -55,6 +56,7 @@ export function ToolCard({
 
     telemetry.capture("toolset_event", {
       action: "tool_variation_updated",
+      tool_urn: tool.toolUrn,
       tool_name: tool.name,
       overridden_fields: Object.keys(vals).join(", "),
     });

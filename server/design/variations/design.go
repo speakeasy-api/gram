@@ -92,8 +92,9 @@ var _ = Service("variations", func() {
 })
 
 var UpsertGlobalToolVariationForm = Type("UpsertGlobalToolVariationForm", func() {
-	Required("src_tool_name")
+	Required("src_tool_name", "src_tool_urn")
 
+	Attribute("src_tool_urn", String, "The URN of the source tool")
 	Attribute("src_tool_name", String, "The name of the source tool")
 	Attribute("confirm", String, "The confirmation mode for the tool variation", func() {
 		Enum(conv.AnySlice(mv.ConfirmValues)...)
