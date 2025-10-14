@@ -177,13 +177,21 @@ jobs:
             const prNumber = Number(process.env.PR_NUMBER);
             const fs = require('fs');
             const body = fs.readFileSync('PR_BODY.md', 'utf8');
-            await github.rest.pulls.update({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: prNumber,
-              title: 'chore: sync docs from Gram',
-              body,
-            });
+            const repoSlug = process.env.MARKETING_REPO;
+            if (!repoSlug || !repoSlug.includes('/')) {
+              core.setFailed(`Invalid MARKETING_REPO: ${repoSlug}`);
+            } else if (!prNumber) {
+              core.setFailed('Missing PR_NUMBER');
+            } else {
+              const [owner, repo] = repoSlug.split('/', 2);
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: prNumber,
+                title: 'chore: sync docs from Gram',
+                body,
+              });
+            }
         env:
           PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
 
