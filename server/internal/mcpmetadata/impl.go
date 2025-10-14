@@ -35,9 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
-	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/templatefuncs"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -53,7 +51,7 @@ type Service struct {
 	repo         *repo.Queries
 	toolsetRepo  *toolsets_repo.Queries
 	orgsRepo     *organizations_repo.Queries
-	domainsRepo  *customdomains_repo.Queries
+	sessions     *sessions.Manager
 	auth         *auth.Auth
 	serverURL    *url.URL
 	toolsetCache cache.TypedCacheObject[mv.ToolsetTools]
@@ -65,25 +63,12 @@ var configSnippetTmplData string
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
 
-type securityMode string
-
-const (
-	securityModePublic securityMode = "public"
-	securityModeGram   securityMode = "gram"
-	securityModeOAuth  securityMode = "oauth"
-)
-
-type securityInput struct {
-	SystemName  string
-	DisplayName string
-	Sensitive   bool
-}
-
 type jsonSnippetData struct {
 	MCPName        string
 	MCPSlug        string
 	MCPDescription string
-	SecurityInputs []securityInput
+	Headers        []string
+	EnvHeaders     []string
 	MCPURL         string
 	ToolNames      []string
 }
@@ -96,7 +81,6 @@ type hostedPageData struct {
 	SiteURL             string
 	LogoAssetURL        string
 	DocsURL             string
-	IsPublic            bool
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -112,7 +96,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		repo:         repo.New(db),
 		toolsetRepo:  toolsets_repo.New(db),
 		orgsRepo:     organizations_repo.New(db),
-		domainsRepo:  customdomains_repo.New(db),
+		sessions:     sessions,
 		auth:         auth.New(logger, db, sessions),
 		serverURL:    serverURL,
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
@@ -127,6 +111,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 		mux,
 		srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil),
 	)
+
+	// Attach hosted page routes
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, service.ServeHostedPage).ServeHTTP(w, r)
+	})
 }
 
 func (s *Service) GetMcpMetadata(ctx context.Context, payload *gen.GetMcpMetadataPayload) (*gen.GetMcpMetadataResult, error) {
@@ -227,7 +216,7 @@ func toMcpMetadata(record repo.McpMetadatum) *types.McpMetadata {
 	return metadata
 }
 
-func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error {
+func (s *Service) ServeHostedPage(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	defer o11y.LogDefer(ctx, s.logger, func() error {
 		return r.Body.Close()
@@ -238,45 +227,23 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").Log(ctx, s.logger)
 	}
 
-	sessionToken, _ := contextvalues.GetSessionTokenFromContext(ctx)
-
-	ctx, _ = s.auth.Authorize(ctx, sessionToken, &security.APIKeyScheme{
-		Name:           auth.SessionSecurityScheme,
-		Scopes:         []string{},
-		RequiredScopes: []string{},
-	})
-
-	// We get the authCtx now, because we need session information in order to look up private servers
-	// but we don't check that auth is ok unless we encounter a private toolset on lookup
-	authCtx, authOk := contextvalues.GetAuthContext(ctx)
-
-	toolset, err := s.loadToolsetFromContextAndSlug(ctx, mcpSlug)
+	toolset, customDomainCtx, err := s.loadToolsetFromMcpSlug(ctx, mcpSlug)
 	if err != nil {
+		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
+	}
+
+	if !toolset.McpIsPublic {
 		return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
 	}
 
 	// Load organization information
 	organization, err := s.orgsRepo.GetOrganizationMetadata(ctx, toolset.OrganizationID)
+	var organizationName string
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "mcp server not found").Log(ctx, s.logger)
-	}
-
-	if !toolset.McpIsPublic {
-		// If no auth context, redirect to login page
-		if authCtx == nil {
-			if s.serverURL != nil {
-				loginURL := s.serverURL.String() + "/login"
-				http.Redirect(w, r, loginURL, http.StatusFound)
-				return nil
-			}
-			// Fallback if serverURL is nil
-			return oops.E(oops.CodeNotFound, nil, "mcp server not found").Log(ctx, s.logger)
-		}
-
-		// Ought one to check if the user has access to the organization rather than just if the org is active?
-		if !authOk || authCtx.ActiveOrganizationID != toolset.OrganizationID {
-			return oops.E(oops.CodeNotFound, err, "mcp server not found").Log(ctx, s.logger)
-		}
+		s.logger.WarnContext(ctx, "could not load organization information", attr.SlogOrganizationID(toolset.OrganizationID), attr.SlogError(err))
+		organizationName = "Unknown Organization"
+	} else {
+		organizationName = organization.Name
 	}
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, s.logger, s.db, mv.ProjectID(toolset.ProjectID), mv.ToolsetSlug(toolset.Slug), &s.toolsetCache)
@@ -302,8 +269,27 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		}
 	}
 
-	securityMode := s.resolveSecurityMode(toolset)
-	securityInputs := s.collectEnvironmentVariables(securityMode, toolsetDetails)
+	envHeaders := []string{}
+
+	// Collect environment variables from security variables
+	isOAuthEnabled := toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid
+	for _, secVar := range toolsetDetails.SecurityVariables {
+		for _, envVar := range secVar.EnvVariables {
+			envVarLower := strings.ToLower(envVar)
+			if strings.HasSuffix(envVarLower, "token_url") {
+				continue
+			}
+			// Skip access_token env vars if OAuth is enabled
+			if isOAuthEnabled && strings.HasSuffix(envVarLower, "access_token") {
+				continue
+			}
+			envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")))
+		}
+	}
+
+	for _, functionEnvVar := range toolsetDetails.FunctionEnvironmentVariables {
+		envHeaders = append(envHeaders, fmt.Sprintf("MCP-%s", strings.ReplaceAll(functionEnvVar.Name, "_", "-")))
+	}
 
 	toolNames := []string{}
 
@@ -312,9 +298,19 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		toolNames = append(toolNames, baseTool.Name)
 	}
 
-	MCPURL, err := resolveMCPURLFromContext(ctx, s.serverURL.String(), mcpSlug, toolset.McpIsPublic)
+	baseURL := s.serverURL.String() + "/mcp"
+	if customDomainCtx != nil {
+		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain+"/mcp")
+	}
+	MCPURL, err := url.JoinPath(baseURL, mcpSlug)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resolved bad url").Log(ctx, s.logger)
+		return oops.E(oops.CodeNotFound, err, "malformed mcp url").Log(ctx, s.logger)
+	}
+
+	// Create env-safe versions of headers (replace dashes with underscores)
+	envHeadersEnvSafe := make([]string, len(envHeaders))
+	for i, header := range envHeaders {
+		envHeadersEnvSafe[i] = strings.ReplaceAll(header, "-", "_")
 	}
 
 	configSnippetData := jsonSnippetData{
@@ -322,11 +318,12 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		MCPSlug:        toolset.Slug,
 		MCPDescription: toolset.Description.String,
 		MCPURL:         MCPURL,
-		SecurityInputs: securityInputs,
+		Headers:        envHeaders,
+		EnvHeaders:     envHeadersEnvSafe,
 		ToolNames:      toolNames,
 	}
 
-	configSnippetTmpl, err := template.New("config_snippet").Funcs(templatefuncs.FuncMap()).Parse(configSnippetTmplData)
+	configSnippetTmpl, err := template.New("config_snippet").Parse(configSnippetTmplData)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to parse config snippet template").Log(ctx, s.logger)
 	}
@@ -340,14 +337,29 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		jsonSnippetData:     configSnippetData,
 		MCPConfig:           configSnippet.String(),
 		MCPConfigURIEncoded: url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
-		OrganizationName:    organization.Name,
+		OrganizationName:    organizationName,
 		SiteURL:             os.Getenv("GRAM_SITE_URL"),
 		LogoAssetURL:        logoAssetURL,
 		DocsURL:             docsURL,
-		IsPublic:            toolset.McpIsPublic,
 	}
 
-	hostedPageTmpl, err := template.New("hosted_page").Funcs(templatefuncs.FuncMap()).Parse(hostedPageTmplData)
+	hostedPageTmpl, err := template.New("hosted_page").Funcs(template.FuncMap{
+		"diff": func(a, b int) int { return a - b },
+		"indent": func(spaces int, text string) string {
+			if spaces <= 0 || text == "" {
+				return text
+			}
+			indent := strings.Repeat(" ", spaces)
+			lines := strings.Split(text, "\n")
+			for i := 1; i < len(lines); i++ {
+				if i == len(lines)-1 && lines[i] == "" {
+					continue
+				}
+				lines[i] = indent + lines[i]
+			}
+			return strings.Join(lines, "\n")
+		},
+	}).Parse(hostedPageTmplData)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to parse hosted page template").Log(ctx, s.logger)
 	}
@@ -360,131 +372,31 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
-	_, writeErr := w.Write(buf.Bytes())
-	if writeErr != nil {
-		s.logger.ErrorContext(ctx, "failed to write response body", attr.SlogError(writeErr))
+	_, err = w.Write(buf.Bytes())
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to write response body", attr.SlogError(err))
 	}
 
 	return nil
 }
 
-func resolveMCPURLFromContext(ctx context.Context, serverUrl string, mcpSlug string, serverIsPublic bool) (string, error) {
-	customDomainCtx := customdomains.FromContext(ctx)
-	baseURL := serverUrl + "/mcp"
-	if !serverIsPublic && customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain+"/mcp")
-	}
-	MCPURL, err := url.JoinPath(baseURL, mcpSlug)
-	if err != nil {
-		return "", fmt.Errorf("failed to join URL path: %w", err)
-	}
-	return MCPURL, nil
-}
-
-func (s *Service) resolveDomainIDFromContext(ctx context.Context) *uuid.UUID {
-	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
-		return &domainCtx.DomainID
-	}
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-
-	if authCtx == nil {
-		return nil
-	}
-
-	domainRecord, err := s.domainsRepo.GetCustomDomainsByOrganization(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to get custom domains by organization ID", attr.SlogError(err))
-		return nil
-	}
-	return &domainRecord.ID
-}
-
-func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, error) {
+func (s *Service) loadToolsetFromMcpSlug(ctx context.Context, mcpSlug string) (*toolsets_repo.Toolset, *customdomains.Context, error) {
 	var toolset toolsets_repo.Toolset
 	var toolsetErr error
-	domainID := s.resolveDomainIDFromContext(ctx)
-	if domainID != nil {
+	var customDomainCtx *customdomains.Context
+	if domainCtx := customdomains.FromContext(ctx); domainCtx != nil {
 		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlugAndCustomDomain(ctx, toolsets_repo.GetToolsetByMcpSlugAndCustomDomainParams{
 			McpSlug:        conv.ToPGText(mcpSlug),
-			CustomDomainID: uuid.NullUUID{UUID: *domainID, Valid: true},
+			CustomDomainID: uuid.NullUUID{UUID: domainCtx.DomainID, Valid: true},
 		})
+		customDomainCtx = domainCtx
 	} else {
 		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	}
 
 	if toolsetErr != nil {
-		return nil, oops.E(oops.CodeNotFound, toolsetErr, "mcp server not found").Log(ctx, s.logger)
+		return nil, nil, oops.E(oops.CodeNotFound, toolsetErr, "mcp server not found").Log(ctx, s.logger)
 	}
 
-	return &toolset, nil
-}
-
-// resolveSecurityMode determines the security mode based on toolset configuration
-// Prefers oauth > gram > public
-func (s *Service) resolveSecurityMode(toolset *toolsets_repo.Toolset) securityMode {
-	if toolset.OauthProxyServerID.Valid || toolset.ExternalOauthServerID.Valid {
-		return securityModeOAuth
-	}
-
-	if toolset.McpIsPublic {
-		return securityModePublic
-	}
-
-	return securityModeGram
-}
-
-// collectEnvironmentVariables returns security inputs based on the security mode
-func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails *types.Toolset) []securityInput {
-	switch mode {
-	case securityModeGram:
-		return []securityInput{
-			{
-				SystemName:  "gram_environment",
-				DisplayName: "gram-environment",
-				Sensitive:   false,
-			},
-			{
-				SystemName:  "authorization",
-				DisplayName: "gram-key",
-				Sensitive:   true,
-			},
-		}
-
-	case securityModePublic, securityModeOAuth:
-		var inputs []securityInput
-		isOAuthEnabled := mode == securityModeOAuth
-
-		for _, secVar := range toolsetDetails.SecurityVariables {
-			for _, envVar := range secVar.EnvVariables {
-				envVarLower := strings.ToLower(envVar)
-				if strings.HasSuffix(envVarLower, "token_url") {
-					continue
-				}
-				// Skip access_token env vars if OAuth is enabled
-				if isOAuthEnabled && strings.HasSuffix(envVarLower, "access_token") {
-					continue
-				}
-
-				inputs = append(inputs, securityInput{
-					SystemName:  fmt.Sprintf("MCP-%s", envVar),
-					DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")),
-					Sensitive:   true,
-				})
-			}
-		}
-
-		for _, functionEnvVar := range toolsetDetails.FunctionEnvironmentVariables {
-			inputs = append(inputs, securityInput{
-				SystemName:  fmt.Sprintf("MCP-%s", functionEnvVar.Name),
-				DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(functionEnvVar.Name, "_", "-")),
-				Sensitive:   true,
-			})
-		}
-
-		return inputs
-
-	default:
-		return []securityInput{}
-	}
+	return &toolset, customDomainCtx, nil
 }
