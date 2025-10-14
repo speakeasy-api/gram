@@ -1,4 +1,4 @@
-import { Message } from "@ai-sdk/react";
+import { UIMessage } from "ai";
 import { useListEnvironments } from "@gram/client/react-query";
 import { EnvironmentDropdown } from "../environments/EnvironmentDropdown";
 import { ChatConfig, ChatWindow } from "./ChatWindow";
@@ -19,12 +19,16 @@ export function PlaygroundRHS({
   const selectedEnvironment = configRef.current.environmentSlug;
 
   const environments = environmentsData?.environments;
-  const initialMessages: Message[] = [
+  const initialMessages: UIMessage[] = [
     {
       id: "1",
       role: "system",
-      content:
-        "This chat has access to the selected toolset on the left! Use it to test out your toolset.",
+      parts: [
+        {
+          type: "text",
+          text: "This chat has access to the selected toolset on the left! Use it to test out your toolset.",
+        },
+      ],
     },
   ];
 
