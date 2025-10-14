@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -27,6 +28,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -50,19 +53,19 @@ var proxiedHeaders = []string{
 	"Pragma",
 }
 
-type ResponseFilterRequest struct {
+type FilterRequest struct {
 	Type   string `json:"type"`
 	Filter string `json:"filter"`
 }
 
 type ToolCallBody struct {
-	PathParameters       map[string]any         `json:"pathParameters"`
-	QueryParameters      map[string]any         `json:"queryParameters"`
-	HeaderParameters     map[string]any         `json:"headerParameters"`
-	Body                 json.RawMessage        `json:"body"`
-	ResponseFilter       *ResponseFilterRequest `json:"responseFilter"`
-	EnvironmentVariables map[string]string      `json:"environmentVariables"`
-	GramRequestSummary   string                 `json:"gram-request-summary"`
+	PathParameters       map[string]any    `json:"pathParameters"`
+	QueryParameters      map[string]any    `json:"queryParameters"`
+	HeaderParameters     map[string]any    `json:"headerParameters"`
+	Body                 json.RawMessage   `json:"body"`
+	ResponseFilter       *FilterRequest    `json:"responseFilter"`
+	EnvironmentVariables map[string]string `json:"environmentVariables"`
+	GramRequestSummary   string            `json:"gram-request-summary"`
 }
 
 // CaseInsensitiveEnv provides case-insensitive environment variable lookup.
@@ -98,12 +101,13 @@ type InstanceToolProxyConfig struct {
 }
 
 type ToolProxy struct {
-	source  ToolCallSource
-	logger  *slog.Logger
-	tracer  trace.Tracer
-	metrics *metrics
-	cache   cache.Cache
-	policy  *guardian.Policy
+	source     ToolCallSource
+	logger     *slog.Logger
+	tracer     trace.Tracer
+	metrics    *metrics
+	encryption *encryption.Client
+	cache      cache.Cache
+	policy     *guardian.Policy
 }
 
 func NewToolProxy(
@@ -111,6 +115,7 @@ func NewToolProxy(
 	tracerProivder trace.TracerProvider,
 	meterProvider metric.MeterProvider,
 	source ToolCallSource,
+	enc *encryption.Client,
 	cache cache.Cache,
 	policy *guardian.Policy,
 ) *ToolProxy {
@@ -118,61 +123,186 @@ func NewToolProxy(
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
 
 	return &ToolProxy{
-		source:  source,
-		logger:  logger,
-		tracer:  tracer,
-		metrics: newMetrics(meter, logger),
-		cache:   cache,
-		policy:  policy,
+		source:     source,
+		logger:     logger,
+		tracer:     tracer,
+		metrics:    newMetrics(meter, logger),
+		encryption: enc,
+		cache:      cache,
+		policy:     policy,
 	}
 }
 
-func (itp *ToolProxy) Do(
+func (tp *ToolProxy) Do(
 	ctx context.Context,
 	w http.ResponseWriter,
 	requestBody io.Reader,
 	env *CaseInsensitiveEnv,
-	gatewayTool *Tool,
-) error {
-	if !gatewayTool.IsHTTP() {
-		return fmt.Errorf("tool type not supported: %s", gatewayTool.Kind())
-	}
-
-	tool := gatewayTool.HTTPTool
-
-	ctx, span := itp.tracer.Start(ctx, "proxyToolCall", trace.WithAttributes(
-		attr.ToolName(tool.Name),
-		attr.ToolID(tool.ID),
-		attr.ProjectID(tool.ProjectID),
-		attr.DeploymentID(tool.DeploymentID),
-		attr.ToolCallSource(string(itp.source)),
-		attr.HTTPRoute(tool.Path), // this is just from the raw OpenAPI spec. It is not a path with any parameters filled in, so not identifiable.
+	plan *ToolCallPlan,
+) (err error) {
+	ctx, span := tp.tracer.Start(ctx, "gateway.toolCall", trace.WithAttributes(
+		attr.ToolName(plan.Descriptor.Name),
+		attr.ToolID(plan.Descriptor.ID),
+		attr.ProjectID(plan.Descriptor.ProjectID),
+		attr.DeploymentID(plan.Descriptor.DeploymentID),
+		attr.ToolCallSource(string(tp.source)),
 	))
-	defer span.End()
+	defer func() {
+		if err != nil {
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 
-	logger := itp.logger.With(
-		attr.SlogProjectID(tool.ProjectID),
-		attr.SlogDeploymentID(tool.DeploymentID),
-		attr.SlogToolID(tool.ID),
-		attr.SlogToolName(tool.Name),
-		attr.SlogToolCallSource(string(itp.source)),
-		attr.SlogHTTPRoute(tool.Path), // this is just from the raw OpenAPI spec. It is not a path with any parameters filled in, so not identifiable.
+	logger := tp.logger.With(
+		attr.SlogProjectID(plan.Descriptor.ProjectID),
+		attr.SlogDeploymentID(plan.Descriptor.DeploymentID),
+		attr.SlogToolID(plan.Descriptor.ID),
+		attr.SlogToolName(plan.Descriptor.Name),
+		attr.SlogToolCallSource(string(tp.source)),
 	)
 
 	if env == nil {
 		env = NewCaseInsensitiveEnv()
 	}
 
+	switch plan.Kind {
+	case "":
+		return oops.E(oops.CodeInvariantViolation, nil, "tool kind is not set").Log(ctx, tp.logger)
+	case ToolKindFunction:
+		return tp.doFunction(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function)
+	case ToolKindHTTP:
+		return tp.doHTTP(ctx, logger, w, requestBody, env, plan.Descriptor, plan.HTTP)
+	default:
+		return fmt.Errorf("tool type not supported: %s", plan.Kind)
+	}
+}
+
+func (tp *ToolProxy) doFunction(
+	ctx context.Context,
+	logger *slog.Logger,
+	w http.ResponseWriter,
+	requestBody io.Reader,
+	env *CaseInsensitiveEnv,
+	descriptor *ToolDescriptor,
+	plan *FunctionToolCallPlan,
+) error {
+	method := http.MethodPost
+	route := "/tool-call"
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attr.HTTPRoute(route),
+	)
+	logger = logger.With(
+		attr.SlogHTTPRoute(route),
+	)
+
+	unsealedAuthKey, err := tp.encryption.Decrypt(string(plan.AuthSecret.Reveal()))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to access credentials for function tool call").Log(ctx, logger)
+	}
+
+	enc, err := encryption.NewWithBytes([]byte(unsealedAuthKey))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to create encryption client for function tool call").Log(ctx, logger)
+	}
+
+	endpoint, err := url.JoinPath(plan.ServerURL, route)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to parse function tool url").Log(ctx, logger)
+	}
+
+	token, err := functions.TokenV1(enc, functions.TokenRequestV1{
+		ID:  plan.FunctionID,
+		Exp: time.Now().Add(10 * time.Minute).Unix(),
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to create bearer token for function tool call").Log(ctx, logger)
+	}
+
+	var input json.RawMessage
+	if err := json.NewDecoder(requestBody).Decode(&input); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
+	}
+
+	payload, err := json.Marshal(functions.CallToolPayload{
+		ToolName:    descriptor.Name,
+		Input:       input,
+		Environment: env.data,
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to marshal function tool payload").Log(ctx, logger)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to create function tool request").Log(ctx, logger)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	var responseStatusCode int
+	defer func() {
+		rawct := w.Header().Get("content-type")
+		ct, _, err := mime.ParseMediaType(rawct)
+		if err != nil {
+			ct = rawct
+		}
+		ct = ct[:min(len(ct), 100)]
+
+		logger.InfoContext(ctx, "function tool call",
+			attr.SlogHTTPResponseStatusCode(responseStatusCode),
+			attr.SlogHTTPRequestMethod(method),
+			attr.SlogHTTPResponseHeaderContentType(ct),
+		)
+		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
+		tp.metrics.RecordToolCall(ctx, descriptor.OrganizationID, descriptor.URN, responseStatusCode)
+
+		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
+	}()
+
+	return reverseProxyRequest(
+		ctx,
+		logger,
+		tp.tracer,
+		w,
+		req,
+		descriptor,
+		&FilterRequest{Type: "none", Filter: ""},
+		DisableResponseFiltering,
+		tp.policy,
+		&responseStatusCode,
+	)
+}
+
+func (tp *ToolProxy) doHTTP(
+	ctx context.Context,
+	logger *slog.Logger,
+	w http.ResponseWriter,
+	requestBody io.Reader,
+	env *CaseInsensitiveEnv,
+	descriptor *ToolDescriptor,
+	plan *HTTPToolCallPlan,
+) error {
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(
+		attr.HTTPRoute(plan.Path), // this is just from the raw OpenAPI spec. It is not a path with any parameters filled in, so not identifiable.
+	)
+	logger = logger.With(
+		attr.SlogHTTPRoute(plan.Path), // this is just from the raw OpenAPI spec. It is not a path with any parameters filled in, so not identifiable.
+	)
+
 	// Variable to capture status code for metrics
 	var responseStatusCode int
 	defer func() {
-		logger.InfoContext(ctx, "tool call",
+		logger.InfoContext(ctx, "http tool call",
 			attr.SlogHTTPResponseStatusCode(responseStatusCode),
-			attr.SlogHTTPRequestMethod(tool.Method),
-			attr.SlogHTTPResponseHeaderContentType(tool.RequestContentType.Value),
+			attr.SlogHTTPRequestMethod(plan.Method),
+			attr.SlogHTTPResponseHeaderContentType(plan.RequestContentType.Value),
 		)
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
-		itp.metrics.RecordHTTPToolCall(ctx, tool.OrganizationID, tool.Name, responseStatusCode)
+		tp.metrics.RecordToolCall(ctx, descriptor.OrganizationID, descriptor.URN, responseStatusCode)
 
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
@@ -191,8 +321,8 @@ func (itp *ToolProxy) Do(
 		return oops.E(oops.CodeBadRequest, err, "invalid request body").Log(ctx, logger)
 	}
 
-	if len(tool.Schema) > 0 {
-		bodyBytes, err = validateAndAttemptHealing(ctx, logger, bodyBytes, string(tool.Schema))
+	if len(plan.Schema) > 0 {
+		bodyBytes, err = validateAndAttemptHealing(ctx, logger, bodyBytes, string(plan.Schema))
 
 		// Extract the body field from healed bodyBytes
 		var healedToolCallBody ToolCallBody
@@ -223,11 +353,11 @@ func (itp *ToolProxy) Do(
 	}
 
 	// Handle path parameters
-	requestPath := tool.Path
+	requestPath := plan.Path
 	if toolCallBody.PathParameters != nil {
 		pathParams := make(map[string]string)
 		for name, value := range toolCallBody.PathParameters {
-			param := tool.PathParams[name]
+			param := plan.PathParams[name]
 			var settings *serialization.HTTPParameter
 			if param == nil {
 				logger.WarnContext(ctx, "no parameter settings found for path parameter", attr.SlogHTTPParamName(name))
@@ -257,16 +387,16 @@ func (itp *ToolProxy) Do(
 
 	// Get the server URL from the tool definition
 	var serverURL string
-	if tool.DefaultServerUrl.Valid {
-		serverURL = tool.DefaultServerUrl.Value
+	if plan.DefaultServerUrl.Valid {
+		serverURL = plan.DefaultServerUrl.Value
 	}
 
-	if envServerURL := processServerEnvVars(ctx, logger, tool, env); envServerURL != "" {
+	if envServerURL := processServerEnvVars(ctx, logger, plan, env); envServerURL != "" {
 		serverURL = envServerURL
 	}
 
 	if serverURL == "" {
-		logger.ErrorContext(ctx, "no server URL provided for tool", attr.SlogToolName(tool.Name))
+		logger.ErrorContext(ctx, "no server URL provided for tool", attr.SlogToolName(descriptor.Name))
 		return oops.E(oops.CodeInvalid, nil, "no server URL provided for tool").Log(ctx, logger)
 	}
 
@@ -282,7 +412,7 @@ func (itp *ToolProxy) Do(
 	}
 
 	var req *http.Request
-	if strings.HasPrefix(tool.RequestContentType.Value, "application/x-www-form-urlencoded") {
+	if strings.HasPrefix(plan.RequestContentType.Value, "application/x-www-form-urlencoded") {
 		encoded := ""
 		if len(toolCallBody.Body) > 0 {
 			// Assume toolCallBody.Body is a JSON object (map[string]interface{})
@@ -298,33 +428,33 @@ func (itp *ToolProxy) Do(
 		}
 		req, err = http.NewRequestWithContext(
 			ctx,
-			tool.Method,
+			plan.Method,
 			fullURL,
 			strings.NewReader(encoded),
 		)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to build url-encoded request").Log(ctx, logger)
 		}
-		req.Header.Set("Content-Type", tool.RequestContentType.Value)
+		req.Header.Set("Content-Type", plan.RequestContentType.Value)
 	} else {
 		req, err = http.NewRequestWithContext(
 			ctx,
-			tool.Method,
+			plan.Method,
 			fullURL,
 			bytes.NewReader(toolCallBody.Body),
 		)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "failed to build json request").Log(ctx, logger)
 		}
-		if tool.RequestContentType.Value != "" {
-			req.Header.Set("Content-Type", tool.RequestContentType.Value)
+		if plan.RequestContentType.Value != "" {
+			req.Header.Set("Content-Type", plan.RequestContentType.Value)
 		}
 	}
 
 	if toolCallBody.QueryParameters != nil {
 		values := url.Values{}
 		for name, value := range toolCallBody.QueryParameters {
-			param := tool.QueryParams[name]
+			param := plan.QueryParams[name]
 			var settings *serialization.HTTPParameter
 			if param == nil {
 				logger.WarnContext(ctx, "no parameter settings found for query parameter", attr.SlogHTTPParamName(name))
@@ -354,7 +484,7 @@ func (itp *ToolProxy) Do(
 	// Handle header parameters (non security schemes)
 	if toolCallBody.HeaderParameters != nil {
 		for name, value := range toolCallBody.HeaderParameters {
-			param := tool.HeaderParams[name]
+			param := plan.HeaderParams[name]
 			var settings *serialization.HTTPParameter
 			if param == nil {
 				logger.WarnContext(ctx, "no parameter settings found for header parameter", attr.SlogHTTPParamName(name))
@@ -376,14 +506,25 @@ func (itp *ToolProxy) Do(
 		}
 	}
 
-	shouldContinue := processSecurity(ctx, logger, req, w, &responseStatusCode, tool, itp.cache, env, serverURL)
+	shouldContinue := processSecurity(ctx, logger, req, w, &responseStatusCode, descriptor, plan, tp.cache, env, serverURL)
 	if !shouldContinue {
 		return nil
 	}
 
 	req.Header.Set("X-Gram-Proxy", "1")
 
-	return reverseProxyRequest(ctx, logger, itp.tracer, tool, toolCallBody.ResponseFilter, w, req, itp.policy, &responseStatusCode)
+	return reverseProxyRequest(
+		ctx,
+		logger,
+		tp.tracer,
+		w,
+		req,
+		descriptor,
+		toolCallBody.ResponseFilter,
+		plan.ResponseFilter,
+		tp.policy,
+		&responseStatusCode,
+	)
 }
 
 type retryConfig struct {
@@ -441,13 +582,15 @@ func retryWithBackoff(
 	return resp, err
 }
 
-func reverseProxyRequest(ctx context.Context,
+func reverseProxyRequest(
+	ctx context.Context,
 	logger *slog.Logger,
 	tracer trace.Tracer,
-	tool *HTTPTool,
-	responseFilter *ResponseFilterRequest,
 	w http.ResponseWriter,
 	req *http.Request,
+	tool *ToolDescriptor,
+	expression *FilterRequest,
+	filterConfig *ResponseFilter,
 	policy *guardian.Policy,
 	responseStatusCodeCapture *int,
 ) error {
@@ -575,7 +718,7 @@ func reverseProxyRequest(ctx context.Context,
 	} else {
 		var body io.Reader = resp.Body
 
-		result := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
+		result := handleResponseFiltering(ctx, logger, filterConfig, expression, resp)
 		if result != nil {
 			w.Header().Set("Content-Type", result.contentType)
 			w.Header().Set(constants.HeaderFilteredResponse, "1")
@@ -598,7 +741,7 @@ func reverseProxyRequest(ctx context.Context,
 	return nil
 }
 
-func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPTool, envVars *CaseInsensitiveEnv) string {
+func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, envVars *CaseInsensitiveEnv) string {
 	if tool.ServerEnvVar != "" {
 		envVar := envVars.Get(tool.ServerEnvVar)
 		if envVar != "" {

@@ -13,6 +13,8 @@ type Key = attribute.Key
 
 const (
 	ErrorMessageKey                   = semconv.ErrorMessageKey
+	ContainerIDKey                    = semconv.ContainerIDKey
+	ContainerNetworkIDKey             = attribute.Key("container.network.id")
 	FilePathKey                       = semconv.FilePathKey
 	HostNameKey                       = semconv.HostNameKey
 	HTTPRequestHeaderContentTypeKey   = attribute.Key("http.request.header.content_type")
@@ -46,6 +48,11 @@ const (
 	DataDogTraceIDKey = attribute.Key("dd.trace_id")
 	DataDogSpanIDKey  = attribute.Key("dd.span_id")
 
+	FlyAppNameKey    = attribute.Key("fly.app.name")
+	FlyOrgIDKey      = attribute.Key("fly.org.id")
+	FlyOrgSlugKey    = attribute.Key("fly.org.slug")
+	FlyMachineIDsKey = attribute.Key("fly.machine_ids")
+
 	GoaServiceKey = attribute.Key("goa.service")
 	GoaMethodKey  = attribute.Key("goa.method")
 
@@ -60,11 +67,13 @@ const (
 	TemporalRunIDKey         = attribute.Key("temporal.run.id")
 
 	AssetIDKey                     = attribute.Key("gram.asset.id")
+	AssetURLKey                    = attribute.Key("gram.asset.url")
 	CacheKeyKey                    = attribute.Key("gram.cache.key")
 	CacheNamespaceKey              = attribute.Key("gram.cache.namespace")
 	ComponentKey                   = attribute.Key("gram.component")
 	DBDeletedRowsCountKey          = attribute.Key("gram.db.deleted_rows_count")
 	DeploymentIDKey                = attribute.Key("gram.deployment.id")
+	DeploymentFunctionsAccessIDKey = attribute.Key("gram.deployment.functions.access_id")
 	DeploymentFunctionsIDKey       = attribute.Key("gram.deployment.functions.id")
 	DeploymentFunctionsNameKey     = attribute.Key("gram.deployment.functions.name")
 	DeploymentFunctionsSlugKey     = attribute.Key("gram.deployment.functions.slug")
@@ -78,7 +87,10 @@ const (
 	EnvVarNameKey                  = attribute.Key("gram.envvar.name")
 	ErrorIDKey                     = attribute.Key("gram.error.id")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
+	FlyAppInternalIDKey            = attribute.Key("gram.fly.app_id")
 	FunctionsManifestVersionKey    = attribute.Key("gram.functions.manifest_version")
+	FunctionsRunnerImageKey        = attribute.Key("gram.functions.runner_image")
+	FunctionsRunnerVersionKey      = attribute.Key("gram.functions.runner_version")
 	FunctionsRuntimeKey            = attribute.Key("gram.functions.runtime")
 	HTTPEncodingStyleKey           = attribute.Key("gram.http.encoding.style")
 	HTTPParamNameKey               = attribute.Key("gram.http.param.name")
@@ -121,6 +133,7 @@ const (
 	SlackEventTypeKey              = attribute.Key("gram.slack.event.type")
 	SlackTeamIDKey                 = attribute.Key("gram.slack.team.id")
 	ToolCallDurationKey            = attribute.Key("gram.tool_call.duration")
+	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
 	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
 	ToolHTTPResponseContentTypeKey = attribute.Key("gram.tool.http.response.content_type")
 	ToolIDKey                      = attribute.Key("gram.tool.id")
@@ -135,6 +148,14 @@ func SlogError(v error) slog.Attr      { return slog.String(string(ErrorMessageK
 
 func ErrorMessage(v string) attribute.KeyValue { return ErrorMessageKey.String(v) }
 func SlogErrorMessage(v string) slog.Attr      { return slog.String(string(ErrorMessageKey), v) }
+
+func ContainerID(v string) attribute.KeyValue { return ContainerIDKey.String(v) }
+func SlogContainerID(v string) slog.Attr      { return slog.String(string(ContainerIDKey), v) }
+
+func ContainerNetworkID(v string) attribute.KeyValue { return ContainerNetworkIDKey.String(v) }
+func SlogContainerNetworkID(v string) slog.Attr {
+	return slog.String(string(ContainerNetworkIDKey), v)
+}
 
 func FilePath(v string) attribute.KeyValue { return FilePathKey.String(v) }
 func SlogFilePath(v string) slog.Attr      { return slog.String(string(FilePathKey), v) }
@@ -251,6 +272,18 @@ func SlogDataDogSpanID(v string) slog.Attr {
 	return slog.String(string(DataDogSpanIDKey), v)
 }
 
+func FlyAppName(v string) attribute.KeyValue { return FlyAppNameKey.String(v) }
+func SlogFlyAppName(v string) slog.Attr      { return slog.String(string(FlyAppNameKey), v) }
+
+func FlyOrgID(v string) attribute.KeyValue { return FlyOrgIDKey.String(v) }
+func SlogFlyOrgID(v string) slog.Attr      { return slog.String(string(FlyOrgIDKey), v) }
+
+func FlyOrgSlug(v string) attribute.KeyValue { return FlyOrgSlugKey.String(v) }
+func SlogFlyOrgSlug(v string) slog.Attr      { return slog.String(string(FlyOrgSlugKey), v) }
+
+func FlyMachineIDs(v []string) attribute.KeyValue { return FlyMachineIDsKey.StringSlice(v) }
+func SlogFlyMachineIDs(v []string) slog.Attr      { return slog.Any(string(FlyMachineIDsKey), v) }
+
 func ValueAny(v any) attribute.KeyValue       { return ValueKey.String(fmt.Sprintf("%v", v)) }
 func SlogValueAny(v any) slog.Attr            { return slog.Any(string(ValueKey), v) }
 func ValueString(v string) attribute.KeyValue { return ValueKey.String(v) }
@@ -267,6 +300,9 @@ func SlogGoaMethod(v string) slog.Attr      { return slog.String(string(GoaMetho
 func AssetID(v string) attribute.KeyValue { return AssetIDKey.String(v) }
 func SlogAssetID(v string) slog.Attr      { return slog.String(string(AssetIDKey), v) }
 
+func AssetURL(v string) attribute.KeyValue { return AssetURLKey.String(v) }
+func SlogAssetURL(v string) slog.Attr      { return slog.String(string(AssetURLKey), v) }
+
 func CacheKey(v string) attribute.KeyValue { return CacheKeyKey.String(v) }
 func SlogCacheKey(v string) slog.Attr      { return slog.String(string(CacheKeyKey), v) }
 
@@ -281,6 +317,13 @@ func SlogDBDeletedRowsCount(v int64) slog.Attr      { return slog.Int64(string(D
 
 func DeploymentID(v string) attribute.KeyValue { return DeploymentIDKey.String(v) }
 func SlogDeploymentID(v string) slog.Attr      { return slog.String(string(DeploymentIDKey), v) }
+
+func DeploymentFunctionsAccessID(v string) attribute.KeyValue {
+	return DeploymentFunctionsAccessIDKey.String(v)
+}
+func SlogDeploymentFunctionsAccessID(v string) slog.Attr {
+	return slog.String(string(DeploymentFunctionsAccessIDKey), v)
+}
 
 func DeploymentFunctionsID(v string) attribute.KeyValue { return DeploymentFunctionsIDKey.String(v) }
 func SlogDeploymentFunctionsID(v string) slog.Attr {
@@ -343,6 +386,9 @@ func SlogErrorID(v string) slog.Attr      { return slog.String(string(ErrorIDKey
 func FilterExpression(v string) attribute.KeyValue { return FilterExpressionKey.String(v) }
 func SlogFilterExpression(v string) slog.Attr      { return slog.String(string(FilterExpressionKey), v) }
 
+func FlyAppInternalID(v string) attribute.KeyValue { return FlyAppInternalIDKey.String(v) }
+func SlogFlyAppInternalID(v string) slog.Attr      { return slog.String(string(FlyAppInternalIDKey), v) }
+
 func FunctionsManifestVersion(v string) attribute.KeyValue {
 	return FunctionsManifestVersionKey.String(v)
 }
@@ -350,9 +396,23 @@ func SlogFunctionsManifestVersion(v string) slog.Attr {
 	return slog.String(string(FunctionsManifestVersionKey), v)
 }
 
-func FunctionsRuntime(v string) attribute.KeyValue { return FunctionsRuntimeKey.String(v) }
-func SlogFunctionsRuntime(v string) slog.Attr {
-	return slog.String(string(FunctionsRuntimeKey), v)
+func FunctionsRunnerImage(v string) attribute.KeyValue { return FunctionsRunnerImageKey.String(v) }
+func SlogFunctionsRunnerImage(v string) slog.Attr {
+	return slog.String(string(FunctionsRunnerImageKey), v)
+}
+
+func FunctionsRunnerVersion[V ~string](v V) attribute.KeyValue {
+	return FunctionsRunnerVersionKey.String(string(v))
+}
+func SlogFunctionsRunnerVersion[V ~string](v V) slog.Attr {
+	return slog.String(string(FunctionsRunnerVersionKey), string(v))
+}
+
+func FunctionsRuntime[V ~string](v V) attribute.KeyValue {
+	return FunctionsRuntimeKey.String(string(v))
+}
+func SlogFunctionsRuntime[V ~string](v V) slog.Attr {
+	return slog.String(string(FunctionsRuntimeKey), string(v))
 }
 
 func HTTPEncodingStyle(v string) attribute.KeyValue { return HTTPEncodingStyleKey.String(v) }
@@ -478,6 +538,11 @@ func SlogSlackEventType(v string) slog.Attr      { return slog.String(string(Sla
 
 func SlackTeamID(v string) attribute.KeyValue { return SlackTeamIDKey.String(v) }
 func SlogSlackTeamID(v string) slog.Attr      { return slog.String(string(SlackTeamIDKey), v) }
+
+func ToolCallKind[V string](v V) attribute.KeyValue { return ToolCallKindKey.String(string(v)) }
+func SlogToolCallKind[V string](v V) slog.Attr {
+	return slog.String(string(ToolCallKindKey), string(v))
+}
 
 func ToolCallSource(v string) attribute.KeyValue { return ToolCallSourceKey.String(v) }
 func SlogToolCallSource(v string) slog.Attr      { return slog.String(string(ToolCallSourceKey), v) }

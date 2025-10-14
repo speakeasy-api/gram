@@ -9,7 +9,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,75 +17,46 @@ func TestHandleResponseFiltering_NoFilter(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	tool := &HTTPTool{
-		ID:                 uuid.New().String(),
-		ProjectID:          uuid.New().String(),
-		DeploymentID:       uuid.New().String(),
-		OrganizationID:     uuid.New().String(),
-		Name:               "test_tool",
-		ServerEnvVar:       "TEST_SERVER_URL",
-		DefaultServerUrl:   NullString{Value: "", Valid: false},
-		Security:           []*HTTPToolSecurity{},
-		SecurityScopes:     map[string][]string{},
-		Method:             "GET",
-		Path:               "/test",
-		Schema:             []byte{},
-		HeaderParams:       map[string]*HTTPParameter{},
-		QueryParams:        map[string]*HTTPParameter{},
-		PathParams:         map[string]*HTTPParameter{},
-		RequestContentType: NullString{Value: "", Valid: false},
-		ResponseFilter:     nil,
+	mockResp := func() *http.Response {
+		return &http.Response{
+			Status:           "200 OK",
+			StatusCode:       200,
+			Proto:            "HTTP/1.1",
+			ProtoMajor:       1,
+			ProtoMinor:       1,
+			Header:           make(http.Header),
+			Body:             io.NopCloser(bytes.NewReader([]byte(`{"data": "test"}`))),
+			ContentLength:    -1,
+			TransferEncoding: nil,
+			Close:            false,
+			Uncompressed:     false,
+			Trailer:          nil,
+			Request:          nil,
+			TLS:              nil,
+		}
 	}
 
-	resp := &http.Response{
-		Status:           "200 OK",
-		StatusCode:       200,
-		Proto:            "HTTP/1.1",
-		ProtoMajor:       1,
-		ProtoMinor:       1,
-		Header:           make(http.Header),
-		Body:             io.NopCloser(bytes.NewReader([]byte(`{"data": "test"}`))),
-		ContentLength:    -1,
-		TransferEncoding: nil,
-		Close:            false,
-		Uncompressed:     false,
-		Trailer:          nil,
-		Request:          nil,
-		TLS:              nil,
-	}
-
-	result := handleResponseFiltering(ctx, logger, tool, nil, resp)
+	resp := mockResp()
+	result := handleResponseFiltering(ctx, logger, nil, nil, resp)
 	require.Nil(t, result)
+	require.NoError(t, resp.Body.Close())
+
+	resp = mockResp()
+	result = handleResponseFiltering(ctx, logger, DisableResponseFiltering, &FilterRequest{"jq", ".data"}, resp)
+	require.Nil(t, result)
+	require.NoError(t, resp.Body.Close())
 }
 
-func TestHandleResponseFiltering_NoResponseFilter(t *testing.T) {
+func TestHandleResponseFiltering_NoFilterExpression(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	tool := &HTTPTool{
-		ID:                 uuid.New().String(),
-		ProjectID:          uuid.New().String(),
-		DeploymentID:       uuid.New().String(),
-		OrganizationID:     uuid.New().String(),
-		Name:               "test_tool",
-		ServerEnvVar:       "TEST_SERVER_URL",
-		DefaultServerUrl:   NullString{Value: "", Valid: false},
-		Security:           []*HTTPToolSecurity{},
-		SecurityScopes:     map[string][]string{},
-		Method:             "GET",
-		Path:               "/test",
-		Schema:             []byte{},
-		HeaderParams:       map[string]*HTTPParameter{},
-		QueryParams:        map[string]*HTTPParameter{},
-		PathParams:         map[string]*HTTPParameter{},
-		RequestContentType: NullString{Value: "", Valid: false},
-		ResponseFilter: &ResponseFilter{
-			Type:         FilterTypeJQ,
-			Schema:       []byte{},
-			StatusCodes:  []string{"200"},
-			ContentTypes: []string{"application/json"},
-		},
+	config := &ResponseFilter{
+		Type:         FilterTypeJQ,
+		Schema:       []byte{},
+		StatusCodes:  []string{"200"},
+		ContentTypes: []string{"application/json"},
 	}
 
 	resp := &http.Response{
@@ -106,7 +76,7 @@ func TestHandleResponseFiltering_NoResponseFilter(t *testing.T) {
 		TLS:              nil,
 	}
 
-	result := handleResponseFiltering(ctx, logger, tool, nil, resp)
+	result := handleResponseFiltering(ctx, logger, config, nil, resp)
 	require.Nil(t, result)
 }
 
@@ -115,32 +85,14 @@ func TestHandleResponseFiltering_ContentTypeMismatch(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	tool := &HTTPTool{
-		ID:                 uuid.New().String(),
-		ProjectID:          uuid.New().String(),
-		DeploymentID:       uuid.New().String(),
-		OrganizationID:     uuid.New().String(),
-		Name:               "test_tool",
-		ServerEnvVar:       "TEST_SERVER_URL",
-		DefaultServerUrl:   NullString{Value: "", Valid: false},
-		Security:           []*HTTPToolSecurity{},
-		SecurityScopes:     map[string][]string{},
-		Method:             "GET",
-		Path:               "/test",
-		Schema:             []byte{},
-		HeaderParams:       map[string]*HTTPParameter{},
-		QueryParams:        map[string]*HTTPParameter{},
-		PathParams:         map[string]*HTTPParameter{},
-		RequestContentType: NullString{Value: "", Valid: false},
-		ResponseFilter: &ResponseFilter{
-			Type:         FilterTypeJQ,
-			Schema:       []byte{},
-			StatusCodes:  []string{"200"},
-			ContentTypes: []string{"application/json"},
-		},
+	config := &ResponseFilter{
+		Type:         FilterTypeJQ,
+		Schema:       []byte{},
+		StatusCodes:  []string{"200"},
+		ContentTypes: []string{"application/json"},
 	}
 
-	responseFilter := &ResponseFilterRequest{
+	responseFilter := &FilterRequest{
 		Type:   "jq",
 		Filter: ".data",
 	}
@@ -162,7 +114,7 @@ func TestHandleResponseFiltering_ContentTypeMismatch(t *testing.T) {
 		TLS:              nil,
 	}
 
-	result := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
+	result := handleResponseFiltering(ctx, logger, config, responseFilter, resp)
 	require.Nil(t, result)
 }
 
@@ -171,32 +123,14 @@ func TestHandleResponseFiltering_StatusCodeMismatch(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	tool := &HTTPTool{
-		ID:                 uuid.New().String(),
-		ProjectID:          uuid.New().String(),
-		DeploymentID:       uuid.New().String(),
-		OrganizationID:     uuid.New().String(),
-		Name:               "test_tool",
-		ServerEnvVar:       "TEST_SERVER_URL",
-		DefaultServerUrl:   NullString{Value: "", Valid: false},
-		Security:           []*HTTPToolSecurity{},
-		SecurityScopes:     map[string][]string{},
-		Method:             "GET",
-		Path:               "/test",
-		Schema:             []byte{},
-		HeaderParams:       map[string]*HTTPParameter{},
-		QueryParams:        map[string]*HTTPParameter{},
-		PathParams:         map[string]*HTTPParameter{},
-		RequestContentType: NullString{Value: "", Valid: false},
-		ResponseFilter: &ResponseFilter{
-			Type:         FilterTypeJQ,
-			Schema:       []byte{},
-			StatusCodes:  []string{"200"},
-			ContentTypes: []string{"application/json"},
-		},
+	config := &ResponseFilter{
+		Type:         FilterTypeJQ,
+		Schema:       []byte{},
+		StatusCodes:  []string{"200"},
+		ContentTypes: []string{"application/json"},
 	}
 
-	responseFilter := &ResponseFilterRequest{
+	responseFilter := &FilterRequest{
 		Type:   "jq",
 		Filter: ".data",
 	}
@@ -218,7 +152,7 @@ func TestHandleResponseFiltering_StatusCodeMismatch(t *testing.T) {
 		TLS:              nil,
 	}
 
-	result := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
+	result := handleResponseFiltering(ctx, logger, config, responseFilter, resp)
 	require.Nil(t, result)
 }
 
@@ -227,32 +161,14 @@ func TestHandleResponseFiltering_InvalidJQFilter(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	tool := &HTTPTool{
-		ID:                 uuid.New().String(),
-		ProjectID:          uuid.New().String(),
-		DeploymentID:       uuid.New().String(),
-		OrganizationID:     uuid.New().String(),
-		Name:               "test_tool",
-		ServerEnvVar:       "TEST_SERVER_URL",
-		DefaultServerUrl:   NullString{Value: "", Valid: false},
-		Security:           []*HTTPToolSecurity{},
-		SecurityScopes:     map[string][]string{},
-		Method:             "GET",
-		Path:               "/test",
-		Schema:             []byte{},
-		HeaderParams:       map[string]*HTTPParameter{},
-		QueryParams:        map[string]*HTTPParameter{},
-		PathParams:         map[string]*HTTPParameter{},
-		RequestContentType: NullString{Value: "", Valid: false},
-		ResponseFilter: &ResponseFilter{
-			Type:         FilterTypeJQ,
-			Schema:       []byte{},
-			StatusCodes:  []string{"200"},
-			ContentTypes: []string{"application/json"},
-		},
+	config := &ResponseFilter{
+		Type:         FilterTypeJQ,
+		Schema:       []byte{},
+		StatusCodes:  []string{"200"},
+		ContentTypes: []string{"application/json"},
 	}
 
-	responseFilter := &ResponseFilterRequest{
+	responseFilter := &FilterRequest{
 		Type:   "jq",
 		Filter: ".invalid[syntax",
 	}
@@ -274,7 +190,7 @@ func TestHandleResponseFiltering_InvalidJQFilter(t *testing.T) {
 		TLS:              nil,
 	}
 
-	result := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
+	result := handleResponseFiltering(ctx, logger, config, responseFilter, resp)
 	require.Nil(t, result)
 }
 
@@ -283,32 +199,14 @@ func TestHandleResponseFiltering_SuccessfulJSONFilter(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	tool := &HTTPTool{
-		ID:                 uuid.New().String(),
-		ProjectID:          uuid.New().String(),
-		DeploymentID:       uuid.New().String(),
-		OrganizationID:     uuid.New().String(),
-		Name:               "test_tool",
-		ServerEnvVar:       "TEST_SERVER_URL",
-		DefaultServerUrl:   NullString{Value: "", Valid: false},
-		Security:           []*HTTPToolSecurity{},
-		SecurityScopes:     map[string][]string{},
-		Method:             "GET",
-		Path:               "/test",
-		Schema:             []byte{},
-		HeaderParams:       map[string]*HTTPParameter{},
-		QueryParams:        map[string]*HTTPParameter{},
-		PathParams:         map[string]*HTTPParameter{},
-		RequestContentType: NullString{Value: "", Valid: false},
-		ResponseFilter: &ResponseFilter{
-			Type:         FilterTypeJQ,
-			Schema:       []byte{},
-			StatusCodes:  []string{"200"},
-			ContentTypes: []string{"application/json"},
-		},
+	config := &ResponseFilter{
+		Type:         FilterTypeJQ,
+		Schema:       []byte{},
+		StatusCodes:  []string{"200"},
+		ContentTypes: []string{"application/json"},
 	}
 
-	responseFilter := &ResponseFilterRequest{
+	responseFilter := &FilterRequest{
 		Type:   "jq",
 		Filter: ".data",
 	}
@@ -330,7 +228,7 @@ func TestHandleResponseFiltering_SuccessfulJSONFilter(t *testing.T) {
 		TLS:              nil,
 	}
 
-	filterResult := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
+	filterResult := handleResponseFiltering(ctx, logger, config, responseFilter, resp)
 	require.NotNil(t, filterResult)
 	require.Equal(t, 200, filterResult.statusCode)
 	require.Equal(t, "application/json", filterResult.contentType)
@@ -351,32 +249,14 @@ func TestHandleResponseFiltering_SuccessfulYAMLFilter(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	tool := &HTTPTool{
-		ID:                 uuid.New().String(),
-		ProjectID:          uuid.New().String(),
-		DeploymentID:       uuid.New().String(),
-		OrganizationID:     uuid.New().String(),
-		Name:               "test_tool",
-		ServerEnvVar:       "TEST_SERVER_URL",
-		DefaultServerUrl:   NullString{Value: "", Valid: false},
-		Security:           []*HTTPToolSecurity{},
-		SecurityScopes:     map[string][]string{},
-		Method:             "GET",
-		Path:               "/test",
-		Schema:             []byte{},
-		HeaderParams:       map[string]*HTTPParameter{},
-		QueryParams:        map[string]*HTTPParameter{},
-		PathParams:         map[string]*HTTPParameter{},
-		RequestContentType: NullString{Value: "", Valid: false},
-		ResponseFilter: &ResponseFilter{
-			Type:         FilterTypeJQ,
-			Schema:       []byte{},
-			StatusCodes:  []string{"200"},
-			ContentTypes: []string{"application/yaml"},
-		},
+	config := &ResponseFilter{
+		Type:         FilterTypeJQ,
+		Schema:       []byte{},
+		StatusCodes:  []string{"200"},
+		ContentTypes: []string{"application/yaml"},
 	}
 
-	responseFilter := &ResponseFilterRequest{
+	responseFilter := &FilterRequest{
 		Type:   "jq",
 		Filter: ".items | map(.name)",
 	}
@@ -406,7 +286,7 @@ meta:
 		TLS:              nil,
 	}
 
-	filterResult := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
+	filterResult := handleResponseFiltering(ctx, logger, config, responseFilter, resp)
 	require.NotNil(t, filterResult)
 	require.Equal(t, 200, filterResult.statusCode)
 	require.Equal(t, "application/yaml", filterResult.contentType)
@@ -422,32 +302,14 @@ func TestHandleResponseFiltering_ComplexJQFilter(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	tool := &HTTPTool{
-		ID:                 uuid.New().String(),
-		ProjectID:          uuid.New().String(),
-		DeploymentID:       uuid.New().String(),
-		OrganizationID:     uuid.New().String(),
-		Name:               "test_tool",
-		ServerEnvVar:       "TEST_SERVER_URL",
-		DefaultServerUrl:   NullString{Value: "", Valid: false},
-		Security:           []*HTTPToolSecurity{},
-		SecurityScopes:     map[string][]string{},
-		Method:             "GET",
-		Path:               "/test",
-		Schema:             []byte{},
-		HeaderParams:       map[string]*HTTPParameter{},
-		QueryParams:        map[string]*HTTPParameter{},
-		PathParams:         map[string]*HTTPParameter{},
-		RequestContentType: NullString{Value: "", Valid: false},
-		ResponseFilter: &ResponseFilter{
-			Type:         FilterTypeJQ,
-			Schema:       []byte{},
-			StatusCodes:  []string{"200"},
-			ContentTypes: []string{"application/json"},
-		},
+	config := &ResponseFilter{
+		Type:         FilterTypeJQ,
+		Schema:       []byte{},
+		StatusCodes:  []string{"200"},
+		ContentTypes: []string{"application/json"},
 	}
 
-	responseFilter := &ResponseFilterRequest{
+	responseFilter := &FilterRequest{
 		Type:   "jq",
 		Filter: ".users | map(select(.active == true)) | map({id, name})",
 	}
@@ -478,7 +340,7 @@ func TestHandleResponseFiltering_ComplexJQFilter(t *testing.T) {
 		TLS:              nil,
 	}
 
-	filterResult := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
+	filterResult := handleResponseFiltering(ctx, logger, config, responseFilter, resp)
 	require.NotNil(t, filterResult)
 	require.Equal(t, 200, filterResult.statusCode)
 	require.Equal(t, "application/json", filterResult.contentType)
@@ -511,32 +373,14 @@ func TestHandleResponseFiltering_FilterError(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	tool := &HTTPTool{
-		ID:                 uuid.New().String(),
-		ProjectID:          uuid.New().String(),
-		DeploymentID:       uuid.New().String(),
-		OrganizationID:     uuid.New().String(),
-		Name:               "test_tool",
-		ServerEnvVar:       "TEST_SERVER_URL",
-		DefaultServerUrl:   NullString{Value: "", Valid: false},
-		Security:           []*HTTPToolSecurity{},
-		SecurityScopes:     map[string][]string{},
-		Method:             "GET",
-		Path:               "/test",
-		Schema:             []byte{},
-		HeaderParams:       map[string]*HTTPParameter{},
-		QueryParams:        map[string]*HTTPParameter{},
-		PathParams:         map[string]*HTTPParameter{},
-		RequestContentType: NullString{Value: "", Valid: false},
-		ResponseFilter: &ResponseFilter{
-			Type:         FilterTypeJQ,
-			Schema:       []byte{},
-			StatusCodes:  []string{"200"},
-			ContentTypes: []string{"application/json"},
-		},
+	config := &ResponseFilter{
+		Type:         FilterTypeJQ,
+		Schema:       []byte{},
+		StatusCodes:  []string{"200"},
+		ContentTypes: []string{"application/json"},
 	}
 
-	responseFilter := &ResponseFilterRequest{
+	responseFilter := &FilterRequest{
 		Type:   "jq",
 		Filter: ".[0] | .field",
 	}
@@ -558,7 +402,7 @@ func TestHandleResponseFiltering_FilterError(t *testing.T) {
 		TLS:              nil,
 	}
 
-	filterResult := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
+	filterResult := handleResponseFiltering(ctx, logger, config, responseFilter, resp)
 	require.NotNil(t, filterResult)
 	require.Equal(t, http.StatusBadRequest, filterResult.statusCode)
 	require.Equal(t, "application/json", filterResult.contentType)
@@ -579,32 +423,14 @@ func TestHandleResponseFiltering_ReadBodyError(t *testing.T) {
 	ctx := t.Context()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 
-	tool := &HTTPTool{
-		ID:                 uuid.New().String(),
-		ProjectID:          uuid.New().String(),
-		DeploymentID:       uuid.New().String(),
-		OrganizationID:     uuid.New().String(),
-		Name:               "test_tool",
-		ServerEnvVar:       "TEST_SERVER_URL",
-		DefaultServerUrl:   NullString{Value: "", Valid: false},
-		Security:           []*HTTPToolSecurity{},
-		SecurityScopes:     map[string][]string{},
-		Method:             "GET",
-		Path:               "/test",
-		Schema:             []byte{},
-		HeaderParams:       map[string]*HTTPParameter{},
-		QueryParams:        map[string]*HTTPParameter{},
-		PathParams:         map[string]*HTTPParameter{},
-		RequestContentType: NullString{Value: "", Valid: false},
-		ResponseFilter: &ResponseFilter{
-			Type:         FilterTypeJQ,
-			Schema:       []byte{},
-			StatusCodes:  []string{"200"},
-			ContentTypes: []string{"application/json"},
-		},
+	config := &ResponseFilter{
+		Type:         FilterTypeJQ,
+		Schema:       []byte{},
+		StatusCodes:  []string{"200"},
+		ContentTypes: []string{"application/json"},
 	}
 
-	responseFilter := &ResponseFilterRequest{
+	responseFilter := &FilterRequest{
 		Type:   "jq",
 		Filter: ".data",
 	}
@@ -627,7 +453,7 @@ func TestHandleResponseFiltering_ReadBodyError(t *testing.T) {
 		TLS:              nil,
 	}
 
-	filterResult := handleResponseFiltering(ctx, logger, tool, responseFilter, resp)
+	filterResult := handleResponseFiltering(ctx, logger, config, responseFilter, resp)
 	require.NotNil(t, filterResult)
 	require.Equal(t, http.StatusInternalServerError, filterResult.statusCode)
 	require.Equal(t, "application/octet-stream", filterResult.contentType)

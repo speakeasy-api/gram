@@ -4,7 +4,7 @@ on:
     branches:
       - main
     paths:
-      - 'cli/package.json'
+      - "cli/package.json"
   workflow_dispatch:
 permissions:
   contents: write

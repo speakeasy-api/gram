@@ -125,8 +125,19 @@ OTLP_GRPC_PORT = "4317"
 ####################################
 ## Gram Functions runner settings ##
 ####################################
-GRAM_FUNCTIONS_OCI_IMAGE = "gram-runner"
+## Where to deploy functions.
+## Allowed values: local, flyio.
+GRAM_FUNCTIONS_PROVIDER = "local"
+GRAM_FUNCTIONS_RUNNER_OCI_IMAGE = "gram-runner"
+## By default, the runner version is inferred from the version of the
+## server/worker. If needed, you can pin the version with the following
+## variable. You must ensure the required version is available for the given OCI
+## image in ther registry.
+# GRAM_FUNCTIONS_RUNNER_VERSION = ""
 GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
+## fly.io api token for deploying gram function runners
 # GRAM_FUNCTIONS_FLYIO_API_TOKEN = "unset"
+## Default app for deploying fly.io apps
 # GRAM_FUNCTIONS_FLYIO_ORG = "unset"
-# GRAM_FUNCTIONS_FLYIO_REGION = "sea"
+## Default region for deploying fly.io apps
+# GRAM_FUNCTIONS_FLYIO_REGION = "sjc"

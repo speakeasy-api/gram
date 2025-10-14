@@ -33,6 +33,30 @@ Example: `chore: fix typo in code comment`.
 _You can include multiple changesets in a single pull request if each affected
 package contains distinct changes._
 
+## Conventions
+
+Use capital letters and proper grammar in your changelogs. Omit the qualifier prefix.
+
+### ❌
+
+```
+---
+"@gram/dashboard": patch
+---
+
+fix: prevents double submit on upgrade button
+```
+
+### ✅
+
+```
+---
+"@gram/dashboard": patch
+---
+
+Prevent double submit on upgrade button <feel free to elaborate if it is warranted. you have room to breath here.>
+```
+
 ## Release flow
 
 Over time, several PRs will be merged and changesets will build up on `main`.

@@ -127,7 +127,7 @@ func handleToolsCall(
 	}
 
 	// At this point, non-http tools have already been handled
-	if tool.HTTPToolDefinition == nil {
+	if tool.HTTPToolDefinition == nil && tool.FunctionToolDefinition == nil {
 		return nil, oops.E(oops.CodeUnexpected, errors.New("tool is not an HTTP tool"), "tool is not an HTTP tool").Log(ctx, logger)
 	}
 
@@ -158,13 +158,15 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
 	}
 
-	executionPlan, err := toolsetHelpers.GetToolExecutionInfoByURN(ctx, *toolURN, uuid.UUID(projectID))
+	plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, *toolURN, uuid.UUID(projectID))
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool execution plan").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").Log(ctx, logger)
 	}
-	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, executionPlan.OrganizationSlug, executionPlan.ProjectSlug)
-	if executionPlan.Tool.IsHTTP() {
-		for _, security := range executionPlan.Tool.HTTPTool.Security {
+
+	descriptor := plan.Descriptor
+	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
+	if plan.Kind == gateway.ToolKindHTTP {
+		for _, security := range plan.HTTP.Security {
 			for _, token := range payload.oauthTokenInputs {
 				if slices.Contains(security.OAuthTypes, "authorization_code") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
 					for _, envVar := range security.EnvVariables {
@@ -200,19 +202,18 @@ func handleToolsCall(
 			ToolID:           conv.ToBaseTool(tool).ID,
 			ToolName:         params.Name,
 			ProjectID:        payload.projectID.String(),
-			ProjectSlug:      &executionPlan.ProjectSlug,
-			OrganizationSlug: &executionPlan.OrganizationSlug,
+			ProjectSlug:      &descriptor.ProjectSlug,
+			OrganizationSlug: &descriptor.OrganizationSlug,
 			ToolsetSlug:      &payload.toolset,
 			ToolsetID:        &toolset.ID,
 			MCPURL:           &mcpURL,
 			MCPSessionID:     &payload.sessionID,
 			ChatID:           nil,
-			Type:             billing.ToolCallTypeHTTP,
+			Type:             plan.BillingType,
 		})
-
 	}()
 
-	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), ciEnv, executionPlan.Tool)
+	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), ciEnv, plan)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}
