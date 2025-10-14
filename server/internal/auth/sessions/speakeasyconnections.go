@@ -35,7 +35,7 @@ type speakeasyProviderOrganization struct {
 	UpdatedAt          time.Time `json:"updated_at"`
 	AccountType        string    `json:"account_type"`
 	SSOConnectionID    *string   `json:"sso_connection_id,omitempty"`
-	UserWorkspaceSlugs []string  `json:"user_workspace_slugs"`
+	UserWorkspaceSlugs []string  `json:"user_workspaces_slugs"` // speakeasy-registry side is user_workspaces_slugs
 }
 
 type validateTokenResponse struct {
