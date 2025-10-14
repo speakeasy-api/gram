@@ -3,13 +3,11 @@ import { CopyButton } from "./ui/copy-button";
 
 export function CodeBlock({
   className,
-  preClassname,
   copyable = true,
   onCopy,
   children,
 }: {
   className?: string;
-  preClassname?: string;
   copyable?: boolean;
   onCopy?: () => void; // Extra actions to take when the code is copied
   children: string;
@@ -29,12 +27,7 @@ export function CodeBlock({
           onCopy={onCopy}
         />
       )}
-      <pre
-        className={cn(
-          "break-all whitespace-pre-wrap text-xs pr-10",
-          preClassname,
-        )}
-      >
+      <pre className="break-all whitespace-pre-wrap text-xs pr-10">
         {children}
       </pre>
     </div>
