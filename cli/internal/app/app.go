@@ -9,6 +9,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
+	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/o11y"
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 )
@@ -33,6 +34,9 @@ func newApp() *cli.App {
 			newWhoAmICommand(),
 		},
 		Flags: []cli.Flag{
+			flags.APIKey(),
+			flags.APIEndpoint(),
+			flags.Project(),
 			&cli.StringFlag{
 				Name:    "log-level",
 				Value:   "info",
@@ -74,12 +78,11 @@ func newApp() *cli.App {
 
 			profilePath := c.String("profile-path")
 			profileName := c.String("profile")
-			apiURL := c.String("api-url")
 			userSpecifiedPath := c.IsSet("profile-path")
 			if profilePath == "" {
 				profilePath = defaultProfilePath
 			}
-			prof, err := profile.LoadByName(profilePath, profileName, apiURL)
+			prof, err := profile.LoadByName(profilePath, profileName)
 			if err != nil {
 				logger.WarnContext(
 					ctx,

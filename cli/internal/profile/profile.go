@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/speakeasy-api/gram/server/gen/keys"
 )
 
 // Config represents the profile configuration file structure.
@@ -16,14 +18,28 @@ type Config struct {
 	Profiles map[string]*Profile `json:"profiles"`
 }
 
+// Org represents an organization in the profile.
+type Org struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
+// Project represents a project in the profile.
+type Project struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
+}
+
 // Profile represents a single profile with authentication and project settings.
 type Profile struct {
-	Name               string `json:"-"`
-	Secret             string `json:"secret"`
-	DefaultProjectSlug string `json:"defaultProjectSlug"`
-	APIUrl             string `json:"apiUrl"`
-	Org                any    `json:"org"`
-	Projects           []any  `json:"projects"`
+	Name               string                        `json:"-"`
+	Secret             string                        `json:"secret"`
+	DefaultProjectSlug string                        `json:"defaultProjectSlug"`
+	APIUrl             string                        `json:"apiUrl"`
+	Org                *keys.ValidateKeyOrganization `json:"org"`
+	Projects           []*keys.ValidateKeyProject    `json:"projects"`
 }
 
 func EmptyConfig() *Config {
@@ -89,46 +105,29 @@ func Load(path string) (*Profile, error) {
 	return profile, nil
 }
 
-func matchProfilesByURL(profiles map[string]*Profile, apiURL string) map[string]*Profile {
-	if apiURL == "" {
-		return profiles
-	}
-
-	matches := make(map[string]*Profile)
-	for name, prof := range profiles {
-		if prof.APIUrl == apiURL {
-			matches[name] = prof
-		}
-	}
-	return matches
-}
-
-func matchProfilesByName(
+func findProfileByName(
 	profiles map[string]*Profile,
 	profileName string,
-	currentName string,
-) map[string]*Profile {
+) *Profile {
 	targetName := profileName
-	if targetName == "" {
-		targetName = currentName
-	}
 	if targetName == "" {
 		return nil
 	}
 
-	matches := make(map[string]*Profile)
 	if prof, ok := profiles[targetName]; ok {
-		matches[targetName] = prof
+		prof.Name = targetName
+		return prof
 	}
-	return matches
+
+	return nil
 }
 
 // LoadByName reads the profile configuration and returns the profile matching
-// the specified name and API URL. If profileName is empty, falls back to current.
+// the specified name. If profileName is empty, falls back to current.
 //
 // Returns (nil, nil) if the profile file doesn't exist or no matching profile found.
 // Returns an error if the file is malformed.
-func LoadByName(path string, profileName string, apiURL string) (*Profile, error) {
+func LoadByName(path string, profileName string) (*Profile, error) {
 	var profilePath string
 	if path != "" {
 		profilePath = path
@@ -153,19 +152,11 @@ func LoadByName(path string, profileName string, apiURL string) (*Profile, error
 		return nil, fmt.Errorf("failed to parse profile file: %w", err)
 	}
 
-	urlMatch := matchProfilesByURL(config.Profiles, apiURL)
-	nameMatch := matchProfilesByName(urlMatch, profileName, config.Current)
-
-	if len(nameMatch) == 0 {
-		return nil, nil
+	if profileName == "" {
+		return findProfileByName(config.Profiles, config.Current), nil
 	}
 
-	for name, prof := range nameMatch {
-		prof.Name = name
-		return prof, nil
-	}
-
-	return nil, nil
+	return findProfileByName(config.Profiles, profileName), nil
 }
 
 type contextKey string
@@ -200,11 +191,7 @@ func LintProfile(p *Profile) []string {
 	if p.DefaultProjectSlug != "" {
 		found := false
 		for _, proj := range p.Projects {
-			projMap, ok := proj.(map[string]interface{})
-			if !ok {
-				continue
-			}
-			if projMap["slug"] == p.DefaultProjectSlug {
+			if proj != nil && proj.Slug == p.DefaultProjectSlug {
 				found = true
 				break
 			}

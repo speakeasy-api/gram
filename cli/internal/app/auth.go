@@ -42,7 +42,7 @@ func profileNameFromURL(apiURL string) string {
 }
 
 func determineProfileName(prof *profile.Profile, apiURL string) string {
-	if prof != nil && prof.APIUrl == apiURL {
+	if prof != nil {
 		return prof.Name
 	}
 	return profileNameFromURL(apiURL)
@@ -121,7 +121,7 @@ func saveProfile(
 		return fmt.Errorf("failed to save profile: %w", err)
 	}
 
-	savedProfile, err := profile.LoadByName(profilePath, profileName, apiURL)
+	savedProfile, err := profile.LoadByName(profilePath, profileName)
 	if err == nil {
 		for _, warning := range profile.LintProfile(savedProfile) {
 			logger.WarnContext(ctx, warning)
@@ -194,6 +194,12 @@ func doAuth(c *cli.Context) error {
 	if canRefreshProfile(prof) {
 		err := refreshProfile(ctx, logger, prof, profileName, apiURL.String(), keysClient, profilePath)
 		if err == nil {
+			msg := fmt.Sprintf(
+				"Authentication successful for org '%s' (project: '%s')",
+				prof.Org.Name,
+				prof.DefaultProjectSlug,
+			)
+			logger.InfoContext(ctx, msg)
 			return nil
 		}
 		// If refresh failed, fall through to authenticate new profile

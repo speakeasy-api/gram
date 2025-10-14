@@ -60,25 +60,6 @@ func buildProfile(
 	org *keys.ValidateKeyOrganization,
 	projects []*keys.ValidateKeyProject,
 ) *Profile {
-	var orgData any
-	if org != nil {
-		orgData = map[string]string{
-			"id":   org.ID,
-			"name": org.Name,
-			"slug": org.Slug,
-		}
-	}
-
-	var projectsData []any
-	for _, p := range projects {
-		projectsData = append(projectsData, map[string]string{
-			"id":   p.ID,
-			"name": p.Name,
-			"slug": p.Slug,
-		})
-	}
-
-	// Use first project as default if no default is set
 	if defaultProjectSlug == "" && len(projects) > 0 {
 		defaultProjectSlug = projects[0].Slug
 	}
@@ -88,8 +69,8 @@ func buildProfile(
 		Secret:             apiKey,
 		DefaultProjectSlug: defaultProjectSlug,
 		APIUrl:             apiURL,
-		Org:                orgData,
-		Projects:           projectsData,
+		Org:                org,
+		Projects:           projects,
 	}
 }
 
