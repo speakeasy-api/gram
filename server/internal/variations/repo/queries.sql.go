@@ -46,19 +46,7 @@ WITH global_group AS (
   ORDER BY project_tool_variations.id DESC
   LIMIT 1
 )
-SELECT
-  id,
-  group_id,
-  src_tool_name,
-  confirm,
-  confirm_prompt,
-  name,
-  summary,
-  description,
-  tags,
-  summarizer,
-  created_at,
-  updated_at
+SELECT id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name, summary, description, tags, summarizer, created_at, updated_at, deleted_at, deleted
 FROM tool_variations
 WHERE
   group_id = (SELECT id FROM global_group)
@@ -71,33 +59,19 @@ type FindGlobalVariationsByToolNamesParams struct {
 	ProjectID uuid.UUID
 }
 
-type FindGlobalVariationsByToolNamesRow struct {
-	ID            uuid.UUID
-	GroupID       uuid.UUID
-	SrcToolName   string
-	Confirm       pgtype.Text
-	ConfirmPrompt pgtype.Text
-	Name          pgtype.Text
-	Summary       pgtype.Text
-	Description   pgtype.Text
-	Tags          []string
-	Summarizer    pgtype.Text
-	CreatedAt     pgtype.Timestamptz
-	UpdatedAt     pgtype.Timestamptz
-}
-
-func (q *Queries) FindGlobalVariationsByToolNames(ctx context.Context, arg FindGlobalVariationsByToolNamesParams) ([]FindGlobalVariationsByToolNamesRow, error) {
+func (q *Queries) FindGlobalVariationsByToolNames(ctx context.Context, arg FindGlobalVariationsByToolNamesParams) ([]ToolVariation, error) {
 	rows, err := q.db.Query(ctx, findGlobalVariationsByToolNames, arg.ToolNames, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []FindGlobalVariationsByToolNamesRow
+	var items []ToolVariation
 	for rows.Next() {
-		var i FindGlobalVariationsByToolNamesRow
+		var i ToolVariation
 		if err := rows.Scan(
 			&i.ID,
 			&i.GroupID,
+			&i.SrcToolUrn,
 			&i.SrcToolName,
 			&i.Confirm,
 			&i.ConfirmPrompt,
@@ -108,6 +82,8 @@ func (q *Queries) FindGlobalVariationsByToolNames(ctx context.Context, arg FindG
 			&i.Summarizer,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
 		); err != nil {
 			return nil, err
 		}
@@ -222,6 +198,7 @@ func (q *Queries) PokeGlobalToolVariationsGroup(ctx context.Context, projectID u
 const upsertToolVariation = `-- name: UpsertToolVariation :one
 INSERT INTO tool_variations (
   group_id,
+  src_tool_urn,
   src_tool_name,
   confirm,
   confirm_prompt,
@@ -239,8 +216,10 @@ INSERT INTO tool_variations (
   $6,
   $7,
   $8,
-  $9
+  $9,
+  $10
 ) ON CONFLICT (group_id, src_tool_name) WHERE deleted IS FALSE DO UPDATE SET
+  src_tool_urn = EXCLUDED.src_tool_urn,
   confirm = EXCLUDED.confirm,
   confirm_prompt = EXCLUDED.confirm_prompt,
   name = EXCLUDED.name,
@@ -254,6 +233,7 @@ RETURNING id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, na
 
 type UpsertToolVariationParams struct {
 	GroupID       uuid.UUID
+	SrcToolUrn    pgtype.Text
 	SrcToolName   string
 	Confirm       pgtype.Text
 	ConfirmPrompt pgtype.Text
@@ -267,6 +247,7 @@ type UpsertToolVariationParams struct {
 func (q *Queries) UpsertToolVariation(ctx context.Context, arg UpsertToolVariationParams) (ToolVariation, error) {
 	row := q.db.QueryRow(ctx, upsertToolVariation,
 		arg.GroupID,
+		arg.SrcToolUrn,
 		arg.SrcToolName,
 		arg.Confirm,
 		arg.ConfirmPrompt,

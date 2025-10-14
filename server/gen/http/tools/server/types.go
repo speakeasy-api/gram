@@ -302,6 +302,8 @@ type ToolVariationResponseBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// The ID of the tool variation group
 	GroupID string `form:"group_id" json:"group_id" xml:"group_id"`
+	// The URN of the source tool
+	SrcToolUrn string `form:"src_tool_urn" json:"src_tool_urn" xml:"src_tool_urn"`
 	// The name of the source tool
 	SrcToolName string `form:"src_tool_name" json:"src_tool_name" xml:"src_tool_name"`
 	// The confirmation mode for the tool variation
