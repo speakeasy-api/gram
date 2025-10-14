@@ -31,7 +31,6 @@ func EncodeCallbackResponse(encoder func(context.Context, http.ResponseWriter) g
 			Name:     "gram_session",
 			Value:    sessionCookie,
 			MaxAge:   2592000,
-			Path:     "/",
 			Secure:   true,
 			HttpOnly: true,
 		})
@@ -395,7 +394,6 @@ func EncodeSwitchScopesResponse(encoder func(context.Context, http.ResponseWrite
 			Name:     "gram_session",
 			Value:    sessionCookie,
 			MaxAge:   2592000,
-			Path:     "/",
 			Secure:   true,
 			HttpOnly: true,
 		})
@@ -605,7 +603,6 @@ func EncodeLogoutResponse(encoder func(context.Context, http.ResponseWriter) goa
 			Name:     "gram_session",
 			Value:    sessionCookie,
 			MaxAge:   0,
-			Path:     "/",
 			Secure:   true,
 			HttpOnly: true,
 		})
@@ -1016,7 +1013,6 @@ func EncodeInfoResponse(encoder func(context.Context, http.ResponseWriter) goaht
 			Name:     "gram_session",
 			Value:    sessionCookie,
 			MaxAge:   2592000,
-			Path:     "/",
 			Secure:   true,
 			HttpOnly: true,
 		})

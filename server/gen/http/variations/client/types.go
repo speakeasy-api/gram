@@ -16,6 +16,8 @@ import (
 // UpsertGlobalRequestBody is the type of the "variations" service
 // "upsertGlobal" endpoint HTTP request body.
 type UpsertGlobalRequestBody struct {
+	// The URN of the source tool
+	SrcToolUrn string `form:"src_tool_urn" json:"src_tool_urn" xml:"src_tool_urn"`
 	// The name of the source tool
 	SrcToolName string `form:"src_tool_name" json:"src_tool_name" xml:"src_tool_name"`
 	// The confirmation mode for the tool variation
@@ -605,6 +607,8 @@ type ToolVariationResponseBody struct {
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The ID of the tool variation group
 	GroupID *string `form:"group_id,omitempty" json:"group_id,omitempty" xml:"group_id,omitempty"`
+	// The URN of the source tool
+	SrcToolUrn *string `form:"src_tool_urn,omitempty" json:"src_tool_urn,omitempty" xml:"src_tool_urn,omitempty"`
 	// The name of the source tool
 	SrcToolName *string `form:"src_tool_name,omitempty" json:"src_tool_name,omitempty" xml:"src_tool_name,omitempty"`
 	// The confirmation mode for the tool variation
@@ -627,6 +631,7 @@ type ToolVariationResponseBody struct {
 // the "upsertGlobal" endpoint of the "variations" service.
 func NewUpsertGlobalRequestBody(p *variations.UpsertGlobalPayload) *UpsertGlobalRequestBody {
 	body := &UpsertGlobalRequestBody{
+		SrcToolUrn:    p.SrcToolUrn,
 		SrcToolName:   p.SrcToolName,
 		Confirm:       p.Confirm,
 		ConfirmPrompt: p.ConfirmPrompt,
@@ -1895,6 +1900,9 @@ func ValidateToolVariationResponseBody(body *ToolVariationResponseBody) (err err
 	}
 	if body.SrcToolName == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("src_tool_name", "body"))
+	}
+	if body.SrcToolUrn == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("src_tool_urn", "body"))
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))

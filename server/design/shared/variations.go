@@ -9,6 +9,7 @@ var ToolVariation = Type("ToolVariation", func() {
 
 	Attribute("id", String, "The ID of the tool variation")
 	Attribute("group_id", String, "The ID of the tool variation group")
+	Attribute("src_tool_urn", String, "The URN of the source tool")
 	Attribute("src_tool_name", String, "The name of the source tool")
 	Attribute("confirm", String, "The confirmation mode for the tool variation")
 	Attribute("confirm_prompt", String, "The confirmation prompt for the tool variation")
@@ -18,5 +19,5 @@ var ToolVariation = Type("ToolVariation", func() {
 	Attribute("created_at", String, "The creation date of the tool variation")
 	Attribute("updated_at", String, "The last update date of the tool variation")
 
-	Required("id", "group_id", "src_tool_name", "created_at", "updated_at")
+	Required("id", "group_id", "src_tool_name", "src_tool_urn", "created_at", "updated_at")
 })

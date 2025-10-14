@@ -26,6 +26,7 @@ SELECT id FROM created;
 -- name: UpsertToolVariation :one
 INSERT INTO tool_variations (
   group_id,
+  src_tool_urn,
   src_tool_name,
   confirm,
   confirm_prompt,
@@ -36,6 +37,7 @@ INSERT INTO tool_variations (
   summarizer
 ) VALUES (
   @group_id,
+  @src_tool_urn,
   @src_tool_name,
   @confirm,
   @confirm_prompt,
@@ -45,6 +47,7 @@ INSERT INTO tool_variations (
   @tags,
   @summarizer
 ) ON CONFLICT (group_id, src_tool_name) WHERE deleted IS FALSE DO UPDATE SET
+  src_tool_urn = EXCLUDED.src_tool_urn,
   confirm = EXCLUDED.confirm,
   confirm_prompt = EXCLUDED.confirm_prompt,
   name = EXCLUDED.name,
@@ -76,19 +79,7 @@ WITH global_group AS (
   ORDER BY project_tool_variations.id DESC
   LIMIT 1
 )
-SELECT
-  id,
-  group_id,
-  src_tool_name,
-  confirm,
-  confirm_prompt,
-  name,
-  summary,
-  description,
-  tags,
-  summarizer,
-  created_at,
-  updated_at
+SELECT *
 FROM tool_variations
 WHERE
   group_id = (SELECT id FROM global_group)

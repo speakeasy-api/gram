@@ -30,6 +30,7 @@ go.work.sum
 gram.code-workspace
 .local.env.json
 /server/cmd/local
+/local/cmd
 
 **/.claude/settings.local.json
 .vercel
