@@ -411,7 +411,8 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 		})
 	}
 
-	if toolsetErr != nil {
+	// Fallback to just looking up by slug if no domain in context or if lookup by domain failed
+	if domainID != nil || toolsetErr != nil {
 		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	}
 
