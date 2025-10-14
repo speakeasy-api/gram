@@ -281,8 +281,8 @@ function ToolRow({
     <>
       <div
         className={cn(
-          "group flex items-center justify-between overflow-hidden pl-4 pr-3 py-4 relative border-b border-neutral-200 last:border-b-0 transition-colors hover:bg-neutral-50",
-          isFocused && "bg-neutral-50",
+          "group flex items-center justify-between overflow-hidden pl-4 pr-3 py-4 relative border-b border-neutral-softest last:border-b-0 transition-colors hover:bg-muted",
+          isFocused && "bg-muted",
         )}
       >
         <div className="flex gap-4 items-center min-w-0 flex-[0_1_60%]">
@@ -371,9 +371,9 @@ function ToolGroupHeader({
       aria-expanded={isExpanded}
       aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
       className={cn(
-        "bg-neutral-100 flex items-center justify-between pl-4 pr-3 py-4 w-full hover:bg-neutral-200 transition-colors",
-        isExpanded && "border-b border-neutral-200",
-        !isFirstGroup && "border-t border-neutral-200",
+        "bg-surface-secondary-default flex items-center justify-between pl-4 pr-3 py-4 w-full hover:bg-active transition-colors",
+        isExpanded && "border-b border-neutral-softest",
+        !isFirstGroup && "border-t border-neutral-softest",
       )}
     >
       <div className="flex gap-4 items-center">
@@ -661,7 +661,7 @@ export function ToolList({
     <div className="relative w-full">
       <div
         className={cn(
-          "border border-neutral-200 rounded-lg overflow-hidden w-full",
+          "border border-neutral-softest rounded-lg overflow-hidden w-full",
           className,
         )}
       >
@@ -709,12 +709,12 @@ export function ToolList({
 
       {hasChanges && !selectionMode && (
         <div className="sticky bottom-0 left-0 right-0 flex justify-center mt-4">
-          <div className="border border-neutral-200 bg-white shadow-lg rounded-lg px-4 py-3 flex items-center gap-4">
+          <div className="border border-neutral-softest bg-background shadow-lg rounded-lg px-4 py-3 flex items-center gap-4">
             <p className="text-sm text-foreground">
               {selectedForRemoval.size} tool(s) selected
             </p>
             <div className="flex items-center gap-2">
-              <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-neutral-200 bg-neutral-100 px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+              <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-neutral-softest bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
                 <span className="text-xs">⌘</span>K
               </kbd>
               <span className="text-sm text-muted-foreground">for actions</span>
