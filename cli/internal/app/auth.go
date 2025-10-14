@@ -182,7 +182,10 @@ func doAuth(c *cli.Context) error {
 		return fmt.Errorf("invalid API URL: %w", err)
 	}
 
-	profileName := determineProfileName(prof, apiURL.String())
+	profileName := c.String("profile")
+	if profileName == "" {
+		profileName = determineProfileName(prof, apiURL.String())
+	}
 
 	keysClient := api.NewKeysClientFromURL(apiURL)
 
