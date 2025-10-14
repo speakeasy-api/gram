@@ -90,28 +90,22 @@ func DescribeToolsetEntry(
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list tools in toolset").Log(ctx, logger)
 		}
 
-		names := make([]string, 0, len(definitions))
-		for _, def := range definitions {
-			names = append(names, def.Name)
-		}
-
-		// TODO variations by urns
-		allVariations, err := variationsRepo.FindGlobalVariationsByToolNames(ctx, vr.FindGlobalVariationsByToolNamesParams{
+		allVariations, err := variationsRepo.FindGlobalVariationsByToolURNs(ctx, vr.FindGlobalVariationsByToolURNsParams{
 			ProjectID: pid,
-			ToolNames: names,
+			ToolUrns:  toolUrns,
 		})
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").Log(ctx, logger)
 		}
 
-		nameVariations := make(map[string]string)
+		urnToVariedName := make(map[string]string)
 		for _, variation := range allVariations {
 			n := conv.FromPGText[string](variation.Name)
 			if n == nil || *n == "" {
 				continue
 			}
 
-			nameVariations[variation.SrcToolName] = *n
+			urnToVariedName[variation.SrcToolUrn.String()] = *n
 		}
 
 		tools = make([]*types.ToolEntry, 0, len(definitions))
@@ -123,7 +117,7 @@ func DescribeToolsetEntry(
 			}
 			seen[def.ID.String()] = true
 
-			name := conv.Default(nameVariations[def.Name], def.Name)
+			name := conv.Default(urnToVariedName[def.ToolUrn.String()], def.Name)
 
 			tool := &types.ToolEntry{
 				Type:    string(urn.ToolKindHTTP),
@@ -644,27 +638,29 @@ func readToolsetTools(
 func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectID uuid.UUID, tools []*types.Tool) error {
 	variationsRepo := vr.New(tx)
 
-	names := make([]string, 0, len(tools))
-	for _, def := range tools {
-		baseTool := conv.ToBaseTool(def)
-		names = append(names, baseTool.Name)
+	toolUrns := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		toolURN, err := conv.GetToolURN(*tool)
+		if err != nil || toolURN == nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+		}
+		toolUrns = append(toolUrns, toolURN.String())
 	}
 
-	// TODO variations by urns
-	allVariations, err := variationsRepo.FindGlobalVariationsByToolNames(ctx, vr.FindGlobalVariationsByToolNamesParams{
+	allVariations, err := variationsRepo.FindGlobalVariationsByToolURNs(ctx, vr.FindGlobalVariationsByToolURNsParams{
 		ProjectID: projectID,
-		ToolNames: names,
+		ToolUrns:  toolUrns,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to list global tool variations").Log(ctx, logger)
 	}
 
-	keyedVariations := make(map[string]types.ToolVariation, len(allVariations))
+	urnToVariation := make(map[string]types.ToolVariation, len(allVariations))
 	for _, variation := range allVariations {
-		keyedVariations[variation.SrcToolName] = types.ToolVariation{
+		urnToVariation[variation.SrcToolUrn.String()] = types.ToolVariation{
 			ID:            variation.ID.String(),
 			GroupID:       variation.GroupID.String(),
-			SrcToolUrn:    variation.SrcToolUrn.String,
+			SrcToolUrn:    variation.SrcToolUrn.String(),
 			SrcToolName:   variation.SrcToolName,
 			Confirm:       conv.FromPGText[string](variation.Confirm),
 			ConfirmPrompt: conv.FromPGText[string](variation.ConfirmPrompt),
@@ -680,9 +676,12 @@ func ApplyVariations(ctx context.Context, logger *slog.Logger, tx DBTX, projectI
 		if tool == nil {
 			continue
 		}
-		baseTool := conv.ToBaseTool(tool)
+		toolURN, err := conv.GetToolURN(*tool)
+		if err != nil || toolURN == nil {
+			return oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+		}
 
-		v, ok := keyedVariations[baseTool.Name]
+		v, ok := urnToVariation[toolURN.String()]
 		if ok {
 			conv.ApplyVariation(*tool, v)
 		}
