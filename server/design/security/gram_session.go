@@ -29,20 +29,10 @@ var WriteSessionCookie = func() {
 var DeleteSessionCookie = func() {
 	Cookie(fmt.Sprintf("session_cookie:%s", auth.SessionCookie), String, func() {
 	})
-	CookieMaxAge(0)
+	CookieMaxAge(-1)
 	CookieSecure()
 	CookieHTTPOnly()
 	CookiePath("/")
-}
-
-// This can be safely removed after 11/13/25 after all `/rpc` scoped session cookies are sure to be expired
-var DeleteLegacyScopedSessionCookie = func() {
-	Cookie(fmt.Sprintf("session_cookie:%s", auth.SessionCookie), String, func() {
-	})
-	CookieMaxAge(0)
-	CookieSecure()
-	CookieHTTPOnly()
-	CookiePath("/rpc")
 }
 
 var SessionHeader = func() {
