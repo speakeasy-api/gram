@@ -531,12 +531,14 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           </BlockInner>
         </Block>
       </PageSection>
+
       <PageSection
         heading="Visibility"
         description="Make your MCP server visible to the world, or protected behind a Gram key."
       >
         <PublicToggle isPublic={mcpIsPublic ?? false} />
       </PageSection>
+
       <PageSection
         heading="MCP Installation"
         description="Share this page with your users to give simple instructions
@@ -553,6 +555,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           <ConfigForm toolset={toolset} />
         </Stack>
       </PageSection>
+      
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
         onClose={() => setIsCustomDomainModalOpen(false)}
