@@ -13,7 +13,7 @@
 "ubi:FiloSottile/mkcert" = "1.4.4"
 apko = "0.30.13"
 flyctl = "0.3.189"
-go = "1.25.0"
+go = "1.25.2"
 golangci-lint = "2.4.0"
 jq = "1.7.1"
 melange = "0.30.6"
