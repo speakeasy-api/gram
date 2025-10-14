@@ -12,7 +12,7 @@ var Entrypoint []byte
 // of having this default implementation is that it allows Gram to always get
 // a useful response even in failure scenarios.
 var DefaultFunctions = []byte(`
-export async function handleToolCall(input, context) {
+export async function handleToolCall() {
   return new Response(JSON.stringify({ error: "Tool calling is not implemented" }), {
     status: 501,
 	headers: { "Content-Type": "application/json" },
