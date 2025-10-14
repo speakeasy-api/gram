@@ -3039,7 +3039,7 @@ paths:
                 "200":
                     description: OK response.
                     schema:
-                        $ref: '#/definitions/ListToolLogResult'
+                        $ref: '#/definitions/ListToolLogResponse'
                         required:
                             - logs
                             - pagination
@@ -27407,8 +27407,8 @@ definitions:
                     updated_at: Pariatur accusamus tempore qui est rerum error.
         required:
             - templates
-    ListToolLogResult:
-        title: ListToolLogResult
+    ListToolLogResponse:
+        title: ListToolLogResponse
         type: object
         properties:
             logs:

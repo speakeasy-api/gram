@@ -253,7 +253,7 @@ type PaginationResultResponseBody struct {
 
 // NewListLogsResponseBody builds the HTTP response body from the result of the
 // "listLogs" endpoint of the "logs" service.
-func NewListLogsResponseBody(res *logs.ListToolLogResult) *ListLogsResponseBody {
+func NewListLogsResponseBody(res *logs.ListToolLogResponse) *ListLogsResponseBody {
 	body := &ListLogsResponseBody{}
 	if res.Logs != nil {
 		body.Logs = make([]*HTTPToolLogResponseBody, len(res.Logs))

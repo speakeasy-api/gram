@@ -119,7 +119,7 @@ func DecodeListLogsResponse(decoder func(*http.Response) goahttp.Decoder, restor
 			if err != nil {
 				return nil, goahttp.ErrValidationError("logs", "listLogs", err)
 			}
-			res := NewListLogsListToolLogResultOK(&body)
+			res := NewListLogsListToolLogResponseOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (

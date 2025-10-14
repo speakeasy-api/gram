@@ -55,7 +55,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (res *gen.ListToolLogResult, err error) {
+func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (res *gen.ListToolLogResponse, err error) {
 	// Parse time parameters with defaults
 	tsStart := parseTimeOrDefault(payload.TsStart, time.Now().Add(-48*time.Hour).UTC())
 	tsEnd := parseTimeOrDefault(payload.TsEnd, time.Now().UTC())
@@ -106,7 +106,7 @@ func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (re
 		NextPageCursor: nextPageCursor,
 	}
 
-	return &gen.ListToolLogResult{Logs: logs, Pagination: pp}, nil
+	return &gen.ListToolLogResponse{Logs: logs, Pagination: pp}, nil
 }
 
 func parseTimeOrDefault(s *string, defaultTime time.Time) time.Time {

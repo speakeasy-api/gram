@@ -21,43 +21,13 @@ var _ = Service("logs", func() {
 		Security(security.Session)
 
 		Payload(func() {
+			Extend(ListToolLogsRequest)
 			security.ByKeyPayload()
 			security.SessionPayload()
 			security.ProjectPayload()
-
-			Attribute("project_id", String, "Project ID", func() {
-				Format(FormatUUID)
-			})
-			Attribute("tool_id", String, "Tool ID", func() {
-				Format(FormatUUID)
-			})
-			Attribute("ts_start", String, "Start timestamp", func() {
-				Format(FormatDateTime)
-			})
-			Attribute("ts_end", String, "End timestamp", func() {
-				Format(FormatDateTime)
-			})
-			Attribute("cursor", String, "Cursor for pagination", func() {
-				Format(FormatUUID)
-			})
-			Attribute("per_page", Int, "Number of items per page (1-100)", func() {
-				Minimum(1)
-				Maximum(100)
-				Default(20)
-			})
-			Attribute("direction", String, "Pagination direction", func() {
-				Enum("next", "prev")
-				Default("next")
-			})
-			Attribute("sort", String, "Sort order", func() {
-				Enum("ASC", "DESC")
-				Default("DESC")
-			})
-
-			Required("project_id")
 		})
 
-		Result(ListToolLogResult)
+		Result(ListToolLogResponse)
 
 		HTTP(func() {
 			GET("/rpc/logs.list")
@@ -85,7 +55,42 @@ var _ = Service("logs", func() {
 
 })
 
-var ListToolLogResult = Type("ListToolLogResult", func() {
+var ListToolLogsRequest = Type("ListToolLogsRequest", func() {
+	Description("Payload for listing tool logs")
+
+	Attribute("project_id", String, "Project ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tool_id", String, "Tool ID", func() {
+		Format(FormatUUID)
+	})
+	Attribute("ts_start", String, "Start timestamp", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("ts_end", String, "End timestamp", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("cursor", String, "Cursor for pagination", func() {
+		Format(FormatUUID)
+	})
+	Attribute("per_page", Int, "Number of items per page (1-100)", func() {
+		Minimum(1)
+		Maximum(100)
+		Default(20)
+	})
+	Attribute("direction", String, "Pagination direction", func() {
+		Enum("next", "prev")
+		Default("next")
+	})
+	Attribute("sort", String, "Sort order", func() {
+		Enum("ASC", "DESC")
+		Default("DESC")
+	})
+
+	Required("project_id")
+})
+
+var ListToolLogResponse = Type("ListToolLogResponse", func() {
 	Attribute("logs", ArrayOf(HTTPToolLog))
 	Attribute("pagination", PaginationResult)
 	Required("logs", "pagination")

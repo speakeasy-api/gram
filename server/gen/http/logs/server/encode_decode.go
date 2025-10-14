@@ -23,7 +23,7 @@ import (
 // listLogs endpoint.
 func EncodeListLogsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*logs.ListToolLogResult)
+		res, _ := v.(*logs.ListToolLogResponse)
 		enc := encoder(ctx, w)
 		body := NewListLogsResponseBody(res)
 		w.WriteHeader(http.StatusOK)

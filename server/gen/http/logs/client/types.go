@@ -251,10 +251,10 @@ type PaginationResultResponseBody struct {
 	NextPageCursor *string `form:"next_page_cursor,omitempty" json:"next_page_cursor,omitempty" xml:"next_page_cursor,omitempty"`
 }
 
-// NewListLogsListToolLogResultOK builds a "logs" service "listLogs" endpoint
+// NewListLogsListToolLogResponseOK builds a "logs" service "listLogs" endpoint
 // result from a HTTP "OK" response.
-func NewListLogsListToolLogResultOK(body *ListLogsResponseBody) *logs.ListToolLogResult {
-	v := &logs.ListToolLogResult{}
+func NewListLogsListToolLogResponseOK(body *ListLogsResponseBody) *logs.ListToolLogResponse {
+	v := &logs.ListToolLogResponse{}
 	v.Logs = make([]*logs.HTTPToolLog, len(body.Logs))
 	for i, val := range body.Logs {
 		v.Logs[i] = unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(val)

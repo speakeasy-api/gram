@@ -17,7 +17,7 @@ import (
 // Call logs for a toolset.
 type Service interface {
 	// List call logs for a toolset.
-	ListLogs(context.Context, *ListLogsPayload) (res *ListToolLogResult, err error)
+	ListLogs(context.Context, *ListLogsPayload) (res *ListToolLogResponse, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -107,8 +107,8 @@ type ListLogsPayload struct {
 	Sort string
 }
 
-// ListToolLogResult is the result type of the logs service listLogs method.
-type ListToolLogResult struct {
+// ListToolLogResponse is the result type of the logs service listLogs method.
+type ListToolLogResponse struct {
 	Logs       []*HTTPToolLog
 	Pagination *PaginationResult
 }

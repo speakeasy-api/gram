@@ -38,11 +38,11 @@ func NewClient(listLogs goa.Endpoint) *Client {
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) ListLogs(ctx context.Context, p *ListLogsPayload) (res *ListToolLogResult, err error) {
+func (c *Client) ListLogs(ctx context.Context, p *ListLogsPayload) (res *ListToolLogResponse, err error) {
 	var ires any
 	ires, err = c.ListLogsEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
-	return ires.(*ListToolLogResult), nil
+	return ires.(*ListToolLogResponse), nil
 }

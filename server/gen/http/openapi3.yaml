@@ -3806,7 +3806,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/ListToolLogResult'
+                                $ref: '#/components/schemas/ListToolLogResponse'
                     description: OK response.
                 "400":
                     content:
@@ -9531,7 +9531,7 @@ components:
                     description: The created prompt template
             required:
                 - templates
-        ListToolLogResult:
+        ListToolLogResponse:
             type: object
             properties:
                 logs:
@@ -9543,6 +9543,53 @@ components:
             required:
                 - logs
                 - pagination
+        ListToolLogsRequest:
+            type: object
+            properties:
+                cursor:
+                    type: string
+                    description: Cursor for pagination
+                    format: uuid
+                direction:
+                    type: string
+                    description: Pagination direction
+                    default: next
+                    enum:
+                        - next
+                        - prev
+                per_page:
+                    type: integer
+                    description: Number of items per page (1-100)
+                    default: 20
+                    format: int64
+                    minimum: 1
+                    maximum: 100
+                project_id:
+                    type: string
+                    description: Project ID
+                    format: uuid
+                sort:
+                    type: string
+                    description: Sort order
+                    default: DESC
+                    enum:
+                        - ASC
+                        - DESC
+                tool_id:
+                    type: string
+                    description: Tool ID
+                    format: uuid
+                ts_end:
+                    type: string
+                    description: End timestamp
+                    format: date-time
+                ts_start:
+                    type: string
+                    description: Start timestamp
+                    format: date-time
+            description: Payload for listing tool logs
+            required:
+                - project_id
         ListToolsResult:
             type: object
             properties:
