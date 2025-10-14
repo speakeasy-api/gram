@@ -102,13 +102,18 @@ jobs:
                   -e "s#src='/img/#src='/assets/docs/gram/img/#g" \
                   -e 's#\]\(/img/#](/assets/docs/gram/img/#g' \
                   -e 's#url\(/img/#url(/assets/docs/gram/img/#g' \
+                  -e 's#href="/videos/#href="/assets/docs/gram/videos/#g' \
+                  -e 's#src="/videos/#src="/assets/docs/gram/videos/#g' \
+                  -e "s#src='/videos/#src='/assets/docs/gram/videos/#g" \
+                  -e 's#\]\(/videos/#](/assets/docs/gram/videos/#g' \
+                  -e 's#url\(/videos/#url(/assets/docs/gram/videos/#g' \
                   "$f"
 
                 # 2) Prefix any other root-relative internal links with /docs/gram/ using a wildcard
                 #    Skips already-correct, assets, images, anchors, and URLs with a scheme (mailto:, https:, etc.)
                 perl -0777 -i -pe \
-                  's{(href=)(["\x27])/(?!docs/gram/|assets/|img/|static/|#|[a-z]+:)}{\1\2/docs/gram/}g;' \
-                  -e 's{(\]\()/(?!docs/gram/|assets/|img/|static/|#|[a-z]+:)}{\1/docs/gram/}g' \
+                  's{(href=)(["\x27])/(?!docs/gram/|assets/|img/|videos/|static/|#|[a-z]+:)}{\1\2/docs/gram/}g;' \
+                  -e 's{(\]\()/(?!docs/gram/|assets/|img/|videos/|static/|#|[a-z]+:)}{\1/docs/gram/}g' \
                   "$f"
               done
             fi
