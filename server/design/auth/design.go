@@ -36,6 +36,7 @@ var _ = Service("auth", func() {
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {
 				})
+				security.DeleteLegacyScopedSessionCookie()
 				security.WriteSessionCookie()
 				security.SessionHeader()
 			})
@@ -91,6 +92,7 @@ var _ = Service("auth", func() {
 			Param("project_id")
 			security.SessionHeader()
 			Response(StatusOK, func() {
+				security.DeleteLegacyScopedSessionCookie()
 				security.WriteSessionCookie()
 				security.SessionHeader()
 			})
@@ -119,6 +121,7 @@ var _ = Service("auth", func() {
 
 			Response(StatusOK, func() {
 				security.DeleteSessionCookie()
+				security.DeleteLegacyScopedSessionCookie()
 			})
 		})
 
@@ -176,6 +179,7 @@ var _ = Service("auth", func() {
 			security.SessionHeader()
 
 			Response(StatusOK, func() {
+				security.DeleteLegacyScopedSessionCookie()
 				security.WriteSessionCookie()
 				security.SessionHeader()
 			})
