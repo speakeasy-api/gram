@@ -149,12 +149,14 @@ jobs:
           fi
 
       - name: Create pull request in Marketing
+        id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.SERVICE_BOT_TOKEN }}
           path: marketing-repo
           commit-message: "Sync marketing docs from Gram 🐝 (source ${{ github.sha }})"
-          branch: chore/gram-to-marketing-sync-${{ github.sha }}
+          # Use a constant branch so we maintain a single rolling PR
+          branch: chore/gram-to-marketing-sync
           title: "chore: sync docs from Gram"
           body-path: PR_BODY.md
           committer: "Beezy the bot <beezy-bot@users.noreply.github.com>"
@@ -164,3 +166,31 @@ jobs:
             docs
             sync
           signoff: false
+          delete-branch: true
+
+      - name: Ensure PR title/body are updated
+        if: steps.cpr.outputs.pull-request-number
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.SERVICE_BOT_TOKEN }}
+          script: |
+            const prNumber = Number(process.env.PR_NUMBER);
+            const fs = require('fs');
+            const body = fs.readFileSync('PR_BODY.md', 'utf8');
+            await github.rest.pulls.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber,
+              title: 'chore: sync docs from Gram',
+              body,
+            });
+        env:
+          PR_NUMBER: ${{ steps.cpr.outputs.pull-request-number }}
+
+      - name: Enable auto-merge on the PR
+        if: steps.cpr.outputs.pull-request-number
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.SERVICE_BOT_TOKEN }}
+          pull-request-number: ${{ steps.cpr.outputs.pull-request-number }}
+          merge-method: squash
