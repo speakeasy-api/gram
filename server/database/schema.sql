@@ -751,7 +751,7 @@ CREATE TABLE IF NOT EXISTS tool_variations (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   group_id uuid NOT NULL,
 
-  src_tool_urn TEXT,
+  src_tool_urn TEXT NOT NULL,
   src_tool_name TEXT NOT NULL,
 
   confirm TEXT,
@@ -771,13 +771,9 @@ CREATE TABLE IF NOT EXISTS tool_variations (
   CONSTRAINT tool_variations_group_id_fkey FOREIGN KEY (group_id) REFERENCES tool_variations_groups (id) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS tool_variations_scoped_src_tool_name_key
-ON tool_variations (group_id, src_tool_name)
-WHERE deleted IS FALSE;
-
 CREATE UNIQUE INDEX IF NOT EXISTS tool_variations_scoped_src_tool_urn_key
 ON tool_variations (group_id, src_tool_urn)
-WHERE src_tool_urn IS NOT NULL AND deleted IS FALSE;
+WHERE deleted IS FALSE;
 
 CREATE TABLE IF NOT EXISTS prompt_templates (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
