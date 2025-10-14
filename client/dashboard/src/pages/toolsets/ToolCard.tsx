@@ -73,7 +73,9 @@ export function ToolCard({
   // Check if tool has a description variation applied
   // When a variation is applied, the canonical field contains the original tool attributes
   const hasDescriptionVariation =
-    tool.type === "http" && tool.canonical?.description !== undefined;
+    tool.type === "http" &&
+    tool.canonical?.description !== undefined &&
+    tool.description !== tool.canonical.description;
 
   const header = (
     <Stack direction="horizontal" gap={2} align="center">
