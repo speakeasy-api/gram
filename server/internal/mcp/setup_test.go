@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/url"
 	"os"
 	"testing"
@@ -50,6 +51,8 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	serverURL      *url.URL
+	logger         *slog.Logger
+	cacheAdapter   cache.Cache
 }
 
 func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
@@ -92,5 +95,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		conn:           conn,
 		sessionManager: sessionManager,
 		serverURL:      serverURL,
+		logger:         logger,
+		cacheAdapter:   cacheAdapter,
 	}
 }
