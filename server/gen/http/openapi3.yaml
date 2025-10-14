@@ -3707,15 +3707,6 @@ paths:
             operationId: listToolLogs
             parameters:
                 - allowEmptyValue: true
-                  description: Project ID
-                  in: query
-                  name: project_id
-                  required: true
-                  schema:
-                    description: Project ID
-                    format: uuid
-                    type: string
-                - allowEmptyValue: true
                   description: Tool ID
                   in: query
                   name: tool_id
@@ -3781,18 +3772,18 @@ paths:
                         - DESC
                     type: string
                 - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
                   schema:
                     description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
                     type: string
                 - allowEmptyValue: true
                   description: project header
@@ -3864,7 +3855,9 @@ paths:
                     description: 'gateway_error: an unexpected error occurred'
             security:
                 - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
+                  project_slug_header_Gram-Project: []
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
             summary: listLogs logs
             tags:
                 - logs
@@ -9235,7 +9228,6 @@ components:
             required:
                 - ts
                 - organization_id
-                - project_id
                 - deployment_id
                 - tool_id
                 - tool_urn
@@ -9539,7 +9531,7 @@ components:
                     items:
                         $ref: '#/components/schemas/HTTPToolLog'
                 pagination:
-                    $ref: '#/components/schemas/PaginationResult'
+                    $ref: '#/components/schemas/PaginationResponse'
             required:
                 - logs
                 - pagination
@@ -9564,10 +9556,6 @@ components:
                     format: int64
                     minimum: 1
                     maximum: 100
-                project_id:
-                    type: string
-                    description: Project ID
-                    format: uuid
                 sort:
                     type: string
                     description: Sort order
@@ -9588,8 +9576,6 @@ components:
                     description: Start timestamp
                     format: date-time
             description: Payload for listing tool logs
-            required:
-                - project_id
         ListToolsResult:
             type: object
             properties:
@@ -9896,7 +9882,7 @@ components:
                 - visibility
                 - semver
                 - created_at
-        PaginationResult:
+        PaginationResponse:
             type: object
             properties:
                 has_next_page:

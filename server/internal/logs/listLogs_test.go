@@ -1,107 +1,28 @@
 package logs_test
 
 import (
-	"context"
 	"crypto/rand"
 	"fmt"
-	"log"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/logs"
-	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
-	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/cache"
-	logsvc "github.com/speakeasy-api/gram/server/internal/logs"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/stretchr/testify/require"
 )
-
-var (
-	infra *testenv.Environment
-)
-
-func TestMain(m *testing.M) {
-	ctx := context.Background()
-
-	res, cleanup, err := testenv.Launch(ctx)
-	if err != nil {
-		log.Fatalf("Failed to launch test infrastructure: %v", err)
-	}
-
-	infra = res
-
-	code := m.Run()
-
-	if err = cleanup(); err != nil {
-		log.Fatalf("Failed to cleanup test infrastructure: %v", err)
-	}
-
-	os.Exit(code)
-}
-
-type testInstance struct {
-	service        *logsvc.Service
-	conn           *pgxpool.Pool
-	chClient       *toolmetrics.Queries
-	sessionManager *sessions.Manager
-}
-
-func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
-	t.Helper()
-
-	ctx := t.Context()
-
-	logger := testenv.NewLogger(t)
-
-	conn, err := infra.CloneTestDatabase(t, "testdb")
-	require.NoError(t, err)
-
-	redisClient, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-
-	billingClient := billing.NewStubClient(logger, testenv.NewTracerProvider(t))
-
-	sessionManager, err := sessions.NewUnsafeManager(logger, conn, redisClient, cache.Suffix("gram-test"), "", billingClient)
-	require.NoError(t, err)
-
-	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
-
-	chConn, err := infra.NewClickhouseClient(t)
-	require.NoError(t, err)
-
-	tracerProvider := testenv.NewTracerProvider(t)
-
-	chClient := toolmetrics.New(logger, chConn, tracerProvider, func(ctx context.Context, log toolmetrics.ToolHTTPRequest) (bool, error) {
-		return true, nil
-	})
-
-	svc := logsvc.NewService(logger, conn, sessionManager, chClient)
-
-	return ctx, &testInstance{
-		service:        svc,
-		conn:           conn,
-		chClient:       chClient,
-		sessionManager: sessionManager,
-	}
-}
 
 func TestListLogs_EmptyResult(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
 
-	projectID := uuid.New().String()
+	// projectID := uuid.New().String()
 
 	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ProjectID:        projectID,
 		ToolID:           nil,
 		TsStart:          nil,
 		TsEnd:            nil,
@@ -124,13 +45,13 @@ func TestListLogs_SinglePage(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+	ctx = setProjectID(t, ctx, "0199a9f5-5659-76e1-be43-1da0b881dcff")
 
 	// Query logs
 	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ProjectID:        "0199a9f5-5659-76e1-be43-1da0b881dcff",
 		ToolID:           nil,
 		TsStart:          nil,
 		TsEnd:            nil,
@@ -164,13 +85,13 @@ func TestListLogs_Pagination(t *testing.T) {
 	ctx, ti := newTestLogsService(t)
 
 	projectID := "0199a9f5-5659-76e1-be43-1da0b881dcff"
+	ctx = setProjectID(t, ctx, projectID)
 
 	// Query first page
 	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ProjectID:        projectID,
 		ToolID:           nil,
 		TsStart:          nil,
 		TsEnd:            nil,
@@ -194,7 +115,6 @@ func TestListLogs_Pagination(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ProjectID:        projectID,
 		ToolID:           nil,
 		TsStart:          nil,
 		TsEnd:            nil,
@@ -218,7 +138,6 @@ func TestListLogs_Pagination(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ProjectID:        projectID,
 		ToolID:           nil,
 		TsStart:          nil,
 		TsEnd:            nil,
@@ -254,6 +173,8 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 
 	// Insert test data
 	projectID := uuid.New().String()
+	ctx = setProjectID(t, ctx, projectID)
+
 	orgID := uuid.New().String()
 	deploymentID := uuid.New().String()
 	toolID := uuid.New().String()
@@ -297,7 +218,6 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ProjectID:        projectID,
 		ToolID:           nil,
 		TsStart:          &tsStart,
 		TsEnd:            &tsEnd,
@@ -326,6 +246,7 @@ func TestListLogs_DifferentPageSizes(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
+	ctx = setProjectID(t, ctx, "0199a9f5-5659-76e1-be43-1da0b881dcff")
 
 	testCases := []struct {
 		perPage         int
@@ -342,7 +263,6 @@ func TestListLogs_DifferentPageSizes(t *testing.T) {
 			ApikeyToken:      nil,
 			SessionToken:     nil,
 			ProjectSlugInput: nil,
-			ProjectID:        "0199a9f5-5659-76e1-be43-1da0b881dcff",
 			ToolID:           nil,
 			TsStart:          nil,
 			TsEnd:            nil,
@@ -376,6 +296,8 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 
 	// Insert test data with specific values
 	projectID := uuid.New().String()
+	ctx = setProjectID(t, ctx, projectID)
+
 	orgID := uuid.New().String()
 	deploymentID := uuid.New().String()
 	toolID := uuid.New().String()
@@ -417,7 +339,6 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ProjectID:        projectID,
 		ToolID:           nil,
 		TsStart:          nil,
 		TsEnd:            nil,
@@ -433,7 +354,7 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 
 	toolLog := result.Logs[0]
 	require.Equal(t, orgID, toolLog.OrganizationID)
-	require.Equal(t, projectID, toolLog.ProjectID)
+	require.Equal(t, projectID, *toolLog.ProjectID)
 	require.Equal(t, deploymentID, toolLog.DeploymentID)
 	require.Equal(t, toolID, toolLog.ToolID)
 	require.Equal(t, toolURN, toolLog.ToolUrn)
@@ -456,10 +377,14 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 	require.Equal(t, "application/json", toolLog.ResponseHeaders["Content-Type"])
 }
 
+// fromTimeV7 generates a version 7 UUID based on the provided time.Time argument.
+// The implementation is based on the following specification: https://github.com/google/uuid
+//
+// This is needed so we can mock the time.Now() function in tests.
 func fromTimeV7(t time.Time) (uuid.UUID, error) {
 	var u uuid.UUID
 
-	// 48-bit big-endian Unix time in milliseconds
+	// 1) 48-bit big-endian Unix time in milliseconds
 	ms64 := t.UnixMilli()
 	if ms64 < 0 {
 		return uuid.Nil, fmt.Errorf("negative Unix milliseconds: %d", ms64)

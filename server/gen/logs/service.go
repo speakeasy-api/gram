@@ -51,7 +51,7 @@ type HTTPToolLog struct {
 	// Organization UUID
 	OrganizationID string
 	// Project UUID
-	ProjectID string
+	ProjectID *string
 	// Deployment UUID
 	DeploymentID string
 	// Tool UUID
@@ -89,8 +89,6 @@ type ListLogsPayload struct {
 	ApikeyToken      *string
 	SessionToken     *string
 	ProjectSlugInput *string
-	// Project ID
-	ProjectID string
 	// Tool ID
 	ToolID *string
 	// Start timestamp
@@ -110,11 +108,11 @@ type ListLogsPayload struct {
 // ListToolLogResponse is the result type of the logs service listLogs method.
 type ListToolLogResponse struct {
 	Logs       []*HTTPToolLog
-	Pagination *PaginationResult
+	Pagination *PaginationResponse
 }
 
 // Pagination metadata for list responses
-type PaginationResult struct {
+type PaginationResponse struct {
 	// Number of items per page
 	PerPage *int
 	// Whether there is a next page

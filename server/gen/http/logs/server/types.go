@@ -15,8 +15,8 @@ import (
 // ListLogsResponseBody is the type of the "logs" service "listLogs" endpoint
 // HTTP response body.
 type ListLogsResponseBody struct {
-	Logs       []*HTTPToolLogResponseBody    `form:"logs" json:"logs" xml:"logs"`
-	Pagination *PaginationResultResponseBody `form:"pagination" json:"pagination" xml:"pagination"`
+	Logs       []*HTTPToolLogResponseBody      `form:"logs" json:"logs" xml:"logs"`
+	Pagination *PaginationResponseResponseBody `form:"pagination" json:"pagination" xml:"pagination"`
 }
 
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
@@ -208,7 +208,7 @@ type HTTPToolLogResponseBody struct {
 	// Organization UUID
 	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
 	// Project UUID
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Deployment UUID
 	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
 	// Tool UUID
@@ -241,8 +241,9 @@ type HTTPToolLogResponseBody struct {
 	ResponseBodyBytes *int64 `form:"response_body_bytes,omitempty" json:"response_body_bytes,omitempty" xml:"response_body_bytes,omitempty"`
 }
 
-// PaginationResultResponseBody is used to define fields on response body types.
-type PaginationResultResponseBody struct {
+// PaginationResponseResponseBody is used to define fields on response body
+// types.
+type PaginationResponseResponseBody struct {
 	// Number of items per page
 	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty" xml:"per_page,omitempty"`
 	// Whether there is a next page
@@ -264,7 +265,7 @@ func NewListLogsResponseBody(res *logs.ListToolLogResponse) *ListLogsResponseBod
 		body.Logs = []*HTTPToolLogResponseBody{}
 	}
 	if res.Pagination != nil {
-		body.Pagination = marshalLogsPaginationResultToPaginationResultResponseBody(res.Pagination)
+		body.Pagination = marshalLogsPaginationResponseToPaginationResponseResponseBody(res.Pagination)
 	}
 	return body
 }
@@ -410,9 +411,8 @@ func NewListLogsGatewayErrorResponseBody(res *goa.ServiceError) *ListLogsGateway
 }
 
 // NewListLogsPayload builds a logs service listLogs endpoint payload.
-func NewListLogsPayload(projectID string, toolID *string, tsStart *string, tsEnd *string, cursor *string, perPage int, direction string, sort string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *logs.ListLogsPayload {
+func NewListLogsPayload(toolID *string, tsStart *string, tsEnd *string, cursor *string, perPage int, direction string, sort string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.ListLogsPayload {
 	v := &logs.ListLogsPayload{}
-	v.ProjectID = projectID
 	v.ToolID = toolID
 	v.TsStart = tsStart
 	v.TsEnd = tsEnd
@@ -420,8 +420,8 @@ func NewListLogsPayload(projectID string, toolID *string, tsStart *string, tsEnd
 	v.PerPage = perPage
 	v.Direction = direction
 	v.Sort = sort
-	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v

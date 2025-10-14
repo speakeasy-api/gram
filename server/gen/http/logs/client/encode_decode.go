@@ -42,20 +42,19 @@ func EncodeListLogsRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 		if !ok {
 			return goahttp.ErrInvalidType("logs", "listLogs", "*logs.ListLogsPayload", v)
 		}
-		if p.SessionToken != nil {
-			head := *p.SessionToken
-			req.Header.Set("Gram-Session", head)
-		}
 		if p.ApikeyToken != nil {
 			head := *p.ApikeyToken
 			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
 		}
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
 		values := req.URL.Query()
-		values.Add("project_id", p.ProjectID)
 		if p.ToolID != nil {
 			values.Add("tool_id", *p.ToolID)
 		}
@@ -282,7 +281,7 @@ func unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(v *HTTPToolLogResponseBod
 		ID:                v.ID,
 		Ts:                *v.Ts,
 		OrganizationID:    *v.OrganizationID,
-		ProjectID:         *v.ProjectID,
+		ProjectID:         v.ProjectID,
 		DeploymentID:      *v.DeploymentID,
 		ToolID:            *v.ToolID,
 		ToolUrn:           *v.ToolUrn,
@@ -317,11 +316,11 @@ func unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(v *HTTPToolLogResponseBod
 	return res
 }
 
-// unmarshalPaginationResultResponseBodyToLogsPaginationResult builds a value
-// of type *logs.PaginationResult from a value of type
-// *PaginationResultResponseBody.
-func unmarshalPaginationResultResponseBodyToLogsPaginationResult(v *PaginationResultResponseBody) *logs.PaginationResult {
-	res := &logs.PaginationResult{
+// unmarshalPaginationResponseResponseBodyToLogsPaginationResponse builds a
+// value of type *logs.PaginationResponse from a value of type
+// *PaginationResponseResponseBody.
+func unmarshalPaginationResponseResponseBodyToLogsPaginationResponse(v *PaginationResponseResponseBody) *logs.PaginationResponse {
+	res := &logs.PaginationResponse{
 		PerPage:        v.PerPage,
 		HasNextPage:    v.HasNextPage,
 		NextPageCursor: v.NextPageCursor,

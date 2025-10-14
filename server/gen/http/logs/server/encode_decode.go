@@ -36,7 +36,6 @@ func EncodeListLogsResponse(encoder func(context.Context, http.ResponseWriter) g
 func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*logs.ListLogsPayload, error) {
 	return func(r *http.Request) (*logs.ListLogsPayload, error) {
 		var (
-			projectID        string
 			toolID           *string
 			tsStart          *string
 			tsEnd            *string
@@ -44,17 +43,12 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 			perPage          int
 			direction        string
 			sort             string
-			sessionToken     *string
 			apikeyToken      *string
+			sessionToken     *string
 			projectSlugInput *string
 			err              error
 		)
 		qp := r.URL.Query()
-		projectID = qp.Get("project_id")
-		if projectID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "query string"))
-		}
-		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
 		toolIDRaw := qp.Get("tool_id")
 		if toolIDRaw != "" {
 			toolID = &toolIDRaw
@@ -119,13 +113,13 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if !(sort == "ASC" || sort == "DESC") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", sort, []any{"ASC", "DESC"}))
 		}
-		sessionTokenRaw := r.Header.Get("Gram-Session")
-		if sessionTokenRaw != "" {
-			sessionToken = &sessionTokenRaw
-		}
 		apikeyTokenRaw := r.Header.Get("Gram-Key")
 		if apikeyTokenRaw != "" {
 			apikeyToken = &apikeyTokenRaw
+		}
+		sessionTokenRaw := r.Header.Get("Gram-Session")
+		if sessionTokenRaw != "" {
+			sessionToken = &sessionTokenRaw
 		}
 		projectSlugInputRaw := r.Header.Get("Gram-Project")
 		if projectSlugInputRaw != "" {
@@ -134,12 +128,19 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListLogsPayload(projectID, toolID, tsStart, tsEnd, cursor, perPage, direction, sort, sessionToken, apikeyToken, projectSlugInput)
+		payload := NewListLogsPayload(toolID, tsStart, tsEnd, cursor, perPage, direction, sort, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
 				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
 				payload.ApikeyToken = &cred
+			}
+		}
+		if payload.ProjectSlugInput != nil {
+			if strings.Contains(*payload.ProjectSlugInput, " ") {
+				// Remove authorization scheme prefix (e.g. "Bearer")
+				cred := strings.SplitN(*payload.ProjectSlugInput, " ", 2)[1]
+				payload.ProjectSlugInput = &cred
 			}
 		}
 		if payload.SessionToken != nil {
@@ -352,11 +353,11 @@ func marshalLogsHTTPToolLogToHTTPToolLogResponseBody(v *logs.HTTPToolLog) *HTTPT
 	return res
 }
 
-// marshalLogsPaginationResultToPaginationResultResponseBody builds a value of
-// type *PaginationResultResponseBody from a value of type
-// *logs.PaginationResult.
-func marshalLogsPaginationResultToPaginationResultResponseBody(v *logs.PaginationResult) *PaginationResultResponseBody {
-	res := &PaginationResultResponseBody{
+// marshalLogsPaginationResponseToPaginationResponseResponseBody builds a value
+// of type *PaginationResponseResponseBody from a value of type
+// *logs.PaginationResponse.
+func marshalLogsPaginationResponseToPaginationResponseResponseBody(v *logs.PaginationResponse) *PaginationResponseResponseBody {
+	res := &PaginationResponseResponseBody{
 		PerPage:        v.PerPage,
 		HasNextPage:    v.HasNextPage,
 		NextPageCursor: v.NextPageCursor,

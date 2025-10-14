@@ -17,16 +17,8 @@ import (
 
 // BuildListLogsPayload builds the payload for the logs listLogs endpoint from
 // CLI flags.
-func BuildListLogsPayload(logsListLogsProjectID string, logsListLogsToolID string, logsListLogsTsStart string, logsListLogsTsEnd string, logsListLogsCursor string, logsListLogsPerPage string, logsListLogsDirection string, logsListLogsSort string, logsListLogsSessionToken string, logsListLogsApikeyToken string, logsListLogsProjectSlugInput string) (*logs.ListLogsPayload, error) {
+func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string, logsListLogsTsEnd string, logsListLogsCursor string, logsListLogsPerPage string, logsListLogsDirection string, logsListLogsSort string, logsListLogsApikeyToken string, logsListLogsSessionToken string, logsListLogsProjectSlugInput string) (*logs.ListLogsPayload, error) {
 	var err error
-	var projectID string
-	{
-		projectID = logsListLogsProjectID
-		err = goa.MergeErrors(err, goa.ValidateFormat("project_id", projectID, goa.FormatUUID))
-		if err != nil {
-			return nil, err
-		}
-	}
 	var toolID *string
 	{
 		if logsListLogsToolID != "" {
@@ -111,16 +103,16 @@ func BuildListLogsPayload(logsListLogsProjectID string, logsListLogsToolID strin
 			}
 		}
 	}
-	var sessionToken *string
-	{
-		if logsListLogsSessionToken != "" {
-			sessionToken = &logsListLogsSessionToken
-		}
-	}
 	var apikeyToken *string
 	{
 		if logsListLogsApikeyToken != "" {
 			apikeyToken = &logsListLogsApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if logsListLogsSessionToken != "" {
+			sessionToken = &logsListLogsSessionToken
 		}
 	}
 	var projectSlugInput *string
@@ -130,7 +122,6 @@ func BuildListLogsPayload(logsListLogsProjectID string, logsListLogsToolID strin
 		}
 	}
 	v := &logs.ListLogsPayload{}
-	v.ProjectID = projectID
 	v.ToolID = toolID
 	v.TsStart = tsStart
 	v.TsEnd = tsEnd
@@ -138,8 +129,8 @@ func BuildListLogsPayload(logsListLogsProjectID string, logsListLogsToolID strin
 	v.PerPage = perPage
 	v.Direction = direction
 	v.Sort = sort
-	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 
 	return v, nil

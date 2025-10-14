@@ -17,8 +17,8 @@ var _ = Service("logs", func() {
 
 	Method("listLogs", func() {
 		Description("List call logs for a toolset.")
-		Security(security.ByKey)
-		Security(security.Session)
+		Security(security.ByKey, security.ProjectSlug)
+		Security(security.Session, security.ProjectSlug)
 
 		Payload(func() {
 			Extend(ListToolLogsRequest)
@@ -31,14 +31,10 @@ var _ = Service("logs", func() {
 
 		HTTP(func() {
 			GET("/rpc/logs.list")
-
-			Response(StatusOK)
-
-			security.SessionHeader()
 			security.ByKeyHeader()
+			security.SessionHeader()
 			security.ProjectHeader()
 
-			Param("project_id")
 			Param("tool_id")
 			Param("ts_start")
 			Param("ts_end")
@@ -58,9 +54,6 @@ var _ = Service("logs", func() {
 var ListToolLogsRequest = Type("ListToolLogsRequest", func() {
 	Description("Payload for listing tool logs")
 
-	Attribute("project_id", String, "Project ID", func() {
-		Format(FormatUUID)
-	})
 	Attribute("tool_id", String, "Tool ID", func() {
 		Format(FormatUUID)
 	})
@@ -86,17 +79,15 @@ var ListToolLogsRequest = Type("ListToolLogsRequest", func() {
 		Enum("ASC", "DESC")
 		Default("DESC")
 	})
-
-	Required("project_id")
 })
 
 var ListToolLogResponse = Type("ListToolLogResponse", func() {
 	Attribute("logs", ArrayOf(HTTPToolLog))
-	Attribute("pagination", PaginationResult)
+	Attribute("pagination", PaginationResponse)
 	Required("logs", "pagination")
 })
 
-var PaginationResult = Type("PaginationResult", func() {
+var PaginationResponse = Type("PaginationResponse", func() {
 	Description("Pagination metadata for list responses")
 
 	Attribute("per_page", Int, "Number of items per page")
@@ -162,7 +153,6 @@ var HTTPToolLog = Type("HTTPToolLog", func() {
 	Required(
 		"ts",
 		"organization_id",
-		"project_id",
 		"deployment_id",
 		"tool_id",
 		"tool_urn",

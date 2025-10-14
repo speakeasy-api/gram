@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -55,7 +56,18 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	)
 }
 
-func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (res *gen.ListToolLogResponse, err error) {
+func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
+	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (res *gen.ListToolLogResponse, err error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	projectID := authCtx.ProjectID
+
 	// Parse time parameters with defaults
 	tsStart := parseTimeOrDefault(payload.TsStart, time.Now().Add(-48*time.Hour).UTC())
 	tsEnd := parseTimeOrDefault(payload.TsEnd, time.Now().UTC())
@@ -63,11 +75,11 @@ func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (re
 	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error generating default cursor").
-			Log(ctx, s.logger, attr.SlogProjectID(payload.ProjectID))
+			Log(ctx, s.logger, attr.SlogProjectID(projectID.String()))
 	}
 
 	options := tm.ListToolLogsOptions{
-		ProjectID: payload.ProjectID,
+		ProjectID: projectID.String(),
 		TsStart:   tsStart,
 		TsEnd:     tsEnd,
 		Cursor:    conv.PtrValOr(payload.Cursor, id.String()),
@@ -85,13 +97,13 @@ func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (re
 	result, err := s.tcm.List(ctx, options)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing logs").
-			Log(ctx, s.logger, attr.SlogProjectID(payload.ProjectID))
+			Log(ctx, s.logger, attr.SlogProjectID(projectID.String()))
 	}
 
 	// Convert results to gen.HTTPToolLog
 	logs := make([]*gen.HTTPToolLog, 0, len(result.Logs))
 	for _, r := range result.Logs {
-		logs = append(logs, toHTTPToolLog(r))
+		logs = append(logs, toHTTPToolLog(r, projectID.String()))
 	}
 
 	// Convert pagination metadata to API format
@@ -100,7 +112,7 @@ func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (re
 		nextPageCursor = result.Pagination.NextPageCursor
 	}
 
-	pp := &gen.PaginationResult{
+	pp := &gen.PaginationResponse{
 		PerPage:        &result.Pagination.PerPage,
 		HasNextPage:    &result.Pagination.HasNextPage,
 		NextPageCursor: nextPageCursor,
@@ -120,12 +132,12 @@ func parseTimeOrDefault(s *string, defaultTime time.Time) time.Time {
 	return t
 }
 
-func toHTTPToolLog(r tm.ToolHTTPRequest) *gen.HTTPToolLog {
+func toHTTPToolLog(r tm.ToolHTTPRequest, projectId string) *gen.HTTPToolLog {
 	return &gen.HTTPToolLog{
 		ID:                conv.Ptr(r.ID),
 		Ts:                r.Ts.Format(time.RFC3339),
 		OrganizationID:    r.OrganizationID,
-		ProjectID:         r.ProjectID,
+		ProjectID:         conv.Ptr(projectId),
 		DeploymentID:      r.DeploymentID,
 		ToolID:            r.ToolID,
 		ToolUrn:           r.ToolURN,
@@ -142,8 +154,4 @@ func toHTTPToolLog(r tm.ToolHTTPRequest) *gen.HTTPToolLog {
 		ResponseHeaders:   r.ResponseHeaders,
 		ResponseBodyBytes: conv.Ptr(r.ResponseBodyBytes),
 	}
-}
-
-func (s Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
-	return s.auth.Authorize(ctx, key, schema)
 }

@@ -49,6 +49,18 @@ func NewListLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.En
 			key = *p.ApikeyToken
 		}
 		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
 		if err != nil {
 			sc := security.APIKeyScheme{
 				Name:           "session",
@@ -60,6 +72,18 @@ func NewListLogsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.En
 				key = *p.SessionToken
 			}
 			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
 		}
 		if err != nil {
 			return nil, err

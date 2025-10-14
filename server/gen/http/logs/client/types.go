@@ -15,8 +15,8 @@ import (
 // ListLogsResponseBody is the type of the "logs" service "listLogs" endpoint
 // HTTP response body.
 type ListLogsResponseBody struct {
-	Logs       []*HTTPToolLogResponseBody    `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
-	Pagination *PaginationResultResponseBody `form:"pagination,omitempty" json:"pagination,omitempty" xml:"pagination,omitempty"`
+	Logs       []*HTTPToolLogResponseBody      `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
+	Pagination *PaginationResponseResponseBody `form:"pagination,omitempty" json:"pagination,omitempty" xml:"pagination,omitempty"`
 }
 
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
@@ -241,8 +241,9 @@ type HTTPToolLogResponseBody struct {
 	ResponseBodyBytes *int64 `form:"response_body_bytes,omitempty" json:"response_body_bytes,omitempty" xml:"response_body_bytes,omitempty"`
 }
 
-// PaginationResultResponseBody is used to define fields on response body types.
-type PaginationResultResponseBody struct {
+// PaginationResponseResponseBody is used to define fields on response body
+// types.
+type PaginationResponseResponseBody struct {
 	// Number of items per page
 	PerPage *int `form:"per_page,omitempty" json:"per_page,omitempty" xml:"per_page,omitempty"`
 	// Whether there is a next page
@@ -259,7 +260,7 @@ func NewListLogsListToolLogResponseOK(body *ListLogsResponseBody) *logs.ListTool
 	for i, val := range body.Logs {
 		v.Logs[i] = unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(val)
 	}
-	v.Pagination = unmarshalPaginationResultResponseBodyToLogsPaginationResult(body.Pagination)
+	v.Pagination = unmarshalPaginationResponseResponseBodyToLogsPaginationResponse(body.Pagination)
 
 	return v
 }
@@ -427,7 +428,7 @@ func ValidateListLogsResponseBody(body *ListLogsResponseBody) (err error) {
 		}
 	}
 	if body.Pagination != nil {
-		if err2 := ValidatePaginationResultResponseBody(body.Pagination); err2 != nil {
+		if err2 := ValidatePaginationResponseResponseBody(body.Pagination); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -683,9 +684,6 @@ func ValidateHTTPToolLogResponseBody(body *HTTPToolLogResponseBody) (err error) 
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}
-	if body.ProjectID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
-	}
 	if body.DeploymentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
 	}
@@ -745,9 +743,9 @@ func ValidateHTTPToolLogResponseBody(body *HTTPToolLogResponseBody) (err error) 
 	return
 }
 
-// ValidatePaginationResultResponseBody runs the validations defined on
-// PaginationResultResponseBody
-func ValidatePaginationResultResponseBody(body *PaginationResultResponseBody) (err error) {
+// ValidatePaginationResponseResponseBody runs the validations defined on
+// PaginationResponseResponseBody
+func ValidatePaginationResponseResponseBody(body *PaginationResponseResponseBody) (err error) {
 	if body.NextPageCursor != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_page_cursor", *body.NextPageCursor, goa.FormatDateTime))
 	}
