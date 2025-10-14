@@ -3,14 +3,11 @@ package profile
 import (
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 
 	"github.com/speakeasy-api/gram/server/gen/keys"
 )
-
-const defaultProfileName = "default"
 
 // Save writes the profile configuration to disk.
 func Save(config *Config, path string) error {
@@ -31,58 +28,38 @@ func Save(config *Config, path string) error {
 	return nil
 }
 
-// UpdateOrCreate updates or creates a profile with the given API key and
-// metadata.
-func UpdateOrCreate(
-	apiKey string,
-	apiURL string,
-	org *keys.ValidateKeyOrganization,
-	projects []*keys.ValidateKeyProject,
-	path string,
-) error {
+func loadOrCreateConfig(path string) (*Config, error) {
 	config, err := loadConfig(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if config == nil {
-		config = &Config{
-			Current:  defaultProfileName,
-			Profiles: make(map[string]*Profile),
-		}
+		config = EmptyConfig()
 	}
 
 	if config.Profiles == nil {
 		config.Profiles = make(map[string]*Profile)
 	}
 
-	// Find or create profile for this API URL
-	profileName := findProfileByURL(config, apiURL)
-	if profileName == "" {
-		// No existing profile for this URL, create new one
-		profileName = generateProfileName(config, apiURL)
-	}
+	return config, nil
+}
 
-	// Set as current profile
-	config.Current = profileName
-
-	// Preserve existing default project if it's still in the projects list
-	var defaultProjectSlug string
-	existingProfile := config.Profiles[profileName]
-	if existingProfile != nil && existingProfile.DefaultProjectSlug != "" {
-		// Check if existing default is still valid
-		for _, p := range projects {
-			if p.Slug == existingProfile.DefaultProjectSlug {
-				defaultProjectSlug = existingProfile.DefaultProjectSlug
-				break
-			}
-		}
+func preserveDefaultProjectSlug(existingProfile *Profile) string {
+	if existingProfile != nil {
+		return existingProfile.DefaultProjectSlug
 	}
-	// Fall back to first project if no valid default
-	if defaultProjectSlug == "" && len(projects) > 0 {
-		defaultProjectSlug = projects[0].Slug
-	}
+	return ""
+}
 
+func buildProfile(
+	name string,
+	apiKey string,
+	apiURL string,
+	defaultProjectSlug string,
+	org *keys.ValidateKeyOrganization,
+	projects []*keys.ValidateKeyProject,
+) *Profile {
 	var orgData any
 	if org != nil {
 		orgData = map[string]string{
@@ -101,13 +78,47 @@ func UpdateOrCreate(
 		})
 	}
 
-	config.Profiles[profileName] = &Profile{
+	// Use first project as default if no default is set
+	if defaultProjectSlug == "" && len(projects) > 0 {
+		defaultProjectSlug = projects[0].Slug
+	}
+
+	return &Profile{
+		Name:               name,
 		Secret:             apiKey,
 		DefaultProjectSlug: defaultProjectSlug,
 		APIUrl:             apiURL,
 		Org:                orgData,
 		Projects:           projectsData,
 	}
+}
+
+// UpdateOrCreate updates or creates a profile with the given name, API key,
+// and metadata.
+func UpdateOrCreate(
+	apiKey string,
+	apiURL string,
+	org *keys.ValidateKeyOrganization,
+	projects []*keys.ValidateKeyProject,
+	path string,
+	profileName string,
+) error {
+	config, err := loadOrCreateConfig(path)
+	if err != nil {
+		return err
+	}
+
+	prof := buildProfile(
+		profileName,
+		apiKey,
+		apiURL,
+		preserveDefaultProjectSlug(config.Profiles[profileName]),
+		org,
+		projects,
+	)
+
+	config.Current = profileName
+	config.Profiles[profileName] = prof
 
 	return Save(config, path)
 }
@@ -127,48 +138,4 @@ func loadConfig(path string) (*Config, error) {
 	}
 
 	return &config, nil
-}
-
-// findProfileByURL searches for an existing profile with matching API URL.
-func findProfileByURL(config *Config, apiURL string) string {
-	for name, prof := range config.Profiles {
-		if prof.APIUrl == apiURL {
-			return name
-		}
-	}
-	return ""
-}
-
-// generateProfileName creates a unique profile name based on API URL.
-func generateProfileName(config *Config, apiURL string) string {
-	// Try default first
-	if _, exists := config.Profiles[defaultProfileName]; !exists {
-		return defaultProfileName
-	}
-
-	// Extract hostname for profile name
-	parsed, err := url.Parse(apiURL)
-	if err != nil {
-		return defaultProfileName
-	}
-
-	baseName := parsed.Host
-	if baseName == "" {
-		baseName = defaultProfileName
-	}
-
-	// If base name is available, use it
-	if _, exists := config.Profiles[baseName]; !exists {
-		return baseName
-	}
-
-	// Append counter to make unique
-	counter := 2
-	for {
-		name := fmt.Sprintf("%s-%d", baseName, counter)
-		if _, exists := config.Profiles[name]; !exists {
-			return name
-		}
-		counter++
-	}
 }

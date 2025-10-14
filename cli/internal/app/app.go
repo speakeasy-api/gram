@@ -51,6 +51,11 @@ func newApp() *cli.App {
 				EnvVars: []string{"GRAM_LOG_PRETTY"},
 			},
 			&cli.StringFlag{
+				Name:    "profile",
+				Usage:   "Profile name to use",
+				EnvVars: []string{"GRAM_PROFILE"},
+			},
+			&cli.StringFlag{
 				Name:    "profile-path",
 				Usage:   fmt.Sprintf("Path to profile JSON file (default: %s)", defaultProfilePath),
 				EnvVars: []string{"GRAM_PROFILE_PATH"},
@@ -67,11 +72,13 @@ func newApp() *cli.App {
 			ctx := logging.PushLogger(c.Context, logger)
 
 			profilePath := c.String("profile-path")
+			profileName := c.String("profile")
+			apiURL := c.String("api-url")
 			userSpecifiedPath := c.IsSet("profile-path")
 			if profilePath == "" {
 				profilePath = defaultProfilePath
 			}
-			prof, err := profile.Load(profilePath)
+			prof, err := profile.LoadByName(profilePath, profileName, apiURL)
 			if err != nil {
 				logger.WarnContext(
 					ctx,

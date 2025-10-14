@@ -18,11 +18,19 @@ type Config struct {
 
 // Profile represents a single profile with authentication and project settings.
 type Profile struct {
+	Name               string `json:"-"`
 	Secret             string `json:"secret"`
 	DefaultProjectSlug string `json:"defaultProjectSlug"`
 	APIUrl             string `json:"apiUrl"`
 	Org                any    `json:"org"`
 	Projects           []any  `json:"projects"`
+}
+
+func EmptyConfig() *Config {
+	return &Config{
+		Current:  "",
+		Profiles: make(map[string]*Profile),
+	}
 }
 
 // DefaultProfilePath returns the default path to the profile configuration file.
@@ -77,7 +85,87 @@ func Load(path string) (*Profile, error) {
 		)
 	}
 
+	profile.Name = config.Current
 	return profile, nil
+}
+
+func matchProfilesByURL(profiles map[string]*Profile, apiURL string) map[string]*Profile {
+	if apiURL == "" {
+		return profiles
+	}
+
+	matches := make(map[string]*Profile)
+	for name, prof := range profiles {
+		if prof.APIUrl == apiURL {
+			matches[name] = prof
+		}
+	}
+	return matches
+}
+
+func matchProfilesByName(
+	profiles map[string]*Profile,
+	profileName string,
+	currentName string,
+) map[string]*Profile {
+	targetName := profileName
+	if targetName == "" {
+		targetName = currentName
+	}
+	if targetName == "" {
+		return nil
+	}
+
+	matches := make(map[string]*Profile)
+	if prof, ok := profiles[targetName]; ok {
+		matches[targetName] = prof
+	}
+	return matches
+}
+
+// LoadByName reads the profile configuration and returns the profile matching
+// the specified name and API URL. If profileName is empty, falls back to current.
+//
+// Returns (nil, nil) if the profile file doesn't exist or no matching profile found.
+// Returns an error if the file is malformed.
+func LoadByName(path string, profileName string, apiURL string) (*Profile, error) {
+	var profilePath string
+	if path != "" {
+		profilePath = path
+	} else {
+		defaultPath, err := DefaultProfilePath()
+		if err != nil {
+			return nil, err
+		}
+		profilePath = defaultPath
+	}
+
+	data, err := os.ReadFile(filepath.Clean(profilePath))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read profile file: %w", err)
+	}
+
+	var config Config
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse profile file: %w", err)
+	}
+
+	urlMatch := matchProfilesByURL(config.Profiles, apiURL)
+	nameMatch := matchProfilesByName(urlMatch, profileName, config.Current)
+
+	if len(nameMatch) == 0 {
+		return nil, nil
+	}
+
+	for name, prof := range nameMatch {
+		prof.Name = name
+		return prof, nil
+	}
+
+	return nil, nil
 }
 
 type contextKey string
@@ -99,4 +187,34 @@ func WithProfile(ctx context.Context, prof *Profile) context.Context {
 		return context.WithValue(ctx, profileContextKey, prof)
 	}
 	return ctx
+}
+
+// LintProfile checks a profile for potential issues and returns warning messages.
+func LintProfile(p *Profile) []string {
+	var warnings []string
+
+	if p == nil {
+		return warnings
+	}
+
+	if p.DefaultProjectSlug != "" {
+		found := false
+		for _, proj := range p.Projects {
+			projMap, ok := proj.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if projMap["slug"] == p.DefaultProjectSlug {
+				found = true
+				break
+			}
+		}
+		if !found {
+			warnings = append(warnings,
+				fmt.Sprintf("default project '%s' not found in available projects",
+					p.DefaultProjectSlug))
+		}
+	}
+
+	return warnings
 }

@@ -48,29 +48,37 @@ func ResolveParams(
 }
 
 func ResolveKey(c *cli.Context, prof *profile.Profile) secret.Secret {
-	apiKey := c.String("api-key")
-	if apiKey != "" {
-		return secret.Secret(apiKey)
+	if c.IsSet("api-key") {
+		return secret.Secret(c.String("api-key"))
 	}
 
-	return secret.Secret(prof.Secret)
+	if prof != nil {
+		return secret.Secret(prof.Secret)
+	}
+
+	return secret.Secret("")
 }
 
 func ResolveProject(c *cli.Context, prof *profile.Profile) string {
-	projectSlug := c.String("project")
-	if projectSlug != "" {
-		return projectSlug
+	if c.IsSet("project") {
+		return c.String("project")
 	}
 
-	return prof.DefaultProjectSlug
+	if prof != nil {
+		return prof.DefaultProjectSlug
+	}
+
+	return ""
 }
 
 func ResolveURL(c *cli.Context, prof *profile.Profile) (*url.URL, error) {
-	apiURLStr := c.String("api-url")
-	if apiURLStr == "" && prof != nil {
+	var apiURLStr string
+	switch {
+	case c.IsSet("api-url"):
+		apiURLStr = c.String("api-url")
+	case prof != nil && prof.APIUrl != "":
 		apiURLStr = prof.APIUrl
-	}
-	if apiURLStr == "" {
+	default:
 		apiURLStr = DefaultBaseURL
 	}
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
+	"strings"
 
 	"github.com/urfave/cli/v2"
 
@@ -31,95 +33,169 @@ func newAuthCommand() *cli.Command {
 	}
 }
 
-func doAuth(c *cli.Context) error {
-	ctx := c.Context
-	logger := logging.PullLogger(ctx)
-	prof := profile.FromContext(ctx)
-	apiURL, err := workflow.ResolveURL(c, prof)
+func profileNameFromURL(apiURL string) string {
+	parsed, err := url.Parse(apiURL)
+	if err != nil || parsed.Host == "" {
+		return "default"
+	}
+	return strings.ReplaceAll(parsed.Host, ".", "-")
+}
+
+func determineProfileName(prof *profile.Profile, apiURL string) string {
+	if prof != nil && prof.APIUrl == apiURL {
+		return prof.Name
+	}
+	return profileNameFromURL(apiURL)
+}
+
+func getProfilePath(c *cli.Context) (string, error) {
+	if p := c.String("profile-path"); p != "" {
+		return p, nil
+	}
+
+	path, err := profile.DefaultProfilePath()
 	if err != nil {
-		return fmt.Errorf("invalid API URL: %w", err)
+		return "", fmt.Errorf("failed to get default profile path: %w", err)
+	}
+	return path, nil
+}
+
+func canRefreshProfile(prof *profile.Profile) bool {
+	return prof != nil && prof.Secret != ""
+}
+
+func mintKey(
+	ctx context.Context,
+	logger *slog.Logger,
+	apiURL string,
+) (string, error) {
+	listener, err := auth.NewListener()
+	if err != nil {
+		return "", fmt.Errorf("failed to create callback listener: %w", err)
 	}
 
-	keysClient := api.NewKeysClientFromURL(apiURL)
-
-	// Check if we have an existing valid API key for this URL
-	var apiKey string
-	var result *keys.ValidateKeyResult
-	if prof != nil && prof.Secret != "" && prof.APIUrl == apiURL.String() {
-		result, err = keysClient.Verify(ctx, secret.Secret(prof.Secret))
-		if err == nil {
-			// Existing key is valid, use it
-			logger.InfoContext(ctx, "existing API key is valid, skipping authentication flow")
-			apiKey = prof.Secret
-		} else {
-			logger.InfoContext(
-				ctx,
-				"existing API key is invalid, starting authentication flow",
-				slog.String("error", err.Error()),
-			)
+	defer func() {
+		bg := context.Background()
+		if err := listener.Stop(bg); err != nil {
+			msg := "failed to stop listener"
+			logger.WarnContext(bg, msg, slog.String("error", err.Error()))
 		}
+	}()
+
+	callbackURL := listener.URL()
+	listener.Start()
+
+	dispatcher := auth.NewDispatcher(logger)
+	if err := dispatcher.Dispatch(ctx, apiURL, callbackURL); err != nil {
+		return "", fmt.Errorf("failed to dispatch auth request: %w", err)
 	}
 
-	// If no valid existing key, go through the auth flow
-	if apiKey == "" {
-		listener, err := auth.NewListener()
-		if err != nil {
-			return fmt.Errorf("failed to create callback listener: %w", err)
-		}
-
-		defer func() {
-			shutdownCtx := context.Background()
-			if err := listener.Stop(shutdownCtx); err != nil {
-				logger.WarnContext(
-					shutdownCtx,
-					"failed to stop listener",
-					slog.String("error", err.Error()),
-				)
-			}
-		}()
-
-		callbackURL := listener.URL()
-		listener.Start()
-
-		dispatcher := auth.NewDispatcher(logger)
-		if err := dispatcher.Dispatch(
-			ctx,
-			apiURL.String(),
-			callbackURL,
-		); err != nil {
-			return fmt.Errorf("failed to dispatch auth request: %w", err)
-		}
-
-		apiKey, err = listener.Wait(ctx)
-		if err != nil {
-			return fmt.Errorf("authentication failed: %w", err)
-		}
-
-		result, err = keysClient.Verify(ctx, secret.Secret(apiKey))
-		if err != nil {
-			return fmt.Errorf("failed to verify API key: %w", err)
-		}
+	apiKey, err := listener.Wait(ctx)
+	if err != nil {
+		return "", fmt.Errorf("authentication failed: %w", err)
 	}
 
-	profilePath := c.String("profile-path")
-	if profilePath == "" {
-		defaultPath, err := profile.DefaultProfilePath()
-		if err != nil {
-			return fmt.Errorf("failed to get profile path: %w", err)
-		}
-		profilePath = defaultPath
-	}
+	return apiKey, nil
+}
 
-	err = profile.UpdateOrCreate(
+func saveProfile(
+	ctx context.Context,
+	logger *slog.Logger,
+	apiKey string,
+	apiURL string,
+	result *keys.ValidateKeyResult,
+	profilePath string,
+	profileName string,
+) error {
+	err := profile.UpdateOrCreate(
 		apiKey,
-		apiURL.String(),
+		apiURL,
 		result.Organization,
 		result.Projects,
 		profilePath,
+		profileName,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to save profile: %w", err)
 	}
 
+	savedProfile, err := profile.LoadByName(profilePath, profileName, apiURL)
+	if err == nil {
+		for _, warning := range profile.LintProfile(savedProfile) {
+			logger.WarnContext(ctx, warning)
+		}
+	}
+
 	return nil
+}
+
+func refreshProfile(
+	ctx context.Context,
+	logger *slog.Logger,
+	prof *profile.Profile,
+	profileName string,
+	apiURL string,
+	keysClient *api.KeysClient,
+	profilePath string,
+) error {
+	result, err := keysClient.Verify(ctx, secret.Secret(prof.Secret))
+	if err != nil {
+		msg := "existing API key is invalid, starting authentication flow"
+		logger.InfoContext(ctx, msg, slog.String("error", err.Error()))
+
+		return fmt.Errorf("failed to refresh profile: %w", err)
+	}
+
+	return saveProfile(ctx, logger, prof.Secret, apiURL, result, profilePath, profileName)
+}
+
+func authenticateNewProfile(
+	ctx context.Context,
+	logger *slog.Logger,
+	profileName string,
+	apiURL string,
+	keysClient *api.KeysClient,
+	profilePath string,
+) error {
+	apiKey, err := mintKey(ctx, logger, apiURL)
+	if err != nil {
+		return err
+	}
+
+	result, err := keysClient.Verify(ctx, secret.Secret(apiKey))
+	if err != nil {
+		return fmt.Errorf("failed to authenticate profile: %w", err)
+	}
+
+	return saveProfile(ctx, logger, apiKey, apiURL, result, profilePath, profileName)
+}
+
+func doAuth(c *cli.Context) error {
+	ctx := c.Context
+	logger := logging.PullLogger(ctx)
+	prof := profile.FromContext(ctx)
+
+	apiURL, err := workflow.ResolveURL(c, prof)
+	if err != nil {
+		return fmt.Errorf("invalid API URL: %w", err)
+	}
+
+	profileName := determineProfileName(prof, apiURL.String())
+
+	keysClient := api.NewKeysClientFromURL(apiURL)
+
+	profilePath, err := getProfilePath(c)
+	if err != nil {
+		return fmt.Errorf("failed to get profile path: %w", err)
+	}
+
+	if canRefreshProfile(prof) {
+		err := refreshProfile(ctx, logger, prof, profileName, apiURL.String(), keysClient, profilePath)
+		if err == nil {
+			return nil
+		}
+		// If refresh failed, fall through to authenticate new profile
+	}
+
+	return authenticateNewProfile(ctx, logger, profileName, apiURL.String(), keysClient, profilePath)
 }
