@@ -15,28 +15,72 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// sensitiveHeaders is a list of header names that should be redacted from logs
-var sensitiveHeaders = map[string]bool{
-	"authorization":       true,
-	"cookie":              true,
-	"set-cookie":          true,
-	"x-api-key":           true,
-	"api-key":             true,
-	"apikey":              true,
-	"proxy-authorization": true,
-	"www-authenticate":    true,
-	"x-auth-token":        true,
-	"x-csrf-token":        true,
-	"x-session-token":     true,
+// allowedHeaders is a list of standard HTTP header names that are safe to log.
+// We use an allowlist approach since we're a proxy and don't want to accidentally
+// log custom headers from upstream services that might contain PII or sensitive data.
+var allowedHeaders = map[string]bool{
+	// Content negotiation
+	"accept":           true,
+	"accept-encoding":  true,
+	"accept-language":  true,
+	"content-type":     true,
+	"content-length":   true,
+	"content-encoding": true,
+
+	// Caching
+	"cache-control":       true,
+	"etag":                true,
+	"if-match":            true,
+	"if-none-match":       true,
+	"if-modified-since":   true,
+	"if-unmodified-since": true,
+	"last-modified":       true,
+	"age":                 true,
+	"expires":             true,
+	"pragma":              true,
+	"vary":                true,
+
+	// CORS
+	"access-control-allow-origin":      true,
+	"access-control-allow-methods":     true,
+	"access-control-allow-headers":     true,
+	"access-control-expose-headers":    true,
+	"access-control-max-age":           true,
+	"access-control-allow-credentials": true,
+	"origin":                           true,
+
+	// Connection and transfer
+	"connection":        true,
+	"host":              true,
+	"user-agent":        true,
+	"referer":           true,
+	"te":                true,
+	"trailer":           true,
+	"transfer-encoding": true,
+	"upgrade":           true,
+
+	// Content location
+	"location":         true,
+	"content-location": true,
+
+	// Range requests
+	"range":         true,
+	"accept-ranges": true,
+	"content-range": true,
+
+	// Others
+	"date":        true,
+	"server":      true,
+	"allow":       true,
+	"retry-after": true,
 }
 
-// filterSensitiveHeaders removes sensitive headers from the map
-func filterSensitiveHeaders(headers map[string]string) map[string]string {
-	filtered := make(map[string]string, len(headers))
+// filterAllowedHeaders keeps only headers from the allowlist and filters out unknown headers.
+// This protects against logging custom headers that might contain PII or sensitive data.
+func filterAllowedHeaders(headers map[string]string) map[string]string {
+	filtered := make(map[string]string)
 	for key, value := range headers {
-		if sensitiveHeaders[strings.ToLower(key)] {
-			filtered[key] = "[REDACTED]"
-		} else {
+		if allowedHeaders[strings.ToLower(key)] {
 			filtered[key] = value
 		}
 	}
@@ -171,16 +215,16 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		)
 	}
 
-	// Get request headers and filter sensitive ones
+	// Get request headers and keep only allowed ones
 	requestHeaders := make(map[string]string)
 	for key, values := range req.Header {
 		for _, value := range values {
 			requestHeaders[key] = value
 		}
 	}
-	requestHeaders = filterSensitiveHeaders(requestHeaders)
+	requestHeaders = filterAllowedHeaders(requestHeaders)
 
-	// Get response headers and filter sensitive ones
+	// Get response headers and keep only allowed ones
 	responseHeaders := make(map[string]string)
 	if resp != nil {
 		for key, values := range resp.Header {
@@ -188,7 +232,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 				responseHeaders[key] = value
 			}
 		}
-		responseHeaders = filterSensitiveHeaders(responseHeaders)
+		responseHeaders = filterAllowedHeaders(responseHeaders)
 	}
 
 	method := req.Method
