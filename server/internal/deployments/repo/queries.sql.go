@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -329,7 +330,7 @@ type CreateDeploymentFunctionsAccessParams struct {
 	ProjectID     uuid.UUID
 	DeploymentID  uuid.UUID
 	FunctionID    uuid.UUID
-	EncryptionKey []byte
+	EncryptionKey conv.Secret
 	BearerFormat  pgtype.Text
 }
 
@@ -875,6 +876,49 @@ func (q *Queries) GetDeploymentByIdempotencyKey(ctx context.Context, arg GetDepl
 	return i, err
 }
 
+const getDeploymentFunctions = `-- name: GetDeploymentFunctions :many
+SELECT df.id, df.deployment_id, df.asset_id, df.name, df.slug, df.runtime, df.runner_version
+FROM deployments_functions df
+INNER JOIN deployments d ON df.deployment_id = d.id
+WHERE 
+  d.project_id = $1
+  AND df.deployment_id = $2
+LIMIT 1
+`
+
+type GetDeploymentFunctionsParams struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+}
+
+func (q *Queries) GetDeploymentFunctions(ctx context.Context, arg GetDeploymentFunctionsParams) ([]DeploymentsFunction, error) {
+	rows, err := q.db.Query(ctx, getDeploymentFunctions, arg.ProjectID, arg.DeploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DeploymentsFunction
+	for rows.Next() {
+		var i DeploymentsFunction
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentID,
+			&i.AssetID,
+			&i.Name,
+			&i.Slug,
+			&i.Runtime,
+			&i.RunnerVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getDeploymentFunctionsWithoutAccess = `-- name: GetDeploymentFunctionsWithoutAccess :many
 SELECT df.id
 FROM deployments_functions df
@@ -1147,6 +1191,58 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.PackageVersionBuild,
 			&i.Openapiv3ToolCount,
 			&i.FunctionsToolCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getFunctionCredentialsBatch = `-- name: GetFunctionCredentialsBatch :many
+SELECT DISTINCT ON (function_id)
+  id,
+  function_id,
+  encryption_key,
+  bearer_format
+FROM functions_access
+WHERE project_id = $1
+  AND deployment_id = $2
+  AND function_id = ANY($3::uuid[])
+  AND deleted IS FALSE
+ORDER BY function_id, seq DESC
+`
+
+type GetFunctionCredentialsBatchParams struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionIds  []uuid.UUID
+}
+
+type GetFunctionCredentialsBatchRow struct {
+	ID            uuid.UUID
+	FunctionID    uuid.UUID
+	EncryptionKey conv.Secret
+	BearerFormat  pgtype.Text
+}
+
+func (q *Queries) GetFunctionCredentialsBatch(ctx context.Context, arg GetFunctionCredentialsBatchParams) ([]GetFunctionCredentialsBatchRow, error) {
+	rows, err := q.db.Query(ctx, getFunctionCredentialsBatch, arg.ProjectID, arg.DeploymentID, arg.FunctionIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFunctionCredentialsBatchRow
+	for rows.Next() {
+		var i GetFunctionCredentialsBatchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FunctionID,
+			&i.EncryptionKey,
+			&i.BearerFormat,
 		); err != nil {
 			return nil, err
 		}

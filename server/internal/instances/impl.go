@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -63,6 +64,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	env *environments.EnvironmentEntries,
+	enc *encryption.Client,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	tracking billing.Tracker,
@@ -85,6 +87,7 @@ func NewService(
 			traceProvider,
 			meterProvider,
 			gateway.ToolCallSourceDirect,
+			enc,
 			cacheImpl,
 			guardianPolicy,
 		),
@@ -270,11 +273,13 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	executionInfo, err := s.toolset.GetToolExecutionInfoByID(ctx, uuid.MustParse(toolID), *authCtx.ProjectID)
+	plan, err := s.toolset.GetToolCallPlanByID(ctx, uuid.MustParse(toolID), *authCtx.ProjectID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to load tool execution info").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to load tool call plan").Log(ctx, logger)
 	}
-	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, executionInfo.OrganizationSlug, executionInfo.ProjectSlug)
+
+	descriptor := plan.Descriptor
+	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	var toolset *types.Toolset
 	if chatID != "" && toolsetSlug != "" {
@@ -297,7 +302,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	interceptor := newResponseInterceptor(w)
 
-	err = s.toolProxy.Do(ctx, interceptor, requestBody, ciEnv, executionInfo.Tool)
+	err = s.toolProxy.Do(ctx, interceptor, requestBody, ciEnv, plan)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}
@@ -331,13 +336,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	if toolset != nil {
 		toolsetID = &toolset.ID
 	}
-	toolName := ""
-	switch executionInfo.Tool.Kind() {
-	case gateway.ToolKindHTTP:
-		toolName = executionInfo.Tool.HTTPTool.Name
-	case gateway.ToolKindFunction:
-		toolName = executionInfo.Tool.FunctionTool.Name
-	}
+	toolName := descriptor.Name
 	go s.tracking.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
 		OrganizationID:   organizationID,
 		RequestBytes:     requestNumBytes,
@@ -346,8 +345,8 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		ToolName:         toolName,
 		ProjectID:        authCtx.ProjectID.String(),
 		ProjectSlug:      authCtx.ProjectSlug,
-		Type:             billing.ToolCallTypeHTTP,
-		OrganizationSlug: &executionInfo.OrganizationSlug,
+		Type:             plan.BillingType,
+		OrganizationSlug: &descriptor.OrganizationSlug,
 		ToolsetSlug:      &toolsetSlug,
 		ChatID:           &chatID,
 		ToolsetID:        toolsetID,

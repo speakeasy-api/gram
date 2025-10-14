@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	env_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -49,6 +50,7 @@ func NewChatClient(logger *slog.Logger,
 	openRouter openrouter.Provisioner,
 	chatClient *openrouter.ChatClient,
 	env *environments.EnvironmentEntries,
+	enc *encryption.Client,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 ) *ChatClient {
@@ -64,6 +66,7 @@ func NewChatClient(logger *slog.Logger,
 			tracerProvider,
 			meterProvider,
 			gateway.ToolCallSourceDirect,
+			enc,
 			cacheImpl,
 			guardianPolicy,
 		),
@@ -239,11 +242,13 @@ func (c *ChatClient) LoadToolsetTools(
 		projID := projectID
 
 		executor := func(ctx context.Context, rawArgs string) (string, error) {
-			executionPlan, err := toolsetHelpers.GetToolExecutionInfoByURN(ctx, *toolURN, projID)
+			plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, *toolURN, projID)
 			if err != nil {
-				return "", fmt.Errorf("failed to get tool execution info: %w", err)
+				return "", fmt.Errorf("failed to get tool call plan: %w", err)
 			}
-			ctx, _ = o11y.EnrichToolCallContext(ctx, c.logger, executionPlan.OrganizationSlug, executionPlan.ProjectSlug)
+
+			descriptor := plan.Descriptor
+			ctx, _ = o11y.EnrichToolCallContext(ctx, c.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 			rw := &toolCallResponseWriter{
 				headers:    make(http.Header),
@@ -261,7 +266,7 @@ func (c *ChatClient) LoadToolsetTools(
 				ciEnv.Set(key, value)
 			}
 
-			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), ciEnv, executionPlan.Tool)
+			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), ciEnv, plan)
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

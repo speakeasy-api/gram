@@ -1,5 +1,12 @@
 # @gram/cli
 
+## 0.8.0
+
+### Minor Changes
+
+- fde5a08: Support function uploads
+- c173592: Add profile support to CLI for storing and managing credentials. Users can now save their authentication credentials in named profiles, eliminating the need to pass them as explicit environment variables for each command invocation.
+
 ## 0.4.0
 
 ### Minor Changes

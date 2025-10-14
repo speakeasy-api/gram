@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -92,6 +93,7 @@ func NewService(
 	env gateway.EnvironmentLoader,
 	posthog *posthog.Posthog,
 	serverURL *url.URL,
+	enc *encryption.Client,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	oauthService *oauth.Service,
@@ -120,6 +122,7 @@ func NewService(
 			tracerProvider,
 			meterProvider,
 			gateway.ToolCallSourceMCP,
+			enc,
 			cacheImpl,
 			guardianPolicy,
 		),
@@ -136,32 +139,12 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 		oops.ErrHandle(service.logger, service.ServePublic).ServeHTTP(w, r)
 	})
 	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
-		// Check if this is a browser request (HTML Accept header)
-		for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
-			if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
-				oops.ErrHandle(service.logger, metadataService.ServeHostedPage).ServeHTTP(w, r)
-				return
-			}
-		}
-
-		body, err := json.Marshal(rpcError{
-			ID:      msgID{format: 0, String: "", Number: 0},
-			Code:    methodNotAllowed,
-			Message: methodNotAllowed.UserMessage(),
-			Data:    nil,
-		})
-		if err != nil {
-			service.logger.ErrorContext(r.Context(), "failed to marshal MCP 405 response", attr.SlogError(err))
-			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		_, writeErr := w.Write(body)
-		if writeErr != nil {
-			service.logger.ErrorContext(r.Context(), "failed to write response body", attr.SlogError(writeErr))
-		}
+		oops.ErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
+			return service.HandleGetServer(w, r, metadataService)
+		}).ServeHTTP(w, r)
+	})
+	o11y.AttachHandler(mux, "GET", "/mcp/{mcpSlug}/install", func(w http.ResponseWriter, r *http.Request) {
+		oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP(w, r)
 	})
 	o11y.AttachHandler(mux, "POST", "/mcp/{project}/{toolset}/{environment}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.ServeAuthenticated).ServeHTTP(w, r)
@@ -175,6 +158,42 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "GET", "/.well-known/oauth-protected-resource/mcp/{mcpSlug}", func(w http.ResponseWriter, r *http.Request) {
 		oops.ErrHandle(service.logger, service.HandleWellKnownOAuthProtectedResourceMetadata).ServeHTTP(w, r)
 	})
+}
+
+// HandleGetServer handles GET requests to /mcp/{mcpSlug}, checking for HTML requests
+// and delegating to metadata service, or returning method not allowed for others.
+func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
+	// Check if this is a browser request (HTML Accept header)
+	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
+		if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
+			if err := metadataService.ServeInstallPage(w, r); err != nil {
+				return fmt.Errorf("failed to serve install page: %w", err)
+			}
+			return nil
+		}
+	}
+
+	body, err := json.Marshal(rpcError{
+		ID:      msgID{format: 0, String: "", Number: 0},
+		Code:    methodNotAllowed,
+		Message: methodNotAllowed.UserMessage(),
+		Data:    nil,
+	})
+	if err != nil {
+		s.logger.ErrorContext(r.Context(), "failed to marshal MCP 405 response", attr.SlogError(err))
+		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+		return fmt.Errorf("failed to marshal MCP 405 response: %w", err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusMethodNotAllowed)
+	_, writeErr := w.Write(body)
+	if writeErr != nil {
+		s.logger.ErrorContext(r.Context(), "failed to write response body", attr.SlogError(writeErr))
+		return fmt.Errorf("failed to write response body: %w", writeErr)
+	}
+
+	return nil
 }
 
 // handleWellKnownMetadata handles OAuth 2.1 authorization server metadata discovery

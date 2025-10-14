@@ -14,7 +14,7 @@ entrypoint:
   shell-fragment: |
     set -e
     gram-runner -init -language javascript
-    exec su-exec gram "$@"
+    exec su-exec gram "$0" "$@"
 
 accounts:
   # The actual container will be run as gram. This just allows an init process
