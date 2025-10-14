@@ -279,7 +279,7 @@ function handleLogin(request, corsHeaders) {
 
 ## Defining OAuth in the OpenAPI document
 
-Next, we'll document our OAuth configuration in the OpenAPI document, you can read more about how Gram uses the OpenAPI document [here](/concepts/openapi).
+Next, we'll document our OAuth configuration in the OpenAPI document, you can read more about how Gram uses the OpenAPI document [here](concepts/openapi).
 
 ```yaml
 openapi: 3.1.0
@@ -363,7 +363,7 @@ The metadata format is standardized across OAuth providers. Most providers offer
 
 Finally, let's test everything in the Gram playground.
 
-After [uploading our OpenAPI document](/build-mcp/create-default-toolset) and creating a toolset, we'll go to the playground to test it. When we ask the AI agent to get deployment history, it will automatically detect that OAuth authentication is required:
+After [uploading our OpenAPI document](build-mcp/create-default-toolset) and creating a toolset, we'll go to the playground to test it. When we ask the AI agent to get deployment history, it will automatically detect that OAuth authentication is required:
 
 ![Gram Playground Testing](/img/guides/oauth-external-server/gram-playground-testing.png)
 

@@ -15,7 +15,7 @@ This allows you to deploy changes automatically whenever you push to your reposi
 
 Before setting up GitHub Actions deployment, ensure you have:
 
-- A Gram [Producer key](/concepts/api-keys#producer-keys)
+- A Gram [Producer key](concepts/api-keys#producer-keys)
 - A repository with your OpenAPI specification or toolset configuration
 
 ## Setup

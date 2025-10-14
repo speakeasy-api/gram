@@ -63,7 +63,7 @@ Under the **MCP Installation** section, you can see the MCP server installation 
 
 Your MCP server is now live. Here are some next steps to consider:
 
-- **Iterate on tool descriptions:** Refine tool definitions and use [tool variations](/concepts/tool-variations) to help LLMs better understand and invoke them accurately.
+- **Iterate on tool descriptions:** Refine tool definitions and use [tool variations](concepts/tool-variations) to help LLMs better understand and invoke them accurately.
 - **Create custom toolsets:** Group tools by task to design structured, step-by-step workflows tailored to specific use cases.
 - **Integrate with frameworks:** Use the Gram Python or TypeScript SDK to build agentic workflows. On the **Playground** page, you can select a ready-to-use code snippet in [Python](https://pypi.org/project/gram-ai/) or [JavaScript](https://www.npmjs.com/package/@gram-ai/sdk).
 
