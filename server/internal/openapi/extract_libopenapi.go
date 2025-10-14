@@ -282,7 +282,7 @@ func extractSecuritySchemesLibOpenAPI(doc v3.Document, task ToolExtractorTask) (
 				errs = append(errs, fmt.Errorf("%s (%d:%d) unsupported http security scheme: %s", key, line, col, sec.Scheme))
 				continue
 			}
-		case "openidConnect":
+		case "openIdConnect":
 			envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_ACCESS_TOKEN"))
 		case "oauth2":
 			if sec.Flows != nil {
