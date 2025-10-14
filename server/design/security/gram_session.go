@@ -35,6 +35,16 @@ var DeleteSessionCookie = func() {
 	CookiePath("/")
 }
 
+// This can be safely removed after 11/13/25 after all `/rpc` scoped session cookies are sure to be expired
+var DeleteLegacyScopedSessionCookie = func() {
+	Cookie(fmt.Sprintf("session_cookie:%s", auth.SessionCookie), String, func() {
+	})
+	CookieMaxAge(0)
+	CookieSecure()
+	CookieHTTPOnly()
+	CookiePath("/rpc")
+}
+
 var SessionHeader = func() {
 	Header(fmt.Sprintf("session_token:%s", auth.SessionHeader), String, "Session header")
 }
