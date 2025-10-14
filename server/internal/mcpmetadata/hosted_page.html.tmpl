@@ -757,9 +757,8 @@
                 </svg>
               </button>
               <!-- prettier-ignore -->
-              <code class="code-snippet language-sh">claude mcp add --transport http "{{ .MCPSlug }}" \
-    "{{ .MCPURL }}"{{- range .SecurityInputs }} \
-    --header '{{ .SystemName | asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>            </div>
+              <code class="code-snippet language-sh">claude mcp add --transport http "{{ .MCPSlug }}" "{{ .MCPURL }}"{{- range .SecurityInputs }} \
+                --header '{{ .SystemName | asHTTPHeader }}:{{ printf "${%s}" (.DisplayName | asPosixName) }}'{{- end }}</code>            </div>
           </li>
           {{- if .SecurityInputs }}
           <li class="instruction-item">
@@ -785,8 +784,7 @@
               </button>
               <!-- prettier-ignore -->
               <code class="code-snippet language-sh">{{- range .SecurityInputs -}}
-export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"
-{{ end }}</code>
+export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-value"{{- end }}</code>
             </div>
             <p>
               The MCP configuration supports environment variable expansion
@@ -1420,38 +1418,38 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
             id="manifest-json-blob"
             type="application/json"
             style="display: none"
-          >{
-    "manifest_version": "0.1",
-    "name": "{{ .MCPName }}",
-    "version": "1.0.0",
-    "description": "{{ .MCPDescription }}",
-    "author": {
-        "name": "{{ .OrganizationName }} with Gram"
-    },
-    "server": {
-    "type": "node",
-    "entry_point": "npx",
-    "mcp_config": {
-        "command": "npx",
-        "args": [
-        "mcp-remote",
-        "{{ .MCPURL }}"{{- range .SecurityInputs }},
-        "--header",
-        "{{ printf "%s:${user_config.%s}" (.SystemName | asHTTPHeader) (.DisplayName | asPosixName) }}"{{- end }}
-        ]
-    }
-    },
-    "user_config": {
-    {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
-    "{{ $input.DisplayName | asPosixName }}": {
-        "type": "string",
-        "title": "{{ $input.DisplayName | asPosixName }}",
-        "description": "Get this value from your gram env",
-        "sensitive": {{ $input.Sensitive }},
-        "required": true
-    }{{- end }}
-    }
-}</code>
+          >            {
+"dxt_version": "0.1",
+"name": "{{ .MCPName }}",
+"version": "1.0.0",
+"description": "{{ .MCPDescription }}",
+"author": {
+   "name": "{{ .OrganizationName }} with Gram"
+},
+"server": {
+  "type": "node",
+  "entry_point": "npx",
+  "mcp_config": {
+    "command": "npx",
+    "args": [
+      "mcp-remote",
+      "{{ .MCPURL }}"{{- range .SecurityInputs }},
+      "--header",
+      "{{ printf "%s:${user_config.%s}" (.SystemName | asHTTPHeader) (.DisplayName | asPosixName) }}"{{- end }}
+    ]
+  }
+},
+"user_config": {
+  {{- range $i, $input := .SecurityInputs }}{{- if $i }},{{ end }}
+  "{{ $input.DisplayName | asPosixName }}": {
+    "type": "string",
+    "title": "{{ $input.DisplayName | asPosixName }}",
+    "description": "Get this value from your gram env",
+    "sensitive": {{ $input.Sensitive }},
+    "required": true
+  }{{- end }}
+}
+</code>
         </section>
       </div>
     </main>
@@ -1539,7 +1537,7 @@ export {{ .DisplayName | asPosixName }}="your-{{ .DisplayName | asPosixName }}-v
     </svg>
     <script
       type="module"
-      src="{{ .SiteURL }}/external/hosted-install-page-7565525b.js"
+      src="{{ .SiteURL }}/external/hosted-install-page-3f84d897.js"
     ></script>
   </body>
 </html>
