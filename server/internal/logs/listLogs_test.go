@@ -456,13 +456,16 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 	require.Equal(t, "application/json", toolLog.ResponseHeaders["Content-Type"])
 }
 
-// fromTimeV7 returns a UUIDv7 for the provided UTC time.
 func fromTimeV7(t time.Time) (uuid.UUID, error) {
 	var u uuid.UUID
 
-	// 1) 48-bit big-endian Unix time in milliseconds
-	// #nosec G115 -- conversion is safe - UnixMilli() returns milliseconds since epoch which fits in uint64
-	ms := uint64(t.UnixMilli())
+	// 48-bit big-endian Unix time in milliseconds
+	ms64 := t.UnixMilli()
+	if ms64 < 0 {
+		return uuid.Nil, fmt.Errorf("negative Unix milliseconds: %d", ms64)
+	}
+	ms := uint64(ms64)
+
 	u[0] = byte(ms >> 40)
 	u[1] = byte(ms >> 32)
 	u[2] = byte(ms >> 24)
@@ -475,10 +478,10 @@ func fromTimeV7(t time.Time) (uuid.UUID, error) {
 		return uuid.Nil, fmt.Errorf("rand.Read: %w", err)
 	}
 
-	// 3) Set version (v7) in the high nibble of byte 6
+	// 3) Set version (v7)
 	u[6] = (u[6] & 0x0F) | 0x70
 
-	// 4) Set RFC 4122 variant in byte 8: 10xx xxxx
+	// 4) Set variant (RFC 4122)
 	u[8] = (u[8] & 0x3F) | 0x80
 
 	return u, nil
