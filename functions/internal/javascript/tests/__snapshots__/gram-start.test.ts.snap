@@ -57,6 +57,13 @@ content-type: application/json
 {"error":"Invalid amount"}"
 `;
 
+exports[`valid tool call from default export 1`] = `
+"HTTP/1.1 200 
+content-type: application/json
+
+{"message":"Hello, Jane!"}"
+`;
+
 exports[`valid tool call with args 1`] = `
 "HTTP/1.1 200 
 content-type: application/json

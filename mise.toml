@@ -6,20 +6,20 @@
 # well as overriding environment variables.
 [tools]
 "aqua:ariga/atlas" = "0.34.0"
-"aqua:pnpm/pnpm" = "10.8.1"
 "aqua:pvolok/mprocs" = "0.7.2"
 "ubi:sbdchd/squawk" = "1.6.1"
 "ubi:speakeasy-api/speakeasy" = "1.606.9"
 "ubi:FiloSottile/mkcert" = "1.4.4"
 apko = "0.30.13"
 flyctl = "0.3.189"
-go = "1.25.0"
+go = "1.25.2"
 golangci-lint = "2.4.0"
+gum = "0.16.0"
 jq = "1.7.1"
 melange = "0.30.6"
-nodejs = "22.14.0"
+nodejs = "24.10.0"
+pnpm = "10.18.2"
 watchexec = "2.3.0"
-gum = "0.16.0"
 
 # ℹ️ The settings below are sensible defaults for local development. When
 # deploying to production, you will want to configure these more carefully.

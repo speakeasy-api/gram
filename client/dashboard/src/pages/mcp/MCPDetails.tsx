@@ -1,8 +1,8 @@
+import { Block, BlockInner } from "@/components/block";
 import { CodeBlock } from "@/components/code";
 import { FeatureRequestModal } from "@/components/FeatureRequestModal";
+import { ConfigForm } from "@/components/mcp_install_page/config_form";
 import { ServerEnableDialog } from "@/components/server-enable-dialog";
-import { Button, Icon } from "@speakeasy-api/moonshine";
-import { Trash2 } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,8 @@ import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useListTools, useToolset } from "@/hooks/toolTypes";
+import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { ToolsetEntry } from "@gram/client/models/components";
@@ -29,18 +31,14 @@ import {
   useRemoveOAuthServerMutation,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
-import { Grid, Stack } from "@speakeasy-api/moonshine";
+import { Button, Grid, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { Globe } from "lucide-react";
+import { Globe, Trash2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { ToolsetCard } from "../toolsets/ToolsetCard";
-import { Block, BlockInner } from "@/components/block";
-import { isHttpTool, Toolset } from "@/lib/toolTypes";
-import { useListTools, useToolset } from "@/hooks/toolTypes";
-import { ConfigForm } from "@/components/mcp_install_page/config_form";
 
 export function MCPDetailsRoot() {
   return <Outlet />;
@@ -53,8 +51,9 @@ export function MCPDetailPage() {
   const activeOAuthAuthCode =
     toolset?.securityVariables?.some(
       (secVar) =>
-        secVar.type === "oauth2" &&
-        secVar.oauthTypes?.includes("authorization_code"),
+        (secVar.type === "oauth2" &&
+          secVar.oauthTypes?.includes("authorization_code")) ||
+        secVar.type === "openIdConnect",
     ) ?? false;
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
@@ -206,14 +205,23 @@ export function useMcpUrl(
   toolset:
     | Pick<
         ToolsetEntry,
-        "slug" | "customDomainId" | "mcpSlug" | "defaultEnvironmentSlug"
+        | "slug"
+        | "customDomainId"
+        | "mcpSlug"
+        | "defaultEnvironmentSlug"
+        | "mcpIsPublic"
       >
     | undefined,
-) {
+): {
+  url: string | undefined;
+  customServerURL: string | undefined;
+  installPageUrl: string;
+} {
   const { domain } = useCustomDomain();
   const project = useProject();
 
-  if (!toolset) return { url: undefined, customServerURL: undefined };
+  if (!toolset)
+    return { url: undefined, customServerURL: undefined, installPageUrl: "" };
 
   // Determine which server URL to use
   let customServerURL: string | undefined;
@@ -228,10 +236,16 @@ export function useMcpUrl(
     toolset.mcpSlug && customServerURL ? customServerURL : getServerURL()
   }/mcp/${urlSuffix}`;
 
+  // Always use our URL for install page when server is private, even for
+  // custom domains to ensure cookie is present
+  const installPageUrl = toolset.mcpIsPublic
+    ? `${mcpUrl}/install`
+    : `${getServerURL()}/mcp/${urlSuffix}/install`;
+
   return {
     url: mcpUrl,
     customServerURL,
-    pageUrl: `${mcpUrl}/install`,
+    installPageUrl,
   };
 }
 
@@ -331,7 +345,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
 
   const anyChanges = mcpSlug !== toolset.mcpSlug;
 
-  const saveButton = (
+  const saveButton = anyChanges && (
     <Button
       onClick={() => {
         updateToolsetMutation.mutate({
@@ -461,7 +475,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         description="The URL you or your users will use to access this MCP server."
       >
         <CodeBlock className="mb-2">{mcpUrl ?? ""}</CodeBlock>
-        <Block label="Custom Slug" error={mcpSlugError}>
+        <Block label="Custom Slug" error={mcpSlugError} className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Type muted mono variant="small">
@@ -500,7 +514,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
             </Stack>
           </BlockInner>
         </Block>
-        <Block label="Custom Domain">
+        <Block label="Custom Domain" className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
               <Type mono small>
@@ -518,30 +532,31 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           </BlockInner>
         </Block>
       </PageSection>
+
       <PageSection
         heading="Visibility"
         description="Make your MCP server visible to the world, or protected behind a Gram key."
       >
         <PublicToggle isPublic={mcpIsPublic ?? false} />
       </PageSection>
-      {toolset.mcpIsPublic && (
-        <PageSection
-          heading="MCP Install Documentation"
-          description="Share this page with your users to give simple instructions
-            for gettings started with your MCP to their client like Cursor or
-            Claude Desktop."
-        >
-          <Stack className="mt-2" gap={1}>
-            <ConfigForm toolset={toolset} />
-          </Stack>
-        </PageSection>
-      )}
+
       <PageSection
-        heading="Configuration"
-        description="Configuration blocks for this server"
+        heading="MCP Installation"
+        description="Share this page with your users to give simple instructions
+          for gettings started with your MCP to their client like Cursor or
+          Claude Desktop."
       >
-        <MCPJson toolset={toolset} />
+        {!toolset.mcpIsPublic && (
+          <Type small italic destructive>
+            Your server is private. To share with external users, you must make
+            it public.
+          </Type>
+        )}
+        <Stack className="mt-2" gap={1}>
+          <ConfigForm toolset={toolset} />
+        </Stack>
       </PageSection>
+
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
         onClose={() => setIsCustomDomainModalOpen(false)}
@@ -850,14 +865,15 @@ function OAuthTabModal({
   const telemetry = useTelemetry();
 
   // Check if there are multiple OAuth2 authorization_code security variables
-  const oauth2AuthCodeCount =
+  const oauthAuthCodeCount =
     toolset.securityVariables?.filter(
       (secVar) =>
-        secVar.type === "oauth2" &&
-        secVar.oauthTypes?.includes("authorization_code"),
+        (secVar.type === "oauth2" &&
+          secVar.oauthTypes?.includes("authorization_code")) ||
+        secVar.type === "openIdConnect",
     ).length ?? 0;
 
-  const hasMultipleOAuth2AuthCode = oauth2AuthCodeCount > 1;
+  const hasMultipleOAuth2AuthCode = oauthAuthCodeCount > 1;
   const queryClient = useQueryClient();
 
   const handleBookMeeting = () => {
@@ -962,7 +978,7 @@ function OAuthTabModal({
               {hasMultipleOAuth2AuthCode && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
                   <Type small className="text-red-600 mt-1">
-                    Not Supported: This MCP server has {oauth2AuthCodeCount}{" "}
+                    Not Supported: This MCP server has {oauthAuthCodeCount}{" "}
                     OAuth2 security schemes detected.
                   </Type>
                 </div>

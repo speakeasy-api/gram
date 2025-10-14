@@ -23,12 +23,14 @@ var WriteSessionCookie = func() {
 	CookieMaxAge(2592000) // 30 days in seconds
 	CookieSecure()
 	CookieHTTPOnly()
+	CookiePath("/")
 }
 
 var DeleteSessionCookie = func() {
 	Cookie(fmt.Sprintf("session_cookie:%s", auth.SessionCookie), String, func() {
 	})
-	CookieMaxAge(0)
+	// NOTE: We set max age to -1 to rather than 0 because go's Set-Cookie treats 0 as unset
+	CookieMaxAge(-1)
 	CookieSecure()
 	CookieHTTPOnly()
 }

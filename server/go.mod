@@ -26,7 +26,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/pb33f/libopenapi v0.25.3
 	github.com/pgx-contrib/pgxotel v0.0.0-20250326222047-55ccee468e10
-	github.com/polarsource/polar-go v0.9.2
+	github.com/polarsource/polar-go v0.10.0
 	github.com/posthog/posthog-go v1.6.10
 	github.com/redis/go-redis/extra/redisotel/v9 v9.14.0
 	github.com/redis/go-redis/v9 v9.14.0
@@ -50,8 +50,8 @@ require (
 	go.opentelemetry.io/otel/sdk v1.38.0
 	go.opentelemetry.io/otel/sdk/metric v1.38.0
 	go.opentelemetry.io/otel/trace v1.38.0
-	go.temporal.io/api v1.53.0
-	go.temporal.io/sdk v1.36.0
+	go.temporal.io/api v1.54.0
+	go.temporal.io/sdk v1.37.0
 	go.temporal.io/sdk/contrib/opentelemetry v0.6.0
 	goa.design/clue v1.2.3
 	goa.design/goa/v3 v3.22.3

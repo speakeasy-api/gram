@@ -430,6 +430,8 @@ func extractSecuritySchemesSpeakeasy(ctx context.Context, logger *slog.Logger, d
 				errs = append(errs, fmt.Errorf("%s (%d:%d) unsupported http security scheme: %s", key, line, col, sec.GetScheme()))
 				continue
 			}
+		case openapi.SecuritySchemeTypeOpenIDConnect:
+			envvars = append(envvars, strcase.ToSNAKE(slug+"_"+key+"_ACCESS_TOKEN"))
 		case openapi.SecuritySchemeTypeOAuth2:
 			if sec.GetFlows() != nil {
 				if sec.GetFlows().AuthorizationCode != nil || sec.GetFlows().ClientCredentials != nil || sec.GetFlows().Implicit != nil {

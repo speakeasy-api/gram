@@ -52,9 +52,7 @@ If no profile is configured, the command will indicate that no profile is set up
 				Scheme: workflowParams.APIURL.Scheme,
 			})
 
-			result, err := client.VerifyKey(ctx, &api.VerifyKeyRequest{
-				APIKey: workflowParams.APIKey,
-			})
+			result, err := client.Verify(ctx, workflowParams.APIKey)
 			if err != nil {
 				return fmt.Errorf("failed to verify API key: %w", err)
 			}
@@ -86,10 +84,10 @@ If no profile is configured, the command will indicate that no profile is set up
 }
 
 type ProfileInfo struct {
-	Organization       keys.ValidateKeyOrganization
-	Scopes             []string
-	CurrentProjectSlug string
-	Projects           []*keys.ValidateKeyProject
+	Organization       keys.ValidateKeyOrganization `json:"org"`
+	Scopes             []string                     `json:"scopes"`
+	CurrentProjectSlug string                       `json:"project"`
+	Projects           []*keys.ValidateKeyProject   `json:"projects"`
 }
 
 func printProfile(profile ProfileInfo) {
@@ -161,13 +159,4 @@ func printProfile(profile ProfileInfo) {
 	}
 
 	fmt.Println(projectTable.Render())
-}
-
-func printProfileJSON(profile *ProfileInfo) error {
-	out, err := json.MarshalIndent(profile, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to encode profile info: %w", err)
-	}
-	fmt.Println(string(out))
-	return nil
 }
