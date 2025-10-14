@@ -53,8 +53,9 @@ export function MCPDetailPage() {
   const activeOAuthAuthCode =
     toolset?.securityVariables?.some(
       (secVar) =>
-        secVar.type === "oauth2" &&
-        secVar.oauthTypes?.includes("authorization_code"),
+        (secVar.type === "oauth2" &&
+          secVar.oauthTypes?.includes("authorization_code")) ||
+        secVar.type === "openIdConnect",
     ) ?? false;
   const isOAuthConnected = !!(
     toolset?.oauthProxyServer || toolset?.externalOauthServer
@@ -850,14 +851,15 @@ function OAuthTabModal({
   const telemetry = useTelemetry();
 
   // Check if there are multiple OAuth2 authorization_code security variables
-  const oauth2AuthCodeCount =
+  const oauthAuthCodeCount =
     toolset.securityVariables?.filter(
       (secVar) =>
-        secVar.type === "oauth2" &&
-        secVar.oauthTypes?.includes("authorization_code"),
+        (secVar.type === "oauth2" &&
+          secVar.oauthTypes?.includes("authorization_code")) ||
+        secVar.type === "openIdConnect",
     ).length ?? 0;
 
-  const hasMultipleOAuth2AuthCode = oauth2AuthCodeCount > 1;
+  const hasMultipleOAuth2AuthCode = oauthAuthCodeCount > 1;
   const queryClient = useQueryClient();
 
   const handleBookMeeting = () => {
@@ -962,7 +964,7 @@ function OAuthTabModal({
               {hasMultipleOAuth2AuthCode && (
                 <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-4">
                   <Type small className="text-red-600 mt-1">
-                    Not Supported: This MCP server has {oauth2AuthCodeCount}{" "}
+                    Not Supported: This MCP server has {oauthAuthCodeCount}{" "}
                     OAuth2 security schemes detected.
                   </Type>
                 </div>
