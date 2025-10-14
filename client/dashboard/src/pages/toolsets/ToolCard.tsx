@@ -18,6 +18,7 @@ import {
 import { invalidateTemplate, useDeployment } from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+import { CircleAlert } from "lucide-react";
 
 export function ToolCard({
   tool,
@@ -69,6 +70,11 @@ export function ToolCard({
     ? tool.name.split(sourceName + "_")[1]
     : tool.name;
 
+  // Check if tool has a description variation applied
+  // When a variation is applied, the canonical field contains the original tool attributes
+  const hasDescriptionVariation =
+    tool.type === "http" && tool.canonical?.description !== undefined;
+
   const header = (
     <Stack direction="horizontal" gap={2} align="center">
       <EditableText
@@ -114,7 +120,7 @@ export function ToolCard({
         {sourceName}
       </Badge>
       {tool.type === "http" &&
-        tool.tags.map((tag) => (
+        tool.tags.map((tag: string) => (
           <Badge key={tag} variant="secondary" className="text-sm capitalize">
             {tag}
           </Badge>
@@ -126,6 +132,21 @@ export function ToolCard({
           tooltip={`Subtools: ${tool.toolsHint.join(", ")}`}
         >
           Custom Tool
+        </Badge>
+      )}
+      {hasDescriptionVariation && (
+        <Badge
+          variant="outline"
+          className="text-sm border-yellow-500 text-yellow-600 dark:text-yellow-400"
+          tooltip={
+            <span>
+              This tool has a custom description that will persist even when the
+              API source is updated.
+            </span>
+          }
+        >
+          <CircleAlert />
+          Edited
         </Badge>
       )}
     </>

@@ -2,7 +2,7 @@ import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { PromptTemplateKind } from "@gram/client/models/components";
 import { Tool } from "@/lib/toolTypes";
-import { ChevronDown, FileCode, Layers, SquareFunction } from "lucide-react";
+import { ChevronDown, FileCode, Layers, SquareFunction, CircleAlert } from "lucide-react";
 import { MethodBadge } from "./MethodBadge";
 import { useState, useEffect, useMemo } from "react";
 import { MoreActions } from "@/components/ui/more-actions";
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface ToolListProps {
   tools: Tool[];
@@ -227,6 +228,12 @@ function ToolRow({
   const [editValue, setEditValue] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  // Check if tool has a description variation applied
+  const hasDescriptionVariation =
+    tool.type === "http" &&
+    tool.canonical?.description !== undefined &&
+    tool.description !== tool.canonical.description;
+
   const openEditDialog = (type: "name" | "description") => {
     setEditType(type);
     setEditValue(type === "name" ? tool.name : tool.description);
@@ -248,6 +255,12 @@ function ToolRow({
     await navigator.clipboard.writeText(tool.canonicalName);
   };
 
+  const handleRevertDescription = () => {
+    if (tool.type === "http" && tool.canonical?.description) {
+      onUpdate?.({ description: tool.canonical.description });
+    }
+  };
+
   const actions = [
     {
       label: "Edit name",
@@ -260,6 +273,15 @@ function ToolRow({
       onClick: () => openEditDialog("description"),
       icon: "pencil" as const,
     },
+    ...(hasDescriptionVariation
+      ? [
+          {
+            label: "Revert to original description",
+            onClick: handleRevertDescription,
+            icon: "undo" as const,
+          },
+        ]
+      : []),
     {
       label: "Copy URN",
       onClick: handleCopyUrn,
@@ -307,9 +329,26 @@ function ToolRow({
             <p className="text-sm leading-6 text-foreground truncate">
               {tool.name}
             </p>
-            <p className="text-sm leading-6 text-muted-foreground truncate">
-              {tool.description || "No description"}
-            </p>
+            <div className="flex items-center gap-2 min-w-0">
+              <p className="text-sm leading-6 text-muted-foreground truncate">
+                {tool.description || "No description"}
+              </p>
+              {hasDescriptionVariation && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1 shrink-0 text-yellow-600 dark:text-yellow-400">
+                      <CircleAlert className="size-3" />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <span>
+                      This tool has a custom description that will persist even
+                      when the API source is updated.
+                    </span>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           </div>
         </div>
         <div className="flex gap-4 items-center shrink-0">
