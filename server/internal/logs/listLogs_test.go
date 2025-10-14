@@ -2,6 +2,8 @@ package logs_test
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
 	"log"
 	"os"
 	"testing"
@@ -202,42 +204,12 @@ func TestListLogs_SinglePage(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 
-	// Insert test data
-	projectID := uuid.New().String()
-	orgID := uuid.New().String()
-	deploymentID := uuid.New().String()
-	toolID := uuid.New().String()
-
-	reqBody := "request body"
-	respBody := "response body"
-
-	// Insert 5 logs
-	insertTestLogs(ctx, t, ti.chClient, insertLogOptions{
-		projectID:    projectID,
-		orgID:        orgID,
-		deploymentID: deploymentID,
-		toolID:       toolID,
-		toolURN:      "",
-		baseTime:     time.Time{},
-		count:        5,
-		httpMethod:   "",
-		httpRoute:    "",
-		statusCode:   0,
-		durationMs:   0,
-		reqBody:      &reqBody,
-		respBody:     &respBody,
-		reqSkip:      nil,
-		respSkip:     nil,
-		reqHeaders:   nil,
-		respHeaders:  nil,
-	})
-
 	// Query logs
 	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
-		ProjectID:        projectID,
+		ProjectID:        "0199a9f5-5659-76e1-be43-1da0b881dcff",
 		ToolID:           nil,
 		TsStart:          nil,
 		TsEnd:            nil,
@@ -249,7 +221,7 @@ func TestListLogs_SinglePage(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Len(t, result.Logs, 5)
+	require.Len(t, result.Logs, 10)
 	require.NotNil(t, result.Pagination)
 	require.Equal(t, 10, *result.Pagination.PerPage)
 	require.False(t, *result.Pagination.HasNextPage)
@@ -270,35 +242,7 @@ func TestListLogs_Pagination(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 
-	// Insert test data
-	projectID := uuid.New().String()
-	orgID := uuid.New().String()
-	deploymentID := uuid.New().String()
-	toolID := uuid.New().String()
-
-	reqBody := "request body"
-	respBody := "response body"
-
-	// Insert 25 logs
-	insertTestLogs(ctx, t, ti.chClient, insertLogOptions{
-		projectID:    projectID,
-		orgID:        orgID,
-		deploymentID: deploymentID,
-		toolID:       toolID,
-		toolURN:      "urn:tool:test",
-		baseTime:     time.Time{},
-		count:        25,
-		httpMethod:   "",
-		httpRoute:    "",
-		statusCode:   0,
-		durationMs:   0,
-		reqBody:      &reqBody,
-		respBody:     &respBody,
-		reqSkip:      nil,
-		respSkip:     nil,
-		reqHeaders:   nil,
-		respHeaders:  nil,
-	})
+	projectID := "0199a9f5-5659-76e1-be43-1da0b881dcff"
 
 	// Query first page
 	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
@@ -310,16 +254,16 @@ func TestListLogs_Pagination(t *testing.T) {
 		TsStart:          nil,
 		TsEnd:            nil,
 		Cursor:           nil,
-		PerPage:          10,
+		PerPage:          3,
 		Direction:        "next",
 		Sort:             "DESC",
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	require.Len(t, result.Logs, 10)
+	require.Len(t, result.Logs, 3)
 	require.NotNil(t, result.Pagination)
-	require.Equal(t, 10, *result.Pagination.PerPage)
+	require.Equal(t, 3, *result.Pagination.PerPage)
 	require.True(t, *result.Pagination.HasNextPage)
 	require.NotNil(t, result.Pagination.NextPageCursor)
 
@@ -334,16 +278,16 @@ func TestListLogs_Pagination(t *testing.T) {
 		TsStart:          nil,
 		TsEnd:            nil,
 		Cursor:           cursor,
-		PerPage:          10,
+		PerPage:          3,
 		Direction:        "next",
 		Sort:             "DESC",
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, result2)
-	require.Len(t, result2.Logs, 10)
+	require.Len(t, result2.Logs, 3)
 	require.NotNil(t, result2.Pagination)
-	require.Equal(t, 10, *result2.Pagination.PerPage)
+	require.Equal(t, 3, *result2.Pagination.PerPage)
 	require.True(t, *result2.Pagination.HasNextPage)
 	require.NotNil(t, result2.Pagination.NextPageCursor)
 
@@ -358,16 +302,16 @@ func TestListLogs_Pagination(t *testing.T) {
 		TsStart:          nil,
 		TsEnd:            nil,
 		Cursor:           cursor,
-		PerPage:          10,
+		PerPage:          4,
 		Direction:        "next",
 		Sort:             "DESC",
 	})
 
 	require.NoError(t, err)
 	require.NotNil(t, result3)
-	require.Len(t, result3.Logs, 5) // Remaining logs
+	require.Len(t, result3.Logs, 4) // Remaining logs
 	require.NotNil(t, result3.Pagination)
-	require.Equal(t, 10, *result3.Pagination.PerPage)
+	require.Equal(t, 4, *result3.Pagination.PerPage)
 	require.False(t, *result3.Pagination.HasNextPage)
 	require.Nil(t, result3.Pagination.NextPageCursor)
 
@@ -397,7 +341,7 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 
 	// Insert 10 logs over 10 minutes
 	for i := 0; i < 10; i++ {
-		id, err := uuid.NewV7()
+		id, err := fromTimeV7(baseTime.Add(time.Duration(i) * time.Minute))
 		require.NoError(t, err)
 
 		err = ti.chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
@@ -409,8 +353,8 @@ func TestListLogs_TimeRangeFilter(t *testing.T) {
 			ToolID:            toolID,
 			ToolURN:           "urn:tool:test",
 			ToolType:          toolmetrics.HTTPToolType,
-			TraceID:           uuid.New().String()[:32],
-			SpanID:            uuid.New().String()[:16],
+			TraceID:           id.String()[:32],
+			SpanID:            id.String()[:16],
 			HTTPMethod:        "GET",
 			HTTPRoute:         "/test",
 			StatusCode:        200,
@@ -462,45 +406,14 @@ func TestListLogs_DifferentPageSizes(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 
-	// Insert test data
-	projectID := uuid.New().String()
-	orgID := uuid.New().String()
-	deploymentID := uuid.New().String()
-	toolID := uuid.New().String()
-
-	reqBody := "request body"
-	respBody := "response body"
-
-	// Insert 15 logs
-	insertTestLogs(ctx, t, ti.chClient, insertLogOptions{
-		projectID:    projectID,
-		orgID:        orgID,
-		deploymentID: deploymentID,
-		toolID:       toolID,
-		toolURN:      "urn:tool:test",
-		baseTime:     time.Time{},
-		count:        15,
-		httpMethod:   "",
-		httpRoute:    "",
-		statusCode:   0,
-		durationMs:   0,
-		reqBody:      &reqBody,
-		respBody:     &respBody,
-		reqSkip:      nil,
-		respSkip:     nil,
-		reqHeaders:   nil,
-		respHeaders:  nil,
-	})
-
 	testCases := []struct {
 		perPage         int
 		expectedCount   int
 		expectedHasNext bool
 	}{
 		{perPage: 5, expectedCount: 5, expectedHasNext: true},
-		{perPage: 10, expectedCount: 10, expectedHasNext: true},
-		{perPage: 15, expectedCount: 15, expectedHasNext: false},
-		{perPage: 20, expectedCount: 15, expectedHasNext: false},
+		{perPage: 10, expectedCount: 10, expectedHasNext: false},
+		{perPage: 20, expectedCount: 10, expectedHasNext: false},
 	}
 
 	for _, tc := range testCases {
@@ -508,7 +421,7 @@ func TestListLogs_DifferentPageSizes(t *testing.T) {
 			ApikeyToken:      nil,
 			SessionToken:     nil,
 			ProjectSlugInput: nil,
-			ProjectID:        projectID,
+			ProjectID:        "0199a9f5-5659-76e1-be43-1da0b881dcff",
 			ToolID:           nil,
 			TsStart:          nil,
 			TsEnd:            nil,
@@ -620,4 +533,31 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 	require.Equal(t, "Bearer token", toolLog.RequestHeaders["Authorization"])
 	require.Len(t, toolLog.ResponseHeaders, 1)
 	require.Equal(t, "application/json", toolLog.ResponseHeaders["Content-Type"])
+}
+
+// fromTimeV7 returns a UUIDv7 for the provided UTC time.
+func fromTimeV7(t time.Time) (uuid.UUID, error) {
+	var u uuid.UUID
+
+	// 1) 48-bit big-endian Unix time in milliseconds
+	ms := uint64(t.UnixMilli())
+	u[0] = byte(ms >> 40)
+	u[1] = byte(ms >> 32)
+	u[2] = byte(ms >> 24)
+	u[3] = byte(ms >> 16)
+	u[4] = byte(ms >> 8)
+	u[5] = byte(ms)
+
+	// 2) Fill remaining bytes [6..15] with cryptographic randomness
+	if _, err := rand.Read(u[6:16]); err != nil {
+		return uuid.Nil, fmt.Errorf("rand.Read: %w", err)
+	}
+
+	// 3) Set version (v7) in the high nibble of byte 6
+	u[6] = (u[6] & 0x0F) | 0x70
+
+	// 4) Set RFC 4122 variant in byte 8: 10xx xxxx
+	u[8] = (u[8] & 0x3F) | 0x80
+
+	return u, nil
 }

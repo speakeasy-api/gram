@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -18,18 +17,14 @@ type ClickhouseClientFunc func(t *testing.T) (clickhouse.Conn, error)
 // from migration files. Returns a container reference and a function to create
 // test connections. The container is automatically cleaned up when the test ends.
 func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseContainer, ClickhouseClientFunc, error) {
-	// Get the schema file path relative to this file's location
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return nil, nil, fmt.Errorf("failed to get current file path")
-	}
-	schemaPath := filepath.Join(filepath.Dir(filename), "..", "..", "clickhouse", "schema.sql")
+	schemaPath := filepath.Join("..", "..", "clickhouse", "schema.sql")
+	seedPath := filepath.Join("..", "..", "clickhouse", "testdata", "seed.sql")
 
 	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:25.8.3",
 		clickhousecontainer.WithUsername("gram"),
 		clickhousecontainer.WithPassword("gram"),
 		clickhousecontainer.WithDatabase("gram"),
-		clickhousecontainer.WithInitScripts(schemaPath),
+		clickhousecontainer.WithInitScripts(schemaPath, seedPath),
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 	)
 	if err != nil {
