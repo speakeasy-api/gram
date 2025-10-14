@@ -359,10 +359,11 @@ export function ToolsetView({
     if (tool.type === "http") {
       await client.variations.upsertGlobal({
         upsertGlobalToolVariationForm: {
-          srcToolName: tool.name,
           ...tool.variation,
           confirm: tool.variation?.confirm as Confirm,
           ...updates,
+          srcToolName: tool.canonicalName,
+          srcToolUrn: tool.toolUrn,
         },
       });
     } else {
