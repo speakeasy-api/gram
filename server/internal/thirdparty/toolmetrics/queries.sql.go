@@ -3,10 +3,8 @@ package toolmetrics
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
-	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -14,90 +12,40 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-type ToolLogLevel string
-type ToolType string
+const insertHttpRaw = `insert into gram.http_requests_raw
+    (id, ts, organization_id, project_id, deployment_id, tool_id, tool_urn, tool_type, trace_id, span_id, http_method,
+     http_route, status_code, duration_ms, user_agent, request_headers, request_body_bytes, response_headers, response_body_bytes)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`
 
-const (
-	HTTPToolType     ToolType = "http"
-	FunctionToolType ToolType = "function"
-	PromptToolType   ToolType = "prompt"
-)
+const listLogsQueryDesc = `
+select * from gram.http_requests_raw
+where project_id = $1
+and ts >= $2
+and ts <= $3
+and ts < UUIDv7ToDateTime(toUUID($4))
+order by ts desc
+limit $5
+`
 
-func (t *ToolType) Scan(src interface{}) error {
-	if src == nil {
-		*t = ""
-		return nil
-	}
-	switch v := src.(type) {
-	case string:
-		*t = ToolType(v)
-		return nil
-	case []byte:
-		*t = ToolType(v)
-		return nil
-	default:
-		return fmt.Errorf("cannot scan %T into ToolType", src)
-	}
-}
+const listLogsQueryAsc = `
+select * from gram.http_requests_raw
+where project_id = $1
+and ts >= $2
+and ts <= $3
+and ts > UUIDv7ToDateTime(toUUID($4))
+order by ts
+limit $5
+`
 
-type ListToolLogsOptions struct {
-	ProjectID string
-	TsStart   time.Time
-	TsEnd     time.Time
-	Cursor    string
-	*Pagination
-}
-
-type ToolMetricsProvider interface {
-	// List tool call logs
-	List(ctx context.Context, opts ListToolLogsOptions) (*ListResult, error)
-	// Log tool call request/response
-	Log(context.Context, ToolHTTPRequest) error
-}
-
-type PaginationMetadata struct {
-	PerPage        int     `json:"per_page"`
-	HasNextPage    bool    `json:"has_next_page"`
-	NextPageCursor *string `json:"next_page_cursor,omitempty"`
-}
-
-type ListResult struct {
-	Logs       []ToolHTTPRequest  `json:"logs"`
-	Pagination PaginationMetadata `json:"pagination"`
-}
-
-func New(logger *slog.Logger, conn clickhouse.Conn, traceProvider trace.TracerProvider, shouldFlag func(ctx context.Context, log ToolHTTPRequest) (bool, error)) *ClickhouseClient {
-	if shouldFlag == nil {
-		shouldFlag = func(ctx context.Context, log ToolHTTPRequest) (bool, error) {
-			return true, nil
-		}
-	}
-
-	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics")
-
-	return &ClickhouseClient{
-		logger:     logger,
-		conn:       conn,
-		tracer:     tracer,
-		ShouldFlag: shouldFlag,
-	}
-}
-
-type ClickhouseClient struct {
-	logger     *slog.Logger
-	conn       clickhouse.Conn
-	tracer     trace.Tracer
-	ShouldFlag func(ctx context.Context, log ToolHTTPRequest) (bool, error)
-}
-
-func (c *ClickhouseClient) List(ctx context.Context, opts ListToolLogsOptions) (*ListResult, error) {
+// List retrieves tool logs based on the provided options.
+func (q *Queries) List(ctx context.Context, opts ListToolLogsOptions) (*ListResult, error) {
 	projectID := opts.ProjectID
 	tsStart := opts.TsStart
 	tsEnd := opts.TsEnd
 	cursor := opts.Cursor
 	pagination := opts.Pagination
 
-	ctx, span := c.tracer.Start(ctx, "clickhouse.list_logs",
+	ctx, span := q.tracer.Start(ctx, "clickhouse.list_logs",
 		trace.WithAttributes(
 			attr.ProjectID(projectID),
 			attr.TsStart(tsStart),
@@ -117,7 +65,7 @@ func (c *ClickhouseClient) List(ctx context.Context, opts ListToolLogsOptions) (
 	}
 
 	perPage := pagination.Limit() - 1 // Remove the +1 for actual page size
-	rows, err := c.conn.Query(ctx, query,
+	rows, err := q.conn.Query(ctx, query,
 		projectID,
 		tsStart,
 		tsEnd,
@@ -126,7 +74,7 @@ func (c *ClickhouseClient) List(ctx context.Context, opts ListToolLogsOptions) (
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to query logs")
-		c.logger.ErrorContext(ctx, "failed to query tool logs from ClickHouse",
+		q.logger.ErrorContext(ctx, "failed to query tool logs from ClickHouse",
 			attr.SlogError(err),
 			attr.SlogProjectID(projectID),
 			attr.SlogTsStart(tsStart),
@@ -135,7 +83,7 @@ func (c *ClickhouseClient) List(ctx context.Context, opts ListToolLogsOptions) (
 		return nil, fmt.Errorf("query logs: %w", err)
 	}
 
-	defer o11y.LogDefer(ctx, c.logger, func() error { return rows.Close() })
+	defer o11y.LogDefer(ctx, q.logger, func() error { return rows.Close() })
 
 	var results []ToolHTTPRequest
 	for rows.Next() {
@@ -143,7 +91,7 @@ func (c *ClickhouseClient) List(ctx context.Context, opts ListToolLogsOptions) (
 		if err = rows.ScanStruct(&log); err != nil {
 			span.RecordError(err)
 			span.SetStatus(codes.Error, "failed to scan row")
-			c.logger.ErrorContext(ctx, "failed to scan row",
+			q.logger.ErrorContext(ctx, "failed to scan row",
 				attr.SlogError(err),
 				attr.SlogProjectID(projectID),
 			)
@@ -155,7 +103,7 @@ func (c *ClickhouseClient) List(ctx context.Context, opts ListToolLogsOptions) (
 	if err = rows.Err(); err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "rows iteration error")
-		c.logger.ErrorContext(ctx, "error iterating rows",
+		q.logger.ErrorContext(ctx, "error iterating rows",
 			attr.SlogError(err),
 			attr.SlogProjectID(projectID),
 		)
@@ -185,7 +133,7 @@ func (c *ClickhouseClient) List(ctx context.Context, opts ListToolLogsOptions) (
 	)
 	span.SetStatus(codes.Ok, "")
 
-	c.logger.InfoContext(ctx, "successfully listed tool logs",
+	q.logger.InfoContext(ctx, "successfully listed tool logs",
 		attr.SlogProjectID(projectID),
 		attr.SlogValueInt(len(results)),
 		attr.SlogPaginationHasNextPage(hasNextPage),
@@ -202,10 +150,11 @@ func (c *ClickhouseClient) List(ctx context.Context, opts ListToolLogsOptions) (
 	}, nil
 }
 
-func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
-	allow, err := c.ShouldFlag(ctx, log)
+// Log inserts a tool HTTP request log entry.
+func (q *Queries) Log(ctx context.Context, log ToolHTTPRequest) error {
+	allow, err := q.ShouldFlag(ctx, log)
 	if err != nil {
-		c.logger.ErrorContext(ctx, "failed to fetch feature flag", attr.SlogError(err))
+		q.logger.ErrorContext(ctx, "failed to fetch feature flag", attr.SlogError(err))
 		return nil
 	}
 
@@ -213,7 +162,7 @@ func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
 		return nil
 	}
 
-	ctx, span := c.tracer.Start(ctx, "clickhouse.log_http_request",
+	ctx, span := q.tracer.Start(ctx, "clickhouse.log_http_request",
 		trace.WithAttributes(
 			attr.ToolID(log.ToolID),
 			attr.ToolURN(log.ToolURN),
@@ -251,11 +200,11 @@ func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
 		log.ResponseBodyBytes,
 	}
 
-	err = c.conn.Exec(ctx, insertHttpRaw, args...)
+	err = q.conn.Exec(ctx, insertHttpRaw, args...)
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, "failed to insert log")
-		c.logger.ErrorContext(ctx, "failed to insert HTTP log to ClickHouse",
+		q.logger.ErrorContext(ctx, "failed to insert HTTP log to ClickHouse",
 			attr.SlogError(err),
 			attr.SlogToolID(log.ToolID),
 			attr.SlogToolURN(log.ToolURN),
@@ -275,43 +224,4 @@ func (c *ClickhouseClient) Log(ctx context.Context, log ToolHTTPRequest) error {
 	span.SetStatus(codes.Ok, "")
 
 	return nil
-}
-
-func (c *ClickhouseClient) Close() error {
-	if err := c.conn.Close(); err != nil {
-		return fmt.Errorf("close clickhouse client: %w", err)
-	}
-	return nil
-}
-
-type ToolHTTPRequest struct {
-	ID string    `ch:"id"` // UUID
-	Ts time.Time `ch:"ts"` // DateTime64(3, 'UTC')
-
-	// required multi-tenant keys
-	OrganizationID string   `ch:"organization_id"` // UUID
-	ProjectID      string   `ch:"project_id"`      // UUID
-	DeploymentID   string   `ch:"deployment_id"`   // UUID
-	ToolID         string   `ch:"tool_id"`         // UUID
-	ToolURN        string   `ch:"tool_urn"`        // String
-	ToolType       ToolType `ch:"tool_type"`       // LowCardinality(String)
-
-	// correlation
-	TraceID string `ch:"trace_id"` // FixedString(32)
-	SpanID  string `ch:"span_id"`  // FixedString(16)
-
-	// request metadata
-	HTTPMethod string  `ch:"http_method"` // LowCardinality(String)
-	HTTPRoute  string  `ch:"http_route"`  // String
-	StatusCode int64   `ch:"status_code"` // Int64
-	DurationMs float64 `ch:"duration_ms"` // Float64
-	UserAgent  string  `ch:"user_agent"`  // LowCardinality(String)
-
-	// request payload
-	RequestHeaders   map[string]string `ch:"request_headers"`    // Map(String, String)
-	RequestBodyBytes int64             `ch:"request_body_bytes"` // Int64
-
-	// response payload
-	ResponseHeaders   map[string]string `ch:"response_headers"`    // Map(String, String)
-	ResponseBodyBytes int64             `ch:"response_body_bytes"` // Int64
 }

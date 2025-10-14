@@ -59,7 +59,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func newClickhouseClient(t *testing.T, orgId string) *toolmetrics.ClickhouseClient {
+func newClickhouseClient(t *testing.T, orgId string) *toolmetrics.Queries {
 	t.Helper()
 
 	chConn, err := infra.NewClickhouseClient(t)
@@ -1442,7 +1442,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 }
 
 // waitForClickHouseLogs polls ClickHouse until the expected number of logs appear or timeout is reached
-func waitForClickHouseLogs(ctx context.Context, t *testing.T, chClient *toolmetrics.ClickhouseClient, projectID string, expectedCount int, timeout time.Duration) *toolmetrics.ListResult {
+func waitForClickHouseLogs(ctx context.Context, t *testing.T, chClient *toolmetrics.Queries, projectID string, expectedCount int, timeout time.Duration) *toolmetrics.ListResult {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)

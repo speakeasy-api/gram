@@ -47,7 +47,7 @@ func TestMain(m *testing.M) {
 type testInstance struct {
 	service        *logsvc.Service
 	conn           *pgxpool.Pool
-	chClient       *toolmetrics.ClickhouseClient
+	chClient       *toolmetrics.Queries
 	sessionManager *sessions.Manager
 }
 
@@ -87,85 +87,6 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 		conn:           conn,
 		chClient:       chClient,
 		sessionManager: sessionManager,
-	}
-}
-
-type insertLogOptions struct {
-	projectID    string
-	orgID        string
-	deploymentID string
-	toolID       string
-	toolURN      string
-	baseTime     time.Time
-	count        int
-	httpMethod   string
-	httpRoute    string
-	statusCode   uint16
-	durationMs   float64
-	reqBody      *string
-	respBody     *string
-	reqSkip      *string
-	respSkip     *string
-	reqHeaders   map[string]string
-	respHeaders  map[string]string
-}
-
-func insertTestLogs(ctx context.Context, t *testing.T, chClient *toolmetrics.ClickhouseClient, opts insertLogOptions) {
-	t.Helper()
-
-	if opts.httpMethod == "" {
-		opts.httpMethod = "GET"
-	}
-	if opts.httpRoute == "" {
-		opts.httpRoute = "/test"
-	}
-	if opts.statusCode == 0 {
-		opts.statusCode = 200
-	}
-	if opts.toolURN == "" {
-		opts.toolURN = "tool:http:test"
-	}
-	if opts.durationMs == 0 {
-		opts.durationMs = 100.0
-	}
-	if opts.reqHeaders == nil {
-		opts.reqHeaders = map[string]string{"Content-Type": "application/json"}
-	}
-	if opts.respHeaders == nil {
-		opts.respHeaders = map[string]string{"Content-Type": "application/json"}
-	}
-
-	for i := 0; i < opts.count; i++ {
-		id, err := uuid.NewV7()
-		require.NoError(t, err)
-
-		if opts.baseTime.IsZero() {
-			opts.baseTime = time.Unix(id.Time().UnixTime()).
-				UTC().Add(-10 * time.Minute)
-		}
-
-		err = chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
-			ID:                id.String(),
-			Ts:                opts.baseTime.Add(time.Duration(i) * time.Minute),
-			OrganizationID:    opts.orgID,
-			ProjectID:         opts.projectID,
-			DeploymentID:      opts.deploymentID,
-			ToolID:            opts.toolID,
-			ToolURN:           opts.toolURN,
-			ToolType:          toolmetrics.HTTPToolType,
-			TraceID:           id.String()[:32],
-			SpanID:            id.String()[:16],
-			HTTPMethod:        opts.httpMethod,
-			HTTPRoute:         opts.httpRoute,
-			StatusCode:        int64(opts.statusCode),
-			DurationMs:        opts.durationMs,
-			UserAgent:         "test-agent",
-			RequestHeaders:    opts.reqHeaders,
-			RequestBodyBytes:  12,
-			ResponseHeaders:   opts.respHeaders,
-			ResponseBodyBytes: 13,
-		})
-		require.NoError(t, err)
 	}
 }
 
@@ -540,6 +461,7 @@ func fromTimeV7(t time.Time) (uuid.UUID, error) {
 	var u uuid.UUID
 
 	// 1) 48-bit big-endian Unix time in milliseconds
+	// #nosec G115 -- conversion is safe - UnixMilli() returns milliseconds since epoch which fits in uint64
 	ms := uint64(t.UnixMilli())
 	u[0] = byte(ms >> 40)
 	u[1] = byte(ms >> 32)

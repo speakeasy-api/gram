@@ -122,7 +122,7 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 	})
 
 	shutdown := func(ctx context.Context) error {
-		if err := cc.Close(); err != nil {
+		if err := conn.Close(); err != nil {
 			logger.ErrorContext(ctx, "failed to close tool metrics client connection", attr.SlogError(err))
 			return fmt.Errorf("close tool metrics client: %w", err)
 		}
