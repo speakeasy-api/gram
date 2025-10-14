@@ -40,7 +40,7 @@ If no profile is configured, the command will indicate that no profile is set up
 
 			workflowParams, err := workflow.ResolveParams(c, prof)
 			if err != nil {
-				return fmt.Errorf("failed to resolve workflow params: %w", err)
+				return fmt.Errorf("no profile configured, please set up a profile in $home/.gram/profile.json")
 			}
 
 			client := api.NewKeysClient(&api.KeysClientOptions{
