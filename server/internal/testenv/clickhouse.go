@@ -56,6 +56,10 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 				Username: "gram",
 				Password: "gram",
 			},
+			Settings: clickhouse.Settings{
+				"async_insert":          0, // Forces inserts to be synchronous
+				"wait_for_async_insert": 0,
+			},
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to clickhouse: %w", err)

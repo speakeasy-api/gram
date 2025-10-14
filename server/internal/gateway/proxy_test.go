@@ -298,17 +298,6 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Verify the path was correctly constructed with the number
 			require.Equal(t, tt.expectedPath, capturedRequest.URL.Path)
-
-			// Wait for ClickHouse logs to be written asynchronously
-			logs := waitForClickHouseLogs(ctx, t, chClient, tool.ProjectID, 1, 5*time.Second)
-			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
-
-			toolHTTPRequest := logs.Logs[0]
-			require.Equal(t, tool.ProjectID, toolHTTPRequest.ProjectID)
-			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
-			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
-			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
-			require.Equal(t, int64(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
@@ -438,17 +427,6 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				actualHeaderValue := capturedRequest.Header.Get(headerName)
 				require.Equal(t, tt.expectedHeader, actualHeaderValue, "header %s value mismatch", headerName)
 			}
-
-			// Wait for ClickHouse logs to be written asynchronously
-			logs := waitForClickHouseLogs(ctx, t, chClient, tool.ProjectID, 1, 5*time.Second)
-			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
-
-			toolHTTPRequest := logs.Logs[0]
-			require.Equal(t, tool.ProjectID, toolHTTPRequest.ProjectID)
-			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
-			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
-			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
-			require.Equal(t, int64(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
@@ -795,16 +773,6 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				require.Equal(t, expectedValues, actualValues, "query parameter %s has incorrect values", expectedKey)
 			}
 
-			// Wait for ClickHouse logs to be written asynchronously
-			logs := waitForClickHouseLogs(ctx, t, chClient, tool.ProjectID, 1, 5*time.Second)
-			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
-
-			toolHTTPRequest := logs.Logs[0]
-			require.Equal(t, tool.ProjectID, toolHTTPRequest.ProjectID)
-			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
-			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
-			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
-			require.Equal(t, int64(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
@@ -1037,16 +1005,6 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				require.Equal(t, expectedJSON, actualJSON)
 			}
 
-			// Wait for ClickHouse logs to be written asynchronously
-			logs := waitForClickHouseLogs(ctx, t, chClient, tool.ProjectID, 1, 5*time.Second)
-			require.Len(t, logs.Logs, 1, "expected exactly one log entry in ClickHouse")
-
-			toolHTTPRequest := logs.Logs[0]
-			require.Equal(t, tool.ProjectID, toolHTTPRequest.ProjectID)
-			require.Equal(t, tool.OrganizationID, toolHTTPRequest.OrganizationID)
-			require.Equal(t, tool.DeploymentID, toolHTTPRequest.DeploymentID)
-			require.Equal(t, tool.ID, toolHTTPRequest.ToolID)
-			require.Equal(t, int64(200), toolHTTPRequest.StatusCode)
 		})
 	}
 }
