@@ -47,7 +47,13 @@ jobs:
           dest_path="marketing-repo/src/content/docs/gram"
           if [ -d "$src_path" ]; then
             mkdir -p "$dest_path"
-            rsync -a --delete --exclude='.DS_Store' "$src_path/" "$dest_path/"
+            # Exclude the root docs index.mdx from being copied and protect any existing
+            # destination file from deletion/overwrites.
+            rsync -a --delete \
+              --exclude='.DS_Store' \
+              --exclude='/index.mdx' \
+              --filter='P /index.mdx' \
+              "$src_path/" "$dest_path/"
           else
             echo "Warning: $src_path does not exist; nothing to sync."
           fi
@@ -85,6 +91,10 @@ jobs:
             mapfile -t files < <(find "$content_dir" -type f \( -name '*.md' -o -name '*.mdx' -o -name '*.markdown' -o -name '*.astro' -o -name '*.html' \))
             if [ "${#files[@]}" -gt 0 ]; then
               for f in "${files[@]}"; do
+                # Skip the root-level index.mdx (left unmanaged by sync step)
+                if [[ "$f" == "$content_dir/index.mdx" ]]; then
+                  continue
+                fi
                 # 1) Rewrite root-relative image/video URLs to point to marketing assets location
                 sed -i -E \
                   -e 's#href="/img/#href="/assets/docs/gram/img/#g' \
