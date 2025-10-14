@@ -555,7 +555,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
           <ConfigForm toolset={toolset} />
         </Stack>
       </PageSection>
-      
+
       <FeatureRequestModal
         isOpen={isCustomDomainModalOpen}
         onClose={() => setIsCustomDomainModalOpen(false)}
