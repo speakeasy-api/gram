@@ -82,11 +82,12 @@ func newTestToolsetsService(t *testing.T) (context.Context, *testInstance) {
 	assetStorage := assetstest.NewTestBlobStore(t)
 
 	enc := testenv.NewEncryptionClient(t)
+	funcs := testenv.NewFunctionsTestOrchestrator(t)
 
 	f := &feature.InMemory{}
 
 	temporal, devserver := infra.NewTemporalClient(t)
-	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc))
+	worker := background.NewTemporalWorker(temporal, logger, tracerProvider, meterProvider, background.ForDeploymentProcessing(conn, f, assetStorage, enc, funcs))
 	t.Cleanup(func() {
 		worker.Stop()
 		temporal.Close()

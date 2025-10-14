@@ -39,7 +39,7 @@ export default function Toolsets() {
         action: "toolset_created",
         toolset_slug: data.slug,
       });
-      routes.toolsets.toolset.update.goTo(data.slug);
+      routes.toolsets.toolset.goTo(data.slug);
     },
     onError: (error) => {
       handleApiError(error, "Failed to create toolset");

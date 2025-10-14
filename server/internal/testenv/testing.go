@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric"
@@ -13,6 +14,18 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	tracernoop "go.opentelemetry.io/otel/trace/noop"
 )
+
+func NewFunctionsTestOrchestrator(t *testing.T) functions.Orchestrator {
+	t.Helper()
+
+	codeRoot := t.TempDir()
+	root, err := os.OpenRoot(codeRoot)
+	require.NoError(t, err, "expected local functions runner code root to open")
+	t.Cleanup(func() {
+		require.NoError(t, root.Close(), "test functions runner root should close without error")
+	})
+	return functions.NewLocalRunner(root)
+}
 
 func NewEncryptionClient(t *testing.T) *encryption.Client {
 	t.Helper()

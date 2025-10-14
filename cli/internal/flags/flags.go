@@ -28,3 +28,10 @@ func Project() *cli.StringFlag {
 		EnvVars: []string{"GRAM_PROJECT"},
 	}
 }
+
+func JSON() *cli.BoolFlag {
+	return &cli.BoolFlag{
+		Name:  "json",
+		Usage: "Output deployment status as JSON",
+	}
+}

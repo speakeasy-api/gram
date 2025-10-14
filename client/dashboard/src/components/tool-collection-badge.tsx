@@ -16,12 +16,10 @@ type ToolsetForBadge = Pick<ToolsetEntry, "name" | "slug" | "promptTemplates">;
 
 export const ToolsetPromptsBadge = ({
   toolset,
-  size = "md",
-  variant = "outline",
+  variant = "neutral",
 }: {
   toolset: ToolsetForBadge | undefined;
-  size?: "sm" | "md";
-  variant?: "outline" | "default";
+  variant?: "neutral" | "destructive" | "information" | "success" | "warning";
 }) => {
   const names = toolset ? promptNames(toolset.promptTemplates) : [];
 
@@ -38,7 +36,7 @@ export const ToolsetPromptsBadge = ({
   return names && names.length > 0 ? (
     <Tooltip>
       <TooltipTrigger>
-        <Badge size={size} variant={variant}>
+        <Badge variant={variant}>
           {names.length} Prompt{names.length === 1 ? "" : "s"}
         </Badge>
       </TooltipTrigger>
@@ -51,13 +49,11 @@ export const ToolsetPromptsBadge = ({
 
 export const ToolCollectionBadge = ({
   toolNames,
-  size = "md",
-  variant = "outline",
+  variant = "neutral",
   className,
   warnOnTooManyTools = false,
 }: {
   toolNames: string[] | undefined;
-  size?: "sm" | "md";
   variant?: React.ComponentProps<typeof Badge>["variant"];
   className?: string;
   warnOnTooManyTools?: boolean;
@@ -88,18 +84,19 @@ export const ToolCollectionBadge = ({
     <Tooltip>
       <TooltipTrigger>
         <Badge
-          size={size}
           variant={toolsWarnings ? "warning" : variant}
           className={cn(
             !toolsWarnings && "bg-card",
-            "flex items-center py-1 gap-[1ch]",
+            "flex items-center py-1 gap-1",
             className,
           )}
         >
           {toolsWarnings && (
             <Icon name="triangle-alert" className="inline-block" />
           )}
-          {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
+          <span>
+            {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
+          </span>
         </Badge>
       </TooltipTrigger>
       <TooltipPortal>
@@ -107,7 +104,7 @@ export const ToolCollectionBadge = ({
       </TooltipPortal>
     </Tooltip>
   ) : (
-    <Badge size={size} variant={variant} className={className}>
+    <Badge variant={variant} className={className}>
       No Tools
     </Badge>
   );

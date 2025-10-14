@@ -137,9 +137,8 @@ const AssetErrorBadge = () => {
     <Tooltip>
       <TooltipTrigger>
         <Badge
-          size="xs"
           variant="destructive"
-          className="px-0.5 py-1 leading-2 items-center flex"
+          className="px-0.5 py-1 leading-2 items-center flex text-xs"
         >
           Error
         </Badge>

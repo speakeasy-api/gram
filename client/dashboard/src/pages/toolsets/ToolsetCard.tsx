@@ -36,7 +36,6 @@ const BoundToolsBadge = ({
   return (
     <ToolCollectionBadge
       toolNames={names}
-      size={"md"}
       className={className}
       warnOnTooManyTools
     />
@@ -68,8 +67,7 @@ export function ToolsetCard({
             actions={[
               {
                 label: "Add Tools",
-                onClick: () =>
-                  routes.toolsets.toolset.update.goTo(toolset.slug),
+                onClick: () => routes.toolsets.toolset.goTo(toolset.slug),
                 icon: "pencil",
               },
               {

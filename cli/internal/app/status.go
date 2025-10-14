@@ -31,10 +31,7 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 				Name:  "id",
 				Usage: "The deployment ID to check status for (if not provided, shows latest deployment)",
 			},
-			&cli.BoolFlag{
-				Name:  "json",
-				Usage: "Output deployment status as JSON",
-			},
+			flags.JSON(),
 		},
 		Action: func(c *cli.Context) error {
 			ctx, cancel := signal.NotifyContext(c.Context, os.Interrupt, syscall.SIGTERM)
