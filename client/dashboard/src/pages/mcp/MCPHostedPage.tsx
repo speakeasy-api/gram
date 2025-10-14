@@ -39,19 +39,19 @@ export function MCPPagePreview({
 }) {
   const session = useSession();
   const project = useProject();
-  const { pageUrl } = useMcpUrl(toolset);
+  const { installPageUrl } = useMcpUrl(toolset);
 
   const [rawHtml, setRawHtml] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    if (!pageUrl) return;
+    if (!installPageUrl) return;
 
     setIsLoading(true);
     setError(null);
 
-    fetch(pageUrl, {
+    fetch(installPageUrl, {
       headers: {
         "Gram-Session": session.session,
         "Gram-Project": project.slug,

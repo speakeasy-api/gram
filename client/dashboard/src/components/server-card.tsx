@@ -47,7 +47,7 @@ export function ServerCard({
 }: ServerCardProps) {
   const routes = useRoutes();
   const telemetry = useTelemetry();
-  const { url: mcpUrl, pageUrl } = useMcpUrl(toolset);
+  const { url: mcpUrl, installPageUrl } = useMcpUrl(toolset);
   const updateToolsetMutation = useUpdateToolsetMutation();
   const queryClient = useQueryClient();
   const [isServerEnableDialogOpen, setIsServerEnableDialogOpen] =
@@ -279,38 +279,24 @@ export function ServerCard({
                         <label className="text-xs text-muted-foreground">
                           Install Page
                         </label>
-                        {toolset.mcpIsPublic && pageUrl ? (
+                        {installPageUrl ? (
                           <div className="flex items-center gap-3">
                             <code className="flex-1 text-xs bg-muted/50 px-2 py-1 rounded border text-muted-foreground font-mono overflow-x-auto whitespace-nowrap min-w-0">
-                              {pageUrl}
+                              {installPageUrl}
                             </code>
                             <div className="flex-shrink-0">
-                              <CopyButton text={pageUrl} size="icon-sm" />
+                              <CopyButton
+                                text={installPageUrl}
+                                size="icon-sm"
+                              />
                             </div>
                           </div>
                         ) : (
-                          <>
-                            {pageUrl ? (
-                              <div className="flex items-center gap-3">
-                                <code className="flex-1 text-xs bg-muted/50 px-2 py-1 rounded border text-muted-foreground font-mono overflow-x-auto whitespace-nowrap min-w-0">
-                                  {pageUrl}
-                                </code>
-                                <div className="flex-shrink-0">
-                                  <CopyButton text={pageUrl} size="icon-sm" />
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-3">
-                                <code className="flex-1 text-xs bg-muted/30 px-2 py-1 rounded border border-dashed text-muted-foreground font-mono">
-                                  Will be generated when public
-                                </code>
-                              </div>
-                            )}
-                            <p className="text-xs text-muted-foreground">
-                              Install page will be available once server is made
-                              public
-                            </p>
-                          </>
+                          <div className="flex items-center gap-3">
+                            <code className="flex-1 text-xs bg-muted/30 px-2 py-1 rounded border border-dashed text-muted-foreground font-mono">
+                              No install page available
+                            </code>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -356,13 +342,13 @@ export function ServerCard({
             </Badge>
           </div>
 
-          {/* Install Badge for Public Servers */}
-          {toolset.mcpIsPublic && pageUrl && (
+          {/* Install Badge */}
+          {installPageUrl && (
             <div
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                window.open(pageUrl, "_blank");
+                window.open(installPageUrl, "_blank");
                 telemetry.capture("server_card_action", {
                   action: "install",
                   server: toolset.slug,
