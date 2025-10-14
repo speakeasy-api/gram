@@ -926,6 +926,7 @@ func TestIsValidJSONSchema_PCREPatterns(t *testing.T) {
 				}
 			}`,
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "PCRE negative lookahead - should be allowed",
@@ -939,6 +940,7 @@ func TestIsValidJSONSchema_PCREPatterns(t *testing.T) {
 				}
 			}`,
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "PCRE positive lookahead - should be allowed",
@@ -952,6 +954,7 @@ func TestIsValidJSONSchema_PCREPatterns(t *testing.T) {
 				}
 			}`,
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "PCRE negative lookbehind - should be allowed",
@@ -965,6 +968,7 @@ func TestIsValidJSONSchema_PCREPatterns(t *testing.T) {
 				}
 			}`,
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "PCRE positive lookbehind - should be allowed",
@@ -978,6 +982,7 @@ func TestIsValidJSONSchema_PCREPatterns(t *testing.T) {
 				}
 			}`,
 			shouldError: false,
+			errorMsg:    "",
 		},
 		{
 			name: "invalid regex - unclosed bracket",

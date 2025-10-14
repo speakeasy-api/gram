@@ -40,7 +40,7 @@ func newCompiler() *jsonschema.Compiler {
 			if isPCREOnlyError(err) {
 				return &noopRegexp{pattern: pattern}, nil
 			}
-			return nil, err
+			return nil, fmt.Errorf("invalid regex '%s': %w", pattern, err)
 		}
 		return &regexpAdapter{Regexp: re}, nil
 	})
