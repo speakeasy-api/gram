@@ -20,7 +20,8 @@ function downloadDxtHandler(event) {
       const ourEl = document.querySelector(".install-targets");
       const a = document.createElement("a");
       a.href = url;
-      a.download = "manifest.dxt";
+      let manifest = JSON.parse(manifestContent);
+      a.download = `${manifest.name}.mcpb`;
       ourEl.appendChild(a);
       a.click();
       ourEl.removeChild(a);
