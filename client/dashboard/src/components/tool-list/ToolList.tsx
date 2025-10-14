@@ -343,7 +343,7 @@ function ToolRow({
                   <TooltipContent>
                     <span>
                       This tool has a custom description that will persist even
-                      when the API source is updated.
+                      when the source is updated.
                     </span>
                   </TooltipContent>
                 </Tooltip>
