@@ -92,6 +92,14 @@ func (l *Listener) Stop(ctx context.Context) error {
 	return nil
 }
 
+const authSuccessHTML = `
+	<html>
+		<body>
+			<h1>Authentication successful!</h1>
+			<p>You can close this window.</p>
+		</body>
+	</html>`
+
 func (l *Listener) handleCallback(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.URL.Query().Get("api_key")
 	if apiKey == "" {
@@ -100,10 +108,9 @@ func (l *Listener) handleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	l.apiKey <- apiKey
-
 	w.Header().Set("Content-Type", "text/html")
 	w.WriteHeader(http.StatusOK)
-	_, _ = fmt.Fprint(w, "<html><body><h1>Authentication successful!</h1><p>You can close this window.</p></body></html>")
+	_, _ = fmt.Fprint(w, authSuccessHTML)
 }
 
 func findAvailablePort() (net.Listener, error) {

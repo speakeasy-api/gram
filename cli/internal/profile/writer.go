@@ -94,7 +94,7 @@ func buildProfile(
 }
 
 // UpdateOrCreate updates or creates a profile with the given name, API key,
-// and metadata.
+// and metadata. The saved profile gets set as "current".
 func UpdateOrCreate(
 	apiKey string,
 	apiURL string,

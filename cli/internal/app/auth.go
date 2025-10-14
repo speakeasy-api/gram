@@ -64,6 +64,8 @@ func canRefreshProfile(prof *profile.Profile) bool {
 	return prof != nil && prof.Secret != ""
 }
 
+// mintKey starts a local HTTP listener while the user authenticates in the web
+// app. The user's new API key is returned to the listener as a query param.
 func mintKey(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -197,5 +199,12 @@ func doAuth(c *cli.Context) error {
 		// If refresh failed, fall through to authenticate new profile
 	}
 
-	return authenticateNewProfile(ctx, logger, profileName, apiURL.String(), keysClient, profilePath)
+	return authenticateNewProfile(
+		ctx,
+		logger,
+		profileName,
+		apiURL.String(),
+		keysClient,
+		profilePath,
+	)
 }
