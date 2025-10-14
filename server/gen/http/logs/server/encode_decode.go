@@ -81,7 +81,7 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 			cursor = &cursorRaw
 		}
 		if cursor != nil {
-			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatDateTime))
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
 		}
 		{
 			perPageRaw := qp.Get("per_page")
@@ -313,9 +313,6 @@ func EncodeListLogsError(encoder func(context.Context, http.ResponseWriter) goah
 // marshalLogsHTTPToolLogToHTTPToolLogResponseBody builds a value of type
 // *HTTPToolLogResponseBody from a value of type *logs.HTTPToolLog.
 func marshalLogsHTTPToolLogToHTTPToolLogResponseBody(v *logs.HTTPToolLog) *HTTPToolLogResponseBody {
-	if v == nil {
-		return nil
-	}
 	res := &HTTPToolLogResponseBody{
 		ID:                v.ID,
 		Ts:                v.Ts,
@@ -359,9 +356,6 @@ func marshalLogsHTTPToolLogToHTTPToolLogResponseBody(v *logs.HTTPToolLog) *HTTPT
 // type *PaginationResultResponseBody from a value of type
 // *logs.PaginationResult.
 func marshalLogsPaginationResultToPaginationResultResponseBody(v *logs.PaginationResult) *PaginationResultResponseBody {
-	if v == nil {
-		return nil
-	}
 	res := &PaginationResultResponseBody{
 		PerPage:        v.PerPage,
 		HasNextPage:    v.HasNextPage,

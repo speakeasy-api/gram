@@ -61,7 +61,7 @@ func BuildListLogsPayload(logsListLogsProjectID string, logsListLogsToolID strin
 	{
 		if logsListLogsCursor != "" {
 			cursor = &logsListLogsCursor
-			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatDateTime))
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
 			if err != nil {
 				return nil, err
 			}

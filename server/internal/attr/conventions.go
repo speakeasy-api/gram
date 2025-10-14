@@ -540,8 +540,8 @@ func SlogTsEnd(v time.Time) slog.Attr {
 	return slog.Time(string(PaginationTsEndKey), v)
 }
 
-func Cursor(v time.Time) attribute.KeyValue {
-	return PaginationCursorKey.String(v.Format(time.RFC3339))
+func Cursor(v string) attribute.KeyValue {
+	return PaginationCursorKey.String(v)
 }
 func SlogCursor(v time.Time) slog.Attr {
 	return slog.Time(string(PaginationCursorKey), v)

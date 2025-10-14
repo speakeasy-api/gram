@@ -1448,16 +1448,22 @@ func waitForClickHouseLogs(ctx context.Context, t *testing.T, chClient *toolmetr
 	deadline := time.Now().Add(timeout)
 	pollInterval := 50 * time.Millisecond
 
-	pagination := &toolmetrics.PaginationRequest{
-		PerPage:    10,
-		Sort:       "DESC",
-		Direction:  toolmetrics.Next,
-		PrevCursor: "",
-		NextCursor: "",
+	opts := toolmetrics.ListToolLogsOptions{
+		ProjectID: projectID,
+		TsStart:   time.Now().Add(-1 * time.Hour),
+		TsEnd:     time.Now().Add(1 * time.Hour),
+		Cursor:    uuid.Max.String(),
+		Pagination: &toolmetrics.Pagination{
+			PerPage:    10,
+			Sort:       "DESC",
+			Direction:  toolmetrics.Next,
+			PrevCursor: "",
+			NextCursor: "",
+		},
 	}
 
 	for time.Now().Before(deadline) {
-		logs, err := chClient.List(ctx, projectID, time.Now().Add(-1*time.Hour), time.Now().Add(1*time.Hour), time.Now().Add(1*time.Hour), pagination)
+		logs, err := chClient.List(ctx, opts)
 		require.NoError(t, err)
 		require.NotNil(t, logs)
 

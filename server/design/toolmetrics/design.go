@@ -38,7 +38,7 @@ var _ = Service("logs", func() {
 				Format(FormatDateTime)
 			})
 			Attribute("cursor", String, "Cursor for pagination", func() {
-				Format(FormatDateTime)
+				Format(FormatUUID)
 			})
 			Attribute("per_page", Int, "Number of items per page (1-100)", func() {
 				Minimum(1)
@@ -88,7 +88,7 @@ var _ = Service("logs", func() {
 var ListToolLogResult = Type("ListToolLogResult", func() {
 	Attribute("logs", ArrayOf(HTTPToolLog))
 	Attribute("pagination", PaginationResult)
-	// Required("logs", "pagination")
+	Required("logs", "pagination")
 })
 
 var PaginationResult = Type("PaginationResult", func() {

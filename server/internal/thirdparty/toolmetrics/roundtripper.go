@@ -271,7 +271,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			// - They might contain sensitive information such as PII or API keys, then we'd have to redact them
 			httpRequest := ToolHTTPRequest{
 				ID:                id.String(),
-				Ts:                time.Now().UTC(),
+				Ts:                time.Unix(id.Time().UnixTime()),
 				OrganizationID:    tool.OrganizationID,
 				ProjectID:         tool.ProjectID,
 				DeploymentID:      tool.DeploymentID,

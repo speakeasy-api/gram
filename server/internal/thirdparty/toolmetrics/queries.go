@@ -9,8 +9,7 @@ var listLogsQueryDesc = `
 select * from gram.http_requests_raw
 where project_id = $1
 and ts >= $2
-and ts <= $3
-and ts < $4
+and ts < UUIDv7ToDateTime(toUUID($4))
 order by ts desc
 limit $5
 `
@@ -20,7 +19,7 @@ select * from gram.http_requests_raw
 where project_id = $1
 and ts >= $2
 and ts <= $3
-and ts > $4
+and ts > UUIDv7ToDateTime(toUUID($4))
 order by ts
 limit $5
 `

@@ -15,8 +15,8 @@ import (
 // ListLogsResponseBody is the type of the "logs" service "listLogs" endpoint
 // HTTP response body.
 type ListLogsResponseBody struct {
-	Logs       []*HTTPToolLogResponseBody    `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
-	Pagination *PaginationResultResponseBody `form:"pagination,omitempty" json:"pagination,omitempty" xml:"pagination,omitempty"`
+	Logs       []*HTTPToolLogResponseBody    `form:"logs" json:"logs" xml:"logs"`
+	Pagination *PaginationResultResponseBody `form:"pagination" json:"pagination" xml:"pagination"`
 }
 
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
@@ -260,6 +260,8 @@ func NewListLogsResponseBody(res *logs.ListToolLogResult) *ListLogsResponseBody 
 		for i, val := range res.Logs {
 			body.Logs[i] = marshalLogsHTTPToolLogToHTTPToolLogResponseBody(val)
 		}
+	} else {
+		body.Logs = []*HTTPToolLogResponseBody{}
 	}
 	if res.Pagination != nil {
 		body.Pagination = marshalLogsPaginationResultToPaginationResultResponseBody(res.Pagination)

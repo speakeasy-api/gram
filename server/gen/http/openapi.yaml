@@ -2989,7 +2989,7 @@ paths:
                   required: false
                   type: string
                 - description: Cursor for pagination
-                  format: date-time
+                  format: uuid
                   in: query
                   name: cursor
                   required: false
@@ -3040,6 +3040,9 @@ paths:
                     description: OK response.
                     schema:
                         $ref: '#/definitions/ListToolLogResult'
+                        required:
+                            - logs
+                            - pagination
                 "400":
                     description: Bad Request response.
                     schema:
@@ -27565,6 +27568,9 @@ definitions:
                 has_next_page: false
                 next_page_cursor: "1988-12-01T06:56:21Z"
                 per_page: 7472156312489546152
+        required:
+            - logs
+            - pagination
     ListToolsResult:
         title: ListToolsResult
         type: object

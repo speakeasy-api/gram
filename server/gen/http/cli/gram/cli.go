@@ -3278,7 +3278,7 @@ func logsListLogsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `logs list-logs --project-id "cbea3c1f-953e-401d-8168-6fa1f343f569" --tool-id "3ef9df5b-2c28-43bc-b649-73ae70f942c2" --ts-start "2005-09-26T17:39:17Z" --ts-end "1998-04-10T15:47:39Z" --cursor "1974-04-30T01:20:34Z" --per-page 99 --direction "prev" --sort "DESC" --session-token "Quia fugiat assumenda dolorem eum id." --apikey-token "Doloribus qui aut soluta." --project-slug-input "Dolorem qui accusamus."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `logs list-logs --project-id "cbea3c1f-953e-401d-8168-6fa1f343f569" --tool-id "3ef9df5b-2c28-43bc-b649-73ae70f942c2" --ts-start "2005-09-26T17:39:17Z" --ts-end "1998-04-10T15:47:39Z" --cursor "0a2fa309-1365-4313-b153-336741422c94" --per-page 99 --direction "prev" --sort "DESC" --session-token "Quia fugiat assumenda dolorem eum id." --apikey-token "Doloribus qui aut soluta." --project-slug-input "Dolorem qui accusamus."`)
 }
 
 // toolsUsage displays the usage of the tools command and its subcommands.

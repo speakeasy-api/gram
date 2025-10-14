@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/logs/server"
 	gen "github.com/speakeasy-api/gram/server/gen/logs"
@@ -58,20 +59,30 @@ func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (re
 	// Parse time parameters with defaults
 	tsStart := parseTimeOrDefault(payload.TsStart, time.Now().Add(-48*time.Hour).UTC())
 	tsEnd := parseTimeOrDefault(payload.TsEnd, time.Now().UTC())
-	cursor := parseTimeOrDefault(payload.Cursor, time.Now().UTC())
 
-	// Build pagination request
-	pagination := &tm.PaginationRequest{
-		PerPage:    payload.PerPage,
-		Direction:  tm.PageDirection(payload.Direction),
-		Sort:       payload.Sort,
-		PrevCursor: "",
-		NextCursor: "",
+	id, err := uuid.NewV7()
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error generating default cursor").
+			Log(ctx, s.logger, attr.SlogProjectID(payload.ProjectID))
 	}
-	pagination.SetDefaults()
+
+	options := tm.ListToolLogsOptions{
+		ProjectID: payload.ProjectID,
+		TsStart:   tsStart,
+		TsEnd:     tsEnd,
+		Cursor:    conv.PtrValOr(payload.Cursor, id.String()),
+		Pagination: &tm.Pagination{
+			PerPage:    payload.PerPage,
+			Sort:       payload.Sort,
+			Direction:  tm.PageDirection(payload.Direction),
+			PrevCursor: "",
+			NextCursor: "",
+		},
+	}
+	options.SetDefaults()
 
 	// Query logs from ClickHouse
-	result, err := s.tcm.List(ctx, payload.ProjectID, tsStart, tsEnd, cursor, pagination)
+	result, err := s.tcm.List(ctx, options)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing logs").
 			Log(ctx, s.logger, attr.SlogProjectID(payload.ProjectID))
@@ -86,8 +97,7 @@ func (s Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (re
 	// Convert pagination metadata to API format
 	var nextPageCursor *string
 	if result.Pagination.NextPageCursor != nil {
-		c := result.Pagination.NextPageCursor.Format(time.RFC3339)
-		nextPageCursor = &c
+		nextPageCursor = result.Pagination.NextPageCursor
 	}
 
 	pp := &gen.PaginationResult{

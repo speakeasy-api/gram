@@ -111,10 +111,6 @@ type insertLogOptions struct {
 func insertTestLogs(ctx context.Context, t *testing.T, chClient *toolmetrics.ClickhouseClient, opts insertLogOptions) {
 	t.Helper()
 
-	if opts.baseTime.IsZero() {
-		opts.baseTime = time.Now().UTC().Add(-10 * time.Hour)
-	}
-
 	if opts.httpMethod == "" {
 		opts.httpMethod = "GET"
 	}
@@ -138,8 +134,16 @@ func insertTestLogs(ctx context.Context, t *testing.T, chClient *toolmetrics.Cli
 	}
 
 	for i := 0; i < opts.count; i++ {
-		err := chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
-			ID:                uuid.New().String(),
+		id, err := uuid.NewV7()
+		require.NoError(t, err)
+
+		if opts.baseTime.IsZero() {
+			opts.baseTime = time.Unix(id.Time().UnixTime()).
+				UTC().Add(-10 * time.Minute)
+		}
+
+		err = chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
+			ID:                id.String(),
 			Ts:                opts.baseTime.Add(time.Duration(i) * time.Minute),
 			OrganizationID:    opts.orgID,
 			ProjectID:         opts.projectID,
@@ -147,8 +151,8 @@ func insertTestLogs(ctx context.Context, t *testing.T, chClient *toolmetrics.Cli
 			ToolID:            opts.toolID,
 			ToolURN:           opts.toolURN,
 			ToolType:          toolmetrics.HTTPToolType,
-			TraceID:           uuid.New().String()[:32],
-			SpanID:            uuid.New().String()[:16],
+			TraceID:           id.String()[:32],
+			SpanID:            id.String()[:16],
 			HTTPMethod:        opts.httpMethod,
 			HTTPRoute:         opts.httpRoute,
 			StatusCode:        int64(opts.statusCode),
@@ -545,10 +549,11 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 	traceID := "0123456789abcdef0123456789abcdef"
 	spanID := "0123456789abcdef"
 
-	baseTime := time.Now().UTC().Add(-10 * time.Minute)
-
 	id, err := uuid.NewV7()
 	require.NoError(t, err)
+
+	baseTime := time.Unix(id.Time().UnixTime()).
+		UTC().Add(-10 * time.Minute)
 
 	err = ti.chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
 		ID:                id.String(),

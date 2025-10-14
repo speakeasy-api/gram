@@ -63,42 +63,45 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context, tracerProvider trace.TracerProvider, features feature.Provider) (tm.ToolMetricsProvider, func(context.Context) error, error) {
 	nilFunc := func(context.Context) error { return nil }
 
+	host := c.String("clickhouse-host")
+	database := c.String("clickhouse-database")
+	username := c.String("clickhouse-username")
+	password := c.String("clickhouse-password")
+	nativePort := c.String("clickhouse-native-port")
+
 	// validate cli args
 	err := inv.Check("clickhouse config options",
-		"clickhouse host is not set", c.String("clickhouse-host") == "",
-		"clickhouse database is not set", c.String("clickhouse-database") == "",
-		"clickhouse username is not set", c.String("clickhouse-username") == "",
-		"clickhouse password is not set", c.String("clickhouse-password") == "",
-		"clickhouse native port is not set", c.String("clickhouse-native-port") == "",
-		"clickhouse http port is not set", c.String("clickhouse-http-port") == "",
+		"clickhouse host is not set", host != "",
+		"clickhouse database is not set", database != "",
+		"clickhouse username is not set", username != "",
+		"clickhouse password is not set", password != "",
+		"clickhouse native port is not set", nativePort != "",
 	)
 	if err != nil {
-		return nil, nilFunc, fmt.Errorf("clickhouse insecure flag is not set: %w", err)
+		return nil, nilFunc, fmt.Errorf("some clickhouse config values are not set: %w", err)
 	}
 
 	conn, err := clickhouse.Open(&clickhouse.Options{
 		Protocol: clickhouse.Native,
-		TLS: &tls.Config{
-			// #nosec G402 -- this will be false by default and only set to true if the user explicitly wants to use an insecure connection
-			InsecureSkipVerify: c.Bool("clickhouse-insecure"),
-		},
-		Addr: []string{fmt.Sprintf("%s:%s", c.String("clickhouse-host"), c.String("clickhouse-native-port"))},
+		Addr:     []string{fmt.Sprintf("%s:%s", host, nativePort)},
 		Auth: clickhouse.Auth{
-			Database: c.String("clickhouse-database"),
-			Username: c.String("clickhouse-username"),
-			Password: c.String("clickhouse-password"),
+			Database: database,
+			Username: username,
+			Password: password,
+		},
+		Debug: true, // I'll remove this before merging
+		Debugf: func(format string, v ...interface{}) {
+			logger.InfoContext(ctx, fmt.Sprintf(format, v...))
 		},
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
 		},
 	})
 	if err != nil {
-		logger.WarnContext(ctx, "error connecting to clickhouse; falling back to stub tool call metrics client")
 		return nil, nilFunc, fmt.Errorf("failed to connect to clickhouse: %w", err)
 	}
 
 	if err = conn.Ping(ctx); err != nil {
-		logger.WarnContext(ctx, "failed to ping clickhouse; falling back to stub tool call metrics client", attr.SlogError(err))
 		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse: %w", err)
 	}
 

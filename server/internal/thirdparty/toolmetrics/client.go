@@ -8,6 +8,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -39,17 +40,25 @@ func (t *ToolType) Scan(src interface{}) error {
 	}
 }
 
+type ListToolLogsOptions struct {
+	ProjectID string
+	TsStart   time.Time
+	TsEnd     time.Time
+	Cursor    string
+	*Pagination
+}
+
 type ToolMetricsProvider interface {
 	// List tool call logs
-	List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) (*ListResult, error)
+	List(ctx context.Context, opts ListToolLogsOptions) (*ListResult, error)
 	// Log tool call request/response
 	Log(context.Context, ToolHTTPRequest) error
 }
 
 type PaginationMetadata struct {
-	PerPage        int        `json:"per_page"`
-	HasNextPage    bool       `json:"has_next_page"`
-	NextPageCursor *time.Time `json:"next_page_cursor,omitempty"`
+	PerPage        int     `json:"per_page"`
+	HasNextPage    bool    `json:"has_next_page"`
+	NextPageCursor *string `json:"next_page_cursor,omitempty"`
 }
 
 type ListResult struct {
@@ -81,7 +90,13 @@ type ClickhouseClient struct {
 	ShouldFlag func(ctx context.Context, log ToolHTTPRequest) (bool, error)
 }
 
-func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, tsEnd, cursor time.Time, pagination Pageable) (*ListResult, error) {
+func (c *ClickhouseClient) List(ctx context.Context, opts ListToolLogsOptions) (*ListResult, error) {
+	projectID := opts.ProjectID
+	tsStart := opts.TsStart
+	tsEnd := opts.TsEnd
+	cursor := opts.Cursor
+	pagination := opts.Pagination
+
 	ctx, span := c.tracer.Start(ctx, "clickhouse.list_logs",
 		trace.WithAttributes(
 			attr.ProjectID(projectID),
@@ -102,7 +117,8 @@ func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, 
 	}
 
 	perPage := pagination.Limit() - 1 // Remove the +1 for actual page size
-	rows, err := c.conn.Query(ctx, query, projectID,
+	rows, err := c.conn.Query(ctx, query,
+		projectID,
 		tsStart,
 		tsEnd,
 		cursor,
@@ -149,18 +165,15 @@ func (c *ClickhouseClient) List(ctx context.Context, projectID string, tsStart, 
 	// Calculate pagination metadata
 	hasNextPage := len(results) > perPage
 
+	// the next cursor is the id of the last record
+	var nextPageCursor *string
+	if len(results) > 0 && hasNextPage {
+		nextPageCursor = conv.Ptr(results[len(results)-1].ID)
+	}
+
 	// Trim to actual page size if we fetched extra for detection
 	if hasNextPage {
 		results = results[:perPage]
-	}
-
-	var nextPageCursor *time.Time
-	if len(results) > 0 {
-		// Next cursor is the timestamp of the last record
-		if hasNextPage {
-			lastTs := results[len(results)-1].Ts
-			nextPageCursor = &lastTs
-		}
 	}
 
 	queryDuration := time.Since(startTime)

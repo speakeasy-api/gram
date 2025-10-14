@@ -3745,7 +3745,7 @@ paths:
                   name: cursor
                   schema:
                     description: Cursor for pagination
-                    format: date-time
+                    format: uuid
                     type: string
                 - allowEmptyValue: true
                   description: Number of items per page (1-100)
@@ -9540,6 +9540,9 @@ components:
                         $ref: '#/components/schemas/HTTPToolLog'
                 pagination:
                     $ref: '#/components/schemas/PaginationResult'
+            required:
+                - logs
+                - pagination
         ListToolsResult:
             type: object
             properties:

@@ -255,15 +255,11 @@ type PaginationResultResponseBody struct {
 // result from a HTTP "OK" response.
 func NewListLogsListToolLogResultOK(body *ListLogsResponseBody) *logs.ListToolLogResult {
 	v := &logs.ListToolLogResult{}
-	if body.Logs != nil {
-		v.Logs = make([]*logs.HTTPToolLog, len(body.Logs))
-		for i, val := range body.Logs {
-			v.Logs[i] = unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(val)
-		}
+	v.Logs = make([]*logs.HTTPToolLog, len(body.Logs))
+	for i, val := range body.Logs {
+		v.Logs[i] = unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(val)
 	}
-	if body.Pagination != nil {
-		v.Pagination = unmarshalPaginationResultResponseBodyToLogsPaginationResult(body.Pagination)
-	}
+	v.Pagination = unmarshalPaginationResultResponseBodyToLogsPaginationResult(body.Pagination)
 
 	return v
 }
@@ -417,6 +413,12 @@ func NewListLogsGatewayError(body *ListLogsGatewayErrorResponseBody) *goa.Servic
 // ValidateListLogsResponseBody runs the validations defined on
 // ListLogsResponseBody
 func ValidateListLogsResponseBody(body *ListLogsResponseBody) (err error) {
+	if body.Logs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("logs", "body"))
+	}
+	if body.Pagination == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("pagination", "body"))
+	}
 	for _, e := range body.Logs {
 		if e != nil {
 			if err2 := ValidateHTTPToolLogResponseBody(e); err2 != nil {

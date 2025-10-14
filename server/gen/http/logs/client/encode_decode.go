@@ -278,9 +278,6 @@ func DecodeListLogsResponse(decoder func(*http.Response) goahttp.Decoder, restor
 // unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog builds a value of type
 // *logs.HTTPToolLog from a value of type *HTTPToolLogResponseBody.
 func unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(v *HTTPToolLogResponseBody) *logs.HTTPToolLog {
-	if v == nil {
-		return nil
-	}
 	res := &logs.HTTPToolLog{
 		ID:                v.ID,
 		Ts:                *v.Ts,
@@ -324,9 +321,6 @@ func unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(v *HTTPToolLogResponseBod
 // of type *logs.PaginationResult from a value of type
 // *PaginationResultResponseBody.
 func unmarshalPaginationResultResponseBodyToLogsPaginationResult(v *PaginationResultResponseBody) *logs.PaginationResult {
-	if v == nil {
-		return nil
-	}
 	res := &logs.PaginationResult{
 		PerPage:        v.PerPage,
 		HasNextPage:    v.HasNextPage,
