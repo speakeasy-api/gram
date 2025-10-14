@@ -409,7 +409,9 @@ func (s *Service) loadToolsetFromContextAndSlug(ctx context.Context, mcpSlug str
 			McpSlug:        conv.ToPGText(mcpSlug),
 			CustomDomainID: uuid.NullUUID{UUID: *domainID, Valid: true},
 		})
-	} else {
+	}
+
+	if toolsetErr != nil {
 		toolset, toolsetErr = s.toolsetRepo.GetToolsetByMcpSlug(ctx, conv.ToPGText(mcpSlug))
 	}
 
