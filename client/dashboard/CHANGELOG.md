@@ -1,5 +1,16 @@
 # @gram/dashboard
 
+## 0.14.0
+
+### Minor Changes
+
+- 9df917a: Adds the ability for users of private servers to load the install page for easy user install of MCPs.
+
+### Patch Changes
+
+- f7a157d: Fix to set srcToolUrn when updating variations
+- 9df917a: fix: update to use mcpb instead of dxt nomenclature for MCP installation pages
+
 ## 0.13.0
 
 ### Minor Changes

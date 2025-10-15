@@ -1,5 +1,12 @@
 # @gram/cli
 
+## 0.9.0
+
+### Minor Changes
+
+- 6ac98df: Add whoami command to easily view details about the current profile specified in $HOME/.gram/profile.json
+- 1470223: Support automated authentication for any user profile via `gram auth`
+
 ## 0.8.0
 
 ### Minor Changes
