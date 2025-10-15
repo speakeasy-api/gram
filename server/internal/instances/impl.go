@@ -219,7 +219,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		sc := security.APIKeyScheme{
 			Name:           auth.KeySecurityScheme,
-			RequiredScopes: []string{"consumer"},
+			RequiredScopes: []string{},
 			Scopes:         []string{},
 		}
 		ctx, err = s.auth.Authorize(r.Context(), r.Header.Get(auth.APIKeyHeader), &sc)

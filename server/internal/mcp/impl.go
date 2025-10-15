@@ -360,9 +360,11 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 	default:
 		if token != "" {
 			// see if we are authenticated with our own key
+			// a producer or consumer key should be able to do this with producer being a superset
+			// therefore we don't ask for a specific scope right now (including both would require both) TBD if this gets adjusted later
 			sc := security.APIKeyScheme{
 				Name:           auth.KeySecurityScheme,
-				RequiredScopes: []string{"consumer"},
+				RequiredScopes: []string{},
 				Scopes:         []string{},
 			}
 			ctx, err = s.auth.Authorize(ctx, token, &sc)
@@ -494,9 +496,12 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 		return oops.E(oops.CodeBadRequest, nil, "an environment slug must be provided")
 	}
 
+	// authenticate with our own key
+	// a producer or consumer key should be able to do this with producer being a superset
+	// therefore we don't ask for a specific scope right now (including both would require both) TBD if this gets adjusted later
 	sc := security.APIKeyScheme{
 		Name:           auth.KeySecurityScheme,
-		Scopes:         []string{"consumer"},
+		Scopes:         []string{},
 		RequiredScopes: []string{},
 	}
 	token := r.Header.Get("Authorization")
