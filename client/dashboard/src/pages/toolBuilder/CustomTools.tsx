@@ -99,7 +99,7 @@ export function CustomToolCard({ template }: { template: PromptTemplate }) {
 
   return (
     <routes.customTools.toolBuilder.Link
-      params={[template.name]}
+      params={[template.canonicalName]}
       className="hover:no-underline"
     >
       <Card>

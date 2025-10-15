@@ -34,6 +34,8 @@ import {
 } from "@gram/client/models/components";
 import {
   invalidateAllListToolsets,
+  invalidateAllTemplate,
+  invalidateAllTemplates,
   invalidateTemplate,
   useListToolsetsSuspense,
   useTemplateSuspense,
@@ -334,6 +336,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   };
 
   const anyChanges =
+    name !== initial.name ||
     description !== initial.description ||
     purpose !== initial.purpose ||
     inputs.length !== initial.inputs.length ||
@@ -367,7 +370,8 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
 
   const { mutate: updatePrompt } = useUpdateTemplateMutation({
     onSettled: () => {
-      invalidateTemplate(queryClient, [{ name }]);
+      invalidateAllTemplate(queryClient);
+      invalidateAllTemplates(queryClient);
     },
     onError: (error) => {
       handleApiError(error, "Failed to update tool");
@@ -407,6 +411,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
               request: {
                 updatePromptTemplateForm: {
                   id: initial.id,
+                  name,
                   description,
                   prompt: higherOrderToolToJSON(higherOrderTool),
                   arguments: JSON.stringify(argsJsonSchema),
@@ -470,7 +475,6 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
       value={name}
       onSubmit={setName}
       validate={validateName}
-      disabled={!!initial.id}
     >
       <Heading variant="h3" className="normal-case">
         {name}

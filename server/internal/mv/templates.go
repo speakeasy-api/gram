@@ -52,7 +52,13 @@ func DescribePromptTemplate(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
 	}
 
-	return fromPromptTemplateRow(row), nil
+	pt := fromPromptTemplateRow(row)
+	err = ApplyVariations(ctx, logger, tx, pid, []*types.Tool{{PromptTemplate: pt}})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to prompt template").Log(ctx, logger)
+	}
+
+	return pt, nil
 }
 
 func DescribePromptTemplates(
@@ -76,12 +82,17 @@ func DescribePromptTemplates(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
 	}
 
-	pt := make([]*types.PromptTemplate, 0, len(rows))
+  templates := make([]*types.PromptTemplate, 0, len(rows))
 	for _, row := range rows {
-		pt = append(pt, fromPromptTemplateRow(row))
+		pt := fromPromptTemplateRow(row)
+		err = ApplyVariations(ctx, logger, tx, pid, []*types.Tool{{PromptTemplate: pt}})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to prompt template").Log(ctx, logger)
+		}
+		templates = append(templates, pt)
 	}
 
-	return pt, nil
+	return templates, nil
 }
 
 func fromPromptTemplateRow(row repo.PromptTemplate) *types.PromptTemplate {
