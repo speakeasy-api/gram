@@ -453,7 +453,7 @@ type SlackAppConnection struct {
 type ToolVariation struct {
 	ID            uuid.UUID
 	GroupID       uuid.UUID
-	SrcToolUrn    urn.Tool
+	SrcToolUrn    pgtype.Text
 	SrcToolName   string
 	Confirm       pgtype.Text
 	ConfirmPrompt pgtype.Text

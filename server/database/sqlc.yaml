@@ -41,10 +41,6 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/conv
           type: Secret
-      - column: tool_variations.src_tool_urn
-        go_type:
-          import: github.com/speakeasy-api/gram/server/internal/urn
-          type: Tool
 
 sql:
   - schema: schema.sql
