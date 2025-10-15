@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
+	"github.com/superfly/fly-go/tokens"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/otel"
@@ -39,7 +40,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/functions"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
@@ -370,5 +374,78 @@ func newBillingProvider(
 		return stub, stub, nil
 	default:
 		return nil, nil, fmt.Errorf("billing provider is not configured")
+	}
+}
+
+func newFunctionOrchestrator(
+	c *cli.Context,
+	logger *slog.Logger,
+	tracerProvider trace.TracerProvider,
+	db *pgxpool.Pool,
+	assetStore assets.BlobStore,
+	enc *encryption.Client,
+) (functions.Orchestrator, func(context.Context) error, error) {
+	switch provider := c.String("functions-provider"); provider {
+	case "local":
+		codeRootDir := filepath.Clean(c.String("functions-local-runner-root"))
+		if codeRootDir == "" {
+			return nil, nil, fmt.Errorf("--functions-local-runner-root must be set in local environment")
+		}
+
+		if err := os.MkdirAll(codeRootDir, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
+			return nil, nil, fmt.Errorf("create local functions root directory: %w", err)
+		}
+
+		codeRoot, err := os.OpenRoot(codeRootDir)
+		if err != nil {
+			return nil, nil, fmt.Errorf("open local functions root directory: %w", err)
+		}
+
+		shutdown := func(ctx context.Context) error {
+			return codeRoot.Close()
+		}
+
+		return functions.NewLocalRunner(codeRoot), shutdown, nil
+	case "flyio":
+		tokenstr := c.String("functions-flyio-api-token")
+		ociImage := c.String("functions-runner-oci-image")
+		defaultOrg := c.String("functions-flyio-org")
+		defaultRegion := c.String("functions-flyio-region")
+
+		if err := inv.Check(
+			"flyio flags",
+			"token is set", tokenstr != "",
+			"oci image is set", ociImage != "",
+			"default org is set", defaultOrg != "",
+			"default region is set", defaultRegion != "",
+		); err != nil {
+			return nil, nil, fmt.Errorf("invalid configuration for functions: %w", err)
+		}
+
+		tpl := fmt.Sprintf("%s:{{.Version}}-{{.Runtime.OCITag}}", ociImage)
+		imgSelector, err := functions.NewTemplateImageSelector(tpl)
+		if err != nil {
+			return nil, nil, fmt.Errorf("create functions image selector: %w", err)
+		}
+
+		return functions.NewFlyRunner(
+			logger,
+			tracerProvider,
+			db,
+			assetStore,
+			imgSelector,
+			enc,
+			functions.FlyRunnerOptions{
+				ServiceName:        "gram",
+				ServiceVersion:     GitSHA,
+				FlyTokens:          tokens.Parse(tokenstr),
+				DefaultFlyOrg:      defaultOrg,
+				DefaultFlyRegion:   defaultRegion,
+				FlyAPIURL:          "", // use default
+				FlyMachinesBaseURL: "", // use default
+			},
+		), nil, nil
+	default:
+		return nil, nil, fmt.Errorf("unrecognized functions provider: %s", provider)
 	}
 }

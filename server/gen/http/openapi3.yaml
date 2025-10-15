@@ -10458,6 +10458,9 @@ components:
                 src_tool_name:
                     type: string
                     description: The name of the source tool
+                src_tool_urn:
+                    type: string
+                    description: The URN of the source tool
                 summarizer:
                     type: string
                     description: The summarizer of the tool variation
@@ -10468,6 +10471,7 @@ components:
                 - id
                 - group_id
                 - src_tool_name
+                - src_tool_urn
                 - created_at
                 - updated_at
         Toolset:
@@ -10982,6 +10986,9 @@ components:
                 src_tool_name:
                     type: string
                     description: The name of the source tool
+                src_tool_urn:
+                    type: string
+                    description: The URN of the source tool
                 summarizer:
                     type: string
                     description: The summarizer of the tool variation
@@ -10995,6 +11002,7 @@ components:
                     description: The tags of the tool variation
             required:
                 - src_tool_name
+                - src_tool_urn
         UpsertGlobalToolVariationResult:
             type: object
             properties:

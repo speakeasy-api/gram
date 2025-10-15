@@ -39,7 +39,7 @@ func (q *Queries) CheckMCPSlugAvailability(ctx context.Context, mcpSlug pgtype.T
 
 const clearToolsetOAuthServers = `-- name: ClearToolsetOAuthServers :one
 UPDATE toolsets
-SET 
+SET
     external_oauth_server_id = NULL
   , oauth_proxy_server_id = NULL
   , updated_at = clock_timestamp()
@@ -334,7 +334,7 @@ func (q *Queries) GetPromptTemplateUrnsByNames(ctx context.Context, arg GetPromp
 
 const getPromptTemplatesForToolset = `-- name: GetPromptTemplatesForToolset :many
 WITH ranked_templates AS (
-  SELECT 
+  SELECT
     pt.id, pt.tool_urn, pt.project_id, pt.history_id, pt.predecessor_id, pt.name, pt.description, pt.arguments, pt.prompt, pt.engine, pt.kind, pt.tools_hint, pt.created_at, pt.updated_at, pt.deleted_at, pt.deleted,
     ROW_NUMBER() OVER (PARTITION BY pt.history_id ORDER BY pt.id DESC) as rn
   FROM prompt_templates pt
@@ -345,7 +345,7 @@ SELECT rel.id as tp_id, rt.id, rt.tool_urn, rt.project_id, rt.history_id, rt.pre
 FROM toolset_prompts rel
 JOIN ranked_templates rt ON (
   (rel.prompt_template_id IS NOT NULL AND rt.id = rel.prompt_template_id)
-  OR 
+  OR
   (rel.prompt_template_id IS NULL AND rt.history_id = rel.prompt_history_id AND rt.rn = 1)
 )
 WHERE rel.toolset_id = $1
@@ -655,7 +655,7 @@ func (q *Queries) ListToolsetsByProject(ctx context.Context, projectID uuid.UUID
 
 const updateToolset = `-- name: UpdateToolset :one
 UPDATE toolsets
-SET 
+SET
     name = COALESCE($1, name)
   , description = COALESCE($2, description)
   , default_environment_slug = COALESCE($3, default_environment_slug)
@@ -717,7 +717,7 @@ func (q *Queries) UpdateToolset(ctx context.Context, arg UpdateToolsetParams) (T
 
 const updateToolsetExternalOAuthServer = `-- name: UpdateToolsetExternalOAuthServer :one
 UPDATE toolsets
-SET 
+SET
     external_oauth_server_id = $1
   , updated_at = clock_timestamp()
 WHERE slug = $2 AND project_id = $3

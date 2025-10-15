@@ -21,6 +21,7 @@ func TestVariationsService_DeleteGlobal_Success(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
+		SrcToolUrn:       "tool:http:test:delete-test-tool",
 		SrcToolName:      "",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
@@ -182,6 +183,7 @@ func TestVariationsService_DeleteGlobal_MultipleDeleteSameID(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
+		SrcToolUrn:       "tool:http:test:delete-twice-tool",
 		SrcToolName:      "delete-twice-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
@@ -232,6 +234,7 @@ func TestVariationsService_DeleteGlobal_DeleteMultipleVariations(t *testing.T) {
 			ApikeyToken:      nil,
 			SessionToken:     nil,
 			ProjectSlugInput: nil,
+			SrcToolUrn:       "tool:http:test:" + toolName,
 			SrcToolName:      toolName,
 			Confirm:          nil,
 			ConfirmPrompt:    nil,
@@ -285,6 +288,7 @@ func TestVariationsService_DeleteGlobal_SoftDelete(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
+		SrcToolUrn:       "tool:http:test:soft-delete-tool",
 		SrcToolName:      "soft-delete-tool",
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
@@ -314,6 +318,7 @@ func TestVariationsService_DeleteGlobal_SoftDelete(t *testing.T) {
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
+		SrcToolUrn:       "tool:http:test:soft-delete-tool",
 		SrcToolName:      "soft-delete-tool", // Same tool name
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
@@ -358,6 +363,7 @@ func createUpsertPayload(srcToolName string, overrides *gen.UpsertGlobalPayload)
 		ApikeyToken:      nil,
 		SessionToken:     nil,
 		ProjectSlugInput: nil,
+		SrcToolUrn:       "tool:http:test:" + srcToolName,
 		SrcToolName:      srcToolName,
 		Confirm:          nil,
 		ConfirmPrompt:    nil,
@@ -369,6 +375,9 @@ func createUpsertPayload(srcToolName string, overrides *gen.UpsertGlobalPayload)
 	}
 
 	if overrides != nil {
+		if overrides.SrcToolUrn != "" {
+			payload.SrcToolUrn = overrides.SrcToolUrn
+		}
 		if overrides.Confirm != nil {
 			payload.Confirm = overrides.Confirm
 		}

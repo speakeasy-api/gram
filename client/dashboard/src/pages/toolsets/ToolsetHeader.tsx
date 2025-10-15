@@ -10,6 +10,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useToolset } from "@/hooks/toolTypes";
 import { Toolset } from "@/lib/toolTypes";
 import { Stack } from "@speakeasy-api/moonshine";
+import { useCallback } from "react";
 
 export const ToolsetHeader = ({
   toolsetSlug,
@@ -21,21 +22,24 @@ export const ToolsetHeader = ({
   const client = useSdkClient();
   const { data: toolset, refetch } = useToolset(toolsetSlug);
 
-  const updateToolset = async (changes: Partial<Toolset>) => {
-    if (!toolset) {
-      return;
-    }
+  const updateToolset = useCallback(
+    async (changes: Partial<Toolset>) => {
+      if (!toolset) {
+        return;
+      }
 
-    await client.toolsets.updateBySlug({
-      slug: toolset.slug,
-      updateToolsetRequestBody: {
-        name: changes.name,
-        description: changes.description,
-      },
-    });
+      await client.toolsets.updateBySlug({
+        slug: toolset.slug,
+        updateToolsetRequestBody: {
+          name: changes.name,
+          description: changes.description,
+        },
+      });
 
-    refetch?.();
-  };
+      refetch?.();
+    },
+    [toolset, client, refetch],
+  );
 
   return (
     <Stack gap={2} className="mb-4">
@@ -71,11 +75,9 @@ export const ToolsetHeader = ({
         <Stack direction="horizontal" gap={2}>
           <ToolCollectionBadge
             toolNames={toolset?.tools.map((t) => t.name) ?? []}
-            size="md"
-            variant="secondary"
-            warnOnTooManyTools
+            variant="neutral"
           />
-          <ToolsetPromptsBadge toolset={toolset} size="md" variant="outline" />
+          <ToolsetPromptsBadge toolset={toolset} variant="neutral" />
         </Stack>
       </div>
     </Stack>

@@ -1,16 +1,36 @@
 /**
- *
- * @param {string} name
- * @param {*} input
+ * @param {{
+ *   name: "ping",
+ *   input: never
+ * } | {
+ *   name: "get-weather",
+ *   input: { city: string }
+ * } | {
+ *  name: "list-products",
+ *  input: { cursor?: string }
+ * } | {
+ *  name: "proxy",
+ *  input: { url: string }
+ * } | {
+ *  name: "create-charge",
+ *  input: { amount: number }
+ * } | {
+ *  name: "null-tool",
+ *  input: null
+ * } | {
+ *  name: "fail-tool",
+ *  input: never
+ * }} call
+ * @returns
  */
-export async function handleToolCall(name, input) {
+export async function handleToolCall({ name, input }) {
   switch (name) {
     case "ping":
       return new Response(JSON.stringify({ response: "pong" }));
     case "get-weather":
       return new Response(
         JSON.stringify({ location: input.city, temperature: "20C" }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
+        { status: 200, headers: { "Content-Type": "application/json" } },
       );
     case "list-products":
       return new Response(
@@ -28,7 +48,7 @@ export async function handleToolCall(name, input) {
             "Content-Type": "application/json",
             "X-Next-Cursor": "4",
           },
-        }
+        },
       );
     case "proxy":
       return await fetch(input.url);
@@ -57,7 +77,7 @@ function createCharge(input) {
   } else {
     return new Response(
       JSON.stringify({ chargeId: "ch_12345", amount: input.amount }),
-      { status: 200, headers: { "Content-Type": "application/json" } }
+      { status: 200, headers: { "Content-Type": "application/json" } },
     );
   }
 }

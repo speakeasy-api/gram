@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -900,6 +901,218 @@ func TestIsValidJSONSchema_FromOpenAPIFixture(t *testing.T) {
 					}
 				})
 			}
+		})
+	}
+}
+
+func TestIsValidJSONSchema_PCREPatterns(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		schema      string
+		shouldError bool
+		errorMsg    string
+	}{
+		{
+			name: "valid RE2 pattern",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"email": {
+						"type": "string",
+						"pattern": "^[a-z]+@[a-z]+\\.[a-z]+$"
+					}
+				}
+			}`,
+			shouldError: false,
+			errorMsg:    "",
+		},
+		{
+			name: "PCRE negative lookahead - should be allowed",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"amount": {
+						"type": "string",
+						"pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,5}|(?=[\\d.]{1,18}0*$)\\d{0,5}\\.\\d{0,12}0*$)"
+					}
+				}
+			}`,
+			shouldError: false,
+			errorMsg:    "",
+		},
+		{
+			name: "PCRE positive lookahead - should be allowed",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"password": {
+						"type": "string",
+						"pattern": "^(?=.*[a-z])(?=.*[A-Z]).+$"
+					}
+				}
+			}`,
+			shouldError: false,
+			errorMsg:    "",
+		},
+		{
+			name: "PCRE negative lookbehind - should be allowed",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"text": {
+						"type": "string",
+						"pattern": "(?<!foo)bar"
+					}
+				}
+			}`,
+			shouldError: false,
+			errorMsg:    "",
+		},
+		{
+			name: "PCRE positive lookbehind - should be allowed",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"text": {
+						"type": "string",
+						"pattern": "(?<=foo)bar"
+					}
+				}
+			}`,
+			shouldError: false,
+			errorMsg:    "",
+		},
+		{
+			name: "invalid regex - unclosed bracket",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"bad": {
+						"type": "string",
+						"pattern": "[unclosed"
+					}
+				}
+			}`,
+			shouldError: true,
+			errorMsg:    "compile json schema",
+		},
+		{
+			name: "invalid regex - unclosed paren",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"bad": {
+						"type": "string",
+						"pattern": "(unclosed"
+					}
+				}
+			}`,
+			shouldError: true,
+			errorMsg:    "compile json schema",
+		},
+		{
+			name: "invalid regex - bad repetition",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"bad": {
+						"type": "string",
+						"pattern": "*invalid"
+					}
+				}
+			}`,
+			shouldError: true,
+			errorMsg:    "compile json schema",
+		},
+		{
+			name: "invalid regex - invalid escape",
+			schema: `{
+				"type": "object",
+				"properties": {
+					"bad": {
+						"type": "string",
+						"pattern": "\\k<invalid>"
+					}
+				}
+			}`,
+			shouldError: true,
+			errorMsg:    "compile json schema",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := IsValidJSONSchema([]byte(tt.schema))
+			if tt.shouldError {
+				require.Error(t, err, "expected error for invalid pattern")
+				require.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				require.NoError(t, err, "expected no error for valid pattern")
+			}
+		})
+	}
+}
+
+func TestIsPCREOnlyError(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		pattern  string
+		expected bool
+	}{
+		{
+			name:     "negative lookahead",
+			pattern:  "(?!test)",
+			expected: true,
+		},
+		{
+			name:     "positive lookahead",
+			pattern:  "(?=test)",
+			expected: true,
+		},
+		{
+			name:     "negative lookbehind",
+			pattern:  "(?<!test)",
+			expected: true,
+		},
+		{
+			name:     "positive lookbehind",
+			pattern:  "(?<=test)",
+			expected: true,
+		},
+		{
+			name:     "unclosed bracket - not PCRE",
+			pattern:  "[unclosed",
+			expected: false,
+		},
+		{
+			name:     "unclosed paren - not PCRE",
+			pattern:  "(unclosed",
+			expected: false,
+		},
+		{
+			name:     "bad repetition - not PCRE",
+			pattern:  "*invalid",
+			expected: false,
+		},
+		{
+			name:     "invalid escape - not PCRE",
+			pattern:  "\\k<invalid>",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := regexp.Compile(tt.pattern)
+			require.Error(t, err, "pattern should fail to compile")
+			result := isPCREOnlyError(err)
+			require.Equal(t, tt.expected, result)
 		})
 	}
 }

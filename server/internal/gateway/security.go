@@ -94,6 +94,16 @@ func processSecurity(
 				logger.ErrorContext(ctx, "unsupported http security scheme", attr.SlogSecurityScheme(security.Scheme.Value))
 				continue
 			}
+		case "openIdConnect":
+			for _, envVar := range security.EnvVariables {
+				if strings.Contains(envVar, "ACCESS_TOKEN") {
+					if token := envVars.Get(envVar); token == "" {
+						logger.ErrorContext(ctx, "missing authorization code", attr.SlogEnvVarName(envVar))
+					} else {
+						req.Header.Set("Authorization", formatForBearer(token))
+					}
+				}
+			}
 		case "oauth2":
 			if security.OAuthTypes == nil {
 				logger.ErrorContext(ctx, "no oauth types provided for oauth2 auth", attr.SlogSecurityScheme(security.Scheme.Value))

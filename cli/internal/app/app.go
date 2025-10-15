@@ -9,6 +9,7 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
+	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/o11y"
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 )
@@ -26,11 +27,16 @@ func newApp() *cli.App {
 		Usage:   "A command line interface for the Gram platform. Get started at https://docs.getgram.ai/",
 		Version: fmt.Sprintf("%s (%s)", Version, shortSha),
 		Commands: []*cli.Command{
+			newAuthCommand(),
 			newPushCommand(),
 			newUploadCommand(),
 			newStatusCommand(),
+			newWhoAmICommand(),
 		},
 		Flags: []cli.Flag{
+			flags.APIKey(),
+			flags.APIEndpoint(),
+			flags.Project(),
 			&cli.StringFlag{
 				Name:    "log-level",
 				Value:   "info",
@@ -50,6 +56,11 @@ func newApp() *cli.App {
 				EnvVars: []string{"GRAM_LOG_PRETTY"},
 			},
 			&cli.StringFlag{
+				Name:    "profile",
+				Usage:   "Profile name to use",
+				EnvVars: []string{"GRAM_PROFILE"},
+			},
+			&cli.StringFlag{
 				Name:    "profile-path",
 				Usage:   fmt.Sprintf("Path to profile JSON file (default: %s)", defaultProfilePath),
 				EnvVars: []string{"GRAM_PROFILE_PATH"},
@@ -66,11 +77,12 @@ func newApp() *cli.App {
 			ctx := logging.PushLogger(c.Context, logger)
 
 			profilePath := c.String("profile-path")
+			profileName := c.String("profile")
 			userSpecifiedPath := c.IsSet("profile-path")
 			if profilePath == "" {
 				profilePath = defaultProfilePath
 			}
-			prof, err := profile.Load(profilePath)
+			prof, err := profile.LoadByName(profilePath, profileName)
 			if err != nil {
 				logger.WarnContext(
 					ctx,

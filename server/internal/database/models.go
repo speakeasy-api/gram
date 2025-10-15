@@ -7,6 +7,7 @@ package database
 import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -125,12 +126,13 @@ type DeploymentStatus struct {
 }
 
 type DeploymentsFunction struct {
-	ID           uuid.UUID
-	DeploymentID uuid.UUID
-	AssetID      uuid.UUID
-	Name         string
-	Slug         string
-	Runtime      string
+	ID            uuid.UUID
+	DeploymentID  uuid.UUID
+	AssetID       uuid.UUID
+	Name          string
+	Slug          string
+	Runtime       string
+	RunnerVersion pgtype.Text
 }
 
 type DeploymentsOpenapiv3Asset struct {
@@ -180,6 +182,25 @@ type ExternalOauthServerMetadatum struct {
 	Deleted   bool
 }
 
+type FlyApp struct {
+	ID            uuid.UUID
+	Seq           int64
+	ProjectID     uuid.UUID
+	DeploymentID  uuid.UUID
+	FunctionID    uuid.UUID
+	AccessID      uuid.UUID
+	FlyOrgID      string
+	FlyOrgSlug    string
+	AppName       string
+	AppUrl        string
+	RunnerVersion string
+	PrimaryRegion string
+	Status        string
+	ReapedAt      pgtype.Timestamptz
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
 type FunctionToolDefinition struct {
 	ID           uuid.UUID
 	ToolUrn      urn.Tool
@@ -203,7 +224,7 @@ type FunctionsAccess struct {
 	ProjectID     uuid.UUID
 	DeploymentID  uuid.UUID
 	FunctionID    uuid.UUID
-	EncryptionKey []byte
+	EncryptionKey conv.Secret
 	BearerFormat  pgtype.Text
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
@@ -381,15 +402,16 @@ type PackageVersion struct {
 }
 
 type Project struct {
-	ID             uuid.UUID
-	Name           string
-	Slug           string
-	OrganizationID string
-	LogoAssetID    uuid.NullUUID
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	DeletedAt      pgtype.Timestamptz
-	Deleted        bool
+	ID                     uuid.UUID
+	Name                   string
+	Slug                   string
+	OrganizationID         string
+	LogoAssetID            uuid.NullUUID
+	FunctionsRunnerVersion pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
 type ProjectToolVariation struct {
@@ -431,6 +453,7 @@ type SlackAppConnection struct {
 type ToolVariation struct {
 	ID            uuid.UUID
 	GroupID       uuid.UUID
+	SrcToolUrn    pgtype.Text
 	SrcToolName   string
 	Confirm       pgtype.Text
 	ConfirmPrompt pgtype.Text

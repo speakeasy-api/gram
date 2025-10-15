@@ -44,7 +44,7 @@ function parseArgs(args) {
 
   if (args.length !== 2) {
     throw new Error(
-      "Expected two command-line argument but got " + args.length
+      "Expected two command-line argument but got " + args.length,
     );
   }
 
@@ -56,7 +56,7 @@ function parseArgs(args) {
   const callArg = args[1];
   if (typeof callArg !== "string") {
     throw new Error(
-      `Invalid tool call argument type: expected string, got ${typeof callArg}`
+      `Invalid tool call argument type: expected string, got ${typeof callArg}`,
     );
   }
 
@@ -74,19 +74,19 @@ function parseArgs(args) {
 }
 
 /**
- * @param {(name: string, input: unknown) => Promise<Response>} func
+ * @param {(call: {name: string, input: unknown}) => Promise<Response>} func
  * @param {string} name
  * @param {unknown} input
  * @returns {Promise<Response>}
  */
 async function callTool(func, name, input) {
   try {
-    const response = await func(name, input);
+    const response = await func({ name, input });
     if (!(response instanceof Response)) {
       throw new FunctionsError(
         ERROR_CODES.INVALID_TOOL_RESULT,
         "Tool call did not return a valid response",
-        `Expected instance of \`Response\` but got \`${typeof response}\``
+        `Expected instance of \`Response\` but got \`${typeof response}\``,
       );
     }
     return response;
@@ -118,7 +118,7 @@ async function writeFunctionsError(pipeFile, error) {
         "Content-Length": String(Buffer.byteLength(text, "utf8")),
         "Gram-Functions-Error": error.code,
       },
-    })
+    }),
   );
 }
 
@@ -153,20 +153,24 @@ async function writeHTTPResponse(pipeFile, response) {
 
 /**
  * @param {string} codePath
- * @returns {Promise<{ok: true, value: (name: string, input: unknown) => Promise<Response>} | {ok: false, error: FunctionsError}>}
+ * @returns {Promise<{ok: true, value: (call: {name: string, input: unknown}) => Promise<Response>} | {ok: false, error: FunctionsError}>}
  */
 async function importToolCallHandler(codePath) {
   try {
-    const { handleToolCall: f } = await import(codePath).catch((e) => {
+    const mod = await import(codePath).catch((e) => {
       const filename = path.basename(codePath);
       throw new FunctionsError(
         ERROR_CODES.IMPORT_FAILURE,
         "Unable to import user code",
         `Failed to import ${filename}: ${
           e instanceof Error ? e.message : String(e)
-        }`
+        }`,
       );
     });
+
+    const f = [mod["handleToolCall"], mod["default"]?.handleToolCall].find(
+      (sym) => typeof sym === "function",
+    );
 
     if (typeof f !== "function") {
       const filename = path.basename(codePath);
@@ -174,7 +178,7 @@ async function importToolCallHandler(codePath) {
       throw new FunctionsError(
         ERROR_CODES.INVALID_TOOL_FUNC,
         "Unable to call tool",
-        "handleToolCall function not found in " + filename
+        "handleToolCall function not found in " + filename,
       );
     }
 
@@ -188,7 +192,7 @@ async function importToolCallHandler(codePath) {
         error: new FunctionsError(
           ERROR_CODES.UNEXPECTED,
           "Unexpected error occurred",
-          e instanceof Error ? e.message : String(e)
+          e instanceof Error ? e.message : String(e),
         ),
       };
     }
@@ -215,7 +219,7 @@ async function handleToolCall(pipeFile, toolCall, codePath) {
     const res = await callTool(
       importResult.value,
       toolCall.name,
-      toolCall.input
+      toolCall.input,
     );
     await writeHTTPResponse(pipeFile, res);
   } catch (e) {

@@ -111,6 +111,8 @@ linters:
         - '^github.com/posthog/posthog-go\..+$'
         - '^github\.com/speakeasy-api/openapi/.*'
         - '^github\.com/polarsource/polar-go/.*'
+        - '^github\.com/docker/docker/api/types/.*'
+        - '^github\.com/superfly/fly-go.*'
         - '^github\.com/speakeasy-api/gram/server/gen/types\.Tool$'
         - '^github\.com/ClickHouse/clickhouse-go/v2\.Options$'
     exhaustive:
@@ -158,6 +160,7 @@ linters:
 
         - "(*github.com/sourcegraph/conc/pool.ErrorPool).Wait("
         - "go.temporal.io/sdk/temporal.NewApplicationErrorWithOptions("
+        - "go.temporal.io/sdk/temporal.NewApplicationErrorWithCause("
         - "go.temporal.io/sdk/temporal.NewNonRetryableApplicationError("
         - "go.temporal.io/sdk/workflow.NewContinueAsNewError("
         - "(go.temporal.io/sdk/client.Client).ExecuteWorkflow("
@@ -165,6 +168,7 @@ linters:
         - "(go.temporal.io/sdk/internal.ActivityInboundInterceptor).ExecuteActivity("
         - "(go.temporal.io/sdk/internal.Future).Get("
 
+        - "github.com/speakeasy-api/gram/server/internal/oops.Permanent("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).CheckProjectAccess("
         - "(*github.com/speakeasy-api/gram/server/internal/auth/sessions.Manager).Authenticate("

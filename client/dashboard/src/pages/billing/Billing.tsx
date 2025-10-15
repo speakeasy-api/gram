@@ -200,31 +200,36 @@ const UsageTiers = () => {
     if (checkoutError) {
       return (
         <Page.Section.CTA>
-          <Button asChild>
-            <a
-              href="mailto:gram@speakeasyapi.dev?subject=Upgrade%20Account"
-              className="inline-flex"
-              onClick={handleFallbackClick}
-            >
-              UPGRADE
-            </a>
-          </Button>
+          <div className="isolate">
+            <Button asChild variant="brand">
+              <a
+                href="mailto:gram@speakeasyapi.dev?subject=Upgrade%20Account"
+                className="inline-flex"
+                onClick={handleFallbackClick}
+              >
+                UPGRADE
+              </a>
+            </Button>
+          </div>
         </Page.Section.CTA>
       );
     }
 
     return (
       <Page.Section.CTA>
-        <Button disabled={isLoadingCheckout} asChild>
-          <a
-            href={checkoutLink}
-            data-polar-checkout
-            data-polar-checkout-theme="light"
-            className="inline-flex"
-          >
-            UPGRADE
-          </a>
-        </Button>
+        {/* Isolate is needed to get the rainbow working */}
+        <div className="isolate">
+          <Button disabled={isLoadingCheckout} asChild variant="brand">
+            <a
+              href={checkoutLink}
+              data-polar-checkout
+              data-polar-checkout-theme={"light"}
+              className="inline-flex"
+            >
+              UPGRADE
+            </a>
+          </Button>
+        </div>
       </Page.Section.CTA>
     );
   }, [checkoutLink, checkoutError, isLoadingCheckout, handleFallbackClick]);

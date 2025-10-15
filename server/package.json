@@ -1,6 +1,6 @@
 {
   "name": "@gram/server",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "",
   "private": true,
   "main": "index.js",
@@ -10,5 +10,5 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.14.0"
+  "packageManager": "pnpm@10.18.2"
 }

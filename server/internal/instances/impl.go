@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -64,6 +65,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	env *environments.EnvironmentEntries,
+	enc *encryption.Client,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	tracking billing.Tracker,
@@ -87,6 +89,7 @@ func NewService(
 			traceProvider,
 			meterProvider,
 			gateway.ToolCallSourceDirect,
+			enc,
 			cacheImpl,
 			guardianPolicy,
 			tcm,
@@ -345,7 +348,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		ToolName:         toolName,
 		ProjectID:        authCtx.ProjectID.String(),
 		ProjectSlug:      authCtx.ProjectSlug,
-		Type:             billing.ToolCallTypeHTTP,
+		Type:             plan.BillingType,
 		OrganizationSlug: &descriptor.OrganizationSlug,
 		ToolsetSlug:      &toolsetSlug,
 		ChatID:           &chatID,

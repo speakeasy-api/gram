@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/url"
 	"os"
 	"testing"
@@ -51,6 +52,8 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	serverURL      *url.URL
+	logger         *slog.Logger
+	cacheAdapter   cache.Cache
 }
 
 func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
@@ -93,12 +96,14 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		return true, nil
 	})
 
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, cacheAdapter, guardianPolicy, oauthService, billingStub, billingStub, toolMetrics)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, oauthService, billingStub, billingStub, toolMetrics)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
 		serverURL:      serverURL,
+		logger:         logger,
+		cacheAdapter:   cacheAdapter,
 	}
 }
