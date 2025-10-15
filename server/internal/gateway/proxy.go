@@ -538,7 +538,7 @@ func reverseProxyRequest(
 	// Add tool to context for the round tripper
 	toolInfo := &tm.ToolInfo{
 		ID:             tool.ID,
-		Urn:            tool.ID,
+		Urn:            tool.URN.String(),
 		Name:           tool.Name,
 		ProjectID:      tool.ProjectID,
 		DeploymentID:   tool.DeploymentID,

@@ -97,7 +97,6 @@ type HTTPLoggingRoundTripper struct {
 
 // NewHTTPLoggingRoundTripper creates a new RoundTripper that logs HTTP requests to ClickHouse
 func NewHTTPLoggingRoundTripper(rt http.RoundTripper, tcm ToolMetricsProvider, logger *slog.Logger, tracer trace.Tracer) *HTTPLoggingRoundTripper {
-	// t := otel.Tracer("github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics")
 	return &HTTPLoggingRoundTripper{
 		rt:     rt,
 		tcm:    tcm,
