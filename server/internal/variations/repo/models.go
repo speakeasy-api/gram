@@ -7,12 +7,13 @@ package repo
 import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type ToolVariation struct {
 	ID            uuid.UUID
 	GroupID       uuid.UUID
-	SrcToolUrn    pgtype.Text
+	SrcToolUrn    urn.Tool
 	SrcToolName   string
 	Confirm       pgtype.Text
 	ConfirmPrompt pgtype.Text
