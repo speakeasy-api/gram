@@ -126,6 +126,13 @@ You are an expert AI programming assistant specializing in building APIs with Go
 
 - When writing assertions, use `github.com/stretchr/testify/require` exclusively.
 
+## React & Frontend Coding Guidelines
+
+### Styling and Design System
+
+- **ALWAYS use Moonshine design system utilities** from `@speakeasy-api/moonshine` instead of hardcoded Tailwind color values
+- **NEVER use hardcoded Tailwind colors** like `bg-neutral-100`, `border-gray-200`, `text-gray-500`, etc.
+
 ## Database design guidelines
 
 - **Code Formatting and Comments:**
