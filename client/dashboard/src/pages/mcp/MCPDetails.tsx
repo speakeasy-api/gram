@@ -478,7 +478,12 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
         <Block label="Custom Slug" error={mcpSlugError} className="p-0">
           <BlockInner>
             <Stack direction="horizontal" align="center">
-              <Type muted mono variant="small">
+              <Type
+                muted
+                mono
+                variant="small"
+                className="hidden @lg/main:block"
+              >
                 {toolset.mcpSlug && customServerURL
                   ? `${customServerURL}/mcp/`
                   : `${getServerURL()}/mcp/`}
