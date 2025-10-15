@@ -277,6 +277,7 @@ func (tp *ToolProxy) doFunction(
 		DisableResponseFiltering,
 		tp.policy,
 		&responseStatusCode,
+		tp.toolMetrics,
 	)
 }
 
