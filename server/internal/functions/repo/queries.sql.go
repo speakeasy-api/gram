@@ -63,7 +63,6 @@ function_preference AS (
     d.project_id = $1
     AND df.id = $2
     AND df.deployment_id = $3
-    AND df.deleted IS FALSE
 )
 SELECT COALESCE(
     (SELECT v FROM function_preference),
