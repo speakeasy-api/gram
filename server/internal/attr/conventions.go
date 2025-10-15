@@ -27,7 +27,7 @@ const (
 	HTTPResponseOriginalStatusCodeKey = attribute.Key("http.response.original_status_code")
 	HTTPRouteKey                      = semconv.HTTPRouteKey
 	HTTPServerRequestDurationKey      = attribute.Key("http.server.request.duration")
-	HTTPRequestDurationMsKey          = attribute.Key("http.response.duration_ms")
+	HTTPRequestDurationMsKey          = attribute.Key("http.request.duration_ms")
 	HTTPRequestSizeKey                = semconv.HTTPRequestSizeKey
 	HTTPResponseSizeKey               = semconv.HTTPResponseSizeKey
 	ServerAddressKey                  = semconv.ServerAddressKey
@@ -149,7 +149,7 @@ const (
 	PaginationTsEndKey       = attribute.Key("gram.pagination.ts_end")
 	PaginationCursorKey      = attribute.Key("gram.pagination.cursor")
 	PaginationLimitKey       = attribute.Key("gram.pagination.limit")
-	paginationSortOrderKey   = attribute.Key("gram.pagination.sort_order")
+	PaginationSortOrderKey   = attribute.Key("gram.pagination.sort_order")
 	PaginationHasNextPageKey = attribute.Key("gram.pagination.has_next_page")
 
 	ClickhouseQueryDurationMsKey = attribute.Key("gram.clickhouse.query_duration_ms")
@@ -587,33 +587,35 @@ func SlogToolCallDuration(v time.Duration) slog.Attr {
 	return slog.Float64(string(ToolCallDurationKey), v.Seconds())
 }
 
-func TsStart(v time.Time) attribute.KeyValue {
+func PaginationTsStart(v time.Time) attribute.KeyValue {
 	return PaginationTsStartKey.String(v.Format(time.RFC3339))
 }
-func SlogTsStart(v time.Time) slog.Attr {
+func SlogPaginationTsStart(v time.Time) slog.Attr {
 	return slog.Time(string(PaginationTsStartKey), v)
 }
 
-func TsEnd(v time.Time) attribute.KeyValue { return PaginationTsEndKey.String(v.Format(time.RFC3339)) }
-func SlogTsEnd(v time.Time) slog.Attr {
+func PaginationTsEnd(v time.Time) attribute.KeyValue {
+	return PaginationTsEndKey.String(v.Format(time.RFC3339))
+}
+func SlogPaginationTsEnd(v time.Time) slog.Attr {
 	return slog.Time(string(PaginationTsEndKey), v)
 }
 
-func Cursor(v string) attribute.KeyValue {
+func PaginationCursor(v string) attribute.KeyValue {
 	return PaginationCursorKey.String(v)
 }
-func SlogCursor(v time.Time) slog.Attr {
+func SlogPaginationCursor(v time.Time) slog.Attr {
 	return slog.Time(string(PaginationCursorKey), v)
 }
 
-func Limit(v int) attribute.KeyValue { return PaginationLimitKey.Int(v) }
-func SlogLimit(v int) slog.Attr {
+func PaginationLimit(v int) attribute.KeyValue { return PaginationLimitKey.Int(v) }
+func SlogPaginationLimit(v int) slog.Attr {
 	return slog.Int(string(PaginationLimitKey), v)
 }
 
-func SortOrder(v string) attribute.KeyValue { return paginationSortOrderKey.String(v) }
-func SlogSortOrder(v string) slog.Attr {
-	return slog.String(string(paginationSortOrderKey), v)
+func PaginationSortOrder(v string) attribute.KeyValue { return PaginationSortOrderKey.String(v) }
+func SlogPaginationSortOrder(v string) slog.Attr {
+	return slog.String(string(PaginationSortOrderKey), v)
 }
 
 func HTTPRequestDurationMs(v float64) attribute.KeyValue { return HTTPRequestDurationMsKey.Float64(v) }

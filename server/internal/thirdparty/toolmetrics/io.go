@@ -1,6 +1,7 @@
 package toolmetrics
 
 import (
+	"fmt"
 	"io"
 )
 
@@ -23,7 +24,11 @@ func NewCountingReadCloser(rc io.ReadCloser, onClose func(int)) io.ReadCloser {
 func (crc *countingReadCloser) Read(p []byte) (n int, err error) {
 	n, err = crc.ReadCloser.Read(p)
 	crc.count += n
-	return n, err
+	if err != nil {
+		return n, fmt.Errorf("counting read: %w", err)
+	}
+
+	return n, nil
 }
 
 func (crc *countingReadCloser) Close() error {
@@ -31,5 +36,10 @@ func (crc *countingReadCloser) Close() error {
 		crc.onClose(crc.count)
 	}
 
-	return crc.ReadCloser.Close()
+	err := crc.ReadCloser.Close()
+	if err != nil {
+		return fmt.Errorf("close counting reader: %w", err)
+	}
+
+	return nil
 }

@@ -13,12 +13,12 @@ type ToolLogLevel string
 type ToolType string
 
 const (
-	HTTPToolType     ToolType = "http"
-	FunctionToolType ToolType = "function"
-	PromptToolType   ToolType = "prompt"
+	ToolTypeHTTP     ToolType = "http"
+	ToolTypeFunction ToolType = "function"
+	ToolTypePrompt   ToolType = "prompt"
 )
 
-func (t *ToolType) Scan(src interface{}) error {
+func (t *ToolType) Scan(src any) error {
 	if src == nil {
 		*t = ""
 		return nil

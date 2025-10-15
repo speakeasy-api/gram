@@ -38,7 +38,7 @@ limit $5
 `
 
 // List retrieves tool logs based on the provided options.
-func (q *Queries) List(ctx context.Context, opts ListToolLogsOptions) (*ListResult, error) {
+func (q *Queries) List(ctx context.Context, opts ListToolLogsOptions) (res *ListResult, err error) {
 	projectID := opts.ProjectID
 	tsStart := opts.TsStart
 	tsEnd := opts.TsEnd
@@ -48,14 +48,22 @@ func (q *Queries) List(ctx context.Context, opts ListToolLogsOptions) (*ListResu
 	ctx, span := q.tracer.Start(ctx, "clickhouse.list_logs",
 		trace.WithAttributes(
 			attr.ProjectID(projectID),
-			attr.TsStart(tsStart),
-			attr.TsEnd(tsEnd),
-			attr.Cursor(cursor),
-			attr.Limit(pagination.Limit()),
-			attr.SortOrder(pagination.SortOrder()),
+			attr.PaginationTsStart(tsStart),
+			attr.PaginationTsEnd(tsEnd),
+			attr.PaginationCursor(cursor),
+			attr.PaginationLimit(pagination.Limit()),
+			attr.PaginationSortOrder(pagination.SortOrder()),
 		),
 	)
-	defer span.End()
+	defer func() {
+		if err == nil {
+			span.SetStatus(codes.Ok, "")
+		} else {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 
 	startTime := time.Now()
 
@@ -72,14 +80,6 @@ func (q *Queries) List(ctx context.Context, opts ListToolLogsOptions) (*ListResu
 		cursor,
 		pagination.Limit())
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to query logs")
-		q.logger.ErrorContext(ctx, "failed to query tool logs from ClickHouse",
-			attr.SlogError(err),
-			attr.SlogProjectID(projectID),
-			attr.SlogTsStart(tsStart),
-			attr.SlogTsEnd(tsEnd),
-		)
 		return nil, fmt.Errorf("query logs: %w", err)
 	}
 
@@ -89,24 +89,12 @@ func (q *Queries) List(ctx context.Context, opts ListToolLogsOptions) (*ListResu
 	for rows.Next() {
 		var log ToolHTTPRequest
 		if err = rows.ScanStruct(&log); err != nil {
-			span.RecordError(err)
-			span.SetStatus(codes.Error, "failed to scan row")
-			q.logger.ErrorContext(ctx, "failed to scan row",
-				attr.SlogError(err),
-				attr.SlogProjectID(projectID),
-			)
 			return nil, fmt.Errorf("error scanning row: %w", err)
 		}
 		results = append(results, log)
 	}
 
 	if err = rows.Err(); err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "rows iteration error")
-		q.logger.ErrorContext(ctx, "error iterating rows",
-			attr.SlogError(err),
-			attr.SlogProjectID(projectID),
-		)
 		return nil, fmt.Errorf("rows error: %w", err)
 	}
 
@@ -133,13 +121,6 @@ func (q *Queries) List(ctx context.Context, opts ListToolLogsOptions) (*ListResu
 	)
 	span.SetStatus(codes.Ok, "")
 
-	q.logger.InfoContext(ctx, "successfully listed tool logs",
-		attr.SlogProjectID(projectID),
-		attr.SlogValueInt(len(results)),
-		attr.SlogPaginationHasNextPage(hasNextPage),
-		attr.SlogClickhouseQueryDurationMs(float64(queryDuration.Milliseconds())),
-	)
-
 	return &ListResult{
 		Logs: results,
 		Pagination: PaginationMetadata{
@@ -151,7 +132,7 @@ func (q *Queries) List(ctx context.Context, opts ListToolLogsOptions) (*ListResu
 }
 
 // Log inserts a tool HTTP request log entry.
-func (q *Queries) Log(ctx context.Context, log ToolHTTPRequest) error {
+func (q *Queries) Log(ctx context.Context, log ToolHTTPRequest) (err error) {
 	allow, err := q.ShouldFlag(ctx, log)
 	if err != nil {
 		q.logger.ErrorContext(ctx, "failed to fetch feature flag", attr.SlogError(err))
@@ -174,7 +155,15 @@ func (q *Queries) Log(ctx context.Context, log ToolHTTPRequest) error {
 			attr.HTTPRequestDurationMs(log.DurationMs),
 		),
 	)
-	defer span.End()
+	defer func() {
+		if err == nil {
+			span.SetStatus(codes.Ok, "")
+		} else {
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+		}
+		span.End()
+	}()
 
 	startTime := time.Now()
 
@@ -202,16 +191,6 @@ func (q *Queries) Log(ctx context.Context, log ToolHTTPRequest) error {
 
 	err = q.conn.Exec(ctx, insertHttpRaw, args...)
 	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, "failed to insert log")
-		q.logger.ErrorContext(ctx, "failed to insert HTTP log to ClickHouse",
-			attr.SlogError(err),
-			attr.SlogToolID(log.ToolID),
-			attr.SlogToolURN(log.ToolURN),
-			attr.SlogProjectID(log.ProjectID),
-			attr.SlogHTTPRequestMethod(log.HTTPMethod),
-			attr.SlogHTTPResponseStatusCode(int(log.StatusCode)),
-		)
 		return fmt.Errorf("insert http raw: %w", err)
 	}
 
@@ -221,7 +200,6 @@ func (q *Queries) Log(ctx context.Context, log ToolHTTPRequest) error {
 		attr.HTTPRequestBodyBytes(int(log.RequestBodyBytes)),
 		attr.HTTPResponseBodyBytes(int(log.ResponseBodyBytes)),
 	)
-	span.SetStatus(codes.Ok, "")
 
 	return nil
 }

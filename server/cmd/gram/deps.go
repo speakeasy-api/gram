@@ -74,14 +74,14 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 
 	// validate cli args
 	err := inv.Check("clickhouse config options",
-		"clickhouse host is not set", host != "",
-		"clickhouse database is not set", database != "",
-		"clickhouse username is not set", username != "",
-		"clickhouse password is not set", password != "",
-		"clickhouse native port is not set", nativePort != "",
+		"clickhouse host must be set", host != "",
+		"clickhouse database must be set", database != "",
+		"clickhouse username must be set", username != "",
+		"clickhouse password must be set", password != "",
+		"clickhouse native port must be set", nativePort != "",
 	)
 	if err != nil {
-		return nil, nilFunc, fmt.Errorf("some clickhouse config values are not set: %w", err)
+		return nil, nilFunc, fmt.Errorf("invalid clickhouse config: %w", err)
 	}
 
 	conn, err := clickhouse.Open(&clickhouse.Options{
@@ -97,24 +97,24 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		},
 	})
 	if err != nil {
-		return nil, nilFunc, fmt.Errorf("failed to connect to clickhouse: %w", err)
+		return nil, nilFunc, fmt.Errorf("connect to clickhouse: %w", err)
 	}
 
 	if err = conn.Ping(ctx); err != nil {
-		return nil, nilFunc, fmt.Errorf("failed to ping clickhouse: %w", err)
+		return nil, nilFunc, fmt.Errorf("ping clickhouse: %w", err)
 	}
 
-	cc := tm.New(logger, conn, tracerProvider, func(ctx context.Context, log tm.ToolHTTPRequest) (bool, error) {
+	cc := tm.New(logger, tracerProvider, conn, func(ctx context.Context, log tm.ToolHTTPRequest) (bool, error) {
 		f := conv.Default[feature.Provider](features, &feature.InMemory{})
 		isEnabled, err := f.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, log.OrganizationID)
 		if err != nil {
 			logger.ErrorContext(
-				ctx, "an error occurred when fetching clickhouse feature flag",
+				ctx, "error checking clickhouse feature flag",
 				attr.SlogError(err),
 				attr.SlogOrganizationSlug(log.OrganizationID),
 				attr.SlogProjectID(log.ProjectID),
 			)
-			return false, fmt.Errorf("an error occurred when fetching clickhouse feature flag: %w", err)
+			return false, fmt.Errorf("check clickhouse feature flag: %w", err)
 		}
 
 		return isEnabled, nil
