@@ -26,6 +26,7 @@ import {
   useCommandPalette,
 } from "./contexts/CommandPalette";
 import { CommandPalette } from "./components/command-palette";
+import { WebGLCanvas, FontTexture } from "@/components/webgl";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -85,6 +86,8 @@ export default function App() {
             <CommandPaletteProvider>
               <BrowserRouter>
                 <SdkProvider>
+                  <WebGLCanvas />
+                  <FontTexture />
                   <AppContent />
                   <Toaster />
                   <CommandPalette />

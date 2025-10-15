@@ -10,6 +10,7 @@ import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
 import { FullWidthUpload } from "@/components/upload";
+import { AsciiVideo, AsciiStars, useWebGLStore } from "@/components/webgl";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useApiError } from "@/hooks/useApiError";
@@ -106,8 +107,9 @@ const Step = ({
     <Stack direction={"horizontal"} gap={2} align={"center"}>
       <span
         className={cn(
-          "rounded-full bg-muted h-8 w-8 flex items-center justify-center",
-          active && "bg-success text-success-foreground",
+          "rounded-lg bg-muted h-8 w-8 flex items-center justify-center border border-border",
+          completed && "bg-success text-success-foreground border-success-softest",
+          !active && !completed && "border-neutral-softest",
         )}
       >
         {completed ? <Check className="w-4 h-4" /> : icon}
@@ -360,7 +362,7 @@ const CliSetupStep = ({
                 variant="tertiary"
                 size="sm"
                 onClick={() => handleCopy(item.command, index)}
-                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute top-2 right-2"
               >
                 {copiedIndex === index ? (
                   <Check className="w-4 h-4" />
@@ -805,19 +807,54 @@ const AnimatedRightSide = ({
   toolsetName: string | undefined;
   mcpSlug: string | undefined;
 }) => {
+  const setCanvasZIndex = useWebGLStore((state) => state.setCanvasZIndex);
+  const setShowAsciiStars = useWebGLStore((state) => state.setShowAsciiStars);
+
+  // Set canvas to be visible (but still allow pointer events through)
+  useEffect(() => {
+    setCanvasZIndex(1);
+    setShowAsciiStars(true);
+    return () => {
+      setCanvasZIndex(-1);
+      setShowAsciiStars(false);
+    };
+  }, [setCanvasZIndex, setShowAsciiStars]);
+
   return (
     <div className="w-full h-full bg-background flex items-center justify-center relative overflow-hidden">
-      <AnimatePresence mode="wait">
-        {currentStep === "cli-setup" ? (
-          <TerminalAnimationWithLogs key="terminal" />
-        ) : currentStep === "toolset" ? (
-          <ToolsetAnimation key="toolset" toolsetName={toolsetName} />
-        ) : currentStep === "mcp" ? (
-          <McpAnimation key="mcp" mcpSlug={mcpSlug} />
-        ) : (
-          <DefaultLogo key="default" />
-        )}
-      </AnimatePresence>
+      {/* ASCII shader decorations in corners */}
+      {/* Top right corner */}
+      <div className="absolute top-0 right-0 w-[300px] h-[300px] opacity-30 pointer-events-none -z-10">
+        <AsciiVideo
+          videoSrc="/webgl/stars.mp4"
+          className="w-full h-full"
+        />
+      </div>
+
+      {/* Bottom left corner - flipped both ways */}
+      <div className="absolute bottom-0 left-0 w-[300px] h-[300px] opacity-30 pointer-events-none -z-10">
+        <AsciiVideo
+          videoSrc="/webgl/stars.mp4"
+          flipX={true}
+          flipY={true}
+          className="w-full h-full"
+        />
+      </div>
+
+      {/* Content layer */}
+      <div className="relative z-10 w-full h-full flex items-center justify-center">
+        <AnimatePresence mode="wait">
+          {currentStep === "cli-setup" ? (
+            <TerminalAnimationWithLogs key="terminal" />
+          ) : currentStep === "toolset" ? (
+            <ToolsetAnimation key="toolset" toolsetName={toolsetName} />
+          ) : currentStep === "mcp" ? (
+            <McpAnimation key="mcp" mcpSlug={mcpSlug} />
+          ) : (
+            <DefaultLogo key="default" />
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 };
@@ -909,7 +946,10 @@ const TerminalAnimationWithLogs = () => {
       >
         {/* Terminal header - draggable handle */}
         <motion.div
-          drag="parent"
+          drag
+          dragListener={false}
+          dragControls={undefined}
+          onPointerDown={(e) => e.currentTarget.parentElement?.dispatchEvent(new PointerEvent('pointerdown', e.nativeEvent))}
           className="bg-muted border-b px-4 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing"
         >
           <div className="flex gap-1.5">
