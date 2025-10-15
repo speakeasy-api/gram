@@ -116,7 +116,7 @@ export function ToolBuilderNew() {
       <Page.Header>
         <Page.Header.Breadcrumbs fullWidth />
       </Page.Header>
-      <Page.Body fullWidth>
+      <Page.Body fullWidth fullHeight>
         <ToolBuilder initial={newTemplate} />
       </Page.Body>
     </Page>
@@ -144,7 +144,7 @@ export function ToolBuilderPage() {
       <Page.Header>
         <Page.Header.Breadcrumbs fullWidth />
       </Page.Header>
-      <Page.Body fullWidth>
+      <Page.Body fullWidth fullHeight>
         <ChatProvider>
           <ToolBuilder
             initial={{

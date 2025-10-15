@@ -137,7 +137,7 @@ function PlaygroundInner() {
           {chatHistoryButton}
         </Stack>
       </Page.Header>
-      <Page.Body className="max-w-full p-0">
+      <Page.Body fullWidth fullHeight className="p-0">
         <ResizablePanel
           direction="horizontal"
           className="h-full [&>[role='separator']]:border-border [&>[role='separator']]:border-1"
