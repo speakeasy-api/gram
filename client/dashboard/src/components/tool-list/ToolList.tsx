@@ -97,6 +97,7 @@ function groupTools(
 ): ToolGroup[] {
   const groups: ToolGroup[] = [];
   const packageMap = new Map<string, Tool[]>();
+  const functionMap = new Map<string, Tool[]>();
   const functionTools: Tool[] = [];
   const customTools: Tool[] = [];
   const higherOrderTools: Tool[] = [];
@@ -128,8 +129,8 @@ function groupTools(
       }
 
       if (groupKey) {
-        const existing = packageMap.get(groupKey) || [];
-        packageMap.set(groupKey, [...existing, tool]);
+        const existing = functionMap.get(groupKey) || [];
+        functionMap.set(groupKey, [...existing, tool]);
       } else {
         // Function tools without a source go to the generic functions group
         functionTools.push(tool);
@@ -148,6 +149,17 @@ function groupTools(
       title: packageName,
       tools: sortToolsByMethod(tools),
       packageName,
+    });
+  });
+
+  // Add function groups
+  functionMap.forEach((tools, functionName) => {
+    groups.push({
+      type: "function",
+      icon: "square-function",
+      title: functionName,
+      tools,
+      packageName: functionName,
     });
   });
 
