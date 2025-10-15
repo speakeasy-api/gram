@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const deleteGlobalToolVariation = `-- name: DeleteGlobalToolVariation :one
@@ -38,7 +37,7 @@ func (q *Queries) DeleteGlobalToolVariation(ctx context.Context, arg DeleteGloba
 	return id, err
 }
 
-const findGlobalVariationsByToolURNs = `-- name: FindGlobalVariationsByToolURNs :many
+const findGlobalVariationsByToolNames = `-- name: FindGlobalVariationsByToolNames :many
 WITH global_group AS (
   SELECT tool_variations_groups.id
   FROM tool_variations_groups
@@ -51,17 +50,17 @@ SELECT id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, name,
 FROM tool_variations
 WHERE
   group_id = (SELECT id FROM global_group)
-  AND src_tool_urn = ANY($1::text[])
+  AND src_tool_name = ANY($1::text[])
   AND deleted IS FALSE
 `
 
-type FindGlobalVariationsByToolURNsParams struct {
-	ToolUrns  []string
+type FindGlobalVariationsByToolNamesParams struct {
+	ToolNames []string
 	ProjectID uuid.UUID
 }
 
-func (q *Queries) FindGlobalVariationsByToolURNs(ctx context.Context, arg FindGlobalVariationsByToolURNsParams) ([]ToolVariation, error) {
-	rows, err := q.db.Query(ctx, findGlobalVariationsByToolURNs, arg.ToolUrns, arg.ProjectID)
+func (q *Queries) FindGlobalVariationsByToolNames(ctx context.Context, arg FindGlobalVariationsByToolNamesParams) ([]ToolVariation, error) {
+	rows, err := q.db.Query(ctx, findGlobalVariationsByToolNames, arg.ToolNames, arg.ProjectID)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +218,8 @@ INSERT INTO tool_variations (
   $8,
   $9,
   $10
-) ON CONFLICT (group_id, src_tool_urn) WHERE deleted IS FALSE DO UPDATE SET
+) ON CONFLICT (group_id, src_tool_name) WHERE deleted IS FALSE DO UPDATE SET
+  src_tool_urn = EXCLUDED.src_tool_urn,
   confirm = EXCLUDED.confirm,
   confirm_prompt = EXCLUDED.confirm_prompt,
   name = EXCLUDED.name,
@@ -233,7 +233,7 @@ RETURNING id, group_id, src_tool_urn, src_tool_name, confirm, confirm_prompt, na
 
 type UpsertToolVariationParams struct {
 	GroupID       uuid.UUID
-	SrcToolUrn    urn.Tool
+	SrcToolUrn    pgtype.Text
 	SrcToolName   string
 	Confirm       pgtype.Text
 	ConfirmPrompt pgtype.Text

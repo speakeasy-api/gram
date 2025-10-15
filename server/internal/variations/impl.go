@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/variations/repo"
 )
 
@@ -81,7 +80,7 @@ func (s *Service) ListGlobal(ctx context.Context, payload *gen.ListGlobalPayload
 		variations = append(variations, &types.ToolVariation{
 			ID:            row.ToolVariation.ID.String(),
 			GroupID:       row.ToolVariation.GroupID.String(),
-			SrcToolUrn:    row.ToolVariation.SrcToolUrn.String(),
+			SrcToolUrn:    row.ToolVariation.SrcToolUrn.String,
 			SrcToolName:   row.ToolVariation.SrcToolName,
 			Confirm:       conv.FromPGText[string](row.ToolVariation.Confirm),
 			ConfirmPrompt: conv.FromPGText[string](row.ToolVariation.ConfirmPrompt),
@@ -130,14 +129,9 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 		}
 	}
 
-	srcToolUrn, err := urn.ParseTool(payload.SrcToolUrn)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid source tool urn").Log(ctx, s.logger)
-	}
-
 	row, err := tx.UpsertToolVariation(ctx, repo.UpsertToolVariationParams{
 		GroupID:       groupID,
-		SrcToolUrn:    srcToolUrn,
+		SrcToolUrn:    conv.ToPGTextEmpty(payload.SrcToolUrn),
 		SrcToolName:   payload.SrcToolName,
 		Confirm:       conv.PtrToPGText(payload.Confirm),
 		ConfirmPrompt: conv.PtrToPGText(payload.ConfirmPrompt),
@@ -159,7 +153,7 @@ func (s *Service) UpsertGlobal(ctx context.Context, payload *gen.UpsertGlobalPay
 		Variation: &types.ToolVariation{
 			ID:            row.ID.String(),
 			GroupID:       row.GroupID.String(),
-			SrcToolUrn:    row.SrcToolUrn.String(),
+			SrcToolUrn:    row.SrcToolUrn.String,
 			SrcToolName:   row.SrcToolName,
 			Confirm:       conv.FromPGText[string](row.Confirm),
 			ConfirmPrompt: conv.FromPGText[string](row.ConfirmPrompt),

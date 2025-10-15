@@ -46,7 +46,8 @@ INSERT INTO tool_variations (
   @description,
   @tags,
   @summarizer
-) ON CONFLICT (group_id, src_tool_urn) WHERE deleted IS FALSE DO UPDATE SET
+) ON CONFLICT (group_id, src_tool_name) WHERE deleted IS FALSE DO UPDATE SET
+  src_tool_urn = EXCLUDED.src_tool_urn,
   confirm = EXCLUDED.confirm,
   confirm_prompt = EXCLUDED.confirm_prompt,
   name = EXCLUDED.name,
@@ -69,7 +70,7 @@ WHERE
   AND tool_variations.deleted IS FALSE
 ORDER BY tool_variations.id DESC;
 
--- name: FindGlobalVariationsByToolURNs :many
+-- name: FindGlobalVariationsByToolNames :many
 WITH global_group AS (
   SELECT tool_variations_groups.id
   FROM tool_variations_groups
@@ -82,7 +83,7 @@ SELECT *
 FROM tool_variations
 WHERE
   group_id = (SELECT id FROM global_group)
-  AND src_tool_urn = ANY(@tool_urns::text[])
+  AND src_tool_name = ANY(@tool_names::text[])
   AND deleted IS FALSE;
 
 -- name: DeleteGlobalToolVariation :one
