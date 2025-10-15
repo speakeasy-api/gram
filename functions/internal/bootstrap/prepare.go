@@ -15,42 +15,42 @@ import (
 	"github.com/speakeasy-api/gram/functions/internal/python"
 )
 
-func ResolveProgram(language string, workDir string) (string, string, error) {
+func ResolveProgram(language string, workDir string) (string, []string, error) {
 	entryPath, err := entrypointFilename(workDir, language)
 	if err != nil {
-		return "", "", fmt.Errorf("get entrypoint filename: %w", err)
+		return "", nil, fmt.Errorf("get entrypoint filename: %w", err)
 	}
 
 	switch language {
 	case "javascript", "typescript":
-		return "node", entryPath, nil
+		return "node", []string{"--experimental-strip-types", entryPath}, nil
 	case "python":
-		return "python", entryPath, nil
+		return "python", []string{entryPath}, nil
 	default:
-		return "", "", fmt.Errorf("unsupported language: %s", language)
+		return "", nil, fmt.Errorf("unsupported language: %s", language)
 	}
 }
 
-func InitializeMachine(ctx context.Context, logger *slog.Logger, language string, codePath string, workDir string) (command string, program string, err error) {
+func InitializeMachine(ctx context.Context, logger *slog.Logger, language string, codePath string, workDir string) (command string, args []string, err error) {
 	if !filepath.IsAbs(workDir) {
-		return "", "", fmt.Errorf("work dir path is not absolute")
+		return "", nil, fmt.Errorf("work dir path is not absolute")
 	}
 
 	if err := unzipCode(ctx, logger, codePath, workDir); err != nil {
-		return "", "", fmt.Errorf("unzip code: %w", err)
+		return "", nil, fmt.Errorf("unzip code: %w", err)
 	}
 
-	command, program, err = prepareProgram(workDir, language)
+	command, args, err = prepareProgram(workDir, language)
 	if err != nil {
-		return "", "", fmt.Errorf("prepare program: %w", err)
+		return "", nil, fmt.Errorf("prepare program: %w", err)
 	}
 
 	// #nosec G302 -- workDir is a directory and needs to be executable to enter it.
 	if err := os.Chmod(workDir, 0555); err != nil {
-		return "", "", fmt.Errorf("chmod work dir: %w", err)
+		return "", nil, fmt.Errorf("chmod work dir: %w", err)
 	}
 
-	return command, program, nil
+	return command, args, nil
 }
 
 func unzipCode(ctx context.Context, logger *slog.Logger, zipPath string, dest string) error {
@@ -131,16 +131,16 @@ func entrypointFilename(workDir string, language string) (string, error) {
 	}
 }
 
-func prepareProgram(workDir string, language string) (string, string, error) {
+func prepareProgram(workDir string, language string) (string, []string, error) {
 	entryPath, err := entrypointFilename(workDir, language)
 	if err != nil {
-		return "", "", fmt.Errorf("get entrypoint filename: %w", err)
+		return "", nil, fmt.Errorf("get entrypoint filename: %w", err)
 	}
 
 	switch language {
 	case "javascript", "typescript":
 		if err := os.WriteFile(entryPath, javascript.Entrypoint, 0444); err != nil {
-			return "", "", fmt.Errorf("write %s entrypoint (%s): %w", language, entryPath, err)
+			return "", nil, fmt.Errorf("write %s entrypoint (%s): %w", language, entryPath, err)
 		}
 
 		functionsPath := filepath.Join(workDir, "functions.js")
@@ -148,16 +148,16 @@ func prepareProgram(workDir string, language string) (string, string, error) {
 		switch {
 		case errors.Is(err, os.ErrNotExist), err == nil && stat.Size() == 0:
 			if err := os.WriteFile(functionsPath, javascript.DefaultFunctions, 0444); err != nil {
-				return "", "", fmt.Errorf("write %s default functions (%s): %w", language, functionsPath, err)
+				return "", nil, fmt.Errorf("write %s default functions (%s): %w", language, functionsPath, err)
 			}
 		case err != nil:
-			return "", "", fmt.Errorf("stat %s: %w", functionsPath, err)
+			return "", nil, fmt.Errorf("stat %s: %w", functionsPath, err)
 		}
 
-		return "node", entryPath, nil
+		return "node", []string{"--experimental-strip-types", entryPath}, nil
 	case "python":
 		if err := os.WriteFile(entryPath, python.Entrypoint, 0444); err != nil {
-			return "", "", fmt.Errorf("write %s entrypoint (%s): %w", language, entryPath, err)
+			return "", nil, fmt.Errorf("write %s entrypoint (%s): %w", language, entryPath, err)
 		}
 
 		functionsPath := filepath.Join(workDir, "functions.py")
@@ -165,14 +165,14 @@ func prepareProgram(workDir string, language string) (string, string, error) {
 		switch {
 		case errors.Is(err, os.ErrNotExist) || (err == nil && stat.Size() == 0):
 			if err := os.WriteFile(functionsPath, python.DefaultFunctions, 0444); err != nil {
-				return "", "", fmt.Errorf("write %s default functions (%s): %w", language, functionsPath, err)
+				return "", nil, fmt.Errorf("write %s default functions (%s): %w", language, functionsPath, err)
 			}
 		case err != nil:
-			return "", "", fmt.Errorf("stat %s: %w", functionsPath, err)
+			return "", nil, fmt.Errorf("stat %s: %w", functionsPath, err)
 		}
 
-		return "python", entryPath, nil
+		return "python", []string{entryPath}, nil
 	default:
-		return "", "", fmt.Errorf("unsupported language: %s", language)
+		return "", nil, fmt.Errorf("unsupported language: %s", language)
 	}
 }

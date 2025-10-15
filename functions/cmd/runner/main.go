@@ -95,7 +95,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("refusing to run as root")
 	}
 
-	command, program, err := bootstrap.ResolveProgram(args.language, args.workDir)
+	cmd, cmdArgs, err := bootstrap.ResolveProgram(args.language, args.workDir)
 	if err != nil {
 		return fmt.Errorf("resolve program: %w", err)
 	}
@@ -124,7 +124,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		_, _ = w.Write([]byte("ok"))
 	})))
 
-	runner.NewService(logger, enc, args.workDir, command, program).Attach(mux)
+	runner.NewService(logger, enc, args.workDir, cmd, cmdArgs).Attach(mux)
 
 	var handler http.Handler = mux
 	handler = middleware.NewVersion(handler)
