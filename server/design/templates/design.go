@@ -269,6 +269,7 @@ var UpdatePromptTemplateForm = Type("UpdatePromptTemplateForm", func() {
 	Required("id")
 
 	Attribute("id", String, "The ID of the prompt template to update")
+	Attribute("name", String, "The name of the prompt template. Will be updated via variation")
 	Attribute("prompt", String, "The template content")
 	Attribute("description", String, "The description of the prompt template")
 	Attribute("arguments", String, func() {

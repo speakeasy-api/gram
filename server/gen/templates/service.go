@@ -180,6 +180,8 @@ type UpdateTemplatePayload struct {
 	ProjectSlugInput *string
 	// The ID of the prompt template to update
 	ID string
+	// The name of the prompt template. Will be updated via variation
+	Name *string
 	// The template content
 	Prompt *string
 	// The description of the prompt template

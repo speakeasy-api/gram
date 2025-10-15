@@ -1,17 +1,24 @@
+import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
+import { ToolList } from "@/components/tool-list";
+import { Dialog } from "@/components/ui/dialog";
 import { Heading } from "@/components/ui/heading";
 import { MoreActions } from "@/components/ui/more-actions";
 import { MultiSelect } from "@/components/ui/multi-select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useCommandPalette } from "@/contexts/CommandPalette";
+import { useSdkClient } from "@/contexts/Sdk";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
   useTelemetry,
 } from "@/contexts/Telemetry";
+import { useToolset } from "@/hooks/toolTypes";
 import { useApiError } from "@/hooks/useApiError";
-import { useGroupedTools } from "@/lib/toolTypes";
+import { Tool, useGroupedTools } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
+import { Confirm } from "@gram/client/models/components";
 import {
   queryKeyInstance,
   useCloneToolsetMutation,
@@ -21,26 +28,17 @@ import {
 } from "@gram/client/react-query/index.js";
 import { Button, Icon, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
+import { AddToolsDialog } from "./AddToolsDialog";
 import { PromptsTabContent } from "./PromptsTab";
 import { ToolsetAuth } from "./ToolsetAuth";
 import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
 import { ToolsetEmptyState } from "./ToolsetEmptyState";
 import { ToolsetHeader } from "./ToolsetHeader";
 import { useToolsets } from "./Toolsets";
-import { useToolset } from "@/hooks/toolTypes";
-import { Tool } from "@/lib/toolTypes";
-import { ToolList } from "@/components/tool-list";
-import { useSdkClient } from "@/contexts/Sdk";
-import { Confirm } from "@gram/client/models/components";
-import { invalidateTemplate } from "@gram/client/react-query";
-import { InputDialog } from "@/components/input-dialog";
-import { Dialog } from "@/components/ui/dialog";
-import { AddToolsDialog } from "./AddToolsDialog";
-import { useCommandPalette } from "@/contexts/CommandPalette";
 
 export function useDeleteToolset({
   onSuccess,
@@ -356,25 +354,15 @@ export function ToolsetView({
     tool: Tool,
     updates: { name?: string; description?: string },
   ) => {
-    if (tool.type === "http") {
-      await client.variations.upsertGlobal({
-        upsertGlobalToolVariationForm: {
-          ...tool.variation,
-          confirm: tool.variation?.confirm as Confirm,
-          ...updates,
-          srcToolName: tool.canonicalName,
-          srcToolUrn: tool.toolUrn,
-        },
-      });
-    } else {
-      await client.templates.update({
-        updatePromptTemplateForm: {
-          ...tool,
-          ...updates,
-        },
-      });
-      invalidateTemplate(queryClient, [{ name: tool.name }]);
-    }
+    await client.variations.upsertGlobal({
+      upsertGlobalToolVariationForm: {
+        ...tool.variation,
+        confirm: tool.variation?.confirm as Confirm,
+        ...updates,
+        srcToolName: tool.canonicalName,
+        srcToolUrn: tool.toolUrn,
+      },
+    });
 
     telemetry.capture("toolset_event", {
       action: "tool_variation_updated",

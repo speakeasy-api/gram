@@ -3068,17 +3068,18 @@ func templatesUpdateTemplateUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates update-template --body '{
       "arguments": "{\"name\":\"example\",\"email\":\"mail@example.com\"}",
-      "description": "Omnis eaque ut libero repellat incidunt odit.",
+      "description": "Quasi officia.",
       "engine": "mustache",
       "id": "Labore aut eveniet.",
-      "kind": "prompt",
-      "prompt": "Commodi vitae et consequatur doloremque sequi.",
+      "kind": "higher_order_tool",
+      "name": "Commodi vitae et consequatur doloremque sequi.",
+      "prompt": "Omnis eaque ut libero repellat incidunt odit.",
       "tools_hint": [
-         "Est explicabo.",
          "Inventore quis.",
-         "Minima minus."
+         "Minima minus.",
+         "Perferendis aut dolor ut omnis."
       ]
-   }' --apikey-token "Perferendis aut dolor ut omnis." --session-token "Porro odit molestiae vitae reprehenderit." --project-slug-input "Ratione dolores atque eos velit suscipit."`)
+   }' --apikey-token "Porro odit molestiae vitae reprehenderit." --session-token "Ratione dolores atque eos velit suscipit." --project-slug-input "At tenetur delectus voluptas ut voluptas sed."`)
 }
 
 func templatesGetTemplateUsage() {
@@ -3105,7 +3106,7 @@ func templatesGetTemplateUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates get-template --id "Quasi fuga eius dicta error in ipsum." --name "Ipsa voluptates porro qui." --apikey-token "Rerum dolorem quam consequatur adipisci." --session-token "Est odit aut." --project-slug-input "Exercitationem doloribus."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates get-template --id "Ipsa voluptates porro qui." --name "Rerum dolorem quam consequatur adipisci." --apikey-token "Est odit aut." --session-token "Exercitationem doloribus." --project-slug-input "Enim dolorem voluptatem facilis asperiores magnam."`)
 }
 
 func templatesListTemplatesUsage() {
@@ -3128,7 +3129,7 @@ func templatesListTemplatesUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates list-templates --apikey-token "Enim expedita eos enim." --session-token "Voluptate quia." --project-slug-input "Modi incidunt."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates list-templates --apikey-token "Et modi." --session-token "Qui ea." --project-slug-input "Dignissimos libero omnis voluptatum nihil vel labore."`)
 }
 
 func templatesDeleteTemplateUsage() {
@@ -3155,7 +3156,7 @@ func templatesDeleteTemplateUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates delete-template --id "Qui quidem ab esse illo." --name "Veniam ut quisquam accusantium ut." --apikey-token "Cumque dolorem magni id quis." --session-token "Aut quo alias reiciendis libero." --project-slug-input "Rerum at quasi."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates delete-template --id "Ut sint." --name "Dolorem magni." --apikey-token "Quis placeat." --session-token "Quo alias." --project-slug-input "Libero odio rerum at quasi."`)
 }
 
 func templatesRenderTemplateByIDUsage() {

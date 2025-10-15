@@ -94,7 +94,7 @@ func BuildUpdateTemplatePayload(templatesUpdateTemplateBody string, templatesUpd
 	{
 		err = json.Unmarshal([]byte(templatesUpdateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Omnis eaque ut libero repellat incidunt odit.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Labore aut eveniet.\",\n      \"kind\": \"prompt\",\n      \"prompt\": \"Commodi vitae et consequatur doloremque sequi.\",\n      \"tools_hint\": [\n         \"Est explicabo.\",\n         \"Inventore quis.\",\n         \"Minima minus.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Quasi officia.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Labore aut eveniet.\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"Commodi vitae et consequatur doloremque sequi.\",\n      \"prompt\": \"Omnis eaque ut libero repellat incidunt odit.\",\n      \"tools_hint\": [\n         \"Inventore quis.\",\n         \"Minima minus.\",\n         \"Perferendis aut dolor ut omnis.\"\n      ]\n   }'")
 		}
 		if body.Arguments != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.arguments", *body.Arguments, goa.FormatJSON))
@@ -136,6 +136,7 @@ func BuildUpdateTemplatePayload(templatesUpdateTemplateBody string, templatesUpd
 	}
 	v := &templates.UpdateTemplatePayload{
 		ID:          body.ID,
+		Name:        body.Name,
 		Prompt:      body.Prompt,
 		Description: body.Description,
 		Arguments:   body.Arguments,

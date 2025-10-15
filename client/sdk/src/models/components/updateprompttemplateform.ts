@@ -58,6 +58,10 @@ export type UpdatePromptTemplateForm = {
    */
   kind?: UpdatePromptTemplateFormKind | undefined;
   /**
+   * The name of the prompt template. Will be updated via variation
+   */
+  name?: string | undefined;
+  /**
    * The template content
    */
   prompt?: string | undefined;
@@ -120,6 +124,7 @@ export const UpdatePromptTemplateForm$inboundSchema: z.ZodType<
   engine: UpdatePromptTemplateFormEngine$inboundSchema.optional(),
   id: z.string(),
   kind: UpdatePromptTemplateFormKind$inboundSchema.optional(),
+  name: z.string().optional(),
   prompt: z.string().optional(),
   tools_hint: z.array(z.string()).optional(),
 }).transform((v) => {
@@ -135,6 +140,7 @@ export type UpdatePromptTemplateForm$Outbound = {
   engine?: string | undefined;
   id: string;
   kind?: string | undefined;
+  name?: string | undefined;
   prompt?: string | undefined;
   tools_hint?: Array<string> | undefined;
 };
@@ -150,6 +156,7 @@ export const UpdatePromptTemplateForm$outboundSchema: z.ZodType<
   engine: UpdatePromptTemplateFormEngine$outboundSchema.optional(),
   id: z.string(),
   kind: UpdatePromptTemplateFormKind$outboundSchema.optional(),
+  name: z.string().optional(),
   prompt: z.string().optional(),
   toolsHint: z.array(z.string()).optional(),
 }).transform((v) => {
