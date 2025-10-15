@@ -1,5 +1,17 @@
 # @gram/server
 
+## 0.7.0
+
+### Minor Changes
+
+- 9df917a: Adds the ability for users of private servers to load the install page for easy user install of MCPs.
+
+### Patch Changes
+
+- 3fa88db: Allow PCRE regex on incoming JSON sources, despite not necessarily being supported by Go's native regexp parsing.
+- f15d1fe: Implements the boilerplate of being able to parse openIdConnect securitySchemes and treat the accessToken produced as a possible implementation of MCP OAuth
+- 9df917a: fix: update to use mcpb instead of dxt nomenclature for MCP installation pages
+
 ## 0.6.0
 
 ### Minor Changes
