@@ -44,14 +44,6 @@ func EncodeServeImageRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		if !ok {
 			return goahttp.ErrInvalidType("assets", "serveImage", "*assets.ServeImageForm", v)
 		}
-		if p.SessionToken != nil {
-			head := *p.SessionToken
-			req.Header.Set("Gram-Session", head)
-		}
-		if p.ApikeyToken != nil {
-			head := *p.ApikeyToken
-			req.Header.Set("Gram-Key", head)
-		}
 		values := req.URL.Query()
 		values.Add("id", p.ID)
 		req.URL.RawQuery = values.Encode()

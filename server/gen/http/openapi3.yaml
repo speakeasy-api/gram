@@ -214,20 +214,6 @@ paths:
                   schema:
                     description: The ID of the asset to serve
                     type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
             responses:
                 "200":
                     content:
@@ -304,9 +290,6 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
             summary: serveImage assets
             tags:
                 - assets
@@ -10262,13 +10245,9 @@ components:
         ServeImageForm:
             type: object
             properties:
-                apikey_token:
-                    type: string
                 id:
                     type: string
                     description: The ID of the asset to serve
-                session_token:
-                    type: string
             required:
                 - id
         ServeImageResult:

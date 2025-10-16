@@ -16,27 +16,13 @@ import (
 
 // BuildServeImagePayload builds the payload for the assets serveImage endpoint
 // from CLI flags.
-func BuildServeImagePayload(assetsServeImageID string, assetsServeImageSessionToken string, assetsServeImageApikeyToken string) (*assets.ServeImageForm, error) {
+func BuildServeImagePayload(assetsServeImageID string) (*assets.ServeImageForm, error) {
 	var id string
 	{
 		id = assetsServeImageID
 	}
-	var sessionToken *string
-	{
-		if assetsServeImageSessionToken != "" {
-			sessionToken = &assetsServeImageSessionToken
-		}
-	}
-	var apikeyToken *string
-	{
-		if assetsServeImageApikeyToken != "" {
-			apikeyToken = &assetsServeImageApikeyToken
-		}
-	}
 	v := &assets.ServeImageForm{}
 	v.ID = id
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
 
 	return v, nil
 }

@@ -8,20 +8,22 @@ import (
 
 var _ = Service("assets", func() {
 	Description("Manages assets used by Gram projects.")
+	shared.DeclareErrorResponses()
 
 	Security(security.ByKey, security.ProjectSlug, func() {
 		Scope("producer")
 	})
 	Security(security.Session, security.ProjectSlug)
-	shared.DeclareErrorResponses()
 
 	Method("serveImage", func() {
 		Description("Serve an image from Gram.")
-		Security(security.ByKey)
-		Security(security.Session)
 
 		Payload(ServeImageForm)
 		Result(ServeImageResult)
+
+		// We remove security for images because they are considered public
+		// The rest of these methods will inherit security from the service
+		NoSecurity()
 
 		HTTP(func() {
 			GET("/rpc/assets.serveImage")
@@ -34,8 +36,6 @@ var _ = Service("assets", func() {
 				Header("access_control_allow_origin:Access-Control-Allow-Origin")
 			})
 
-			security.SessionHeader()
-			security.ByKeyHeader()
 			SkipResponseBodyEncodeDecode()
 		})
 
@@ -45,6 +45,7 @@ var _ = Service("assets", func() {
 	})
 
 	Method("uploadImage", func() {
+
 		Description("Upload an image to Gram.")
 
 		Payload(UploadImageForm)
@@ -113,11 +114,11 @@ var _ = Service("assets", func() {
 	Method("serveOpenAPIv3", func() {
 		Description("Serve an OpenAPIv3 asset from Gram.")
 
-		Security(security.ByKey)
-		Security(security.Session)
-
 		Payload(ServeOpenAPIv3Form)
 		Result(ServeOpenAPIv3Result)
+
+		Security(security.ByKey)
+		Security(security.Session)
 
 		HTTP(func() {
 			GET("/rpc/assets.serveOpenAPIv3")
@@ -173,9 +174,6 @@ var ListAssetsResult = Type("ListAssetsResult", func() {
 
 var ServeImageForm = Type("ServeImageForm", func() {
 	Required("id")
-	security.SessionPayload()
-	security.ByKeyPayload()
-
 	Attribute("id", String, "The ID of the asset to serve")
 })
 
