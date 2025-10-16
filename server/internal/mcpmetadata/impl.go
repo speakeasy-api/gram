@@ -371,7 +371,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 func resolveMCPURLFromContext(ctx context.Context, serverUrl string, mcpSlug string, serverIsPublic bool) (string, error) {
 	customDomainCtx := customdomains.FromContext(ctx)
 	baseURL := serverUrl + "/mcp"
-	if !serverIsPublic && customDomainCtx != nil {
+	if customDomainCtx != nil {
 		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain+"/mcp")
 	}
 	MCPURL, err := url.JoinPath(baseURL, mcpSlug)
