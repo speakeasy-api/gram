@@ -225,10 +225,17 @@ func (tp *ToolProxy) doFunction(
 		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
 	}
 
+	payloadEnv := make(map[string]string, len(plan.Variables))
+	for _, v := range plan.Variables {
+		if val := env.Get(v); val != "" {
+			payloadEnv[v] = val
+		}
+	}
+
 	payload, err := json.Marshal(functions.CallToolPayload{
 		ToolName:    descriptor.Name,
 		Input:       input,
-		Environment: env.data,
+		Environment: payloadEnv,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to marshal function tool payload").Log(ctx, logger)
