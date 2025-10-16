@@ -1,5 +1,13 @@
 # @gram/server
 
+## 0.7.1
+
+### Patch Changes
+
+- 3ea6da7: feat: treat producer keys as a superset of consumer
+- 8890c9e: Remove references to the `deleted` column for deployments_functions.
+- d2283dd: Pass through only relevant environment variables to a given Gram Functions tool, as specified in the manifest, when invoking it.
+
 ## 0.7.0
 
 ### Minor Changes

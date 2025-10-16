@@ -1,5 +1,12 @@
 # @gram/dashboard
 
+## 0.14.1
+
+### Patch Changes
+
+- b53cefb: Ensure all pages have proper bottom padding
+- 64b8fc7: feat: Claude 4.5 Haiku available in playground model switcher
+
 ## 0.14.0
 
 ### Minor Changes
