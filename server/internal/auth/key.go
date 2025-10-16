@@ -88,12 +88,13 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 	}
 
 	// a bit of a hack right now, the product intends to allow producer keys to act as a superset of consumer keys
-	if slices.Contains(apiKey.Scopes, APIKeyScopeProducer.String()) && !slices.Contains(requiredScopes, APIKeyScopeConsumer.String()) {
-		apiKey.Scopes = append(apiKey.Scopes, APIKeyScopeConsumer.String())
+	scopes := slices.Clone(apiKey.Scopes)
+	if slices.Contains(scopes, APIKeyScopeProducer.String()) && !slices.Contains(requiredScopes, APIKeyScopeConsumer.String()) {
+		scopes = append(scopes, APIKeyScopeConsumer.String())
 	}
 
 	for _, scope := range requiredScopes {
-		if !slices.Contains(apiKey.Scopes, scope) {
+		if !slices.Contains(scopes, scope) {
 			return ctx, oops.E(oops.CodeForbidden, nil, "api key insufficient scopes")
 		}
 	}
@@ -112,7 +113,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		Email:                nil,
 		AccountType:          org.GramAccountType,
 		ProjectSlug:          nil,
-		APIKeyScopes:         apiKey.Scopes,
+		APIKeyScopes:         scopes,
 	})
 
 	return ctx, nil
