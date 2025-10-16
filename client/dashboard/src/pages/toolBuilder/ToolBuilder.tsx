@@ -36,7 +36,6 @@ import {
   invalidateAllListToolsets,
   invalidateAllTemplate,
   invalidateAllTemplates,
-  invalidateTemplate,
   useListToolsetsSuspense,
   useTemplateSuspense,
   useUpdateTemplateMutation,
