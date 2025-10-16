@@ -61,7 +61,9 @@ export const ToolCollectionBadge = ({
   let tooltipContent: React.ReactNode = (
     <div className="max-h-[300px] overflow-y-auto">
       <Stack gap={1}>
-        {toolNames?.map((tool, i) => <p key={i}>{tool}</p>)}
+        {toolNames?.map((tool, i) => (
+          <p key={i}>{tool}</p>
+        ))}
       </Stack>
     </div>
   );
