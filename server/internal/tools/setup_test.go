@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/tools"
+	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
 var (
@@ -103,7 +104,8 @@ func newTestToolsService(t *testing.T, assetStorage assets.BlobStore) (context.C
 	deploymentsSvc := deployments.NewService(logger, tracerProvider, conn, temporal, sessionManager, assetStorage)
 	assetsSvc := assets.NewService(logger, conn, sessionManager, assetStorage)
 	packagesSvc := packages.NewService(logger, conn, sessionManager)
-	templatesSvc := templates.NewService(logger, conn, sessionManager)
+	toolsetsSvc := toolsets.NewService(logger, conn, sessionManager, cache.NewRedisCacheAdapter(redisClient))
+	templatesSvc := templates.NewService(logger, conn, sessionManager, toolsetsSvc)
 
 	return ctx, &testInstance{
 		service:        toolsSvc,

@@ -507,6 +507,8 @@ func newStartCommand() *cli.Command {
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.AdminOverrideMiddleware)
 
+			toolsetsSvc := toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient))
+
 			about.Attach(mux, about.NewService(logger, tracerProvider))
 			auth.Attach(mux, auth.NewService(logger, db, sessionManager, auth.AuthConfigurations{
 				SpeakeasyServerAddress: c.String("speakeasy-server-address"),
@@ -516,11 +518,11 @@ func newStartCommand() *cli.Command {
 			}))
 			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
 			packages.Attach(mux, packages.NewService(logger, db, sessionManager))
+			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, db, sessionManager))
-			templates.Attach(mux, templates.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient)))
+			templates.Attach(mux, templates.NewService(logger, db, sessionManager, toolsetsSvc))
 			assets.Attach(mux, assets.NewService(logger, db, sessionManager, assetStorage))
 			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalClient, sessionManager, assetStorage))
-			toolsets.Attach(mux, toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient)))
 			keys.Attach(mux, keys.NewService(logger, db, sessionManager, c.String("environment")))
 			environments.Attach(mux, environments.NewService(logger, db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger, db, sessionManager))

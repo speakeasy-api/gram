@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 var (
@@ -66,11 +68,25 @@ func newTestTemplateService(t *testing.T) (context.Context, *testInstance) {
 
 	ctx = testenv.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := templates.NewService(logger, conn, sessionManager)
+	toolsetsSvc := &toolsetsServiceStub{
+		InvalidateCacheByToolFunc: func(ctx context.Context, toolURN urn.Tool, projectID uuid.UUID) error {
+			println("Invalidating cache for tool", toolURN.String(), "and project", projectID.String())
+			return nil
+		},
+	}
+	svc := templates.NewService(logger, conn, sessionManager, toolsetsSvc)
 
 	return ctx, &testInstance{
 		service:        svc,
 		conn:           conn,
 		sessionManager: sessionManager,
 	}
+}
+
+type toolsetsServiceStub struct {
+	InvalidateCacheByToolFunc func(ctx context.Context, toolURN urn.Tool, projectID uuid.UUID) error
+}
+
+func (s *toolsetsServiceStub) InvalidateCacheByTool(ctx context.Context, toolURN urn.Tool, projectID uuid.UUID) error {
+	return s.InvalidateCacheByToolFunc(ctx, toolURN, projectID)
 }

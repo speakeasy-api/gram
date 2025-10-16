@@ -27,17 +27,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/jsonschema"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/templates/repo"
-	"github.com/speakeasy-api/gram/server/internal/toolsets"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/variations"
 )
+
+type ToolsetsService interface {
+	InvalidateCacheByTool(ctx context.Context, toolURN urn.Tool, projectID uuid.UUID) error
+}
 
 type Service struct {
 	tracer     trace.Tracer
@@ -46,13 +48,13 @@ type Service struct {
 	auth       *auth.Auth
 	repo       *repo.Queries
 	variations *variations.Service
-	toolsets   *toolsets.Service	
+	toolsets   ToolsetsService	
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, cache cache.Cache) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, toolsets ToolsetsService) *Service {
 	logger = logger.With(attr.SlogComponent("templates"))
 
 	return &Service{
@@ -62,7 +64,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		auth:       auth.New(logger, db, sessions),
 		repo:       repo.New(db),
 		variations: variations.NewService(logger, db, sessions),
-		toolsets:   toolsets.NewService(logger, db, sessions, cache),
+		toolsets:   toolsets,
 	}
 }
 
@@ -253,8 +255,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	}
 
 	// We need to invalidate the cache for any toolsets that contain this template as a tool 
-	err = s.toolsets.InvalidateCacheByTool(ctx, toolURN, projectID)
-	if err != nil {
+	if err := s.toolsets.InvalidateCacheByTool(ctx, toolURN, projectID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to invalidate toolset cache").Log(ctx, s.logger)
 	}
 
