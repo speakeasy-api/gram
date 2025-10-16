@@ -295,7 +295,12 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		}
 	} else {
 		if metadataRecord.LogoID.Valid {
-			logoAssetURL = fmt.Sprintf("/rpc/assets.serveImage?id=%s", metadataRecord.LogoID.UUID.String())
+			logoURL := *s.serverURL
+			logoURL.Path = "/rpc/assets.serveImage"
+			q := logoURL.Query()
+			q.Set("id", metadataRecord.LogoID.UUID.String())
+			logoURL.RawQuery = q.Encode()
+			logoAssetURL = logoURL.String()
 		}
 		if docs := conv.FromPGText[string](metadataRecord.ExternalDocumentationUrl); docs != nil {
 			docsURL = strings.TrimSpace(*docs)

@@ -1472,7 +1472,7 @@ func assetsUploadImageUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-image --content-type "Perspiciatis praesentium." --content-length 3776818567254265790 --apikey-token "Sit illum eum odio minima eaque laborum." --project-slug-input "Accusantium aliquam explicabo commodi inventore." --session-token "Voluptatem dignissimos ut vel similique qui hic." --stream "goa.png"`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-image --content-type "Magnam sit illum eum odio." --content-length 3768800536004234205 --apikey-token "Laborum corporis accusantium aliquam explicabo." --project-slug-input "Inventore eum." --session-token "Dignissimos ut vel similique qui hic." --stream "goa.png"`)
 }
 
 func assetsUploadFunctionsUsage() {

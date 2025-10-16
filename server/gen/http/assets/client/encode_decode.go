@@ -89,10 +89,11 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				contentType   string
-				contentLength int64
-				lastModified  string
-				err           error
+				contentType              string
+				contentLength            int64
+				lastModified             string
+				accessControlAllowOrigin *string
+				err                      error
 			)
 			contentTypeRaw := resp.Header.Get("Content-Type")
 			if contentTypeRaw == "" {
@@ -115,10 +116,14 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 				err = goa.MergeErrors(err, goa.MissingFieldError("last_modified", "header"))
 			}
 			lastModified = lastModifiedRaw
+			accessControlAllowOriginRaw := resp.Header.Get("Access-Control-Allow-Origin")
+			if accessControlAllowOriginRaw != "" {
+				accessControlAllowOrigin = &accessControlAllowOriginRaw
+			}
 			if err != nil {
 				return nil, goahttp.ErrValidationError("assets", "serveImage", err)
 			}
-			res := NewServeImageResultOK(contentType, contentLength, lastModified)
+			res := NewServeImageResultOK(contentType, contentLength, lastModified, accessControlAllowOrigin)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (

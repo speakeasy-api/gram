@@ -193,6 +193,8 @@ paths:
                 "200":
                     description: OK response.
                     headers:
+                        Access-Control-Allow-Origin:
+                            type: string
                         Content-Length:
                             type: int64
                         Content-Type:
