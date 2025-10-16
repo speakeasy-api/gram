@@ -507,7 +507,7 @@ func newStartCommand() *cli.Command {
 			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
 			packages.Attach(mux, packages.NewService(logger, db, sessionManager))
 			integrations.Attach(mux, integrations.NewService(logger, db, sessionManager))
-			templates.Attach(mux, templates.NewService(logger, db, sessionManager))
+			templates.Attach(mux, templates.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient)))
 			assets.Attach(mux, assets.NewService(logger, db, sessionManager, assetStorage))
 			deployments.Attach(mux, deployments.NewService(logger, tracerProvider, db, temporalClient, sessionManager, assetStorage))
 			toolsets.Attach(mux, toolsets.NewService(logger, db, sessionManager, cache.NewRedisCacheAdapter(redisClient)))
