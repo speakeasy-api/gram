@@ -45,6 +45,7 @@ const defaultModel = {
 
 const availableModels = [
   defaultModel,
+  { label: "Claude 4.5 Haiku", value: "anthropic/claude-haiku-4.5" },
   { label: "Claude 4 Sonnet", value: "anthropic/claude-sonnet-4" },
   { label: "GPT-4o", value: "openai/gpt-4o" },
   { label: "GPT-4o-mini", value: "openai/gpt-4o-mini" },
