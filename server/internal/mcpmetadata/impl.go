@@ -317,7 +317,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		toolNames = append(toolNames, baseTool.Name)
 	}
 
-	MCPURL, err := resolveMCPURLFromContext(ctx, s.serverURL.String(), mcpSlug)
+	MCPURL, err := resolveMCPURLFromContext(ctx, s.serverURL.String(), mcpSlug, toolset.McpIsPublic)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolved bad url").Log(ctx, s.logger)
 	}
@@ -373,7 +373,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
-func resolveMCPURLFromContext(ctx context.Context, serverUrl string, mcpSlug string) (string, error) {
+func resolveMCPURLFromContext(ctx context.Context, serverUrl string, mcpSlug string, serverIsPublic bool) (string, error) {
 	customDomainCtx := customdomains.FromContext(ctx)
 	baseURL := serverUrl + "/mcp"
 	if !serverIsPublic && customDomainCtx != nil {

@@ -185,9 +185,7 @@ var ServeImageResult = Type("ServeImageResult", func() {
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
 	Attribute("last_modified", String)
-	Attribute("access_control_allow_origin", String, func() {
-		Default("*")
-	})
+	Attribute("access_control_allow_origin", String)
 })
 
 var UploadOpenAPIv3Form = Type("UploadOpenAPIv3Form", func() {

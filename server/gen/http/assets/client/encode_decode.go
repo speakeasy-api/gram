@@ -92,7 +92,7 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 				contentType              string
 				contentLength            int64
 				lastModified             string
-				accessControlAllowOrigin string
+				accessControlAllowOrigin *string
 				err                      error
 			)
 			contentTypeRaw := resp.Header.Get("Content-Type")
@@ -118,9 +118,7 @@ func DecodeServeImageResponse(decoder func(*http.Response) goahttp.Decoder, rest
 			lastModified = lastModifiedRaw
 			accessControlAllowOriginRaw := resp.Header.Get("Access-Control-Allow-Origin")
 			if accessControlAllowOriginRaw != "" {
-				accessControlAllowOrigin = accessControlAllowOriginRaw
-			} else {
-				accessControlAllowOrigin = "*"
+				accessControlAllowOrigin = &accessControlAllowOriginRaw
 			}
 			if err != nil {
 				return nil, goahttp.ErrValidationError("assets", "serveImage", err)

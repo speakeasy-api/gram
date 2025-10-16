@@ -239,7 +239,6 @@ paths:
                     headers:
                         Access-Control-Allow-Origin:
                             schema:
-                                default: '*'
                                 type: string
                         Content-Length:
                             schema:
@@ -10262,7 +10261,6 @@ components:
             properties:
                 access_control_allow_origin:
                     type: string
-                    default: '*'
                 content_length:
                     type: integer
                     format: int64

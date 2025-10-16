@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -150,7 +151,7 @@ func (s *Service) ServeImage(ctx context.Context, payload *gen.ServeImageForm) (
 		ContentType:              row.ContentType,
 		ContentLength:            row.ContentLength,
 		LastModified:             row.UpdatedAt.Time.Format(time.RFC1123),
-		AccessControlAllowOrigin: "*",
+		AccessControlAllowOrigin: conv.Ptr("*"),
 	}, body, nil
 }
 

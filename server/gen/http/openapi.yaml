@@ -194,7 +194,6 @@ paths:
                     description: OK response.
                     headers:
                         Access-Control-Allow-Origin:
-                            default: '*'
                             type: string
                         Content-Length:
                             type: int64
