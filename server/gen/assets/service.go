@@ -101,9 +101,10 @@ type ServeImageForm struct {
 
 // ServeImageResult is the result type of the assets service serveImage method.
 type ServeImageResult struct {
-	ContentType   string
-	ContentLength int64
-	LastModified  string
+	ContentType              string
+	ContentLength            int64
+	LastModified             string
+	AccessControlAllowOrigin *string
 }
 
 // ServeOpenAPIv3Form is the payload type of the assets service serveOpenAPIv3
