@@ -31,6 +31,7 @@ var _ = Service("assets", func() {
 				Header("content_type:Content-Type")
 				Header("content_length:Content-Length")
 				Header("last_modified:Last-Modified")
+				Header("access_control_allow_origin:Access-Control-Allow-Origin")
 			})
 
 			security.SessionHeader()
@@ -184,6 +185,9 @@ var ServeImageResult = Type("ServeImageResult", func() {
 	Attribute("content_type", String)
 	Attribute("content_length", Int64)
 	Attribute("last_modified", String)
+	Attribute("access_control_allow_origin", String, func() {
+		Default("*")
+	})
 })
 
 var UploadOpenAPIv3Form = Type("UploadOpenAPIv3Form", func() {

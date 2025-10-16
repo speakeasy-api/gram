@@ -31,6 +31,7 @@ func EncodeServeImageResponse(encoder func(context.Context, http.ResponseWriter)
 			w.Header().Set("Content-Length", contentLengths)
 		}
 		w.Header().Set("Last-Modified", res.LastModified)
+		w.Header().Set("Access-Control-Allow-Origin", res.AccessControlAllowOrigin)
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}
