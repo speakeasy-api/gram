@@ -23,6 +23,24 @@ export default defineConfig({
   build: {
     target: "es2022",
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "lucide-react": ["lucide-react"],
+          moonshine: ["@speakeasy-api/moonshine"],
+          externals: [
+            "posthog-js",
+            "react",
+            "react-dom",
+            "react-error-boundary",
+            "react-router",
+            "sonner",
+            "vaul",
+            "zod",
+          ],
+        },
+      },
+    },
   },
   esbuild: {
     target: "es2022",
