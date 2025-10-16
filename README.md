@@ -38,6 +38,8 @@ With Gram you can:
 └ Power agentic workflows or chat in your product by exposing context from your internal APIs to LLMs.    
 └ Manage and secure MCP servers for your entire organization through a unified control plane.  
 
+If you are looking to get started on the hosted platform you can do that [here](https://app.getgram.ai/) or check out the [quickstart guide](https://docs.getgram.ai/gram-quickstart).
+
 ## Features
 
 └ Minimal, lightweight, and open source.  
