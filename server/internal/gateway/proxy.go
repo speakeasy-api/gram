@@ -280,6 +280,12 @@ func (tp *ToolProxy) doFunction(
 		tp.policy,
 		&responseStatusCode,
 		tp.toolMetrics,
+		func(resp *http.Response) error {
+			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
+				return fmt.Errorf("failed to verify function invocation ID")
+			}
+			return nil
+		},
 	)
 }
 
@@ -532,6 +538,7 @@ func (tp *ToolProxy) doHTTP(
 		tp.policy,
 		&responseStatusCode,
 		tp.toolMetrics,
+		func(resp *http.Response) error { return nil },
 	)
 }
 
@@ -602,6 +609,7 @@ func reverseProxyRequest(
 	policy *guardian.Policy,
 	responseStatusCodeCapture *int,
 	tcm tm.ToolMetricsProvider,
+	verifyResponse func(*http.Response) error,
 ) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
@@ -696,6 +704,11 @@ func reverseProxyRequest(
 	defer o11y.LogDefer(ctx, logger, func() error {
 		return resp.Body.Close()
 	})
+
+	if err := verifyResponse(resp); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return oops.E(oops.CodeGatewayError, err, "tool call response verification failed").Log(ctx, logger)
+	}
 
 	if len(resp.Trailer) > 0 {
 		var trailerKeys []string
