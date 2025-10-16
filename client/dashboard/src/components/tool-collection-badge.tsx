@@ -78,7 +78,15 @@ export const ToolCollectionBadge = ({
     );
   }
 
-  return toolNames && toolNames.length > 0 ? (
+  if (!toolNames || toolNames.length === 0) {
+    return (
+      <Badge variant={variant} className={className}>
+        No Tools
+      </Badge>
+    );
+  }
+
+  return (
     <Tooltip>
       <TooltipTrigger>
         <Badge
@@ -101,9 +109,5 @@ export const ToolCollectionBadge = ({
         <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
       </TooltipPortal>
     </Tooltip>
-  ) : (
-    <Badge variant={variant} className={className}>
-      No Tools
-    </Badge>
   );
 };
