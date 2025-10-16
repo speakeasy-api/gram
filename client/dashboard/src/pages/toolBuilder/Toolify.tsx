@@ -108,12 +108,16 @@ export const ToolifyDialog = ({
           {
             "tool": "exact_tool_name",
             "instructions": "How to use the tool with {{input_name}} placeholders"
+          },
+           {
+            "tool": "different_tool_name",
+            "instructions": "How to use the different tool with {{input_name}} placeholders"
           }
         ]
       }
   
       Requirements:
-      - The inputs array should contain objects with name and description for each input parameter
+      - The inputs array should contain objects with name and description for each input parameter, unique by name
       - Any inputs must appear in at least one step's instructions inside {{mustaches}}
       - Each step should invoke exactly one tool by its provided name
       - Pay attention to tool schemas - you may need multiple steps if one tool's output feeds another's input
@@ -133,10 +137,19 @@ export const ToolifyDialog = ({
       schema: SuggestionSchema,
     });
 
+    const suggestion = res.object as z.infer<typeof SuggestionSchema>;
+    const uniqueInputs = suggestion.inputs.filter(
+      (input, index, self) =>
+        index === self.findIndex((i) => i.name === input.name),
+    );
+
     set({
       toolset: selectedToolset,
       purpose,
-      suggestion: res.object as z.infer<typeof SuggestionSchema>,
+      suggestion: {
+        ...suggestion,
+        inputs: uniqueInputs,
+      },
     });
 
     setInProgress(false);
