@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -68,6 +69,7 @@ func NewService(
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	tracking billing.Tracker,
+	tcm tm.ToolMetricsProvider,
 ) *Service {
 	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
@@ -90,6 +92,7 @@ func NewService(
 			enc,
 			cacheImpl,
 			guardianPolicy,
+			tcm,
 		),
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}

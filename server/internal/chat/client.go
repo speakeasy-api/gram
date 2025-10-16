@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -53,6 +54,7 @@ func NewChatClient(logger *slog.Logger,
 	enc *encryption.Client,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
+	tcm tm.ToolMetricsProvider,
 ) *ChatClient {
 	return &ChatClient{
 		logger:     logger,
@@ -69,6 +71,7 @@ func NewChatClient(logger *slog.Logger,
 			enc,
 			cacheImpl,
 			guardianPolicy,
+			tcm,
 		),
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}

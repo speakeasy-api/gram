@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -99,6 +100,7 @@ func NewService(
 	oauthService *oauth.Service,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
+	tcm tm.ToolMetricsProvider,
 ) *Service {
 	tracer := tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/mcp")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/mcp")
@@ -125,6 +127,7 @@ func NewService(
 			enc,
 			cacheImpl,
 			guardianPolicy,
+			tcm,
 		),
 		oauthService:      oauthService,
 		oauthRepo:         oauth_repo.New(db),

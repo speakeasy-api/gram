@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric/noop"
 
@@ -88,7 +89,14 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env)
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, oauthService, billingStub, billingStub)
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	toolMetrics := toolmetrics.New(logger, tracerProvider, chConn, func(ctx context.Context, log toolmetrics.ToolHTTPRequest) (bool, error) {
+		return true, nil
+	})
+
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, oauthService, billingStub, billingStub, toolMetrics)
 
 	return ctx, &testInstance{
 		service:        svc,

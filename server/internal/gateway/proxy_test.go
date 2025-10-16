@@ -5,13 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -31,6 +34,44 @@ func newTestToolDescriptor() *ToolDescriptor {
 		OrganizationSlug: "test-org",
 		Name:             "test_tool",
 	}
+}
+
+var (
+	infra *testenv.Environment
+)
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+
+	res, cleanup, err := testenv.Launch(ctx)
+	if err != nil {
+		log.Fatalf("Failed to launch test infrastructure: %v", err)
+	}
+
+	infra = res
+
+	code := m.Run()
+
+	if err = cleanup(); err != nil {
+		log.Fatalf("Failed to cleanup test infrastructure: %v", err)
+	}
+
+	os.Exit(code)
+}
+
+func newClickhouseClient(t *testing.T, orgId string) *toolmetrics.Queries {
+	t.Helper()
+
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	tracerProvider := testenv.NewTracerProvider(t)
+
+	ch := toolmetrics.New(testenv.NewLogger(t), tracerProvider, chConn, func(ctx context.Context, log toolmetrics.ToolHTTPRequest) (bool, error) {
+		return true, nil
+	})
+
+	return ch
 }
 
 func TestToolProxy_Do_PathParams(t *testing.T) {
@@ -204,6 +245,8 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				ResponseFilter:     nil,
 			}
 
+			chClient := newClickhouseClient(t, tool.OrganizationID)
+
 			// Add path parameter configuration for the parameter in the test
 			for paramName := range tt.pathParam {
 				plan.PathParams[paramName] = &HTTPParameter{
@@ -237,6 +280,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				enc,
 				nil, // no cache needed for this test
 				policy,
+				chClient,
 			)
 
 			// Create response recorder
@@ -329,6 +373,8 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				ResponseFilter:     nil,
 			}
 
+			chClient := newClickhouseClient(t, tool.OrganizationID)
+
 			// Add header parameter configuration for the parameter in the test
 			for paramName := range tt.headerParam {
 				plan.HeaderParams[paramName] = &HTTPParameter{
@@ -362,6 +408,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				enc,
 				nil, // no cache needed for this test
 				policy,
+				chClient,
 			)
 
 			// Create response recorder
@@ -685,6 +732,8 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				ResponseFilter:     nil,
 			}
 
+			chClient := newClickhouseClient(t, tool.OrganizationID)
+
 			// Create request body with query parameters
 			requestBody := ToolCallBody{
 				PathParameters:       nil,
@@ -708,6 +757,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				enc,
 				nil, // no cache needed for this test
 				policy,
+				chClient,
 			)
 
 			// Create response recorder
@@ -897,6 +947,8 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				ResponseFilter:     nil,
 			}
 
+			chClient := newClickhouseClient(t, tool.OrganizationID)
+
 			// Marshal the test request body
 			bodyJSON, err := json.Marshal(tt.requestBody)
 			require.NoError(t, err)
@@ -924,6 +976,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				enc,
 				nil, // no cache needed for this test
 				policy,
+				chClient,
 			)
 
 			// Create response recorder
@@ -958,6 +1011,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, expectedJSON, actualJSON)
 			}
+
 		})
 	}
 }
@@ -1250,6 +1304,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				RequestContentType: NullString{Value: "application/json", Valid: true},
 				ResponseFilter:     nil,
 			}
+			chClient := newClickhouseClient(t, tool.OrganizationID)
 
 			// Create tool proxy
 			proxy := NewToolProxy(
@@ -1260,6 +1315,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				enc,
 				nil,
 				policy,
+				chClient,
 			)
 
 			// Create response recorder

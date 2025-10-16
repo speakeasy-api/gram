@@ -114,6 +114,7 @@ services:
     ports:
       - "8123:8123"
       - "9000:9000"
+      - "9440:9440"
     environment:
       CLICKHOUSE_DB: gram
       CLICKHOUSE_USER: gram

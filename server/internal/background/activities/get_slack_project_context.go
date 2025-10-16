@@ -80,7 +80,7 @@ func (s *GetSlackProjectContext) Do(ctx context.Context, event types.SlackEvent)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "error getting toolset version").Log(ctx, s.logger)
 		}
-		
+
 		toolsetSummaries[i] = SlackToolsetSummary{
 			ID:            toolset.ID,
 			Slug:          toolset.Slug,
