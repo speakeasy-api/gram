@@ -106,7 +106,7 @@ type FunctionToolCallPlan struct {
 	BearerFormat string      `json:"bearer_format" yaml:"bearer_format"`
 	AuthSecret   conv.Secret `json:"auth_secret" yaml:"auth_secret"`
 	InputSchema  []byte      `json:"input_schema" yaml:"input_schema"`
-	Variables    []byte      `json:"variables" yaml:"variables"`
+	Variables    []string    `json:"variables" yaml:"variables"`
 }
 
 type ToolKind string

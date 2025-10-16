@@ -185,6 +185,15 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 		return nil, fmt.Errorf("no app url available for function tool")
 	}
 
+	var envconfig map[string]any
+	if len(tool.Variables) > 0 {
+		if err := json.Unmarshal(tool.Variables, &envconfig); err != nil {
+			return nil, fmt.Errorf("unmarshal function tool env vars: %w", err)
+		}
+	}
+
+	envvars := slices.Collect(maps.Keys(envconfig))
+
 	descriptor := &gateway.ToolDescriptor{
 		ID:               tool.ID.String(),
 		URN:              tool.ToolUrn,
@@ -202,7 +211,7 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 		BearerFormat: conv.PtrValOr(conv.FromPGText[string](tool.BearerFormat), ""),
 		Runtime:      tool.Runtime,
 		InputSchema:  tool.InputSchema,
-		Variables:    tool.Variables,
+		Variables:    envvars,
 	}
 
 	return gateway.NewFunctionToolCallPlan(descriptor, plan), nil
