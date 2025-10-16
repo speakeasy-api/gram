@@ -70,7 +70,7 @@ func newClickhouseClient(t *testing.T, orgId string) *toolmetrics.Queries {
 
 	tracerProvider := testenv.NewTracerProvider(t)
 
-	ch := toolmetrics.New(testenv.NewLogger(t), tracerProvider, chConn, func(ctx context.Context, log toolmetrics.ToolHTTPRequest) (bool, error) {
+	ch := toolmetrics.New(testenv.NewLogger(t), tracerProvider, chConn, func(context.Context, string) (bool, error) {
 		return true, nil
 	})
 

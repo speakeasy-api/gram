@@ -625,13 +625,31 @@ func reverseProxyRequest(
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 
-	// Wrap with HTTP logging round tripper
-	loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, tcm, logger, tracer)
+	isAllowed, err := tcm.ShouldLog(ctx, tool.OrganizationID)
+	if err != nil {
+		// If we can't determine if the tool is allowed to log, we won't log the request.
+		isAllowed = false
+		logger.ErrorContext(ctx,
+			"failed to determine if tool is allowed to log",
+			attr.SlogOrganizationID(tool.OrganizationID),
+			attr.SlogToolName(tool.Name),
+			attr.SlogError(err))
+	}
 
-	otelTransport := otelhttp.NewTransport(
-		loggingTransport,
-		otelhttp.WithPropagators(propagation.TraceContext{}),
-	)
+	var otelTransport *otelhttp.Transport
+	if isAllowed {
+		// Wrap with HTTP logging round tripper
+		loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, tcm, logger, tracer)
+		otelTransport = otelhttp.NewTransport(
+			loggingTransport,
+			otelhttp.WithPropagators(propagation.TraceContext{}),
+		)
+	} else {
+		otelTransport = otelhttp.NewTransport(
+			transport,
+			otelhttp.WithPropagators(propagation.TraceContext{}),
+		)
+	}
 
 	client := &http.Client{
 		Timeout:   60 * time.Second,
