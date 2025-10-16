@@ -1,5 +1,13 @@
 # @gram/dashboard
 
+## 0.14.2
+
+### Patch Changes
+
+- 660c110: Support variations on any tool type. Allows the names of Custom Tools to now be edited along with all fields of Functions.
+- Updated dependencies [660c110]
+  - @gram/client@0.14.11
+
 ## 0.14.1
 
 ### Patch Changes
