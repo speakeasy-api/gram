@@ -19,6 +19,31 @@ import (
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
+type APIKeyScope int
+
+const (
+	APIKeyScopeInvalid  APIKeyScope = iota
+	APIKeyScopeConsumer APIKeyScope = iota
+	APIKeyScopeProducer APIKeyScope = iota
+)
+
+var APIKeyScopes = map[string]APIKeyScope{
+	"invalid":  APIKeyScopeInvalid,
+	"consumer": APIKeyScopeConsumer,
+	"producer": APIKeyScopeProducer,
+}
+
+func (scope APIKeyScope) String() string {
+	switch scope {
+	case APIKeyScopeConsumer:
+		return "consumer"
+	case APIKeyScopeProducer:
+		return "producer"
+	default:
+		return "invalid"
+	}
+}
+
 func GetAPIKeyHash(key string) (string, error) {
 	hash := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(hash[:]), nil
@@ -60,6 +85,11 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		return ctx, oops.E(oops.CodeUnauthorized, err, "unauthorized: api key not found")
 	case err != nil:
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading api key details")
+	}
+
+	// a bit of a hack right now, the product intends to allow producer keys to act as a superset of consumer keys
+	if slices.Contains(apiKey.Scopes, APIKeyScopeProducer.String()) && !slices.Contains(requiredScopes, APIKeyScopeConsumer.String()) {
+		apiKey.Scopes = append(apiKey.Scopes, APIKeyScopeConsumer.String())
 	}
 
 	for _, scope := range requiredScopes {
