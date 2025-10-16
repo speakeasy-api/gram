@@ -70,6 +70,10 @@ func newFunctionRunnerFromString(value string) (FunctionRunner, error) {
 	return t, nil
 }
 
+func (u FunctionRunner) IsZero() bool {
+	return u.Kind == "" && u.Tenancy == "" && u.Name == ""
+}
+
 func (u FunctionRunner) String() string {
 	return "gfr" + delimiter + string(u.Kind) + delimiter + u.Tenancy + delimiter + u.Name
 }

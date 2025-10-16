@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const finalizeFlyApp = `-- name: FinalizeFlyApp :one
@@ -46,6 +47,70 @@ func (q *Queries) FinalizeFlyApp(ctx context.Context, arg FinalizeFlyAppParams) 
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const getFlyAppAccess = `-- name: GetFlyAppAccess :one
+SELECT
+    fa.fly_org_id
+  , fa.fly_org_slug
+  , fa.app_name
+  , fa.app_url
+  , fa.runner_version
+  , access.id AS access_id
+  , access.encryption_key
+  , access.bearer_format
+FROM fly_apps fa
+LEFT JOIN functions_access access
+  ON access.id = fa.access_id
+  AND access.deleted IS FALSE
+WHERE
+  fa.project_id = $1
+  AND fa.deployment_id = $2
+  AND fa.function_id = $3
+  AND fa.status = 'ready'
+  AND fa.reaped_at IS NULL
+  AND fa.access_id = $4
+ORDER BY fa.seq DESC NULLS LAST
+LIMIT 1
+`
+
+type GetFlyAppAccessParams struct {
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	AccessID     uuid.UUID
+}
+
+type GetFlyAppAccessRow struct {
+	FlyOrgID      string
+	FlyOrgSlug    string
+	AppName       string
+	AppUrl        string
+	RunnerVersion string
+	AccessID      uuid.NullUUID
+	EncryptionKey conv.Secret
+	BearerFormat  pgtype.Text
+}
+
+func (q *Queries) GetFlyAppAccess(ctx context.Context, arg GetFlyAppAccessParams) (GetFlyAppAccessRow, error) {
+	row := q.db.QueryRow(ctx, getFlyAppAccess,
+		arg.ProjectID,
+		arg.DeploymentID,
+		arg.FunctionID,
+		arg.AccessID,
+	)
+	var i GetFlyAppAccessRow
+	err := row.Scan(
+		&i.FlyOrgID,
+		&i.FlyOrgSlug,
+		&i.AppName,
+		&i.AppUrl,
+		&i.RunnerVersion,
+		&i.AccessID,
+		&i.EncryptionKey,
+		&i.BearerFormat,
+	)
+	return i, err
 }
 
 const getFunctionsRunnerVersion = `-- name: GetFunctionsRunnerVersion :one

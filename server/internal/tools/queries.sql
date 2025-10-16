@@ -255,27 +255,18 @@ SELECT
   , tool.input_schema
   , tool.variables
   , access.id AS access_id
-  , access.encryption_key
-  , access.bearer_format
-  , apps.id as fly_app_internal_id
-  , apps.app_name as fly_app_name
-  , apps.app_url as fly_app_url
-  , apps.runner_version as fly_runner_version
 FROM deployment dep
 INNER JOIN function_tool_definitions tool
   ON tool.deployment_id = dep.id
   AND tool.tool_urn = @urn
   AND tool.project_id = @project_id
   AND tool.deleted IS FALSE
-LEFT JOIN fly_apps apps
-  ON apps.project_id = @project_id
-  AND apps.deployment_id = tool.deployment_id
-  AND apps.function_id = tool.function_id
-  AND apps.status = 'ready'
 LEFT JOIN functions_access access
-  ON access.id = apps.access_id
+  ON access.project_id = @project_id
+  AND access.deployment_id = dep.id
+  AND access.function_id = tool.function_id
   AND access.deleted IS FALSE
-ORDER BY apps.seq DESC NULLS LAST
+ORDER BY access.seq DESC NULLS LAST
 LIMIT 1;
 
 -- name: GetFunctionToolDefinitionByID :one

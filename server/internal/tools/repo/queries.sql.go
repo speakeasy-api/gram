@@ -10,7 +10,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/tools/repo/models"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -330,27 +329,18 @@ SELECT
   , tool.input_schema
   , tool.variables
   , access.id AS access_id
-  , access.encryption_key
-  , access.bearer_format
-  , apps.id as fly_app_internal_id
-  , apps.app_name as fly_app_name
-  , apps.app_url as fly_app_url
-  , apps.runner_version as fly_runner_version
 FROM deployment dep
 INNER JOIN function_tool_definitions tool
   ON tool.deployment_id = dep.id
   AND tool.tool_urn = $1
   AND tool.project_id = $2
   AND tool.deleted IS FALSE
-LEFT JOIN fly_apps apps
-  ON apps.project_id = $2
-  AND apps.deployment_id = tool.deployment_id
-  AND apps.function_id = tool.function_id
-  AND apps.status = 'ready'
 LEFT JOIN functions_access access
-  ON access.id = apps.access_id
+  ON access.project_id = $2
+  AND access.deployment_id = dep.id
+  AND access.function_id = tool.function_id
   AND access.deleted IS FALSE
-ORDER BY apps.seq DESC NULLS LAST
+ORDER BY access.seq DESC NULLS LAST
 LIMIT 1
 `
 
@@ -360,23 +350,17 @@ type GetFunctionToolByURNParams struct {
 }
 
 type GetFunctionToolByURNRow struct {
-	ID               uuid.UUID
-	ToolUrn          urn.Tool
-	ProjectID        uuid.UUID
-	DeploymentID     uuid.UUID
-	FunctionID       uuid.UUID
-	Runtime          string
-	Name             string
-	Description      string
-	InputSchema      []byte
-	Variables        []byte
-	AccessID         uuid.NullUUID
-	EncryptionKey    conv.Secret
-	BearerFormat     pgtype.Text
-	FlyAppInternalID uuid.NullUUID
-	FlyAppName       pgtype.Text
-	FlyAppUrl        pgtype.Text
-	FlyRunnerVersion pgtype.Text
+	ID           uuid.UUID
+	ToolUrn      urn.Tool
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+	InputSchema  []byte
+	Variables    []byte
+	AccessID     uuid.NullUUID
 }
 
 func (q *Queries) GetFunctionToolByURN(ctx context.Context, arg GetFunctionToolByURNParams) (GetFunctionToolByURNRow, error) {
@@ -394,12 +378,6 @@ func (q *Queries) GetFunctionToolByURN(ctx context.Context, arg GetFunctionToolB
 		&i.InputSchema,
 		&i.Variables,
 		&i.AccessID,
-		&i.EncryptionKey,
-		&i.BearerFormat,
-		&i.FlyAppInternalID,
-		&i.FlyAppName,
-		&i.FlyAppUrl,
-		&i.FlyRunnerVersion,
 	)
 	return i, err
 }

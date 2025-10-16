@@ -31,6 +31,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
 	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -68,6 +69,7 @@ func NewService(
 	enc *encryption.Client,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
+	funcCaller functions.ToolCaller,
 	tracking billing.Tracker,
 	tcm tm.ToolMetricsProvider,
 ) *Service {
@@ -92,6 +94,7 @@ func NewService(
 			enc,
 			cacheImpl,
 			guardianPolicy,
+			funcCaller,
 			tcm,
 		),
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),

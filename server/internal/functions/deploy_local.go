@@ -27,7 +27,7 @@ func NewLocalRunner(codeRoot *os.Root) *LocalRunner {
 	}
 }
 
-func (l *LocalRunner) CallTool(ctx context.Context, call RunnerToolCallRequest) (*http.Response, error) {
+func (l *LocalRunner) ToolCall(ctx context.Context, call RunnerToolCallRequest) (*http.Request, error) {
 	return nil, oops.Permanent(errors.New("not implemented"))
 }
 

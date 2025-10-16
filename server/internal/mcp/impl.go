@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -97,6 +98,7 @@ func NewService(
 	enc *encryption.Client,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
+	funcCaller functions.ToolCaller,
 	oauthService *oauth.Service,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
@@ -127,6 +129,7 @@ func NewService(
 			enc,
 			cacheImpl,
 			guardianPolicy,
+			funcCaller,
 			tcm,
 		),
 		oauthService:      oauthService,

@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -100,13 +99,11 @@ var DisableResponseFiltering = &ResponseFilter{
 
 // FunctionToolCallPlan describes a serverless function that can be invoked as a tool.
 type FunctionToolCallPlan struct {
-	FunctionID   string      `json:"function_id" yaml:"function_id"`
-	ServerURL    string      `json:"server_url" yaml:"server_url"`
-	Runtime      string      `json:"runtime" yaml:"runtime"`
-	BearerFormat string      `json:"bearer_format" yaml:"bearer_format"`
-	AuthSecret   conv.Secret `json:"auth_secret" yaml:"auth_secret"`
-	InputSchema  []byte      `json:"input_schema" yaml:"input_schema"`
-	Variables    []string    `json:"variables" yaml:"variables"`
+	FunctionID        string   `json:"function_id" yaml:"function_id"`
+	FunctionsAccessID string   `json:"functions_access_id" yaml:"functions_access_id"`
+	Runtime           string   `json:"runtime" yaml:"runtime"`
+	InputSchema       []byte   `json:"input_schema" yaml:"input_schema"`
+	Variables         []string `json:"variables" yaml:"variables"`
 }
 
 type ToolKind string
