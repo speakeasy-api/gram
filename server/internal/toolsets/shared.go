@@ -8,7 +8,6 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/openapi"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -180,9 +179,11 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 		return nil, fmt.Errorf("get project with organization metadata: %w", err)
 	}
 
-	flyURL := tool.FlyAppUrl.String
-	if flyURL == "" {
-		return nil, fmt.Errorf("no app url available for function tool")
+	accessID := ""
+	if tool.AccessID.Valid && tool.AccessID.UUID != uuid.Nil {
+		accessID = tool.AccessID.UUID.String()
+	} else {
+		return nil, fmt.Errorf("missing function access credentials")
 	}
 
 	var envconfig map[string]any
@@ -205,13 +206,11 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 		Name:             tool.Name,
 	}
 	plan := &gateway.FunctionToolCallPlan{
-		FunctionID:   tool.FunctionID.String(),
-		ServerURL:    flyURL,
-		AuthSecret:   tool.EncryptionKey,
-		BearerFormat: conv.PtrValOr(conv.FromPGText[string](tool.BearerFormat), ""),
-		Runtime:      tool.Runtime,
-		InputSchema:  tool.InputSchema,
-		Variables:    envvars,
+		FunctionID:        tool.FunctionID.String(),
+		FunctionsAccessID: accessID,
+		Runtime:           tool.Runtime,
+		InputSchema:       tool.InputSchema,
+		Variables:         envvars,
 	}
 
 	return gateway.NewFunctionToolCallPlan(descriptor, plan), nil

@@ -18,10 +18,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+var funcs functions.ToolCaller
 
 func newTestToolDescriptor() *ToolDescriptor {
 	return &ToolDescriptor{
@@ -280,6 +283,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				enc,
 				nil, // no cache needed for this test
 				policy,
+				funcs,
 				chClient,
 			)
 
@@ -408,6 +412,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				enc,
 				nil, // no cache needed for this test
 				policy,
+				funcs,
 				chClient,
 			)
 
@@ -757,6 +762,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				enc,
 				nil, // no cache needed for this test
 				policy,
+				funcs,
 				chClient,
 			)
 
@@ -976,6 +982,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				enc,
 				nil, // no cache needed for this test
 				policy,
+				funcs,
 				chClient,
 			)
 
@@ -1315,6 +1322,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				enc,
 				nil,
 				policy,
+				funcs,
 				chClient,
 			)
 

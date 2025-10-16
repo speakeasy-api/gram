@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
@@ -26,6 +27,7 @@ import (
 
 var (
 	infra *testenv.Environment
+	funcs functions.ToolCaller
 )
 
 func TestMain(m *testing.M) {
@@ -96,7 +98,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		return true, nil
 	})
 
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, oauthService, billingStub, billingStub, toolMetrics)
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics)
 
 	return ctx, &testInstance{
 		service:        svc,

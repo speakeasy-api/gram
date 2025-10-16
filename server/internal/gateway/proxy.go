@@ -26,6 +26,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -109,6 +110,7 @@ type ToolProxy struct {
 	encryption  *encryption.Client
 	cache       cache.Cache
 	policy      *guardian.Policy
+	functions   functions.ToolCaller
 	toolMetrics tm.ToolMetricsProvider
 }
 
@@ -120,6 +122,7 @@ func NewToolProxy(
 	enc *encryption.Client,
 	cache cache.Cache,
 	policy *guardian.Policy,
+	funcCaller functions.ToolCaller,
 	toolMetrics tm.ToolMetricsProvider,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
@@ -133,6 +136,7 @@ func NewToolProxy(
 		encryption:  enc,
 		cache:       cache,
 		policy:      policy,
+		functions:   funcCaller,
 		toolMetrics: toolMetrics,
 	}
 }
@@ -191,37 +195,27 @@ func (tp *ToolProxy) doFunction(
 	descriptor *ToolDescriptor,
 	plan *FunctionToolCallPlan,
 ) error {
-	method := http.MethodPost
-	route := "/tool-call"
 	span := trace.SpanFromContext(ctx)
-	span.SetAttributes(
-		attr.HTTPRoute(route),
-	)
-	logger = logger.With(
-		attr.SlogHTTPRoute(route),
-	)
-
-	unsealedAuthKey, err := tp.encryption.Decrypt(string(plan.AuthSecret.Reveal()))
+	invocationID, err := uuid.NewV7()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to access credentials for function tool call").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to generate function invocation ID").Log(ctx, logger)
 	}
 
-	enc, err := encryption.NewWithBytes([]byte(unsealedAuthKey))
+	projectID, err := uuid.Parse(descriptor.ProjectID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create encryption client for function tool call").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid project id received for function tool call").Log(ctx, logger)
 	}
-
-	endpoint, err := url.JoinPath(plan.ServerURL, route)
+	deploymentID, err := uuid.Parse(descriptor.DeploymentID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to parse function tool url").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid deployment id received for function tool call").Log(ctx, logger)
 	}
-
-	token, err := functions.TokenV1(enc, functions.TokenRequestV1{
-		ID:  plan.FunctionID,
-		Exp: time.Now().Add(10 * time.Minute).Unix(),
-	})
+	functionID, err := uuid.Parse(plan.FunctionID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create bearer token for function tool call").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid function id received for function tool call").Log(ctx, logger)
+	}
+	accessID, err := uuid.Parse(plan.FunctionsAccessID)
+	if err != nil {
+		return oops.E(oops.CodeInvariantViolation, err, "invalid function access id received for function tool call").Log(ctx, logger)
 	}
 
 	var input json.RawMessage
@@ -236,22 +230,23 @@ func (tp *ToolProxy) doFunction(
 		}
 	}
 
-	payload, err := json.Marshal(functions.CallToolPayload{
-		ToolName:    descriptor.Name,
-		Input:       input,
-		Environment: payloadEnv,
+	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
+		InvocationID:      invocationID,
+		OrganizationID:    descriptor.OrganizationID,
+		OrganizationSlug:  descriptor.OrganizationSlug,
+		ProjectID:         projectID,
+		ProjectSlug:       descriptor.ProjectSlug,
+		DeploymentID:      deploymentID,
+		FunctionsID:       functionID,
+		FunctionsAccessID: accessID,
+		ToolURN:           descriptor.URN,
+		ToolName:          descriptor.Name,
+		ToolInput:         input,
+		ToolEnvironment:   payloadEnv,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal function tool payload").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to create function tool call request").Log(ctx, logger)
 	}
-
-	req, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create function tool request").Log(ctx, logger)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
 
 	var responseStatusCode int
 	defer func() {
@@ -264,7 +259,7 @@ func (tp *ToolProxy) doFunction(
 
 		logger.InfoContext(ctx, "function tool call",
 			attr.SlogHTTPResponseStatusCode(responseStatusCode),
-			attr.SlogHTTPRequestMethod(method),
+			attr.SlogHTTPRequestMethod(req.Method),
 			attr.SlogHTTPResponseHeaderContentType(ct),
 		)
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it

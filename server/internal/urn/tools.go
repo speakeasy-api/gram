@@ -64,6 +64,10 @@ func ParseTool(value string) (Tool, error) {
 	return t, nil
 }
 
+func (u Tool) IsZero() bool {
+	return u.Kind == "" && u.Source == "" && u.Name == ""
+}
+
 func (u Tool) String() string {
 	return "tools" + delimiter + string(u.Kind) + delimiter + u.Source + delimiter + u.Name
 }

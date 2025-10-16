@@ -22,7 +22,7 @@ type Deployer interface {
 }
 
 type ToolCaller interface {
-	CallTool(context.Context, RunnerToolCallRequest) (*http.Response, error)
+	ToolCall(context.Context, RunnerToolCallRequest) (*http.Request, error)
 }
 
 type RunnerImageRequest struct {
@@ -75,12 +75,16 @@ type RunnerAsset struct {
 type RunnerToolCallRequest struct {
 	InvocationID uuid.UUID
 
-	ProjectID    uuid.UUID
-	DeploymentID uuid.UUID
-	FunctionsID  uuid.UUID
+	OrganizationID    string
+	OrganizationSlug  string
+	ProjectID         uuid.UUID
+	ProjectSlug       string
+	DeploymentID      uuid.UUID
+	FunctionsID       uuid.UUID
+	FunctionsAccessID uuid.UUID
 
-	URN         urn.Tool
-	Name        string
-	Input       json.RawMessage
-	Environment map[string]string
+	ToolURN         urn.Tool
+	ToolName        string
+	ToolInput       json.RawMessage
+	ToolEnvironment map[string]string
 }

@@ -91,6 +91,7 @@ const (
 	ErrorIDKey                     = attribute.Key("gram.error.id")
 	FilterExpressionKey            = attribute.Key("gram.filter.src")
 	FlyAppInternalIDKey            = attribute.Key("gram.fly.app_id")
+	FunctionsBackendKey            = attribute.Key("gram.functions.backend")
 	FunctionsManifestVersionKey    = attribute.Key("gram.functions.manifest_version")
 	FunctionsRunnerImageKey        = attribute.Key("gram.functions.runner_image")
 	FunctionsRunnerVersionKey      = attribute.Key("gram.functions.runner_version")
@@ -400,6 +401,9 @@ func SlogFilterExpression(v string) slog.Attr      { return slog.String(string(F
 
 func FlyAppInternalID(v string) attribute.KeyValue { return FlyAppInternalIDKey.String(v) }
 func SlogFlyAppInternalID(v string) slog.Attr      { return slog.String(string(FlyAppInternalIDKey), v) }
+
+func FunctionsBackend(v string) attribute.KeyValue { return FunctionsBackendKey.String(v) }
+func SlogFunctionsBackend(v string) slog.Attr      { return slog.String(string(FunctionsBackendKey), v) }
 
 func FunctionsManifestVersion(v string) attribute.KeyValue {
 	return FunctionsManifestVersionKey.String(v)
