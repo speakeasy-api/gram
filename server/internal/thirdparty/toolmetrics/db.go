@@ -20,7 +20,7 @@ type Queries struct {
 	conn       CHTX
 	logger     *slog.Logger
 	tracer     trace.Tracer
-	ShouldFlag func(ctx context.Context, log ToolHTTPRequest) (bool, error)
+	ShouldFlag func(ctx context.Context, orgId string) (bool, error)
 }
 
 // WithConn returns a new Queries instance using the provided connection.
@@ -34,9 +34,9 @@ func (q *Queries) WithConn(conn CHTX) *Queries {
 }
 
 // New creates a new Queries instance with logger and tracer.
-func New(logger *slog.Logger, traceProvider trace.TracerProvider, conn CHTX, shouldFlag func(ctx context.Context, log ToolHTTPRequest) (bool, error)) *Queries {
+func New(logger *slog.Logger, traceProvider trace.TracerProvider, conn CHTX, shouldFlag func(ctx context.Context, orgId string) (bool, error)) *Queries {
 	if shouldFlag == nil {
-		shouldFlag = func(ctx context.Context, log ToolHTTPRequest) (bool, error) {
+		shouldFlag = func(ctx context.Context, orgId string) (bool, error) {
 			return true, nil
 		}
 	}

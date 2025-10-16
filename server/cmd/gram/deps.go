@@ -97,22 +97,23 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		},
 	})
 	if err != nil {
-		return nil, nilFunc, fmt.Errorf("connect to clickhouse: %w", err)
+		logger.WarnContext(ctx, "error connecting to clickhouse; falling back to stub tool call metrics client")
+		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil
 	}
 
 	if err = conn.Ping(ctx); err != nil {
-		return nil, nilFunc, fmt.Errorf("ping clickhouse: %w", err)
+		logger.WarnContext(ctx, "failed to ping clickhouse; falling back to stub tool call metrics client", attr.SlogError(err))
+		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil
 	}
 
-	cc := tm.New(logger, tracerProvider, conn, func(ctx context.Context, log tm.ToolHTTPRequest) (bool, error) {
+	cc := tm.New(logger, tracerProvider, conn, func(ctx context.Context, orgId string) (bool, error) {
 		f := conv.Default[feature.Provider](features, &feature.InMemory{})
-		isEnabled, err := f.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, log.OrganizationID)
+		isEnabled, err := f.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, orgId)
 		if err != nil {
 			logger.ErrorContext(
 				ctx, "error checking clickhouse feature flag",
 				attr.SlogError(err),
-				attr.SlogOrganizationSlug(log.OrganizationID),
-				attr.SlogProjectID(log.ProjectID),
+				attr.SlogOrganizationSlug(orgId),
 			)
 			return false, fmt.Errorf("check clickhouse feature flag: %w", err)
 		}

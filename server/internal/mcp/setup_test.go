@@ -94,7 +94,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 
-	toolMetrics := toolmetrics.New(logger, tracerProvider, chConn, func(ctx context.Context, log toolmetrics.ToolHTTPRequest) (bool, error) {
+	toolMetrics := toolmetrics.New(logger, tracerProvider, chConn, func(context.Context, string) (bool, error) {
 		return true, nil
 	})
 
