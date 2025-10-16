@@ -567,7 +567,7 @@ JOIN toolset_versions tv ON t.id = tv.toolset_id
 WHERE t.project_id = $1
   AND t.deleted IS FALSE
   AND tv.deleted IS FALSE
-  AND $2::tool_urn = ANY(tv.tool_urns)
+  AND $2::TEXT = ANY(tv.tool_urns)
   AND tv.version = (
     SELECT MAX(version)
     FROM toolset_versions tv2
@@ -578,7 +578,7 @@ WHERE t.project_id = $1
 
 type GetToolsetsByToolURNParams struct {
 	ProjectID uuid.UUID
-	ToolUrn   interface{}
+	ToolUrn   string
 }
 
 type GetToolsetsByToolURNRow struct {

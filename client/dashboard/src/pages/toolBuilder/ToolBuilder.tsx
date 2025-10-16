@@ -1094,6 +1094,7 @@ function ChatPanel(props: {
       configRef={chatConfigRef}
       additionalActions={additionalActions}
       initialMessages={customToolSystemPrompt}
+      hideTemperatureSlider
     />
   );
 }

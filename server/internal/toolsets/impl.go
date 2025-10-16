@@ -746,7 +746,7 @@ func (s *Service) InvalidateCacheByTool(ctx context.Context, toolURN urn.Tool, p
 	// Look up all toolsets that contain this tool in their latest version
 	toolsets, err := s.repo.GetToolsetsByToolURN(ctx, repo.GetToolsetsByToolURNParams{
 		ProjectID: projectID,
-		ToolUrn:   toolURN,
+		ToolUrn:   toolURN.String(),
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to get toolsets by tool URN").Log(ctx, logger)

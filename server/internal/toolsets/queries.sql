@@ -188,7 +188,7 @@ JOIN toolset_versions tv ON t.id = tv.toolset_id
 WHERE t.project_id = @project_id
   AND t.deleted IS FALSE
   AND tv.deleted IS FALSE
-  AND @tool_urn = ANY(tv.tool_urns)
+  AND @tool_urn::TEXT = ANY(tv.tool_urns)
   AND tv.version = (
     SELECT MAX(version)
     FROM toolset_versions tv2
