@@ -13,25 +13,25 @@ type authPayloadV1 struct {
 	Exp int64  `json:"exp"`
 }
 
-func authorizeV1(enc *encryption.Client, ciphertext string) error {
+func authorizeV1(enc *encryption.Client, ciphertext string) (*authPayloadV1, error) {
 	plaintext, err := enc.Decrypt(ciphertext)
 	if err != nil {
-		return fmt.Errorf("not authorized to call gram functions")
+		return nil, fmt.Errorf("not authorized to call gram functions")
 	}
 
 	var payload authPayloadV1
 	if err := json.Unmarshal([]byte(plaintext), &payload); err != nil {
-		return fmt.Errorf("unmarshal bearer token: %w", err)
+		return nil, fmt.Errorf("unmarshal bearer token: %w", err)
 	}
 
 	if payload.ID == "" {
-		return fmt.Errorf("invalid bearer token: missing id")
+		return nil, fmt.Errorf("invalid bearer token: missing id")
 	}
 
 	expTime := time.Unix(payload.Exp, 0)
 	if time.Now().After(expTime) {
-		return fmt.Errorf("bearer token expired")
+		return nil, fmt.Errorf("bearer token expired")
 	}
 
-	return nil
+	return &payload, nil
 }
