@@ -138,8 +138,9 @@ export const ToolifyDialog = ({
     });
 
     const suggestion = res.object as z.infer<typeof SuggestionSchema>;
-    const uniqueInputs = suggestion.inputs.filter((input, index, self) =>
-      index === self.findIndex((i) => i.name === input.name),
+    const uniqueInputs = suggestion.inputs.filter(
+      (input, index, self) =>
+        index === self.findIndex((i) => i.name === input.name),
     );
 
     set({
