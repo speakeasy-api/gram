@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/metric/noop"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/environments"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/oauth"
@@ -25,6 +27,7 @@ import (
 
 var (
 	infra *testenv.Environment
+	funcs functions.ToolCaller
 )
 
 func TestMain(m *testing.M) {
@@ -88,7 +91,14 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env)
 	billingStub := billing.NewStubClient(logger, tracerProvider)
 
-	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, oauthService, billingStub, billingStub)
+	chConn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	toolMetrics := toolmetrics.New(logger, tracerProvider, chConn, func(ctx context.Context, log toolmetrics.ToolHTTPRequest) (bool, error) {
+		return true, nil
+	})
+
+	svc := mcp.NewService(logger, tracerProvider, meterProvider, conn, sessionManager, env, posthog, serverURL, enc, cacheAdapter, guardianPolicy, funcs, oauthService, billingStub, billingStub, toolMetrics)
 
 	return ctx, &testInstance{
 		service:        svc,

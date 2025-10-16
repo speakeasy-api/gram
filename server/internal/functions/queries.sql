@@ -1,3 +1,27 @@
+-- name: GetFlyAppAccess :one
+SELECT
+    fa.fly_org_id
+  , fa.fly_org_slug
+  , fa.app_name
+  , fa.app_url
+  , fa.runner_version
+  , access.id AS access_id
+  , access.encryption_key
+  , access.bearer_format
+FROM fly_apps fa
+LEFT JOIN functions_access access
+  ON access.id = fa.access_id
+  AND access.deleted IS FALSE
+WHERE
+  fa.project_id = @project_id
+  AND fa.deployment_id = @deployment_id
+  AND fa.function_id = @function_id
+  AND fa.status = 'ready'
+  AND fa.reaped_at IS NULL
+  AND fa.access_id = @access_id
+ORDER BY fa.seq DESC NULLS LAST
+LIMIT 1;
+
 -- name: GetFunctionsRunnerVersion :one
 WITH project_preference AS (
   SELECT p.functions_runner_version as v
@@ -13,7 +37,6 @@ function_preference AS (
     d.project_id = @project_id
     AND df.id = @function_id
     AND df.deployment_id = @deployment_id
-    AND df.deleted IS FALSE
 )
 SELECT COALESCE(
     (SELECT v FROM function_preference),

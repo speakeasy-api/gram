@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/exaring/otelpgx"
 	"github.com/jackc/pgx/v5/multitracer"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,6 +23,9 @@ import (
 	polargo "github.com/polarsource/polar-go"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/inv"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/superfly/fly-go/tokens"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
@@ -39,7 +43,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
-	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
@@ -58,6 +61,74 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 		cfgLoader = altsrc.InitInputSourceWithContext(flags, altsrc.NewTomlSourceFromFlagFunc("config-file"))
 	}
 	return cfgLoader(c)
+}
+
+func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context, tracerProvider trace.TracerProvider, features feature.Provider) (tm.ToolMetricsProvider, func(context.Context) error, error) {
+	nilFunc := func(context.Context) error { return nil }
+
+	host := c.String("clickhouse-host")
+	database := c.String("clickhouse-database")
+	username := c.String("clickhouse-username")
+	password := c.String("clickhouse-password")
+	nativePort := c.String("clickhouse-native-port")
+
+	// validate cli args
+	err := inv.Check("clickhouse config options",
+		"clickhouse host must be set", host != "",
+		"clickhouse database must be set", database != "",
+		"clickhouse username must be set", username != "",
+		"clickhouse password must be set", password != "",
+		"clickhouse native port must be set", nativePort != "",
+	)
+	if err != nil {
+		return nil, nilFunc, fmt.Errorf("invalid clickhouse config: %w", err)
+	}
+
+	conn, err := clickhouse.Open(&clickhouse.Options{
+		Protocol: clickhouse.Native,
+		Addr:     []string{fmt.Sprintf("%s:%s", host, nativePort)},
+		Auth: clickhouse.Auth{
+			Database: database,
+			Username: username,
+			Password: password,
+		},
+		Settings: clickhouse.Settings{
+			"max_execution_time": 60, // query timeout
+		},
+	})
+	if err != nil {
+		return nil, nilFunc, fmt.Errorf("connect to clickhouse: %w", err)
+	}
+
+	if err = conn.Ping(ctx); err != nil {
+		return nil, nilFunc, fmt.Errorf("ping clickhouse: %w", err)
+	}
+
+	cc := tm.New(logger, tracerProvider, conn, func(ctx context.Context, log tm.ToolHTTPRequest) (bool, error) {
+		f := conv.Default[feature.Provider](features, &feature.InMemory{})
+		isEnabled, err := f.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, log.OrganizationID)
+		if err != nil {
+			logger.ErrorContext(
+				ctx, "error checking clickhouse feature flag",
+				attr.SlogError(err),
+				attr.SlogOrganizationSlug(log.OrganizationID),
+				attr.SlogProjectID(log.ProjectID),
+			)
+			return false, fmt.Errorf("check clickhouse feature flag: %w", err)
+		}
+
+		return isEnabled, nil
+	})
+
+	shutdown := func(ctx context.Context) error {
+		if err := conn.Close(); err != nil {
+			logger.ErrorContext(ctx, "failed to close tool metrics client connection", attr.SlogError(err))
+			return fmt.Errorf("close tool metrics client: %w", err)
+		}
+		return nil
+	}
+
+	return cc, shutdown, nil
 }
 
 type dbClientOptions struct {

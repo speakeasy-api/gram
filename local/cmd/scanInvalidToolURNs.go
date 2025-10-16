@@ -16,11 +16,11 @@ import (
 const batchSize = 10000
 
 type InvalidTool struct {
-	ID       uuid.UUID
-	Name     string
-	Project  string
-	ToolURN  string
-	Error    string
+	ID      uuid.UUID
+	Name    string
+	Project string
+	ToolURN string
+	Error   string
 }
 
 func main6() {
@@ -122,7 +122,6 @@ func scanHTTPToolDefinitions(ctx context.Context, pool *pgxpool.Pool) ([]Invalid
 
 			batchCount++
 			processedCount++
-
 
 			sanitizedName := tools.SanitizeName(name)
 
@@ -282,13 +281,13 @@ func updateToolsetsWithNewNames(ctx context.Context, tx pgx.Tx, project string, 
 
 	// Collect toolsets that need updates
 	type toolsetUpdate struct {
-		id           uuid.UUID
-		name         string
-		slug         string
-		updatedNames []string
+		id            uuid.UUID
+		name          string
+		slug          string
+		updatedNames  []string
 		originalNames []string
 	}
-	
+
 	var toolsetsToUpdate []toolsetUpdate
 
 	for rows.Next() {
@@ -314,10 +313,10 @@ func updateToolsetsWithNewNames(ctx context.Context, tx pgx.Tx, project string, 
 
 		if hasChanges {
 			toolsetsToUpdate = append(toolsetsToUpdate, toolsetUpdate{
-				id:           toolsetID,
-				name:         toolsetName,
-				slug:         toolsetSlug,
-				updatedNames: updatedNames,
+				id:            toolsetID,
+				name:          toolsetName,
+				slug:          toolsetSlug,
+				updatedNames:  updatedNames,
 				originalNames: httpToolNames,
 			})
 		}
@@ -351,4 +350,3 @@ func updateToolsetsWithNewNames(ctx context.Context, tx pgx.Tx, project string, 
 
 	return len(toolsetsToUpdate), nil
 }
-

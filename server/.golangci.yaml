@@ -114,6 +114,7 @@ linters:
         - '^github\.com/docker/docker/api/types/.*'
         - '^github\.com/superfly/fly-go.*'
         - '^github\.com/speakeasy-api/gram/server/gen/types\.Tool$'
+        - '^github\.com/ClickHouse/clickhouse-go/v2\.Options$'
     exhaustive:
       check:
         - switch

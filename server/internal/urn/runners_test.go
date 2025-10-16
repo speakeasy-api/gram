@@ -13,102 +13,102 @@ import (
 func TestNewFunctionRunner(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name     string
-		kind     urn.FunctionRunnerKind
-		orgSlug  string
-		appName  string
-		wantErr  error
+		name    string
+		kind    urn.FunctionRunnerKind
+		orgSlug string
+		appName string
+		wantErr error
 	}{
 		{
-			name:     "valid local runner",
-			kind:     urn.FunctionRunnerKindLocal,
-			orgSlug:  "my-org",
-			appName:  "my-app",
-			wantErr:  nil,
+			name:    "valid local runner",
+			kind:    urn.FunctionRunnerKindLocal,
+			orgSlug: "my-org",
+			appName: "my-app",
+			wantErr: nil,
 		},
 		{
-			name:     "valid fly runner",
-			kind:     urn.FunctionRunnerKindFlyApp,
-			orgSlug:  "speakeasy",
-			appName:  "gram-worker",
-			wantErr:  nil,
+			name:    "valid fly runner",
+			kind:    urn.FunctionRunnerKindFlyApp,
+			orgSlug: "speakeasy",
+			appName: "gram-worker",
+			wantErr: nil,
 		},
 		{
-			name:     "valid with numbers",
-			kind:     urn.FunctionRunnerKindLocal,
-			orgSlug:  "org123",
-			appName:  "app456",
-			wantErr:  nil,
+			name:    "valid with numbers",
+			kind:    urn.FunctionRunnerKindLocal,
+			orgSlug: "org123",
+			appName: "app456",
+			wantErr: nil,
 		},
 		{
-			name:     "valid with underscores and dashes",
-			kind:     urn.FunctionRunnerKindFlyApp,
-			orgSlug:  "my_org-v2",
-			appName:  "my_app-name",
-			wantErr:  nil,
+			name:    "valid with underscores and dashes",
+			kind:    urn.FunctionRunnerKindFlyApp,
+			orgSlug: "my_org-v2",
+			appName: "my_app-name",
+			wantErr: nil,
 		},
 		{
-			name:     "empty org slug",
-			kind:     urn.FunctionRunnerKindLocal,
-			orgSlug:  "",
-			appName:  "my-app",
-			wantErr:  urn.ErrInvalid,
+			name:    "empty org slug",
+			kind:    urn.FunctionRunnerKindLocal,
+			orgSlug: "",
+			appName: "my-app",
+			wantErr: urn.ErrInvalid,
 		},
 		{
-			name:     "empty app name",
-			kind:     urn.FunctionRunnerKindLocal,
-			orgSlug:  "my-org",
-			appName:  "",
-			wantErr:  urn.ErrInvalid,
+			name:    "empty app name",
+			kind:    urn.FunctionRunnerKindLocal,
+			orgSlug: "my-org",
+			appName: "",
+			wantErr: urn.ErrInvalid,
 		},
 		{
-			name:     "invalid kind",
-			kind:     urn.FunctionRunnerKind("invalid"),
-			orgSlug:  "my-org",
-			appName:  "my-app",
-			wantErr:  urn.ErrInvalid,
+			name:    "invalid kind",
+			kind:    urn.FunctionRunnerKind("invalid"),
+			orgSlug: "my-org",
+			appName: "my-app",
+			wantErr: urn.ErrInvalid,
 		},
 		{
-			name:     "org slug too long",
-			kind:     urn.FunctionRunnerKindLocal,
-			orgSlug:  strings.Repeat("a", 129), // maxSegmentLength+1
-			appName:  "my-app",
-			wantErr:  urn.ErrInvalid,
+			name:    "org slug too long",
+			kind:    urn.FunctionRunnerKindLocal,
+			orgSlug: strings.Repeat("a", 129), // maxSegmentLength+1
+			appName: "my-app",
+			wantErr: urn.ErrInvalid,
 		},
 		{
-			name:     "app name too long",
-			kind:     urn.FunctionRunnerKindLocal,
-			orgSlug:  "my-org",
-			appName:  strings.Repeat("a", 129), // maxSegmentLength+1
-			wantErr:  urn.ErrInvalid,
+			name:    "app name too long",
+			kind:    urn.FunctionRunnerKindLocal,
+			orgSlug: "my-org",
+			appName: strings.Repeat("a", 129), // maxSegmentLength+1
+			wantErr: urn.ErrInvalid,
 		},
 		{
-			name:     "org slug with invalid characters",
-			kind:     urn.FunctionRunnerKindLocal,
-			orgSlug:  "my org!",
-			appName:  "my-app",
-			wantErr:  urn.ErrInvalid,
+			name:    "org slug with invalid characters",
+			kind:    urn.FunctionRunnerKindLocal,
+			orgSlug: "my org!",
+			appName: "my-app",
+			wantErr: urn.ErrInvalid,
 		},
 		{
-			name:     "app name with invalid characters",
-			kind:     urn.FunctionRunnerKindLocal,
-			orgSlug:  "my-org",
-			appName:  "my app!",
-			wantErr:  urn.ErrInvalid,
+			name:    "app name with invalid characters",
+			kind:    urn.FunctionRunnerKindLocal,
+			orgSlug: "my-org",
+			appName: "my app!",
+			wantErr: urn.ErrInvalid,
 		},
 		{
-			name:     "org slug starting with dash",
-			kind:     urn.FunctionRunnerKindLocal,
-			orgSlug:  "-my-org",
-			appName:  "my-app",
-			wantErr:  nil,
+			name:    "org slug starting with dash",
+			kind:    urn.FunctionRunnerKindLocal,
+			orgSlug: "-my-org",
+			appName: "my-app",
+			wantErr: nil,
 		},
 		{
-			name:     "app name ending with dash",
-			kind:     urn.FunctionRunnerKindLocal,
-			orgSlug:  "my-org",
-			appName:  "my-app-",
-			wantErr:  nil,
+			name:    "app name ending with dash",
+			kind:    urn.FunctionRunnerKindLocal,
+			orgSlug: "my-org",
+			appName: "my-app-",
+			wantErr: nil,
 		},
 	}
 

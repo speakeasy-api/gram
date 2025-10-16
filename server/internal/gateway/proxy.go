@@ -19,12 +19,14 @@ import (
 	"strings"
 	"time"
 
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -101,13 +103,15 @@ type InstanceToolProxyConfig struct {
 }
 
 type ToolProxy struct {
-	source     ToolCallSource
-	logger     *slog.Logger
-	tracer     trace.Tracer
-	metrics    *metrics
-	encryption *encryption.Client
-	cache      cache.Cache
-	policy     *guardian.Policy
+	source      ToolCallSource
+	logger      *slog.Logger
+	tracer      trace.Tracer
+	metrics     *metrics
+	encryption  *encryption.Client
+	cache       cache.Cache
+	policy      *guardian.Policy
+	functions   functions.ToolCaller
+	toolMetrics tm.ToolMetricsProvider
 }
 
 func NewToolProxy(
@@ -118,18 +122,22 @@ func NewToolProxy(
 	enc *encryption.Client,
 	cache cache.Cache,
 	policy *guardian.Policy,
+	funcCaller functions.ToolCaller,
+	toolMetrics tm.ToolMetricsProvider,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
 
 	return &ToolProxy{
-		source:     source,
-		logger:     logger,
-		tracer:     tracer,
-		metrics:    newMetrics(meter, logger),
-		encryption: enc,
-		cache:      cache,
-		policy:     policy,
+		source:      source,
+		logger:      logger,
+		tracer:      tracer,
+		metrics:     newMetrics(meter, logger),
+		encryption:  enc,
+		cache:       cache,
+		policy:      policy,
+		functions:   funcCaller,
+		toolMetrics: toolMetrics,
 	}
 }
 
@@ -187,37 +195,27 @@ func (tp *ToolProxy) doFunction(
 	descriptor *ToolDescriptor,
 	plan *FunctionToolCallPlan,
 ) error {
-	method := http.MethodPost
-	route := "/tool-call"
 	span := trace.SpanFromContext(ctx)
-	span.SetAttributes(
-		attr.HTTPRoute(route),
-	)
-	logger = logger.With(
-		attr.SlogHTTPRoute(route),
-	)
-
-	unsealedAuthKey, err := tp.encryption.Decrypt(string(plan.AuthSecret.Reveal()))
+	invocationID, err := uuid.NewV7()
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to access credentials for function tool call").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to generate function invocation ID").Log(ctx, logger)
 	}
 
-	enc, err := encryption.NewWithBytes([]byte(unsealedAuthKey))
+	projectID, err := uuid.Parse(descriptor.ProjectID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create encryption client for function tool call").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid project id received for function tool call").Log(ctx, logger)
 	}
-
-	endpoint, err := url.JoinPath(plan.ServerURL, route)
+	deploymentID, err := uuid.Parse(descriptor.DeploymentID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to parse function tool url").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid deployment id received for function tool call").Log(ctx, logger)
 	}
-
-	token, err := functions.TokenV1(enc, functions.TokenRequestV1{
-		ID:  plan.FunctionID,
-		Exp: time.Now().Add(10 * time.Minute).Unix(),
-	})
+	functionID, err := uuid.Parse(plan.FunctionID)
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create bearer token for function tool call").Log(ctx, logger)
+		return oops.E(oops.CodeInvariantViolation, err, "invalid function id received for function tool call").Log(ctx, logger)
+	}
+	accessID, err := uuid.Parse(plan.FunctionsAccessID)
+	if err != nil {
+		return oops.E(oops.CodeInvariantViolation, err, "invalid function access id received for function tool call").Log(ctx, logger)
 	}
 
 	var input json.RawMessage
@@ -225,22 +223,30 @@ func (tp *ToolProxy) doFunction(
 		return oops.E(oops.CodeBadRequest, err, "failed to read request body").Log(ctx, logger)
 	}
 
-	payload, err := json.Marshal(functions.CallToolPayload{
-		ToolName:    descriptor.Name,
-		Input:       input,
-		Environment: env.data,
+	payloadEnv := make(map[string]string, len(plan.Variables))
+	for _, v := range plan.Variables {
+		if val := env.Get(v); val != "" {
+			payloadEnv[v] = val
+		}
+	}
+
+	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
+		InvocationID:      invocationID,
+		OrganizationID:    descriptor.OrganizationID,
+		OrganizationSlug:  descriptor.OrganizationSlug,
+		ProjectID:         projectID,
+		ProjectSlug:       descriptor.ProjectSlug,
+		DeploymentID:      deploymentID,
+		FunctionsID:       functionID,
+		FunctionsAccessID: accessID,
+		ToolURN:           descriptor.URN,
+		ToolName:          descriptor.Name,
+		ToolInput:         input,
+		ToolEnvironment:   payloadEnv,
 	})
 	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to marshal function tool payload").Log(ctx, logger)
+		return oops.E(oops.CodeUnexpected, err, "failed to create function tool call request").Log(ctx, logger)
 	}
-
-	req, err := http.NewRequestWithContext(ctx, method, endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to create function tool request").Log(ctx, logger)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
 
 	var responseStatusCode int
 	defer func() {
@@ -253,7 +259,7 @@ func (tp *ToolProxy) doFunction(
 
 		logger.InfoContext(ctx, "function tool call",
 			attr.SlogHTTPResponseStatusCode(responseStatusCode),
-			attr.SlogHTTPRequestMethod(method),
+			attr.SlogHTTPRequestMethod(req.Method),
 			attr.SlogHTTPResponseHeaderContentType(ct),
 		)
 		// Record metrics for the tool call, some cardinality is introduced with org and tool name we will keep an eye on it
@@ -273,6 +279,13 @@ func (tp *ToolProxy) doFunction(
 		DisableResponseFiltering,
 		tp.policy,
 		&responseStatusCode,
+		tp.toolMetrics,
+		func(resp *http.Response) error {
+			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
+				return fmt.Errorf("failed to verify function invocation ID")
+			}
+			return nil
+		},
 	)
 }
 
@@ -524,6 +537,8 @@ func (tp *ToolProxy) doHTTP(
 		plan.ResponseFilter,
 		tp.policy,
 		&responseStatusCode,
+		tp.toolMetrics,
+		func(resp *http.Response) error { return nil },
 	)
 }
 
@@ -593,6 +608,8 @@ func reverseProxyRequest(
 	filterConfig *ResponseFilter,
 	policy *guardian.Policy,
 	responseStatusCodeCapture *int,
+	tcm tm.ToolMetricsProvider,
+	verifyResponse func(*http.Response) error,
 ) error {
 	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
 	defer span.End()
@@ -608,26 +625,53 @@ func reverseProxyRequest(
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 
+	// Wrap with HTTP logging round tripper
+	loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, tcm, logger, tracer)
+
+	otelTransport := otelhttp.NewTransport(
+		loggingTransport,
+		otelhttp.WithPropagators(propagation.TraceContext{}),
+	)
+
 	client := &http.Client{
-		Timeout: 60 * time.Second,
-		Transport: otelhttp.NewTransport(
-			transport,
-			otelhttp.WithPropagators(propagation.TraceContext{}),
-		),
+		Timeout:   60 * time.Second,
+		Transport: otelTransport,
 	}
+
+	// Add tool to context for the round tripper
+	toolInfo := &tm.ToolInfo{
+		ID:             tool.ID,
+		Urn:            tool.URN.String(),
+		Name:           tool.Name,
+		ProjectID:      tool.ProjectID,
+		DeploymentID:   tool.DeploymentID,
+		OrganizationID: tool.OrganizationID,
+	}
+
+	ctx = context.WithValue(ctx, tm.ToolInfoContextKey, toolInfo)
+
+	// Track request body size
+	var requestBodySize int
 
 	executeRequest := func() (*http.Response, error) {
 		// Clone the request for each retry attempt
 		retryReq := req.Clone(ctx)
 
-		// Set fresh body on the cloned request
+		// Set the fresh body on the cloned request and wrap with counter
 		if req.Body != nil && req.GetBody != nil {
 			freshBody, err := req.GetBody()
 			if err != nil {
 				return nil, fmt.Errorf("retry: clone request body: %w", err)
 			}
-			retryReq.Body = freshBody
+
+			// Wrap body to count bytes as they're sent
+			retryReq.Body = tm.NewCountingReadCloser(freshBody, func(count int) {
+				requestBodySize = count
+			})
 		}
+
+		retryCtx := context.WithValue(retryReq.Context(), tm.RequestBodyContextKey, &requestBodySize)
+		retryReq = retryReq.WithContext(retryCtx)
 
 		return client.Do(retryReq)
 	}
@@ -660,6 +704,11 @@ func reverseProxyRequest(
 	defer o11y.LogDefer(ctx, logger, func() error {
 		return resp.Body.Close()
 	})
+
+	if err := verifyResponse(resp); err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return oops.E(oops.CodeGatewayError, err, "tool call response verification failed").Log(ctx, logger)
+	}
 
 	if len(resp.Trailer) > 0 {
 		var trailerKeys []string

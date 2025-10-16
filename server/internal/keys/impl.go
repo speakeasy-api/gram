@@ -2,7 +2,9 @@ package keys
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -110,8 +112,8 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 
 	scopes := map[string]struct{}{}
 	for _, rawscope := range payload.Scopes {
-		scope, ok := APIKeyScopes[rawscope]
-		if !ok || scope == APIKeyScopeInvalid {
+		scope, ok := auth.APIKeyScopes[rawscope]
+		if !ok || scope == auth.APIKeyScopeInvalid {
 			return nil, oops.E(oops.CodeBadRequest, nil, "invalid api key scope: %s", scope).Log(ctx, s.logger)
 		}
 
@@ -120,7 +122,7 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 
 	if len(scopes) == 0 {
 		scopes = map[string]struct{}{
-			APIKeyScopeConsumer.String(): {},
+			auth.APIKeyScopeConsumer.String(): {},
 		}
 	}
 
@@ -257,4 +259,14 @@ func parseProjects(rawProjects []project_repo.Project) []*gen.ValidateKeyProject
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+func (s *Service) generateToken() (string, error) {
+	const randomKeyLength = 64
+	randomBytes := make([]byte, randomKeyLength/2) // there are 2 hex chars per byte, we can guarantee output of 64 chars this way
+	_, err := rand.Read(randomBytes)
+	if err != nil {
+		return "", fmt.Errorf("generate random token bytes: %w", err)
+	}
+	return hex.EncodeToString(randomBytes), nil
 }

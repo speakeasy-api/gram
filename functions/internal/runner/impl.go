@@ -16,15 +16,15 @@ type Service struct {
 
 	workDir string
 	command string
-	program string
+	args    []string
 }
 
 func NewService(
 	logger *slog.Logger,
 	enc *encryption.Client,
 	workDir string,
-	command string,
-	program string,
+	cmd string,
+	cmdArgs []string,
 ) *Service {
 	return &Service{
 		logger: logger.With(
@@ -32,8 +32,8 @@ func NewService(
 		),
 		encryption: enc,
 		workDir:    workDir,
-		command:    command,
-		program:    program,
+		command:    cmd,
+		args:       cmdArgs,
 	}
 }
 
