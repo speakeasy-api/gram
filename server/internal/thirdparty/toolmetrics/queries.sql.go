@@ -152,7 +152,7 @@ func (q *Queries) Log(ctx context.Context, log ToolHTTPRequest) (err error) {
 			attr.HTTPRequestMethod(log.HTTPMethod),
 			attr.HTTPRoute(log.HTTPRoute),
 			attr.HTTPResponseStatusCode(int(log.StatusCode)),
-			attr.HTTPRequestDurationMs(log.DurationMs),
+			attr.HTTPClientRequestDuration(log.DurationMs/1000),
 		),
 	)
 	defer func() {

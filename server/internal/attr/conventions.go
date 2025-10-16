@@ -27,7 +27,7 @@ const (
 	HTTPResponseOriginalStatusCodeKey = attribute.Key("http.response.original_status_code")
 	HTTPRouteKey                      = semconv.HTTPRouteKey
 	HTTPServerRequestDurationKey      = attribute.Key("http.server.request.duration")
-	HTTPRequestDurationMsKey          = attribute.Key("http.request.duration_ms")
+	HTTPClientRequestDurationKey      = attribute.Key("http.client.request.duration_ms")
 	HTTPRequestSizeKey                = semconv.HTTPRequestSizeKey
 	HTTPResponseSizeKey               = semconv.HTTPResponseSizeKey
 	ServerAddressKey                  = semconv.ServerAddressKey
@@ -618,9 +618,11 @@ func SlogPaginationSortOrder(v string) slog.Attr {
 	return slog.String(string(PaginationSortOrderKey), v)
 }
 
-func HTTPRequestDurationMs(v float64) attribute.KeyValue { return HTTPRequestDurationMsKey.Float64(v) }
-func SlogHTTPRequestDuration(v float64) slog.Attr {
-	return slog.Float64(string(HTTPRequestDurationMsKey), v)
+func HTTPClientRequestDuration(v float64) attribute.KeyValue {
+	return HTTPClientRequestDurationKey.Float64(v)
+}
+func SlogHTTPClientRequestDuration(v float64) slog.Attr {
+	return slog.Float64(string(HTTPClientRequestDurationKey), v)
 }
 
 func HTTPRequestBodyBytes(v int) attribute.KeyValue { return HTTPRequestSizeKey.Int(v) }

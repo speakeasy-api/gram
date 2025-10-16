@@ -136,7 +136,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 
 	resp, err := base.RoundTrip(req)
 
-	durationMs := time.Since(startTime).Seconds() * 1000
+	duration := time.Since(startTime).Seconds()
 
 	// Extract tool information from context
 	tool, ok := ctx.Value(ToolInfoContextKey).(*ToolInfo)
@@ -175,7 +175,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			attr.SlogURLOriginal(req.URL.String()),
 			attr.SlogHTTPRequestMethod(req.Method),
 			attr.SlogToolURN(tool.Urn),
-			attr.SlogHTTPRequestDuration(durationMs),
+			attr.SlogHTTPClientRequestDuration(duration),
 		)
 		return resp, fmt.Errorf("roundtrip: %w", err)
 	}
@@ -195,7 +195,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		statusCode = resp.StatusCode
 		span.SetAttributes(
 			attr.HTTPResponseStatusCode(statusCode),
-			attr.HTTPRequestDurationMs(durationMs),
+			attr.HTTPClientRequestDuration(duration),
 		)
 
 		// Set span status based on HTTP status code
@@ -209,7 +209,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			attr.SlogHTTPRequestMethod(req.Method),
 			attr.SlogURLOriginal(req.URL.String()),
 			attr.SlogHTTPResponseStatusCode(statusCode),
-			attr.SlogHTTPRequestDuration(durationMs),
+			attr.SlogHTTPClientRequestDuration(duration),
 			attr.SlogToolURN(tool.Urn),
 		)
 	}
@@ -282,7 +282,7 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 				HTTPMethod:        req.Method,
 				HTTPRoute:         req.URL.Path,
 				StatusCode:        int64(statusCode),
-				DurationMs:        durationMs,
+				DurationMs:        duration * 1000,
 				UserAgent:         req.UserAgent(),
 				RequestHeaders:    requestHeaders,
 				RequestBodyBytes:  int64(requestBodyBytes),
