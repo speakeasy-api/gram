@@ -37,6 +37,8 @@ type CreateTemplateRequestBody struct {
 type UpdateTemplateRequestBody struct {
 	// The ID of the prompt template to update
 	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the prompt template. Will be updated via variation
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// The template content
 	Prompt *string `form:"prompt,omitempty" json:"prompt,omitempty" xml:"prompt,omitempty"`
 	// The description of the prompt template
@@ -1517,6 +1519,7 @@ func NewCreateTemplateRequestBody(p *templates.CreateTemplatePayload) *CreateTem
 func NewUpdateTemplateRequestBody(p *templates.UpdateTemplatePayload) *UpdateTemplateRequestBody {
 	body := &UpdateTemplateRequestBody{
 		ID:          p.ID,
+		Name:        p.Name,
 		Prompt:      p.Prompt,
 		Description: p.Description,
 		Arguments:   p.Arguments,

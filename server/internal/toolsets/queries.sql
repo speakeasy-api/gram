@@ -178,3 +178,20 @@ FROM toolset_prompts tp
 WHERE tp.toolset_id = @toolset_id
   AND tp.project_id = @project_id
 ORDER BY tp.prompt_name;
+
+-- name: GetToolsetsByToolURN :many
+SELECT
+    t.*,
+    tv.version as latest_version
+FROM toolsets t
+JOIN toolset_versions tv ON t.id = tv.toolset_id
+WHERE t.project_id = @project_id
+  AND t.deleted IS FALSE
+  AND tv.deleted IS FALSE
+  AND @tool_urn::TEXT = ANY(tv.tool_urns)
+  AND tv.version = (
+    SELECT MAX(version)
+    FROM toolset_versions tv2
+    WHERE tv2.toolset_id = t.id
+      AND tv2.deleted IS FALSE
+  );

@@ -22,6 +22,7 @@ import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useToolset } from "@/hooks/toolTypes";
 import { useApiError } from "@/hooks/useApiError";
 import { MUSTACHE_VAR_REGEX, slugify, TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool, useGroupedTools } from "@/lib/toolTypes";
@@ -33,7 +34,8 @@ import {
 } from "@gram/client/models/components";
 import {
   invalidateAllListToolsets,
-  invalidateTemplate,
+  invalidateAllTemplate,
+  invalidateAllTemplates,
   useListToolsetsSuspense,
   useTemplateSuspense,
   useUpdateTemplateMutation,
@@ -49,7 +51,6 @@ import { ChatProvider, useChatContext } from "../playground/ChatContext";
 import { ChatConfig, ChatWindow } from "../playground/ChatWindow";
 import { ToolsetDropdown } from "../toolsets/ToolsetDropown";
 import { useToolifyContext } from "./Toolify";
-import { useToolset } from "@/hooks/toolTypes";
 
 type Input = {
   name: string;
@@ -334,6 +335,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   };
 
   const anyChanges =
+    name !== initial.name ||
     description !== initial.description ||
     purpose !== initial.purpose ||
     inputs.length !== initial.inputs.length ||
@@ -367,7 +369,8 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
 
   const { mutate: updatePrompt } = useUpdateTemplateMutation({
     onSettled: () => {
-      invalidateTemplate(queryClient, [{ name }]);
+      invalidateAllTemplate(queryClient);
+      invalidateAllTemplates(queryClient);
     },
     onError: (error) => {
       handleApiError(error, "Failed to update tool");
@@ -407,6 +410,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
               request: {
                 updatePromptTemplateForm: {
                   id: initial.id,
+                  name,
                   description,
                   prompt: higherOrderToolToJSON(higherOrderTool),
                   arguments: JSON.stringify(argsJsonSchema),
@@ -463,22 +467,13 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     </Button>
   );
 
-  const toolName = initial.id ? (
-    <Heading
-      variant="h3"
-      className={cn("normal-case w-fit", initial.id && "text-muted-foreground")}
-      tooltip="Can't change name after tool is created"
-    >
-      {name}
-    </Heading>
-  ) : (
+  const toolName = (
     <EditableText
       label="Tool Name"
       description="Give your tool a name. This influences tool selection."
       value={name}
       onSubmit={setName}
       validate={validateName}
-      disabled={!!initial.id}
     >
       <Heading variant="h3" className="normal-case">
         {name}
@@ -1098,6 +1093,7 @@ function ChatPanel(props: {
       configRef={chatConfigRef}
       additionalActions={additionalActions}
       initialMessages={customToolSystemPrompt}
+      hideTemperatureSlider
     />
   );
 }

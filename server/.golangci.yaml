@@ -56,6 +56,9 @@ linters:
       - path: internal/billing/stub\.go
         linters:
           - musttag
+      - path: _test\.go
+        linters:
+          - exhaustruct
   settings:
     sloglint:
       no-mixed-args: true

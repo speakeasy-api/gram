@@ -558,6 +558,89 @@ func (q *Queries) GetToolsetPromptTemplateNames(ctx context.Context, arg GetTool
 	return items, nil
 }
 
+const getToolsetsByToolURN = `-- name: GetToolsetsByToolURN :many
+SELECT
+    t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.created_at, t.updated_at, t.deleted_at, t.deleted,
+    tv.version as latest_version
+FROM toolsets t
+JOIN toolset_versions tv ON t.id = tv.toolset_id
+WHERE t.project_id = $1
+  AND t.deleted IS FALSE
+  AND tv.deleted IS FALSE
+  AND $2::TEXT = ANY(tv.tool_urns)
+  AND tv.version = (
+    SELECT MAX(version)
+    FROM toolset_versions tv2
+    WHERE tv2.toolset_id = t.id
+      AND tv2.deleted IS FALSE
+  )
+`
+
+type GetToolsetsByToolURNParams struct {
+	ProjectID uuid.UUID
+	ToolUrn   string
+}
+
+type GetToolsetsByToolURNRow struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	ProjectID              uuid.UUID
+	Name                   string
+	Slug                   string
+	Description            pgtype.Text
+	DefaultEnvironmentSlug pgtype.Text
+	McpSlug                pgtype.Text
+	McpIsPublic            bool
+	McpEnabled             bool
+	CustomDomainID         uuid.NullUUID
+	ExternalOauthServerID  uuid.NullUUID
+	OauthProxyServerID     uuid.NullUUID
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
+	LatestVersion          int64
+}
+
+func (q *Queries) GetToolsetsByToolURN(ctx context.Context, arg GetToolsetsByToolURNParams) ([]GetToolsetsByToolURNRow, error) {
+	rows, err := q.db.Query(ctx, getToolsetsByToolURN, arg.ProjectID, arg.ToolUrn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetToolsetsByToolURNRow
+	for rows.Next() {
+		var i GetToolsetsByToolURNRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.DefaultEnvironmentSlug,
+			&i.McpSlug,
+			&i.McpIsPublic,
+			&i.McpEnabled,
+			&i.CustomDomainID,
+			&i.ExternalOauthServerID,
+			&i.OauthProxyServerID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+			&i.LatestVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPublicToolsetsByOrganization = `-- name: ListPublicToolsetsByOrganization :many
 SELECT t.id, t.organization_id, t.project_id, t.name, t.slug, t.description, t.default_environment_slug, t.mcp_slug, t.mcp_is_public, t.mcp_enabled, t.custom_domain_id, t.external_oauth_server_id, t.oauth_proxy_server_id, t.created_at, t.updated_at, t.deleted_at, t.deleted
 FROM toolsets t

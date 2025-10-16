@@ -3087,17 +3087,18 @@ func templatesUpdateTemplateUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates update-template --body '{
       "arguments": "{\"name\":\"example\",\"email\":\"mail@example.com\"}",
-      "description": "Itaque totam repudiandae.",
+      "description": "Quia enim.",
       "engine": "mustache",
       "id": "Ex eos.",
       "kind": "prompt",
-      "prompt": "Dolorem quia.",
+      "name": "Dolorem quia.",
+      "prompt": "Itaque totam repudiandae.",
       "tools_hint": [
-         "Libero aut ipsa qui quis ea quis.",
-         "Ut pariatur est iusto.",
-         "Mollitia cupiditate repellendus aspernatur ad amet."
+         "Qui quis ea.",
+         "Repellat ut pariatur est.",
+         "Qui mollitia cupiditate repellendus aspernatur."
       ]
-   }' --apikey-token "Quia nesciunt et nihil." --session-token "Consequuntur vel." --project-slug-input "Sed earum."`)
+   }' --apikey-token "Amet repellat quia nesciunt." --session-token "Nihil cumque consequuntur vel vero." --project-slug-input "Earum ex aut."`)
 }
 
 func templatesGetTemplateUsage() {
@@ -3124,7 +3125,7 @@ func templatesGetTemplateUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates get-template --id "Animi velit impedit." --name "Similique rerum." --apikey-token "Vel non nemo rerum." --session-token "Quos minus ea minus cupiditate dignissimos repudiandae." --project-slug-input "Rerum et."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates get-template --id "Impedit est similique." --name "Ut vel non nemo rerum sed." --apikey-token "Minus ea minus cupiditate dignissimos repudiandae cumque." --session-token "Et impedit." --project-slug-input "Ut fugiat."`)
 }
 
 func templatesListTemplatesUsage() {
@@ -3147,7 +3148,7 @@ func templatesListTemplatesUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates list-templates --apikey-token "Odit quas molestiae ipsa cum esse." --session-token "Dolor in error quia." --project-slug-input "Inventore eum aut et."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates list-templates --apikey-token "Cum esse sed dolor in error." --session-token "Debitis inventore eum aut et." --project-slug-input "Rerum officia dolores sed est eligendi unde."`)
 }
 
 func templatesDeleteTemplateUsage() {
@@ -3174,7 +3175,7 @@ func templatesDeleteTemplateUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates delete-template --id "Qui odio magni autem." --name "Totam libero pariatur optio porro." --apikey-token "Voluptas sint architecto saepe odit rerum earum." --session-token "Non est enim perspiciatis maiores nemo sint." --project-slug-input "Dolores sit voluptas tenetur."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates delete-template --id "Optio porro itaque." --name "Sint architecto saepe odit rerum." --apikey-token "Odit non est enim perspiciatis." --session-token "Nemo sint at dolores." --project-slug-input "Voluptas tenetur voluptatem vel rem porro."`)
 }
 
 func templatesRenderTemplateByIDUsage() {
@@ -3203,11 +3204,9 @@ func templatesRenderTemplateByIDUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates render-template-by-id --body '{
       "arguments": {
-         "Illo voluptatem aliquid expedita debitis et occaecati.": "Officiis quia ratione aut in nihil in.",
-         "Iure quae ad maxime ullam voluptate porro.": "Dolorem quia quia officia sed.",
-         "Officiis ea dolores nobis.": "Error ut qui ad autem ducimus iste."
+         "Ullam voluptate porro atque dolorem quia quia.": "Sed explicabo illo voluptatem aliquid expedita debitis."
       }
-   }' --id "Voluptatum est adipisci fuga et consequuntur officiis." --apikey-token "Esse voluptas." --session-token "Accusamus debitis eum praesentium consequatur sed similique." --project-slug-input "Neque iure harum accusantium blanditiis reprehenderit."`)
+   }' --id "Occaecati ut officiis quia ratione." --apikey-token "In nihil in at officiis ea dolores." --session-token "Ut error ut qui." --project-slug-input "Autem ducimus iste totam."`)
 }
 
 func templatesRenderTemplateUsage() {
@@ -3234,13 +3233,14 @@ func templatesRenderTemplateUsage() {
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `templates render-template --body '{
       "arguments": {
-         "Consequatur illo expedita dicta molestias tempore at.": "Aut consectetur dolorem.",
-         "Excepturi voluptatem quis unde.": "Sint error ea saepe."
+         "Quibusdam et aspernatur quidem.": "Suscipit quos ut.",
+         "Quis asperiores praesentium aut voluptate in dolorem.": "Quaerat quis id laboriosam expedita.",
+         "Quis sapiente enim ut quia.": "Ab architecto."
       },
       "engine": "mustache",
       "kind": "higher_order_tool",
-      "prompt": "Et aspernatur quidem doloremque suscipit."
-   }' --apikey-token "Soluta aperiam consequatur quis reprehenderit." --session-token "Quas sunt." --project-slug-input "Ut fugiat aperiam qui."`)
+      "prompt": "Qui rem iste."
+   }' --apikey-token "Dicta molestias tempore at sunt aut." --session-token "Dolorem debitis excepturi voluptatem." --project-slug-input "Unde enim sint error."`)
 }
 
 // logsUsage displays the usage of the logs command and its subcommands.
@@ -3287,7 +3287,7 @@ func logsListLogsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `logs list-logs --tool-id "91141cff-ce4d-49d9-8019-d498181e01d5" --ts-start "1993-03-15T02:43:10Z" --ts-end "1988-06-14T12:21:54Z" --cursor "0a18d34d-7ece-4cae-b391-8a86fcd8feef" --per-page 84 --direction "next" --sort "DESC" --apikey-token "Consequatur earum ex provident quis commodi." --session-token "Alias velit tenetur nisi sit praesentium quas." --project-slug-input "Sit quia ullam."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `logs list-logs --tool-id "de3a3b08-6420-4de8-b023-4091ceceb96a" --ts-start "2011-04-06T03:18:18Z" --ts-end "1993-12-06T15:33:38Z" --cursor "1ea6f657-57ce-4e2c-a69b-21b9fc10f14f" --per-page 86 --direction "prev" --sort "DESC" --apikey-token "Enim repellendus cumque ad necessitatibus." --session-token "Corporis quasi illo aut maxime." --project-slug-input "Maxime non."`)
 }
 
 // toolsUsage displays the usage of the tools command and its subcommands.
@@ -3324,7 +3324,7 @@ func toolsListToolsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `tools list-tools --cursor "Aut dolorem." --limit 702098140 --deployment-id "Et excepturi voluptates ut ipsa aut." --session-token "Dolore deserunt voluptatum aperiam nesciunt eum harum." --project-slug-input "Assumenda voluptas enim mollitia ut ipsam."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `tools list-tools --cursor "Accusamus sed dolor sunt voluptas." --limit 1299986329 --deployment-id "Ut rerum aut error ducimus." --session-token "Blanditiis rerum sint excepturi inventore porro." --project-slug-input "Provident dolorum debitis qui culpa laborum assumenda."`)
 }
 
 // toolsetsUsage displays the usage of the toolsets command and its subcommands.
@@ -3366,16 +3366,16 @@ func toolsetsCreateToolsetUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets create-toolset --body '{
-      "default_environment_slug": "n82",
-      "description": "Temporibus vel.",
-      "name": "Sunt aut ipsa quia distinctio aperiam et.",
+      "default_environment_slug": "ndd",
+      "description": "Voluptatem sit molestiae iste quibusdam.",
+      "name": "Qui odit labore est.",
       "tool_urns": [
-         "Dicta error non non.",
-         "Ad eius nihil est.",
-         "Voluptas consequuntur.",
-         "Rem debitis."
+         "Commodi nisi expedita.",
+         "Aperiam qui ea in est.",
+         "Omnis omnis eveniet doloremque quaerat.",
+         "Hic id aliquid natus officia."
       ]
-   }' --session-token "Nemo quae." --project-slug-input "Enim cupiditate quibusdam rerum et ut."`)
+   }' --session-token "Aut ipsa quia." --project-slug-input "Aperiam et quia temporibus."`)
 }
 
 func toolsetsListToolsetsUsage() {
@@ -3396,7 +3396,7 @@ func toolsetsListToolsetsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets list-toolsets --session-token "Sapiente laboriosam aut porro." --project-slug-input "Dolor nesciunt quis veritatis velit."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets list-toolsets --session-token "Non quod." --project-slug-input "Rerum sunt culpa."`)
 }
 
 func toolsetsUpdateToolsetUsage() {
@@ -3424,11 +3424,11 @@ func toolsetsUpdateToolsetUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `toolsets update-toolset --body '{
       "custom_domain_id": "Et culpa autem.",
       "default_environment_slug": "n6l",
-      "description": "Sit saepe reprehenderit eaque assumenda.",
+      "description": "Saepe est sit saepe reprehenderit eaque assumenda.",
       "mcp_enabled": false,
       "mcp_is_public": true,
       "mcp_slug": "29h",
-      "name": "Quae ut porro voluptate saepe.",
+      "name": "Ipsam consectetur est quae ut porro.",
       "prompt_template_names": [
          "Nulla voluptatum praesentium.",
          "Consectetur nihil ea ut."

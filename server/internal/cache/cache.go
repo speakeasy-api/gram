@@ -67,6 +67,21 @@ func (d *TypedCacheObject[T]) Delete(ctx context.Context, obj T) error {
 	return nil
 }
 
+func (d *TypedCacheObject[T]) DeleteByKey(ctx context.Context, key string) error {
+	if d.cache == nil {
+		return nil
+	}
+
+	cacheKey := d.fullKey(key)
+	d.logger.DebugContext(ctx, "invalidating cache by key", attr.SlogCacheKey(cacheKey))
+	err := d.cache.Delete(ctx, cacheKey)
+	if err != nil {
+		return fmt.Errorf("delete by key: %s: %w", cacheKey, err)
+	}
+
+	return nil
+}
+
 func (d *TypedCacheObject[T]) Get(ctx context.Context, key string) (T, error) {
 	if d.cache == nil {
 		return *new(T), errors.New("cache is not configured")

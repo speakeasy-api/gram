@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
+	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 )
 
 var allowedPublicServers = map[string]int{
@@ -725,6 +726,45 @@ func (s *Service) updatePromptTemplates(ctx context.Context, dbtx pgx.Tx, projec
 	_, err = tr.AddToolsetPromptTemplates(ctx, additions)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "error adding prompt templates to toolset").Log(ctx, logger)
+	}
+
+	return nil
+}
+
+// InvalidateCacheByTool invalidates cache entries for all toolsets that contain the specified tool in their latest version
+func (s *Service) InvalidateCacheByTool(ctx context.Context, toolURN urn.Tool, projectID uuid.UUID) error {
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()), attr.SlogToolURN(toolURN.String()))
+
+	dr := deploymentsRepo.New(s.db)
+
+	// Get the latest deployment ID for this project
+	deploymentID, err := dr.GetActiveDeploymentID(ctx, projectID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to get latest deployment").Log(ctx, logger)
+	}
+
+	// Look up all toolsets that contain this tool in their latest version
+	toolsets, err := s.repo.GetToolsetsByToolURN(ctx, repo.GetToolsetsByToolURNParams{
+		ProjectID: projectID,
+		ToolUrn:   toolURN.String(),
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to get toolsets by tool URN").Log(ctx, logger)
+	}
+
+	// For each toolset, invalidate its cache entry using the version from the query result
+	for _, toolset := range toolsets {
+		cacheKey := mv.ToolsetCacheKey(toolset.ID.String(), deploymentID.String(), toolset.LatestVersion)
+		if err := s.toolsetCache.DeleteByKey(ctx, cacheKey); err != nil {
+			logger.WarnContext(ctx, "failed to invalidate cache entry",
+				attr.SlogError(err),
+				attr.SlogToolsetID(toolset.ID.String()),
+				attr.SlogCacheKey(cacheKey))
+		} else {
+			logger.InfoContext(ctx, "invalidated toolset cache entry",
+				attr.SlogToolsetID(toolset.ID.String()),
+				attr.SlogCacheKey(cacheKey))
+		}
 	}
 
 	return nil

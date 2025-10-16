@@ -21,6 +21,7 @@ import (
 
 	srv "github.com/speakeasy-api/gram/server/gen/http/templates/server"
 	gen "github.com/speakeasy-api/gram/server/gen/templates"
+	variationsTypes "github.com/speakeasy-api/gram/server/gen/variations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
@@ -33,28 +34,37 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/templates/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/variations"
 )
 
+type ToolsetsService interface {
+	InvalidateCacheByTool(ctx context.Context, toolURN urn.Tool, projectID uuid.UUID) error
+}
+
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	auth   *auth.Auth
-	repo   *repo.Queries
+	tracer     trace.Tracer
+	logger     *slog.Logger
+	db         *pgxpool.Pool
+	auth       *auth.Auth
+	repo       *repo.Queries
+	variations *variations.Service
+	toolsets   ToolsetsService	
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, toolsets ToolsetsService) *Service {
 	logger = logger.With(attr.SlogComponent("templates"))
 
 	return &Service{
-		tracer: otel.Tracer("github.com/speakeasy-api/gram/server/internal/templates"),
-		logger: logger,
-		db:     db,
-		auth:   auth.New(logger, db, sessions),
-		repo:   repo.New(db),
+		tracer:     otel.Tracer("github.com/speakeasy-api/gram/server/internal/templates"),
+		logger:     logger,
+		db:         db,
+		auth:       auth.New(logger, db, sessions),
+		repo:       repo.New(db),
+		variations: variations.NewService(logger, db, sessions),
+		toolsets:   toolsets,
 	}
 }
 
@@ -199,6 +209,27 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 
 	toolURN := urn.NewTool(urn.ToolKindPrompt, current.Kind.String, current.Name)
 
+	// We allow the editing of the name via variation
+	if payload.Name != nil && *payload.Name != current.Name {
+		_, err = s.variations.UpsertGlobal(ctx, &variationsTypes.UpsertGlobalPayload{
+			SrcToolUrn:       toolURN.String(),
+			SrcToolName:      current.Name,
+			Name:             payload.Name,
+			Description:      nil,
+			Confirm:          nil,
+			ConfirmPrompt:    nil,
+			Summary:          nil,
+			Tags:             nil,
+			Summarizer:       nil,
+			SessionToken:     nil,
+			ApikeyToken:      nil,
+			ProjectSlugInput: nil,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to update template").Log(ctx, logger)
+		}
+	}
+
 	newid, err := tr.UpdateTemplate(ctx, repo.UpdateTemplateParams{
 		ProjectID:   uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
 		ID:          uuid.NullUUID{UUID: id, Valid: id != uuid.Nil},
@@ -221,6 +252,11 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to save updated template").Log(ctx, s.logger)
+	}
+
+	// We need to invalidate the cache for any toolsets that contain this template as a tool 
+	if err := s.toolsets.InvalidateCacheByTool(ctx, toolURN, projectID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to invalidate toolset cache").Log(ctx, s.logger)
 	}
 
 	pt, err := mv.DescribePromptTemplate(ctx, logger, s.db,

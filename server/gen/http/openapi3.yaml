@@ -10786,6 +10786,9 @@ components:
                     enum:
                         - prompt
                         - higher_order_tool
+                name:
+                    type: string
+                    description: The name of the prompt template. Will be updated via variation
                 prompt:
                     type: string
                     description: The template content
