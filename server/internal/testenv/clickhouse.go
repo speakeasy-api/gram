@@ -18,13 +18,12 @@ type ClickhouseClientFunc func(t *testing.T) (clickhouse.Conn, error)
 // test connections. The container is automatically cleaned up when the test ends.
 func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseContainer, ClickhouseClientFunc, error) {
 	schemaPath := filepath.Join("..", "..", "clickhouse", "schema.sql")
-	seedPath := filepath.Join("..", "..", "clickhouse", "testdata", "seed.sql")
 
 	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:25.8.3",
 		clickhousecontainer.WithUsername("gram"),
 		clickhousecontainer.WithPassword("gram"),
 		clickhousecontainer.WithDatabase("gram"),
-		clickhousecontainer.WithInitScripts(schemaPath, seedPath),
+		clickhousecontainer.WithInitScripts(schemaPath),
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 	)
 	if err != nil {

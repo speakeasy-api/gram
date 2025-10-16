@@ -1,6 +1,7 @@
 package logs_test
 
 import (
+	"context"
 	"crypto/rand"
 	"fmt"
 	"testing"
@@ -45,7 +46,12 @@ func TestListLogs_SinglePage(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
-	ctx = setProjectID(t, ctx, "0199a9f5-5659-76e1-be43-1da0b881dcff")
+
+	projectID := uuid.New().String()
+	ctx = setProjectID(t, ctx, projectID)
+
+	// Insert 10 test logs
+	insertTestLogs(t, ctx, ti, projectID, 10)
 
 	// Query logs
 	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
@@ -84,8 +90,11 @@ func TestListLogs_Pagination(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 
-	projectID := "0199a9f5-5659-76e1-be43-1da0b881dcff"
+	projectID := uuid.New().String()
 	ctx = setProjectID(t, ctx, projectID)
+
+	// Insert 10 test logs
+	insertTestLogs(t, ctx, ti, projectID, 10)
 
 	// Query first page
 	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
@@ -246,7 +255,12 @@ func TestListLogs_DifferentPageSizes(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
-	ctx = setProjectID(t, ctx, "0199a9f5-5659-76e1-be43-1da0b881dcff")
+
+	projectID := uuid.New().String()
+	ctx = setProjectID(t, ctx, projectID)
+
+	// Insert 10 test logs
+	insertTestLogs(t, ctx, ti, projectID, 10)
 
 	testCases := []struct {
 		perPage         int
@@ -375,6 +389,48 @@ func TestListLogs_VerifyLogFields(t *testing.T) {
 	require.Equal(t, "Bearer token", toolLog.RequestHeaders["Authorization"])
 	require.Len(t, toolLog.ResponseHeaders, 1)
 	require.Equal(t, "application/json", toolLog.ResponseHeaders["Content-Type"])
+}
+
+// insertTestLogs inserts a specified number of logs for testing purposes.
+// Logs are inserted with timestamps starting from baseTime, incrementing by 1 minute each.
+// Uses a timestamp of 1 hour ago to ensure logs are always within any reasonable default query window.
+func insertTestLogs(t *testing.T, ctx context.Context, ti *testInstance, projectID string, count int) {
+	t.Helper()
+
+	orgID := uuid.New().String()
+	deploymentID := uuid.New().String()
+	toolID := uuid.New().String()
+
+	// Use 1 hour ago to stay well within the default 48-hour query window
+	baseTime := time.Now().UTC().Add(-1 * time.Hour)
+
+	for i := 0; i < count; i++ {
+		id, err := fromTimeV7(baseTime.Add(time.Duration(i) * time.Minute))
+		require.NoError(t, err)
+
+		err = ti.chClient.Log(ctx, toolmetrics.ToolHTTPRequest{
+			ID:                id.String(),
+			Ts:                baseTime.Add(time.Duration(i) * time.Minute),
+			OrganizationID:    orgID,
+			ProjectID:         projectID,
+			DeploymentID:      deploymentID,
+			ToolID:            toolID,
+			ToolURN:           "urn:tool:test",
+			ToolType:          toolmetrics.ToolTypeHTTP,
+			TraceID:           id.String()[:32],
+			SpanID:            id.String()[:16],
+			HTTPMethod:        "GET",
+			HTTPRoute:         "/test",
+			StatusCode:        200,
+			DurationMs:        100.0,
+			UserAgent:         "test-agent",
+			RequestHeaders:    map[string]string{"Content-Type": "application/json"},
+			RequestBodyBytes:  12,
+			ResponseHeaders:   map[string]string{"Content-Type": "application/json"},
+			ResponseBodyBytes: 13,
+		})
+		require.NoError(t, err)
+	}
 }
 
 // fromTimeV7 generates a version 7 UUID based on the provided time.Time argument.
