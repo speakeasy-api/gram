@@ -38,7 +38,11 @@ func AuthorizeRequest(logger *slog.Logger, enc *encryption.Client, handler http.
 		var err error
 		switch version {
 		case "v01.":
-			err = authorizeV1(enc, token)
+			if payload, autherr := authorizeV1(enc, token); autherr == nil {
+				w.Header().Set("Gram-Invoke-ID", payload.ID)
+			} else {
+				err = autherr
+			}
 		default:
 			err = fmt.Errorf("unsupported bearer token version")
 		}
