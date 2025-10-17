@@ -8,8 +8,15 @@
     }
   ],
   "fixed": [],
-  "linked": [],
-  "ignore": [],
+  "linked": [
+    [
+      "@gram-ai/functions",
+      "@gram-ai/create-function"
+    ]
+  ],
+  "ignore": [
+    "gram-template-*"
+  ],
   "access": "restricted",
   "baseBranch": "origin/main",
   "updateInternalDependencies": "patch",

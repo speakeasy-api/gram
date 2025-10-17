@@ -11,3 +11,6 @@ client:
 
 functions:
   - 'functions/**'
+
+tsframework:
+  - 'ts-framework/**'
