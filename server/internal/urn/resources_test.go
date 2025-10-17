@@ -278,6 +278,16 @@ func TestResource_URISlugification(t *testing.T) {
 			uri:         "postgres://database/customers?sslmode=require&connect_timeout=10",
 			wantSlugURI: "postgres-database-customers-sslmode-require-connect_timeout-10",
 		},
+		{
+			name:        "URI with template syntax - curly braces",
+			uri:         "https://api.example.com/users/{id}/posts/{postId}",
+			wantSlugURI: "https-api-example-com-users-id-posts-postid",
+		},
+		{
+			name:        "URI with multiple template parameters",
+			uri:         "https://api.example.com/{version}/users/{id}",
+			wantSlugURI: "https-api-example-com-version-users-id",
+		},
 	}
 
 	for _, tt := range tests {
