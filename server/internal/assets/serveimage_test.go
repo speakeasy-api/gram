@@ -48,9 +48,7 @@ func TestService_ServeImage_Success(t *testing.T) {
 
 	// Call ServeImage
 	result, body, err := ti.service.ServeImage(ctx, &assets.ServeImageForm{
-		SessionToken: nil,
-		ApikeyToken:  nil,
-		ID:           asset.ID.String(),
+		ID: asset.ID.String(),
 	})
 
 	require.NoError(t, err)
@@ -75,9 +73,7 @@ func TestService_ServeImage_InvalidAssetID(t *testing.T) {
 	ctx, ti := newTestAssetsService(t)
 
 	_, _, err := ti.service.ServeImage(ctx, &assets.ServeImageForm{
-		SessionToken: nil,
-		ApikeyToken:  nil,
-		ID:           "invalid-uuid",
+		ID: "invalid-uuid",
 	})
 
 	var oopsErr *oops.ShareableError
@@ -93,9 +89,7 @@ func TestService_ServeImage_AssetNotFound(t *testing.T) {
 	nonExistentID := uuid.New()
 
 	_, _, err := ti.service.ServeImage(ctx, &assets.ServeImageForm{
-		SessionToken: nil,
-		ApikeyToken:  nil,
-		ID:           nonExistentID.String(),
+		ID: nonExistentID.String(),
 	})
 
 	var oopsErr *oops.ShareableError
@@ -123,9 +117,7 @@ func TestService_ServeImage_FileNotInStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _, err = ti.service.ServeImage(ctx, &assets.ServeImageForm{
-		SessionToken: nil,
-		ApikeyToken:  nil,
-		ID:           asset.ID.String(),
+		ID: asset.ID.String(),
 	})
 
 	var oopsErr *oops.ShareableError
@@ -153,9 +145,7 @@ func TestService_ServeImage_InvalidAssetURL(t *testing.T) {
 	require.NoError(t, err)
 
 	_, _, err = ti.service.ServeImage(ctx, &assets.ServeImageForm{
-		SessionToken: nil,
-		ApikeyToken:  nil,
-		ID:           asset.ID.String(),
+		ID: asset.ID.String(),
 	})
 
 	var oopsErr *oops.ShareableError

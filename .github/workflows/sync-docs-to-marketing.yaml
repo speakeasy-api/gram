@@ -1,0 +1,151 @@
+name: Sync Gram Docs → Marketing Site (PR)
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "docs/src/content/docs/**"
+      - "docs/public/**"
+permissions:
+  contents: read
+  pull-requests: write
+concurrency:
+  group: gram-to-marketing-pr-sync-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  MARKETING_REPO: speakeasy-api/marketing-site
+  BRANCH: main
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Gram repo (source)
+        uses: actions/checkout@a5ac7e51b41094c153674e0e265ab8620f0be3ad  # v4.1.6
+        with:
+          fetch-depth: 0
+      - name: Checkout Marketing repo (destination)
+        uses: actions/checkout@a5ac7e51b41094c153674e0e265ab8620f0be3ad  # v4.1.6
+        with:
+          repository: ${{ env.MARKETING_REPO }}
+          ref: ${{ env.BRANCH }}
+          token: ${{ secrets.SERVICE_BOT_TOKEN }}
+          path: marketing-repo
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Sync docs content into Marketing working tree
+        run: |
+          set -euo pipefail
+          src_path="docs/src/content/docs"
+          dest_path="marketing-repo/src/content/docs/gram"
+          if [ -d "$src_path" ]; then
+            mkdir -p "$dest_path"
+            # Exclude the root docs index.mdx from being copied and protect any existing
+            # destination file from deletion/overwrites.
+            rsync -a --delete \
+              --exclude='.DS_Store' \
+              --exclude='/index.mdx' \
+              --filter='P /index.mdx' \
+              "$src_path/" "$dest_path/"
+          else
+            echo "Warning: $src_path does not exist; nothing to sync."
+          fi
+      - name: Sync public assets into Marketing working tree
+        run: |
+          set -euo pipefail
+          src_assets="docs/public"
+          dest_assets="marketing-repo/public/assets/docs/gram"
+          if [ -d "$src_assets" ]; then
+            mkdir -p "$dest_assets"
+            EXCLUDES=(
+              '.DS_Store'
+              'well-known/security.txt'
+              '.well-known/security.txt'
+              'favicon-dark.ico'
+              'favicon-dark.png'
+              'favicon.ico'
+              'favicon.png'
+            )
+            rsync -a --delete \
+              "${EXCLUDES[@]/#/--exclude=}" \
+              "$src_assets/" "$dest_assets/"
+          else
+            echo "Warning: $src_assets does not exist; no assets to sync."
+          fi
+      - name: Transform asset paths in synced content
+        run: |
+          set -euo pipefail
+          content_dir="marketing-repo/src/content/docs/gram"
+          if [ -d "$content_dir" ]; then
+            # Target common content file extensions
+            mapfile -t files < <(find "$content_dir" -type f \( -name '*.md' -o -name '*.mdx' -o -name '*.markdown' -o -name '*.astro' -o -name '*.html' \))
+            if [ "${#files[@]}" -gt 0 ]; then
+              for f in "${files[@]}"; do
+                # Skip the root-level index.mdx (left unmanaged by sync step)
+                if [[ "$f" == "$content_dir/index.mdx" ]]; then
+                  continue
+                fi
+                # 1) Rewrite root-relative image/video URLs to point to marketing assets location
+                sed -i -E \
+                  -e 's#href="/img/#href="/assets/docs/gram/img/#g' \
+                  -e 's#src="/img/#src="/assets/docs/gram/img/#g' \
+                  -e "s#src='/img/#src='/assets/docs/gram/img/#g" \
+                  -e 's#\]\(/img/#](/assets/docs/gram/img/#g' \
+                  -e 's#url\(/img/#url(/assets/docs/gram/img/#g' \
+                  -e 's#href="/videos/#href="/assets/docs/gram/videos/#g' \
+                  -e 's#src="/videos/#src="/assets/docs/gram/videos/#g' \
+                  -e "s#src='/videos/#src='/assets/docs/gram/videos/#g" \
+                  -e 's#\]\(/videos/#](/assets/docs/gram/videos/#g' \
+                  -e 's#url\(/videos/#url(/assets/docs/gram/videos/#g' \
+                  "$f"
+                # 2) Prefix any other root-relative internal links with /docs/gram/ using a wildcard
+                #    Skips already-correct, assets, images, anchors, and URLs with a scheme (mailto:, https:, etc.)
+                perl -0777 -i -pe \
+                  's{(href=)(["\x27])/(?!docs/gram/|assets/|img/|videos/|static/|#|[a-z]+:)}{\1\2/docs/gram/}g;' \
+                  -e 's{(\]\()/(?!docs/gram/|assets/|img/|videos/|static/|#|[a-z]+:)}{\1/docs/gram/}g' \
+                  "$f"
+              done
+            fi
+          else
+            echo "Warning: $content_dir does not exist; nothing to transform."
+          fi
+      - name: Build PR body with grouped changes
+        run: |
+          set -euo pipefail
+          cd marketing-repo
+          echo "### Sync from Gram" > ../PR_BODY.md
+          echo "" >> ../PR_BODY.md
+          echo "**Source commit:** \`${GITHUB_SHA}\`" >> ../PR_BODY.md
+          echo "" >> ../PR_BODY.md
+          echo "**Grouped file changes:**" >> ../PR_BODY.md
+          if git diff --name-status | grep -q .; then
+            git diff --name-status | awk '
+              {
+                split($2, parts, "/");
+                key = parts[1];
+                if (length(parts) >= 2) key = key "/" parts[2];
+                if (current != key) {
+                  if (current != "") print "" >> "../PR_BODY.md";
+                  print "#### `" key "/`" >> "../PR_BODY.md";
+                  current = key;
+                }
+                print $0 >> "../PR_BODY.md";
+              }
+            '
+          else
+            echo "_No file changes detected after sync._" >> ../PR_BODY.md
+          fi
+      - name: Create pull request in Marketing
+        uses: peter-evans/create-pull-request@4851eb8d498411fd05b06f54537670583e8acf1f  # v6.1.0
+        with:
+          token: ${{ secrets.SERVICE_BOT_TOKEN }}
+          path: marketing-repo
+          commit-message: "Sync marketing docs from Gram 🐝 (source ${{ github.sha }})"
+          branch: chore/gram-to-marketing-sync-${{ github.sha }}
+          title: "chore: sync docs from Gram"
+          body-path: PR_BODY.md
+          committer: "Beezy the bot <beezy-bot@users.noreply.github.com>"
+          author: "Beezy the bot <beezy-bot@users.noreply.github.com>"
+          labels: |
+            automation
+            docs
+            sync
+          signoff: false

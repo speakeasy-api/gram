@@ -19,6 +19,7 @@ var _ = Service("auth", func() {
 
 		Payload(func() {
 			Attribute("code", String, "The auth code for authentication from the speakeasy system")
+			Attribute("state", String, "The opaque state string optionally provided during initialization.")
 			Required("code")
 		})
 
@@ -32,6 +33,7 @@ var _ = Service("auth", func() {
 		HTTP(func() {
 			GET("/rpc/auth.callback")
 			Param("code")
+			Param("state")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {
@@ -51,6 +53,10 @@ var _ = Service("auth", func() {
 
 		NoSecurity()
 
+		Payload(func() {
+			Attribute("redirect", String, "Optional URL to redirect to after successful authentication")
+		})
+
 		Result(func() {
 			Attribute("location", String, "The URL to redirect to after authentication")
 			Required("location")
@@ -58,6 +64,7 @@ var _ = Service("auth", func() {
 
 		HTTP(func() {
 			GET("/rpc/auth.login")
+			Param("redirect")
 
 			Response(StatusTemporaryRedirect, func() {
 				Header("location:Location", String, func() {

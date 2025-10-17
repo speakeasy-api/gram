@@ -68,8 +68,8 @@ func UsageCommands() []string {
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + ` about openapi` + "\n" +
-		os.Args[0] + ` assets serve-image --id "Animi illum nisi voluptatum molestiae architecto." --session-token "Aut sit sit est ducimus voluptatem nam." --apikey-token "Nulla vitae et maiores et atque."` + "\n" +
-		os.Args[0] + ` auth callback --code "Est nesciunt vel."` + "\n" +
+		os.Args[0] + ` assets serve-image --id "Animi illum nisi voluptatum molestiae architecto."` + "\n" +
+		os.Args[0] + ` auth callback --code "Alias nostrum enim id repudiandae." --state "Quibusdam quia et et dolor et."` + "\n" +
 		os.Args[0] + ` chat list-chats --session-token "Blanditiis placeat." --project-slug-input "Facilis dolor vitae exercitationem."` + "\n" +
 		os.Args[0] + ` deployments get-deployment --id "Minus fugiat dolore dignissimos iste eos." --apikey-token "Officia molestiae ipsam nihil consequatur cum." --session-token "Qui architecto nemo." --project-slug-input "Qui libero sint aut."` + "\n" +
 		""
@@ -91,10 +91,8 @@ func ParseEndpoint(
 
 		assetsFlags = flag.NewFlagSet("assets", flag.ContinueOnError)
 
-		assetsServeImageFlags            = flag.NewFlagSet("serve-image", flag.ExitOnError)
-		assetsServeImageIDFlag           = assetsServeImageFlags.String("id", "REQUIRED", "")
-		assetsServeImageSessionTokenFlag = assetsServeImageFlags.String("session-token", "", "")
-		assetsServeImageApikeyTokenFlag  = assetsServeImageFlags.String("apikey-token", "", "")
+		assetsServeImageFlags  = flag.NewFlagSet("serve-image", flag.ExitOnError)
+		assetsServeImageIDFlag = assetsServeImageFlags.String("id", "REQUIRED", "")
 
 		assetsUploadImageFlags                = flag.NewFlagSet("upload-image", flag.ExitOnError)
 		assetsUploadImageContentTypeFlag      = assetsUploadImageFlags.String("content-type", "REQUIRED", "")
@@ -133,10 +131,12 @@ func ParseEndpoint(
 
 		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
 
-		authCallbackFlags    = flag.NewFlagSet("callback", flag.ExitOnError)
-		authCallbackCodeFlag = authCallbackFlags.String("code", "REQUIRED", "")
+		authCallbackFlags     = flag.NewFlagSet("callback", flag.ExitOnError)
+		authCallbackCodeFlag  = authCallbackFlags.String("code", "REQUIRED", "")
+		authCallbackStateFlag = authCallbackFlags.String("state", "", "")
 
-		authLoginFlags = flag.NewFlagSet("login", flag.ExitOnError)
+		authLoginFlags        = flag.NewFlagSet("login", flag.ExitOnError)
+		authLoginRedirectFlag = authLoginFlags.String("redirect", "", "")
 
 		authSwitchScopesFlags              = flag.NewFlagSet("switch-scopes", flag.ExitOnError)
 		authSwitchScopesOrganizationIDFlag = authSwitchScopesFlags.String("organization-id", "", "")
@@ -1063,7 +1063,7 @@ func ParseEndpoint(
 			switch epn {
 			case "serve-image":
 				endpoint = c.ServeImage()
-				data, err = assetsc.BuildServeImagePayload(*assetsServeImageIDFlag, *assetsServeImageSessionTokenFlag, *assetsServeImageApikeyTokenFlag)
+				data, err = assetsc.BuildServeImagePayload(*assetsServeImageIDFlag)
 			case "upload-image":
 				endpoint = c.UploadImage()
 				data, err = assetsc.BuildUploadImagePayload(*assetsUploadImageContentTypeFlag, *assetsUploadImageContentLengthFlag, *assetsUploadImageApikeyTokenFlag, *assetsUploadImageProjectSlugInputFlag, *assetsUploadImageSessionTokenFlag)
@@ -1094,9 +1094,10 @@ func ParseEndpoint(
 			switch epn {
 			case "callback":
 				endpoint = c.Callback()
-				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag)
+				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackStateFlag)
 			case "login":
 				endpoint = c.Login()
+				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag)
 			case "switch-scopes":
 				endpoint = c.SwitchScopes()
 				data, err = authc.BuildSwitchScopesPayload(*authSwitchScopesOrganizationIDFlag, *authSwitchScopesProjectIDFlag, *authSwitchScopesSessionTokenFlag)
@@ -1427,8 +1428,6 @@ func assetsServeImageUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] assets serve-image", os.Args[0])
 	fmt.Fprint(os.Stderr, " -id STRING")
-	fmt.Fprint(os.Stderr, " -session-token STRING")
-	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -1437,13 +1436,11 @@ func assetsServeImageUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
-	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
-	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets serve-image --id "Animi illum nisi voluptatum molestiae architecto." --session-token "Aut sit sit est ducimus voluptatem nam." --apikey-token "Nulla vitae et maiores et atque."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets serve-image --id "Animi illum nisi voluptatum molestiae architecto."`)
 }
 
 func assetsUploadImageUsage() {
@@ -1472,7 +1469,7 @@ func assetsUploadImageUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-image --content-type "Quidem libero voluptas earum sed nisi voluptatem." --content-length 5247310401722162742 --apikey-token "Ea harum ea qui repudiandae nesciunt dolor." --project-slug-input "Minima provident error dolor perferendis." --session-token "Non velit." --stream "goa.png"`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-image --content-type "Ut voluptas qui eligendi." --content-length 7010262161391205372 --apikey-token "Quam maiores quisquam impedit ipsam." --project-slug-input "Consectetur perspiciatis hic quidem." --session-token "Voluptas earum sed nisi voluptatem saepe." --stream "goa.png"`)
 }
 
 func assetsUploadFunctionsUsage() {
@@ -1501,7 +1498,7 @@ func assetsUploadFunctionsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-functions --content-type "Quis placeat." --content-length 5366782482360284836 --apikey-token "Nihil et ipsa tempore." --project-slug-input "Ipsam occaecati accusamus harum qui." --session-token "Sapiente qui cumque eius voluptatem qui dolorem." --stream "goa.png"`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-functions --content-type "Corporis eligendi." --content-length 5470043908848697208 --apikey-token "Ut voluptate qui nihil dolorum fugit animi." --project-slug-input "Nam placeat quis." --session-token "Autem illum." --stream "goa.png"`)
 }
 
 func assetsUploadOpenAPIv3Usage() {
@@ -1530,7 +1527,7 @@ func assetsUploadOpenAPIv3Usage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-open-ap-iv3 --content-type "Quia repellat dolor." --content-length 8228446596507555073 --apikey-token "Esse eos fuga natus facilis." --project-slug-input "Facilis recusandae dolor." --session-token "Dicta voluptas." --stream "goa.png"`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets upload-open-ap-iv3 --content-type "Ea accusantium similique aut." --content-length 1310160652289565892 --apikey-token "Inventore totam in unde esse sequi velit." --project-slug-input "Voluptatem aliquam harum beatae quia." --session-token "Dolor non veritatis esse." --stream "goa.png"`)
 }
 
 func assetsServeOpenAPIv3Usage() {
@@ -1555,7 +1552,7 @@ func assetsServeOpenAPIv3Usage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets serve-open-ap-iv3 --id "Enim quae animi saepe ex possimus." --project-id "Vero recusandae dolorem quibusdam corrupti dolores." --apikey-token "Et hic molestias." --session-token "Autem incidunt sed dolor ut ipsa."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets serve-open-ap-iv3 --id "Nisi natus." --project-id "Explicabo tenetur." --apikey-token "Quos ut praesentium et." --session-token "Enim quae animi saepe ex possimus."`)
 }
 
 func assetsListAssetsUsage() {
@@ -1578,7 +1575,7 @@ func assetsListAssetsUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets list-assets --session-token "Odit necessitatibus quibusdam." --project-slug-input "Aut autem dolorum alias dolorem et." --apikey-token "Excepturi ut aut expedita consequatur ea."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `assets list-assets --session-token "Id sit." --project-slug-input "Praesentium illo assumenda sequi quis eius." --apikey-token "Est in."`)
 }
 
 // authUsage displays the usage of the auth command and its subcommands.
@@ -1600,6 +1597,7 @@ func authCallbackUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] auth callback", os.Args[0])
 	fmt.Fprint(os.Stderr, " -code STRING")
+	fmt.Fprint(os.Stderr, " -state STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -1608,16 +1606,18 @@ func authCallbackUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -code STRING: `)
+	fmt.Fprintln(os.Stderr, `    -state STRING: `)
 
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth callback --code "Est nesciunt vel."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth callback --code "Alias nostrum enim id repudiandae." --state "Quibusdam quia et et dolor et."`)
 }
 
 func authLoginUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] auth login", os.Args[0])
+	fmt.Fprint(os.Stderr, " -redirect STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -1625,11 +1625,12 @@ func authLoginUsage() {
 	fmt.Fprintln(os.Stderr, `Proxies to auth login through speakeasy oidc.`)
 
 	// Flags list
+	fmt.Fprintln(os.Stderr, `    -redirect STRING: `)
 
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth login`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth login --redirect "Quia quam temporibus iure."`)
 }
 
 func authSwitchScopesUsage() {
@@ -1652,7 +1653,7 @@ func authSwitchScopesUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth switch-scopes --organization-id "Alias qui." --project-id "Blanditiis et nesciunt." --session-token "Minima libero."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth switch-scopes --organization-id "Odit officia velit occaecati autem est itaque." --project-id "Veniam explicabo et est aut cumque alias." --session-token "Et blanditiis et."`)
 }
 
 func authLogoutUsage() {
@@ -1671,7 +1672,7 @@ func authLogoutUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth logout --session-token "Non voluptas."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth logout --session-token "Asperiores necessitatibus accusamus repudiandae iste non."`)
 }
 
 func authRegisterUsage() {
@@ -1693,8 +1694,8 @@ func authRegisterUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth register --body '{
-      "org_name": "Quaerat dolorem tempore est nihil."
-   }' --session-token "Voluptatem sint enim."`)
+      "org_name": "Soluta aperiam sit quaerat dolorem."
+   }' --session-token "Est nihil qui voluptatem."`)
 }
 
 func authInfoUsage() {
@@ -1713,7 +1714,7 @@ func authInfoUsage() {
 	// Example block: pass example as parameter to avoid format parsing of % characters
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth info --session-token "Accusantium est dolor sit."`)
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], `auth info --session-token "Est aut."`)
 }
 
 // chatUsage displays the usage of the chat command and its subcommands.

@@ -116,12 +116,21 @@ function AuthLayout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function LoginSection() {
+export type LoginSectionProps = {
+  redirectTo: string | null;
+};
+
+export function LoginSection(props: LoginSectionProps) {
   const [searchParams] = useSearchParams();
   const signinError = searchParams.get("signin_error");
 
+  const { redirectTo } = props;
+
   const handleLogin = async () => {
-    window.location.href = `${getServerURL()}/rpc/auth.login`;
+    let href = `${getServerURL()}/rpc/auth.login`;
+    if (redirectTo) href += `?redirect=${encodeURIComponent(redirectTo)}`;
+
+    window.location.href = href;
   };
 
   return (

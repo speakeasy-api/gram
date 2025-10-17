@@ -31,7 +31,7 @@ gram.code-workspace
 .local.env.json
 /server/cmd/local
 /local/cmd
-
+dist/
 **/.claude/settings.local.json
 .vercel
 cover.*

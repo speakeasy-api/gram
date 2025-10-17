@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 1fdd6b943fc1e824e507e9ebe6f4fa47
+  docChecksum: da72a4dc37cb489c071909175a10c139
   docVersion: 0.0.1
   speakeasyVersion: 1.637.0
   generationVersion: 2.727.4
-  releaseVersion: 0.14.12
-  configChecksum: 66eee5a92e9197f8b77c6206292baa45
+  releaseVersion: 0.14.13
+  configChecksum: 0f74e888b8fbbe75280ae1292943fedd
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -178,6 +178,7 @@ generatedFiles:
   - docs/models/operations/addexternaloauthserversecurity.md
   - docs/models/operations/authcallbackrequest.md
   - docs/models/operations/authcallbackresponse.md
+  - docs/models/operations/authloginrequest.md
   - docs/models/operations/authloginresponse.md
   - docs/models/operations/checkmcpslugavailabilityrequest.md
   - docs/models/operations/checkmcpslugavailabilitysecurity.md
@@ -342,7 +343,6 @@ generatedFiles:
   - docs/models/operations/revokeapikeysecurity.md
   - docs/models/operations/serveimagerequest.md
   - docs/models/operations/serveimageresponse.md
-  - docs/models/operations/serveimagesecurity.md
   - docs/models/operations/serveopenapiv3request.md
   - docs/models/operations/serveopenapiv3response.md
   - docs/models/operations/serveopenapiv3security.md

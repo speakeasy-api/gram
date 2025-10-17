@@ -179,16 +179,6 @@ paths:
                   name: id
                   required: true
                   type: string
-                - description: Session header
-                  in: header
-                  name: Gram-Session
-                  required: false
-                  type: string
-                - description: API Key header
-                  in: header
-                  name: Gram-Key
-                  required: false
-                  type: string
             responses:
                 "200":
                     description: OK response.
@@ -239,9 +229,6 @@ paths:
                         $ref: '#/definitions/AssetsServeImageGatewayErrorResponseBody'
             schemes:
                 - http
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
             summary: serveImage assets
             tags:
                 - assets
@@ -616,6 +603,11 @@ paths:
                   name: code
                   required: true
                   type: string
+                - description: The opaque state string optionally provided during initialization.
+                  in: query
+                  name: state
+                  required: false
+                  type: string
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -746,6 +738,12 @@ paths:
         get:
             description: Proxies to auth login through speakeasy oidc.
             operationId: auth#login
+            parameters:
+                - description: Optional URL to redirect to after successful authentication
+                  in: query
+                  name: redirect
+                  required: false
+                  type: string
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -9694,74 +9692,90 @@ definitions:
                 items:
                     $ref: '#/definitions/OrganizationEntry'
                 example:
-                    - id: Deleniti laudantium ipsum non.
-                      name: Molestiae veniam at cumque.
+                    - id: Eum corporis harum.
+                      name: Illum deleniti laudantium ipsum.
                       projects:
-                        - id: Inventore aliquam libero.
-                          name: Sed ad rerum nisi quam deleniti.
-                          slug: c6o
-                        - id: Inventore aliquam libero.
-                          name: Sed ad rerum nisi quam deleniti.
-                          slug: c6o
-                        - id: Inventore aliquam libero.
-                          name: Sed ad rerum nisi quam deleniti.
-                          slug: c6o
-                      slug: Inventore reprehenderit.
-                      sso_connection_id: Minima qui enim aliquam quia debitis odio.
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                      slug: Aut molestiae veniam at cumque.
+                      sso_connection_id: Qui enim.
                       user_workspace_slugs:
-                        - Animi quas.
-                        - Error quia aut et sit possimus.
-                    - id: Deleniti laudantium ipsum non.
-                      name: Molestiae veniam at cumque.
+                        - Debitis odio ex velit animi quas nihil.
+                        - Quia aut et sit.
+                        - Aut et assumenda ea quia neque id.
+                    - id: Eum corporis harum.
+                      name: Illum deleniti laudantium ipsum.
                       projects:
-                        - id: Inventore aliquam libero.
-                          name: Sed ad rerum nisi quam deleniti.
-                          slug: c6o
-                        - id: Inventore aliquam libero.
-                          name: Sed ad rerum nisi quam deleniti.
-                          slug: c6o
-                        - id: Inventore aliquam libero.
-                          name: Sed ad rerum nisi quam deleniti.
-                          slug: c6o
-                      slug: Inventore reprehenderit.
-                      sso_connection_id: Minima qui enim aliquam quia debitis odio.
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                      slug: Aut molestiae veniam at cumque.
+                      sso_connection_id: Qui enim.
                       user_workspace_slugs:
-                        - Animi quas.
-                        - Error quia aut et sit possimus.
-                    - id: Deleniti laudantium ipsum non.
-                      name: Molestiae veniam at cumque.
+                        - Debitis odio ex velit animi quas nihil.
+                        - Quia aut et sit.
+                        - Aut et assumenda ea quia neque id.
+                    - id: Eum corporis harum.
+                      name: Illum deleniti laudantium ipsum.
                       projects:
-                        - id: Inventore aliquam libero.
-                          name: Sed ad rerum nisi quam deleniti.
-                          slug: c6o
-                        - id: Inventore aliquam libero.
-                          name: Sed ad rerum nisi quam deleniti.
-                          slug: c6o
-                        - id: Inventore aliquam libero.
-                          name: Sed ad rerum nisi quam deleniti.
-                          slug: c6o
-                      slug: Inventore reprehenderit.
-                      sso_connection_id: Minima qui enim aliquam quia debitis odio.
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                      slug: Aut molestiae veniam at cumque.
+                      sso_connection_id: Qui enim.
                       user_workspace_slugs:
-                        - Animi quas.
-                        - Error quia aut et sit possimus.
-                    - id: Deleniti laudantium ipsum non.
-                      name: Molestiae veniam at cumque.
+                        - Debitis odio ex velit animi quas nihil.
+                        - Quia aut et sit.
+                        - Aut et assumenda ea quia neque id.
+                    - id: Eum corporis harum.
+                      name: Illum deleniti laudantium ipsum.
                       projects:
-                        - id: Inventore aliquam libero.
-                          name: Sed ad rerum nisi quam deleniti.
-                          slug: c6o
-                        - id: Inventore aliquam libero.
-                          name: Sed ad rerum nisi quam deleniti.
-                          slug: c6o
-                        - id: Inventore aliquam libero.
-                          name: Sed ad rerum nisi quam deleniti.
-                          slug: c6o
-                      slug: Inventore reprehenderit.
-                      sso_connection_id: Minima qui enim aliquam quia debitis odio.
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                        - id: Reprehenderit ea eos inventore aliquam libero libero.
+                          name: Ad rerum nisi quam deleniti occaecati.
+                          slug: 6oe
+                      slug: Aut molestiae veniam at cumque.
+                      sso_connection_id: Qui enim.
                       user_workspace_slugs:
-                        - Animi quas.
-                        - Error quia aut et sit possimus.
+                        - Debitis odio ex velit animi quas nihil.
+                        - Quia aut et sit.
+                        - Aut et assumenda ea quia neque id.
             user_display_name:
                 type: string
                 example: In pariatur non nam.
@@ -9782,74 +9796,90 @@ definitions:
             gram_account_type: Ducimus ut et.
             is_admin: true
             organizations:
-                - id: Deleniti laudantium ipsum non.
-                  name: Molestiae veniam at cumque.
+                - id: Eum corporis harum.
+                  name: Illum deleniti laudantium ipsum.
                   projects:
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                  slug: Inventore reprehenderit.
-                  sso_connection_id: Minima qui enim aliquam quia debitis odio.
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                  slug: Aut molestiae veniam at cumque.
+                  sso_connection_id: Qui enim.
                   user_workspace_slugs:
-                    - Animi quas.
-                    - Error quia aut et sit possimus.
-                - id: Deleniti laudantium ipsum non.
-                  name: Molestiae veniam at cumque.
+                    - Debitis odio ex velit animi quas nihil.
+                    - Quia aut et sit.
+                    - Aut et assumenda ea quia neque id.
+                - id: Eum corporis harum.
+                  name: Illum deleniti laudantium ipsum.
                   projects:
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                  slug: Inventore reprehenderit.
-                  sso_connection_id: Minima qui enim aliquam quia debitis odio.
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                  slug: Aut molestiae veniam at cumque.
+                  sso_connection_id: Qui enim.
                   user_workspace_slugs:
-                    - Animi quas.
-                    - Error quia aut et sit possimus.
-                - id: Deleniti laudantium ipsum non.
-                  name: Molestiae veniam at cumque.
+                    - Debitis odio ex velit animi quas nihil.
+                    - Quia aut et sit.
+                    - Aut et assumenda ea quia neque id.
+                - id: Eum corporis harum.
+                  name: Illum deleniti laudantium ipsum.
                   projects:
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                  slug: Inventore reprehenderit.
-                  sso_connection_id: Minima qui enim aliquam quia debitis odio.
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                  slug: Aut molestiae veniam at cumque.
+                  sso_connection_id: Qui enim.
                   user_workspace_slugs:
-                    - Animi quas.
-                    - Error quia aut et sit possimus.
-                - id: Deleniti laudantium ipsum non.
-                  name: Molestiae veniam at cumque.
+                    - Debitis odio ex velit animi quas nihil.
+                    - Quia aut et sit.
+                    - Aut et assumenda ea quia neque id.
+                - id: Eum corporis harum.
+                  name: Illum deleniti laudantium ipsum.
                   projects:
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                  slug: Inventore reprehenderit.
-                  sso_connection_id: Minima qui enim aliquam quia debitis odio.
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                  slug: Aut molestiae veniam at cumque.
+                  sso_connection_id: Qui enim.
                   user_workspace_slugs:
-                    - Animi quas.
-                    - Error quia aut et sit possimus.
+                    - Debitis odio ex velit animi quas nihil.
+                    - Quia aut et sit.
+                    - Aut et assumenda ea quia neque id.
             user_display_name: Adipisci voluptatem pariatur.
             user_email: Ad commodi.
             user_id: Animi numquam.
@@ -26395,50 +26425,50 @@ definitions:
                     $ref: '#/definitions/Asset'
                 description: The list of assets
                 example:
-                    - content_length: 996491283838038336
-                      content_type: Laboriosam iusto ea est et.
-                      created_at: "2001-02-19T07:18:35Z"
-                      id: Dolorem quibusdam animi.
+                    - content_length: 8560959590084482867
+                      content_type: Perferendis et non velit.
+                      created_at: "1975-07-01T07:44:31Z"
+                      id: Ea harum ea qui repudiandae nesciunt dolor.
                       kind: functions
-                      sha256: Molestiae nulla aut.
-                      updated_at: "2001-05-03T16:11:00Z"
-                    - content_length: 996491283838038336
-                      content_type: Laboriosam iusto ea est et.
-                      created_at: "2001-02-19T07:18:35Z"
-                      id: Dolorem quibusdam animi.
+                      sha256: Provident error.
+                      updated_at: "1987-04-27T01:28:13Z"
+                    - content_length: 8560959590084482867
+                      content_type: Perferendis et non velit.
+                      created_at: "1975-07-01T07:44:31Z"
+                      id: Ea harum ea qui repudiandae nesciunt dolor.
                       kind: functions
-                      sha256: Molestiae nulla aut.
-                      updated_at: "2001-05-03T16:11:00Z"
+                      sha256: Provident error.
+                      updated_at: "1987-04-27T01:28:13Z"
         example:
             assets:
-                - content_length: 996491283838038336
-                  content_type: Laboriosam iusto ea est et.
-                  created_at: "2001-02-19T07:18:35Z"
-                  id: Dolorem quibusdam animi.
+                - content_length: 8560959590084482867
+                  content_type: Perferendis et non velit.
+                  created_at: "1975-07-01T07:44:31Z"
+                  id: Ea harum ea qui repudiandae nesciunt dolor.
                   kind: functions
-                  sha256: Molestiae nulla aut.
-                  updated_at: "2001-05-03T16:11:00Z"
-                - content_length: 996491283838038336
-                  content_type: Laboriosam iusto ea est et.
-                  created_at: "2001-02-19T07:18:35Z"
-                  id: Dolorem quibusdam animi.
+                  sha256: Provident error.
+                  updated_at: "1987-04-27T01:28:13Z"
+                - content_length: 8560959590084482867
+                  content_type: Perferendis et non velit.
+                  created_at: "1975-07-01T07:44:31Z"
+                  id: Ea harum ea qui repudiandae nesciunt dolor.
                   kind: functions
-                  sha256: Molestiae nulla aut.
-                  updated_at: "2001-05-03T16:11:00Z"
-                - content_length: 996491283838038336
-                  content_type: Laboriosam iusto ea est et.
-                  created_at: "2001-02-19T07:18:35Z"
-                  id: Dolorem quibusdam animi.
+                  sha256: Provident error.
+                  updated_at: "1987-04-27T01:28:13Z"
+                - content_length: 8560959590084482867
+                  content_type: Perferendis et non velit.
+                  created_at: "1975-07-01T07:44:31Z"
+                  id: Ea harum ea qui repudiandae nesciunt dolor.
                   kind: functions
-                  sha256: Molestiae nulla aut.
-                  updated_at: "2001-05-03T16:11:00Z"
-                - content_length: 996491283838038336
-                  content_type: Laboriosam iusto ea est et.
-                  created_at: "2001-02-19T07:18:35Z"
-                  id: Dolorem quibusdam animi.
+                  sha256: Provident error.
+                  updated_at: "1987-04-27T01:28:13Z"
+                - content_length: 8560959590084482867
+                  content_type: Perferendis et non velit.
+                  created_at: "1975-07-01T07:44:31Z"
+                  id: Ea harum ea qui repudiandae nesciunt dolor.
                   kind: functions
-                  sha256: Molestiae nulla aut.
-                  updated_at: "2001-05-03T16:11:00Z"
+                  sha256: Provident error.
+                  updated_at: "1987-04-27T01:28:13Z"
         required:
             - assets
     ListChatsResult:
@@ -27057,26 +27087,26 @@ definitions:
                     $ref: '#/definitions/ProjectEntry'
                 description: The list of projects
                 example:
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
         example:
             projects:
-                - id: Inventore aliquam libero.
-                  name: Sed ad rerum nisi quam deleniti.
-                  slug: c6o
-                - id: Inventore aliquam libero.
-                  name: Sed ad rerum nisi quam deleniti.
-                  slug: c6o
-                - id: Inventore aliquam libero.
-                  name: Sed ad rerum nisi quam deleniti.
-                  slug: c6o
-                - id: Inventore aliquam libero.
-                  name: Sed ad rerum nisi quam deleniti.
-                  slug: c6o
+                - id: Reprehenderit ea eos inventore aliquam libero libero.
+                  name: Ad rerum nisi quam deleniti occaecati.
+                  slug: 6oe
+                - id: Reprehenderit ea eos inventore aliquam libero libero.
+                  name: Ad rerum nisi quam deleniti occaecati.
+                  slug: 6oe
+                - id: Reprehenderit ea eos inventore aliquam libero libero.
+                  name: Ad rerum nisi quam deleniti occaecati.
+                  slug: 6oe
+                - id: Reprehenderit ea eos inventore aliquam libero libero.
+                  name: Ad rerum nisi quam deleniti occaecati.
+                  slug: 6oe
         required:
             - projects
     ListPromptTemplatesResult:
@@ -30865,12 +30895,12 @@ definitions:
                 items:
                     $ref: '#/definitions/ProjectEntry'
                 example:
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
-                    - id: Inventore aliquam libero.
-                      name: Sed ad rerum nisi quam deleniti.
-                      slug: c6o
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
+                    - id: Reprehenderit ea eos inventore aliquam libero libero.
+                      name: Ad rerum nisi quam deleniti occaecati.
+                      slug: 6oe
             slug:
                 type: string
                 example: Aspernatur libero.
@@ -30891,18 +30921,18 @@ definitions:
             id: Cumque minus modi repellat voluptas.
             name: Nesciunt aspernatur qui sit facilis officiis.
             projects:
-                - id: Inventore aliquam libero.
-                  name: Sed ad rerum nisi quam deleniti.
-                  slug: c6o
-                - id: Inventore aliquam libero.
-                  name: Sed ad rerum nisi quam deleniti.
-                  slug: c6o
-                - id: Inventore aliquam libero.
-                  name: Sed ad rerum nisi quam deleniti.
-                  slug: c6o
-                - id: Inventore aliquam libero.
-                  name: Sed ad rerum nisi quam deleniti.
-                  slug: c6o
+                - id: Reprehenderit ea eos inventore aliquam libero libero.
+                  name: Ad rerum nisi quam deleniti occaecati.
+                  slug: 6oe
+                - id: Reprehenderit ea eos inventore aliquam libero libero.
+                  name: Ad rerum nisi quam deleniti occaecati.
+                  slug: 6oe
+                - id: Reprehenderit ea eos inventore aliquam libero libero.
+                  name: Ad rerum nisi quam deleniti occaecati.
+                  slug: 6oe
+                - id: Reprehenderit ea eos inventore aliquam libero libero.
+                  name: Ad rerum nisi quam deleniti occaecati.
+                  slug: 6oe
             slug: Voluptates aut enim ducimus et est dolor.
             sso_connection_id: Aliquid voluptas ducimus qui ullam.
             user_workspace_slugs:
@@ -47988,13 +48018,13 @@ definitions:
                 $ref: '#/definitions/Asset'
         example:
             asset:
-                content_length: 996491283838038336
-                content_type: Laboriosam iusto ea est et.
-                created_at: "2001-02-19T07:18:35Z"
-                id: Dolorem quibusdam animi.
+                content_length: 8560959590084482867
+                content_type: Perferendis et non velit.
+                created_at: "1975-07-01T07:44:31Z"
+                id: Ea harum ea qui repudiandae nesciunt dolor.
                 kind: functions
-                sha256: Molestiae nulla aut.
-                updated_at: "2001-05-03T16:11:00Z"
+                sha256: Provident error.
+                updated_at: "1987-04-27T01:28:13Z"
         required:
             - asset
     UploadImageResult:
@@ -48005,13 +48035,13 @@ definitions:
                 $ref: '#/definitions/Asset'
         example:
             asset:
-                content_length: 996491283838038336
-                content_type: Laboriosam iusto ea est et.
-                created_at: "2001-02-19T07:18:35Z"
-                id: Dolorem quibusdam animi.
+                content_length: 8560959590084482867
+                content_type: Perferendis et non velit.
+                created_at: "1975-07-01T07:44:31Z"
+                id: Ea harum ea qui repudiandae nesciunt dolor.
                 kind: functions
-                sha256: Molestiae nulla aut.
-                updated_at: "2001-05-03T16:11:00Z"
+                sha256: Provident error.
+                updated_at: "1987-04-27T01:28:13Z"
         required:
             - asset
     UploadOpenAPIv3Result:
@@ -48022,13 +48052,13 @@ definitions:
                 $ref: '#/definitions/Asset'
         example:
             asset:
-                content_length: 996491283838038336
-                content_type: Laboriosam iusto ea est et.
-                created_at: "2001-02-19T07:18:35Z"
-                id: Dolorem quibusdam animi.
+                content_length: 8560959590084482867
+                content_type: Perferendis et non velit.
+                created_at: "1975-07-01T07:44:31Z"
+                id: Ea harum ea qui repudiandae nesciunt dolor.
                 kind: functions
-                sha256: Molestiae nulla aut.
-                updated_at: "2001-05-03T16:11:00Z"
+                sha256: Provident error.
+                updated_at: "1987-04-27T01:28:13Z"
         required:
             - asset
     UpsertGlobalToolVariationResult:

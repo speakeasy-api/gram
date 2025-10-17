@@ -44,41 +44,17 @@ func EncodeServeImageResponse(encoder func(context.Context, http.ResponseWriter)
 func DecodeServeImageRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*assets.ServeImageForm, error) {
 	return func(r *http.Request) (*assets.ServeImageForm, error) {
 		var (
-			id           string
-			sessionToken *string
-			apikeyToken  *string
-			err          error
+			id  string
+			err error
 		)
 		id = r.URL.Query().Get("id")
 		if id == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("id", "query string"))
 		}
-		sessionTokenRaw := r.Header.Get("Gram-Session")
-		if sessionTokenRaw != "" {
-			sessionToken = &sessionTokenRaw
-		}
-		apikeyTokenRaw := r.Header.Get("Gram-Key")
-		if apikeyTokenRaw != "" {
-			apikeyToken = &apikeyTokenRaw
-		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewServeImageForm(id, sessionToken, apikeyToken)
-		if payload.ApikeyToken != nil {
-			if strings.Contains(*payload.ApikeyToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.ApikeyToken, " ", 2)[1]
-				payload.ApikeyToken = &cred
-			}
-		}
-		if payload.SessionToken != nil {
-			if strings.Contains(*payload.SessionToken, " ") {
-				// Remove authorization scheme prefix (e.g. "Bearer")
-				cred := strings.SplitN(*payload.SessionToken, " ", 2)[1]
-				payload.SessionToken = &cred
-			}
-		}
+		payload := NewServeImageForm(id)
 
 		return payload, nil
 	}

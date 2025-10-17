@@ -1,5 +1,25 @@
 # @gram/server
 
+## 0.8.0
+
+### Minor Changes
+
+- f3ffd00: Preserve redirect URLs during log-in for unauthenticated browsers.
+
+### Patch Changes
+
+- 6c5d329: Remove errant authorization from image serving
+- ac5cb3d: Add correct resolution of custom domains for private MCP servers in install pages
+
+## 0.7.2
+
+### Patch Changes
+
+- 0fa05ce: Fix custom install page logos on custom domains
+- 660c110: Support variations on any tool type. Allows the names of Custom Tools to now be edited along with all fields of Functions.
+- 9f7f5ea: Correctly use the custom domain on install pages
+- cb7fc5a: Update the gateway to check the `Gram-Invoke-ID` response header from Gram Functions tool calls before proxying the response back to the client. This is an added security measure that asserts the server that ran a function had access to the auth secret and was able to decrypt the bearer token successfully.
+
 ## 0.7.1
 
 ### Patch Changes

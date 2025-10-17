@@ -22,6 +22,26 @@ npm run dev
 
 Now you can visit the project locally at <http://localhost:4321>.
 
+## Publishing model: synced to Speakeasy marketing
+
+This docs site is used for local authoring only. On deploy, all routes are redirected to the Speakeasy marketing site at `http://speakeasy.com/docs/gram/` (see `vercel.json`). A GitHub Action (`.github/workflows/sync-docs-to-marketing.yaml`) automatically syncs content to the marketing repo and opens a PR.
+
+- What syncs: files under `docs/src/content/docs/**` and public assets under `docs/public/**`.
+- Where it lands: `speakeasy-api/marketing-site` at `src/content/docs/gram/` and assets at `public/assets/docs/gram/`.
+- Excluded: `docs/src/content/docs/index.mdx` (the landing page is owned by marketing).
+- When it runs: on pushes to `main` that touch the paths above, or via manual dispatch.
+
+### Authoring guidelines (important)
+
+- No Starlight components: do not use any Starlight UI components (e.g., Tabs, Card, Aside, Steps, or Starlight-specific imports). They won’t render on the Speakeasy marketing site. Stick to plain Markdown/MDX.
+- Assets location: place images and videos in `docs/public/` (e.g., `docs/public/img/...`, `docs/public/videos/...`).
+  - Reference them with root-relative paths: `/img/...` or `/videos/...`.
+  - The sync workflow rewrites these to `/assets/docs/gram/img/...` and `/assets/docs/gram/videos/...` in marketing.
+- Internal links: use relative links or root-relative links starting with `/...`. Root-relative links are rewritten to `/docs/gram/...` during sync (non-asset paths only).
+- Keep landing page separate: avoid editing `docs/src/content/docs/index.mdx`; marketing maintains the top-level landing page.
+
+You can still use the Astro + Starlight site locally to develop and preview, but assume only plain Markdown/MDX will make it to production.
+
 ## 🚀 Project Structure
 
 Inside this Astro + Starlight project, you'll see the following folders and files:
@@ -45,9 +65,7 @@ Inside this Astro + Starlight project, you'll see the following folders and file
 
 Starlight looks for `.md` or `.mdx` files in the `src/content/docs/` directory. Each file is exposed as a route based on its file name.
 
-Images can be added to `src/assets/` and embedded in Markdown with a relative link.
-
-Static assets, like favicons, can be placed in the `public/` directory.
+For assets that must appear on the marketing site, place them under `docs/public/` (prefer `docs/public/img` and `docs/public/videos`) and reference with root-relative paths as described above. Assets placed in `src/assets/` will not be synced to marketing.
 
 ## 🧞 Commands
 

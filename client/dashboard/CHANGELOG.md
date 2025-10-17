@@ -1,5 +1,23 @@
 # @gram/dashboard
 
+## 0.15.0
+
+### Minor Changes
+
+- f3ffd00: Preserve redirect URLs during log-in for unauthenticated browsers.
+
+### Patch Changes
+
+- 73a7ffc: chore: Make tools dialog is wider, tool name prefixes are muted for easier legibility and mo tools found in search message has been improved for clarity
+
+## 0.14.2
+
+### Patch Changes
+
+- 660c110: Support variations on any tool type. Allows the names of Custom Tools to now be edited along with all fields of Functions.
+- Updated dependencies [660c110]
+  - @gram/client@0.14.11
+
 ## 0.14.1
 
 ### Patch Changes

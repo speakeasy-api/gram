@@ -41,13 +41,11 @@ export class Assets extends ClientSDK {
    */
   async serveImage(
     request: operations.ServeImageRequest,
-    security?: operations.ServeImageSecurity | undefined,
     options?: RequestOptions,
   ): Promise<operations.ServeImageResponse> {
     return unwrapAsync(assetsServeImage(
       this,
       request,
-      security,
       options,
     ));
   }

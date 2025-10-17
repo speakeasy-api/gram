@@ -13,6 +13,10 @@ export type AuthCallbackRequest = {
    * The auth code for authentication from the speakeasy system
    */
   code: string;
+  /**
+   * The opaque state string optionally provided during initialization.
+   */
+  state?: string | undefined;
 };
 
 export type AuthCallbackResponse = {
@@ -26,11 +30,13 @@ export const AuthCallbackRequest$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   code: z.string(),
+  state: z.string().optional(),
 });
 
 /** @internal */
 export type AuthCallbackRequest$Outbound = {
   code: string;
+  state?: string | undefined;
 };
 
 /** @internal */
@@ -40,6 +46,7 @@ export const AuthCallbackRequest$outboundSchema: z.ZodType<
   AuthCallbackRequest
 > = z.object({
   code: z.string(),
+  state: z.string().optional(),
 });
 
 /**

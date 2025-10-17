@@ -10,7 +10,16 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 jobs:
   release:
     name: Release
-    runs-on: ubicloud-standard-4
+    # We have setup NPM trusted publishing which requires running the release
+    # workflow on GitHub-hosted runners. It can running on ubicloud or any other
+    # self-hosted runners that we manage.
+    # https://docs.npmjs.com/trusted-publishers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
     steps:
       - name: Checkout Repo
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
@@ -53,7 +62,6 @@ jobs:
           publish: pnpm changeset publish
         env:
           GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
-          NPM_TOKEN: "not-set" # intentionally not set for now
 
       - name: Prune PNPM store
         run: pnpm store prune

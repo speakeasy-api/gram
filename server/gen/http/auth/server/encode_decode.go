@@ -45,17 +45,23 @@ func EncodeCallbackResponse(encoder func(context.Context, http.ResponseWriter) g
 func DecodeCallbackRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*auth.CallbackPayload, error) {
 	return func(r *http.Request) (*auth.CallbackPayload, error) {
 		var (
-			code string
-			err  error
+			code  string
+			state *string
+			err   error
 		)
-		code = r.URL.Query().Get("code")
+		qp := r.URL.Query()
+		code = qp.Get("code")
 		if code == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("code", "query string"))
+		}
+		stateRaw := qp.Get("state")
+		if stateRaw != "" {
+			state = &stateRaw
 		}
 		if err != nil {
 			return nil, err
 		}
-		payload := NewCallbackPayload(code)
+		payload := NewCallbackPayload(code, state)
 
 		return payload, nil
 	}
@@ -225,6 +231,23 @@ func EncodeLoginResponse(encoder func(context.Context, http.ResponseWriter) goah
 		w.Header().Set("Location", res.Location)
 		w.WriteHeader(http.StatusTemporaryRedirect)
 		return nil
+	}
+}
+
+// DecodeLoginRequest returns a decoder for requests sent to the auth login
+// endpoint.
+func DecodeLoginRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*auth.LoginPayload, error) {
+	return func(r *http.Request) (*auth.LoginPayload, error) {
+		var (
+			redirect *string
+		)
+		redirectRaw := r.URL.Query().Get("redirect")
+		if redirectRaw != "" {
+			redirect = &redirectRaw
+		}
+		payload := NewLoginPayload(redirect)
+
+		return payload, nil
 	}
 }
 

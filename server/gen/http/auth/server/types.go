@@ -2000,9 +2000,18 @@ func NewInfoGatewayErrorResponseBody(res *goa.ServiceError) *InfoGatewayErrorRes
 }
 
 // NewCallbackPayload builds a auth service callback endpoint payload.
-func NewCallbackPayload(code string) *auth.CallbackPayload {
+func NewCallbackPayload(code string, state *string) *auth.CallbackPayload {
 	v := &auth.CallbackPayload{}
 	v.Code = code
+	v.State = state
+
+	return v
+}
+
+// NewLoginPayload builds a auth service login endpoint payload.
+func NewLoginPayload(redirect *string) *auth.LoginPayload {
+	v := &auth.LoginPayload{}
+	v.Redirect = redirect
 
 	return v
 }

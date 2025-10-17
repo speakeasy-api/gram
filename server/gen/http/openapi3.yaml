@@ -214,20 +214,6 @@ paths:
                   schema:
                     description: The ID of the asset to serve
                     type: string
-                - allowEmptyValue: true
-                  description: Session header
-                  in: header
-                  name: Gram-Session
-                  schema:
-                    description: Session header
-                    type: string
-                - allowEmptyValue: true
-                  description: API Key header
-                  in: header
-                  name: Gram-Key
-                  schema:
-                    description: API Key header
-                    type: string
             responses:
                 "200":
                     content:
@@ -304,9 +290,6 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
-            security:
-                - apikey_header_Gram-Key: []
-                - session_header_Gram-Session: []
             summary: serveImage assets
             tags:
                 - assets
@@ -776,6 +759,13 @@ paths:
                   schema:
                     description: The auth code for authentication from the speakeasy system
                     type: string
+                - allowEmptyValue: true
+                  description: The opaque state string optionally provided during initialization.
+                  in: query
+                  name: state
+                  schema:
+                    description: The opaque state string optionally provided during initialization.
+                    type: string
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -951,6 +941,14 @@ paths:
         get:
             description: Proxies to auth login through speakeasy oidc.
             operationId: authLogin
+            parameters:
+                - allowEmptyValue: true
+                  description: Optional URL to redirect to after successful authentication
+                  in: query
+                  name: redirect
+                  schema:
+                    description: Optional URL to redirect to after successful authentication
+                    type: string
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -10388,13 +10386,9 @@ components:
         ServeImageForm:
             type: object
             properties:
-                apikey_token:
-                    type: string
                 id:
                     type: string
                     description: The ID of the asset to serve
-                session_token:
-                    type: string
             required:
                 - id
         ServeImageResult:

@@ -8,9 +8,70 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
+export type AuthLoginRequest = {
+  /**
+   * Optional URL to redirect to after successful authentication
+   */
+  redirect?: string | undefined;
+};
+
 export type AuthLoginResponse = {
   headers: { [k: string]: Array<string> };
 };
+
+/** @internal */
+export const AuthLoginRequest$inboundSchema: z.ZodType<
+  AuthLoginRequest,
+  z.ZodTypeDef,
+  unknown
+> = z.object({
+  redirect: z.string().optional(),
+});
+
+/** @internal */
+export type AuthLoginRequest$Outbound = {
+  redirect?: string | undefined;
+};
+
+/** @internal */
+export const AuthLoginRequest$outboundSchema: z.ZodType<
+  AuthLoginRequest$Outbound,
+  z.ZodTypeDef,
+  AuthLoginRequest
+> = z.object({
+  redirect: z.string().optional(),
+});
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace AuthLoginRequest$ {
+  /** @deprecated use `AuthLoginRequest$inboundSchema` instead. */
+  export const inboundSchema = AuthLoginRequest$inboundSchema;
+  /** @deprecated use `AuthLoginRequest$outboundSchema` instead. */
+  export const outboundSchema = AuthLoginRequest$outboundSchema;
+  /** @deprecated use `AuthLoginRequest$Outbound` instead. */
+  export type Outbound = AuthLoginRequest$Outbound;
+}
+
+export function authLoginRequestToJSON(
+  authLoginRequest: AuthLoginRequest,
+): string {
+  return JSON.stringify(
+    AuthLoginRequest$outboundSchema.parse(authLoginRequest),
+  );
+}
+
+export function authLoginRequestFromJSON(
+  jsonString: string,
+): SafeParseResult<AuthLoginRequest, SDKValidationError> {
+  return safeParse(
+    jsonString,
+    (x) => AuthLoginRequest$inboundSchema.parse(JSON.parse(x)),
+    `Failed to parse 'AuthLoginRequest' from JSON`,
+  );
+}
 
 /** @internal */
 export const AuthLoginResponse$inboundSchema: z.ZodType<

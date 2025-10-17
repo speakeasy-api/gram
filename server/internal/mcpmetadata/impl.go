@@ -317,7 +317,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		toolNames = append(toolNames, baseTool.Name)
 	}
 
-	MCPURL, err := resolveMCPURLFromContext(ctx, s.serverURL.String(), mcpSlug)
+	MCPURL, err := s.resolveMCPURLFromContext(ctx, *toolset, s.serverURL.String())
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolved bad url").Log(ctx, s.logger)
 	}
@@ -373,13 +373,19 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	return nil
 }
 
-func resolveMCPURLFromContext(ctx context.Context, serverUrl string, mcpSlug string) (string, error) {
-	customDomainCtx := customdomains.FromContext(ctx)
+func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets_repo.Toolset, serverUrl string) (string, error) {
 	baseURL := serverUrl + "/mcp"
-	if customDomainCtx != nil {
-		baseURL = fmt.Sprintf("https://%s", customDomainCtx.Domain+"/mcp")
+
+	if toolset.CustomDomainID.Valid {
+		customDomain, err := s.domainsRepo.GetCustomDomainByID(ctx, toolset.CustomDomainID.UUID)
+		if err != nil {
+			return "", fmt.Errorf("failed to get custom domain: %w", err)
+		}
+
+		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
 	}
-	MCPURL, err := url.JoinPath(baseURL, mcpSlug)
+
+	MCPURL, err := url.JoinPath(baseURL, toolset.Slug)
 	if err != nil {
 		return "", fmt.Errorf("failed to join URL path: %w", err)
 	}

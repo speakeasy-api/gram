@@ -1,10 +1,6 @@
-import { Input } from "@/components/ui/input";
-import { Dialog } from "@/components/ui/dialog";
-import { Button } from "@speakeasy-api/moonshine";
-import { useMemo, useState } from "react";
-import { useListTools } from "@/hooks/toolTypes";
 import { ToolList } from "@/components/tool-list";
-import { Tool, Toolset } from "@/lib/toolTypes";
+import { Dialog } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -12,7 +8,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useListTools } from "@/hooks/toolTypes";
+import { Tool, Toolset } from "@/lib/toolTypes";
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
+import { Button } from "@speakeasy-api/moonshine";
+import { useMemo, useState } from "react";
 
 function getToolSource(
   tool: Tool,
@@ -135,6 +135,16 @@ export function AddToolsDialog({
     functionIdToName,
   ]);
 
+  const unavailableToolsMatchingSearch = useMemo(() => {
+    return allTools?.tools.filter((tool) => {
+      return (
+        tool.name.toLowerCase().includes(search.toLowerCase()) ||
+        (tool.description?.toLowerCase().includes(search.toLowerCase()) &&
+          !existingToolUrns.has(tool.toolUrn))
+      );
+    });
+  }, [allTools, search, existingToolUrns]);
+
   const handleSelectionChange = (urns: string[]) => {
     setSelectedToolUrns(new Set(urns));
   };
@@ -154,9 +164,20 @@ export function AddToolsDialog({
     onOpenChange(false);
   };
 
+  let noResultsMessage = "No tools found matching your search";
+  if (
+    unavailableToolsMatchingSearch &&
+    unavailableToolsMatchingSearch.length > 0
+  ) {
+    noResultsMessage =
+      "All tools matching your search are already in this toolset";
+  } else if (availableTools.length === 0) {
+    noResultsMessage = "All available tools are already in this toolset";
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content className="max-w-4xl max-h-[80vh] flex flex-col">
+      <Dialog.Content className="min-w-3xl max-h-[80vh] flex flex-col">
         <Dialog.Header>
           <Dialog.Title>Add Tools to the toolset {toolset.name}</Dialog.Title>
           <Dialog.Description>
@@ -197,9 +218,7 @@ export function AddToolsDialog({
               </div>
             ) : filteredTools.length === 0 ? (
               <div className="text-center py-8 text-neutral-500">
-                {availableTools.length === 0
-                  ? "All available tools are already in this toolset"
-                  : "No tools found matching your search"}
+                {noResultsMessage}
               </div>
             ) : (
               <ToolList

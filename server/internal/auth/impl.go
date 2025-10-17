@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -139,7 +141,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 
 		return &gen.CallbackResult{
-			Location:      s.cfg.SignInRedirectURL,
+			Location:      s.callbackRedirectURL(ctx, payload),
 			SessionToken:  session.SessionID,
 			SessionCookie: session.SessionID,
 		}, nil
@@ -178,13 +180,13 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	return &gen.CallbackResult{
-		Location:      s.cfg.SignInRedirectURL,
+		Location:      s.callbackRedirectURL(ctx, payload),
 		SessionToken:  session.SessionID,
 		SessionCookie: session.SessionID,
 	}, nil
 }
 
-func (s *Service) Login(ctx context.Context) (res *gen.LoginResult, err error) {
+func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
 	if s.sessions.IsUnsafeLocalDevelopment() {
 		err = errors.New("calling rpc.login for local development stubbed auth is not supported because stubbed auth implies always being logged in. Reaching this point suggests a problem with dashboard authentication")
 		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(authErrLocalDevStubbed)))
@@ -204,6 +206,7 @@ func (s *Service) Login(ctx context.Context) (res *gen.LoginResult, err error) {
 
 	values := url.Values{}
 	values.Add("return_url", returnAddress+"/rpc/auth.callback")
+	values.Add("state", encodeStateParam(payload))
 
 	location := s.cfg.SpeakeasyServerAddress + "/v1/speakeasy_provider/login?" + values.Encode()
 
@@ -461,4 +464,100 @@ func (s *Service) createDefaultProject(ctx context.Context, organizationID strin
 	}
 
 	return project, nil
+}
+
+type loginState struct {
+	FinalDestinationURL string `json:"final_destination_url"`
+}
+
+func encodeStateParam(payload *gen.LoginPayload) string {
+	state := loginState{
+		FinalDestinationURL: conv.PtrValOr(payload.Redirect, ""),
+	}
+
+	jsonBytes, err := json.Marshal(state)
+	if err != nil {
+		return ""
+	}
+
+	return base64.RawURLEncoding.EncodeToString(jsonBytes)
+}
+
+func decodeStateParam(payload *gen.CallbackPayload) *loginState {
+	if payload == nil {
+		return nil
+	}
+
+	rawB64 := conv.PtrValOr(payload.State, "")
+	if rawB64 == "" {
+		return nil
+	}
+
+	rawJSON, err := base64.RawURLEncoding.DecodeString(rawB64)
+	if err != nil {
+		return nil
+	}
+
+	var state *loginState
+	err = json.Unmarshal(rawJSON, &state)
+	if err != nil {
+		return nil
+	}
+
+	return state
+}
+
+// callbackRedirectURL determines the redirect location after authentication. It
+// only allows relative URLs to prevent open redirect attacks (see relativeURL).
+// If no redirect is found, fall back to SignInRedirectURL.
+func (s *Service) callbackRedirectURL(
+	ctx context.Context,
+	payload *gen.CallbackPayload,
+) string {
+	var location string
+
+	if state := decodeStateParam(payload); state != nil {
+		location = relativeURL(state.FinalDestinationURL)
+	}
+
+	if location != "" {
+		msg := fmt.Sprintf("Found destination URL in state: '%s'", location)
+		s.logger.InfoContext(ctx, msg)
+
+		return location
+	}
+
+	return s.cfg.SignInRedirectURL
+}
+
+// relativeURL converts any URL to a safe relative URL by extracting only the
+// path, query, and fragment components.
+//
+// Examples:
+//   - "/dashboard" → "/dashboard"
+//   - "/projects?id=123#section" → "/projects?id=123#section"
+//   - "http://localhost:3000/dashboard" → "/dashboard"
+//   - "https://evil-site.com/phishing" → "/phishing"
+//   - "//evil.com/phish" → ""
+//   - "invalid:///" → ""
+func relativeURL(urlStr string) string {
+	parsed, err := url.Parse(urlStr)
+	if err != nil {
+		return ""
+	}
+
+	isRelative := parsed.Host == "" && parsed.Scheme == ""
+	if isRelative {
+		return urlStr
+	}
+
+	rel := parsed.Path
+	if parsed.RawQuery != "" {
+		rel += "?" + parsed.RawQuery
+	}
+	if parsed.Fragment != "" {
+		rel += "#" + parsed.Fragment
+	}
+
+	return rel
 }
