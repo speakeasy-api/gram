@@ -493,12 +493,12 @@ func decodeStateParam(payload *gen.CallbackPayload) *loginState {
 		return nil
 	}
 
-	var state *loginState
 	rawJSON, err := base64.RawURLEncoding.DecodeString(rawB64)
 	if err != nil {
 		return nil
 	}
 
+	var state *loginState
 	err = json.Unmarshal(rawJSON, &state)
 	if err != nil {
 		return nil
@@ -551,13 +551,13 @@ func relativeURL(urlStr string) string {
 		return urlStr
 	}
 
-	safeURL := parsed.Path
+	rel := parsed.Path
 	if parsed.RawQuery != "" {
-		safeURL += "?" + parsed.RawQuery
+		rel += "?" + parsed.RawQuery
 	}
 	if parsed.Fragment != "" {
-		safeURL += "#" + parsed.Fragment
+		rel += "#" + parsed.Fragment
 	}
 
-	return safeURL
+	return rel
 }
