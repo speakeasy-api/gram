@@ -1,0 +1,14 @@
+{
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "http://speakeasy.com/docs/gram",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "destination": "http://speakeasy.com/docs/gram/:path*",
+      "permanent": true
+    }
+  ]
+}
