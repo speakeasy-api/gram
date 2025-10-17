@@ -10,14 +10,24 @@ import (
 )
 
 type ManifestV0 struct {
-	Version string           `json:"version"`
-	Tools   []ManifestToolV0 `json:"tools"`
+	Version   string               `json:"version"`
+	Tools     []ManifestToolV0     `json:"tools"`
+	Resources []ManifestResourceV0 `json:"resources"`
 }
 
 type ManifestToolV0 struct {
 	Name        string                                  `json:"name"`
 	Description string                                  `json:"description"`
 	InputSchema json.RawMessage                         `json:"inputSchema"`
+	Variables   map[string]*ManifestVariableAttributeV0 `json:"variables"`
+}
+
+type ManifestResourceV0 struct {
+	Name        string                                  `json:"name"`
+	URI         string                                  `json:"uri"`
+	Description string                                  `json:"description"`
+	MimeType    *string                                 `json:"mimeType,omitempty"`
+	Title       *string                                 `json:"title,omitempty"`
 	Variables   map[string]*ManifestVariableAttributeV0 `json:"variables"`
 }
 
@@ -68,6 +78,22 @@ func validateManifestToolV0(tool ManifestToolV0) (err error) {
 		if jerr := jsonschema.IsValidJSONSchema(tool.InputSchema); jerr != nil {
 			err = errors.Join(err, fmt.Errorf("invalid tool input schema: %w", jerr))
 		}
+	}
+
+	return
+}
+
+func validateManifestResourceV0(resource ManifestResourceV0) (err error) {
+	if resource.Name == "" {
+		err = errors.Join(err, errors.New("resource name is required"))
+	}
+
+	if resource.Description == "" {
+		err = errors.Join(err, errors.New("resource description is required"))
+	}
+
+	if resource.URI == "" {
+		err = errors.Join(err, errors.New("resource URI is required"))
 	}
 
 	return

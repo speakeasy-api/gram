@@ -161,6 +161,8 @@ type UpdateToolsetPayload struct {
 	PromptTemplateNames []string
 	// List of tool URNs to include in the toolset
 	ToolUrns []string
+	// List of resource URNs to include in the toolset
+	ResourceUrns []string
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool
 	// The slug of the MCP to use for the toolset

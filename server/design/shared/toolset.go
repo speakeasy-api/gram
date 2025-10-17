@@ -50,6 +50,8 @@ var Toolset = Type("Toolset", func() {
 	Attribute("function_environment_variables", ArrayOf(FunctionEnvironmentVariable), "The function environment variables that are relevant to the toolset")
 	Attribute("tools", ArrayOf(Tool), "The tools in this toolset")
 	Attribute("tool_urns", ArrayOf(String), "The tool URNs in this toolset")
+	Attribute("resources", ArrayOf(Resource), "The resources in this toolset")
+	Attribute("resource_urns", ArrayOf(String), "The resource URNs in this toolset")
 
 	Attribute("prompt_templates", ArrayOf(PromptTemplate), "The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts")
 	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
@@ -66,7 +68,7 @@ var Toolset = Type("Toolset", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "prompt_templates", "tool_urns", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "account_type", "name", "slug", "tools", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
 })
 
 var ToolsetEntry = Type("ToolsetEntry", func() {
@@ -84,6 +86,8 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 	Attribute("function_environment_variables", ArrayOf(FunctionEnvironmentVariable), "The function environment variables that are relevant to the toolset")
 	Attribute("tools", ArrayOf(ToolEntry), "The tools in this toolset")
 	Attribute("tool_urns", ArrayOf(String), "The tool URNs in this toolset")
+	Attribute("resources", ArrayOf(ResourceEntry), "The resources in this toolset")
+	Attribute("resource_urns", ArrayOf(String), "The resource URNs in this toolset")
 
 	Attribute("prompt_templates", ArrayOf(PromptTemplateEntry), "The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts")
 	Attribute("mcp_slug", Slug, "The slug of the MCP to use for the toolset")
@@ -98,7 +102,7 @@ var ToolsetEntry = Type("ToolsetEntry", func() {
 		Description("When the toolset was last updated.")
 		Format(FormatDateTime)
 	})
-	Required("id", "project_id", "organization_id", "name", "slug", "tools", "prompt_templates", "tool_urns", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "name", "slug", "tools", "prompt_templates", "tool_urns", "resources", "resource_urns", "created_at", "updated_at")
 })
 
 var ExternalOAuthServer = Type("ExternalOAuthServer", func() {

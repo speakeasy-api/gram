@@ -41,6 +41,7 @@ func TestToolsetsService_CreateToolset_Success(t *testing.T) {
 		Name:                   "Test Toolset",
 		Description:            conv.Ptr("A test toolset"),
 		ToolUrns:               toolUrns[:2], // Use first two tools
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -102,6 +103,7 @@ func TestToolsetsService_CreateToolset_WithDefaultEnvironment(t *testing.T) {
 		Name:                   "Test Toolset with Env",
 		Description:            conv.Ptr("A test toolset with environment"),
 		ToolUrns:               []string{tools[0].ToolUrn.String()}, // Use first tool from deployment
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: (*types.Slug)(conv.Ptr("test-env")),
 		ProjectSlugInput:       nil,
 	})
@@ -134,6 +136,7 @@ func TestToolsetsService_CreateToolset_DuplicateSlug(t *testing.T) {
 		Name:                   "Test Toolset",
 		Description:            nil,
 		ToolUrns:               []string{tools[0].ToolUrn.String()},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -145,6 +148,7 @@ func TestToolsetsService_CreateToolset_DuplicateSlug(t *testing.T) {
 		Name:                   "Test Toolset",
 		Description:            nil,
 		ToolUrns:               []string{tools[1].ToolUrn.String()},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -162,6 +166,7 @@ func TestToolsetsService_CreateToolset_InvalidEnvironment(t *testing.T) {
 		Name:                   "Test Toolset",
 		Description:            nil,
 		ToolUrns:               []string{},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: (*types.Slug)(conv.Ptr("non-existent-env")),
 		ProjectSlugInput:       nil,
 	})
@@ -182,6 +187,7 @@ func TestToolsetsService_CreateToolset_Unauthorized(t *testing.T) {
 		Name:                   "Test Toolset",
 		Description:            nil,
 		ToolUrns:               []string{},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -205,6 +211,7 @@ func TestToolsetsService_CreateToolset_NoProjectID(t *testing.T) {
 		Name:                   "Test Toolset",
 		Description:            nil,
 		ToolUrns:               []string{},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -222,6 +229,7 @@ func TestToolsetsService_CreateToolset_EmptyToolUrns(t *testing.T) {
 		Name:                   "Test Toolset Empty Tools",
 		Description:            nil,
 		ToolUrns:               []string{},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})

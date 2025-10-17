@@ -2407,6 +2407,44 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 	return res
 }
 
+// unmarshalResourceResponseBodyToTypesResource builds a value of type
+// *types.Resource from a value of type *ResourceResponseBody.
+func unmarshalResourceResponseBodyToTypesResource(v *ResourceResponseBody) *types.Resource {
+	res := &types.Resource{}
+	if v.FunctionResourceDefinition != nil {
+		res.FunctionResourceDefinition = unmarshalFunctionResourceDefinitionResponseBodyToTypesFunctionResourceDefinition(v.FunctionResourceDefinition)
+	}
+
+	return res
+}
+
+// unmarshalFunctionResourceDefinitionResponseBodyToTypesFunctionResourceDefinition
+// builds a value of type *types.FunctionResourceDefinition from a value of
+// type *FunctionResourceDefinitionResponseBody.
+func unmarshalFunctionResourceDefinitionResponseBodyToTypesFunctionResourceDefinition(v *FunctionResourceDefinitionResponseBody) *types.FunctionResourceDefinition {
+	if v == nil {
+		return nil
+	}
+	res := &types.FunctionResourceDefinition{
+		DeploymentID: *v.DeploymentID,
+		FunctionID:   *v.FunctionID,
+		Runtime:      *v.Runtime,
+		Variables:    v.Variables,
+		ID:           *v.ID,
+		ResourceUrn:  *v.ResourceUrn,
+		ProjectID:    *v.ProjectID,
+		Name:         *v.Name,
+		Description:  *v.Description,
+		URI:          *v.URI,
+		Title:        v.Title,
+		MimeType:     v.MimeType,
+		CreatedAt:    *v.CreatedAt,
+		UpdatedAt:    *v.UpdatedAt,
+	}
+
+	return res
+}
+
 // unmarshalExternalOAuthServerResponseBodyToTypesExternalOAuthServer builds a
 // value of type *types.ExternalOAuthServer from a value of type
 // *ExternalOAuthServerResponseBody.
@@ -2537,6 +2575,14 @@ func unmarshalToolsetEntryResponseBodyToTypesToolsetEntry(v *ToolsetEntryRespons
 	for i, val := range v.ToolUrns {
 		res.ToolUrns[i] = val
 	}
+	res.Resources = make([]*types.ResourceEntry, len(v.Resources))
+	for i, val := range v.Resources {
+		res.Resources[i] = unmarshalResourceEntryResponseBodyToTypesResourceEntry(val)
+	}
+	res.ResourceUrns = make([]string, len(v.ResourceUrns))
+	for i, val := range v.ResourceUrns {
+		res.ResourceUrns[i] = val
+	}
 	res.PromptTemplates = make([]*types.PromptTemplateEntry, len(v.PromptTemplates))
 	for i, val := range v.PromptTemplates {
 		res.PromptTemplates[i] = unmarshalPromptTemplateEntryResponseBodyToTypesPromptTemplateEntry(val)
@@ -2553,6 +2599,19 @@ func unmarshalToolEntryResponseBodyToTypesToolEntry(v *ToolEntryResponseBody) *t
 		ID:      *v.ID,
 		ToolUrn: *v.ToolUrn,
 		Name:    *v.Name,
+	}
+
+	return res
+}
+
+// unmarshalResourceEntryResponseBodyToTypesResourceEntry builds a value of
+// type *types.ResourceEntry from a value of type *ResourceEntryResponseBody.
+func unmarshalResourceEntryResponseBodyToTypesResourceEntry(v *ResourceEntryResponseBody) *types.ResourceEntry {
+	res := &types.ResourceEntry{
+		Type:        *v.Type,
+		ID:          *v.ID,
+		ResourceUrn: *v.ResourceUrn,
+		Name:        *v.Name,
 	}
 
 	return res

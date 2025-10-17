@@ -275,6 +275,9 @@ export function ToolsetView({
   const [selectedToolUrns, setSelectedToolUrns] = useState<string[]>([]);
   const [newToolsetName, setNewToolsetName] = useState("");
 
+  console.log("HERE")
+  console.log(toolset?.resourceUrns)
+
   useRegisterToolsetTelemetry({
     toolsetSlug: toolsetSlug ?? "",
   });

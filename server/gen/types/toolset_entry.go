@@ -32,6 +32,10 @@ type ToolsetEntry struct {
 	Tools []*ToolEntry
 	// The tool URNs in this toolset
 	ToolUrns []string
+	// The resources in this toolset
+	Resources []*ResourceEntry
+	// The resource URNs in this toolset
+	ResourceUrns []string
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateEntry

@@ -347,6 +347,85 @@ func (q *Queries) CreateDeploymentFunctionsAccess(ctx context.Context, arg Creat
 	return id, err
 }
 
+const createFunctionsResource = `-- name: CreateFunctionsResource :one
+INSERT INTO function_resource_definitions (
+    deployment_id
+  , function_id
+  , resource_urn
+  , project_id
+  , runtime
+  , name
+  , description
+  , uri
+  , title
+  , mime_type
+  , variables
+) VALUES (
+    $1
+  , $2
+  , $3
+  , $4
+  , $5
+  , $6
+  , $7
+  , $8
+  , $9
+  , $10
+  , $11
+)
+RETURNING id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateFunctionsResourceParams struct {
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	ResourceUrn  urn.Resource
+	ProjectID    uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+	Uri          string
+	Title        pgtype.Text
+	MimeType     pgtype.Text
+	Variables    []byte
+}
+
+func (q *Queries) CreateFunctionsResource(ctx context.Context, arg CreateFunctionsResourceParams) (FunctionResourceDefinition, error) {
+	row := q.db.QueryRow(ctx, createFunctionsResource,
+		arg.DeploymentID,
+		arg.FunctionID,
+		arg.ResourceUrn,
+		arg.ProjectID,
+		arg.Runtime,
+		arg.Name,
+		arg.Description,
+		arg.Uri,
+		arg.Title,
+		arg.MimeType,
+		arg.Variables,
+	)
+	var i FunctionResourceDefinition
+	err := row.Scan(
+		&i.ID,
+		&i.ResourceUrn,
+		&i.ProjectID,
+		&i.DeploymentID,
+		&i.FunctionID,
+		&i.Runtime,
+		&i.Name,
+		&i.Description,
+		&i.Uri,
+		&i.Title,
+		&i.MimeType,
+		&i.Variables,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createFunctionsTool = `-- name: CreateFunctionsTool :one
 INSERT INTO function_tool_definitions (
     deployment_id

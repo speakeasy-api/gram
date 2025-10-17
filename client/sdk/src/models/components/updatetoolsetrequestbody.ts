@@ -42,6 +42,10 @@ export type UpdateToolsetRequestBody = {
    */
   promptTemplateNames?: Array<string> | undefined;
   /**
+   * List of resource URNs to include in the toolset
+   */
+  resourceUrns?: Array<string> | undefined;
+  /**
    * List of tool URNs to include in the toolset
    */
   toolUrns?: Array<string> | undefined;
@@ -61,6 +65,7 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
   mcp_slug: z.string().optional(),
   name: z.string().optional(),
   prompt_template_names: z.array(z.string()).optional(),
+  resource_urns: z.array(z.string()).optional(),
   tool_urns: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
@@ -70,6 +75,7 @@ export const UpdateToolsetRequestBody$inboundSchema: z.ZodType<
     "mcp_is_public": "mcpIsPublic",
     "mcp_slug": "mcpSlug",
     "prompt_template_names": "promptTemplateNames",
+    "resource_urns": "resourceUrns",
     "tool_urns": "toolUrns",
   });
 });
@@ -84,6 +90,7 @@ export type UpdateToolsetRequestBody$Outbound = {
   mcp_slug?: string | undefined;
   name?: string | undefined;
   prompt_template_names?: Array<string> | undefined;
+  resource_urns?: Array<string> | undefined;
   tool_urns?: Array<string> | undefined;
 };
 
@@ -101,6 +108,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
   mcpSlug: z.string().optional(),
   name: z.string().optional(),
   promptTemplateNames: z.array(z.string()).optional(),
+  resourceUrns: z.array(z.string()).optional(),
   toolUrns: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
@@ -110,6 +118,7 @@ export const UpdateToolsetRequestBody$outboundSchema: z.ZodType<
     mcpIsPublic: "mcp_is_public",
     mcpSlug: "mcp_slug",
     promptTemplateNames: "prompt_template_names",
+    resourceUrns: "resource_urns",
     toolUrns: "tool_urns",
   });
 });

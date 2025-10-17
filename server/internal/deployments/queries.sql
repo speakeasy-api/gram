@@ -521,6 +521,34 @@ INSERT INTO function_tool_definitions (
 )
 RETURNING *;
 
+-- name: CreateFunctionsResource :one
+INSERT INTO function_resource_definitions (
+    deployment_id
+  , function_id
+  , resource_urn
+  , project_id
+  , runtime
+  , name
+  , description
+  , uri
+  , title
+  , mime_type
+  , variables
+) VALUES (
+    @deployment_id
+  , @function_id
+  , @resource_urn
+  , @project_id
+  , @runtime
+  , @name
+  , @description
+  , @uri
+  , @title
+  , @mime_type
+  , @variables
+)
+RETURNING *;
+
 -- name: DescribeDeploymentPackages :many
 SELECT 
   deployments_packages.id as deployment_package_id

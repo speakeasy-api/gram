@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	slogmulti "github.com/samber/slog-multi"
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -251,8 +252,32 @@ func (p *ToolExtractor) Do(
 		numTools += 1
 	}
 
+	numResources := 0
+	for idx, resource := range manifest.V0.Resources {
+		_, err := processManifestResourceV0(
+			ctx,
+			tx,
+			resource,
+			projectID,
+			deploymentID,
+			attachementID,
+			slug,
+			attachement.Runtime,
+		)
+		if err != nil {
+			msg := fmt.Sprintf("%s: skipping resource %d (%q): %v", slug, idx, resource.Name, err)
+			logger.ErrorContext(ctx, msg, attrError)
+			if task.OnToolSkipped != nil {
+				task.OnToolSkipped(err)
+			}
+			continue
+		}
+
+		numResources += 1
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "%s: error saving tools", slug).Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, oops.Permanent(err), "%s: error saving tools and resources", slug).Log(ctx, logger)
 	}
 
 	return &ToolExtractorResult{
@@ -305,4 +330,65 @@ func processManifestToolV0(
 	}
 
 	return &t, nil
+}
+
+func processManifestResourceV0(
+	ctx context.Context,
+	tx *repo.Queries,
+	resource ManifestResourceV0,
+	projectID uuid.UUID,
+	deploymentID uuid.UUID,
+	attachementID uuid.UUID,
+	attachementSlug types.Slug,
+	runtime string,
+) (*repo.FunctionResourceDefinition, error) {
+	if err := validateManifestResourceV0(resource); err != nil {
+		return nil, tagError("invalid-manifest", "validate resource: %w", err)
+	}
+
+	name := resource.Name
+	description := resource.Description
+	uri := resource.URI
+	variables := resource.Variables
+
+	if variables == nil {
+		variables = map[string]*ManifestVariableAttributeV0{}
+	}
+
+	varBs, err := json.Marshal(variables)
+	if err != nil {
+		return nil, fmt.Errorf("serialize variables to json: %w", err)
+	}
+
+	var title, mimeType pgtype.Text
+	if resource.Title != nil {
+		title.String = *resource.Title
+		title.Valid = true
+	}
+
+	if resource.MimeType != nil {
+		mimeType.String = *resource.MimeType
+		mimeType.Valid = true
+	}
+
+	params := repo.CreateFunctionsResourceParams{
+		DeploymentID: deploymentID,
+		FunctionID:   attachementID,
+		ResourceUrn:  urn.NewResource(urn.ResourceKindFunction, string(attachementSlug), uri),
+		ProjectID:    projectID,
+		Runtime:      runtime,
+		Name:         name,
+		Description:  description,
+		Uri:          uri,
+		Title:        title,
+		MimeType:     mimeType,
+		Variables:    varBs,
+	}
+
+	r, err := tx.CreateFunctionsResource(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("save resource: %w", err)
+	}
+
+	return &r, nil
 }

@@ -21,3 +21,13 @@ var toolKinds = map[ToolKind]struct{}{
 	ToolKindHTTP:     {},
 	ToolKindPrompt:   {},
 }
+
+type ResourceKind string
+
+const (
+	ResourceKindFunction ResourceKind = "function"
+)
+
+var resourceKinds = map[ResourceKind]struct{}{
+	ResourceKindFunction: {},
+}

@@ -36,6 +36,18 @@ type ToolDescriptor struct {
 	OrganizationSlug string   `json:"organization_slug" yaml:"organization_slug"`
 }
 
+type ResourceDescriptor struct {
+	ID               string        `json:"id" yaml:"id"`
+	URN              urn.Resource  `json:"urn" yaml:"urn"`
+	Name             string        `json:"name" yaml:"name"`
+	URI              string        `json:"uri" yaml:"uri"`
+	DeploymentID     string        `json:"deployment_id" yaml:"deployment_id"`
+	ProjectID        string        `json:"project_id" yaml:"project_id"`
+	ProjectSlug      string        `json:"project_slug" yaml:"project_slug"`
+	OrganizationID   string        `json:"organization_id" yaml:"organization_id"`
+	OrganizationSlug string        `json:"organization_slug" yaml:"organization_slug"`
+}
+
 // HTTPToolCallPlan describes how to translate a tool call into an HTTP request to be
 // proxied to some downstream server.
 type HTTPToolCallPlan struct {
@@ -106,11 +118,27 @@ type FunctionToolCallPlan struct {
 	Variables         []string `json:"variables" yaml:"variables"`
 }
 
+// ResourceFunctionCallPlan describes a serverless function that provides a resource.
+type ResourceFunctionCallPlan struct {
+	FunctionID        string            `json:"function_id" yaml:"function_id"`
+	FunctionsAccessID string            `json:"functions_access_id" yaml:"functions_access_id"`
+	Runtime           string            `json:"runtime" yaml:"runtime"`
+	URI               string            `json:"uri" yaml:"uri"`
+	MimeType          string            `json:"mime_type" yaml:"mime_type"`
+	Variables         map[string]string `json:"variables" yaml:"variables"`
+}
+
 type ToolKind string
 
 const (
 	ToolKindHTTP     ToolKind = "http"
 	ToolKindFunction ToolKind = "function"
+)
+
+type ResourceKind string
+
+const (
+	ResourceKindFunction ResourceKind = "function"
 )
 
 // ToolCallPlan is a polymorphic type that can represent either an HTTPTool or a FunctionTool.
@@ -143,5 +171,23 @@ func NewFunctionToolCallPlan(tool *ToolDescriptor, plan *FunctionToolCallPlan) *
 		Descriptor:  tool,
 		HTTP:        nil,
 		Function:    plan,
+	}
+}
+
+// ResourceCallPlan is a polymorphic type that can represent different kinds of resources.
+// Use NewResourceFunctionCallPlan to create instances.
+type ResourceCallPlan struct {
+	Kind       ResourceKind
+	Descriptor *ResourceDescriptor
+
+	Function *ResourceFunctionCallPlan
+}
+
+// NewResourceFunctionCallPlan creates a new ResourceCallPlan wrapping a ResourceFunctionCallPlan.
+func NewResourceFunctionCallPlan(resource *ResourceDescriptor, plan *ResourceFunctionCallPlan) *ResourceCallPlan {
+	return &ResourceCallPlan{
+		Kind:       ResourceKindFunction,
+		Descriptor: resource,
+		Function:   plan,
 	}
 }

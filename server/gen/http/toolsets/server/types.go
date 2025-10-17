@@ -42,6 +42,8 @@ type UpdateToolsetRequestBody struct {
 	PromptTemplateNames []string `form:"prompt_template_names,omitempty" json:"prompt_template_names,omitempty" xml:"prompt_template_names,omitempty"`
 	// List of tool URNs to include in the toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// List of resource URNs to include in the toolset
+	ResourceUrns []string `form:"resource_urns,omitempty" json:"resource_urns,omitempty" xml:"resource_urns,omitempty"`
 	// Whether the toolset is enabled for MCP
 	McpEnabled *bool `form:"mcp_enabled,omitempty" json:"mcp_enabled,omitempty" xml:"mcp_enabled,omitempty"`
 	// The slug of the MCP to use for the toolset
@@ -88,6 +90,10 @@ type CreateToolsetResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
@@ -145,6 +151,10 @@ type UpdateToolsetResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
@@ -195,6 +205,10 @@ type GetToolsetResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
@@ -245,6 +259,10 @@ type CloneToolsetResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
@@ -295,6 +313,10 @@ type AddExternalOAuthServerResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
@@ -345,6 +367,10 @@ type RemoveOAuthServerResponseBody struct {
 	Tools []*ToolResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The resources in this toolset
+	Resources []*ResourceResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
@@ -2272,6 +2298,45 @@ type PromptTemplateResponseBody struct {
 	Variation *ToolVariationResponseBody `form:"variation,omitempty" json:"variation,omitempty" xml:"variation,omitempty"`
 }
 
+// ResourceResponseBody is used to define fields on response body types.
+type ResourceResponseBody struct {
+	// The function resource definition
+	FunctionResourceDefinition *FunctionResourceDefinitionResponseBody `form:"function_resource_definition,omitempty" json:"function_resource_definition,omitempty" xml:"function_resource_definition,omitempty"`
+}
+
+// FunctionResourceDefinitionResponseBody is used to define fields on response
+// body types.
+type FunctionResourceDefinitionResponseBody struct {
+	// The ID of the deployment
+	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
+	// The ID of the function
+	FunctionID string `form:"function_id" json:"function_id" xml:"function_id"`
+	// Runtime environment (e.g., nodejs:22, python:3.12)
+	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
+	// Variables configuration for the resource
+	Variables any `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+	// The ID of the resource
+	ID string `form:"id" json:"id" xml:"id"`
+	// The URN of this resource
+	ResourceUrn string `form:"resource_urn" json:"resource_urn" xml:"resource_urn"`
+	// The ID of the project
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The name of the resource
+	Name string `form:"name" json:"name" xml:"name"`
+	// Description of the resource
+	Description string `form:"description" json:"description" xml:"description"`
+	// The URI of the resource
+	URI string `form:"uri" json:"uri" xml:"uri"`
+	// Optional title for the resource
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Optional MIME type of the resource
+	MimeType *string `form:"mime_type,omitempty" json:"mime_type,omitempty" xml:"mime_type,omitempty"`
+	// The creation date of the resource.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the resource.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
 // ExternalOAuthServerResponseBody is used to define fields on response body
 // types.
 type ExternalOAuthServerResponseBody struct {
@@ -2354,6 +2419,10 @@ type ToolsetEntryResponseBody struct {
 	Tools []*ToolEntryResponseBody `form:"tools" json:"tools" xml:"tools"`
 	// The tool URNs in this toolset
 	ToolUrns []string `form:"tool_urns" json:"tool_urns" xml:"tool_urns"`
+	// The resources in this toolset
+	Resources []*ResourceEntryResponseBody `form:"resources" json:"resources" xml:"resources"`
+	// The resource URNs in this toolset
+	ResourceUrns []string `form:"resource_urns" json:"resource_urns" xml:"resource_urns"`
 	// The prompt templates in this toolset -- Note: these are actual prompts, as
 	// in MCP prompts
 	PromptTemplates []*PromptTemplateEntryResponseBody `form:"prompt_templates" json:"prompt_templates" xml:"prompt_templates"`
@@ -2379,6 +2448,17 @@ type ToolEntryResponseBody struct {
 	// The URN of the tool
 	ToolUrn string `form:"tool_urn" json:"tool_urn" xml:"tool_urn"`
 	// The name of the tool
+	Name string `form:"name" json:"name" xml:"name"`
+}
+
+// ResourceEntryResponseBody is used to define fields on response body types.
+type ResourceEntryResponseBody struct {
+	Type string `form:"type" json:"type" xml:"type"`
+	// The ID of the resource
+	ID string `form:"id" json:"id" xml:"id"`
+	// The URN of the resource
+	ResourceUrn string `form:"resource_urn" json:"resource_urn" xml:"resource_urn"`
+	// The name of the resource
 	Name string `form:"name" json:"name" xml:"name"`
 }
 
@@ -2460,6 +2540,22 @@ func NewCreateToolsetResponseBody(res *types.Toolset) *CreateToolsetResponseBody
 		}
 	} else {
 		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
 	}
 	if res.PromptTemplates != nil {
 		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
@@ -2552,6 +2648,22 @@ func NewUpdateToolsetResponseBody(res *types.Toolset) *UpdateToolsetResponseBody
 	} else {
 		body.ToolUrns = []string{}
 	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
 	if res.PromptTemplates != nil {
 		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
 		for i, val := range res.PromptTemplates {
@@ -2627,6 +2739,22 @@ func NewGetToolsetResponseBody(res *types.Toolset) *GetToolsetResponseBody {
 		}
 	} else {
 		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
 	}
 	if res.PromptTemplates != nil {
 		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
@@ -2704,6 +2832,22 @@ func NewCloneToolsetResponseBody(res *types.Toolset) *CloneToolsetResponseBody {
 	} else {
 		body.ToolUrns = []string{}
 	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
 	if res.PromptTemplates != nil {
 		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
 		for i, val := range res.PromptTemplates {
@@ -2780,6 +2924,22 @@ func NewAddExternalOAuthServerResponseBody(res *types.Toolset) *AddExternalOAuth
 	} else {
 		body.ToolUrns = []string{}
 	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
+	}
 	if res.PromptTemplates != nil {
 		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
 		for i, val := range res.PromptTemplates {
@@ -2855,6 +3015,22 @@ func NewRemoveOAuthServerResponseBody(res *types.Toolset) *RemoveOAuthServerResp
 		}
 	} else {
 		body.ToolUrns = []string{}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*ResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			body.Resources[i] = marshalTypesResourceToResourceResponseBody(val)
+		}
+	} else {
+		body.Resources = []*ResourceResponseBody{}
+	}
+	if res.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(res.ResourceUrns))
+		for i, val := range res.ResourceUrns {
+			body.ResourceUrns[i] = val
+		}
+	} else {
+		body.ResourceUrns = []string{}
 	}
 	if res.PromptTemplates != nil {
 		body.PromptTemplates = make([]*PromptTemplateResponseBody, len(res.PromptTemplates))
@@ -4220,6 +4396,12 @@ func NewUpdateToolsetPayload(body *UpdateToolsetRequestBody, slug string, sessio
 		v.ToolUrns = make([]string, len(body.ToolUrns))
 		for i, val := range body.ToolUrns {
 			v.ToolUrns[i] = val
+		}
+	}
+	if body.ResourceUrns != nil {
+		v.ResourceUrns = make([]string, len(body.ResourceUrns))
+		for i, val := range body.ResourceUrns {
+			v.ResourceUrns[i] = val
 		}
 	}
 	v.Slug = types.Slug(slug)

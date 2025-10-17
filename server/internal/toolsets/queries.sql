@@ -155,11 +155,13 @@ INSERT INTO toolset_versions (
     toolset_id
   , version
   , tool_urns
+  , resource_urns
   , predecessor_id
 ) VALUES (
     @toolset_id
   , @version
   , @tool_urns
+  , @resource_urns
   , @predecessor_id
 )
 RETURNING *;

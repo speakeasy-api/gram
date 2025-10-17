@@ -1,0 +1,24 @@
+# ListToolLogsRequest
+
+## Example Usage
+
+```typescript
+import { ListToolLogsRequest } from "@gram/client/models/operations";
+
+let value: ListToolLogsRequest = {};
+```
+
+## Fields
+
+| Field                                                                                         | Type                                                                                          | Required                                                                                      | Description                                                                                   |
+| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `toolId`                                                                                      | *string*                                                                                      | :heavy_minus_sign:                                                                            | Tool ID                                                                                       |
+| `tsStart`                                                                                     | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_minus_sign:                                                                            | Start timestamp                                                                               |
+| `tsEnd`                                                                                       | [Date](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Date) | :heavy_minus_sign:                                                                            | End timestamp                                                                                 |
+| `cursor`                                                                                      | *string*                                                                                      | :heavy_minus_sign:                                                                            | Cursor for pagination                                                                         |
+| `perPage`                                                                                     | *number*                                                                                      | :heavy_minus_sign:                                                                            | Number of items per page (1-100)                                                              |
+| `direction`                                                                                   | [operations.Direction](../../models/operations/direction.md)                                  | :heavy_minus_sign:                                                                            | Pagination direction                                                                          |
+| `sort`                                                                                        | [operations.Sort](../../models/operations/sort.md)                                            | :heavy_minus_sign:                                                                            | Sort order                                                                                    |
+| `gramKey`                                                                                     | *string*                                                                                      | :heavy_minus_sign:                                                                            | API Key header                                                                                |
+| `gramSession`                                                                                 | *string*                                                                                      | :heavy_minus_sign:                                                                            | Session header                                                                                |
+| `gramProject`                                                                                 | *string*                                                                                      | :heavy_minus_sign:                                                                            | project header                                                                                |

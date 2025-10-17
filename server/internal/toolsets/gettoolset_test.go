@@ -35,6 +35,7 @@ func TestToolsetsService_GetToolset_Success(t *testing.T) {
 		Name:                   "Test Toolset",
 		Description:            conv.Ptr("A test toolset"),
 		ToolUrns:               []string{tools[0].ToolUrn.String(), tools[1].ToolUrn.String()},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -92,6 +93,7 @@ func TestToolsetsService_GetToolset_WithEnvironment(t *testing.T) {
 		Name:                   "Toolset with Env",
 		Description:            conv.Ptr("A toolset with environment"),
 		ToolUrns:               []string{},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: (*types.Slug)(conv.Ptr("get-test-env")),
 		ProjectSlugInput:       nil,
 	})
@@ -171,6 +173,7 @@ func TestToolsetsService_GetToolset_VerifyAllFields(t *testing.T) {
 		Name:                   "Complete Toolset",
 		Description:            conv.Ptr("A complete toolset with all fields"),
 		ToolUrns:               []string{},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -225,6 +228,7 @@ func TestToolsetsService_GetToolset_WithFunctionTools(t *testing.T) {
 		Name:                   "Function Toolset",
 		Description:            conv.Ptr("A toolset with function tools"),
 		ToolUrns:               []string{functionTools[0].ToolUrn.String()},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})

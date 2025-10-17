@@ -32,6 +32,7 @@ func TestToolsetsService_ListToolsets_Success(t *testing.T) {
 		Name:                   "First Toolset",
 		Description:            conv.Ptr("First test toolset"),
 		ToolUrns:               []string{tools[0].ToolUrn.String(), tools[1].ToolUrn.String()},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -42,6 +43,7 @@ func TestToolsetsService_ListToolsets_Success(t *testing.T) {
 		Name:                   "Second Toolset",
 		Description:            conv.Ptr("Second test toolset"),
 		ToolUrns:               []string{tools[2].ToolUrn.String(), tools[3].ToolUrn.String()},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -128,6 +130,7 @@ func TestToolsetsService_ListToolsets_VerifyDetails(t *testing.T) {
 		Name:                   "Detailed Toolset",
 		Description:            conv.Ptr("A toolset with details"),
 		ToolUrns:               []string{},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})

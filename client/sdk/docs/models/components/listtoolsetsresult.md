@@ -14,13 +14,18 @@ let value: ListToolsetsResult = {
       organizationId: "<id>",
       projectId: "<id>",
       promptTemplates: [],
+      resourceUrns: [
+        "<value 1>",
+        "<value 2>",
+      ],
+      resources: [],
       slug: "<value>",
       toolUrns: [
         "<value 1>",
         "<value 2>",
       ],
       tools: [],
-      updatedAt: new Date("2024-07-07T17:12:05.835Z"),
+      updatedAt: new Date("2024-10-27T10:52:08.281Z"),
     },
   ],
 };
