@@ -400,6 +400,9 @@ CREATE TABLE IF NOT EXISTS function_resource_definitions (
   CONSTRAINT function_resource_definitions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS function_resource_definitions_deployment_id_tool_urn_key ON function_resource_definitions (deployment_id, resource_urn) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS function_resource_definitions_function_id_idx ON function_resource_definitions (function_id) WHERE deleted IS FALSE;
+
 CREATE UNIQUE INDEX IF NOT EXISTS function_tool_definitions_deployment_id_tool_urn_key ON function_tool_definitions (deployment_id, tool_urn) WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS function_tool_definitions_function_id_idx ON function_tool_definitions (function_id) WHERE deleted IS FALSE;
 
