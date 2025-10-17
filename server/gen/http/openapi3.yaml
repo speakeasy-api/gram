@@ -776,6 +776,13 @@ paths:
                   schema:
                     description: The auth code for authentication from the speakeasy system
                     type: string
+                - allowEmptyValue: true
+                  description: The opaque state string optionally provided during initialization.
+                  in: query
+                  name: state
+                  schema:
+                    description: The opaque state string optionally provided during initialization.
+                    type: string
             responses:
                 "307":
                     description: Temporary Redirect response.
@@ -951,6 +958,14 @@ paths:
         get:
             description: Proxies to auth login through speakeasy oidc.
             operationId: authLogin
+            parameters:
+                - allowEmptyValue: true
+                  description: Optional URL to redirect to after successful authentication
+                  in: query
+                  name: redirect
+                  schema:
+                    description: Optional URL to redirect to after successful authentication
+                    type: string
             responses:
                 "307":
                     description: Temporary Redirect response.

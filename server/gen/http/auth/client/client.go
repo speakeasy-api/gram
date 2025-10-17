@@ -100,10 +100,15 @@ func (c *Client) Callback() goa.Endpoint {
 // server.
 func (c *Client) Login() goa.Endpoint {
 	var (
+		encodeRequest  = EncodeLoginRequest(c.encoder)
 		decodeResponse = DecodeLoginResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
 		req, err := c.BuildLoginRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
 		if err != nil {
 			return nil, err
 		}

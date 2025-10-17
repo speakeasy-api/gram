@@ -2,6 +2,8 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -178,13 +180,13 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	return &gen.CallbackResult{
-		Location:      s.cfg.SignInRedirectURL,
+		Location:      s.callbackRedirectURL(payload),
 		SessionToken:  session.SessionID,
 		SessionCookie: session.SessionID,
 	}, nil
 }
 
-func (s *Service) Login(ctx context.Context) (res *gen.LoginResult, err error) {
+func (s *Service) Login(ctx context.Context, payload *gen.LoginPayload) (res *gen.LoginResult, err error) {
 	if s.sessions.IsUnsafeLocalDevelopment() {
 		err = errors.New("calling rpc.login for local development stubbed auth is not supported because stubbed auth implies always being logged in. Reaching this point suggests a problem with dashboard authentication")
 		s.logger.ErrorContext(ctx, "signin error", attr.SlogError(err), attr.SlogReason(string(authErrLocalDevStubbed)))
@@ -204,6 +206,7 @@ func (s *Service) Login(ctx context.Context) (res *gen.LoginResult, err error) {
 
 	values := url.Values{}
 	values.Add("return_url", returnAddress+"/rpc/auth.callback")
+	values.Add("state", encodeStateParam(payload))
 
 	location := s.cfg.SpeakeasyServerAddress + "/v1/speakeasy_provider/login?" + values.Encode()
 
@@ -461,4 +464,56 @@ func (s *Service) createDefaultProject(ctx context.Context, organizationID strin
 	}
 
 	return project, nil
+}
+
+type loginState struct {
+	FinalDestinationURL string `json:"final_destination_url"`
+}
+
+func encodeStateParam(payload *gen.LoginPayload) string {
+	state := loginState{
+		FinalDestinationURL: conv.PtrValOr(payload.Redirect, ""),
+	}
+
+	jsonBytes, err := json.Marshal(state)
+	if err != nil {
+		return ""
+	}
+
+	return base64.RawURLEncoding.EncodeToString(jsonBytes)
+}
+
+func decodeStateParam(payload *gen.CallbackPayload) *loginState {
+	if payload == nil {
+		return nil
+	}
+
+	rawB64 := conv.PtrValOr(payload.State, "")
+	if rawB64 == "" {
+		return nil
+	}
+
+	var state *loginState
+	rawJSON, err := base64.RawURLEncoding.DecodeString(rawB64)
+	if err != nil {
+		return nil
+	}
+
+	err = json.Unmarshal(rawJSON, &state)
+	if err != nil {
+		return nil
+	}
+
+	return state
+}
+
+func (s *Service) callbackRedirectURL(payload *gen.CallbackPayload) string {
+	location := s.cfg.SignInRedirectURL
+	if state := decodeStateParam(payload); state != nil {
+		if state.FinalDestinationURL != "" {
+			location = state.FinalDestinationURL
+		}
+	}
+
+	return location
 }

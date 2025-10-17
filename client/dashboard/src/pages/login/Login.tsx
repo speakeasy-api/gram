@@ -11,9 +11,9 @@ export default function Login() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
+  const redirectTo = searchParams.get("redirect");
   useEffect(() => {
     if (session.session !== "") {
-      const redirectTo = searchParams.get("redirect");
       if (redirectTo) {
         navigate(redirectTo, { replace: true });
       } else {
@@ -25,7 +25,7 @@ export default function Login() {
   return (
     <main className="flex min-h-screen flex-col md:flex-row">
       <JourneyDemo />
-      <LoginSection />
+      <LoginSection redirectTo={redirectTo} />
     </main>
   );
 }
