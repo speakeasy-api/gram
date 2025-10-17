@@ -128,7 +128,7 @@ export function LoginSection(props: LoginSectionProps) {
 
   const handleLogin = async () => {
     let href = `${getServerURL()}/rpc/auth.login`;
-    if (redirectTo) href += `?redirect=${redirectTo}`;
+    if (redirectTo) href += `?redirect=${encodeURIComponent(redirectTo)}`;
 
     window.location.href = href;
   };
