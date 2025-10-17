@@ -24,6 +24,8 @@ type CreateToolsetRequestBody struct {
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
 	// List of tool URNs to include in the toolset
 	ToolUrns []string `form:"tool_urns,omitempty" json:"tool_urns,omitempty" xml:"tool_urns,omitempty"`
+	// List of resource URNs to include in the toolset
+	ResourceUrns []string `form:"resource_urns,omitempty" json:"resource_urns,omitempty" xml:"resource_urns,omitempty"`
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *string `form:"default_environment_slug,omitempty" json:"default_environment_slug,omitempty" xml:"default_environment_slug,omitempty"`
 }
@@ -2497,6 +2499,12 @@ func NewCreateToolsetRequestBody(p *toolsets.CreateToolsetPayload) *CreateToolse
 		body.ToolUrns = make([]string, len(p.ToolUrns))
 		for i, val := range p.ToolUrns {
 			body.ToolUrns[i] = val
+		}
+	}
+	if p.ResourceUrns != nil {
+		body.ResourceUrns = make([]string, len(p.ResourceUrns))
+		for i, val := range p.ResourceUrns {
+			body.ResourceUrns[i] = val
 		}
 	}
 	return body

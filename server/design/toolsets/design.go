@@ -229,6 +229,7 @@ var CreateToolsetForm = Type("CreateToolsetForm", func() {
 	Attribute("name", String, "The name of the toolset")
 	Attribute("description", String, "Description of the toolset")
 	Attribute("tool_urns", ArrayOf(String), "List of tool URNs to include in the toolset")
+	Attribute("resource_urns", ArrayOf(String), "List of resource URNs to include in the toolset")
 	Attribute("default_environment_slug", shared.Slug, "The slug of the environment to use as the default for the toolset")
 	security.ProjectPayload()
 	Required("name")

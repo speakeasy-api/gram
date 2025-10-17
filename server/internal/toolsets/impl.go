@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -40,7 +41,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
-	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 )
 
 var allowedPublicServers = map[string]int{
@@ -155,7 +155,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	// Create initial toolset version with tool URNs
-	err = s.createToolsetVersion(ctx, payload.ToolUrns, nil, createdToolset.ID, s.repo)
+	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, createdToolset.ID, s.repo)
 	if err != nil {
 		return nil, err
 	}
@@ -670,11 +670,11 @@ func (s *Service) createToolsetVersion(ctx context.Context, toolUrnStrings []str
 		latestVersionNumber = latestVersion.Version
 	}
 
-	if toolUrnStrings == nil {
+	if toolUrnStrings == nil && len(latestVersion.ToolUrns) > 0 {
 		allToolUrns = append(allToolUrns, latestVersion.ToolUrns...)
 	}
 
-	if resourceUrnStrings == nil {
+	if resourceUrnStrings == nil && len(latestVersion.ResourceUrns) > 0 {
 		allResourceUrns = append(allResourceUrns, latestVersion.ResourceUrns...)
 	}
 
