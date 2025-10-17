@@ -3,4 +3,4 @@
 "@gram/server": minor
 ---
 
-Support smart redirects after authenticating.
+Preserve redirect URLs during log-in for unauthenticated browsers.
