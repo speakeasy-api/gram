@@ -6,7 +6,13 @@
   "author": "Georges Haidar <georges@speakeasyapi.dev>",
   "main": "dist/index.js",
   "keywords": [],
-  "license": "ISC",
+  "license": "MIT",
+  "homepage": "https://github.com/speakeasy-api/gram",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/speakeasy-api/gram.git",
+    "directory": "ts-framework/functions"
+  },
   "scripts": {
     "test": "vitest run",
     "build": "tsc -p tsconfig.json",
