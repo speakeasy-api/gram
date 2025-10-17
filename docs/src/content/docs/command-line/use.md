@@ -11,13 +11,19 @@ It can also integrate with CI/CD pipelines. See our [Deploy from GitHub Actions]
 
 ## Authentication
 
-Create and save a [Producer key](/concepts/api-keys#producer-keys) from your Gram dashboard.
-
-Expose this key as an environment variable called `$GRAM_API_KEY`.
+Use `gram auth` to bootstrap your account:
 
 ```bash
-export GRAM_API_KEY="$YOUR_PRODUCER_KEY"
+gram auth
 ```
+
+Then, inspect your current user information:
+
+```bash
+gram whoami
+```
+
+The first time you run `gram auth`, it will create and save a [Producer key](/concepts/api-keys#producer-keys) in your Gram dashboard.
 
 ## Usage
 
