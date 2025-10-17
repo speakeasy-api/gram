@@ -212,6 +212,7 @@ function getIcon(icon: ToolGroup["icon"]) {
 
 function ToolRow({
   tool,
+  groupName,
   onUpdate,
   isSelected,
   isFocused,
@@ -220,6 +221,7 @@ function ToolRow({
   onRemove,
 }: {
   tool: Tool;
+  groupName: string;
   onUpdate?: (updates: { name?: string; description?: string }) => void;
   isSelected: boolean;
   isFocused: boolean;
@@ -292,6 +294,11 @@ function ToolRow({
       : []),
   ];
 
+  const toolPrefix = tool.name.startsWith(groupName + "_")
+    ? groupName + "_"
+    : "";
+  const toolNameNoPrefix = tool.name.replace(toolPrefix, "");
+
   return (
     <>
       <div
@@ -312,7 +319,12 @@ function ToolRow({
           <div className="flex flex-col min-w-0 flex-1">
             <Stack direction="horizontal" gap={2} align="center">
               <p className="text-sm leading-6 text-foreground truncate">
-                {tool.name}
+                {toolPrefix && (
+                  <Type small muted className="inline">
+                    {toolPrefix}
+                  </Type>
+                )}
+                {toolNameNoPrefix}
               </p>
               <ToolVariationBadge tool={tool} />
             </Stack>
@@ -736,6 +748,7 @@ export function ToolList({
                   return (
                     <ToolRow
                       key={tool.canonicalName}
+                      groupName={group.title}
                       tool={tool}
                       onUpdate={(updates) => onToolUpdate?.(tool, updates)}
                       isSelected={
