@@ -10,4 +10,6 @@ The Gram CLI is available as a beta release via Homebrew.
 ```bash
 brew update && brew install speakeasy-api/homebrew-tap/gram
 gram --version
+
+gram auth
 ```
