@@ -4,8 +4,14 @@
   "version": "0.1.0",
   "description": "Build AI tools and deploy them to getgram.ai",
   "keywords": [],
+  "homepage": "https://github.com/speakeasy-api/gram",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/speakeasy-api/gram.git",
+    "directory": "ts-framework/create-function"
+  },
   "author": "Georges Haidar <georges@speakeasyapi.dev>",
-  "license": "ISC",
+  "license": "MIT",
   "main": "dist/index.js",
   "bin": {
     "create-function": "dist/main.js"
