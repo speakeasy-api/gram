@@ -141,7 +141,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 
 		return &gen.CallbackResult{
-			Location:      s.callbackRedirectURL(payload),
+			Location:      s.callbackRedirectURL(ctx, payload),
 			SessionToken:  session.SessionID,
 			SessionCookie: session.SessionID,
 		}, nil
@@ -180,7 +180,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 	}
 
 	return &gen.CallbackResult{
-		Location:      s.callbackRedirectURL(payload),
+		Location:      s.callbackRedirectURL(ctx, payload),
 		SessionToken:  session.SessionID,
 		SessionCookie: session.SessionID,
 	}, nil
@@ -510,7 +510,10 @@ func decodeStateParam(payload *gen.CallbackPayload) *loginState {
 // callbackRedirectURL determines the redirect location after authentication. It
 // only allows relative URLs to prevent open redirect attacks (see relativeURL).
 // If no redirect is found, fall back to SignInRedirectURL.
-func (s *Service) callbackRedirectURL(payload *gen.CallbackPayload) string {
+func (s *Service) callbackRedirectURL(
+	ctx context.Context,
+	payload *gen.CallbackPayload,
+) string {
 	var location string
 
 	if state := decodeStateParam(payload); state != nil {
@@ -518,6 +521,9 @@ func (s *Service) callbackRedirectURL(payload *gen.CallbackPayload) string {
 	}
 
 	if location != "" {
+		msg := fmt.Sprintf("Found destination URL in state: '%s'", location)
+		s.logger.InfoContext(ctx, msg)
+
 		return location
 	}
 
