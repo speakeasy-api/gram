@@ -8279,11 +8279,6 @@ components:
                     description: The name of the toolset
                 project_slug_input:
                     type: string
-                resource_urns:
-                    type: array
-                    items:
-                        type: string
-                    description: List of resource URNs to include in the toolset
                 tool_urns:
                     type: array
                     items:
@@ -8305,11 +8300,6 @@ components:
                 name:
                     type: string
                     description: The name of the toolset
-                resource_urns:
-                    type: array
-                    items:
-                        type: string
-                    description: List of resource URNs to include in the toolset
                 tool_urns:
                     type: array
                     items:
@@ -10951,6 +10941,9 @@ components:
                     enum:
                         - prompt
                         - higher_order_tool
+                name:
+                    type: string
+                    description: The name of the prompt template. Will be updated via variation
                 prompt:
                     type: string
                     description: The template content

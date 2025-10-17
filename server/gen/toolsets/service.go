@@ -98,8 +98,6 @@ type CreateToolsetPayload struct {
 	Description *string
 	// List of tool URNs to include in the toolset
 	ToolUrns []string
-	// List of resource URNs to include in the toolset
-	ResourceUrns []string
 	// The slug of the environment to use as the default for the toolset
 	DefaultEnvironmentSlug *types.Slug
 	ProjectSlugInput       *string

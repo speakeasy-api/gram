@@ -22,10 +22,6 @@ export type CreateToolsetRequestBody = {
    */
   name: string;
   /**
-   * List of resource URNs to include in the toolset
-   */
-  resourceUrns?: Array<string> | undefined;
-  /**
    * List of tool URNs to include in the toolset
    */
   toolUrns?: Array<string> | undefined;
@@ -40,12 +36,10 @@ export const CreateToolsetRequestBody$inboundSchema: z.ZodType<
   default_environment_slug: z.string().optional(),
   description: z.string().optional(),
   name: z.string(),
-  resource_urns: z.array(z.string()).optional(),
   tool_urns: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     "default_environment_slug": "defaultEnvironmentSlug",
-    "resource_urns": "resourceUrns",
     "tool_urns": "toolUrns",
   });
 });
@@ -55,7 +49,6 @@ export type CreateToolsetRequestBody$Outbound = {
   default_environment_slug?: string | undefined;
   description?: string | undefined;
   name: string;
-  resource_urns?: Array<string> | undefined;
   tool_urns?: Array<string> | undefined;
 };
 
@@ -68,12 +61,10 @@ export const CreateToolsetRequestBody$outboundSchema: z.ZodType<
   defaultEnvironmentSlug: z.string().optional(),
   description: z.string().optional(),
   name: z.string(),
-  resourceUrns: z.array(z.string()).optional(),
   toolUrns: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
     defaultEnvironmentSlug: "default_environment_slug",
-    resourceUrns: "resource_urns",
     toolUrns: "tool_urns",
   });
 });

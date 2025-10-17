@@ -30,13 +30,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { z } from "zod";
 import { onboardingStepStorageKeys } from "../home/Home";
+import { ChatComposerWrapper } from "./ChatComposerWrapper";
 import { useChatContext } from "./ChatContext";
 import { useChatHistory } from "./ChatHistory";
 import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
 import { useMiniModel, useModel } from "./Openrouter";
+import { Tool as MentionTool, parseMentionedTools } from "./ToolMentions";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
-import { parseMentionedTools, Tool as MentionTool } from "./ToolMentions";
-import { ChatComposerWrapper } from "./ChatComposerWrapper";
 
 const defaultModel = {
   label: "Claude 4.5 Sonnet",
@@ -72,12 +72,14 @@ export function ChatWindow({
   additionalActions,
   initialMessages,
   initialPrompt,
+  hideTemperatureSlider = false,
 }: {
   configRef: ChatConfig;
   dynamicToolset?: boolean;
   additionalActions?: React.ReactNode;
   initialMessages?: Message[];
   initialPrompt?: string | null;
+  hideTemperatureSlider?: boolean;
 }) {
   const [model, setModel] = useState(defaultModel.value);
   const [temperature, setTemperature] = useState(0.5);
@@ -89,13 +91,12 @@ export function ChatWindow({
       key={chatKey}
       model={model}
       setModel={setModel}
-      temperature={temperature}
-      setTemperature={setTemperature}
       configRef={configRef}
       dynamicToolset={dynamicToolset}
       initialMessages={initialMessages}
       additionalActions={additionalActions}
       initialPrompt={initialPrompt}
+      {...(!hideTemperatureSlider && { temperature, setTemperature })}
     />
   );
 }
@@ -118,8 +119,8 @@ function ChatInner({
 }: {
   model: string;
   setModel: (model: string) => void;
-  temperature: number;
-  setTemperature: (temperature: number) => void;
+  temperature?: number;
+  setTemperature?: (temperature: number) => void;
   configRef: ChatConfig;
   dynamicToolset: boolean;
   initialMessages?: Message[];
@@ -577,7 +578,7 @@ function ChatInner({
   /* eslint-disable  @typescript-eslint/no-explicit-any */
   const m = messagesToDisplay as any;
 
-  const temperatureSlider = (
+  const temperatureSlider = temperature && setTemperature && (
     <div className="flex items-center gap-3 px-2">
       <SimpleTooltip tooltip="Controls randomness in responses. Lower values (0.0-0.3) make outputs more focused and deterministic. Higher values (0.7-1.0) increase creativity and variety. Default: 0.5">
         <span className="text-xs text-muted-foreground whitespace-nowrap cursor-help">

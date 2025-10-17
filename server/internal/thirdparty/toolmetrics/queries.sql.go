@@ -37,6 +37,10 @@ order by ts
 limit $5
 `
 
+func (q *Queries) ShouldLog(ctx context.Context, orgId string) (bool, error) {
+	return q.ShouldFlag(ctx, orgId)
+}
+
 // List retrieves tool logs based on the provided options.
 func (q *Queries) List(ctx context.Context, opts ListToolLogsOptions) (res *ListResult, err error) {
 	projectID := opts.ProjectID
@@ -133,7 +137,7 @@ func (q *Queries) List(ctx context.Context, opts ListToolLogsOptions) (res *List
 
 // Log inserts a tool HTTP request log entry.
 func (q *Queries) Log(ctx context.Context, log ToolHTTPRequest) (err error) {
-	allow, err := q.ShouldFlag(ctx, log)
+	allow, err := q.ShouldFlag(ctx, log.OrganizationID)
 	if err != nil {
 		q.logger.ErrorContext(ctx, "failed to fetch feature flag", attr.SlogError(err))
 		return nil

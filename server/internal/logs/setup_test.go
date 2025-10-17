@@ -74,7 +74,7 @@ func newTestLogsService(t *testing.T) (context.Context, *testInstance) {
 
 	tracerProvider := testenv.NewTracerProvider(t)
 
-	chClient := toolmetrics.New(logger, tracerProvider, chConn, func(ctx context.Context, log toolmetrics.ToolHTTPRequest) (bool, error) {
+	chClient := toolmetrics.New(logger, tracerProvider, chConn, func(context.Context, string) (bool, error) {
 		return true, nil
 	})
 

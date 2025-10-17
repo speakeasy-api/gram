@@ -1,17 +1,20 @@
-import { TOOL_NAME_REGEX } from "@/lib/constants";
-import { cn } from "@/lib/utils";
-import { Tool, isHttpTool } from "@/lib/toolTypes";
-import { ChevronDown, FileCode, Layers, SquareFunction } from "lucide-react";
-import { MethodBadge } from "./MethodBadge";
-import { useState, useEffect, useMemo } from "react";
-import { MoreActions } from "@/components/ui/more-actions";
-import { Input } from "@/components/ui/input";
-import { TextArea } from "@/components/ui/textarea";
-import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { MoreActions } from "@/components/ui/more-actions";
+import { TextArea } from "@/components/ui/textarea";
 import { useCommandPalette } from "@/contexts/CommandPalette";
+import { TOOL_NAME_REGEX } from "@/lib/constants";
+import { Tool, isHttpTool } from "@/lib/toolTypes";
+import { cn } from "@/lib/utils";
 import { useLatestDeployment } from "@gram/client/react-query/index.js";
+import { Icon, Stack } from "@speakeasy-api/moonshine";
+import { ChevronDown, FileCode, Layers, SquareFunction } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ToolVariationBadge } from "../tool-variation-badge";
+import { Type } from "../ui/type";
+import { MethodBadge } from "./MethodBadge";
 
 interface ToolListProps {
   tools: Tool[];
@@ -307,9 +310,12 @@ function ToolRow({
             )}
           />
           <div className="flex flex-col min-w-0 flex-1">
-            <p className="text-sm leading-6 text-foreground truncate">
-              {tool.name}
-            </p>
+            <Stack direction="horizontal" gap={2} align="center">
+              <p className="text-sm leading-6 text-foreground truncate">
+                {tool.name}
+              </p>
+              <ToolVariationBadge tool={tool} />
+            </Stack>
             <p className="text-sm leading-6 text-muted-foreground truncate">
               {tool.description || "No description"}
             </p>
@@ -337,23 +343,60 @@ function ToolRow({
           </Dialog.Header>
           <div className="space-y-4 py-4">
             {editType === "name" ? (
-              <Input
-                value={editValue}
-                onChange={setEditValue}
-                placeholder="Tool name"
-              />
+              <Stack gap={2}>
+                <Input
+                  value={editValue}
+                  onChange={setEditValue}
+                  placeholder="Tool name"
+                />
+                {tool.variation?.name &&
+                  tool.variation?.name !== tool.canonical?.name && (
+                    <Stack direction="horizontal" gap={2} align="center">
+                      <Icon
+                        name="layers-2"
+                        size="small"
+                        className="text-muted-foreground/70"
+                      />
+                      <Type small muted>
+                        Original name:
+                      </Type>
+                      <Type small muted>
+                        {tool.canonical?.name}
+                      </Type>
+                    </Stack>
+                  )}
+              </Stack>
             ) : (
-              <TextArea
-                value={editValue}
-                onChange={setEditValue}
-                placeholder="Tool description"
-                rows={3}
-              />
+              <Stack gap={2}>
+                <TextArea
+                  value={editValue}
+                  onChange={setEditValue}
+                  placeholder="Tool description"
+                  rows={3}
+                />
+                {tool.variation?.description &&
+                  tool.variation?.description !==
+                    tool.canonical?.description && (
+                    <Stack className="p-2 border rounded-md border-border/70">
+                      <Type small muted className="inline font-medium">
+                        <Icon
+                          name="layers-2"
+                          size="small"
+                          className="text-muted-foreground/70 inline align-text-bottom"
+                        />{" "}
+                        Original Description
+                      </Type>
+                      <Type small muted>
+                        {tool.canonical?.description}
+                      </Type>
+                    </Stack>
+                  )}
+              </Stack>
             )}
             {error && <p className="text-sm text-destructive">{error}</p>}
           </div>
           <Dialog.Footer>
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+            <Button variant="ghost" onClick={() => setEditDialogOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSave}>Save</Button>

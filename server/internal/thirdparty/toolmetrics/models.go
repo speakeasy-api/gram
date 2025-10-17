@@ -96,4 +96,6 @@ type ToolMetricsProvider interface {
 	List(ctx context.Context, opts ListToolLogsOptions) (*ListResult, error)
 	// Log tool call request/response
 	Log(context.Context, ToolHTTPRequest) error
+	// ShouldLog returns true if the tool call should be logged
+	ShouldLog(context.Context, string) (bool, error)
 }

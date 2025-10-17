@@ -154,6 +154,37 @@ func TestTemplatesService_UpdateTemplate_NoChanges(t *testing.T) {
 	require.Equal(t, "Original prompt", result.Template.Prompt, "prompt should remain unchanged")
 }
 
+func TestTemplatesService_UpdateTemplateName_Success(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestTemplateService(t)
+
+	// First create a template
+	created, err := ti.service.CreateTemplate(ctx, &gen.CreateTemplatePayload{
+		Name:             types.Slug("update-name-template"),
+		Prompt:           "Original prompt",
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Description:      nil,
+		Arguments:        nil,
+		Engine:           "",
+		Kind:             "prompt",
+		ToolsHint:        []string{},
+	})
+	require.NoError(t, err, "create template")
+
+	// Update the template name
+	result, err := ti.service.UpdateTemplate(ctx, &gen.UpdateTemplatePayload{
+		ID:               created.Template.ID,
+		Name:             conv.Ptr("New name"),
+	})
+	require.NoError(t, err, "update template name")
+
+	require.NotNil(t, result, "result is nil")
+	require.Equal(t, "New name", result.Template.Name, "template name mismatch")
+}
+
 func TestTemplatesService_UpdateTemplate_InvalidID(t *testing.T) {
 	t.Parallel()
 
