@@ -2,12 +2,12 @@
   "redirects": [
     {
       "source": "/",
-      "destination": "http://speakeasy.com/docs/gram",
+      "destination": "https://www.speakeasy.com/docs/gram/introduction",
       "permanent": true
     },
     {
       "source": "/:path*",
-      "destination": "http://speakeasy.com/docs/gram/:path*",
+      "destination": "https://www.speakeasy.com/docs/gram/:path*",
       "permanent": true
     }
   ]
