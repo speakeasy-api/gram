@@ -61,7 +61,8 @@ func NewCallbackEndpoint(s Service) goa.Endpoint {
 // of service "auth".
 func NewLoginEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
-		return s.Login(ctx)
+		p := req.(*LoginPayload)
+		return s.Login(ctx, p)
 	}
 }
 

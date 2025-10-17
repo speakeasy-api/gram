@@ -45,6 +45,9 @@ func EncodeCallbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 		}
 		values := req.URL.Query()
 		values.Add("code", p.Code)
+		if p.State != nil {
+			values.Add("state", *p.State)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
@@ -284,6 +287,23 @@ func (c *Client) BuildLoginRequest(ctx context.Context, v any) (*http.Request, e
 	}
 
 	return req, nil
+}
+
+// EncodeLoginRequest returns an encoder for requests sent to the auth login
+// server.
+func EncodeLoginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*auth.LoginPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("auth", "login", "*auth.LoginPayload", v)
+		}
+		values := req.URL.Query()
+		if p.Redirect != nil {
+			values.Add("redirect", *p.Redirect)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
 }
 
 // DecodeLoginResponse returns a decoder for responses returned by the auth

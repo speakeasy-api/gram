@@ -70,9 +70,9 @@ func (c *Client) Callback(ctx context.Context, p *CallbackPayload) (res *Callbac
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
 //   - error: internal error
-func (c *Client) Login(ctx context.Context) (res *LoginResult, err error) {
+func (c *Client) Login(ctx context.Context, p *LoginPayload) (res *LoginResult, err error) {
 	var ires any
-	ires, err = c.LoginEndpoint(ctx, nil)
+	ires, err = c.LoginEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
