@@ -117,15 +117,20 @@ async function init(argv: string[]): Promise<void> {
     title: "Setting up project",
   });
 
+  const isLocalDev = yn(process.env["GRAM_DEV"]);
+
   tlog.message("Scaffolding");
   const dirname = import.meta.dirname;
   const templateDir = resolve(join(dirname, "..", `gram-template-${template}`));
   await fs.cp(templateDir, dir, {
     recursive: true,
-    filter: (src) =>
-      !src.includes("node_modules") &&
-      !src.includes(".git") &&
-      !src.includes("dist"),
+    filter: (src) => {
+      let banned = src.includes(".git");
+      if (isLocalDev) {
+        banned ||= src.includes("node_modules") || src.includes("dist");
+      }
+      return !banned;
+    },
   });
 
   let gramFuncsVersion = pkg.devDependencies["@gram-ai/functions"];
@@ -134,10 +139,7 @@ async function init(argv: string[]): Promise<void> {
     // lockstep so we can just use the matching version.
     gramFuncsVersion = `^${pkg.version}`;
   }
-  if (
-    yn(process.env["GRAM_DEV"]) &&
-    existsSync(resolve(dirname, "..", "..", "functions"))
-  ) {
+  if (isLocalDev && existsSync(resolve(dirname, "..", "..", "functions"))) {
     // For local development, use the local version of `@gram-ai/functions`
     // if it exists.
     const localPkgPath = resolve(dirname, "..", "..", "functions");
