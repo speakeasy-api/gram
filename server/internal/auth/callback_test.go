@@ -224,7 +224,7 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		require.Equal(t, redirectURL, result.Location)
+		require.Equal(t, "/dashboard/projects/my-project", result.Location)
 		require.NotEmpty(t, result.SessionToken)
 	})
 
@@ -253,7 +253,7 @@ func TestService_Callback(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		require.Equal(t, redirectURL, result.Location)
+		require.Equal(t, "/dashboard/projects/my-project?tab=settings&view=details", result.Location)
 		require.NotEmpty(t, result.SessionToken)
 	})
 
@@ -310,7 +310,7 @@ func TestService_Callback(t *testing.T) {
 		require.NotNil(t, callbackResult)
 
 		// Step 4: Verify the callback redirects to the original redirect URL
-		require.Equal(t, redirectURL, callbackResult.Location)
+		require.Equal(t, "/dashboard/environments/prod", callbackResult.Location)
 		require.NotEmpty(t, callbackResult.SessionToken)
 	})
 }

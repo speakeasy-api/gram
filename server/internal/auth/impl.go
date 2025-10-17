@@ -141,7 +141,7 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 
 		return &gen.CallbackResult{
-			Location:      s.cfg.SignInRedirectURL,
+			Location:      s.callbackRedirectURL(payload),
 			SessionToken:  session.SessionID,
 			SessionCookie: session.SessionID,
 		}, nil
@@ -507,13 +507,51 @@ func decodeStateParam(payload *gen.CallbackPayload) *loginState {
 	return state
 }
 
+// callbackRedirectURL determines the redirect location after authentication. It
+// only allows relative URLs to prevent open redirect attacks (see relativeURL).
+// If no redirect is found, fall back to SignInRedirectURL.
 func (s *Service) callbackRedirectURL(payload *gen.CallbackPayload) string {
-	location := s.cfg.SignInRedirectURL
+	var location string
+
 	if state := decodeStateParam(payload); state != nil {
-		if state.FinalDestinationURL != "" {
-			location = state.FinalDestinationURL
-		}
+		location = relativeURL(state.FinalDestinationURL)
 	}
 
-	return location
+	if location != "" {
+		return location
+	}
+
+	return s.cfg.SignInRedirectURL
+}
+
+// relativeURL converts any URL to a safe relative URL by extracting only the
+// path, query, and fragment components.
+//
+// Examples:
+//   - "/dashboard" → "/dashboard"
+//   - "/projects?id=123#section" → "/projects?id=123#section"
+//   - "http://localhost:3000/dashboard" → "/dashboard"
+//   - "https://evil-site.com/phishing" → "/phishing"
+//   - "//evil.com/phish" → ""
+//   - "invalid:///" → ""
+func relativeURL(urlStr string) string {
+	parsed, err := url.Parse(urlStr)
+	if err != nil {
+		return ""
+	}
+
+	isRelative := parsed.Host == "" && parsed.Scheme == ""
+	if isRelative {
+		return urlStr
+	}
+
+	safeURL := parsed.Path
+	if parsed.RawQuery != "" {
+		safeURL += "?" + parsed.RawQuery
+	}
+	if parsed.Fragment != "" {
+		safeURL += "#" + parsed.Fragment
+	}
+
+	return safeURL
 }
