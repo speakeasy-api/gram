@@ -32,10 +32,19 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Tool
+      - column: function_resource_definitions.resource_urn
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Resource
       - column: toolset_versions.tool_urns
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Tool
+          slice: true
+      - column: toolset_versions.resource_urns
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Resource
           slice: true
       - column: functions_access.encryption_key
         go_type:

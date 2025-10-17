@@ -21,6 +21,7 @@ func TestToolsetsService_DeleteToolset_Success(t *testing.T) {
 		Name:                   "Toolset to Delete",
 		Description:            conv.Ptr("This toolset will be deleted"),
 		ToolUrns:               []string{},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -106,6 +107,7 @@ func TestToolsetsService_DeleteToolset_VerifyListAfterDelete(t *testing.T) {
 		Name:                   "First Toolset",
 		Description:            nil,
 		ToolUrns:               []string{},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -116,6 +118,7 @@ func TestToolsetsService_DeleteToolset_VerifyListAfterDelete(t *testing.T) {
 		Name:                   "Second Toolset",
 		Description:            nil,
 		ToolUrns:               []string{},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})

@@ -1,0 +1,286 @@
+package urn
+
+import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
+	"net/url"
+	"regexp"
+	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/constants"
+)
+
+type Resource struct {
+	Kind         ResourceKind
+	Source       string
+	SlugifiedURI string
+
+	checked bool
+	err     error
+}
+
+var (
+	nonSlugCharsRE    = regexp.MustCompile(`[^a-z0-9_-]+`)
+	multiDashRE       = regexp.MustCompile(`-+`)
+	multiUnderscoreRE = regexp.MustCompile(`_+`)
+)
+
+func sanitizeToSlug(s string) string {
+	if s == "" {
+		return ""
+	}
+
+	// Convert to lowercase
+	s = strings.ToLower(s)
+
+	// Replace non-slug characters with dash
+	s = nonSlugCharsRE.ReplaceAllString(s, "-")
+
+	// Clean up multiple consecutive dashes
+	s = multiDashRE.ReplaceAllString(s, "-")
+
+	// Clean up multiple consecutive underscores
+	s = multiUnderscoreRE.ReplaceAllString(s, "_")
+
+	// Trim leading and trailing dashes/underscores
+	s = strings.Trim(s, "-_")
+
+	// Trim to 128 characters to comply with maxSegmentLength
+	if len(s) > maxSegmentLength {
+		s = s[:maxSegmentLength]
+		// Re-trim in case we cut in the middle of trailing dashes
+		s = strings.Trim(s, "-_")
+	}
+
+	return s
+}
+
+// uriToSlug converts a URI into a slug-friendly format suitable for URN usage.
+// It includes the scheme, host, and path to ensure uniqueness across different URI types.
+// Examples:
+//
+//	file:///project/src/main.rs -> file-project-src-main-rs
+//	postgres://database/customers/schema -> postgres-database-customers-schema
+//	screen://localhost/display1 -> screen-localhost-display1
+func uriToSlug(uri string) string {
+	// Parse the URI to extract components
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		// If parsing fails, sanitize the raw URI string
+		sanitized := sanitizeToSlug(uri)
+		if sanitized == "" {
+			return "resource"
+		}
+		return sanitized
+	}
+
+	// Build slug from URI components
+	var parts []string
+
+	// Add scheme if present (e.g., "file", "postgres", "screen")
+	// This ensures different schemes produce unique URNs
+	if parsed.Scheme != "" {
+		parts = append(parts, sanitizeToSlug(parsed.Scheme))
+	}
+
+	// Add host if present (e.g., "localhost", "database")
+	if parsed.Host != "" {
+		parts = append(parts, sanitizeToSlug(parsed.Host))
+	}
+
+	// Add path if present (e.g., "/api/users" becomes "api-users")
+	if parsed.Path != "" && parsed.Path != "/" {
+		pathPart := strings.Trim(parsed.Path, "/")
+		pathPart = strings.ReplaceAll(pathPart, "/", "-")
+		parts = append(parts, sanitizeToSlug(pathPart))
+	}
+
+	// Filter out empty parts and join with dash
+	var filtered []string
+	for _, p := range parts {
+		if p != "" {
+			filtered = append(filtered, p)
+		}
+	}
+
+	if len(filtered) == 0 {
+		return "resource"
+	}
+
+	return strings.Join(filtered, "-")
+}
+
+func NewResource(kind ResourceKind, source, uri string) Resource {
+	r := Resource{
+		Kind:         kind,
+		Source:       source,
+		SlugifiedURI: uriToSlug(uri),
+
+		checked: false,
+		err:       nil,
+	}
+
+	_ = r.validate()
+
+	return r
+}
+
+func ParseResource(value string) (Resource, error) {
+	if value == "" {
+		return Resource{}, fmt.Errorf("%w: empty string", ErrInvalid)
+	}
+
+	parts := strings.SplitN(value, delimiter, 4)
+	if len(parts) != 4 {
+		return Resource{}, fmt.Errorf("%w: expected four segments", ErrInvalid)
+	}
+
+	if parts[0] != "resources" {
+		truncated := parts[0][:min(maxSegmentLength, len(parts[0]))]
+		return Resource{}, fmt.Errorf("%w: expected resources urn (got: %q)", ErrInvalid, truncated)
+	}
+
+	r := Resource{
+		Kind:         ResourceKind(parts[1]),
+		Source:       parts[2],
+		SlugifiedURI: parts[3],
+
+		checked: false,
+		err:     nil,
+	}
+
+	if err := r.validate(); err != nil {
+		return Resource{}, err
+	}
+
+	return r, nil
+}
+
+func (u Resource) IsZero() bool {
+	return u.Kind == "" && u.Source == "" && u.SlugifiedURI == ""
+}
+
+func (u Resource) String() string {
+	return "resources" + delimiter + string(u.Kind) + delimiter + u.Source + delimiter + u.SlugifiedURI
+}
+
+func (u Resource) MarshalJSON() ([]byte, error) {
+	if err := u.validate(); err != nil {
+		return nil, err
+	}
+
+	b, err := json.Marshal(u.String())
+	if err != nil {
+		return nil, fmt.Errorf("resource urn to json: %w", err)
+	}
+
+	return b, nil
+}
+
+func (u *Resource) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err != nil {
+		return fmt.Errorf("read resource urn string from json: %w", err)
+	}
+
+	parsed, err := ParseResource(s)
+	if err != nil {
+		return fmt.Errorf("parse resource urn json string: %w", err)
+	}
+
+	*u = parsed
+
+	return nil
+}
+
+func (u *Resource) Scan(value interface{}) error {
+	if value == nil {
+		return nil
+	}
+
+	var s string
+	switch v := value.(type) {
+	case string:
+		s = v
+	case []byte:
+		s = string(v)
+	default:
+		return fmt.Errorf("cannot scan %T into Resource", value)
+	}
+
+	parsed, err := ParseResource(s)
+	if err != nil {
+		return fmt.Errorf("scan database value: %w", err)
+	}
+
+	*u = parsed
+
+	return nil
+}
+
+func (u Resource) Value() (driver.Value, error) {
+	if err := u.validate(); err != nil {
+		return nil, err
+	}
+
+	return u.String(), nil
+}
+
+func (u Resource) MarshalText() (text []byte, err error) {
+	if err := u.validate(); err != nil {
+		return nil, fmt.Errorf("marshal resource urn text: %w", err)
+	}
+
+	return []byte(u.String()), nil
+}
+
+func (u *Resource) UnmarshalText(text []byte) error {
+	parsed, err := ParseResource(string(text))
+	if err != nil {
+		return fmt.Errorf("unmarshal resource urn text: %w", err)
+	}
+
+	*u = parsed
+
+	return nil
+}
+
+func (u *Resource) validate() error {
+	if u.checked {
+		return u.err
+	}
+
+	u.checked = true
+
+	parts := [][2]string{
+		{"kind", string(u.Kind)},
+		{"source", u.Source},
+		{"slugified_uri", u.SlugifiedURI},
+	}
+
+	for _, part := range parts {
+		v := part[1]
+		if v == "" {
+			u.err = fmt.Errorf("%w: empty %s", ErrInvalid, part[0])
+			return u.err
+		}
+
+		if len(part[1]) > maxSegmentLength {
+			u.err = fmt.Errorf("%w: %s segment is too long (max %d, got %d)", ErrInvalid, part[0], maxSegmentLength, len(part[1]))
+			return u.err
+		}
+
+		if !constants.SlugPatternRE.MatchString(v) {
+			u.err = fmt.Errorf("%w: disallowed characters in %s: %q", ErrInvalid, part[0], part[1])
+			return u.err
+		}
+	}
+
+	if _, ok := resourceKinds[u.Kind]; !ok {
+		u.err = fmt.Errorf("%w: unknown resource kind: %q", ErrInvalid, u.Kind)
+		return u.err
+	}
+
+	return nil
+}

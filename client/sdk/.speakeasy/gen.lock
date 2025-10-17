@@ -1,18 +1,19 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: a3a1926b815df1d99ef053f0a00c1b5f
+  docChecksum: bd91efb0d98c8a183a6d5a78f2a1f714
   docVersion: 0.0.1
-  speakeasyVersion: 1.613.0
-  generationVersion: 2.696.0
-  releaseVersion: 0.14.9
-  configChecksum: 7cc0154927ec14183e72e088b3df6547
+  speakeasyVersion: 1.637.0
+  generationVersion: 2.727.4
+  releaseVersion: 0.15.0
+  configChecksum: 8826583bda1c24b0ad4398f433f183c8
 features:
   typescript:
     additionalDependencies: 0.1.0
-    core: 3.21.22
+    constsAndDefaults: 0.1.12
+    core: 3.22.0
     defaultEnabledRetries: 0.1.0
-    devContainers: 2.90.0
+    devContainers: 2.90.1
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
@@ -78,6 +79,7 @@ generatedFiles:
   - docs/models/components/externaloauthserver.md
   - docs/models/components/externaloauthserverform.md
   - docs/models/components/functionenvironmentvariable.md
+  - docs/models/components/functionresourcedefinition.md
   - docs/models/components/functiontooldefinition.md
   - docs/models/components/getactivedeploymentresult.md
   - docs/models/components/getdeploymentlogsresult.md
@@ -89,6 +91,7 @@ generatedFiles:
   - docs/models/components/getprompttemplateresult.md
   - docs/models/components/getslackconnectionresult.md
   - docs/models/components/httptooldefinition.md
+  - docs/models/components/httptoollog.md
   - docs/models/components/inforesponsebody.md
   - docs/models/components/integration.md
   - docs/models/components/integrationentry.md
@@ -104,6 +107,7 @@ generatedFiles:
   - docs/models/components/listpackagesresult.md
   - docs/models/components/listprojectsresult.md
   - docs/models/components/listprompttemplatesresult.md
+  - docs/models/components/listtoollogresponse.md
   - docs/models/components/listtoolsetsresult.md
   - docs/models/components/listtoolsresult.md
   - docs/models/components/listvariationsresult.md
@@ -116,6 +120,7 @@ generatedFiles:
   - docs/models/components/organizationentry.md
   - docs/models/components/package.md
   - docs/models/components/packageversion.md
+  - docs/models/components/paginationresponse.md
   - docs/models/components/periodusage.md
   - docs/models/components/project.md
   - docs/models/components/projectentry.md
@@ -132,6 +137,8 @@ generatedFiles:
   - docs/models/components/rendertemplaterequestbodyengine.md
   - docs/models/components/rendertemplaterequestbodykind.md
   - docs/models/components/rendertemplateresult.md
+  - docs/models/components/resource.md
+  - docs/models/components/resourceentry.md
   - docs/models/components/responsefilter.md
   - docs/models/components/securityvariable.md
   - docs/models/components/servervariable.md
@@ -141,8 +148,10 @@ generatedFiles:
   - docs/models/components/tierlimits.md
   - docs/models/components/tool.md
   - docs/models/components/toolentry.md
+  - docs/models/components/toolentrytype.md
   - docs/models/components/toolset.md
   - docs/models/components/toolsetentry.md
+  - docs/models/components/tooltype.md
   - docs/models/components/toolvariation.md
   - docs/models/components/type.md
   - docs/models/components/updateenvironmentrequestbody.md
@@ -216,6 +225,7 @@ generatedFiles:
   - docs/models/operations/deletetemplatesecurityoption2.md
   - docs/models/operations/deletetoolsetrequest.md
   - docs/models/operations/deletetoolsetsecurity.md
+  - docs/models/operations/direction.md
   - docs/models/operations/evolvedeploymentrequest.md
   - docs/models/operations/evolvedeploymentsecurity.md
   - docs/models/operations/evolvedeploymentsecurityoption1.md
@@ -287,6 +297,10 @@ generatedFiles:
   - docs/models/operations/listtemplatessecurity.md
   - docs/models/operations/listtemplatessecurityoption1.md
   - docs/models/operations/listtemplatessecurityoption2.md
+  - docs/models/operations/listtoollogsrequest.md
+  - docs/models/operations/listtoollogssecurity.md
+  - docs/models/operations/listtoollogssecurityoption1.md
+  - docs/models/operations/listtoollogssecurityoption2.md
   - docs/models/operations/listtoolsetsrequest.md
   - docs/models/operations/listtoolsetssecurity.md
   - docs/models/operations/listtoolsrequest.md
@@ -346,6 +360,7 @@ generatedFiles:
   - docs/models/operations/slackloginrequest.md
   - docs/models/operations/slackloginresponse.md
   - docs/models/operations/slackloginsecurity.md
+  - docs/models/operations/sort.md
   - docs/models/operations/switchauthscopesrequest.md
   - docs/models/operations/switchauthscopesresponse.md
   - docs/models/operations/switchauthscopessecurity.md
@@ -388,10 +403,10 @@ generatedFiles:
   - docs/sdks/deployments/README.md
   - docs/sdks/domains/README.md
   - docs/sdks/environments/README.md
-  - docs/sdks/gram/README.md
   - docs/sdks/instances/README.md
   - docs/sdks/integrations/README.md
   - docs/sdks/keys/README.md
+  - docs/sdks/logs/README.md
   - docs/sdks/mcpmetadata/README.md
   - docs/sdks/packages/README.md
   - docs/sdks/projects/README.md
@@ -446,6 +461,7 @@ generatedFiles:
   - src/funcs/keysList.ts
   - src/funcs/keysRevokeById.ts
   - src/funcs/keysValidate.ts
+  - src/funcs/logsList.ts
   - src/funcs/mcpMetadataGet.ts
   - src/funcs/mcpMetadataSet.ts
   - src/funcs/packagesCreate.ts
@@ -543,6 +559,7 @@ generatedFiles:
   - src/models/components/externaloauthserver.ts
   - src/models/components/externaloauthserverform.ts
   - src/models/components/functionenvironmentvariable.ts
+  - src/models/components/functionresourcedefinition.ts
   - src/models/components/functiontooldefinition.ts
   - src/models/components/getactivedeploymentresult.ts
   - src/models/components/getdeploymentlogsresult.ts
@@ -554,6 +571,7 @@ generatedFiles:
   - src/models/components/getprompttemplateresult.ts
   - src/models/components/getslackconnectionresult.ts
   - src/models/components/httptooldefinition.ts
+  - src/models/components/httptoollog.ts
   - src/models/components/index.ts
   - src/models/components/inforesponsebody.ts
   - src/models/components/integration.ts
@@ -569,6 +587,7 @@ generatedFiles:
   - src/models/components/listpackagesresult.ts
   - src/models/components/listprojectsresult.ts
   - src/models/components/listprompttemplatesresult.ts
+  - src/models/components/listtoollogresponse.ts
   - src/models/components/listtoolsetsresult.ts
   - src/models/components/listtoolsresult.ts
   - src/models/components/listvariationsresult.ts
@@ -581,6 +600,7 @@ generatedFiles:
   - src/models/components/organizationentry.ts
   - src/models/components/package.ts
   - src/models/components/packageversion.ts
+  - src/models/components/paginationresponse.ts
   - src/models/components/periodusage.ts
   - src/models/components/project.ts
   - src/models/components/projectentry.ts
@@ -594,6 +614,8 @@ generatedFiles:
   - src/models/components/rendertemplatebyidrequestbody.ts
   - src/models/components/rendertemplaterequestbody.ts
   - src/models/components/rendertemplateresult.ts
+  - src/models/components/resource.ts
+  - src/models/components/resourceentry.ts
   - src/models/components/responsefilter.ts
   - src/models/components/securityvariable.ts
   - src/models/components/servervariable.ts
@@ -674,6 +696,7 @@ generatedFiles:
   - src/models/operations/listpackages.ts
   - src/models/operations/listprojects.ts
   - src/models/operations/listtemplates.ts
+  - src/models/operations/listtoollogs.ts
   - src/models/operations/listtools.ts
   - src/models/operations/listtoolsets.ts
   - src/models/operations/listversions.ts
@@ -748,6 +771,7 @@ generatedFiles:
   - src/react-query/listIntegrations.ts
   - src/react-query/listPackages.ts
   - src/react-query/listProjects.ts
+  - src/react-query/listToolLogs.ts
   - src/react-query/listTools.ts
   - src/react-query/listToolsets.ts
   - src/react-query/listVersions.ts
@@ -790,6 +814,7 @@ generatedFiles:
   - src/sdk/instances.ts
   - src/sdk/integrations.ts
   - src/sdk/keys.ts
+  - src/sdk/logs.ts
   - src/sdk/mcpmetadata.ts
   - src/sdk/packages.ts
   - src/sdk/projects.ts
@@ -1312,7 +1337,7 @@ examples:
         application/json: {"name": "<value>"}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "updated_at": "2024-05-10T06:01:51.541Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-03-22T17:12:26.250Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": ["<value 1>", "<value 2>"], "resources": [], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>"], "tools": [{}], "updated_at": "2024-05-10T06:01:51.541Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1334,7 +1359,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2025-12-20T03:22:44.412Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-06-22T22:46:40.439Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2025-12-20T03:22:44.412Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1357,7 +1382,7 @@ examples:
         application/json: {}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "description": "mushy comparison messy lady fly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2023-07-28T22:54:49.336Z"}], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "updated_at": "2025-08-07T19:20:12.233Z"}
+          application/json: {"account_type": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "confirm": "<value>", "created_at": "2025-08-15T11:40:59.388Z", "description": "mushy comparison messy lady fly", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "higher_order_tool", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2023-07-28T22:54:49.336Z"}], "resource_urns": ["<value 1>", "<value 2>", "<value 3>"], "resources": [], "slug": "<value>", "tool_urns": ["<value 1>", "<value 2>", "<value 3>"], "tools": [{}], "updated_at": "2025-08-07T19:20:12.233Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1491,7 +1516,7 @@ examples:
         application/json: {"external_oauth_server": {"metadata": "<value>", "slug": "<value>"}}
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2025-03-28T09:33:33.851Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-31T03:23:36.997Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2025-03-28T09:33:33.851Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1515,7 +1540,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2023-10-21T14:21:06.001Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-08-30T05:28:04.458Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [], "resource_urns": [], "resources": [], "slug": "<value>", "tool_urns": [], "tools": [], "updated_at": "2023-10-21T14:21:06.001Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
@@ -1618,7 +1643,7 @@ examples:
           slug: "<value>"
       responses:
         "200":
-          application/json: {"account_type": "<value>", "created_at": "2023-07-27T03:45:28.599Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-10-23T10:29:38.107Z", "description": "chap whoa gee lightly devastation vivacious about t-shirt", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-11-26T08:12:18.787Z"}], "slug": "<value>", "tool_urns": ["<value 1>"], "tools": [], "updated_at": "2024-04-29T05:29:07.967Z"}
+          application/json: {"account_type": "<value>", "created_at": "2023-07-27T03:45:28.599Z", "id": "<id>", "name": "<value>", "organization_id": "<id>", "project_id": "<id>", "prompt_templates": [{"canonical_name": "<value>", "created_at": "2024-10-23T10:29:38.107Z", "description": "chap whoa gee lightly devastation vivacious about t-shirt", "engine": "mustache", "history_id": "<id>", "id": "<id>", "kind": "prompt", "name": "<value>", "project_id": "<id>", "prompt": "<value>", "schema": "<value>", "tool_urn": "<value>", "tools_hint": ["<value 1>", "<value 2>", "<value 3>"], "updated_at": "2024-11-26T08:12:18.787Z"}], "resource_urns": [], "resources": [{}], "slug": "<value>", "tool_urns": ["<value 1>"], "tools": [], "updated_at": "2024-04-29T05:29:07.967Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -1632,5 +1657,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  listToolLogs:
+    speakeasy-default-list-tool-logs:
+      parameters:
+        query:
+          per_page: 20
+          direction: "next"
+          sort: "DESC"
+      responses:
+        "200":
+          application/json: {"logs": [{"deployment_id": "2a25e446-d87e-49c8-ab8c-b3bb267aae46", "duration_ms": 689.89, "http_method": "<value>", "http_route": "<value>", "organization_id": "51b32f4a-389b-4b2b-939b-ee326b00dc01", "span_id": "<id>", "status_code": 43822, "tool_id": "190ecf68-271f-42fa-8e69-a905b9b63ad1", "tool_type": "function", "tool_urn": "<value>", "trace_id": "<id>", "ts": "2024-07-05T07:17:29.939Z", "user_agent": "<value>"}], "pagination": {}}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

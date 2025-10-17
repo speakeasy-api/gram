@@ -20,6 +20,12 @@ import {
   PromptTemplateEntry$outboundSchema,
 } from "./prompttemplateentry.js";
 import {
+  ResourceEntry,
+  ResourceEntry$inboundSchema,
+  ResourceEntry$Outbound,
+  ResourceEntry$outboundSchema,
+} from "./resourceentry.js";
+import {
   SecurityVariable,
   SecurityVariable$inboundSchema,
   SecurityVariable$Outbound,
@@ -92,6 +98,14 @@ export type ToolsetEntry = {
    */
   promptTemplates: Array<PromptTemplateEntry>;
   /**
+   * The resource URNs in this toolset
+   */
+  resourceUrns: Array<string>;
+  /**
+   * The resources in this toolset
+   */
+  resources: Array<ResourceEntry>;
+  /**
    * The security variables that are relevant to the toolset
    */
   securityVariables?: Array<SecurityVariable> | undefined;
@@ -138,6 +152,8 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
   organization_id: z.string(),
   project_id: z.string(),
   prompt_templates: z.array(PromptTemplateEntry$inboundSchema),
+  resource_urns: z.array(z.string()),
+  resources: z.array(ResourceEntry$inboundSchema),
   security_variables: z.array(SecurityVariable$inboundSchema).optional(),
   server_variables: z.array(ServerVariable$inboundSchema).optional(),
   slug: z.string(),
@@ -156,6 +172,7 @@ export const ToolsetEntry$inboundSchema: z.ZodType<
     "organization_id": "organizationId",
     "project_id": "projectId",
     "prompt_templates": "promptTemplates",
+    "resource_urns": "resourceUrns",
     "security_variables": "securityVariables",
     "server_variables": "serverVariables",
     "tool_urns": "toolUrns",
@@ -180,6 +197,8 @@ export type ToolsetEntry$Outbound = {
   organization_id: string;
   project_id: string;
   prompt_templates: Array<PromptTemplateEntry$Outbound>;
+  resource_urns: Array<string>;
+  resources: Array<ResourceEntry$Outbound>;
   security_variables?: Array<SecurityVariable$Outbound> | undefined;
   server_variables?: Array<ServerVariable$Outbound> | undefined;
   slug: string;
@@ -209,6 +228,8 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
   organizationId: z.string(),
   projectId: z.string(),
   promptTemplates: z.array(PromptTemplateEntry$outboundSchema),
+  resourceUrns: z.array(z.string()),
+  resources: z.array(ResourceEntry$outboundSchema),
   securityVariables: z.array(SecurityVariable$outboundSchema).optional(),
   serverVariables: z.array(ServerVariable$outboundSchema).optional(),
   slug: z.string(),
@@ -227,6 +248,7 @@ export const ToolsetEntry$outboundSchema: z.ZodType<
     organizationId: "organization_id",
     projectId: "project_id",
     promptTemplates: "prompt_templates",
+    resourceUrns: "resource_urns",
     securityVariables: "security_variables",
     serverVariables: "server_variables",
     toolUrns: "tool_urns",

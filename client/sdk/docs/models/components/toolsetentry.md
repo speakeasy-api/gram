@@ -12,10 +12,19 @@ let value: ToolsetEntry = {
   organizationId: "<id>",
   projectId: "<id>",
   promptTemplates: [],
+  resourceUrns: [],
+  resources: [],
   slug: "<value>",
   toolUrns: [],
-  tools: [],
-  updatedAt: new Date("2023-08-13T19:01:15.619Z"),
+  tools: [
+    {
+      id: "<id>",
+      name: "<value>",
+      toolUrn: "<value>",
+      type: "http",
+    },
+  ],
+  updatedAt: new Date("2025-10-29T00:12:43.112Z"),
 };
 ```
 
@@ -36,6 +45,8 @@ let value: ToolsetEntry = {
 | `organizationId`                                                                                   | *string*                                                                                           | :heavy_check_mark:                                                                                 | The organization ID this toolset belongs to                                                        |
 | `projectId`                                                                                        | *string*                                                                                           | :heavy_check_mark:                                                                                 | The project ID this toolset belongs to                                                             |
 | `promptTemplates`                                                                                  | [components.PromptTemplateEntry](../../models/components/prompttemplateentry.md)[]                 | :heavy_check_mark:                                                                                 | The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts          |
+| `resourceUrns`                                                                                     | *string*[]                                                                                         | :heavy_check_mark:                                                                                 | The resource URNs in this toolset                                                                  |
+| `resources`                                                                                        | [components.ResourceEntry](../../models/components/resourceentry.md)[]                             | :heavy_check_mark:                                                                                 | The resources in this toolset                                                                      |
 | `securityVariables`                                                                                | [components.SecurityVariable](../../models/components/securityvariable.md)[]                       | :heavy_minus_sign:                                                                                 | The security variables that are relevant to the toolset                                            |
 | `serverVariables`                                                                                  | [components.ServerVariable](../../models/components/servervariable.md)[]                           | :heavy_minus_sign:                                                                                 | The server variables that are relevant to the toolset                                              |
 | `slug`                                                                                             | *string*                                                                                           | :heavy_check_mark:                                                                                 | A short url-friendly label that uniquely identifies a resource.                                    |
