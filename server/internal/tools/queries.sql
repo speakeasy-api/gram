@@ -392,14 +392,6 @@ LEFT JOIN functions_access access
 ORDER BY access.seq DESC NULLS LAST
 LIMIT 1;
 
--- name: GetFunctionResourceDefinitionByID :one
-SELECT *
-FROM function_resource_definitions
-WHERE function_resource_definitions.id = @id
-  AND function_resource_definitions.project_id = @project_id
-  AND function_resource_definitions.deleted IS FALSE
-LIMIT 1;
-
 -- name: PokeToolDefinitionByUrn :one
 WITH first_party AS (
   SELECT id

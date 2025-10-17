@@ -516,44 +516,6 @@ func (q *Queries) GetFunctionResourceByURN(ctx context.Context, arg GetFunctionR
 	return i, err
 }
 
-const getFunctionResourceDefinitionByID = `-- name: GetFunctionResourceDefinitionByID :one
-SELECT id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, created_at, updated_at, deleted_at, deleted
-FROM function_resource_definitions
-WHERE function_resource_definitions.id = $1
-  AND function_resource_definitions.project_id = $2
-  AND function_resource_definitions.deleted IS FALSE
-LIMIT 1
-`
-
-type GetFunctionResourceDefinitionByIDParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) GetFunctionResourceDefinitionByID(ctx context.Context, arg GetFunctionResourceDefinitionByIDParams) (FunctionResourceDefinition, error) {
-	row := q.db.QueryRow(ctx, getFunctionResourceDefinitionByID, arg.ID, arg.ProjectID)
-	var i FunctionResourceDefinition
-	err := row.Scan(
-		&i.ID,
-		&i.ResourceUrn,
-		&i.ProjectID,
-		&i.DeploymentID,
-		&i.FunctionID,
-		&i.Runtime,
-		&i.Name,
-		&i.Description,
-		&i.Uri,
-		&i.Title,
-		&i.MimeType,
-		&i.Variables,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const getFunctionToolByURN = `-- name: GetFunctionToolByURN :one
 WITH deployment AS (
   SELECT d.id
