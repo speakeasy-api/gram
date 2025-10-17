@@ -31,6 +31,49 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 	return count, err
 }
 
+const listDeploymentFunctionsResources = `-- name: ListDeploymentFunctionsResources :many
+SELECT id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, created_at, updated_at, deleted_at, deleted
+FROM function_resource_definitions
+WHERE deployment_id = $1
+`
+
+func (q *Queries) ListDeploymentFunctionsResources(ctx context.Context, deploymentID uuid.UUID) ([]FunctionResourceDefinition, error) {
+	rows, err := q.db.Query(ctx, listDeploymentFunctionsResources, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FunctionResourceDefinition
+	for rows.Next() {
+		var i FunctionResourceDefinition
+		if err := rows.Scan(
+			&i.ID,
+			&i.ResourceUrn,
+			&i.ProjectID,
+			&i.DeploymentID,
+			&i.FunctionID,
+			&i.Runtime,
+			&i.Name,
+			&i.Description,
+			&i.Uri,
+			&i.Title,
+			&i.MimeType,
+			&i.Variables,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeploymentFunctionsTools = `-- name: ListDeploymentFunctionsTools :many
 SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
 FROM function_tool_definitions

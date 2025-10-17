@@ -14,3 +14,8 @@ FROM functions_access
 WHERE
   project_id = @project_id
   AND deployment_id = @deployment_id;
+
+-- name: ListDeploymentFunctionsResources :many
+SELECT *
+FROM function_resource_definitions
+WHERE deployment_id = @deployment_id;

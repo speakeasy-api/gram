@@ -931,3 +931,251 @@ func TestCreateDeployment_WithFunctions_ManifestValidation(t *testing.T) {
 		require.Equal(t, "python:3.12", tool.Runtime, "petstore tools should have python:3.12 runtime")
 	}
 }
+
+func TestDeploymentsService_CreateDeployment_WithResources(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload functions file with resources
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-functions-with-resources",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "functions-with-resources",
+				Slug:    "functions-with-resources",
+				Runtime: "nodejs:22",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment with functions and resources")
+
+	require.NotEqual(t, uuid.Nil.String(), dep.Deployment.ID, "deployment ID is nil")
+	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
+
+	repo := testrepo.New(ti.conn)
+
+	// Verify function tools were created
+	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.Len(t, functionTools, 2, "expected 2 function tools")
+
+	toolNames := lo.Map(functionTools, func(tool testrepo.FunctionToolDefinition, _ int) string {
+		return tool.Name
+	})
+	require.ElementsMatch(t, toolNames, []string{"search_documentation", "analyze_data"}, "unexpected tool names")
+
+	// Verify function resources were created
+	resources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment function resources")
+	require.Len(t, resources, 3, "expected 3 function resources")
+
+	t.Run("resource names", func(t *testing.T) {
+		t.Parallel()
+
+		names := lo.Map(resources, func(r testrepo.FunctionResourceDefinition, _ int) string {
+			return r.Name
+		})
+		require.ElementsMatch(t, names, []string{
+			"user_guide",
+			"api_reference",
+			"data_source",
+		}, "mismatched resource names")
+	})
+
+	t.Run("verify user_guide resource", func(t *testing.T) {
+		t.Parallel()
+
+		resource, ok := lo.Find(resources, func(r testrepo.FunctionResourceDefinition) bool {
+			return r.Name == "user_guide"
+		})
+
+		require.True(t, ok, "resource user_guide not found")
+		require.Equal(t, "file:///docs/user-guide.pdf", resource.Uri)
+		require.Equal(t, "Comprehensive user guide for the system", resource.Description)
+		require.Equal(t, "User Guide", resource.Title.String)
+		require.True(t, resource.Title.Valid, "title should be set")
+		require.Equal(t, "application/pdf", resource.MimeType.String)
+		require.True(t, resource.MimeType.Valid, "mime type should be set")
+		require.JSONEq(t, `{}`, string(resource.Variables), "should have no variables")
+	})
+
+	t.Run("verify api_reference resource with variables", func(t *testing.T) {
+		t.Parallel()
+
+		resource, ok := lo.Find(resources, func(r testrepo.FunctionResourceDefinition) bool {
+			return r.Name == "api_reference"
+		})
+
+		require.True(t, ok, "resource api_reference not found")
+		require.Equal(t, "file:///docs/api-reference.md", resource.Uri)
+		require.Equal(t, "API reference documentation", resource.Description)
+		require.Equal(t, "API Reference", resource.Title.String)
+		require.Equal(t, "text/markdown", resource.MimeType.String)
+		require.NotNil(t, resource.Variables, "should have variables")
+		require.JSONEq(t, `{"API_VERSION": {"description": "The API version to use"}}`, string(resource.Variables))
+	})
+
+	t.Run("verify data_source resource with multiple variables", func(t *testing.T) {
+		t.Parallel()
+
+		resource, ok := lo.Find(resources, func(r testrepo.FunctionResourceDefinition) bool {
+			return r.Name == "data_source"
+		})
+
+		require.True(t, ok, "resource data_source not found")
+		require.Equal(t, "https://api.example.com/data", resource.Uri)
+		require.Equal(t, "External data source endpoint", resource.Description)
+		require.False(t, resource.Title.Valid, "should have no title")
+		require.False(t, resource.MimeType.Valid, "should have no mime type")
+		require.NotNil(t, resource.Variables, "should have variables")
+		require.JSONEq(t, `{"DATA_API_KEY": {"description": "API key for data source"}, "DATA_REGION": {"description": "Region for data access"}}`, string(resource.Variables))
+	})
+}
+
+func TestDeploymentsService_CreateDeployment_ResourcesMultipleFiles(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload multiple function files with resources
+	res1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+	res2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "python:3.12")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-resources-multiple-files",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID: res1.Asset.ID,
+				Name:    "functions-with-resources",
+				Slug:    "functions-with-resources",
+				Runtime: "nodejs:22",
+			},
+			{
+				AssetID: res2.Asset.ID,
+				Name:    "todo-functions",
+				Slug:    "todo-functions",
+				Runtime: "python:3.12",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment with multiple function files")
+
+	require.NotEqual(t, uuid.Nil.String(), dep.Deployment.ID, "deployment ID is nil")
+	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
+
+	repo := testrepo.New(ti.conn)
+
+	// Verify function tools from both files were created
+	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.Len(t, functionTools, 6, "expected 6 function tools (2 from first + 4 from second)")
+
+	// Verify resources from first file were created (second file has no resources)
+	resources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment function resources")
+	require.Len(t, resources, 3, "expected 3 function resources from first file")
+
+	// Verify all resources are from the nodejs runtime function
+	for _, resource := range resources {
+		require.Equal(t, "nodejs:22", resource.Runtime, "all resources should be from nodejs function")
+	}
+}
+
+func TestDeploymentsService_CreateDeployment_ResourcesWithOpenAPI(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload OpenAPI asset
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi v3 asset")
+
+	// Upload functions file with resources
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+
+	dep, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey: "test-resources-with-openapi",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "todo-api",
+				Slug:    "todo-api",
+			},
+		},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "functions-with-resources",
+				Slug:    "functions-with-resources",
+				Runtime: "nodejs:22",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment with resources and OpenAPI")
+
+	require.NotEqual(t, uuid.Nil.String(), dep.Deployment.ID, "deployment ID is nil")
+	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
+
+	repo := testrepo.New(ti.conn)
+
+	// Verify HTTP tools from OpenAPI were created
+	httpTools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment HTTP tools")
+	require.Len(t, httpTools, 5, "expected 5 HTTP tools from OpenAPI")
+
+	// Verify function tools were created
+	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.Len(t, functionTools, 2, "expected 2 function tools")
+
+	// Verify function resources were created
+	resources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment function resources")
+	require.Len(t, resources, 3, "expected 3 function resources")
+}

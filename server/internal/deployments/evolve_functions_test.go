@@ -1146,3 +1146,455 @@ func TestEvolve_UpsertFunctions_InvalidManifest(t *testing.T) {
 	require.NoError(t, err, "list deployment function tools")
 	require.Empty(t, functionTools, "expected zero function tools due to invalid manifest JSON")
 }
+
+func TestEvolve_WithResources_InitialDeployment(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload functions file with resources
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+
+	// Create initial deployment with functions containing resources
+	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "functions-with-resources",
+				Slug:    "functions-with-resources",
+				Runtime: "nodejs:22",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve initial deployment with functions and resources")
+
+	require.NotEqual(t, uuid.Nil.String(), result.Deployment.ID, "deployment ID is nil")
+	require.Equal(t, "completed", result.Deployment.Status, "deployment status is not completed")
+	require.Len(t, result.Deployment.FunctionsAssets, 1, "expected 1 functions file")
+
+	repo := testrepo.New(ti.conn)
+
+	// Verify function tools were created
+	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(result.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.Len(t, functionTools, 2, "expected 2 function tools")
+
+	// Verify function resources were created
+	resources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(result.Deployment.ID))
+	require.NoError(t, err, "list deployment function resources")
+	require.Len(t, resources, 3, "expected 3 function resources")
+
+	// Verify resource names
+	names := lo.Map(resources, func(r testrepo.FunctionResourceDefinition, _ int) string {
+		return r.Name
+	})
+	require.ElementsMatch(t, names, []string{
+		"user_guide",
+		"api_reference",
+		"data_source",
+	}, "mismatched resource names")
+}
+
+func TestEvolve_WithResources_UpdateFunctions(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload initial functions file without resources
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+
+	// Create initial deployment
+	initial, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres1.Asset.ID,
+				Name:    "my-functions",
+				Slug:    "my-functions",
+				Runtime: "nodejs:22",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "create initial deployment")
+
+	repo := testrepo.New(ti.conn)
+
+	// Verify initial deployment has no resources
+	initialResources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(initial.Deployment.ID))
+	require.NoError(t, err, "list initial deployment resources")
+	require.Empty(t, initialResources, "initial deployment should have no resources")
+
+	// Upload updated functions file with resources
+	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+
+	// Evolve to update functions with resources (same name/slug, different asset)
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres2.Asset.ID,
+				Name:    "my-functions", // Same name
+				Slug:    "my-functions", // Same slug
+				Runtime: "nodejs:22",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment to update functions with resources")
+
+	require.NotEqual(t, initial.Deployment.ID, evolved.Deployment.ID, "evolved deployment should have different ID")
+	require.Equal(t, "completed", evolved.Deployment.Status, "deployment status is not completed")
+
+	// Verify resources were added in evolved deployment
+	evolvedResources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(evolved.Deployment.ID))
+	require.NoError(t, err, "list evolved deployment resources")
+	require.Len(t, evolvedResources, 3, "evolved deployment should have 3 resources")
+
+	// Verify all resources have correct runtime
+	for _, resource := range evolvedResources {
+		require.Equal(t, "nodejs:22", resource.Runtime, "all resources should have nodejs:22 runtime")
+	}
+}
+
+func TestEvolve_WithResources_AddMultipleFunctions(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload initial functions without resources
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+
+	// Create initial deployment
+	initial, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres1.Asset.ID,
+				Name:    "todo-functions",
+				Slug:    "todo-functions",
+				Runtime: "nodejs:22",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "create initial deployment")
+
+	// Upload functions with resources
+	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "python:3.12")
+
+	// Evolve to add second functions file with resources
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres2.Asset.ID,
+				Name:    "resource-functions",
+				Slug:    "resource-functions",
+				Runtime: "python:3.12",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment to add functions with resources")
+
+	require.NotEqual(t, initial.Deployment.ID, evolved.Deployment.ID, "evolved deployment should have different ID")
+	require.Equal(t, "completed", evolved.Deployment.Status, "deployment status is not completed")
+	require.Len(t, evolved.Deployment.FunctionsAssets, 2, "expected 2 functions files")
+
+	repo := testrepo.New(ti.conn)
+
+	// Verify function tools from both files
+	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(evolved.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.Len(t, functionTools, 6, "expected 6 function tools (4 from todo + 2 from resources)")
+
+	// Verify resources from second file only
+	resources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(evolved.Deployment.ID))
+	require.NoError(t, err, "list deployment function resources")
+	require.Len(t, resources, 3, "expected 3 function resources from second file")
+
+	// Verify all resources are from the python runtime function
+	for _, resource := range resources {
+		require.Equal(t, "python:3.12", resource.Runtime, "all resources should be from python function")
+	}
+}
+
+func TestEvolve_WithResources_ExcludeFunctionsWithResources(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload functions with resources
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+	// Upload functions without resources
+	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "python:3.12")
+
+	// Create initial deployment with both
+	initial, err := ti.service.CreateDeployment(ctx, &gen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-exclude-resources",
+		Openapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres1.Asset.ID,
+				Name:    "functions-with-resources",
+				Slug:    "functions-with-resources",
+				Runtime: "nodejs:22",
+			},
+			{
+				AssetID: fres2.Asset.ID,
+				Name:    "functions-without-resources",
+				Slug:    "functions-without-resources",
+				Runtime: "python:3.12",
+			},
+		},
+		Packages:         []*gen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create initial deployment")
+
+	repo := testrepo.New(ti.conn)
+
+	// Verify initial deployment has resources
+	initialResources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(initial.Deployment.ID))
+	require.NoError(t, err, "list initial deployment resources")
+	require.Len(t, initialResources, 3, "initial deployment should have 3 resources")
+
+	// Evolve to exclude functions with resources
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:            nil,
+		SessionToken:           nil,
+		ProjectSlugInput:       nil,
+		DeploymentID:           nil,
+		UpsertOpenapiv3Assets:  []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions:        []*gen.AddFunctionsForm{},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{fres1.Asset.ID}, // Exclude functions with resources
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment to exclude functions with resources")
+
+	require.NotEqual(t, initial.Deployment.ID, evolved.Deployment.ID, "evolved deployment should have different ID")
+	require.Equal(t, "completed", evolved.Deployment.Status, "deployment status is not completed")
+	require.Len(t, evolved.Deployment.FunctionsAssets, 1, "expected 1 functions file after exclusion")
+
+	// Verify resources were removed in evolved deployment
+	evolvedResources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(evolved.Deployment.ID))
+	require.NoError(t, err, "list evolved deployment resources")
+	require.Empty(t, evolvedResources, "evolved deployment should have no resources after excluding functions with resources")
+
+	// Verify tools from non-excluded functions remain
+	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(evolved.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.NotEmpty(t, functionTools, "should still have function tools from non-excluded functions")
+
+	for _, tool := range functionTools {
+		require.Equal(t, "python:3.12", tool.Runtime, "all remaining tools should be from python function")
+	}
+}
+
+func TestEvolve_WithResources_ReplaceResourceFunctions(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload initial functions with resources
+	fres1 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+
+	// Create initial deployment
+	initial, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres1.Asset.ID,
+				Name:    "resource-functions",
+				Slug:    "resource-functions",
+				Runtime: "nodejs:22",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "create initial deployment with resources")
+
+	repo := testrepo.New(ti.conn)
+
+	// Verify initial resources
+	initialResources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(initial.Deployment.ID))
+	require.NoError(t, err, "list initial deployment resources")
+	require.Len(t, initialResources, 3, "initial deployment should have 3 resources")
+
+	// Verify nodejs runtime
+	for _, resource := range initialResources {
+		require.Equal(t, "nodejs:22", resource.Runtime)
+	}
+
+	// Upload different functions without resources
+	fres2 := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "python:3.12")
+
+	// Evolve to replace with different functions (exclude old, add new)
+	evolved, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:           nil,
+		SessionToken:          nil,
+		ProjectSlugInput:      nil,
+		DeploymentID:          nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres2.Asset.ID,
+				Name:    "resource-functions", // Same name/slug
+				Slug:    "resource-functions",
+				Runtime: "python:3.12",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment to replace functions")
+
+	require.NotEqual(t, initial.Deployment.ID, evolved.Deployment.ID, "evolved deployment should have different ID")
+	require.Equal(t, "completed", evolved.Deployment.Status, "deployment status is not completed")
+
+	// Verify resources were removed (new functions don't have resources)
+	evolvedResources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(evolved.Deployment.ID))
+	require.NoError(t, err, "list evolved deployment resources")
+	require.Empty(t, evolvedResources, "evolved deployment should have no resources after replacing with functions without resources")
+
+	// Verify function tools updated with new runtime
+	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(evolved.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.NotEmpty(t, functionTools, "should have function tools")
+
+	for _, tool := range functionTools {
+		require.Equal(t, "python:3.12", tool.Runtime, "all tools should have updated runtime")
+	}
+}
+
+func TestEvolve_WithResources_MixedWithOpenAPI(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestDeploymentService(t, assetStorage)
+
+	// Upload OpenAPI asset
+	bs := bytes.NewBuffer(testenv.ReadFixture(t, "fixtures/todo-valid.yaml"))
+	ares, err := ti.assets.UploadOpenAPIv3(ctx, &agen.UploadOpenAPIv3Form{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		ContentType:      "application/x-yaml",
+		ContentLength:    int64(bs.Len()),
+	}, io.NopCloser(bs))
+	require.NoError(t, err, "upload openapi v3 asset")
+
+	// Upload functions with resources
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+
+	// Create deployment with both OpenAPI and functions with resources
+	result, err := ti.service.Evolve(ctx, &gen.EvolvePayload{
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		DeploymentID:     nil,
+		UpsertOpenapiv3Assets: []*gen.AddOpenAPIv3DeploymentAssetForm{
+			{
+				AssetID: ares.Asset.ID,
+				Name:    "todo-api",
+				Slug:    "todo-api",
+			},
+		},
+		UpsertFunctions: []*gen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "functions-with-resources",
+				Slug:    "functions-with-resources",
+				Runtime: "nodejs:22",
+			},
+		},
+		UpsertPackages:         []*gen.AddPackageForm{},
+		ExcludeOpenapiv3Assets: []string{},
+		ExcludeFunctions:       []string{},
+		ExcludePackages:        []string{},
+	})
+	require.NoError(t, err, "evolve deployment with OpenAPI and functions with resources")
+
+	require.NotEqual(t, uuid.Nil.String(), result.Deployment.ID, "deployment ID is nil")
+	require.Equal(t, "completed", result.Deployment.Status, "deployment status is not completed")
+	require.Len(t, result.Deployment.Openapiv3Assets, 1, "expected 1 OpenAPI asset")
+	require.Len(t, result.Deployment.FunctionsAssets, 1, "expected 1 functions file")
+
+	repo := testrepo.New(ti.conn)
+
+	// Verify HTTP tools from OpenAPI
+	httpTools, err := repo.ListDeploymentHTTPTools(ctx, uuid.MustParse(result.Deployment.ID))
+	require.NoError(t, err, "list deployment HTTP tools")
+	require.Len(t, httpTools, 5, "expected 5 HTTP tools from OpenAPI")
+
+	// Verify function tools
+	functionTools, err := repo.ListDeploymentFunctionsTools(ctx, uuid.MustParse(result.Deployment.ID))
+	require.NoError(t, err, "list deployment function tools")
+	require.Len(t, functionTools, 2, "expected 2 function tools")
+
+	// Verify function resources
+	resources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(result.Deployment.ID))
+	require.NoError(t, err, "list deployment function resources")
+	require.Len(t, resources, 3, "expected 3 function resources")
+}
