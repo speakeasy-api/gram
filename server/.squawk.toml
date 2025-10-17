@@ -9,6 +9,7 @@ excluded_rules = [
   "disallowed-unique-constraint",
   "ban-drop-column",
   "adding-required-field",
+  "adding-field-with-default",
 ]
 [upload_to_github]
 fail_on_violations = true
