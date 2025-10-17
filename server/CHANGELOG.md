@@ -1,5 +1,16 @@
 # @gram/server
 
+## 0.8.0
+
+### Minor Changes
+
+- f3ffd00: Preserve redirect URLs during log-in for unauthenticated browsers.
+
+### Patch Changes
+
+- 6c5d329: Remove errant authorization from image serving
+- ac5cb3d: Add correct resolution of custom domains for private MCP servers in install pages
+
 ## 0.7.2
 
 ### Patch Changes
