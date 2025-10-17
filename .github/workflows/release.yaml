@@ -15,6 +15,11 @@ jobs:
     # self-hosted runners that we manage.
     # https://docs.npmjs.com/trusted-publishers
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+      id-token: write
     steps:
       - name: Checkout Repo
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
