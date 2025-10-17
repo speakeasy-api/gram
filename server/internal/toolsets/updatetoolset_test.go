@@ -380,3 +380,124 @@ func TestToolsetsService_UpdateToolset_McpEnabled(t *testing.T) {
 	require.NotNil(t, result)
 	require.True(t, *result.McpEnabled)
 }
+
+func TestToolsetsService_UpdateToolset_ResourceUrnsNil_PreservesResources(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	// Create deployment with functions that include resources
+	dep := createFunctionsDeploymentWithResources(t, ctx, ti)
+
+	// Get resources from the deployment
+	repo := testrepo.New(ti.conn)
+	resources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment resources")
+	require.Len(t, resources, 3, "expected 3 resources from manifest")
+
+	// Create toolset with resources
+	resourceUrns := make([]string, len(resources))
+	for i, r := range resources {
+		resourceUrns[i] = r.ResourceUrn.String()
+	}
+
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Toolset With Resources",
+		Description:            conv.Ptr("A toolset with resources"),
+		ToolUrns:               []string{},
+		ResourceUrns:           resourceUrns,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, created.Resources, 3, "should start with 3 resources")
+
+	// Update the toolset with ResourceUrns as nil (should preserve existing resources)
+	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		Slug:                   created.Slug,
+		Name:                   conv.Ptr("Updated Name"),
+		Description:            conv.Ptr("Updated description"),
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           nil, // nil should preserve existing resources
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpEnabled:             nil,
+		McpIsPublic:            nil,
+		CustomDomainID:         nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "Updated Name", result.Name)
+	require.Equal(t, "Updated description", *result.Description)
+	require.Len(t, result.Resources, 3, "resources should be preserved when ResourceUrns is nil")
+	require.Len(t, result.ResourceUrns, 3, "resource URNs should be preserved when ResourceUrns is nil")
+
+	// Verify resource names are still present
+	resourceNames := make(map[string]bool)
+	for _, r := range result.Resources {
+		require.NotNil(t, r.FunctionResourceDefinition)
+		resourceNames[r.FunctionResourceDefinition.Name] = true
+	}
+	require.True(t, resourceNames["user_guide"])
+	require.True(t, resourceNames["api_reference"])
+	require.True(t, resourceNames["data_source"])
+}
+
+func TestToolsetsService_UpdateToolset_ResourceUrnsEmpty_RemovesResources(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+
+	// Create deployment with functions that include resources
+	dep := createFunctionsDeploymentWithResources(t, ctx, ti)
+
+	// Get resources from the deployment
+	repo := testrepo.New(ti.conn)
+	resources, err := repo.ListDeploymentFunctionsResources(ctx, uuid.MustParse(dep.Deployment.ID))
+	require.NoError(t, err, "list deployment resources")
+	require.Len(t, resources, 3, "expected 3 resources from manifest")
+
+	// Create toolset with resources
+	resourceUrns := make([]string, len(resources))
+	for i, r := range resources {
+		resourceUrns[i] = r.ResourceUrn.String()
+	}
+
+	created, err := ti.service.CreateToolset(ctx, &gen.CreateToolsetPayload{
+		SessionToken:           nil,
+		Name:                   "Toolset With Resources",
+		Description:            conv.Ptr("A toolset with resources to be removed"),
+		ToolUrns:               []string{},
+		ResourceUrns:           resourceUrns,
+		DefaultEnvironmentSlug: nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.Len(t, created.Resources, 3, "should start with 3 resources")
+
+	// Update the toolset with ResourceUrns as empty array (should remove all resources)
+	result, err := ti.service.UpdateToolset(ctx, &gen.UpdateToolsetPayload{
+		SessionToken:           nil,
+		Slug:                   created.Slug,
+		Name:                   conv.Ptr("Updated Without Resources"),
+		Description:            nil,
+		DefaultEnvironmentSlug: nil,
+		ToolUrns:               nil,
+		ResourceUrns:           []string{}, // empty array should remove all resources
+		PromptTemplateNames:    nil,
+		McpSlug:                nil,
+		McpEnabled:             nil,
+		McpIsPublic:            nil,
+		CustomDomainID:         nil,
+		ProjectSlugInput:       nil,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, "Updated Without Resources", result.Name)
+	require.Empty(t, result.Resources, "resources should be removed when ResourceUrns is empty array")
+	require.Empty(t, result.ResourceUrns, "resource URNs should be removed when ResourceUrns is empty array")
+}

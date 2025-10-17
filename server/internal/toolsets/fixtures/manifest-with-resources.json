@@ -1,0 +1,71 @@
+{
+  "version": "0.0.0",
+  "tools": [
+    {
+      "name": "search_documentation",
+      "description": "Search through documentation files",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query"
+          }
+        },
+        "required": [
+          "query"
+        ]
+      }
+    },
+    {
+      "name": "analyze_data",
+      "description": "Analyze data from various sources",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Data source identifier"
+          }
+        },
+        "required": [
+          "source"
+        ]
+      }
+    }
+  ],
+  "resources": [
+    {
+      "name": "user_guide",
+      "uri": "file:///docs/user-guide.pdf",
+      "description": "Comprehensive user guide for the system",
+      "title": "User Guide",
+      "mimeType": "application/pdf"
+    },
+    {
+      "name": "api_reference",
+      "uri": "file:///docs/api-reference.md",
+      "description": "API reference documentation",
+      "title": "API Reference",
+      "mimeType": "text/markdown",
+      "variables": {
+        "API_VERSION": {
+          "description": "The API version to use"
+        }
+      }
+    },
+    {
+      "name": "data_source",
+      "uri": "https://api.example.com/data",
+      "description": "External data source endpoint",
+      "variables": {
+        "DATA_API_KEY": {
+          "description": "API key for data source"
+        },
+        "DATA_REGION": {
+          "description": "Region for data access"
+        }
+      }
+    }
+  ]
+}

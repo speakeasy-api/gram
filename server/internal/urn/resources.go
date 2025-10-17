@@ -57,21 +57,24 @@ func sanitizeToSlug(s string) string {
 }
 
 // uriToSlug converts a URI into a slug-friendly format suitable for URN usage.
-// It includes the scheme, host, and path to ensure uniqueness across different URI types.
+// It includes the scheme, host, path, and query parameters to ensure uniqueness across different URI types.
 // Examples:
 //
 //	file:///project/src/main.rs -> file-project-src-main-rs
 //	postgres://database/customers/schema -> postgres-database-customers-schema
 //	screen://localhost/display1 -> screen-localhost-display1
+//	https://api.example.com/data?version=v1&format=json -> https-api-example-com-data-version-v1-format-json
 func uriToSlug(uri string) string {
+	// Empty URI is invalid - return empty string to fail validation
+	if uri == "" {
+		return ""
+	}
+
 	// Parse the URI to extract components
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		// If parsing fails, sanitize the raw URI string
 		sanitized := sanitizeToSlug(uri)
-		if sanitized == "" {
-			return "resource"
-		}
 		return sanitized
 	}
 
@@ -96,6 +99,14 @@ func uriToSlug(uri string) string {
 		parts = append(parts, sanitizeToSlug(pathPart))
 	}
 
+	// Add query parameters if present (e.g., "?version=v1&format=json" becomes "version-v1-format-json")
+	if parsed.RawQuery != "" {
+		// Convert query string to a slug-friendly format
+		queryPart := strings.ReplaceAll(parsed.RawQuery, "&", "-")
+		queryPart = strings.ReplaceAll(queryPart, "=", "-")
+		parts = append(parts, sanitizeToSlug(queryPart))
+	}
+
 	// Filter out empty parts and join with dash
 	var filtered []string
 	for _, p := range parts {
@@ -104,11 +115,21 @@ func uriToSlug(uri string) string {
 		}
 	}
 
+	// If no valid parts found, return empty string to fail validation
 	if len(filtered) == 0 {
-		return "resource"
+		return ""
 	}
 
-	return strings.Join(filtered, "-")
+	result := strings.Join(filtered, "-")
+
+	// Ensure the final result doesn't exceed maxSegmentLength
+	if len(result) > maxSegmentLength {
+		result = result[:maxSegmentLength]
+		// Re-trim in case we cut in the middle of trailing dashes
+		result = strings.Trim(result, "-_")
+	}
+
+	return result
 }
 
 func NewResource(kind ResourceKind, source, uri string) Resource {
