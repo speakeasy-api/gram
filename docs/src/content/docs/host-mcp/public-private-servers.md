@@ -21,7 +21,7 @@ Public servers are the easiest way to use Gram and are typically what you'd use 
 
 ![Example of a Gram-hosted MCP documentation page showing available tools and endpoints](/img/guides/gram-example-public-docs.png)
 
-Public servers also support [MCP Managed OAuth](/build-mcp/adding-oauth) for simplified authentication.
+Public servers also support [MCP Managed OAuth](build-mcp/adding-oauth) for simplified authentication.
 
 ## Private Servers
 
@@ -60,7 +60,7 @@ Pass-through authentication can be used with both public and private Gram server
 
 ## Managed Authentication
 
-Managed authentication lets you store API credentials centrally in Gram [environments](/concepts/environments), so users only need a Gram API key to access your server. This is perfect for demos, trials, or team scenarios where you want to provide easy access without exposing your actual API keys.
+Managed authentication lets you store API credentials centrally in Gram [environments](concepts/environments), so users only need a Gram API key to access your server. This is perfect for demos, trials, or team scenarios where you want to provide easy access without exposing your actual API keys.
 
 For example, you could give potential customers a temporary Gram API key to test your service. They get instant access to your tools without needing to sign up for your API or handle sensitive credentials directly. All the actual API keys and configuration stay securely stored in your Gram environment.
 
@@ -87,6 +87,6 @@ For example, you could give potential customers a temporary Gram API key to test
 
 The `Gram-Environment` header specifies which Gram environment to link - you can use different environments for development, staging, or production configurations.
 
-Before using managed authentication, use the [Playground](/build-mcp/test-toolsets#_top) to ensure your environment is properly configured with all required API keys. The Playground will automatically prompt you to create any missing keys with the correct names.
+Before using managed authentication, use the [Playground](build-mcp/test-toolsets#_top) to ensure your environment is properly configured with all required API keys. The Playground will automatically prompt you to create any missing keys with the correct names.
 
 You can also mix managed and pass-through authentication, using Gram environments for some credentials while letting users provide others directly.

@@ -43,7 +43,7 @@ Existing REST APIs are a starting point, but to create a functional MCP server, 
 2. **Add Context** - A user reading an API reference is coming in with some implicit context about the relevant business domain. The same is not true of an LLM examining a list of tools on an MCP server. It is up to the MCP server maintainer to make sure the server provides the LLM with the context it needs. Adding rich tool descriptions, prompts, and examples, greatly improves the performance of the MCP server. Focus on the _when_ and _why_ of the tool. Gram gives you the ability to add additional context to your tools.
 3. **Define Custom Tools** - REST APIs are resource-oriented: create a company, update the contact field, etc. MCP servers work best when they're workflow-based: "summarize recent channel activity". Gram gives you the ability to distribute custom tools that wrap multiple API endpoints and additional steps as a single tool.
 
-Gram makes tool creation & curation easy. [Tools](/concepts/tool-definitions) are bootstrapped by pulling API paths, input schemas, security schemes, and descriptions out of OpenAPI documents. Once an API is uploaded to the Gram platform the day 0 workflow looks like this:
+Gram makes tool creation & curation easy. [Tools](concepts/tool-definitions) are bootstrapped by pulling API paths, input schemas, security schemes, and descriptions out of OpenAPI documents. Once an API is uploaded to the Gram platform the day 0 workflow looks like this:
 
 * Remove unnecessary tools from your toolset
 * Combine tools into use case specific toolsets.
@@ -69,7 +69,7 @@ Currently, MCP servers are mostly **local** (hosted by API consumers), which cre
 
 Once tools have been curated, the MCP server is ready to deploy. Every toolset automatically comes with an MCP server hosted at a Gram managed URL. Custom domains can be linked to create a branded, 1st party MCP server at `mcp.{{your-domain}}.com/{{server-name}}`
 
-Gram provides completely [managed hosting of MCP servers](/gram-quickstart) or self-hosted.
+Gram provides completely [managed hosting of MCP servers](gram-quickstart) or self-hosted.
 
 ## LLM-Friendly Docs
 
@@ -85,11 +85,11 @@ Finally, you can copy the contents of any page as markdown by pressing â€œCmd+Câ
 
 ## Further Reading
 
-- [Quickstart](/gram-quickstart)
-- [Creating your first toolset](/build-mcp/create-default-toolset)
-- [Curating custom toolsets](/build-mcp/custom-toolsets)
-- [Deploying an MCP server](/host-mcp/deploy-mcp-server)
-- [OpenAPI concepts](/concepts/openapi)
-- [Tool definitions](/concepts/tool-definitions)
-- [Toolsets](/concepts/toolsets)
-- [Environment variables](/concepts/environments)
+- [Quickstart](gram-quickstart)
+- [Creating your first toolset](build-mcp/create-default-toolset)
+- [Curating custom toolsets](build-mcp/custom-toolsets)
+- [Deploying an MCP server](host-mcp/deploy-mcp-server)
+- [OpenAPI concepts](concepts/openapi)
+- [Tool definitions](concepts/tool-definitions)
+- [Toolsets](concepts/toolsets)
+- [Environment variables](concepts/environments)

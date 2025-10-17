@@ -11,11 +11,11 @@ The new Developer Mode in [ChatGPT](https://chatgpt.com/) lets you wire external
 Developer Mode is currently only available on Plus and Pro plans. It is not available on Free or Business plans. You can read more about Developer Mode in the [OpenAI documentation](https://platform.openai.com/docs/guides/developer-mode).
 :::
 
-When combined with [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers hosted on [Gram](/gram-quickstart), you can give ChatGPT access to your APIs and tools in just a few minutes.
+When combined with [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers hosted on [Gram](gram-quickstart), you can give ChatGPT access to your APIs and tools in just a few minutes.
 
 ![Screenshot showing Acme To-Do in ChatGPT preview](/img/guides/chatgpt/acme-todo-in-chatgpt-preview.png)
 
-This guide walks you through connecting ChatGPT to a [Gram-hosted MCP server](/blog/the-easiest-way-to-host-mcp-servers) using the example Acme To-Do API. You'll learn to set up the connection, configure the custom connector, and test it with natural language prompts for managing your to-dos.
+This guide walks you through connecting ChatGPT to a [Gram-hosted MCP server](https://www.speakeasy.com/blog/release-gram-beta) using the example Acme To-Do API. You'll learn to set up the connection, configure the custom connector, and test it with natural language prompts for managing your to-dos.
 
 We'll use the Acme To-Do API as our example. It's a simple Python Flask REST API for managing to-do list items. You can find the complete OpenAPI document here: [`acmetodo.yaml`](https://github.com/ritza-co/acme-todo/blob/main/acmetodo.yaml).
 
@@ -29,7 +29,7 @@ To follow this tutorial, you need:
 
 ## Creating a Gram MCP server
 
-If you already have a Gram-hosted MCP server configured, skip to the section on [connecting ChatGPT to your Gram-hosted MCP server](#connecting-chatgpt-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and more details on creating a Gram-hosted MCP server, check out the [Gram concepts guide](/blog/gram-concepts).
+If you already have a Gram-hosted MCP server configured, skip to the section on [connecting ChatGPT to your Gram-hosted MCP server](#connecting-chatgpt-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and more details on creating a Gram-hosted MCP server, check out the [Gram concepts guide](https://www.speakeasy.com/mcp/core-concepts).
 
 ## Setting up a Gram project
 
@@ -77,7 +77,7 @@ By default, the server URL is set by the OpenAPI document. The `acmetodo.yaml` O
 If you use your own API, set the server URL to the URL of your deployment. You can either edit the OpenAPI document and skip the step below, or set the server URL in the environment variables.
 :::
 
-[Environments](/concepts/environments) store API keys and configurations separate from your toolset logic.
+[Environments](concepts/environments) store API keys and configurations separate from your toolset logic.
 
 In the **Environments** tab, click the **Default** environment. Click the three-dot menu in the top-right corner of the environment card and then click **Fill for Toolset**. Select the **Acmetodo** toolset and click **Fill Variables** to automatically populate the required variables.
 

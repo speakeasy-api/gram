@@ -28,7 +28,7 @@ Future versions of Gram will automate this publishing process. These instruction
 To follow the tutorial, you need:
 
 - **A [Gram Pro or Enterprise account](https://www.speakeasy.com/pricing?product=mcp):** You need a custom domain to publish your MCP server to the registry.
-- **A Gram-hosted MCP server:** If you don't have one, learn to create one in our [quickstart guide](/gram-quickstart).
+- **A Gram-hosted MCP server:** If you don't have one, learn to create one in our [quickstart guide](gram-quickstart).
 - **Domain management access for a custom domain:** You need to create a DNS TXT record.
 - **A GitHub repository:** This is where you need to store your MCP server source code.
 
@@ -253,4 +253,4 @@ You have now published your Gram MCP server on the official MCP Registry, making
 To maintain and further improve your MCP server, you can:
 
 - Automate publishing with [GitHub Actions workflows](https://github.com/modelcontextprotocol/registry/blob/main/docs/guides/publishing/github-actions.md)
-- Refine tool definitions and use [tool variations](/concepts/tool-variations) to help LLMs better understand and invoke them accurately
+- Refine tool definitions and use [tool variations](concepts/tool-variations) to help LLMs better understand and invoke them accurately

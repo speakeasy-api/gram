@@ -25,7 +25,7 @@ When creating a toolset, start by identifying the specific task you want an LLM 
 
 To ensure your toolsets are LLM-friendly:
 
-- Refine tool names and descriptions using Gram's [tool-variations](/concepts/tool-variations) feature to improve clarity and usability for the LLM.
+- Refine tool names and descriptions using Gram's [tool-variations](concepts/tool-variations) feature to improve clarity and usability for the LLM.
 - Keep toolsets focused by including only what's needed for the task. Avoid unrelated tools that may confuse the agent.
 
 ## Experimenting with toolsets

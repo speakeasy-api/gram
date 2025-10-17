@@ -9,7 +9,7 @@ Gram uses your API as the starting point for the creation of your MCP server. A 
 
 This toolset is created via an uploaded OpenAPI document.
 
-The default toolset will likely contain too many tools for an LLM to use effectively in production. Before launching the MCP server, [a custom toolset will be curated](/) to contain only the tools that are relevant to the intended use case.
+The default toolset will likely contain too many tools for an LLM to use effectively in production. Before launching the MCP server, [a custom toolset will be curated]() to contain only the tools that are relevant to the intended use case.
 
 ## Generating tools from OpenAPI
 
@@ -26,7 +26,7 @@ To upload an OpenAPI document:
 
 ![Validating tool definitions](/img/guides/build-mcp/01-upload-openapi-document-done.png)
 
-Gram will parse the uploaded OpenAPI document and generate [tool definitions](/concepts/tool-definitions) for each endpoint method.
+Gram will parse the uploaded OpenAPI document and generate [tool definitions](concepts/tool-definitions) for each endpoint method.
 
 ## How it works
 
@@ -34,4 +34,4 @@ Gram does not make use of the entire OpenAPI document, therefore the document do
 
 In particular, Gram will pull out the URL paths, HTTP methods, request schemas, and operation descriptions.
 
-Most OpenAPI documents, do not contain detailed, contextual descriptions. That's okay. Context can be added via [prompts](/build-mcp/writing-prompts) in the Gram or added to the OpenAPI document with the `x-gram` extension](/concepts/openapi#using-the-x-gram-extension) to help LLM agents understand and use your tools correctly.
+Most OpenAPI documents, do not contain detailed, contextual descriptions. That's okay. Context can be added via [prompts](build-mcp/writing-prompts) in the Gram or added to the OpenAPI document with the `x-gram` extension](concepts/openapi#using-the-x-gram-extension) to help LLM agents understand and use your tools correctly.

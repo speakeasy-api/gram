@@ -19,7 +19,7 @@ A project's deployment history can be accessed from the "Deployments" page:
 
 A Deployment is created whenever you upload a new asset, or update an existing
 one. Once the deployment process is finished, tool definitions generated from
-it can be used in [Toolsets](/build-mcp/custom-toolsets) and Custom Tools. If a
+it can be used in [Toolsets](build-mcp/custom-toolsets) and Custom Tools. If a
 Deployment includes updates to existing assets, any dependent tool definitions,
 toolsets, custom tools, and MCP servers are updated automatically.
 
