@@ -216,69 +216,6 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 	return gateway.NewFunctionToolCallPlan(descriptor, plan), nil
 }
 
-func (t *Toolsets) GetResourceCallPlanByURN(ctx context.Context, resourceUrn urn.Resource, projectID uuid.UUID) (*gateway.ResourceCallPlan, error) {
-	switch resourceUrn.Kind {
-	case urn.ResourceKindFunction:
-		resource, err := t.toolsRepo.GetFunctionResourceByURN(ctx, toolsRepo.GetFunctionResourceByURNParams{
-			ProjectID: projectID,
-			Urn:       resourceUrn,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("get function resource definition by urn: %w", err)
-		}
-		return t.extractFunctionResourceCallPlan(ctx, resource)
-
-	default:
-		return nil, fmt.Errorf("unsupported resource kind: %s", resourceUrn.Kind)
-	}
-}
-
-func (t *Toolsets) extractFunctionResourceCallPlan(ctx context.Context, resource toolsRepo.GetFunctionResourceByURNRow) (*gateway.ResourceCallPlan, error) {
-	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, resource.ProjectID)
-	if err != nil {
-		return nil, fmt.Errorf("get project with organization metadata: %w", err)
-	}
-
-	var envconfig map[string]string
-	if len(resource.Variables) > 0 {
-		if err := json.Unmarshal(resource.Variables, &envconfig); err != nil {
-			return nil, fmt.Errorf("unmarshal function resource env vars: %w", err)
-		}
-	}
-
-	mimeType := ""
-	if resource.MimeType.Valid {
-		mimeType = resource.MimeType.String
-	}
-
-	descriptor := &gateway.ResourceDescriptor{
-		ID:               resource.ID.String(),
-		URN:              resource.ResourceUrn,
-		Name:             resource.Name,
-		URI:              resource.Uri,
-		DeploymentID:     resource.DeploymentID.String(),
-		ProjectID:        resource.ProjectID.String(),
-		ProjectSlug:      orgData.ProjectSlug,
-		OrganizationID:   orgData.ID,
-		OrganizationSlug: orgData.Slug,
-	}
-	accessID := ""
-	if resource.AccessID.Valid {
-		accessID = resource.AccessID.UUID.String()
-	}
-
-	plan := &gateway.ResourceFunctionCallPlan{
-		FunctionID:        resource.FunctionID.String(),
-		FunctionsAccessID: accessID,
-		Runtime:           resource.Runtime,
-		URI:               resource.Uri,
-		MimeType:          mimeType,
-		Variables:         envconfig,
-	}
-
-	return gateway.NewResourceFunctionCallPlan(descriptor, plan), nil
-}
-
 func UnmarshalParameterSettings(settings []byte) (map[string]*gateway.HTTPParameter, error) {
 	if len(settings) == 0 {
 		return map[string]*gateway.HTTPParameter{}, nil
