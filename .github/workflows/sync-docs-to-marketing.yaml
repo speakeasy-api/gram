@@ -30,6 +30,7 @@ jobs:
           token: ${{ secrets.SERVICE_BOT_TOKEN }}
           path: marketing-repo
           fetch-depth: 0
+          persist-credentials: false
       - name: Sync docs content into Marketing working tree
         run: |
           set -euo pipefail
