@@ -73,8 +73,8 @@ GRAM_CONTROL_ADDRESS = ":8081"
 GRAM_WORKER_CONTROL_ADDRESS = ":8082"
 ## The following variable can be one of: local, test, prod
 GRAM_ENVIRONMENT = "local"
-GRAM_SERVER_URL = "http://localhost:8080"
-GRAM_SITE_URL = "http://localhost:5173"
+GRAM_SERVER_URL = "https://localhost:8080"
+GRAM_SITE_URL = "https://localhost:5173"
 GRAM_ASSETS_BACKEND = "fs"
 GRAM_ASSETS_URI = ".assets"
 ## The following variable is used to encrypt env vars stored in the database.
