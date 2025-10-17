@@ -2033,11 +2033,9 @@ func NewListAssetsGatewayErrorResponseBody(res *goa.ServiceError) *ListAssetsGat
 }
 
 // NewServeImageForm builds a assets service serveImage endpoint payload.
-func NewServeImageForm(id string, sessionToken *string, apikeyToken *string) *assets.ServeImageForm {
+func NewServeImageForm(id string) *assets.ServeImageForm {
 	v := &assets.ServeImageForm{}
 	v.ID = id
-	v.SessionToken = sessionToken
-	v.ApikeyToken = apikeyToken
 
 	return v
 }

@@ -75,7 +75,7 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		ServeImage:      NewServeImageEndpoint(s, a.APIKeyAuth),
+		ServeImage:      NewServeImageEndpoint(s),
 		UploadImage:     NewUploadImageEndpoint(s, a.APIKeyAuth),
 		UploadFunctions: NewUploadFunctionsEndpoint(s, a.APIKeyAuth),
 		UploadOpenAPIv3: NewUploadOpenAPIv3Endpoint(s, a.APIKeyAuth),
@@ -96,35 +96,9 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 
 // NewServeImageEndpoint returns an endpoint function that calls the method
 // "serveImage" of service "assets".
-func NewServeImageEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+func NewServeImageEndpoint(s Service) goa.Endpoint {
 	return func(ctx context.Context, req any) (any, error) {
 		p := req.(*ServeImageForm)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "apikey",
-			Scopes:         []string{"consumer", "producer"},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.ApikeyToken != nil {
-			key = *p.ApikeyToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			sc := security.APIKeyScheme{
-				Name:           "session",
-				Scopes:         []string{},
-				RequiredScopes: []string{},
-			}
-			var key string
-			if p.SessionToken != nil {
-				key = *p.SessionToken
-			}
-			ctx, err = authAPIKeyFn(ctx, key, &sc)
-		}
-		if err != nil {
-			return nil, err
-		}
 		res, body, err := s.ServeImage(ctx, p)
 		if err != nil {
 			return nil, err

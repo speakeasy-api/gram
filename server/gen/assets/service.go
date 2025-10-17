@@ -93,8 +93,6 @@ type ListAssetsResult struct {
 
 // ServeImageForm is the payload type of the assets service serveImage method.
 type ServeImageForm struct {
-	SessionToken *string
-	ApikeyToken  *string
 	// The ID of the asset to serve
 	ID string
 }
