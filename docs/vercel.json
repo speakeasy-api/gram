@@ -7,7 +7,7 @@
     },
     {
       "source": "/:path*",
-      "destination": "https://speakeasy.com/docs/gram/:path*",
+      "destination": "https://www.speakeasy.com/docs/gram/:path*",
       "permanent": true
     }
   ]
