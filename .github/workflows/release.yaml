@@ -16,10 +16,10 @@ jobs:
     # https://docs.npmjs.com/trusted-publishers
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write # to push tags
       pull-requests: read
       issues: read
-      id-token: write
+      id-token: write # to publish to NPM
     steps:
       - name: Checkout Repo
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
