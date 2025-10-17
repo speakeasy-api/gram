@@ -1,5 +1,11 @@
 # @gram-ai/create-function
 
+## 0.1.1
+
+### Patch Changes
+
+- 8675163: Adjust fs.cp filter so scaffolding works
+
 ## 0.1.0
 
 ### Minor Changes
