@@ -1,5 +1,21 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`backward compatibility - tool call without type parameter 1`] = `
+"HTTP/1.1 200 
+content-type: text/plain;charset=UTF-8
+
+{"response":"pong"}"
+`;
+
+exports[`catches resource requests that throw 1`] = `
+"HTTP/1.1 500 
+content-length: 75
+content-type: application/json
+gram-functions-error: gram_err_006
+
+{"name":"FunctionsError","message":"Resource access failed (gram_err_006)"}"
+`;
+
 exports[`catches tool calls that throw 1`] = `
 "HTTP/1.1 500 
 content-length: 72
@@ -9,6 +25,15 @@ gram-functions-error: gram_err_002
 {"name":"FunctionsError","message":"Intentional failure (gram_err_002)"}"
 `;
 
+exports[`fails when functions file does not export handleResources 1`] = `
+"HTTP/1.1 500 
+content-length: 136
+content-type: application/json
+gram-functions-error: gram_err_007
+
+{"name":"FunctionsError","message":"Unable to handle resources (gram_err_007)","cause":"handleResources function not found in empty.js"}"
+`;
+
 exports[`fails when functions file does not export handleToolCall 1`] = `
 "HTTP/1.1 500 
 content-length: 128
@@ -16,6 +41,15 @@ content-type: application/json
 gram-functions-error: gram_err_004
 
 {"name":"FunctionsError","message":"Unable to call tool (gram_err_004)","cause":"handleToolCall function not found in empty.js"}"
+`;
+
+exports[`fails when resource request does not return Response 1`] = `
+"HTTP/1.1 500 
+content-length: 160
+content-type: application/json
+gram-functions-error: gram_err_005
+
+{"name":"FunctionsError","message":"Resource request did not return a valid response (gram_err_005)","cause":"Expected instance of \`Response\` but got \`object\`"}"
 `;
 
 exports[`fails when tool call does not return Response 1`] = `
@@ -33,6 +67,30 @@ content-length: 28
 content-type: application/json
 
 {"name":"Finn","type":"cat"}"
+`;
+
+exports[`resource request with template rendering 1`] = `
+"HTTP/1.1 200 
+content-type: text/html
+
+<html><body>Hello, Alice!</body></html>"
+`;
+
+exports[`valid resource request with input 1`] = `
+"HTTP/1.1 200 
+content-type: text/csv
+
+name,email
+user1,user1@example.com
+user2,user2@example.com
+user3,user3@example.com"
+`;
+
+exports[`valid resource request with uri 1`] = `
+"HTTP/1.1 200 
+content-type: application/json
+
+{"version":"1.0.0","environment":"production"}"
 `;
 
 exports[`valid tool call adds custom headers 1`] = `

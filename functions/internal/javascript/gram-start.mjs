@@ -11,6 +11,9 @@ export const ERROR_CODES = /** @type {const} */ ({
   TOOL_CALL_FAILED: "gram_err_002",
   IMPORT_FAILURE: "gram_err_003",
   INVALID_TOOL_FUNC: "gram_err_004",
+  INVALID_RESOURCE_RESULT: "gram_err_005",
+  RESOURCE_REQUEST_FAILED: "gram_err_006",
+  INVALID_RESOURCE_FUNC: "gram_err_007",
 });
 
 class FunctionsError extends Error {
@@ -37,14 +40,14 @@ class FunctionsError extends Error {
 
 /**
  * @param {string[]} args
- * @returns {{pipePath: string, toolCall: {name: string, input: unknown}}}
+ * @returns {{pipePath: string, request: {name?: string, uri?: string, input: unknown}, type: 'tool' | 'resource'}}
  */
 function parseArgs(args) {
   args = args.slice(2);
 
-  if (args.length !== 2) {
+  if (args.length < 2 || args.length > 3) {
     throw new Error(
-      "Expected two command-line argument but got " + args.length,
+      "Expected two or three command-line arguments but got " + args.length,
     );
   }
 
@@ -53,24 +56,37 @@ function parseArgs(args) {
     throw new Error(`Named pipe does not exist: ${pipePath}`);
   }
 
-  const callArg = args[1];
-  if (typeof callArg !== "string") {
+  const requestArg = args[1];
+  if (typeof requestArg !== "string") {
     throw new Error(
-      `Invalid tool call argument type: expected string, got ${typeof callArg}`,
+      `Invalid request argument type: expected string, got ${typeof requestArg}`,
     );
   }
 
-  const toolCall = JSON.parse(callArg);
-
-  if (typeof toolCall !== "object" || toolCall === null) {
-    throw new Error("Tool call argument must be a valid JSON object");
+  // Default to "tool" for backward compatibility
+  const typeArg = args[2] || "tool";
+  if (typeArg !== "tool" && typeArg !== "resource") {
+    throw new Error(
+      `Invalid type argument: expected "tool" or "resource", got "${typeArg}"`,
+    );
   }
 
-  if (typeof toolCall.name !== "string") {
-    throw new Error("Argument must have a string 'name' property");
+  const request = JSON.parse(requestArg);
+
+  if (typeof request !== "object" || request === null) {
+    throw new Error("Request argument must be a valid JSON object");
   }
 
-  return { pipePath, toolCall };
+  // Validate the request has the correct property based on type
+  if (typeArg === "tool" && typeof request.name !== "string") {
+    throw new Error("Tool request must have a string 'name' property");
+  }
+
+  if (typeArg === "resource" && typeof request.uri !== "string") {
+    throw new Error("Resource request must have a string 'uri' property");
+  }
+
+  return { pipePath, request, type: typeArg };
 }
 
 /**
@@ -97,6 +113,34 @@ async function callTool(func, name, input) {
       let msg = e instanceof Error ? e.message : String(e);
       msg = msg || "Tool call failed";
       throw new FunctionsError(ERROR_CODES.TOOL_CALL_FAILED, msg);
+    }
+  }
+}
+
+/**
+ * @param {(call: {uri: string, input: unknown}) => Promise<Response>} func
+ * @param {string} uri
+ * @param {unknown} input
+ * @returns {Promise<Response>}
+ */
+async function callResource(func, uri, input) {
+  try {
+    const response = await func({ uri, input });
+    if (!(response instanceof Response)) {
+      throw new FunctionsError(
+        ERROR_CODES.INVALID_RESOURCE_RESULT,
+        "Resource request did not return a valid response",
+        `Expected instance of \`Response\` but got \`${typeof response}\``,
+      );
+    }
+    return response;
+  } catch (e) {
+    if (e instanceof FunctionsError) {
+      throw e;
+    } else {
+      let msg = e instanceof Error ? e.message : String(e);
+      msg = msg || "Resource request failed";
+      throw new FunctionsError(ERROR_CODES.RESOURCE_REQUEST_FAILED, msg);
     }
   }
 }
@@ -199,6 +243,54 @@ async function importToolCallHandler(codePath) {
   }
 }
 
+/**
+ * @param {string} codePath
+ * @returns {Promise<{ok: true, value: (call: {uri: string, input: unknown}) => Promise<Response>} | {ok: false, error: FunctionsError}>}
+ */
+async function importResourceHandler(codePath) {
+  try {
+    const mod = await import(codePath).catch((e) => {
+      const filename = path.basename(codePath);
+      throw new FunctionsError(
+        ERROR_CODES.IMPORT_FAILURE,
+        "Unable to import user code",
+        `Failed to import ${filename}: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    });
+
+    const f = [mod["handleResources"], mod["default"]?.handleResources].find(
+      (sym) => typeof sym === "function",
+    );
+
+    if (typeof f !== "function") {
+      const filename = path.basename(codePath);
+
+      throw new FunctionsError(
+        ERROR_CODES.INVALID_RESOURCE_FUNC,
+        "Unable to handle resources",
+        "handleResources function not found in " + filename,
+      );
+    }
+
+    return { ok: true, value: f };
+  } catch (e) {
+    if (e instanceof FunctionsError) {
+      return { ok: false, error: e };
+    } else {
+      return {
+        ok: false,
+        error: new FunctionsError(
+          ERROR_CODES.UNEXPECTED,
+          "Unexpected error occurred",
+          e instanceof Error ? e.message : String(e),
+        ),
+      };
+    }
+  }
+}
+
 const USER_CODE_PATH = path.join(process.cwd(), "functions.js");
 
 /**
@@ -231,12 +323,57 @@ async function handleToolCall(pipeFile, toolCall, codePath) {
   }
 }
 
+/**
+ *
+ * @param {import("node:fs/promises").FileHandle} pipeFile
+ * @param {{uri: string, input: unknown}} resourceRequest
+ * @param {string} codePath
+ * @returns
+ */
+async function handleResources(pipeFile, resourceRequest, codePath) {
+  const importResult = await importResourceHandler(codePath);
+  if (!importResult.ok) {
+    await writeFunctionsError(pipeFile, importResult.error);
+    return;
+  }
+
+  try {
+    const res = await callResource(
+      importResult.value,
+      resourceRequest.uri,
+      resourceRequest.input,
+    );
+    await writeHTTPResponse(pipeFile, res);
+  } catch (e) {
+    if (e instanceof FunctionsError) {
+      return await writeFunctionsError(pipeFile, e);
+    } else {
+      throw e;
+    }
+  }
+}
+
 export async function main(args = process.argv, codePath = USER_CODE_PATH) {
-  const { pipePath, toolCall } = parseArgs(args);
+  const { pipePath, request, type } = parseArgs(args);
 
   const pipeFile = await open(pipePath, "w");
   try {
-    await handleToolCall(pipeFile, toolCall, codePath);
+    switch (type) {
+      case "tool":
+        await handleToolCall(
+          pipeFile,
+          /** @type {{name: string, input: unknown}} */ (request),
+          codePath,
+        );
+        break;
+      case "resource":
+        await handleResources(
+          pipeFile,
+          /** @type {{uri: string, input: unknown}} */ (request),
+          codePath,
+        );
+        break;
+    }
   } finally {
     await pipeFile.close();
   }

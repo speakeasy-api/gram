@@ -18,4 +18,11 @@ export async function handleToolCall() {
 	headers: { "Content-Type": "application/json" },
   });
 }
+
+export async function handleResources() {
+  return new Response(JSON.stringify({ error: "Resource handling is not implemented" }), {
+    status: 501,
+	headers: { "Content-Type": "application/json" },
+  });
+}
 `[1:])
