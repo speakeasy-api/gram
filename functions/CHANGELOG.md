@@ -1,5 +1,11 @@
 # @gram/functions
 
+## 0.0.4
+
+### Patch Changes
+
+- 468b341: Modifies the functions runner and JS entrypoint to accept `handleResources` entrypoint. Can differentiate between tools, resources, and potential other future entrypoints by type argument.
+
 ## 0.0.3
 
 ### Patch Changes
