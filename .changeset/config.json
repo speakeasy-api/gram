@@ -7,13 +7,13 @@
       "skipCI": false
     }
   ],
-  "fixed": [],
-  "linked": [
+  "fixed": [
     [
       "@gram-ai/functions",
       "@gram-ai/create-function"
     ]
   ],
+  "linked": [],
   "ignore": [
     "gram-template-*"
   ],

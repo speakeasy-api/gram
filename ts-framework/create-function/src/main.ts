@@ -18,6 +18,26 @@ const packageNameRE = /^(@?[a-z0-9-_]+\/)?[a-z0-9-_]+$/;
 
 const knownPackageManagers = new Set(["npm", "yarn", "pnpm", "bun", "deno"]);
 
+function printUsage(packageManager: string): void {
+  console.log(`
+Usage:
+  ${packageManager} create @gram-ai/function [options]
+
+Options:
+  --template <name>     Template to use (gram, mcp)
+  --name <name>         Project name
+  --dir <path>          Directory to create project in
+  --git <yes|no>        Initialize git repository
+  --install <yes|no>    Install dependencies
+  -y, --yes             Skip all prompts and use defaults
+
+Examples:
+  ${packageManager} create @gram-ai/function
+  ${packageManager} create @gram-ai/function --template mcp --name ecommerce
+  ${packageManager} create @gram-ai/function --yes --template gram
+`);
+}
+
 async function init(argv: string[]): Promise<void> {
   let packageManager = "npm";
   let detectedPM = process.env["npm_config_user_agent"]?.split("/")[0] || "";
@@ -26,10 +46,15 @@ async function init(argv: string[]): Promise<void> {
   }
 
   const args = parse(argv, {
-    alias: { y: "yes" },
+    alias: { y: "yes", h: "help" },
     string: ["template", "name", "dir", "git", "install"],
-    boolean: ["yes"],
+    boolean: ["yes", "help"],
   });
+
+  if (args.help) {
+    printUsage(packageManager);
+    return;
+  }
 
   const template = await selectOrClack<string>({
     message: "Pick a framework",
@@ -125,7 +150,7 @@ async function init(argv: string[]): Promise<void> {
   await fs.cp(templateDir, dir, {
     recursive: true,
     filter: (src) => {
-      let banned = src.includes(".git");
+      let banned = src.includes(".git") || src.includes("NEXT_STEPS.txt");
       if (isLocalDev) {
         banned ||= src.includes("node_modules") || src.includes("dist");
       }
@@ -178,9 +203,15 @@ async function init(argv: string[]): Promise<void> {
     await $`cd ${dir} && ${packageManager} install`;
   }
 
-  tlog.success(
-    `All done! Run \`cd ${dir} && ${packageManager} run build\` to build your first Gram Function.`,
-  );
+  let successMessage = `All done! Run \`cd ${dir} && ${packageManager} run build\` to build your first Gram Function.`;
+  successMessage = await fs
+    .readFile(join(templateDir, "NEXT_STEPS.txt"), "utf-8")
+    .catch(() => successMessage);
+  successMessage = successMessage
+    .replaceAll("$PACKAGE_MANAGER", packageManager)
+    .replaceAll("$DIR", dir);
+
+  tlog.success(successMessage);
 }
 
 try {
