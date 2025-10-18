@@ -381,6 +381,8 @@ export async function main(args = process.argv, codePath = USER_CODE_PATH) {
           codePath,
         );
         break;
+      default:
+        throw new Error(`Unrecognized type: ${type}`)
     }
   } finally {
     await pipeFile.close();
