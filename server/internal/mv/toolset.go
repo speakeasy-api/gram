@@ -22,6 +22,7 @@ import (
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	org "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	resourcesR "github.com/speakeasy-api/gram/server/internal/resources/repo"
 	templatesR "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	tr "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/tools/security"
@@ -187,7 +188,8 @@ func DescribeToolsetEntry(
 
 	var resources []*types.ResourceEntry
 	if len(resourceUrns) > 0 {
-		functionResourceEntries, err := toolsRepo.FindFunctionResourceEntriesByUrn(ctx, tr.FindFunctionResourceEntriesByUrnParams{
+		resourcesRepo := resourcesR.New(tx)
+		functionResourceEntries, err := resourcesRepo.FindFunctionResourceEntriesByUrn(ctx, resourcesR.FindFunctionResourceEntriesByUrnParams{
 			ProjectID: pid,
 			Urns:      resourceUrns,
 		})
@@ -661,7 +663,8 @@ func readToolsetTools(
 	// Fetch resources - for now we only have function resources
 	var resources []*types.Resource
 	if len(resourceUrns) > 0 {
-		functionResourceDefinitions, err := toolsRepo.FindFunctionResourcesByUrn(ctx, tr.FindFunctionResourcesByUrnParams{
+		resourcesRepo := resourcesR.New(tx)
+		functionResourceDefinitions, err := resourcesRepo.FindFunctionResourcesByUrn(ctx, resourcesR.FindFunctionResourcesByUrnParams{
 			ProjectID: pid,
 			Urns:      resourceUrns,
 		})

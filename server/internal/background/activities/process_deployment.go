@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openapi"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	resourcesRepo "github.com/speakeasy-api/gram/server/internal/resources/repo"
 	toolsRepo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 )
 
@@ -42,6 +43,7 @@ type ProcessDeployment struct {
 	repo           *repo.Queries
 	assets         *assetsRepo.Queries
 	tools          *toolsRepo.Queries
+	resources      *resourcesRepo.Queries
 	assetStorage   assets.BlobStore
 	projects       *projectsRepo.Queries
 }
@@ -65,6 +67,7 @@ func NewProcessDeployment(
 		assets:         assetsRepo.New(db),
 		assetStorage:   assetStorage,
 		tools:          toolsRepo.New(db),
+		resources:      resourcesRepo.New(db),
 		projects:       projectsRepo.New(db),
 	}
 }
@@ -130,7 +133,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		})
 	}
 
-	functionResources, err := p.tools.ListFunctionResources(ctx, toolsRepo.ListFunctionResourcesParams{
+	functionResources, err := p.resources.ListFunctionResources(ctx, resourcesRepo.ListFunctionResourcesParams{
 		DeploymentID: uuid.NullUUID{UUID: deploymentID, Valid: true},
 		ProjectID:    projectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
