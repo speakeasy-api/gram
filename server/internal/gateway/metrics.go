@@ -70,6 +70,6 @@ func (m *metrics) RecordResourceCall(ctx context.Context, orgID string, resource
 		kv = append(kv, attr.OrganizationSlug(org))
 	}
 
-	// we keep it in the general tool call counting right now, we don't bill differently
+	// for now we will keep it in the general tool call counter, we don't bill differently
 	m.toolCallsCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }

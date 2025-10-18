@@ -116,7 +116,6 @@ type FunctionToolCallPlan struct {
 	Variables         []string `json:"variables" yaml:"variables"`
 }
 
-// ResourceFunctionCallPlan describes a serverless function that provides a resource.
 type ResourceFunctionCallPlan struct {
 	FunctionID        string            `json:"function_id" yaml:"function_id"`
 	FunctionsAccessID string            `json:"functions_access_id" yaml:"functions_access_id"`
@@ -172,8 +171,6 @@ func NewFunctionToolCallPlan(tool *ToolDescriptor, plan *FunctionToolCallPlan) *
 	}
 }
 
-// ResourceCallPlan is a polymorphic type that can represent different kinds of resources.
-// Use NewResourceFunctionCallPlan to create instances.
 type ResourceCallPlan struct {
 	Kind        ResourceKind
 	BillingType billing.ToolCallType
@@ -182,7 +179,6 @@ type ResourceCallPlan struct {
 	Function *ResourceFunctionCallPlan
 }
 
-// NewResourceFunctionCallPlan creates a new ResourceCallPlan wrapping a ResourceFunctionCallPlan.
 func NewResourceFunctionCallPlan(resource *ResourceDescriptor, plan *ResourceFunctionCallPlan) *ResourceCallPlan {
 	return &ResourceCallPlan{
 		Kind:        ResourceKindFunction,

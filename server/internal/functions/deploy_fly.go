@@ -235,7 +235,7 @@ func (f *FlyRunner) ReadResource(ctx context.Context, req RunnerResourceReadRequ
 	)
 
 	if err := inv.Check(
-		"flyio tool call",
+		"flyio read resource",
 		"organization id cannot be empty", req.OrganizationID != "",
 		"organization slug cannot be empty", req.OrganizationSlug != "",
 		"project id cannot be nil", req.ProjectID != uuid.Nil,
