@@ -26,7 +26,7 @@ var (
 	multiUnderscoreRE = regexp.MustCompile(`_+`)
 )
 
-func sanitizeToSlug(s string) string {
+func santitizeToURIFragment(s string) string {
 	if s == "" {
 		return ""
 	}
@@ -74,7 +74,7 @@ func uriToSlug(uri string) string {
 	parsed, err := url.Parse(uri)
 	if err != nil {
 		// If parsing fails, sanitize the raw URI string
-		sanitized := sanitizeToSlug(uri)
+		sanitized := santitizeToURIFragment(uri)
 		return sanitized
 	}
 
@@ -84,19 +84,19 @@ func uriToSlug(uri string) string {
 	// Add scheme if present (e.g., "file", "postgres", "screen")
 	// This ensures different schemes produce unique URNs
 	if parsed.Scheme != "" {
-		parts = append(parts, sanitizeToSlug(parsed.Scheme))
+		parts = append(parts, santitizeToURIFragment(parsed.Scheme))
 	}
 
 	// Add host if present (e.g., "localhost", "database")
 	if parsed.Host != "" {
-		parts = append(parts, sanitizeToSlug(parsed.Host))
+		parts = append(parts, santitizeToURIFragment(parsed.Host))
 	}
 
 	// Add path if present (e.g., "/api/users" becomes "api-users")
 	if parsed.Path != "" && parsed.Path != "/" {
 		pathPart := strings.Trim(parsed.Path, "/")
 		pathPart = strings.ReplaceAll(pathPart, "/", "-")
-		parts = append(parts, sanitizeToSlug(pathPart))
+		parts = append(parts, santitizeToURIFragment(pathPart))
 	}
 
 	// Add query parameters if present (e.g., "?version=v1&format=json" becomes "version-v1-format-json")
@@ -104,7 +104,7 @@ func uriToSlug(uri string) string {
 		// Convert query string to a slug-friendly format
 		queryPart := strings.ReplaceAll(parsed.RawQuery, "&", "-")
 		queryPart = strings.ReplaceAll(queryPart, "=", "-")
-		parts = append(parts, sanitizeToSlug(queryPart))
+		parts = append(parts, santitizeToURIFragment(queryPart))
 	}
 
 	// Filter out empty parts and join with dash
@@ -139,7 +139,7 @@ func NewResource(kind ResourceKind, source, uri string) Resource {
 		SlugifiedURI: uriToSlug(uri),
 
 		checked: false,
-		err:       nil,
+		err:     nil,
 	}
 
 	_ = r.validate()
