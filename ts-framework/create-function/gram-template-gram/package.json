@@ -19,6 +19,7 @@
     "node": ">=22.18.0"
   },
   "scripts": {
+    "dev": "node ./src/server.ts",
     "lint": "tsc --noEmit",
     "build": "node ./src/build.ts",
     "prebuild": "tsc -p tsconfig.json",
@@ -29,7 +30,9 @@
     "zod": "^4"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "@types/node": "22.x"
+    "@hono/node-server": "^1.19.5",
+    "@types/node": "22.x",
+    "hono": "^4",
+    "typescript": "^5"
   }
 }

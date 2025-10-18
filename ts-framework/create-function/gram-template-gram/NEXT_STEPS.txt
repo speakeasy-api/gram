@@ -1,0 +1,14 @@
+All done! Jump in with `cd $DIR`.
+
+Some next steps:
+
+- Build your function with `$PACKAGE_MANAGER run build` and deploy it with the Gram CLI: https://www.speakeasy.com/docs/gram/command-line/installation.
+
+- Run the provided Hono server to simulate tool calls over HTTP with `$PACKAGE_MANAGER run dev` and:
+
+  curl \
+    --data '{"name": "greet", "input": {"name": "Friend"}}' \
+    -H "Content-Type: application/json" \
+    http://localhost:3000/tool-call
+
+Have fun 🚀
