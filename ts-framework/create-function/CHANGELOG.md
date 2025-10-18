@@ -1,5 +1,13 @@
 # @gram-ai/create-function
 
+## 0.2.0
+
+### Minor Changes
+
+- baaa388: Add a simple Hono-based server to the Gram Functions mini-framework template.
+  This server allows developers to run and test their Gram Functions locally
+  before deploying them.
+
 ## 0.1.1
 
 ### Patch Changes

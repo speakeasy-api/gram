@@ -1,5 +1,12 @@
 # @gram/dashboard
 
+## 0.15.1
+
+### Patch Changes
+
+- Updated dependencies [f3cea34]
+  - @gram/client@0.14.14
+
 ## 0.15.0
 
 ### Minor Changes
