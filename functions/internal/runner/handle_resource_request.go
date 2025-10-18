@@ -16,8 +16,7 @@ type CallResourcePayload struct {
 	Environment map[string]string `json:"environment,omitempty,omitzero"`
 }
 
-//nolint:unused // Will be used when resource handler is registered
-func (s *Service) callResource(ctx context.Context, payload CallResourcePayload, w http.ResponseWriter) error {
+func (s *Service) getResource(ctx context.Context, payload CallResourcePayload, w http.ResponseWriter) error {
 	if payload.URI == "" {
 		return svc.NewPermanentError(
 			fmt.Errorf("invalid request: missing uri"),
@@ -49,7 +48,6 @@ func (s *Service) callResource(ctx context.Context, payload CallResourcePayload,
 	}, w)
 }
 
-//nolint:unused // Will be used when resource handler is registered
 func (s *Service) handleResourceRequest(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -62,7 +60,7 @@ func (s *Service) handleResourceRequest(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	err := s.callResource(ctx, payload, w)
+	err := s.getResource(ctx, payload, w)
 	if err != nil {
 		s.handleError(ctx, err, "call resource", w)
 		return
