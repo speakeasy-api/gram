@@ -15,7 +15,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.7
 	go.opentelemetry.io/otel/trace v1.38.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.2
-	goa.design/goa/v3 v3.22.3
+	goa.design/goa/v3 v3.22.5
 )
 
 require (
