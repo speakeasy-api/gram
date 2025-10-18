@@ -40,7 +40,15 @@ class FunctionsError extends Error {
 
 /**
  * @param {string[]} args
- * @returns {{pipePath: string, request: {name?: string, uri?: string, input: unknown}, type: 'tool' | 'resource'}}
+ * @returns {{
+ *   type: "tool",
+ *   pipePath: string,
+ *   request: { name: string, input: unknown }
+ * } | {
+ *   type: "resource",
+ *   pipePath: string,
+ *   request: { uri: string, input: unknown}
+ * }}}
  */
 function parseArgs(args) {
   args = args.slice(2);
