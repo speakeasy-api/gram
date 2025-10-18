@@ -46,4 +46,11 @@ func (s *Service) Attach(mux *http.ServeMux) {
 		),
 	)
 
+	mux.Handle(
+		"POST /resource-request",
+		otelhttp.WithRouteTag(
+			"http.resourceRequest",
+			auth.AuthorizeRequest(s.logger, s.encryption, http.HandlerFunc(s.handleResourceRequest)),
+		),
+	)
 }

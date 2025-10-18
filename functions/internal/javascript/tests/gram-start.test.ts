@@ -40,7 +40,7 @@ test("valid tool call with args", async () => {
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args],
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
     join(import.meta.dirname, "good.js"),
   );
 
@@ -56,7 +56,7 @@ test("valid tool call from default export", async () => {
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args],
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
     join(import.meta.dirname, "good-default-export.js"),
   );
 
@@ -77,7 +77,7 @@ test("valid tool call without args", async () => {
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args],
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
     join(import.meta.dirname, "good.js"),
   );
 
@@ -93,7 +93,7 @@ test("valid tool call adds custom headers", async () => {
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args],
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
     join(import.meta.dirname, "good.js"),
   );
 
@@ -111,7 +111,7 @@ test("valid tool call explicit 4XX", async () => {
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args],
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
     join(import.meta.dirname, "good.js"),
   );
 
@@ -127,7 +127,7 @@ test("valid tool call explicit 4XX", async () => {
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args],
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
     join(import.meta.dirname, "good.js"),
   );
 
@@ -143,7 +143,7 @@ test("proxy good downstream fetch calls", async () => {
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args],
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
     join(import.meta.dirname, "good.js"),
   );
 
@@ -162,7 +162,7 @@ test("proxy good downstream that returns binary data", async () => {
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args],
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
     join(import.meta.dirname, "good.js"),
   );
 
@@ -190,7 +190,7 @@ test("catches tool calls that throw", async () => {
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args],
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
     join(import.meta.dirname, "good.js"),
   );
 
@@ -212,7 +212,7 @@ test("fails when tool call does not return Response", async () => {
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args],
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
     join(import.meta.dirname, "good.js"),
   );
 
@@ -228,7 +228,7 @@ test("fails when functions file does not exist", async () => {
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args],
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
     join(import.meta.dirname, "nonexistent.js"),
   );
 
@@ -250,11 +250,141 @@ test("fails when functions file does not export handleToolCall", async () => {
   });
 
   await main(
-    ["node", "./gram-start.mjs", pipePath, args],
+    ["node", "./gram-start.mjs", pipePath, args, "tool"],
     join(import.meta.dirname, "empty.js"),
   );
 
   const content = await readFile(pipePath, "utf-8");
   expect(content).toContain(ERROR_CODES.INVALID_TOOL_FUNC);
+  expect(content).toMatchSnapshot();
+});
+
+test("backward compatibility - tool call without type parameter", async () => {
+  const pipePath = await fakepipe();
+  const args = JSON.stringify({
+    name: "ping",
+    input: {},
+  });
+
+  await main(
+    ["node", "./gram-start.mjs", pipePath, args],
+    join(import.meta.dirname, "good.js"),
+  );
+
+  const content = await readFile(pipePath, "utf-8");
+  expect(content).toMatchSnapshot();
+});
+
+test("valid resource request with uri", async () => {
+  const pipePath = await fakepipe();
+  const args = JSON.stringify({
+    uri: "file:///config.json",
+    input: {},
+  });
+
+  await main(
+    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    join(import.meta.dirname, "goodResources.js"),
+  );
+
+  const content = await readFile(pipePath, "utf-8");
+  expect(content).toMatchSnapshot();
+
+  const res = JSON.parse(content.trim().split("\n").at(-1) ?? "");
+  expect(res).toEqual({
+    version: "1.0.0",
+    environment: "production",
+  });
+});
+
+test("valid resource request with input", async () => {
+  const pipePath = await fakepipe();
+  const args = JSON.stringify({
+    uri: "file:///data/users.csv",
+    input: { limit: 3 },
+  });
+
+  await main(
+    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    join(import.meta.dirname, "goodResources.js"),
+  );
+
+  const content = await readFile(pipePath, "utf-8");
+  expect(content).toMatchSnapshot();
+  expect(content).toContain("user1,user1@example.com");
+  expect(content).toContain("user3,user3@example.com");
+});
+
+test("resource request with template rendering", async () => {
+  const pipePath = await fakepipe();
+  const args = JSON.stringify({
+    uri: "file:///templates/email.html",
+    input: { name: "Alice" },
+  });
+
+  await main(
+    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    join(import.meta.dirname, "goodResources.js"),
+  );
+
+  const content = await readFile(pipePath, "utf-8");
+  expect(content).toContain("Hello, Alice!");
+  expect(content).toMatchSnapshot();
+});
+
+test("catches resource requests that throw", async () => {
+  const pipePath = await fakepipe();
+  const args = JSON.stringify({
+    uri: "error://fail",
+    input: {},
+  });
+
+  await main(
+    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    join(import.meta.dirname, "goodResources.js"),
+  );
+
+  const content = await readFile(pipePath, "utf-8");
+  expect(content).toContain(ERROR_CODES.RESOURCE_REQUEST_FAILED);
+  expect(content).toMatchSnapshot();
+
+  const res = JSON.parse(content.trim().split("\n").at(-1) ?? "");
+  expect(res).toEqual({
+    name: "FunctionsError",
+    message: expect.stringMatching(/Resource access failed/),
+  });
+});
+
+test("fails when resource request does not return Response", async () => {
+  const pipePath = await fakepipe();
+  const args = JSON.stringify({
+    uri: "null://resource",
+    input: {},
+  });
+
+  await main(
+    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    join(import.meta.dirname, "goodResources.js"),
+  );
+
+  const content = await readFile(pipePath, "utf-8");
+  expect(content).toContain(ERROR_CODES.INVALID_RESOURCE_RESULT);
+  expect(content).toMatchSnapshot();
+});
+
+test("fails when functions file does not export handleResources", async () => {
+  const pipePath = await fakepipe();
+  const args = JSON.stringify({
+    uri: "file:///config.json",
+    input: {},
+  });
+
+  await main(
+    ["node", "./gram-start.mjs", pipePath, args, "resource"],
+    join(import.meta.dirname, "empty.js"),
+  );
+
+  const content = await readFile(pipePath, "utf-8");
+  expect(content).toContain(ERROR_CODES.INVALID_RESOURCE_FUNC);
   expect(content).toMatchSnapshot();
 });
