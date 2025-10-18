@@ -130,6 +130,39 @@ func NewFlyRunner(
 	}
 }
 
+func (f *FlyRunner) prepareFunctionAuth(ctx context.Context, logger *slog.Logger, baseReq RunnerBaseRequest) (appURL string, enc *encryption.Client, err error) {
+	funcsRepo := repo.New(f.db)
+	row, err := funcsRepo.GetFlyAppAccess(ctx, repo.GetFlyAppAccessParams{
+		ProjectID:    baseReq.ProjectID,
+		DeploymentID: baseReq.DeploymentID,
+		FunctionID:   baseReq.FunctionsID,
+		AccessID:     baseReq.FunctionsAccessID,
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return "", nil, oops.E(oops.CodeNotFound, err, "no function runner available").Log(ctx, logger)
+	case err != nil:
+		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function runner").Log(ctx, logger)
+	}
+
+	format := row.BearerFormat.String
+	sec := row.EncryptionKey.Reveal()
+	if format == "" || len(sec) == 0 {
+		return "", nil, oops.E(oops.CodeInvariantViolation, nil, "function runner does not have credentials").Log(ctx, logger)
+	}
+
+	unsealedAuthKey, err := f.encryption.Decrypt(string(sec))
+	if err != nil {
+		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to access credentials").Log(ctx, logger)
+	}
+	enc, err = encryption.NewWithBytes([]byte(unsealedAuthKey))
+	if err != nil {
+		return "", nil, oops.E(oops.CodeUnexpected, err, "failed to create encryption client").Log(ctx, logger)
+	}
+
+	return row.AppUrl, enc, nil
+}
+
 func (f *FlyRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (httpreq *http.Request, err error) {
 	logger := f.logger.With(
 		attr.SlogFunctionsBackend("flyio"),
@@ -153,36 +186,12 @@ func (f *FlyRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (ht
 		return nil, oops.E(oops.CodeInvariantViolation, err, "malformed tool call request").Log(ctx, logger)
 	}
 
-	funcsRepo := repo.New(f.db)
-	row, err := funcsRepo.GetFlyAppAccess(ctx, repo.GetFlyAppAccessParams{
-		ProjectID:    req.ProjectID,
-		DeploymentID: req.DeploymentID,
-		FunctionID:   req.FunctionsID,
-		AccessID:     req.FunctionsAccessID,
-	})
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return nil, oops.E(oops.CodeNotFound, err, "no function runner available to serve tool call").Log(ctx, logger)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to fetch function runner").Log(ctx, logger)
-	}
-
-	format := row.BearerFormat.String
-	sec := row.EncryptionKey.Reveal()
-	if format == "" || len(sec) == 0 {
-		return nil, oops.E(oops.CodeInvariantViolation, nil, "function runner does not have credentials to make tool call").Log(ctx, logger)
-	}
-
-	unsealedAuthKey, err := f.encryption.Decrypt(string(sec))
+	appURL, enc, err := f.prepareFunctionAuth(ctx, logger, req.RunnerBaseRequest)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to access credentials for function tool call").Log(ctx, logger)
-	}
-	enc, err := encryption.NewWithBytes([]byte(unsealedAuthKey))
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create encryption client for function tool call").Log(ctx, logger)
+		return nil, err
 	}
 
-	endpoint, err := url.JoinPath(row.AppUrl, "/tool-call")
+	endpoint, err := url.JoinPath(appURL, "/tool-call")
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse function tool url").Log(ctx, logger)
 	}
@@ -197,8 +206,8 @@ func (f *FlyRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (ht
 
 	payload, err := json.Marshal(CallToolPayload{
 		ToolName:    req.ToolName,
-		Input:       req.ToolInput,
-		Environment: req.ToolEnvironment,
+		Input:       req.Input,
+		Environment: req.Environment,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal function tool payload").Log(ctx, logger)
@@ -207,6 +216,67 @@ func (f *FlyRunner) ToolCall(ctx context.Context, req RunnerToolCallRequest) (ht
 	httpreq, err = http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to create function tool request").Log(ctx, logger)
+	}
+
+	httpreq.Header.Set("Authorization", "Bearer "+token)
+	httpreq.Header.Set("Content-Type", "application/json")
+
+	return httpreq, nil
+}
+
+func (f *FlyRunner) ReadResource(ctx context.Context, req RunnerResourceReadRequest) (httpreq *http.Request, err error) {
+	logger := f.logger.With(
+		attr.SlogFunctionsBackend("flyio"),
+		attr.SlogProjectID(req.ProjectID.String()),
+		attr.SlogDeploymentID(req.DeploymentID.String()),
+		attr.SlogDeploymentFunctionsID(req.FunctionsID.String()),
+		attr.SlogResourceURI(req.ResourceURI),
+		attr.SlogResourceURN(req.ResourceURN.String()),
+	)
+
+	if err := inv.Check(
+		"flyio tool call",
+		"organization id cannot be empty", req.OrganizationID != "",
+		"organization slug cannot be empty", req.OrganizationSlug != "",
+		"project id cannot be nil", req.ProjectID != uuid.Nil,
+		"deployment id cannot be nil", req.DeploymentID != uuid.Nil,
+		"functions id cannot be nil", req.FunctionsID != uuid.Nil,
+		"resource urn cannot be empty", !req.ResourceURN.IsZero(),
+		"resource uri cannot be empty", req.ResourceURI != "",
+	); err != nil {
+		return nil, oops.E(oops.CodeInvariantViolation, err, "malformed read resource request").Log(ctx, logger)
+	}
+
+	appURL, enc, err := f.prepareFunctionAuth(ctx, logger, req.RunnerBaseRequest)
+	if err != nil {
+		return nil, err
+	}
+
+	endpoint, err := url.JoinPath(appURL, "/resource-request")
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to parse function resource request url").Log(ctx, logger)
+	}
+
+	token, err := TokenV1(enc, TokenRequestV1{
+		ID:  req.InvocationID.String(),
+		Exp: time.Now().Add(10 * time.Minute).Unix(),
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create bearer token for function read resource call").Log(ctx, logger)
+	}
+
+	payload, err := json.Marshal(ReadResourcePayload{
+		URI:         req.ResourceURI,
+		Input:       req.Input,
+		Environment: req.Environment,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal function read resource payload").Log(ctx, logger)
+	}
+
+	httpreq, err = http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create function read resource request").Log(ctx, logger)
 	}
 
 	httpreq.Header.Set("Authorization", "Bearer "+token)

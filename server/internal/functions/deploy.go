@@ -23,6 +23,7 @@ type Deployer interface {
 
 type ToolCaller interface {
 	ToolCall(context.Context, RunnerToolCallRequest) (*http.Request, error)
+	ReadResource(context.Context, RunnerResourceReadRequest) (*http.Request, error)
 }
 
 type RunnerImageRequest struct {
@@ -72,7 +73,7 @@ type RunnerAsset struct {
 	SHA256Sum string
 }
 
-type RunnerToolCallRequest struct {
+type RunnerBaseRequest struct {
 	InvocationID uuid.UUID
 
 	OrganizationID    string
@@ -83,8 +84,21 @@ type RunnerToolCallRequest struct {
 	FunctionsID       uuid.UUID
 	FunctionsAccessID uuid.UUID
 
-	ToolURN         urn.Tool
-	ToolName        string
-	ToolInput       json.RawMessage
-	ToolEnvironment map[string]string
+	Input       json.RawMessage
+	Environment map[string]string
+}
+
+type RunnerToolCallRequest struct {
+	RunnerBaseRequest
+
+	ToolURN  urn.Tool
+	ToolName string
+}
+
+type RunnerResourceReadRequest struct {
+	RunnerBaseRequest
+
+	ResourceURN  urn.Resource
+	ResourceURI  string
+	ResourceName string
 }

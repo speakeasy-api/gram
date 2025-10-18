@@ -52,3 +52,24 @@ func (m *metrics) RecordToolCall(ctx context.Context, orgID string, toolURN urn.
 
 	m.toolCallsCounter.Add(ctx, 1, metric.WithAttributes(kv...))
 }
+
+func (m *metrics) RecordResourceCall(ctx context.Context, orgID string, resourceURN urn.Resource, statusCode int) {
+	if m.toolCallsCounter == nil {
+		return
+	}
+
+	kv := []attribute.KeyValue{
+		attr.ResourceURN(resourceURN.String()),
+		attr.OrganizationID(orgID),
+		semconv.HTTPResponseStatusCode(statusCode),
+	}
+
+	bag := baggage.FromContext(ctx)
+
+	if org := bag.Member(string(attr.OrganizationSlugKey)).Value(); org != "" {
+		kv = append(kv, attr.OrganizationSlug(org))
+	}
+
+	// we keep it in the general tool call counting right now, we don't bill differently
+	m.toolCallsCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}

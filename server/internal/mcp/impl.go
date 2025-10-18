@@ -649,6 +649,10 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
 		return handlePromptsGet(ctx, s.logger, s.db, payload, req)
+	case "resources/list":
+		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
+	case "resources/read":
+		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository)
 	default:
 		return nil, &rpcError{
 			ID:      req.ID,

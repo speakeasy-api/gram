@@ -231,18 +231,20 @@ func (tp *ToolProxy) doFunction(
 	}
 
 	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
-		InvocationID:      invocationID,
-		OrganizationID:    descriptor.OrganizationID,
-		OrganizationSlug:  descriptor.OrganizationSlug,
-		ProjectID:         projectID,
-		ProjectSlug:       descriptor.ProjectSlug,
-		DeploymentID:      deploymentID,
-		FunctionsID:       functionID,
-		FunctionsAccessID: accessID,
-		ToolURN:           descriptor.URN,
-		ToolName:          descriptor.Name,
-		ToolInput:         input,
-		ToolEnvironment:   payloadEnv,
+		RunnerBaseRequest: functions.RunnerBaseRequest{
+			InvocationID:      invocationID,
+			OrganizationID:    descriptor.OrganizationID,
+			OrganizationSlug:  descriptor.OrganizationSlug,
+			ProjectID:         projectID,
+			ProjectSlug:       descriptor.ProjectSlug,
+			DeploymentID:      deploymentID,
+			FunctionsID:       functionID,
+			FunctionsAccessID: accessID,
+			Input:             input,
+			Environment:       payloadEnv,
+		},
+		ToolURN:  descriptor.URN,
+		ToolName: descriptor.Name,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to create function tool call request").Log(ctx, logger)
@@ -274,7 +276,8 @@ func (tp *ToolProxy) doFunction(
 		tp.tracer,
 		w,
 		req,
-		descriptor,
+		&descriptor.BaseDescriptor,
+		descriptor.URN.String(),
 		&FilterRequest{Type: "none", Filter: ""},
 		DisableResponseFiltering,
 		tp.policy,
@@ -532,7 +535,8 @@ func (tp *ToolProxy) doHTTP(
 		tp.tracer,
 		w,
 		req,
-		descriptor,
+		&descriptor.BaseDescriptor,
+		descriptor.URN.String(),
 		toolCallBody.ResponseFilter,
 		plan.ResponseFilter,
 		tp.policy,
@@ -603,7 +607,8 @@ func reverseProxyRequest(
 	tracer trace.Tracer,
 	w http.ResponseWriter,
 	req *http.Request,
-	tool *ToolDescriptor,
+	descriptor *BaseDescriptor,
+	urnString string,
 	expression *FilterRequest,
 	filterConfig *ResponseFilter,
 	policy *guardian.Policy,
@@ -611,7 +616,7 @@ func reverseProxyRequest(
 	tcm tm.ToolMetricsProvider,
 	verifyResponse func(*http.Response) error,
 ) error {
-	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
+	ctx, span := tracer.Start(ctx, fmt.Sprintf("gateway_proxy.%s", descriptor.Name))
 	defer span.End()
 
 	transport := &http.Transport{
@@ -625,14 +630,13 @@ func reverseProxyRequest(
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 
-	isAllowed, err := tcm.ShouldLog(ctx, tool.OrganizationID)
+	isAllowed, err := tcm.ShouldLog(ctx, descriptor.OrganizationID)
 	if err != nil {
 		// If we can't determine if the tool is allowed to log, we won't log the request.
 		isAllowed = false
 		logger.ErrorContext(ctx,
-			"failed to determine if tool is allowed to log",
-			attr.SlogOrganizationID(tool.OrganizationID),
-			attr.SlogToolName(tool.Name),
+			"failed to determine if organization is allowed to request log",
+			attr.SlogOrganizationID(descriptor.OrganizationID),
 			attr.SlogError(err))
 	}
 
@@ -658,12 +662,12 @@ func reverseProxyRequest(
 
 	// Add tool to context for the round tripper
 	toolInfo := &tm.ToolInfo{
-		ID:             tool.ID,
-		Urn:            tool.URN.String(),
-		Name:           tool.Name,
-		ProjectID:      tool.ProjectID,
-		DeploymentID:   tool.DeploymentID,
-		OrganizationID: tool.OrganizationID,
+		ID:             descriptor.ID,
+		Urn:            urnString,
+		Name:           descriptor.Name,
+		ProjectID:      descriptor.ProjectID,
+		DeploymentID:   descriptor.DeploymentID,
+		OrganizationID: descriptor.OrganizationID,
 	}
 
 	ctx = context.WithValue(ctx, tm.ToolInfoContextKey, toolInfo)
@@ -725,7 +729,7 @@ func reverseProxyRequest(
 
 	if err := verifyResponse(resp); err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		return oops.E(oops.CodeGatewayError, err, "tool call response verification failed").Log(ctx, logger)
+		return oops.E(oops.CodeGatewayError, err, "response verification failed").Log(ctx, logger)
 	}
 
 	if len(resp.Trailer) > 0 {
