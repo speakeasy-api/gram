@@ -56,10 +56,12 @@ export class Auth extends ClientSDK {
    * Proxies to auth login through speakeasy oidc.
    */
   async login(
+    request?: operations.AuthLoginRequest | undefined,
     options?: RequestOptions,
   ): Promise<operations.AuthLoginResponse | undefined> {
     return unwrapAsync(authLogin(
       this,
+      request,
       options,
     ));
   }

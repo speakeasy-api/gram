@@ -216,20 +216,6 @@ paths:
           schema:
             description: The ID of the asset to serve
             type: string
-        - allowEmptyValue: true
-          description: Session header
-          in: header
-          name: Gram-Session
-          schema:
-            description: Session header
-            type: string
-        - allowEmptyValue: true
-          description: API Key header
-          in: header
-          name: Gram-Key
-          schema:
-            description: API Key header
-            type: string
       responses:
         "200":
           content:
@@ -239,6 +225,9 @@ paths:
                 type: string
           description: OK response.
           headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
             Content-Length:
               schema:
                 format: int64
@@ -303,10 +292,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: 'gateway_error: an unexpected error occurred'
-      security:
-        - apikey_header_Gram-Key: []
-        - session_header_Gram-Session: []
-        - {}
       summary: serveImage assets
       tags:
         - assets
@@ -780,6 +765,13 @@ paths:
           schema:
             description: The auth code for authentication from the speakeasy system
             type: string
+        - allowEmptyValue: true
+          description: The opaque state string optionally provided during initialization.
+          in: query
+          name: state
+          schema:
+            description: The opaque state string optionally provided during initialization.
+            type: string
       responses:
         "307":
           description: Temporary Redirect response.
@@ -956,6 +948,14 @@ paths:
     get:
       description: Proxies to auth login through speakeasy oidc.
       operationId: authLogin
+      parameters:
+        - allowEmptyValue: true
+          description: Optional URL to redirect to after successful authentication
+          in: query
+          name: redirect
+          schema:
+            description: Optional URL to redirect to after successful authentication
+            type: string
       responses:
         "307":
           description: Temporary Redirect response.
@@ -3737,6 +3737,170 @@ paths:
       x-speakeasy-name-override: validate
       x-speakeasy-react-hook:
         name: ValidateAPIKey
+  /rpc/logs.list:
+    get:
+      description: List call logs for a toolset.
+      operationId: listToolLogs
+      parameters:
+        - allowEmptyValue: true
+          description: Tool ID
+          in: query
+          name: tool_id
+          schema:
+            description: Tool ID
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Start timestamp
+          in: query
+          name: ts_start
+          schema:
+            description: Start timestamp
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: End timestamp
+          in: query
+          name: ts_end
+          schema:
+            description: End timestamp
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Cursor for pagination
+          in: query
+          name: cursor
+          schema:
+            description: Cursor for pagination
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Number of items per page (1-100)
+          in: query
+          name: per_page
+          schema:
+            default: 20
+            description: Number of items per page (1-100)
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Pagination direction
+          in: query
+          name: direction
+          schema:
+            default: next
+            description: Pagination direction
+            enum:
+              - next
+              - prev
+            type: string
+        - allowEmptyValue: true
+          description: Sort order
+          in: query
+          name: sort
+          schema:
+            default: DESC
+            description: Sort order
+            enum:
+              - ASC
+              - DESC
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListToolLogResponse'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: listLogs logs
+      tags:
+        - logs
+      x-speakeasy-name-override: list
+      x-speakeasy-react-hook:
+        name: ListToolLogs
   /rpc/mcpMetadata.get:
     get:
       description: Fetch the metadata that powers the MCP install page.
@@ -7682,6 +7846,51 @@ components:
         - content_length
         - created_at
         - updated_at
+    BaseResourceAttributes:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: The creation date of the resource.
+          format: date-time
+        description:
+          type: string
+          description: Description of the resource
+        id:
+          type: string
+          description: The ID of the resource
+        mime_type:
+          type: string
+          description: Optional MIME type of the resource
+        name:
+          type: string
+          description: The name of the resource
+        project_id:
+          type: string
+          description: The ID of the project
+        resource_urn:
+          type: string
+          description: The URN of this resource
+        title:
+          type: string
+          description: Optional title for the resource
+        updated_at:
+          type: string
+          description: The last update date of the resource.
+          format: date-time
+        uri:
+          type: string
+          description: The URI of the resource
+      description: Common attributes shared by all resource types
+      required:
+        - id
+        - project_id
+        - name
+        - description
+        - uri
+        - resource_urn
+        - created_at
+        - updated_at
     BaseToolAttributes:
       type: object
       properties:
@@ -8140,6 +8349,11 @@ components:
           description: The name of the toolset
         project_slug_input:
           type: string
+        resource_urns:
+          type: array
+          items:
+            type: string
+          description: List of resource URNs to include in the toolset
         tool_urns:
           type: array
           items:
@@ -8161,6 +8375,11 @@ components:
         name:
           type: string
           description: The name of the toolset
+        resource_urns:
+          type: array
+          items:
+            type: string
+          description: List of resource URNs to include in the toolset
         tool_urns:
           type: array
           items:
@@ -8641,6 +8860,65 @@ components:
           description: The environment variables
       required:
         - name
+    FunctionResourceDefinition:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: The creation date of the resource.
+          format: date-time
+        deployment_id:
+          type: string
+          description: The ID of the deployment
+        description:
+          type: string
+          description: Description of the resource
+        function_id:
+          type: string
+          description: The ID of the function
+        id:
+          type: string
+          description: The ID of the resource
+        mime_type:
+          type: string
+          description: Optional MIME type of the resource
+        name:
+          type: string
+          description: The name of the resource
+        project_id:
+          type: string
+          description: The ID of the project
+        resource_urn:
+          type: string
+          description: The URN of this resource
+        runtime:
+          type: string
+          description: Runtime environment (e.g., nodejs:22, python:3.12)
+        title:
+          type: string
+          description: Optional title for the resource
+        updated_at:
+          type: string
+          description: The last update date of the resource.
+          format: date-time
+        uri:
+          type: string
+          description: The URI of the resource
+        variables:
+          description: Variables configuration for the resource
+      description: A function resource
+      required:
+        - deployment_id
+        - function_id
+        - runtime
+        - id
+        - project_id
+        - name
+        - description
+        - uri
+        - resource_urn
+        - created_at
+        - updated_at
     FunctionToolDefinition:
       type: object
       properties:
@@ -9056,6 +9334,99 @@ components:
         - tool_urn
         - created_at
         - updated_at
+    HTTPToolLog:
+      type: object
+      properties:
+        deployment_id:
+          type: string
+          description: Deployment UUID
+          format: uuid
+        duration_ms:
+          type: number
+          description: Duration in milliseconds
+          format: double
+        http_method:
+          type: string
+          description: HTTP method
+        http_route:
+          type: string
+          description: HTTP route
+        id:
+          type: string
+          description: Id of the request
+          format: uuid
+        organization_id:
+          type: string
+          description: Organization UUID
+          format: uuid
+        project_id:
+          type: string
+          description: Project UUID
+          format: uuid
+        request_body_bytes:
+          type: integer
+          description: Request body size in bytes
+          format: int64
+        request_headers:
+          type: object
+          description: Request headers
+          additionalProperties:
+            type: string
+        response_body_bytes:
+          type: integer
+          description: Response body size in bytes
+          format: int64
+        response_headers:
+          type: object
+          description: Response headers
+          additionalProperties:
+            type: string
+        span_id:
+          type: string
+          description: Span ID for correlation
+        status_code:
+          type: integer
+          description: HTTP status code
+          format: int64
+        tool_id:
+          type: string
+          description: Tool UUID
+          format: uuid
+        tool_type:
+          type: string
+          description: Type of tool being logged
+          enum:
+            - http
+            - function
+            - prompt
+        tool_urn:
+          type: string
+          description: Tool URN
+        trace_id:
+          type: string
+          description: Trace ID for correlation
+        ts:
+          type: string
+          description: Timestamp of the request
+          format: date-time
+        user_agent:
+          type: string
+          description: User agent
+      description: HTTP tool request and response log entry
+      required:
+        - ts
+        - organization_id
+        - deployment_id
+        - tool_id
+        - tool_urn
+        - tool_type
+        - trace_id
+        - span_id
+        - http_method
+        - http_route
+        - status_code
+        - duration_ms
+        - user_agent
     InfoResponseBody:
       type: object
       properties:
@@ -9340,6 +9711,59 @@ components:
           description: The created prompt template
       required:
         - templates
+    ListToolLogResponse:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/HTTPToolLog'
+        pagination:
+          $ref: '#/components/schemas/PaginationResponse'
+      required:
+        - logs
+        - pagination
+    ListToolLogsRequest:
+      type: object
+      properties:
+        cursor:
+          type: string
+          description: Cursor for pagination
+          format: uuid
+        direction:
+          type: string
+          description: Pagination direction
+          default: next
+          enum:
+            - next
+            - prev
+        per_page:
+          type: integer
+          description: Number of items per page (1-100)
+          default: 20
+          format: int64
+          minimum: 1
+          maximum: 100
+        sort:
+          type: string
+          description: Sort order
+          default: DESC
+          enum:
+            - ASC
+            - DESC
+        tool_id:
+          type: string
+          description: Tool ID
+          format: uuid
+        ts_end:
+          type: string
+          description: End timestamp
+          format: date-time
+        ts_start:
+          type: string
+          description: Start timestamp
+          format: date-time
+      description: Payload for listing tool logs
     ListToolsResult:
       type: object
       properties:
@@ -9646,6 +10070,21 @@ components:
         - visibility
         - semver
         - created_at
+    PaginationResponse:
+      type: object
+      properties:
+        has_next_page:
+          type: boolean
+          description: Whether there is a next page
+        next_page_cursor:
+          type: string
+          description: Cursor for next page
+          format: date-time
+        per_page:
+          type: integer
+          description: Number of items per page
+          format: int64
+      description: Pagination metadata for list responses
     PeriodUsage:
       type: object
       properties:
@@ -9932,6 +10371,33 @@ components:
           description: The rendered prompt
       required:
         - prompt
+    Resource:
+      type: object
+      properties:
+        function_resource_definition:
+          $ref: '#/components/schemas/FunctionResourceDefinition'
+      description: A polymorphic resource - currently only function resources are supported
+    ResourceEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The ID of the resource
+        name:
+          type: string
+          description: The name of the resource
+        resource_urn:
+          type: string
+          description: The URN of the resource
+        type:
+          type: string
+          enum:
+            - function
+      required:
+        - type
+        - id
+        - name
+        - resource_urn
     ResponseFilter:
       type: object
       properties:
@@ -9993,18 +10459,16 @@ components:
     ServeImageForm:
       type: object
       properties:
-        apikey_token:
-          type: string
         id:
           type: string
           description: The ID of the asset to serve
-        session_token:
-          type: string
       required:
         - id
     ServeImageResult:
       type: object
       properties:
+        access_control_allow_origin:
+          type: string
         content_length:
           type: integer
           format: int64
@@ -10281,6 +10745,16 @@ components:
           items:
             $ref: '#/components/schemas/PromptTemplate'
           description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
+        resource_urns:
+          type: array
+          items:
+            type: string
+          description: The resource URNs in this toolset
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+          description: The resources in this toolset
         security_variables:
           type: array
           items:
@@ -10320,6 +10794,8 @@ components:
         - tools
         - prompt_templates
         - tool_urns
+        - resources
+        - resource_urns
         - created_at
         - updated_at
     ToolsetEntry:
@@ -10373,6 +10849,16 @@ components:
           items:
             $ref: '#/components/schemas/PromptTemplateEntry'
           description: 'The prompt templates in this toolset -- Note: these are actual prompts, as in MCP prompts'
+        resource_urns:
+          type: array
+          items:
+            type: string
+          description: The resource URNs in this toolset
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceEntry'
+          description: The resources in this toolset
         security_variables:
           type: array
           items:
@@ -10411,6 +10897,8 @@ components:
         - tools
         - prompt_templates
         - tool_urns
+        - resources
+        - resource_urns
         - created_at
         - updated_at
     UpdateEnvironmentForm:
@@ -10594,6 +11082,11 @@ components:
           items:
             type: string
           description: 'List of prompt template names to include (note: for actual prompts, not tools)'
+        resource_urns:
+          type: array
+          items:
+            type: string
+          description: List of resource URNs to include in the toolset
         slug:
           type: string
           description: A short url-friendly label that uniquely identifies a resource.
@@ -10639,6 +11132,11 @@ components:
           items:
             type: string
           description: 'List of prompt template names to include (note: for actual prompts, not tools)'
+        resource_urns:
+          type: array
+          items:
+            type: string
+          description: List of resource URNs to include in the toolset
         tool_urns:
           type: array
           items:
@@ -10876,6 +11374,8 @@ tags:
     description: Auth and interactions for the Gram Slack App.
   - name: templates
     description: Manages re-usable prompt templates and higher-order tools for a project.
+  - name: logs
+    description: Call logs for a toolset.
   - name: tools
     description: Dashboard API for interacting with tools.
   - name: toolsets

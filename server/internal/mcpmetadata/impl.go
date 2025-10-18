@@ -56,7 +56,7 @@ type Service struct {
 	domainsRepo  *customdomains_repo.Queries
 	auth         *auth.Auth
 	serverURL    *url.URL
-	toolsetCache cache.TypedCacheObject[mv.ToolsetTools]
+	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
 //go:embed config_snippet.json.tmpl
@@ -115,7 +115,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		domainsRepo:  customdomains_repo.New(db),
 		auth:         auth.New(logger, db, sessions),
 		serverURL:    serverURL,
-		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 	}
 }
 

@@ -32,10 +32,19 @@ overrides:
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Tool
+      - column: function_resource_definitions.resource_urn
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Resource
       - column: toolset_versions.tool_urns
         go_type:
           import: github.com/speakeasy-api/gram/server/internal/urn
           type: Tool
+          slice: true
+      - column: toolset_versions.resource_urns
+        go_type:
+          import: github.com/speakeasy-api/gram/server/internal/urn
+          type: Resource
           slice: true
       - column: functions_access.encryption_key
         go_type:
@@ -310,5 +319,15 @@ sql:
       go:
         package: "repo"
         out: "../internal/functions/repo"
+        sql_package: "pgx/v5"
+        omit_unused_structs: true
+
+  - schema: schema.sql
+    queries: ../internal/resources/repo/queries.sql
+    engine: postgresql
+    gen:
+      go:
+        package: "repo"
+        out: "../internal/resources/repo"
         sql_package: "pgx/v5"
         omit_unused_structs: true

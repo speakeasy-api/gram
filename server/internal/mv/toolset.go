@@ -22,6 +22,7 @@ import (
 	oauth "github.com/speakeasy-api/gram/server/internal/oauth/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	org "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	resourcesR "github.com/speakeasy-api/gram/server/internal/resources/repo"
 	templatesR "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	tr "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/tools/security"
@@ -67,13 +68,18 @@ func DescribeToolsetEntry(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load toolset").Log(ctx, logger)
 	}
 
-	// Get tool URNs from latest toolset version
+	// Get tool URNs and resource URNs from latest toolset version
 	var toolUrns []string
+	var resourceUrns []string
 	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
 	if err == nil {
 		toolUrns = make([]string, len(latestVersion.ToolUrns))
 		for i, urn := range latestVersion.ToolUrns {
 			toolUrns[i] = urn.String()
+		}
+		resourceUrns = make([]string, len(latestVersion.ResourceUrns))
+		for i, urn := range latestVersion.ResourceUrns {
+			resourceUrns[i] = urn.String()
 		}
 	}
 
@@ -180,6 +186,34 @@ func DescribeToolsetEntry(
 		}
 	}
 
+	var resources []*types.ResourceEntry
+	if len(resourceUrns) > 0 {
+		resourcesRepo := resourcesR.New(tx)
+		functionResourceEntries, err := resourcesRepo.FindFunctionResourceEntriesByUrn(ctx, resourcesR.FindFunctionResourceEntriesByUrnParams{
+			ProjectID: pid,
+			Urns:      resourceUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to list resources in toolset").Log(ctx, logger)
+		}
+
+		resources = make([]*types.ResourceEntry, 0, len(functionResourceEntries))
+		for _, resource := range functionResourceEntries {
+			resources = append(resources, &types.ResourceEntry{
+				Type:        string(urn.ResourceKindFunction),
+				ID:          resource.ID.String(),
+				Name:        resource.Name,
+				ResourceUrn: resource.ResourceUrn.String(),
+			})
+
+			envVars, err := extractFunctionEnvVars(ctx, logger, resource.Variables)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").Log(ctx, logger)
+			}
+			functionEnvVars = append(functionEnvVars, envVars...)
+		}
+	}
+
 	ptrows, err := toolsetRepo.GetPromptTemplatesForToolset(ctx, tsr.GetPromptTemplatesForToolsetParams{
 		ProjectID: pid,
 		ToolsetID: toolset.ID,
@@ -217,6 +251,8 @@ func DescribeToolsetEntry(
 		Tools:                        tools,
 		PromptTemplates:              promptTemplates,
 		ToolUrns:                     toolUrns,
+		Resources:                    resources,
+		ResourceUrns:                 resourceUrns,
 	}, nil
 }
 
@@ -226,7 +262,7 @@ func DescribeToolset(
 	tx DBTX,
 	projectID ProjectID,
 	toolsetSlug ToolsetSlug,
-	toolsetCache *cache.TypedCacheObject[ToolsetTools],
+	toolsetCache *cache.TypedCacheObject[ToolsetBaseContents],
 ) (*types.Toolset, error) {
 	toolsetRepo := tsr.New(tx)
 	orgRepo := org.New(tx)
@@ -260,8 +296,9 @@ func DescribeToolset(
 		logger.ErrorContext(ctx, "failed to get active deployment id", attr.SlogError(err))
 	}
 
-	// Get tool URNs from latest toolset version
+	// Get tool URNs and resource URNs from latest toolset version
 	var toolUrns []string
+	var resourceUrns []string
 	var toolsetVersion int64
 	latestVersion, err := toolsetRepo.GetLatestToolsetVersion(ctx, toolset.ID)
 	if err == nil {
@@ -269,10 +306,14 @@ func DescribeToolset(
 		for i, urn := range latestVersion.ToolUrns {
 			toolUrns[i] = urn.String()
 		}
+		resourceUrns = make([]string, len(latestVersion.ResourceUrns))
+		for i, urn := range latestVersion.ResourceUrns {
+			resourceUrns[i] = urn.String()
+		}
 		toolsetVersion = latestVersion.Version
 	}
 
-	toolsetTools, err := readToolsetTools(ctx, logger, tx, pid, activeDeploymentID, toolset.ID, toolsetVersion, toolUrns, toolsetCache)
+	toolsetTools, err := readToolsetTools(ctx, logger, tx, pid, activeDeploymentID, toolset.ID, toolsetVersion, toolUrns, resourceUrns, toolsetCache)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset tools").Log(ctx, logger)
 	}
@@ -411,6 +452,7 @@ func DescribeToolset(
 		FunctionEnvironmentVariables: toolsetTools.FunctionEnvVars,
 		Description:                  conv.FromPGText[string](toolset.Description),
 		Tools:                        toolsetTools.Tools,
+		Resources:                    toolsetTools.Resources,
 		PromptTemplates:              promptTemplates,
 		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
 		McpEnabled:                   &toolset.McpEnabled,
@@ -419,6 +461,7 @@ func DescribeToolset(
 		CreatedAt:                    toolset.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                    toolset.UpdatedAt.Time.Format(time.RFC3339),
 		ToolUrns:                     toolUrns,
+		ResourceUrns:                 resourceUrns,
 		ExternalOauthServer:          externalOAuthServer,
 		OauthProxyServer:             oauthProxyServer,
 	}
@@ -435,8 +478,9 @@ func readToolsetTools(
 	toolsetID uuid.UUID,
 	toolsetVersion int64,
 	toolUrns []string,
-	toolsetCache *cache.TypedCacheObject[ToolsetTools],
-) (*ToolsetTools, error) {
+	resourceUrns []string,
+	toolsetCache *cache.TypedCacheObject[ToolsetBaseContents],
+) (*ToolsetBaseContents, error) {
 	toolsRepo := tr.New(tx)
 	templatesRepo := templatesR.New(tx)
 
@@ -616,11 +660,54 @@ func readToolsetTools(
 		}
 	}
 
-	toolsetTools := ToolsetTools{
+	// Fetch resources - for now we only have function resources
+	var resources []*types.Resource
+	if len(resourceUrns) > 0 {
+		resourcesRepo := resourcesR.New(tx)
+		functionResourceDefinitions, err := resourcesRepo.FindFunctionResourcesByUrn(ctx, resourcesR.FindFunctionResourcesByUrnParams{
+			ProjectID: pid,
+			Urns:      resourceUrns,
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to get function resources for toolset").Log(ctx, logger)
+		}
+
+		for _, def := range functionResourceDefinitions {
+			functionResource := &types.FunctionResourceDefinition{
+				ID:           def.FunctionResourceDefinition.ID.String(),
+				ResourceUrn:  def.FunctionResourceDefinition.ResourceUrn.String(),
+				ProjectID:    def.FunctionResourceDefinition.ProjectID.String(),
+				DeploymentID: def.FunctionResourceDefinition.DeploymentID.String(),
+				FunctionID:   def.FunctionResourceDefinition.FunctionID.String(),
+				Runtime:      def.FunctionResourceDefinition.Runtime,
+				Name:         def.FunctionResourceDefinition.Name,
+				Description:  def.FunctionResourceDefinition.Description,
+				URI:          def.FunctionResourceDefinition.Uri,
+				Title:        conv.FromPGText[string](def.FunctionResourceDefinition.Title),
+				MimeType:     conv.FromPGText[string](def.FunctionResourceDefinition.MimeType),
+				Variables:    def.FunctionResourceDefinition.Variables,
+				CreatedAt:    def.FunctionResourceDefinition.CreatedAt.Time.Format(time.RFC3339),
+				UpdatedAt:    def.FunctionResourceDefinition.UpdatedAt.Time.Format(time.RFC3339),
+			}
+
+			envVars, err := extractFunctionEnvVars(ctx, logger, def.FunctionResourceDefinition.Variables)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").Log(ctx, logger)
+			}
+			functionEnvVars = append(functionEnvVars, envVars...)
+
+			resources = append(resources, &types.Resource{
+				FunctionResourceDefinition: functionResource,
+			})
+		}
+	}
+
+	toolsetTools := ToolsetBaseContents{
 		DeploymentID:    activeDeploymentID.String(),
 		ToolsetID:       toolsetID.String(),
 		Version:         toolsetVersion,
 		Tools:           tools,
+		Resources:       resources,
 		SecurityVars:    securityVars,
 		ServerVars:      serverVars,
 		FunctionEnvVars: functionEnvVars,

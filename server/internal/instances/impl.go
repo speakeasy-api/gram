@@ -54,7 +54,7 @@ type Service struct {
 	env              *environments.EnvironmentEntries
 	toolProxy        *gateway.ToolProxy
 	tracking         billing.Tracker
-	toolsetCache     cache.TypedCacheObject[mv.ToolsetTools]
+	toolsetCache     cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -97,7 +97,7 @@ func NewService(
 			funcCaller,
 			tcm,
 		),
-		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
+		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}
 }
 

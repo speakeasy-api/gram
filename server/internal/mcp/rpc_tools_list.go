@@ -26,7 +26,7 @@ type toolListEntry struct {
 	InputSchema json.RawMessage `json:"inputSchema,omitempty,omitzero"`
 }
 
-func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, productMetrics *posthog.Posthog, toolsetCache *cache.TypedCacheObject[mv.ToolsetTools]) (json.RawMessage, error) {
+func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, productMetrics *posthog.Posthog, toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents]) (json.RawMessage, error) {
 	projectID := mv.ProjectID(payload.projectID)
 
 	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache)

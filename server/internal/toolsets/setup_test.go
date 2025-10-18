@@ -269,3 +269,36 @@ func createFunctionsDeployment(t *testing.T, ctx context.Context, ti *testInstan
 
 	return dep
 }
+
+func createFunctionsDeploymentWithResources(t *testing.T, ctx context.Context, ti *testInstance) *dgen.CreateDeploymentResult {
+	t.Helper()
+
+	// Upload functions file with resources in manifest
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-with-resources.json", "nodejs:22")
+
+	dep, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-functions-with-resources",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*dgen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "test-functions-with-resources",
+				Slug:    "test-functions-with-resources",
+				Runtime: "nodejs:22",
+			},
+		},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create functions deployment with resources")
+	require.Equal(t, "completed", dep.Deployment.Status, "deployment status is not completed")
+
+	return dep
+}

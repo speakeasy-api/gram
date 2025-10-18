@@ -91,6 +91,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "code": payload.code,
+    "state": payload.state,
   });
 
   const headers = new Headers(compactMap({
@@ -101,7 +102,7 @@ async function $do(
     options: client._options,
     baseURL: options?.serverURL ?? client._baseURL ?? "",
     operationID: "authCallback",
-    oAuth2Scopes: [],
+    oAuth2Scopes: null,
 
     resolvedSecurity: null,
 

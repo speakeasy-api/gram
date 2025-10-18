@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openapi"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	resourcesRepo "github.com/speakeasy-api/gram/server/internal/resources/repo"
 	toolsRepo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 )
 
@@ -42,6 +43,7 @@ type ProcessDeployment struct {
 	repo           *repo.Queries
 	assets         *assetsRepo.Queries
 	tools          *toolsRepo.Queries
+	resources      *resourcesRepo.Queries
 	assetStorage   assets.BlobStore
 	projects       *projectsRepo.Queries
 }
@@ -65,6 +67,7 @@ func NewProcessDeployment(
 		assets:         assetsRepo.New(db),
 		assetStorage:   assetStorage,
 		tools:          toolsRepo.New(db),
+		resources:      resourcesRepo.New(db),
 		projects:       projectsRepo.New(db),
 	}
 }
@@ -130,10 +133,25 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 		})
 	}
 
+	functionResources, err := p.resources.ListFunctionResources(ctx, resourcesRepo.ListFunctionResourcesParams{
+		DeploymentID: uuid.NullUUID{UUID: deploymentID, Valid: true},
+		ProjectID:    projectID,
+		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
+		Limit:        1,
+	})
+	if err != nil {
+		err = oops.E(oops.CodeUnexpected, err, "failed to read list of function resources in deployment").Log(ctx, p.logger)
+		return temporal.NewApplicationErrorWithOptions("deployment function resources could not be verified", "deployment_error", temporal.ApplicationErrorOptions{
+			NonRetryable: true,
+			Cause:        err,
+		})
+	}
+
 	// If there were documents to process in this deployment but no tools were created then we consider this a failure.
 	expectsTools := len(deployment.Openapiv3Assets) > 0 || len(deployment.FunctionsAssets) > 0
 	hasTools := len(tools) > 0 || len(functionTools) > 0
-	if expectsTools && !hasTools {
+	hasResources := len(functionResources) > 0
+	if expectsTools && !hasTools && !hasResources {
 		err = oops.E(oops.CodeUnexpected, err, "no tools were created for deployment").Log(ctx, p.logger)
 		return temporal.NewApplicationErrorWithOptions("empty deployment was not expected", "deployment_error", temporal.ApplicationErrorOptions{
 			NonRetryable: true,

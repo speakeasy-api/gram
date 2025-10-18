@@ -201,6 +201,25 @@ type FlyApp struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type FunctionResourceDefinition struct {
+	ID           uuid.UUID
+	ResourceUrn  urn.Resource
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	Runtime      string
+	Name         string
+	Description  string
+	Uri          string
+	Title        pgtype.Text
+	MimeType     pgtype.Text
+	Variables    []byte
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
+	DeletedAt    pgtype.Timestamptz
+	Deleted      bool
+}
+
 type FunctionToolDefinition struct {
 	ID           uuid.UUID
 	ToolUrn      urn.Tool
@@ -513,6 +532,7 @@ type ToolsetVersion struct {
 	ToolsetID     uuid.UUID
 	Version       int64
 	ToolUrns      []urn.Tool
+	ResourceUrns  []urn.Resource
 	PredecessorID uuid.NullUUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz

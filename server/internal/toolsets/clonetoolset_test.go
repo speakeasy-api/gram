@@ -38,6 +38,7 @@ func TestToolsetsService_CloneToolset_Success(t *testing.T) {
 		Name:                   "Original Toolset",
 		Description:            conv.Ptr("Original toolset description"),
 		ToolUrns:               toolUrns,
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})
@@ -94,6 +95,7 @@ func TestToolsetsService_CloneToolset_MultipleClones(t *testing.T) {
 		Name:                   "Original",
 		Description:            nil,
 		ToolUrns:               []string{tools[0].ToolUrn.String()},
+		ResourceUrns:           nil,
 		DefaultEnvironmentSlug: nil,
 		ProjectSlugInput:       nil,
 	})

@@ -8,19 +8,20 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
-type ToolsetTools struct {
+type ToolsetBaseContents struct {
 	DeploymentID    string
 	ToolsetID       string
 	Version         int64
 	Tools           []*types.Tool
+	Resources       []*types.Resource
 	SecurityVars    []*types.SecurityVariable
 	ServerVars      []*types.ServerVariable
 	FunctionEnvVars []*types.FunctionEnvironmentVariable
 }
 
-var _ cache.CacheableObject[ToolsetTools] = (*ToolsetTools)(nil)
+var _ cache.CacheableObject[ToolsetBaseContents] = (*ToolsetBaseContents)(nil)
 
-func (c ToolsetTools) CacheKey() string {
+func (c ToolsetBaseContents) CacheKey() string {
 	return ToolsetCacheKey(c.ToolsetID, c.DeploymentID, c.Version)
 }
 
@@ -28,10 +29,10 @@ func ToolsetCacheKey(toolsetID string, deploymentID string, version int64) strin
 	return fmt.Sprintf("toolset:%s:%s:%d", deploymentID, toolsetID, version)
 }
 
-func (c ToolsetTools) TTL() time.Duration {
+func (c ToolsetBaseContents) TTL() time.Duration {
 	return 1 * time.Hour
 }
 
-func (c ToolsetTools) AdditionalCacheKeys() []string {
+func (c ToolsetBaseContents) AdditionalCacheKeys() []string {
 	return []string{}
 }

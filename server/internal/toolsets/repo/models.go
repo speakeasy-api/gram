@@ -55,6 +55,7 @@ type ToolsetVersion struct {
 	ToolsetID     uuid.UUID
 	Version       int64
 	ToolUrns      []urn.Tool
+	ResourceUrns  []urn.Resource
 	PredecessorID uuid.NullUUID
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz

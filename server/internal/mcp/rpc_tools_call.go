@@ -45,7 +45,7 @@ func handleToolsCall(
 	toolProxy *gateway.ToolProxy,
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
-	toolsetCache *cache.TypedCacheObject[mv.ToolsetTools],
+	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {

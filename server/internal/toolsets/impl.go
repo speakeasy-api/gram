@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	domainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	environmentsRepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -40,7 +41,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usageRepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
-	deploymentsRepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 )
 
 var allowedPublicServers = map[string]int{
@@ -59,7 +59,7 @@ type Service struct {
 	domainsRepo     *domainsRepo.Queries
 	usageRepo       *usageRepo.Queries
 	oauthRepo       *oauthRepo.Queries
-	toolsetCache    cache.TypedCacheObject[mv.ToolsetTools]
+	toolsetCache    cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -78,7 +78,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		domainsRepo:     domainsRepo.New(db),
 		usageRepo:       usageRepo.New(db),
 		oauthRepo:       oauthRepo.New(db),
-		toolsetCache:    cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
+		toolsetCache:    cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 	}
 }
 
@@ -155,7 +155,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 	}
 
 	// Create initial toolset version with tool URNs
-	err = s.createToolsetVersion(ctx, payload.ToolUrns, createdToolset.ID, s.repo)
+	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, createdToolset.ID, s.repo)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +308,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		updateParams.McpIsPublic = *payload.McpIsPublic
 	}
 
-	err = s.createToolsetVersion(ctx, payload.ToolUrns, existingToolset.ID, tr)
+	err = s.createToolsetVersion(ctx, payload.ToolUrns, payload.ResourceUrns, existingToolset.ID, tr)
 	if err != nil {
 		return nil, err
 	}
@@ -440,6 +440,7 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 			ToolsetID:     clonedToolset.ID,
 			Version:       1,
 			ToolUrns:      latestVersion.ToolUrns,
+			ResourceUrns:  latestVersion.ResourceUrns,
 			PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		})
 		if err != nil {
@@ -625,28 +626,39 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 	return toolsetDetails, nil
 }
 
-// createToolsetVersion creates a toolset version using the tool URNs from the payload
-func (s *Service) createToolsetVersion(ctx context.Context, urnStrings []string, toolsetID uuid.UUID, tr *repo.Queries) error {
+// createToolsetVersion creates a toolset version using the tool URNs and resource URNs from the payload
+func (s *Service) createToolsetVersion(ctx context.Context, toolUrnStrings []string, resourceUrnStrings []string, toolsetID uuid.UUID, tr *repo.Queries) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetID(toolsetID.String()))
 
-	// Only create a version if tool URNs are provided (indicating a change). Check nil (not len==0) so that toolsets can be made empty.
-	if urnStrings == nil {
+	// Only create a version if URNs are provided (indicating a change). Check nil (not len==0) so that toolsets can be made empty.
+	if toolUrnStrings == nil && resourceUrnStrings == nil {
 		return nil
 	}
 
 	// Parse tool URNs from payload
 	allToolUrns := []urn.Tool{}
-	for _, urnStr := range urnStrings {
+	for _, urnStr := range toolUrnStrings {
 		var toolUrn urn.Tool
 		if err := toolUrn.UnmarshalText([]byte(urnStr)); err != nil {
 			logger.WarnContext(ctx, "invalid tool URN", attr.SlogError(err), attr.SlogToolURN(urnStr))
 			continue
 		}
 		allToolUrns = append(allToolUrns, toolUrn)
+	}
+
+	// Parse resource URNs from payload
+	allResourceUrns := []urn.Resource{}
+	for _, urnStr := range resourceUrnStrings {
+		var resourceUrn urn.Resource
+		if err := resourceUrn.UnmarshalText([]byte(urnStr)); err != nil {
+			logger.WarnContext(ctx, "invalid resource URN", attr.SlogError(err), attr.SlogResourceURN(urnStr))
+			continue
+		}
+		allResourceUrns = append(allResourceUrns, resourceUrn)
 	}
 
 	// Get the latest version to set as predecessor
@@ -658,22 +670,45 @@ func (s *Service) createToolsetVersion(ctx context.Context, urnStrings []string,
 		latestVersionNumber = latestVersion.Version
 	}
 
-	// Check if URNs are different from latest version
-	if err == nil && len(latestVersion.ToolUrns) == len(allToolUrns) {
-		existingUrnSet := make(map[string]bool)
-		for _, existingUrn := range latestVersion.ToolUrns {
-			existingUrnSet[existingUrn.String()] = true
-		}
+	if toolUrnStrings == nil && len(latestVersion.ToolUrns) > 0 {
+		allToolUrns = append(allToolUrns, latestVersion.ToolUrns...)
+	}
 
-		unchanged := true
-		for _, newUrn := range allToolUrns {
-			if !existingUrnSet[newUrn.String()] {
-				unchanged = false
-				break
+	if resourceUrnStrings == nil && len(latestVersion.ResourceUrns) > 0 {
+		allResourceUrns = append(allResourceUrns, latestVersion.ResourceUrns...)
+	}
+
+	// Check if URNs are different from latest version
+	if err == nil {
+		toolsUnchanged := len(latestVersion.ToolUrns) == len(allToolUrns)
+		if toolsUnchanged {
+			existingToolUrnSet := make(map[string]bool)
+			for _, existingUrn := range latestVersion.ToolUrns {
+				existingToolUrnSet[existingUrn.String()] = true
+			}
+			for _, newUrn := range allToolUrns {
+				if !existingToolUrnSet[newUrn.String()] {
+					toolsUnchanged = false
+					break
+				}
 			}
 		}
 
-		if unchanged {
+		resourcesUnchanged := len(latestVersion.ResourceUrns) == len(allResourceUrns)
+		if resourcesUnchanged {
+			existingResourceUrnSet := make(map[string]bool)
+			for _, existingUrn := range latestVersion.ResourceUrns {
+				existingResourceUrnSet[existingUrn.String()] = true
+			}
+			for _, newUrn := range allResourceUrns {
+				if !existingResourceUrnSet[newUrn.String()] {
+					resourcesUnchanged = false
+					break
+				}
+			}
+		}
+
+		if toolsUnchanged && resourcesUnchanged {
 			return nil // No change needed
 		}
 	}
@@ -682,6 +717,7 @@ func (s *Service) createToolsetVersion(ctx context.Context, urnStrings []string,
 		ToolsetID:     toolsetID,
 		Version:       latestVersionNumber + 1,
 		ToolUrns:      allToolUrns,
+		ResourceUrns:  allResourceUrns,
 		PredecessorID: predecessorID,
 	})
 	if err != nil {

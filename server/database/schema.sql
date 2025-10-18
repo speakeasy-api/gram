@@ -373,6 +373,36 @@ CREATE TABLE IF NOT EXISTS function_tool_definitions (
   CONSTRAINT function_tool_definitions_function_id_fkey FOREIGN KEY (function_id) REFERENCES deployments_functions (id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS function_resource_definitions (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  resource_urn TEXT NOT NULL,
+  project_id uuid NOT NULL,
+
+  deployment_id uuid NOT NULL,
+  function_id uuid NOT NULL,
+
+  runtime TEXT NOT NULL, -- nodejs:22, python:3.12, ...
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  uri TEXT NOT NULL,
+  title TEXT,
+  mime_type TEXT,
+  variables JSONB,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deleted_at timestamptz,
+  deleted boolean NOT NULL GENERATED ALWAYS AS (deleted_at IS NOT NULL) stored,
+
+  CONSTRAINT function_resource_definitions_pkey PRIMARY KEY (id),
+  CONSTRAINT function_resource_definitions_deployment_id_fkey FOREIGN KEY (deployment_id) REFERENCES deployments (id) ON DELETE CASCADE,
+  CONSTRAINT function_resource_definitions_function_id_fkey FOREIGN KEY (function_id) REFERENCES deployments_functions (id) ON DELETE CASCADE,
+  CONSTRAINT function_resource_definitions_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS function_resource_definitions_deployment_id_tool_urn_key ON function_resource_definitions (deployment_id, resource_urn) WHERE deleted IS FALSE;
+CREATE INDEX IF NOT EXISTS function_resource_definitions_function_id_idx ON function_resource_definitions (function_id) WHERE deleted IS FALSE;
+
 CREATE UNIQUE INDEX IF NOT EXISTS function_tool_definitions_deployment_id_tool_urn_key ON function_tool_definitions (deployment_id, tool_urn) WHERE deleted IS FALSE;
 CREATE INDEX IF NOT EXISTS function_tool_definitions_function_id_idx ON function_tool_definitions (function_id) WHERE deleted IS FALSE;
 
@@ -591,6 +621,7 @@ CREATE TABLE IF NOT EXISTS toolset_versions (
   toolset_id uuid NOT NULL,
   version BIGINT NOT NULL,
   tool_urns TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  resource_urns TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   predecessor_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),

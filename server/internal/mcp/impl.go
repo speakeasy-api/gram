@@ -68,7 +68,7 @@ type Service struct {
 	oauthRepo         *oauth_repo.Queries
 	billingTracker    billing.Tracker
 	billingRepository billing.Repository
-	toolsetCache      cache.TypedCacheObject[mv.ToolsetTools]
+	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
 type oauthTokenInputs struct {
@@ -136,7 +136,7 @@ func NewService(
 		oauthRepo:         oauth_repo.New(db),
 		billingTracker:    billingTracker,
 		billingRepository: billingRepository,
-		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
+		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}
 }
 

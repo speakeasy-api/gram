@@ -9,12 +9,12 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
-export const Type = {
+export const ToolEntryType = {
   Http: "http",
   Prompt: "prompt",
   Function: "function",
 } as const;
-export type Type = ClosedEnum<typeof Type>;
+export type ToolEntryType = ClosedEnum<typeof ToolEntryType>;
 
 export type ToolEntry = {
   /**
@@ -29,27 +29,28 @@ export type ToolEntry = {
    * The URN of the tool
    */
   toolUrn: string;
-  type: Type;
+  type: ToolEntryType;
 };
 
 /** @internal */
-export const Type$inboundSchema: z.ZodNativeEnum<typeof Type> = z.nativeEnum(
-  Type,
-);
+export const ToolEntryType$inboundSchema: z.ZodNativeEnum<
+  typeof ToolEntryType
+> = z.nativeEnum(ToolEntryType);
 
 /** @internal */
-export const Type$outboundSchema: z.ZodNativeEnum<typeof Type> =
-  Type$inboundSchema;
+export const ToolEntryType$outboundSchema: z.ZodNativeEnum<
+  typeof ToolEntryType
+> = ToolEntryType$inboundSchema;
 
 /**
  * @internal
  * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
  */
-export namespace Type$ {
-  /** @deprecated use `Type$inboundSchema` instead. */
-  export const inboundSchema = Type$inboundSchema;
-  /** @deprecated use `Type$outboundSchema` instead. */
-  export const outboundSchema = Type$outboundSchema;
+export namespace ToolEntryType$ {
+  /** @deprecated use `ToolEntryType$inboundSchema` instead. */
+  export const inboundSchema = ToolEntryType$inboundSchema;
+  /** @deprecated use `ToolEntryType$outboundSchema` instead. */
+  export const outboundSchema = ToolEntryType$outboundSchema;
 }
 
 /** @internal */
@@ -61,7 +62,7 @@ export const ToolEntry$inboundSchema: z.ZodType<
   id: z.string(),
   name: z.string(),
   tool_urn: z.string(),
-  type: Type$inboundSchema,
+  type: ToolEntryType$inboundSchema,
 }).transform((v) => {
   return remap$(v, {
     "tool_urn": "toolUrn",
@@ -85,7 +86,7 @@ export const ToolEntry$outboundSchema: z.ZodType<
   id: z.string(),
   name: z.string(),
   toolUrn: z.string(),
-  type: Type$outboundSchema,
+  type: ToolEntryType$outboundSchema,
 }).transform((v) => {
   return remap$(v, {
     toolUrn: "tool_urn",

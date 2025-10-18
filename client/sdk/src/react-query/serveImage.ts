@@ -35,7 +35,6 @@ export type ServeImageQueryData = operations.ServeImageResponse;
  */
 export function useServeImage(
   request: operations.ServeImageRequest,
-  security?: operations.ServeImageSecurity | undefined,
   options?: QueryHookOptions<ServeImageQueryData>,
 ): UseQueryResult<ServeImageQueryData, Error> {
   const client = useGramContext();
@@ -43,7 +42,6 @@ export function useServeImage(
     ...buildServeImageQuery(
       client,
       request,
-      security,
       options,
     ),
     ...options,
@@ -58,7 +56,6 @@ export function useServeImage(
  */
 export function useServeImageSuspense(
   request: operations.ServeImageRequest,
-  security?: operations.ServeImageSecurity | undefined,
   options?: SuspenseQueryHookOptions<ServeImageQueryData>,
 ): UseSuspenseQueryResult<ServeImageQueryData, Error> {
   const client = useGramContext();
@@ -66,7 +63,6 @@ export function useServeImageSuspense(
     ...buildServeImageQuery(
       client,
       request,
-      security,
       options,
     ),
     ...options,
@@ -77,26 +73,18 @@ export function prefetchServeImage(
   queryClient: QueryClient,
   client$: GramCore,
   request: operations.ServeImageRequest,
-  security?: operations.ServeImageSecurity | undefined,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildServeImageQuery(
       client$,
       request,
-      security,
     ),
   });
 }
 
 export function setServeImageData(
   client: QueryClient,
-  queryKeyBase: [
-    parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    },
-  ],
+  queryKeyBase: [parameters: { id: string }],
   data: ServeImageQueryData,
 ): ServeImageQueryData | undefined {
   const key = queryKeyServeImage(...queryKeyBase);
@@ -106,13 +94,7 @@ export function setServeImageData(
 
 export function invalidateServeImage(
   client: QueryClient,
-  queryKeyBase: TupleToPrefixes<
-    [parameters: {
-      id: string;
-      gramSession?: string | undefined;
-      gramKey?: string | undefined;
-    }]
-  >,
+  queryKeyBase: TupleToPrefixes<[parameters: { id: string }]>,
   filters?: Omit<InvalidateQueryFilters, "queryKey" | "predicate" | "exact">,
 ): Promise<void> {
   return client.invalidateQueries({
@@ -134,18 +116,13 @@ export function invalidateAllServeImage(
 export function buildServeImageQuery(
   client$: GramCore,
   request: operations.ServeImageRequest,
-  security?: operations.ServeImageSecurity | undefined,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
   queryFn: (context: QueryFunctionContext) => Promise<ServeImageQueryData>;
 } {
   return {
-    queryKey: queryKeyServeImage({
-      id: request.id,
-      gramSession: request.gramSession,
-      gramKey: request.gramKey,
-    }),
+    queryKey: queryKeyServeImage({ id: request.id }),
     queryFn: async function serveImageQueryFn(
       ctx,
     ): Promise<ServeImageQueryData> {
@@ -158,19 +135,12 @@ export function buildServeImageQuery(
       return unwrapAsync(assetsServeImage(
         client$,
         request,
-        security,
         mergedOptions,
       ));
     },
   };
 }
 
-export function queryKeyServeImage(
-  parameters: {
-    id: string;
-    gramSession?: string | undefined;
-    gramKey?: string | undefined;
-  },
-): QueryKey {
+export function queryKeyServeImage(parameters: { id: string }): QueryKey {
   return ["@gram/client", "assets", "serveImage", parameters];
 }
