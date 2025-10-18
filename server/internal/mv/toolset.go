@@ -260,7 +260,7 @@ func DescribeToolset(
 	tx DBTX,
 	projectID ProjectID,
 	toolsetSlug ToolsetSlug,
-	toolsetCache *cache.TypedCacheObject[ToolsetTools],
+	toolsetCache *cache.TypedCacheObject[ToolsetBaseContents],
 ) (*types.Toolset, error) {
 	toolsetRepo := tsr.New(tx)
 	orgRepo := org.New(tx)
@@ -477,8 +477,8 @@ func readToolsetTools(
 	toolsetVersion int64,
 	toolUrns []string,
 	resourceUrns []string,
-	toolsetCache *cache.TypedCacheObject[ToolsetTools],
-) (*ToolsetTools, error) {
+	toolsetCache *cache.TypedCacheObject[ToolsetBaseContents],
+) (*ToolsetBaseContents, error) {
 	toolsRepo := tr.New(tx)
 	templatesRepo := templatesR.New(tx)
 
@@ -699,7 +699,7 @@ func readToolsetTools(
 		}
 	}
 
-	toolsetTools := ToolsetTools{
+	toolsetTools := ToolsetBaseContents{
 		DeploymentID:    activeDeploymentID.String(),
 		ToolsetID:       toolsetID.String(),
 		Version:         toolsetVersion,

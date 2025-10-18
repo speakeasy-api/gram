@@ -42,7 +42,7 @@ type ChatClient struct {
 	env          *environments.EnvironmentEntries
 	cache        cache.Cache
 	toolProxy    *gateway.ToolProxy
-	toolsetCache cache.TypedCacheObject[mv.ToolsetTools]
+	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
 func NewChatClient(logger *slog.Logger,
@@ -76,7 +76,7 @@ func NewChatClient(logger *slog.Logger,
 			funcCaller,
 			tcm,
 		),
-		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetTools](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
+		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}
 }
 

@@ -8,9 +8,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 )
 
-// TODO: We should rename this if we start to include other toolset output primitives like resources
-// Alternatively we could have a different cache but seems like a bad idea
-type ToolsetTools struct {
+type ToolsetBaseContents struct {
 	DeploymentID    string
 	ToolsetID       string
 	Version         int64
@@ -21,9 +19,9 @@ type ToolsetTools struct {
 	FunctionEnvVars []*types.FunctionEnvironmentVariable
 }
 
-var _ cache.CacheableObject[ToolsetTools] = (*ToolsetTools)(nil)
+var _ cache.CacheableObject[ToolsetBaseContents] = (*ToolsetBaseContents)(nil)
 
-func (c ToolsetTools) CacheKey() string {
+func (c ToolsetBaseContents) CacheKey() string {
 	return ToolsetCacheKey(c.ToolsetID, c.DeploymentID, c.Version)
 }
 
@@ -31,10 +29,10 @@ func ToolsetCacheKey(toolsetID string, deploymentID string, version int64) strin
 	return fmt.Sprintf("toolset:%s:%s:%d", deploymentID, toolsetID, version)
 }
 
-func (c ToolsetTools) TTL() time.Duration {
+func (c ToolsetBaseContents) TTL() time.Duration {
 	return 1 * time.Hour
 }
 
-func (c ToolsetTools) AdditionalCacheKeys() []string {
+func (c ToolsetBaseContents) AdditionalCacheKeys() []string {
 	return []string{}
 }
