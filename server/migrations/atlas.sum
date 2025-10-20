@@ -1,4 +1,4 @@
-h1:qSCxqQp8vBaUmhJM5qAM4N8+qzlpHHao+uxMEVz0gRM=
+h1:EPey7+uqP5nH29zPDpScMwOM0IAcyjocmcNabopyuaE=
 20250502122425_initial-tables.sql h1:Hu3O60/bB4fjZpUay8FzyOjw6vngp087zU+U/wVKn7k=
 20250502130852_initial-indexes.sql h1:oYbnwi9y9PPTqu7uVbSPSALhCY8XF3rv03nDfG4b7mo=
 20250502154250_relax-http-security-fields.sql h1:0+OYIDq7IHmx7CP5BChVwfpF2rOSrRDxnqawXio2EVo=
@@ -60,3 +60,4 @@ h1:qSCxqQp8vBaUmhJM5qAM4N8+qzlpHHao+uxMEVz0gRM=
 20251013183658_variation-urns.sql h1:TJgNEcedIG4cevYZyWEog0Y1i0GMgZmbPfk74blSwVU=
 20251014212513_variation-urns-not-null.sql h1:1SIRNrH1l4pxwr3TAMux6n4D6qvIwJquy/wVwLWF6jw=
 20251017220142_add-functions-resources-migrations.sql h1:6cq1oILYkukTG0PTevDbJZ+aqa7NJcIhUTouM7h+cWI=
+20251020180734_prompt_templates_tool_urns.sql h1:ESuIMO0ROfJmpfvBatZMPx+6fmn2RAlQV7LWi/zJhFw=
