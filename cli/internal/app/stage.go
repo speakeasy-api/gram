@@ -12,7 +12,6 @@ import (
 
 	"github.com/speakeasy-api/gram/cli/internal/constants"
 	"github.com/speakeasy-api/gram/cli/internal/deploy"
-	"github.com/speakeasy-api/gram/cli/internal/flags"
 )
 
 var (
@@ -46,9 +45,6 @@ passed to "gram push". It is used to add Gram Functions zip files and OpenAPI
 YAML/JSON documents.
 `[1:],
 		Flags: []cli.Flag{
-			flags.APIEndpoint(),
-			flags.APIKey(),
-			flags.Project(),
 			&cli.PathFlag{
 				Name:  "config",
 				Usage: "Path to the deployment file",
