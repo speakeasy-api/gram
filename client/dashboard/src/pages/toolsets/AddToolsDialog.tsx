@@ -223,6 +223,7 @@ export function AddToolsDialog({
             ) : (
               <ToolList
                 tools={filteredTools}
+                toolset={toolset}
                 selectionMode="add"
                 selectedUrns={Array.from(selectedToolUrns)}
                 onSelectionChange={handleSelectionChange}

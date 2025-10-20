@@ -24,7 +24,8 @@ INSERT INTO prompt_templates (
   arguments,
   engine,
   kind,
-  tools_hint
+  tools_hint,
+  tool_urns_hint
 )
 SELECT
   $1,
@@ -36,20 +37,22 @@ SELECT
   $6,
   $7,
   $8,
-  $9
+  $9,
+  $10
 RETURNING id
 `
 
 type CreateTemplateParams struct {
-	ProjectID   uuid.UUID
-	ToolUrn     urn.Tool
-	Name        string
-	Prompt      string
-	Description pgtype.Text
-	Arguments   []byte
-	Engine      pgtype.Text
-	Kind        pgtype.Text
-	ToolsHint   []string
+	ProjectID    uuid.UUID
+	ToolUrn      urn.Tool
+	Name         string
+	Prompt       string
+	Description  pgtype.Text
+	Arguments    []byte
+	Engine       pgtype.Text
+	Kind         pgtype.Text
+	ToolsHint    []string
+	ToolUrnsHint []string
 }
 
 func (q *Queries) CreateTemplate(ctx context.Context, arg CreateTemplateParams) (uuid.UUID, error) {
@@ -63,6 +66,7 @@ func (q *Queries) CreateTemplate(ctx context.Context, arg CreateTemplateParams) 
 		arg.Engine,
 		arg.Kind,
 		arg.ToolsHint,
+		arg.ToolUrnsHint,
 	)
 	var id uuid.UUID
 	err := row.Scan(&id)
@@ -409,7 +413,8 @@ INSERT INTO prompt_templates (
   arguments,
   engine,
   kind,
-  tools_hint
+  tools_hint,
+  tool_urns_hint
 )
 SELECT
   c.project_id,
@@ -422,10 +427,11 @@ SELECT
   $4,
   COALESCE(NULLIF($5, ''), c.engine),
   COALESCE(NULLIF($6, ''), c.kind),
-  COALESCE($7, ARRAY[]::TEXT[])
+  COALESCE($7, ARRAY[]::TEXT[]),
+  COALESCE($8, ARRAY[]::TEXT[])
 FROM prompt_templates c
-WHERE project_id = $8
-  AND id = $9
+WHERE project_id = $9
+  AND id = $10
   AND (
     (NULLIF($2, '') IS NOT NULL AND $2 != c.prompt)
     OR (NULLIF($3, '') IS NOT NULL AND $3 != c.description)
@@ -433,20 +439,22 @@ WHERE project_id = $8
     OR (NULLIF($5, '') IS NOT NULL AND $5 != c.engine)
     OR (NULLIF($6, '') IS NOT NULL AND NULLIF($6, '') != c.kind)
     OR ($7 IS DISTINCT FROM c.tools_hint)
+    OR ($8 IS DISTINCT FROM c.tool_urns_hint)
   )
 RETURNING id
 `
 
 type UpdateTemplateParams struct {
-	ToolUrn     pgtype.Text
-	Prompt      pgtype.Text
-	Description pgtype.Text
-	Arguments   []byte
-	Engine      pgtype.Text
-	Kind        pgtype.Text
-	ToolsHint   []string
-	ProjectID   uuid.NullUUID
-	ID          uuid.NullUUID
+	ToolUrn      pgtype.Text
+	Prompt       pgtype.Text
+	Description  pgtype.Text
+	Arguments    []byte
+	Engine       pgtype.Text
+	Kind         pgtype.Text
+	ToolsHint    []string
+	ToolUrnsHint []string
+	ProjectID    uuid.NullUUID
+	ID           uuid.NullUUID
 }
 
 func (q *Queries) UpdateTemplate(ctx context.Context, arg UpdateTemplateParams) (uuid.UUID, error) {
@@ -458,6 +466,7 @@ func (q *Queries) UpdateTemplate(ctx context.Context, arg UpdateTemplateParams) 
 		arg.Engine,
 		arg.Kind,
 		arg.ToolsHint,
+		arg.ToolUrnsHint,
 		arg.ProjectID,
 		arg.ID,
 	)

@@ -48,7 +48,7 @@ type Service struct {
 	auth       *auth.Auth
 	repo       *repo.Queries
 	variations *variations.Service
-	toolsets   ToolsetsService	
+	toolsets   ToolsetsService
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -119,15 +119,16 @@ func (s *Service) CreateTemplate(ctx context.Context, payload *gen.CreateTemplat
 	toolURN := urn.NewTool(urn.ToolKindPrompt, payload.Kind, string(payload.Name))
 
 	id, err := tr.CreateTemplate(ctx, repo.CreateTemplateParams{
-		ProjectID:   projectID,
-		ToolUrn:     toolURN,
-		Name:        string(payload.Name),
-		Prompt:      payload.Prompt,
-		Description: conv.PtrToPGTextEmpty(payload.Description),
-		Arguments:   args,
-		Engine:      conv.ToPGTextEmpty(payload.Engine),
-		Kind:        conv.ToPGTextEmpty(payload.Kind),
-		ToolsHint:   payload.ToolsHint,
+		ProjectID:    projectID,
+		ToolUrn:      toolURN,
+		Name:         string(payload.Name),
+		Prompt:       payload.Prompt,
+		Description:  conv.PtrToPGTextEmpty(payload.Description),
+		Arguments:    args,
+		Engine:       conv.ToPGTextEmpty(payload.Engine),
+		Kind:         conv.ToPGTextEmpty(payload.Kind),
+		ToolsHint:    payload.ToolsHint,
+		ToolUrnsHint: payload.ToolUrnsHint,
 	})
 
 	var pgErr *pgconn.PgError
@@ -231,15 +232,16 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 	}
 
 	newid, err := tr.UpdateTemplate(ctx, repo.UpdateTemplateParams{
-		ProjectID:   uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
-		ID:          uuid.NullUUID{UUID: id, Valid: id != uuid.Nil},
-		ToolUrn:     conv.ToPGTextEmpty(toolURN.String()),
-		Prompt:      conv.PtrToPGTextEmpty(payload.Prompt),
-		Description: conv.PtrToPGTextEmpty(payload.Description),
-		Arguments:   args,
-		Engine:      conv.PtrToPGTextEmpty(payload.Engine),
-		Kind:        conv.PtrToPGTextEmpty(payload.Kind),
-		ToolsHint:   payload.ToolsHint,
+		ProjectID:    uuid.NullUUID{UUID: projectID, Valid: projectID != uuid.Nil},
+		ID:           uuid.NullUUID{UUID: id, Valid: id != uuid.Nil},
+		ToolUrn:      conv.ToPGTextEmpty(toolURN.String()),
+		Prompt:       conv.PtrToPGTextEmpty(payload.Prompt),
+		Description:  conv.PtrToPGTextEmpty(payload.Description),
+		Arguments:    args,
+		Engine:       conv.PtrToPGTextEmpty(payload.Engine),
+		Kind:         conv.PtrToPGTextEmpty(payload.Kind),
+		ToolsHint:    payload.ToolsHint,
+		ToolUrnsHint: payload.ToolUrnsHint,
 	})
 	switch {
 	case err == nil:
@@ -254,7 +256,7 @@ func (s *Service) UpdateTemplate(ctx context.Context, payload *gen.UpdateTemplat
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to save updated template").Log(ctx, s.logger)
 	}
 
-	// We need to invalidate the cache for any toolsets that contain this template as a tool 
+	// We need to invalidate the cache for any toolsets that contain this template as a tool
 	if err := s.toolsets.InvalidateCacheByTool(ctx, toolURN, projectID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to invalidate toolset cache").Log(ctx, s.logger)
 	}
@@ -459,6 +461,7 @@ type Step struct {
 	ID            string   `json:"id"`
 	Tool          string   `json:"tool"`
 	CanonicalTool string   `json:"canonicalTool"`
+	ToolUrn       string   `json:"toolUrn"`
 	Instructions  string   `json:"instructions"`
 	Inputs        []string `json:"inputs"`
 }

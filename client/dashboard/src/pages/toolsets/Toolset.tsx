@@ -578,6 +578,7 @@ export function ToolsetView({
           {toolsToDisplay.length > 0 ? (
             <ToolList
               tools={toolsToDisplay}
+              toolset={toolset}
               onToolUpdate={handleToolUpdate}
               onToolsRemove={handleToolsRemove}
               onCreateToolset={handleCreateToolset}

@@ -61,12 +61,13 @@ type Step = {
   id: string;
   tool?: string;
   canonicalTool?: string;
+  toolUrn?: string;
   instructions: string;
   inputs?: string[];
   update: (step: Step) => void;
 };
 
-function higherOrderToolToJSON(tool: HigherOrderTool): string {
+function higherOrderToolToJSON(tool: CustomTool): string {
   return JSON.stringify(tool, null, 2);
 }
 
@@ -77,7 +78,7 @@ const instructionsPlaceholder =
 type SerializableStep = Omit<Step, "update">;
 
 // Needs to stay aligned with server/internal/templates/impl.go:CustomToolJSONV1
-type HigherOrderTool = {
+type CustomTool = {
   toolName: string;
   purpose: string;
   inputs: Input[];
@@ -129,9 +130,10 @@ export function ToolBuilderPage() {
 
   const { data: toolsets } = useListToolsetsSuspense();
 
+  // TODO: This is a little janky
   const toolset =
     toolsets?.toolsets.find((t) =>
-      t.promptTemplates.some((pt) => pt.name === toolName),
+      t.tools.some((tool) => tool.name === toolName),
     ) ?? undefined;
 
   const { data: template } = useTemplateSuspense({
@@ -209,27 +211,27 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
 
   const tools = toolsetData?.tools ?? [];
 
-  // Ensures that the canonical tool and update function is set for the step
+  // Ensures that the canonical tool, tool URN, and update function is set for the step
   const makeStep = (step: Step) => {
-    if (!step.tool) {
+    if (!step.tool || !tools.length) {
       return {
         ...step,
         update: (s: Step) => setStep(s),
       };
     }
 
-    const canonicalTool =
-      step.canonicalTool ??
-      tools.find((t) => t.name === step.tool)?.canonicalName;
+    const tool = tools.find((t) => t.name === step.tool);
+    const canonicalToolName = step.canonicalTool ?? tool?.canonicalName;
+    const toolUrn = step.toolUrn ?? tool?.toolUrn;
 
-    if (!canonicalTool) {
-      console.error(`Tool ${step.tool} not found`);
-    }
+    if (!canonicalToolName) console.error(`Tool ${step.tool} not found`);
+    if (!toolUrn) console.error(`Tool URN for ${step.tool} not found`);
 
     return {
       ...step,
       update: (s: Step) => setStep(s),
-      canonicalTool,
+      canonicalTool: canonicalToolName,
+      toolUrn,
     };
   };
 
@@ -244,7 +246,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
   }, [initial]);
 
   const insertTool = (
-    tool: { name: string; canonicalName: string } | "none",
+    tool: { name: string; canonicalName: string; toolUrn: string } | "none",
   ) => {
     if (steps.length >= 10) {
       return;
@@ -260,6 +262,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     if (tool !== "none") {
       step.tool = tool.name;
       step.canonicalTool = tool.canonicalName;
+      step.toolUrn = tool.toolUrn;
     } else {
       step.instructions = "Fill in what this step should do...";
     }
@@ -398,7 +401,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
             required: inputs.map((input) => input.name),
           };
 
-          const higherOrderTool: HigherOrderTool = {
+          const higherOrderTool: CustomTool = {
             toolName: name,
             purpose,
             inputs,
@@ -415,6 +418,7 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
                   prompt: higherOrderToolToJSON(higherOrderTool),
                   arguments: JSON.stringify(argsJsonSchema),
                   toolsHint: steps.flatMap((step) => step.canonicalTool ?? []),
+                  toolUrnsHint: steps.flatMap((step) => step.toolUrn ?? []),
                 },
               },
             });
@@ -875,108 +879,21 @@ const StepSeparator = () => {
 const parsePrompt = (
   prompt: string,
 ): { purpose: string; inputs: Input[]; steps: Step[] } => {
-  // First try to parse as JSON
-  try {
-    const higherOrderTool = JSON.parse(prompt) as HigherOrderTool;
+  const customTool = JSON.parse(prompt) as CustomTool;
 
-    // Validate that it has the expected structure
-    if (
-      higherOrderTool &&
-      typeof higherOrderTool === "object" &&
-      "purpose" in higherOrderTool &&
-      "inputs" in higherOrderTool &&
-      "steps" in higherOrderTool
-    ) {
-      // Convert to the expected format with proper step handling
-      const steps: Step[] = higherOrderTool.steps.map((step) => ({
-        ...step,
-        id: step.id || uuidv7(), // Ensure steps have IDs
-        update: () => {
-          console.error("update not implemented");
-        }, // This will be replaced by the component when used
-      }));
+  const steps: Step[] = customTool.steps.map((step) => ({
+    ...step,
+    id: step.id || uuidv7(), // Ensure steps have IDs
+    update: () => {
+      console.error("update not implemented");
+    }, // This will be replaced by the component when used
+  }));
 
-      return {
-        purpose: higherOrderTool.purpose,
-        inputs: higherOrderTool.inputs,
-        steps,
-      };
-    }
-  } catch (error) {
-    console.error(
-      "Failed to parse template as JSON, falling back to legacy parsing:",
-      error,
-    );
-  }
-
-  // Legacy parsing logic (kept for backward compatibility)
-  return parsePromptLegacy(prompt);
-};
-
-// Keep this around until important "old" templates have been migrated
-const parsePromptLegacy = (
-  prompt: string,
-): { purpose: string; inputs: Input[]; steps: Step[] } => {
-  // Remove markdown backticks and xml tag if present
-  const cleanPrompt = prompt.replace(/```xml\n|\n```/g, "").trim();
-
-  // Extract purpose
-  const purposeMatch = cleanPrompt.match(
-    /<Purpose>\s*<Instruction>.*?<\/Instruction>\s*<Purpose>\s*(.*?)\s*<\/Purpose>\s*<\/Purpose>/s,
-  );
-  const purpose = purposeMatch?.[1]?.trim() || "";
-
-  // Extract inputs
-  const inputsSection = cleanPrompt.match(/<Inputs>.*?<\/Inputs>/s)?.[0] || "";
-  const inputMatches = [
-    ...inputsSection.matchAll(
-      /<Input name="([^"]+)"(?:\s+description="([^"]*)")?\s*\/>/g,
-    ),
-  ];
-  const inputs: Input[] = [];
-
-  for (const match of inputMatches) {
-    const name = match[1];
-    if (name) {
-      inputs.push({
-        name,
-        ...(match[2] && { description: match[2] }),
-      });
-    }
-  }
-
-  // Extract steps
-  const planSection = cleanPrompt.match(/<Plan>(.*?)<\/Plan>/s)?.[0] || "";
-  const stepMatches = [
-    ...planSection.matchAll(
-      /<CallTool tool_name="([^"]+)">\s*<Instruction>(.*?)<\/Instruction>(.*?)<\/CallTool>/gs,
-    ),
-  ];
-  const steps: Step[] = [];
-
-  for (const match of stepMatches) {
-    const [, tool, instructions, inputSection] = match;
-    if (tool && instructions) {
-      const stepInputs = [
-        ...(inputSection || "").matchAll(/<Input name="([^"]+)"\s*\/>/g),
-      ]
-        .map((m) => m[1])
-        .filter((input): input is string => !!input);
-
-      steps.push({
-        id: uuidv7(),
-        tool,
-        canonicalTool: tool,
-        instructions: instructions.trim(),
-        inputs: stepInputs,
-        update: () => {
-          console.error("update not implemented");
-        }, // This will be replaced by the component when used
-      });
-    }
-  }
-
-  return { purpose, inputs, steps };
+  return {
+    purpose: customTool.purpose,
+    inputs: customTool.inputs,
+    steps,
+  };
 };
 
 const customToolSystemPrompt = [
@@ -1049,7 +966,7 @@ function ChatPanel(props: {
           inputs.map((input) => [input.name, `{{${input.name}}}`]),
         );
 
-        const higherOrderTool: HigherOrderTool = {
+        const higherOrderTool: CustomTool = {
           toolName: name,
           purpose,
           inputs,

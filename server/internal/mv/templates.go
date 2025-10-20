@@ -100,6 +100,10 @@ func fromPromptTemplateRow(row repo.PromptTemplate) *types.PromptTemplate {
 	if len(row.ToolsHint) > 0 {
 		tools = row.ToolsHint
 	}
+	var toolUrns []string
+	if len(row.ToolUrnsHint) > 0 {
+		toolUrns = row.ToolUrnsHint
+	}
 
 	return &types.PromptTemplate{
 		ID:            row.ID.String(),
@@ -114,6 +118,7 @@ func fromPromptTemplateRow(row repo.PromptTemplate) *types.PromptTemplate {
 		Engine:        conv.PtrValOr(conv.FromPGText[string](row.Engine), ""),
 		Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](row.Kind), "prompt"),
 		ToolsHint:     tools,
+		ToolUrnsHint:  toolUrns,
 		CreatedAt:     row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:     row.UpdatedAt.Time.Format(time.RFC3339),
 		ProjectID:     row.ProjectID.String(),
