@@ -1,4 +1,4 @@
-import { asTool } from "@/lib/toolTypes";
+import { asResource, asTool } from "@/lib/toolTypes";
 import {
   ListToolsRequest,
   ListToolsSecurity,
@@ -21,6 +21,7 @@ export function useToolset(toolsetSlug: string | undefined) {
       ? {
           ...result.data,
           tools: result.data.tools.map(asTool),
+          resources: result.data.resources?.map(asResource) ?? [],
         }
       : undefined,
   };

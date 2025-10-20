@@ -98,9 +98,7 @@ export function ToolsetCard({
         <Card.Footer>
           <Stack direction="horizontal" gap={1} align="center">
             <BoundToolsBadge toolset={toolset} />
-            <ResourcesBadge
-              resourceUris={toolset.resources?.map((r) => r.uri) ?? []}
-            />
+            <ResourcesBadge resourceUris={toolset.resources?.map((r) => r.uri) ?? []} />
             <ToolsetPromptsBadge toolset={toolset} />
           </Stack>
           <UpdatedAt date={new Date(toolset.updatedAt)} />

@@ -6,6 +6,7 @@ import {
   PromptTemplateEntry,
   PromptTemplateKind,
   FunctionToolDefinition,
+  Resource as GeneratedResource,
 } from "@gram/client/models/components";
 import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
@@ -17,6 +18,7 @@ export type HttpToolWithDisplayName = Tool & { type: "http" } & {
 
 export type Toolset = Omit<GeneratedToolset, "tools"> & {
   tools: Tool[];
+  resources?: Resource[];
 };
 
 export type Tool =
@@ -43,6 +45,28 @@ export const asTool = (tool: GeneratedTool): Tool => {
     return { type: "function", ...tool.functionToolDefinition };
   } else {
     throw new Error("Unexpected tool type");
+  }
+};
+
+export type Resource = {
+  type: "function";
+  id: string;
+  name: string;
+  resourceUrn: string;
+  uri: string;
+};
+
+export const asResource = (resource: GeneratedResource): Resource => {
+  if (resource.functionResourceDefinition) {
+    return {
+      type: "function",
+      id: resource.functionResourceDefinition.id,
+      name: resource.functionResourceDefinition.name,
+      resourceUrn: resource.functionResourceDefinition.resourceUrn,
+      uri: resource.functionResourceDefinition.uri,
+    };
+  } else {
+    throw new Error("Unexpected resource type");
   }
 };
 
