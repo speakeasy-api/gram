@@ -33,6 +33,7 @@
     "@hono/node-server": "^1.19.5",
     "@types/node": "22.x",
     "hono": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "zx": "^8.8.5-lite"
   }
 }
