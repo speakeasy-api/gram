@@ -1,5 +1,11 @@
 # @gram-ai/create-function
 
+## 0.2.1
+
+### Patch Changes
+
+- a8cc73e: Ensure .gitignore is scaffolded out with templating Gram Functions projects.
+
 ## 0.2.0
 
 ### Minor Changes

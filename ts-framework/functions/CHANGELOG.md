@@ -1,5 +1,13 @@
 # @gram-ai/functions
 
+## 0.2.1
+
+### Patch Changes
+
+- 676405c: Updated the `manifest()` method of the Gram Functions TS framework to avoid
+  JSON-serializing the input schema for tool definitions. This was a mistake since
+  the server is expecting a literal object for the schema.
+
 ## 0.2.0
 
 ## 0.1.0
