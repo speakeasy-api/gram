@@ -109,8 +109,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			)
 
 			result := workflow.New(ctx, logger, workflowParams).
-				UploadAssets(ctx, config.Sources).
-				LoadLatestDeployment(ctx)
+				UploadAssets(ctx, config.Sources)
 			if c.String("method") == "replace" {
 				result = result.CreateDeployment(ctx, c.String("idempotency-key"))
 			} else {

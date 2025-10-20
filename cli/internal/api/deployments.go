@@ -172,7 +172,7 @@ type EvolveRequest struct {
 	OpenAPIv3Assets []*deployments.AddOpenAPIv3DeploymentAssetForm
 	Functions       []*deployments.AddFunctionsForm
 	APIKey          secret.Secret
-	DeploymentID    string
+	DeploymentID    *string
 	ProjectSlug     string
 }
 
@@ -185,7 +185,7 @@ func (c *DeploymentsClient) Evolve(
 	result, err := c.client.Evolve(ctx, &deployments.EvolvePayload{
 		ApikeyToken:            &key,
 		ProjectSlugInput:       &req.ProjectSlug,
-		DeploymentID:           &req.DeploymentID,
+		DeploymentID:           req.DeploymentID,
 		UpsertOpenapiv3Assets:  req.OpenAPIv3Assets,
 		UpsertFunctions:        req.Functions,
 		ExcludeOpenapiv3Assets: []string{},
