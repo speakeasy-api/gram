@@ -297,7 +297,7 @@ export function MCPDetails({ toolset }: { toolset: Toolset }) {
     setMcpSlug(value);
   };
 
-  const linkDomainButton = domain && (
+  const linkDomainButton = (domain && domain.activated && domain.verified) && (
     <Tooltip>
       <TooltipTrigger asChild>
         <Button
