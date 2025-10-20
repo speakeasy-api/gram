@@ -25,25 +25,27 @@ func NewFilterType(s string) (FilterType, error) {
 	}
 }
 
-type BaseDescriptor struct {
-	ID               string `json:"id" yaml:"id"`
-	Name             string `json:"name" yaml:"name"`
-	DeploymentID     string `json:"deployment_id" yaml:"deployment_id"`
-	ProjectID        string `json:"project_id" yaml:"project_id"`
-	ProjectSlug      string `json:"project_slug" yaml:"project_slug"`
-	OrganizationID   string `json:"organization_id" yaml:"organization_id"`
-	OrganizationSlug string `json:"organization_slug" yaml:"organization_slug"`
-}
-
 type ToolDescriptor struct {
-	BaseDescriptor
-	URN urn.Tool `json:"urn" yaml:"urn"`
+	ID               string   `json:"id" yaml:"id"`
+	Name             string   `json:"name" yaml:"name"`
+	DeploymentID     string   `json:"deployment_id" yaml:"deployment_id"`
+	ProjectID        string   `json:"project_id" yaml:"project_id"`
+	ProjectSlug      string   `json:"project_slug" yaml:"project_slug"`
+	OrganizationID   string   `json:"organization_id" yaml:"organization_id"`
+	OrganizationSlug string   `json:"organization_slug" yaml:"organization_slug"`
+	URN              urn.Tool `json:"urn" yaml:"urn"`
 }
 
 type ResourceDescriptor struct {
-	BaseDescriptor
-	URN urn.Resource `json:"urn" yaml:"urn"`
-	URI string       `json:"uri" yaml:"uri"`
+	ID               string       `json:"id" yaml:"id"`
+	Name             string       `json:"name" yaml:"name"`
+	DeploymentID     string       `json:"deployment_id" yaml:"deployment_id"`
+	ProjectID        string       `json:"project_id" yaml:"project_id"`
+	ProjectSlug      string       `json:"project_slug" yaml:"project_slug"`
+	OrganizationID   string       `json:"organization_id" yaml:"organization_id"`
+	OrganizationSlug string       `json:"organization_slug" yaml:"organization_slug"`
+	URN              urn.Resource `json:"urn" yaml:"urn"`
+	URI              string       `json:"uri" yaml:"uri"`
 }
 
 // HTTPToolCallPlan describes how to translate a tool call into an HTTP request to be

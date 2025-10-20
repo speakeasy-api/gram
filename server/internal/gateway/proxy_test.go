@@ -28,16 +28,14 @@ var funcs functions.ToolCaller
 
 func newTestToolDescriptor() *ToolDescriptor {
 	return &ToolDescriptor{
-		BaseDescriptor: BaseDescriptor{
-			ID:               uuid.New().String(),
-			Name:             "test_tool",
-			DeploymentID:     uuid.New().String(),
-			ProjectID:        uuid.New().String(),
-			ProjectSlug:      "test-project",
-			OrganizationID:   uuid.New().String(),
-			OrganizationSlug: "test-org",
-		},
-		URN: urn.NewTool(urn.ToolKindHTTP, "doc", "test_tool"),
+		ID:               uuid.New().String(),
+		Name:             "test_tool",
+		DeploymentID:     uuid.New().String(),
+		ProjectID:        uuid.New().String(),
+		ProjectSlug:      "test-project",
+		OrganizationID:   uuid.New().String(),
+		OrganizationSlug: "test-org",
+		URN:              urn.NewTool(urn.ToolKindHTTP, "doc", "test_tool"),
 	}
 }
 

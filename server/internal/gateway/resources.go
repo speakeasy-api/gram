@@ -144,24 +144,29 @@ func (tp *ToolProxy) doFunctionResource(
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
 
-	return reverseProxyRequest(
-		ctx,
-		logger,
-		tp.tracer,
-		w,
-		req,
-		&descriptor.BaseDescriptor,
-		descriptor.URN.String(),
-		&FilterRequest{Type: "none", Filter: ""},
-		DisableResponseFiltering,
-		tp.policy,
-		&responseStatusCode,
-		tp.toolMetrics,
-		func(resp *http.Response) error {
+	return reverseProxyRequest(ctx, ReverseProxyOptions{
+		Logger:                    logger,
+		Tracer:                    tp.tracer,
+		Writer:                    w,
+		Request:                   req,
+		URN:                       descriptor.URN.String(),
+		Expression:                &FilterRequest{Type: "none", Filter: ""},
+		FilterConfig:              DisableResponseFiltering,
+		Policy:                    tp.policy,
+		ResponseStatusCodeCapture: &responseStatusCode,
+		ToolMetricsProvider:       tp.toolMetrics,
+		VerifyResponse: func(resp *http.Response) error {
 			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
 				return fmt.Errorf("failed to verify function invocation ID")
 			}
 			return nil
 		},
-	)
+		ID:               descriptor.ID,
+		Name:             descriptor.Name,
+		DeploymentID:     descriptor.DeploymentID,
+		ProjectID:        descriptor.ProjectID,
+		ProjectSlug:      descriptor.ProjectSlug,
+		OrganizationID:   descriptor.OrganizationID,
+		OrganizationSlug: descriptor.OrganizationSlug,
+	})
 }

@@ -149,16 +149,14 @@ func (t *Toolsets) extractHTTPToolCallPlan(ctx context.Context, tool toolsRepo.H
 	}
 
 	descriptor := &gateway.ToolDescriptor{
-		BaseDescriptor: gateway.BaseDescriptor{
-			ID:               tool.ID.String(),
-			Name:             tool.Name,
-			DeploymentID:     tool.DeploymentID.String(),
-			ProjectID:        tool.ProjectID.String(),
-			ProjectSlug:      orgData.ProjectSlug,
-			OrganizationID:   orgData.ID,
-			OrganizationSlug: orgData.Slug,
-		},
-		URN: tool.ToolUrn,
+		ID:               tool.ID.String(),
+		Name:             tool.Name,
+		DeploymentID:     tool.DeploymentID.String(),
+		ProjectID:        tool.ProjectID.String(),
+		ProjectSlug:      orgData.ProjectSlug,
+		OrganizationID:   orgData.ID,
+		OrganizationSlug: orgData.Slug,
+		URN:              tool.ToolUrn,
 	}
 	plan := &gateway.HTTPToolCallPlan{
 		DefaultServerUrl:   gateway.NullString{Valid: tool.DefaultServerUrl.Valid, Value: tool.DefaultServerUrl.String},
@@ -201,16 +199,14 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 	envvars := slices.Collect(maps.Keys(envconfig))
 
 	descriptor := &gateway.ToolDescriptor{
-		BaseDescriptor: gateway.BaseDescriptor{
-			ID:               tool.ID.String(),
-			Name:             tool.Name,
-			DeploymentID:     tool.DeploymentID.String(),
-			ProjectID:        tool.ProjectID.String(),
-			ProjectSlug:      orgData.Slug,
-			OrganizationID:   orgData.ID,
-			OrganizationSlug: orgData.Slug,
-		},
-		URN: tool.ToolUrn,
+		ID:               tool.ID.String(),
+		Name:             tool.Name,
+		DeploymentID:     tool.DeploymentID.String(),
+		ProjectID:        tool.ProjectID.String(),
+		ProjectSlug:      orgData.Slug,
+		OrganizationID:   orgData.ID,
+		OrganizationSlug: orgData.Slug,
+		URN:              tool.ToolUrn,
 	}
 	plan := &gateway.FunctionToolCallPlan{
 		FunctionID:        tool.FunctionID.String(),
@@ -282,17 +278,15 @@ func (t *Toolsets) extractFunctionResourceCallPlan(ctx context.Context, resource
 	}
 
 	descriptor := &gateway.ResourceDescriptor{
-		BaseDescriptor: gateway.BaseDescriptor{
-			ID:               resource.ID.String(),
-			Name:             resource.Name,
-			DeploymentID:     resource.DeploymentID.String(),
-			ProjectID:        resource.ProjectID.String(),
-			ProjectSlug:      orgData.ProjectSlug,
-			OrganizationID:   orgData.ID,
-			OrganizationSlug: orgData.Slug,
-		},
-		URN: resource.ResourceUrn,
-		URI: resource.Uri,
+		ID:               resource.ID.String(),
+		Name:             resource.Name,
+		DeploymentID:     resource.DeploymentID.String(),
+		ProjectID:        resource.ProjectID.String(),
+		ProjectSlug:      orgData.ProjectSlug,
+		OrganizationID:   orgData.ID,
+		OrganizationSlug: orgData.Slug,
+		URN:              resource.ResourceUrn,
+		URI:              resource.Uri,
 	}
 	accessID := ""
 	if resource.AccessID.Valid {
