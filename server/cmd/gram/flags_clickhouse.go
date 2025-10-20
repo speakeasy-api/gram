@@ -13,7 +13,7 @@ var clickHouseFlags = []cli.Flag{
 		Name:     "clickhouse-database",
 		Required: false,
 		EnvVars:  []string{"CLICKHOUSE_DATABASE"},
-		Value:    "gram",
+		Value:    "default",
 	},
 	&cli.StringFlag{
 		Name:     "clickhouse-username",

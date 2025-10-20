@@ -1,6 +1,4 @@
-CREATE DATABASE IF NOT EXISTS gram;
-
-create table if not exists gram.http_requests_raw
+create table if not exists http_requests_raw
 (
     id                  UUID DEFAULT generateUUIDv7(),
     ts                  DateTime64(3, 'UTC'),
