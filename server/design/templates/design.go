@@ -257,6 +257,10 @@ var CreatePromptTemplateForm = Type("CreatePromptTemplateForm", func() {
 		Description("The suggested tool names associated with the prompt template")
 		MaxLength(20)
 	})
+	Attribute("tool_urns_hint", ArrayOf(String), func() {
+		Description("The suggested tool URNS associated with the prompt template")
+		MaxLength(20)
+	})
 })
 
 var CreatePromptTemplateResult = Type("CreatePromptTemplateResult", func() {
@@ -286,6 +290,10 @@ var UpdatePromptTemplateForm = Type("UpdatePromptTemplateForm", func() {
 	})
 	Attribute("tools_hint", ArrayOf(String), func() {
 		Description("The suggested tool names associated with the prompt template")
+		MaxLength(20)
+	})
+	Attribute("tool_urns_hint", ArrayOf(String), func() {
+		Description("The suggested tool URNS associated with the prompt template")
 		MaxLength(20)
 	})
 })

@@ -32,6 +32,8 @@ type CreateTemplateRequestBody struct {
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string `form:"tools_hint,omitempty" json:"tools_hint,omitempty" xml:"tools_hint,omitempty"`
+	// The suggested tool URNS associated with the prompt template
+	ToolUrnsHint []string `form:"tool_urns_hint,omitempty" json:"tool_urns_hint,omitempty" xml:"tool_urns_hint,omitempty"`
 }
 
 // UpdateTemplateRequestBody is the type of the "templates" service
@@ -53,6 +55,8 @@ type UpdateTemplateRequestBody struct {
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string `form:"tools_hint,omitempty" json:"tools_hint,omitempty" xml:"tools_hint,omitempty"`
+	// The suggested tool URNS associated with the prompt template
+	ToolUrnsHint []string `form:"tool_urns_hint,omitempty" json:"tool_urns_hint,omitempty" xml:"tool_urns_hint,omitempty"`
 }
 
 // RenderTemplateByIDRequestBody is the type of the "templates" service
@@ -1420,6 +1424,8 @@ type PromptTemplateResponseBody struct {
 	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string `form:"tools_hint" json:"tools_hint" xml:"tools_hint"`
+	// The suggested tool URNS associated with the prompt template
+	ToolUrnsHint []string `form:"tool_urns_hint,omitempty" json:"tool_urns_hint,omitempty" xml:"tool_urns_hint,omitempty"`
 	// The ID of the tool
 	ID string `form:"id" json:"id" xml:"id"`
 	// The URN of this tool
@@ -2567,6 +2573,12 @@ func NewCreateTemplatePayload(body *CreateTemplateRequestBody, apikeyToken *stri
 			v.ToolsHint[i] = val
 		}
 	}
+	if body.ToolUrnsHint != nil {
+		v.ToolUrnsHint = make([]string, len(body.ToolUrnsHint))
+		for i, val := range body.ToolUrnsHint {
+			v.ToolUrnsHint[i] = val
+		}
+	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
@@ -2590,6 +2602,12 @@ func NewUpdateTemplatePayload(body *UpdateTemplateRequestBody, apikeyToken *stri
 		v.ToolsHint = make([]string, len(body.ToolsHint))
 		for i, val := range body.ToolsHint {
 			v.ToolsHint[i] = val
+		}
+	}
+	if body.ToolUrnsHint != nil {
+		v.ToolUrnsHint = make([]string, len(body.ToolUrnsHint))
+		for i, val := range body.ToolUrnsHint {
+			v.ToolUrnsHint[i] = val
 		}
 	}
 	v.ApikeyToken = apikeyToken
@@ -2714,6 +2732,9 @@ func ValidateCreateTemplateRequestBody(body *CreateTemplateRequestBody) (err err
 	if len(body.ToolsHint) > 20 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools_hint", body.ToolsHint, len(body.ToolsHint), 20, false))
 	}
+	if len(body.ToolUrnsHint) > 20 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tool_urns_hint", body.ToolUrnsHint, len(body.ToolUrnsHint), 20, false))
+	}
 	return
 }
 
@@ -2738,6 +2759,9 @@ func ValidateUpdateTemplateRequestBody(body *UpdateTemplateRequestBody) (err err
 	}
 	if len(body.ToolsHint) > 20 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools_hint", body.ToolsHint, len(body.ToolsHint), 20, false))
+	}
+	if len(body.ToolUrnsHint) > 20 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tool_urns_hint", body.ToolUrnsHint, len(body.ToolUrnsHint), 20, false))
 	}
 	return
 }

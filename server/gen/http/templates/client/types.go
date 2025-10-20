@@ -30,6 +30,8 @@ type CreateTemplateRequestBody struct {
 	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string `form:"tools_hint,omitempty" json:"tools_hint,omitempty" xml:"tools_hint,omitempty"`
+	// The suggested tool URNS associated with the prompt template
+	ToolUrnsHint []string `form:"tool_urns_hint,omitempty" json:"tool_urns_hint,omitempty" xml:"tool_urns_hint,omitempty"`
 }
 
 // UpdateTemplateRequestBody is the type of the "templates" service
@@ -51,6 +53,8 @@ type UpdateTemplateRequestBody struct {
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string `form:"tools_hint,omitempty" json:"tools_hint,omitempty" xml:"tools_hint,omitempty"`
+	// The suggested tool URNS associated with the prompt template
+	ToolUrnsHint []string `form:"tool_urns_hint,omitempty" json:"tool_urns_hint,omitempty" xml:"tool_urns_hint,omitempty"`
 }
 
 // RenderTemplateByIDRequestBody is the type of the "templates" service
@@ -1418,6 +1422,8 @@ type PromptTemplateResponseBody struct {
 	Kind *string `form:"kind,omitempty" json:"kind,omitempty" xml:"kind,omitempty"`
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string `form:"tools_hint,omitempty" json:"tools_hint,omitempty" xml:"tools_hint,omitempty"`
+	// The suggested tool URNS associated with the prompt template
+	ToolUrnsHint []string `form:"tool_urns_hint,omitempty" json:"tool_urns_hint,omitempty" xml:"tool_urns_hint,omitempty"`
 	// The ID of the tool
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The URN of this tool
@@ -1511,6 +1517,12 @@ func NewCreateTemplateRequestBody(p *templates.CreateTemplatePayload) *CreateTem
 			body.ToolsHint[i] = val
 		}
 	}
+	if p.ToolUrnsHint != nil {
+		body.ToolUrnsHint = make([]string, len(p.ToolUrnsHint))
+		for i, val := range p.ToolUrnsHint {
+			body.ToolUrnsHint[i] = val
+		}
+	}
 	return body
 }
 
@@ -1530,6 +1542,12 @@ func NewUpdateTemplateRequestBody(p *templates.UpdateTemplatePayload) *UpdateTem
 		body.ToolsHint = make([]string, len(p.ToolsHint))
 		for i, val := range p.ToolsHint {
 			body.ToolsHint[i] = val
+		}
+	}
+	if p.ToolUrnsHint != nil {
+		body.ToolUrnsHint = make([]string, len(p.ToolUrnsHint))
+		for i, val := range p.ToolUrnsHint {
+			body.ToolUrnsHint[i] = val
 		}
 	}
 	return body
@@ -4491,6 +4509,9 @@ func ValidatePromptTemplateResponseBody(body *PromptTemplateResponseBody) (err e
 	}
 	if len(body.ToolsHint) > 20 {
 		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools_hint", body.ToolsHint, len(body.ToolsHint), 20, false))
+	}
+	if len(body.ToolUrnsHint) > 20 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.tool_urns_hint", body.ToolUrnsHint, len(body.ToolUrnsHint), 20, false))
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
