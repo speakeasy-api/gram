@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: da72a4dc37cb489c071909175a10c139
+  docChecksum: b54f3232f5ef424e6d8a6e6a4562756e
   docVersion: 0.0.1
-  speakeasyVersion: 1.637.0
-  generationVersion: 2.727.4
-  releaseVersion: 0.14.13
-  configChecksum: 0f74e888b8fbbe75280ae1292943fedd
+  speakeasyVersion: 1.637.2
+  generationVersion: 2.727.9
+  releaseVersion: 0.14.15
+  configChecksum: eb13bc4d53a18781224f0fd2dcdd18fc
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -107,6 +107,7 @@ generatedFiles:
   - docs/models/components/listpackagesresult.md
   - docs/models/components/listprojectsresult.md
   - docs/models/components/listprompttemplatesresult.md
+  - docs/models/components/listresourcesresult.md
   - docs/models/components/listtoollogresponse.md
   - docs/models/components/listtoolsetsresult.md
   - docs/models/components/listtoolsresult.md
@@ -294,6 +295,8 @@ generatedFiles:
   - docs/models/operations/listpackagessecurityoption2.md
   - docs/models/operations/listprojectsrequest.md
   - docs/models/operations/listprojectssecurity.md
+  - docs/models/operations/listresourcesrequest.md
+  - docs/models/operations/listresourcessecurity.md
   - docs/models/operations/listtemplatesrequest.md
   - docs/models/operations/listtemplatessecurity.md
   - docs/models/operations/listtemplatessecurityoption1.md
@@ -410,6 +413,7 @@ generatedFiles:
   - docs/sdks/mcpmetadata/README.md
   - docs/sdks/packages/README.md
   - docs/sdks/projects/README.md
+  - docs/sdks/resources/README.md
   - docs/sdks/slack/README.md
   - docs/sdks/templates/README.md
   - docs/sdks/tools/README.md
@@ -472,6 +476,7 @@ generatedFiles:
   - src/funcs/projectsCreate.ts
   - src/funcs/projectsList.ts
   - src/funcs/projectsSetLogo.ts
+  - src/funcs/resourcesList.ts
   - src/funcs/slackDeleteSlackConnection.ts
   - src/funcs/slackGetSlackConnection.ts
   - src/funcs/slackSlackCallback.ts
@@ -587,6 +592,7 @@ generatedFiles:
   - src/models/components/listpackagesresult.ts
   - src/models/components/listprojectsresult.ts
   - src/models/components/listprompttemplatesresult.ts
+  - src/models/components/listresourcesresult.ts
   - src/models/components/listtoollogresponse.ts
   - src/models/components/listtoolsetsresult.ts
   - src/models/components/listtoolsresult.ts
@@ -695,6 +701,7 @@ generatedFiles:
   - src/models/operations/listintegrations.ts
   - src/models/operations/listpackages.ts
   - src/models/operations/listprojects.ts
+  - src/models/operations/listresources.ts
   - src/models/operations/listtemplates.ts
   - src/models/operations/listtoollogs.ts
   - src/models/operations/listtools.ts
@@ -771,6 +778,7 @@ generatedFiles:
   - src/react-query/listIntegrations.ts
   - src/react-query/listPackages.ts
   - src/react-query/listProjects.ts
+  - src/react-query/listResources.ts
   - src/react-query/listToolLogs.ts
   - src/react-query/listTools.ts
   - src/react-query/listToolsets.ts
@@ -818,6 +826,7 @@ generatedFiles:
   - src/sdk/mcpmetadata.ts
   - src/sdk/packages.ts
   - src/sdk/projects.ts
+  - src/sdk/resources.ts
   - src/sdk/sdk.ts
   - src/sdk/slack.ts
   - src/sdk/templates.ts
@@ -1671,5 +1680,14 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listResources:
+    speakeasy-default-list-resources:
+      responses:
+        "200":
+          application/json: {"resources": [{}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

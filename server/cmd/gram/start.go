@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauth"
 	"github.com/speakeasy-api/gram/server/internal/packages"
 	"github.com/speakeasy-api/gram/server/internal/projects"
+	"github.com/speakeasy-api/gram/server/internal/resources"
 	"github.com/speakeasy-api/gram/server/internal/templates"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
@@ -526,6 +527,7 @@ func newStartCommand() *cli.Command {
 			keys.Attach(mux, keys.NewService(logger, db, sessionManager, c.String("environment")))
 			environments.Attach(mux, environments.NewService(logger, db, sessionManager, encryptionClient))
 			tools.Attach(mux, tools.NewService(logger, db, sessionManager))
+			resources.Attach(mux, resources.NewService(logger, db, sessionManager))
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env)
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, billingTracker, tcm))

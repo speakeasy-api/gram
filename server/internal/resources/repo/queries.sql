@@ -68,7 +68,7 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  frd.id, frd.resource_urn, frd.deployment_id, frd.name, frd.variables
+  frd.id, frd.resource_urn, frd.deployment_id, frd.name, frd.uri, frd.variables
 FROM function_resource_definitions frd
 WHERE
   frd.deployment_id = (SELECT id FROM deployment)

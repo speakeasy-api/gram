@@ -1,6 +1,7 @@
 import { EditableText } from "@/components/editable-text";
 import { CopyableSlug } from "@/components/name-and-slug";
 import {
+  ResourcesBadge,
   ToolCollectionBadge,
   ToolsetPromptsBadge,
 } from "@/components/tool-collection-badge";
@@ -75,6 +76,10 @@ export const ToolsetHeader = ({
         <Stack direction="horizontal" gap={2}>
           <ToolCollectionBadge
             toolNames={toolset?.tools.map((t) => t.name) ?? []}
+            variant="neutral"
+          />
+          <ResourcesBadge
+            resourceUris={toolset?.resources?.map((r) => r.functionResourceDefinition?.uri).filter((uri): uri is string => uri !== undefined) ?? []}
             variant="neutral"
           />
           <ToolsetPromptsBadge toolset={toolset} variant="neutral" />

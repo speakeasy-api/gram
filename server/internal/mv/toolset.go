@@ -203,6 +203,7 @@ func DescribeToolsetEntry(
 				Type:        string(urn.ResourceKindFunction),
 				ID:          resource.ID.String(),
 				Name:        resource.Name,
+				URI:         resource.Uri,
 				ResourceUrn: resource.ResourceUrn.String(),
 			})
 

@@ -15,4 +15,6 @@ type ResourceEntry struct {
 	ResourceUrn string
 	// The name of the resource
 	Name string
+	// The uri of the resource
+	URI string
 }

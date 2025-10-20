@@ -45,6 +45,7 @@ export * from "./listglobalvariations.js";
 export * from "./listintegrations.js";
 export * from "./listpackages.js";
 export * from "./listprojects.js";
+export * from "./listresources.js";
 export * from "./listtemplates.js";
 export * from "./listtoollogs.js";
 export * from "./listtools.js";

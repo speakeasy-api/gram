@@ -47,6 +47,48 @@ export const ToolsetPromptsBadge = ({
   ) : null;
 };
 
+export const ResourcesBadge = ({
+  resourceUris,
+  variant = "neutral",
+  className,
+}: {
+  resourceUris: string[] | undefined;
+  variant?: React.ComponentProps<typeof Badge>["variant"];
+  className?: string;
+}) => {
+  if (!resourceUris || resourceUris.length === 0) {
+    return null;
+  }
+
+  const tooltipContent = (
+    <div className="max-h-[300px] overflow-y-auto">
+      <Stack gap={1}>
+        {resourceUris.map((uri, i) => (
+          <p key={i}>{uri}</p>
+        ))}
+      </Stack>
+    </div>
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger>
+        <Badge
+          variant={variant}
+          className={cn("bg-card flex items-center py-1 gap-1", className)}
+        >
+          <span>
+            {resourceUris.length} Resource{resourceUris.length === 1 ? "" : "s"}
+          </span>
+        </Badge>
+      </TooltipTrigger>
+      <TooltipPortal>
+        <TooltipContent className="max-w-sm">{tooltipContent}</TooltipContent>
+      </TooltipPortal>
+    </Tooltip>
+  );
+};
+
 export const ToolCollectionBadge = ({
   toolNames,
   variant = "neutral",

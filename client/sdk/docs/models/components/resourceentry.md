@@ -10,6 +10,7 @@ let value: ResourceEntry = {
   name: "<value>",
   resourceUrn: "<value>",
   type: "function",
+  uri: "https://sweet-premise.org/",
 };
 ```
 
@@ -21,3 +22,4 @@ let value: ResourceEntry = {
 | `name`                                             | *string*                                           | :heavy_check_mark:                                 | The name of the resource                           |
 | `resourceUrn`                                      | *string*                                           | :heavy_check_mark:                                 | The URN of the resource                            |
 | `type`                                             | [components.Type](../../models/components/type.md) | :heavy_check_mark:                                 | N/A                                                |
+| `uri`                                              | *string*                                           | :heavy_check_mark:                                 | The uri of the resource                            |

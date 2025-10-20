@@ -24,7 +24,7 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  frd.id, frd.resource_urn, frd.deployment_id, frd.name, frd.variables
+  frd.id, frd.resource_urn, frd.deployment_id, frd.name, frd.uri, frd.variables
 FROM function_resource_definitions frd
 WHERE
   frd.deployment_id = (SELECT id FROM deployment)
@@ -43,6 +43,7 @@ type FindFunctionResourceEntriesByUrnRow struct {
 	ResourceUrn  urn.Resource
 	DeploymentID uuid.UUID
 	Name         string
+	Uri          string
 	Variables    []byte
 }
 
@@ -60,6 +61,7 @@ func (q *Queries) FindFunctionResourceEntriesByUrn(ctx context.Context, arg Find
 			&i.ResourceUrn,
 			&i.DeploymentID,
 			&i.Name,
+			&i.Uri,
 			&i.Variables,
 		); err != nil {
 			return nil, err

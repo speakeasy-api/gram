@@ -2612,6 +2612,7 @@ func unmarshalResourceEntryResponseBodyToTypesResourceEntry(v *ResourceEntryResp
 		ID:          *v.ID,
 		ResourceUrn: *v.ResourceUrn,
 		Name:        *v.Name,
+		URI:         *v.URI,
 	}
 
 	return res
