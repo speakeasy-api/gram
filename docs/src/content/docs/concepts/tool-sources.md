@@ -218,6 +218,10 @@ your tools and invokes `handleToolCall` to execute them.
 Gram Functions support TypeSript as well as JavaScript.
 :::
 
+:::note[Bundle Size Limit]
+The zipped bundle (containing both `manifest.json` and `functions.js`) must not exceed **700KB**. Keep your functions lean by avoiding large dependencies and using tree-shaking when bundling.
+:::
+
 ### Environment Variables
 
 Environment variables defined in your Gram project can be accessed within the
