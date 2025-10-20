@@ -592,6 +592,7 @@ func readToolsetTools(
 					Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
 					Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
 					ToolsHint:     pt.ToolsHint,
+					ToolUrnsHint:  pt.ToolUrnsHint,
 					CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
 					UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
 					ProjectID:     pt.ProjectID.String(),
