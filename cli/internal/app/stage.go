@@ -47,8 +47,8 @@ YAML/JSON documents.
 		Flags: []cli.Flag{
 			&cli.PathFlag{
 				Name:  "config",
-				Usage: "Path to the deployment file",
-				Value: "config.json",
+				Usage: "Path to the deployment config file",
+				Value: "gram.json",
 			},
 		},
 		Subcommands: []*cli.Command{
