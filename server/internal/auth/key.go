@@ -89,7 +89,7 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 
 	// a bit of a hack right now, the product intends to allow producer keys to act as a superset of consumer keys
 	scopes := slices.Clone(apiKey.Scopes)
-	if slices.Contains(scopes, APIKeyScopeProducer.String()) && !slices.Contains(requiredScopes, APIKeyScopeConsumer.String()) {
+	if slices.Contains(scopes, APIKeyScopeProducer.String()) && !slices.Contains(scopes, APIKeyScopeConsumer.String()) {
 		scopes = append(scopes, APIKeyScopeConsumer.String())
 	}
 
