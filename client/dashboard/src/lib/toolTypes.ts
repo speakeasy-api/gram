@@ -48,13 +48,14 @@ export const asTool = (tool: GeneratedTool): Tool => {
   }
 };
 
-export type Resource = {
-  type: "function";
+export type FunctionResource = {
   id: string;
   name: string;
   resourceUrn: string;
   uri: string;
 };
+
+export type Resource = { type: "function" } & FunctionResource;
 
 export const asResource = (resource: GeneratedResource): Resource => {
   if (resource.functionResourceDefinition) {
