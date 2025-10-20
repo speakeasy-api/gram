@@ -17,7 +17,7 @@ var urlSchemes = []string{"http", "https"}
 
 var validSchemaVersions = []string{"1.0.0"}
 
-const configTypeDeployment = "deployment"
+const ConfigTypeDeployment = "deployment"
 
 type SourceType string
 
@@ -135,7 +135,7 @@ func NewConfig(cfgRdr io.Reader, filename string) (*Config, error) {
 func NewConfigFromSources(sources ...Source) *Config {
 	return &Config{
 		SchemaVersion: validSchemaVersions[0],
-		Type:          configTypeDeployment,
+		Type:          ConfigTypeDeployment,
 		Sources:       sources,
 	}
 }
@@ -148,9 +148,9 @@ func (dc Config) Validate() error {
 		return fmt.Errorf(msg, dc.SchemaVersion, validSchemaVersions)
 	}
 
-	if dc.Type != configTypeDeployment {
+	if dc.Type != ConfigTypeDeployment {
 		msg := "unexpected value for 'type': '%s'. Expected '%s'"
-		return fmt.Errorf(msg, dc.Type, configTypeDeployment)
+		return fmt.Errorf(msg, dc.Type, ConfigTypeDeployment)
 	}
 
 	if len(dc.Sources) < 1 {
