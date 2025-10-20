@@ -18,8 +18,6 @@ func TestListLogs_EmptyResult(t *testing.T) {
 
 	ctx, ti := newTestLogsService(t)
 
-	// projectID := uuid.New().String()
-
 	result, err := ti.service.ListLogs(ctx, &logs.ListLogsPayload{
 		ApikeyToken:      nil,
 		SessionToken:     nil,
