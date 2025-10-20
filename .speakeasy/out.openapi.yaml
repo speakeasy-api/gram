@@ -8315,6 +8315,12 @@ components:
         prompt:
           type: string
           description: The template content
+        tool_urns_hint:
+          type: array
+          items:
+            type: string
+          description: The suggested tool URNS associated with the prompt template
+          maxItems: 20
         tools_hint:
           type: array
           items:
@@ -10229,6 +10235,12 @@ components:
         tool_urn:
           type: string
           description: The URN of this tool
+        tool_urns_hint:
+          type: array
+          items:
+            type: string
+          description: The suggested tool URNS associated with the prompt template
+          maxItems: 20
         tools_hint:
           type: array
           items:
@@ -11024,6 +11036,12 @@ components:
         prompt:
           type: string
           description: The template content
+        tool_urns_hint:
+          type: array
+          items:
+            type: string
+          description: The suggested tool URNS associated with the prompt template
+          maxItems: 20
         tools_hint:
           type: array
           items:
