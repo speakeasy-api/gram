@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
 import { Resource } from "@gram/client/models/components";
-import { useLatestDeployment, useListResources, useUpdateToolsetMutation } from "@gram/client/react-query";
+import {
+  useLatestDeployment,
+  useListResources,
+  useUpdateToolsetMutation,
+} from "@gram/client/react-query";
 import { Stack } from "@speakeasy-api/moonshine";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -46,15 +50,17 @@ export function ResourcesTabContent({
     );
   }, [deployment]);
 
-  // Use toolset.resources directly to avoid flashes
   const toolsetResources = useMemo(() => {
-    return toolset.resources?.map((resource) => {
-      // Find the full resource from allResources to get additional data like functionId
-      const fullResource = allResources.find(
-        (r) => r.functionResourceDefinition?.resourceUrn === resource.functionResourceDefinition?.resourceUrn
-      );
-      return fullResource || resource;
-    }) ?? [];
+    return (
+      toolset.resources?.map((resource) => {
+        const fullResource = allResources.find(
+          (r) =>
+            r.functionResourceDefinition?.resourceUrn ===
+            resource.functionResourceDefinition?.resourceUrn,
+        );
+        return fullResource || resource;
+      }) ?? []
+    );
   }, [toolset.resources, allResources]);
 
   const currentResourceUrns = toolset.resourceUrns ?? [];
@@ -79,13 +85,15 @@ export function ResourcesTabContent({
       request: {
         slug: toolset.slug,
         updateToolsetRequestBody: {
-          resourceUrns: currentResourceUrns.filter((urn) => urn !== resourceUrn),
+          resourceUrns: currentResourceUrns.filter(
+            (urn) => urn !== resourceUrn,
+          ),
         },
       },
     });
   };
 
-  // Show empty state if no resources exist at all
+  // Show empty state if no resources exist at all in the system
   if (allResources.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -184,8 +192,9 @@ function ResourceSelectPopover({
 
   // Filter out resources that are already in the toolset
   const availableResources = allResources.filter(
-    (r) => r.functionResourceDefinition?.resourceUrn &&
-      !currentResourceUrns.includes(r.functionResourceDefinition.resourceUrn)
+    (r) =>
+      r.functionResourceDefinition?.resourceUrn &&
+      !currentResourceUrns.includes(r.functionResourceDefinition.resourceUrn),
   );
 
   if (availableResources.length === 0) {
@@ -197,52 +206,68 @@ function ResourceSelectPopover({
       <PopoverTrigger asChild>
         <button className="w-full border border-border rounded-lg p-4 flex items-start gap-4 hover:bg-muted transition-colors cursor-pointer">
           <div className="p-2 rounded-md bg-muted shrink-0">
-            <Newspaper className="size-5 text-muted-foreground" strokeWidth={1.5} />
+            <Newspaper
+              className="size-5 text-muted-foreground"
+              strokeWidth={1.5}
+            />
           </div>
-          <span className="text-sm text-foreground flex items-center h-9">+ Add Resource</span>
+          <span className="text-sm text-foreground flex items-center h-9">
+            + Add Resource
+          </span>
         </button>
       </PopoverTrigger>
-        <PopoverContent className="w-[400px] p-0" align="start">
-          <Command>
-            <CommandInput placeholder="Search resources..." className="h-9" />
-            <CommandList>
-              <CommandEmpty>
-                {availableResources.length === 0 ? "No resources found." : "No items found."}
-              </CommandEmpty>
-              <CommandGroup>
-                {availableResources.map((resource) => {
-                  const def = resource.functionResourceDefinition;
-                  if (!def) return null;
+      <PopoverContent className="w-[400px] p-0" align="start">
+        <Command>
+          <CommandInput placeholder="Search resources..." className="h-9" />
+          <CommandList>
+            <CommandEmpty>
+              {availableResources.length === 0
+                ? "No resources found."
+                : "No items found."}
+            </CommandEmpty>
+            <CommandGroup>
+              {availableResources.map((resource) => {
+                const def = resource.functionResourceDefinition;
+                if (!def) return null;
 
-                  return (
-                    <CommandItem
-                      key={def.resourceUrn}
-                      value={`${def.name} ${def.description} ${def.uri}`}
-                      className="cursor-pointer"
-                      onSelect={() => {
-                        onSelect(def.resourceUrn);
-                        setOpen(false);
-                      }}
-                    >
-                      <div className="flex items-start gap-3 w-full">
-                        <Newspaper className="size-4 text-muted-foreground shrink-0 mt-0.5" strokeWidth={1.5} />
-                        <Stack gap={0.5} className="flex-1 min-w-0">
-                          <Type small className="font-medium">{def.name}</Type>
-                          <Type small muted className="truncate">
-                            {def.description || "No description"}
-                          </Type>
-                          <Type small muted className="font-mono truncate text-xs">
-                            {def.uri}
-                          </Type>
-                        </Stack>
-                      </div>
-                    </CommandItem>
-                  );
-                })}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
+                return (
+                  <CommandItem
+                    key={def.resourceUrn}
+                    value={`${def.name} ${def.description} ${def.uri}`}
+                    className="cursor-pointer"
+                    onSelect={() => {
+                      onSelect(def.resourceUrn);
+                      setOpen(false);
+                    }}
+                  >
+                    <div className="flex items-start gap-3 w-full">
+                      <Newspaper
+                        className="size-4 text-muted-foreground shrink-0 mt-0.5"
+                        strokeWidth={1.5}
+                      />
+                      <Stack gap={0.5} className="flex-1 min-w-0">
+                        <Type small className="font-medium">
+                          {def.name}
+                        </Type>
+                        <Type small muted className="truncate">
+                          {def.description || "No description"}
+                        </Type>
+                        <Type
+                          small
+                          muted
+                          className="font-mono truncate text-xs"
+                        >
+                          {def.uri}
+                        </Type>
+                      </Stack>
+                    </div>
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
     </Popover>
   );
 }

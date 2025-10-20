@@ -68,7 +68,6 @@ func (s *Service) ListResources(ctx context.Context, payload *gen.ListResourcesP
 		limit = 100
 	}
 
-	// Build query parameters
 	params := repo.ListFunctionResourcesParams{
 		ProjectID:    *authCtx.ProjectID,
 		Cursor:       uuid.NullUUID{Valid: false, UUID: uuid.Nil},
@@ -92,20 +91,18 @@ func (s *Service) ListResources(ctx context.Context, payload *gen.ListResourcesP
 		params.DeploymentID = uuid.NullUUID{UUID: deploymentUUID, Valid: true}
 	}
 
-	// Execute query
 	resources, err := s.repo.ListFunctionResources(ctx, params)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to list resources").Log(ctx, s.logger)
 	}
 
-	// Build result
 	result := &gen.ListResourcesResult{
-		Resources:  make([]*types.Resource, 0, len(resources)),
+		Resources:  make([]*types.Resource, len(resources)),
 		NextCursor: nil,
 	}
 
-	for _, resource := range resources {
-		result.Resources = append(result.Resources, &types.Resource{
+	for i, resource := range resources {
+		result.Resources[i] = &types.Resource{
 			FunctionResourceDefinition: &types.FunctionResourceDefinition{
 				ID:           resource.ID.String(),
 				ResourceUrn:  resource.ResourceUrn.String(),
@@ -122,7 +119,7 @@ func (s *Service) ListResources(ctx context.Context, payload *gen.ListResourcesP
 				CreatedAt:    resource.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:    resource.UpdatedAt.Time.Format(time.RFC3339),
 			},
-		})
+		}
 	}
 
 	// Check if there are more results

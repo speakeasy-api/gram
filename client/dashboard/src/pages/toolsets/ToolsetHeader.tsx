@@ -79,7 +79,11 @@ export const ToolsetHeader = ({
             variant="neutral"
           />
           <ResourcesBadge
-            resourceUris={toolset?.resources?.map((r) => r.functionResourceDefinition?.uri).filter((uri): uri is string => uri !== undefined) ?? []}
+            resourceUris={
+              toolset?.resources
+                ?.map((r) => r.functionResourceDefinition?.uri)
+                .filter((uri): uri is string => uri !== undefined) ?? []
+            }
             variant="neutral"
           />
           <ToolsetPromptsBadge toolset={toolset} variant="neutral" />
