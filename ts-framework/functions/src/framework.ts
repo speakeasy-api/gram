@@ -49,7 +49,7 @@ export type Manifest = {
   tools: Array<{
     name: string;
     description?: string;
-    inputSchema: string;
+    inputSchema: unknown;
     variables?: Record<string, VarDef>;
   }>;
 };
@@ -223,11 +223,11 @@ export class Gram<
       const result: {
         name: string;
         description?: string;
-        inputSchema: string;
+        inputSchema: unknown;
         variables?: Record<string, VarDef>;
       } = {
         name: tool.name,
-        inputSchema: JSON.stringify(inputSchema),
+        inputSchema: inputSchema,
       };
       if (tool.description != null) {
         result.description = tool.description;

@@ -22,7 +22,6 @@ func NewTestClickhouse(ctx context.Context) (*clickhousecontainer.ClickHouseCont
 	container, err := clickhousecontainer.Run(ctx, "clickhouse/clickhouse-server:25.8.3",
 		clickhousecontainer.WithUsername("gram"),
 		clickhousecontainer.WithPassword("gram"),
-		clickhousecontainer.WithDatabase("gram"),
 		clickhousecontainer.WithInitScripts(schemaPath),
 		testcontainers.WithLogger(NewTestcontainersLogger()),
 	)
@@ -51,7 +50,7 @@ func newClickhouseClientFunc(container *clickhousecontainer.ClickHouseContainer)
 		conn, err := clickhouse.Open(&clickhouse.Options{
 			Addr: []string{fmt.Sprintf("%s:%s", host, port.Port())},
 			Auth: clickhouse.Auth{
-				Database: "gram",
+				Database: "default",
 				Username: "gram",
 				Password: "gram",
 			},

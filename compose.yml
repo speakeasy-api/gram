@@ -116,7 +116,7 @@ services:
       - "9000:9000"
       - "9440:9440"
     environment:
-      CLICKHOUSE_DB: gram
+      CLICKHOUSE_DB: default
       CLICKHOUSE_USER: gram
       CLICKHOUSE_PASSWORD: gram
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1

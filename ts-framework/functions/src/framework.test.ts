@@ -284,17 +284,28 @@ test("generates a manifest", () => {
     tools: [
       {
         name: "echo",
-        inputSchema: expect.stringContaining("message"),
+        inputSchema: expect.objectContaining({
+          type: "object",
+          properties: { message: { type: "string" } },
+          required: ["message"],
+        }),
       },
       {
         name: "add",
         description: "Add two numbers",
-        inputSchema: expect.stringContaining(`"required":["a","b"]`),
+        inputSchema: expect.objectContaining({
+          type: "object",
+          properties: { a: { type: "number" }, b: { type: "number" } },
+          required: ["a", "b"],
+        }),
       },
       {
         name: "shout",
         description: "Shouts the input",
-        inputSchema: expect.any(String),
+        inputSchema: expect.objectContaining({
+          type: "object",
+          properties: {},
+        }),
         variables: {
           MESSAGE: { description: "The message to shout" },
         },

@@ -19,11 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Gram repo (source)
-        uses: actions/checkout@a5ac7e51b41094c153674e0e265ab8620f0be3ad  # v4.1.6
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
       - name: Checkout Marketing repo (destination)
-        uses: actions/checkout@a5ac7e51b41094c153674e0e265ab8620f0be3ad  # v4.1.6
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           repository: ${{ env.MARKETING_REPO }}
           ref: ${{ env.BRANCH }}

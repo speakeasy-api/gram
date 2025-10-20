@@ -50,6 +50,17 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 				Required: true,
 			},
 			&cli.StringFlag{
+				Name:  "method",
+				Usage: "When set to 'replace', the deployment replaces any existing deployment artifacts in Gram projects. When set to 'merge', the deployment merges with any existing deployment artifacts in Gram project.",
+				Action: func(ctx *cli.Context, s string) error {
+					if s != "replace" && s != "merge" {
+						return fmt.Errorf("invalid method: %s (allowed values: replace, merge)", s)
+					}
+					return nil
+				},
+				Value: "merge",
+			},
+			&cli.StringFlag{
 				Name:     "idempotency-key",
 				Usage:    "A unique key to identify this deployment request for idempotency",
 				Required: false,
@@ -98,8 +109,12 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			)
 
 			result := workflow.New(ctx, logger, workflowParams).
-				UploadAssets(ctx, config.Sources).
-				CreateDeployment(ctx, c.String("idempotency-key"))
+				UploadAssets(ctx, config.Sources)
+			if c.String("method") == "replace" {
+				result = result.CreateDeployment(ctx, c.String("idempotency-key"))
+			} else {
+				result = result.EvolveDeployment(ctx)
+			}
 
 			if !c.Bool("skip-poll") {
 				result.Poll(ctx)
