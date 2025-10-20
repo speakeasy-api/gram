@@ -205,6 +205,12 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallU
 		},
 	}
 
+	if event.ResourceURI != "" {
+		metadata["resource_uri"] = polarComponents.EventCreateExternalCustomerMetadata{
+			Str: &event.ResourceURI,
+		}
+	}
+
 	if event.ProjectSlug != nil {
 		metadata["project_slug"] = polarComponents.EventCreateExternalCustomerMetadata{
 			Str: event.ProjectSlug,

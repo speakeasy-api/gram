@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -29,13 +30,13 @@ var funcs functions.ToolCaller
 func newTestToolDescriptor() *ToolDescriptor {
 	return &ToolDescriptor{
 		ID:               uuid.New().String(),
-		URN:              urn.NewTool(urn.ToolKindHTTP, "doc", "test_tool"),
+		Name:             "test_tool",
+		DeploymentID:     uuid.New().String(),
 		ProjectID:        uuid.New().String(),
 		ProjectSlug:      "test-project",
-		DeploymentID:     uuid.New().String(),
 		OrganizationID:   uuid.New().String(),
 		OrganizationSlug: "test-org",
-		Name:             "test_tool",
+		URN:              urn.NewTool(urn.ToolKindHTTP, "doc", "test_tool"),
 	}
 }
 
@@ -1350,4 +1351,123 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 			require.Equal(t, tt.expectedBody, actualBody)
 		})
 	}
+}
+
+func TestResourceProxy_ReadResource(t *testing.T) {
+	t.Parallel()
+
+	// Track the invocation ID that will be generated
+	var invocationID uuid.UUID
+
+	// Create a mock server that returns a test response
+	var capturedRequest *http.Request
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedRequest = r
+		w.Header().Set("Gram-Invoke-ID", invocationID.String())
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("Test resource content"))
+	}))
+	defer mockServer.Close()
+
+	// Setup test dependencies
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	enc := testenv.NewEncryptionClient(t)
+	policy, err := guardian.NewUnsafePolicy([]string{})
+	require.NoError(t, err)
+
+	// Create resource descriptor
+	descriptor := &ResourceDescriptor{
+		ID:               uuid.New().String(),
+		Name:             "test_resource",
+		DeploymentID:     uuid.New().String(),
+		ProjectID:        uuid.New().String(),
+		ProjectSlug:      "test-project",
+		OrganizationID:   uuid.New().String(),
+		OrganizationSlug: "test-org",
+		URN:              urn.NewResource(urn.ResourceKindFunction, "functions", "resource://test"),
+		URI:              "resource://test",
+	}
+
+	// Create function resource plan
+	functionID := uuid.New().String()
+	accessID := uuid.New().String()
+	plan := &ResourceFunctionCallPlan{
+		FunctionID:        functionID,
+		FunctionsAccessID: accessID,
+		Runtime:           "nodejs",
+		URI:               "resource://test",
+		MimeType:          "text/plain",
+		Variables:         map[string]string{},
+	}
+
+	resourcePlan := NewResourceFunctionCallPlan(descriptor, plan)
+
+	chClient := newClickhouseClient(t, descriptor.OrganizationID)
+
+	// Mock the functions.ToolCaller to return our mock server URL
+	mockFuncCaller := &mockToolCaller{
+		serverURL: mockServer.URL,
+		onCall: func(invID uuid.UUID) {
+			invocationID = invID
+		},
+	}
+
+	// Create resource proxy
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		enc,
+		nil,
+		policy,
+		mockFuncCaller,
+		chClient,
+	)
+
+	// Create response recorder
+	recorder := httptest.NewRecorder()
+
+	// Execute the resource read
+	ciEnv := NewCaseInsensitiveEnv()
+	err = proxy.ReadResource(ctx, recorder, bytes.NewReader([]byte("{}")), ciEnv, resourcePlan)
+
+	require.NoError(t, err)
+	require.NotNil(t, capturedRequest)
+
+	// Verify the response was proxied correctly
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "Test resource content", recorder.Body.String())
+}
+
+// mockToolCaller is a mock implementation of functions.ToolCaller for testing
+type mockToolCaller struct {
+	serverURL string
+	onCall    func(uuid.UUID)
+}
+
+func (m *mockToolCaller) ToolCall(ctx context.Context, req functions.RunnerToolCallRequest) (*http.Request, error) {
+	if m.onCall != nil {
+		m.onCall(req.InvocationID)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", m.serverURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create mock request: %w", err)
+	}
+	return httpReq, nil
+}
+
+func (m *mockToolCaller) ReadResource(ctx context.Context, req functions.RunnerResourceReadRequest) (*http.Request, error) {
+	if m.onCall != nil {
+		m.onCall(req.InvocationID)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", m.serverURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create mock request: %w", err)
+	}
+	return httpReq, nil
 }

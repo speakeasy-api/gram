@@ -121,6 +121,7 @@ func handleToolsCall(
 			ProjectSlug:      nil, // This data is only there for debugging, but we don't have it here
 			OrganizationSlug: nil,
 			ChatID:           nil,
+			ResourceURI:      "",
 		})
 
 		return formatHigherOrderToolResult(ctx, logger, req, promptData)
@@ -210,6 +211,7 @@ func handleToolsCall(
 			MCPSessionID:     &payload.sessionID,
 			ChatID:           nil,
 			Type:             plan.BillingType,
+			ResourceURI:      "",
 		})
 	}()
 

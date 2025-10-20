@@ -31,6 +31,10 @@ func (l *LocalRunner) ToolCall(ctx context.Context, call RunnerToolCallRequest) 
 	return nil, oops.Permanent(errors.New("not implemented"))
 }
 
+func (l *LocalRunner) ReadResource(ctx context.Context, readReq RunnerResourceReadRequest) (*http.Request, error) {
+	return nil, oops.Permanent(errors.New("not implemented"))
+}
+
 func (l *LocalRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (*RunnerDeployResult, error) {
 	name := fmt.Sprintf("dev-%s", req.FunctionID.String())
 

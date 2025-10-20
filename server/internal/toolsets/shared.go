@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/openapi"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	resourcesRepo "github.com/speakeasy-api/gram/server/internal/resources/repo"
 	toolsRepo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/tools/security"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -19,16 +20,18 @@ import (
 
 // Shared service for aggregating toolset details
 type Toolsets struct {
-	repo      *repo.Queries
-	toolsRepo *toolsRepo.Queries
-	projects  *projectsRepo.Queries
+	repo          *repo.Queries
+	toolsRepo     *toolsRepo.Queries
+	resourcesRepo *resourcesRepo.Queries
+	projects      *projectsRepo.Queries
 }
 
 func NewToolsets(tx repo.DBTX) *Toolsets {
 	return &Toolsets{
-		repo:      repo.New(tx),
-		toolsRepo: toolsRepo.New(tx),
-		projects:  projectsRepo.New(tx),
+		repo:          repo.New(tx),
+		toolsRepo:     toolsRepo.New(tx),
+		resourcesRepo: resourcesRepo.New(tx),
+		projects:      projectsRepo.New(tx),
 	}
 }
 
@@ -147,13 +150,13 @@ func (t *Toolsets) extractHTTPToolCallPlan(ctx context.Context, tool toolsRepo.H
 
 	descriptor := &gateway.ToolDescriptor{
 		ID:               tool.ID.String(),
-		URN:              tool.ToolUrn,
+		Name:             tool.Name,
 		DeploymentID:     tool.DeploymentID.String(),
 		ProjectID:        tool.ProjectID.String(),
 		ProjectSlug:      orgData.ProjectSlug,
 		OrganizationID:   orgData.ID,
 		OrganizationSlug: orgData.Slug,
-		Name:             tool.Name,
+		URN:              tool.ToolUrn,
 	}
 	plan := &gateway.HTTPToolCallPlan{
 		DefaultServerUrl:   gateway.NullString{Valid: tool.DefaultServerUrl.Valid, Value: tool.DefaultServerUrl.String},
@@ -197,13 +200,13 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 
 	descriptor := &gateway.ToolDescriptor{
 		ID:               tool.ID.String(),
-		URN:              tool.ToolUrn,
+		Name:             tool.Name,
 		DeploymentID:     tool.DeploymentID.String(),
 		ProjectID:        tool.ProjectID.String(),
 		ProjectSlug:      orgData.Slug,
 		OrganizationID:   orgData.ID,
 		OrganizationSlug: orgData.Slug,
-		Name:             tool.Name,
+		URN:              tool.ToolUrn,
 	}
 	plan := &gateway.FunctionToolCallPlan{
 		FunctionID:        tool.FunctionID.String(),
@@ -237,4 +240,67 @@ func UnmarshalParameterSettings(settings []byte) (map[string]*gateway.HTTPParame
 	}
 
 	return out, nil
+}
+
+func (t *Toolsets) GetResourceCallPlanByURN(ctx context.Context, resourceUrn urn.Resource, projectID uuid.UUID) (*gateway.ResourceCallPlan, error) {
+	switch resourceUrn.Kind {
+	case urn.ResourceKindFunction:
+		resource, err := t.resourcesRepo.GetFunctionResourceByURN(ctx, resourcesRepo.GetFunctionResourceByURNParams{
+			ProjectID: projectID,
+			Urn:       resourceUrn,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get function resource definition by urn: %w", err)
+		}
+		return t.extractFunctionResourceCallPlan(ctx, resource)
+
+	default:
+		return nil, fmt.Errorf("unsupported resource kind: %s", resourceUrn.Kind)
+	}
+}
+
+func (t *Toolsets) extractFunctionResourceCallPlan(ctx context.Context, resource resourcesRepo.GetFunctionResourceByURNRow) (*gateway.ResourceCallPlan, error) {
+	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, resource.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("get project with organization metadata: %w", err)
+	}
+
+	var envconfig map[string]string
+	if len(resource.Variables) > 0 {
+		if err := json.Unmarshal(resource.Variables, &envconfig); err != nil {
+			return nil, fmt.Errorf("unmarshal function resource env vars: %w", err)
+		}
+	}
+
+	mimeType := ""
+	if resource.MimeType.Valid {
+		mimeType = resource.MimeType.String
+	}
+
+	descriptor := &gateway.ResourceDescriptor{
+		ID:               resource.ID.String(),
+		Name:             resource.Name,
+		DeploymentID:     resource.DeploymentID.String(),
+		ProjectID:        resource.ProjectID.String(),
+		ProjectSlug:      orgData.ProjectSlug,
+		OrganizationID:   orgData.ID,
+		OrganizationSlug: orgData.Slug,
+		URN:              resource.ResourceUrn,
+		URI:              resource.Uri,
+	}
+	accessID := ""
+	if resource.AccessID.Valid {
+		accessID = resource.AccessID.UUID.String()
+	}
+
+	plan := &gateway.ResourceFunctionCallPlan{
+		FunctionID:        resource.FunctionID.String(),
+		FunctionsAccessID: accessID,
+		Runtime:           resource.Runtime,
+		URI:               resource.Uri,
+		MimeType:          mimeType,
+		Variables:         envconfig,
+	}
+
+	return gateway.NewResourceFunctionCallPlan(descriptor, plan), nil
 }
