@@ -186,6 +186,11 @@ async function init(argv: string[]): Promise<void> {
     JSON.stringify(dstPkg, null, 2),
   );
 
+  const gitignorePath = join(dir, "gitignore");
+  if (existsSync(gitignorePath)) {
+    await fs.rename(gitignorePath, join(dir, ".gitignore"));
+  }
+
   const contributingPath = join(dir, "CONTRIBUTING.md");
   if (existsSync(contributingPath)) {
     tlog.message("Creating symlinks for CONTRIBUTING.md");
