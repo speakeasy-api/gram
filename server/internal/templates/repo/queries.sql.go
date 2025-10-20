@@ -104,7 +104,7 @@ func (q *Queries) DeleteTemplateByName(ctx context.Context, arg DeleteTemplateBy
 }
 
 const findPromptTemplatesByUrns = `-- name: FindPromptTemplatesByUrns :many
-SELECT DISTINCT ON (pt.project_id, pt.tool_urn) id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
+SELECT DISTINCT ON (pt.project_id, pt.tool_urn) id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, tool_urns_hint, created_at, updated_at, deleted_at, deleted
 FROM prompt_templates pt
 WHERE pt.project_id = $1
   AND pt.tool_urn = ANY($2::TEXT[])
@@ -139,6 +139,7 @@ func (q *Queries) FindPromptTemplatesByUrns(ctx context.Context, arg FindPromptT
 			&i.Engine,
 			&i.Kind,
 			&i.ToolsHint,
+			&i.ToolUrnsHint,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -155,7 +156,7 @@ func (q *Queries) FindPromptTemplatesByUrns(ctx context.Context, arg FindPromptT
 }
 
 const getTemplateByID = `-- name: GetTemplateByID :one
-SELECT id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, tool_urns_hint, created_at, updated_at, deleted_at, deleted
 FROM prompt_templates pt
 WHERE
   pt.project_id = $1
@@ -186,6 +187,7 @@ func (q *Queries) GetTemplateByID(ctx context.Context, arg GetTemplateByIDParams
 		&i.Engine,
 		&i.Kind,
 		&i.ToolsHint,
+		&i.ToolUrnsHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -195,7 +197,7 @@ func (q *Queries) GetTemplateByID(ctx context.Context, arg GetTemplateByIDParams
 }
 
 const getTemplateByName = `-- name: GetTemplateByName :one
-SELECT id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, tool_urns_hint, created_at, updated_at, deleted_at, deleted
 FROM prompt_templates pt
 WHERE
   pt.project_id = $1
@@ -226,6 +228,7 @@ func (q *Queries) GetTemplateByName(ctx context.Context, arg GetTemplateByNamePa
 		&i.Engine,
 		&i.Kind,
 		&i.ToolsHint,
+		&i.ToolUrnsHint,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -235,7 +238,7 @@ func (q *Queries) GetTemplateByName(ctx context.Context, arg GetTemplateByNamePa
 }
 
 const listTemplates = `-- name: ListTemplates :many
-SELECT DISTINCT ON (pt.project_id, pt.name) id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, created_at, updated_at, deleted_at, deleted
+SELECT DISTINCT ON (pt.project_id, pt.name) id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, tool_urns_hint, created_at, updated_at, deleted_at, deleted
 FROM prompt_templates pt
 WHERE pt.project_id = $1
   AND pt.deleted IS FALSE
@@ -264,6 +267,7 @@ func (q *Queries) ListTemplates(ctx context.Context, projectID uuid.UUID) ([]Pro
 			&i.Engine,
 			&i.Kind,
 			&i.ToolsHint,
+			&i.ToolUrnsHint,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,

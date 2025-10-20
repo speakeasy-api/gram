@@ -452,6 +452,7 @@ type PromptTemplate struct {
 	Engine        pgtype.Text
 	Kind          pgtype.Text
 	ToolsHint     []string
+	ToolUrnsHint  []string
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
 	DeletedAt     pgtype.Timestamptz
