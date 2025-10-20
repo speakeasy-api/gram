@@ -2,6 +2,7 @@ import {
   Tool as GeneratedTool,
   Toolset as GeneratedToolset,
   HTTPToolDefinition,
+  FunctionResourceDefinition,
   PromptTemplate,
   PromptTemplateEntry,
   PromptTemplateKind,
@@ -48,23 +49,13 @@ export const asTool = (tool: GeneratedTool): Tool => {
   }
 };
 
-export type FunctionResource = {
-  id: string;
-  name: string;
-  resourceUrn: string;
-  uri: string;
-};
-
-export type Resource = { type: "function" } & FunctionResource;
+export type Resource = { type: "function" } & FunctionResourceDefinition;
 
 export const asResource = (resource: GeneratedResource): Resource => {
   if (resource.functionResourceDefinition) {
     return {
       type: "function",
-      id: resource.functionResourceDefinition.id,
-      name: resource.functionResourceDefinition.name,
-      resourceUrn: resource.functionResourceDefinition.resourceUrn,
-      uri: resource.functionResourceDefinition.uri,
+      ...resource.functionResourceDefinition,
     };
   } else {
     throw new Error("Unexpected resource type");

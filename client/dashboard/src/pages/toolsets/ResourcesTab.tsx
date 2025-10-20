@@ -14,7 +14,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
-import { Resource } from "@gram/client/models/components";
+import { Resource as GeneratedResource } from "@gram/client/models/components";
 import {
   useLatestDeployment,
   useListResources,
@@ -23,7 +23,7 @@ import {
 import { Stack } from "@speakeasy-api/moonshine";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Toolset } from "@/lib/toolTypes";
+import { Toolset, Resource } from "@/lib/toolTypes";
 
 export function ResourcesTabContent({
   toolset,
@@ -50,19 +50,7 @@ export function ResourcesTabContent({
     );
   }, [deployment]);
 
-  const toolsetResources = useMemo(() => {
-    return (
-      toolset.resources?.map((resource) => {
-        const fullResource = allResources.find(
-          (r) =>
-            r.functionResourceDefinition?.resourceUrn ===
-            resource.functionResourceDefinition?.resourceUrn,
-        );
-        return fullResource || resource;
-      }) ?? []
-    );
-  }, [toolset.resources, allResources]);
-
+  const toolsetResources = toolset.resources ?? [];
   const currentResourceUrns = toolset.resourceUrns ?? [];
 
   const addResourceToToolset = (resourceUrn: string) => {
@@ -104,19 +92,19 @@ export function ResourcesTabContent({
 
   return (
     <Cards>
-      {toolsetResources.map((resource) => {
-        const def = resource.functionResourceDefinition;
-        if (!def) return null;
-
-        return (
-          <ResourceCard
-            key={def.resourceUrn}
-            resource={resource}
-            functionName={functionIdToName?.[def.functionId]}
-            onDelete={() => removeResourceFromToolset(def.resourceUrn)}
-          />
-        );
-      })}
+      {toolsetResources
+        .filter((resource) => resource.type === "function")
+        .map((resource) => {
+          const functionName = functionIdToName?.[resource.functionId];
+          return (
+            <ResourceCard
+              key={resource.resourceUrn}
+              resource={resource}
+              functionName={functionName}
+              onDelete={() => removeResourceFromToolset(resource.resourceUrn)}
+            />
+          );
+        })}
       {allResources && allResources.length > 0 && (
         <ResourceSelectPopover
           allResources={allResources}
@@ -137,9 +125,6 @@ function ResourceCard({
   functionName?: string;
   onDelete: () => void;
 }) {
-  const def = resource.functionResourceDefinition;
-  if (!def) return null;
-
   const actions = [
     {
       label: "Remove from toolset",
@@ -158,7 +143,7 @@ function ResourceCard({
         <Stack gap={1}>
           <Stack direction="horizontal" justify="space-between" align="start">
             <div className="text-sm font-medium truncate">
-              {def.name}
+              {resource.name}
               {functionName && (
                 <span className="text-xs text-muted-foreground font-normal ml-1">
                   ({functionName})
@@ -167,11 +152,8 @@ function ResourceCard({
             </div>
             <MoreActions actions={actions} />
           </Stack>
-          <Type small muted className="truncate">
-            {def.description || "No description"}
-          </Type>
           <Type small muted className="font-mono truncate">
-            {def.uri}
+            {resource.uri}
           </Type>
         </Stack>
       </div>
@@ -184,7 +166,7 @@ function ResourceSelectPopover({
   currentResourceUrns,
   onSelect,
 }: {
-  allResources: Resource[];
+  allResources: GeneratedResource[];
   currentResourceUrns: string[];
   onSelect: (resourceUrn: string) => void;
 }) {
