@@ -106,6 +106,7 @@ const (
 	McpMethodKey                   = attribute.Key("gram.mcp.method")
 	McpURLKey                      = attribute.Key("gram.mcp.url")
 	MetricNameKey                  = attribute.Key("gram.metric.name")
+	MimeTypeKey                    = attribute.Key("mime.type")
 	OAuthClientIDKey               = attribute.Key("gram.oauth.client_id")
 	OAuthCodeKey                   = attribute.Key("gram.oauth.code")
 	OAuthExternalCodeKey           = attribute.Key("gram.oauth.external_code")
@@ -599,6 +600,9 @@ func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey),
 
 func McpMethod(v string) attribute.KeyValue { return McpMethodKey.String(v) }
 func SlogMcpMethod(v string) slog.Attr      { return slog.String(string(McpMethodKey), v) }
+
+func MimeType(v string) attribute.KeyValue { return MimeTypeKey.String(v) }
+func SlogMimeType(v string) slog.Attr      { return slog.String(string(MimeTypeKey), v) }
 
 func ToolCallDuration(v time.Duration) attribute.KeyValue {
 	return ToolCallDurationKey.Float64(v.Seconds())

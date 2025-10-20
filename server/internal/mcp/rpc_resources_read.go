@@ -8,12 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -145,7 +148,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		mimeType = plan.Function.MimeType
 	}
 
-	isBinary := isBinaryMimeType(mimeType)
+	isBinary := isBinaryMimeType(ctx, logger, mimeType)
 
 	content := resourceContent{
 		URI:      params.URI,
@@ -174,39 +177,23 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	return bs, nil
 }
 
+var textSuffixPattern = regexp.MustCompile(`\+(json|xml|yaml|yml|csv|toml)$`)
+
 // isBinaryMimeType determines if a MIME type represents binary content that should be base64 encoded.
 // According to MCP spec, binary resources should use base64 encoding while text resources use plain text.
-func isBinaryMimeType(mimeType string) bool {
-	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
-
-	// Remove parameters like charset
-	if idx := strings.Index(mimeType, ";"); idx != -1 {
-		mimeType = strings.TrimSpace(mimeType[:idx])
+func isBinaryMimeType(ctx context.Context, logger *slog.Logger, mimeType string) bool {
+	parsedType, _, err := mime.ParseMediaType(mimeType)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to parse MIME type", attr.SlogMimeType(mimeType), attr.SlogError(err))
+		return false
 	}
 
-	// Text-based MIME types that should NOT be treated as binary
-	textPrefixes := []string{
-		"text/",
-		"application/json",
-		"application/xml",
-		"application/javascript",
-		"application/ecmascript",
-		"application/x-javascript",
-		"application/ld+json",
-		"application/sql",
-		"application/graphql",
-		"application/x-yaml",
-		"application/yaml",
-		"application/x-www-form-urlencoded",
+	// Check for structured syntax suffixes that indicate text formats e.g., application/vnd.api+json, application/hal+xml, etc.
+	if textSuffixPattern.MatchString(parsedType) {
+		return false
 	}
 
-	for _, prefix := range textPrefixes {
-		if strings.HasPrefix(mimeType, prefix) {
-			return false
-		}
-	}
-
-	// Known binary MIME type prefixes
+	// Accepted binary MIME type prefixes
 	binaryPrefixes := []string{
 		"image/",
 		"video/",
@@ -227,12 +214,12 @@ func isBinaryMimeType(mimeType string) bool {
 	}
 
 	for _, prefix := range binaryPrefixes {
-		if strings.HasPrefix(mimeType, prefix) {
+		if strings.HasPrefix(parsedType, prefix) {
 			return true
 		}
 	}
 
-	// Default for unknown types: assume text
+	// Treat everything else as default text
 	return false
 }
 
