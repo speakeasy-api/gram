@@ -100,11 +100,13 @@ export const ToolCollectionBadge = ({
           )}
         >
           {toolsWarnings && (
-            <Icon name="triangle-alert" className="inline-block" />
+            <Badge.LeftIcon>
+              <Icon name="triangle-alert" className="inline-block" />
+            </Badge.LeftIcon>
           )}
-          <span>
+          <Badge.Text>
             {toolNames.length} Tool{toolNames.length === 1 ? "" : "s"}
-          </span>
+          </Badge.Text>
         </Badge>
       </TooltipTrigger>
       <TooltipPortal>

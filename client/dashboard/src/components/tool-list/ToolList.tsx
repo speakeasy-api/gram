@@ -342,7 +342,10 @@ function ToolRow({
             <MethodBadge method={tool.httpMethod} />
           )}
           {tool.type === "prompt" && (
-            <SubtoolsBadge tool={tool} availableToolUrns={availableToolUrns ?? []} />
+            <SubtoolsBadge
+              tool={tool}
+              availableToolUrns={availableToolUrns ?? []}
+            />
           )}
           <MoreActions actions={actions} />
         </div>
@@ -758,7 +761,8 @@ export function ToolList({
                     <ToolRow
                       key={tool.canonicalName}
                       groupName={group.title}
-                      availableToolUrns={toolset?.tools?.map((t) => t.toolUrn)
+                      availableToolUrns={toolset?.tools
+                        ?.map((t) => t.toolUrn)
                         .concat(selectionMode === "add" ? selectedUrns : [])
                         .filter((urn) => !selectedForRemoval.has(urn))}
                       tool={tool}
