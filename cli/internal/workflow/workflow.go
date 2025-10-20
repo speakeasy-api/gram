@@ -156,19 +156,12 @@ func (s *Workflow) EvolveDeployment(
 		return s
 	}
 
-	if s.Deployment == nil {
-		return s.Fail(fmt.Errorf("update failed: no deployment found"))
-	}
-	s.Logger.InfoContext(
-		ctx,
-		"updating deployment",
-		slog.String("deployment_id", s.Deployment.ID),
-	)
+	s.Logger.InfoContext(ctx, "creating deployment with merge strategy")
 	evolved, err := s.DeploymentsClient.Evolve(ctx, api.EvolveRequest{
 		OpenAPIv3Assets: s.NewOpenAPIAssets,
 		Functions:       s.NewFunctionAssets,
 		APIKey:          s.Params.APIKey,
-		DeploymentID:    s.Deployment.ID,
+		DeploymentID:    nil,
 		ProjectSlug:     s.Params.ProjectSlug,
 	})
 	if err != nil {
@@ -194,7 +187,7 @@ func (s *Workflow) CreateDeployment(
 		return s
 	}
 
-	s.Logger.InfoContext(ctx, "creating deployment")
+	s.Logger.InfoContext(ctx, "creating deployment with replace strategy")
 	createReq := api.CreateDeploymentRequest{
 		APIKey:          s.Params.APIKey,
 		IdempotencyKey:  idem,
