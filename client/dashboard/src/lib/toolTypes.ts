@@ -17,7 +17,7 @@ export type HttpToolWithDisplayName = Tool & { type: "http" } & {
   displayName: string;
 };
 
-export type Toolset = Omit<GeneratedToolset, "tools"> & {
+export type Toolset = Omit<GeneratedToolset, "tools" | "resources"> & {
   tools: Tool[];
   resources?: Resource[];
 };
