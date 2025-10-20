@@ -27,13 +27,25 @@ func NewFilterType(s string) (FilterType, error) {
 
 type ToolDescriptor struct {
 	ID               string   `json:"id" yaml:"id"`
-	URN              urn.Tool `json:"urn" yaml:"urn"`
 	Name             string   `json:"name" yaml:"name"`
 	DeploymentID     string   `json:"deployment_id" yaml:"deployment_id"`
 	ProjectID        string   `json:"project_id" yaml:"project_id"`
 	ProjectSlug      string   `json:"project_slug" yaml:"project_slug"`
 	OrganizationID   string   `json:"organization_id" yaml:"organization_id"`
 	OrganizationSlug string   `json:"organization_slug" yaml:"organization_slug"`
+	URN              urn.Tool `json:"urn" yaml:"urn"`
+}
+
+type ResourceDescriptor struct {
+	ID               string       `json:"id" yaml:"id"`
+	Name             string       `json:"name" yaml:"name"`
+	DeploymentID     string       `json:"deployment_id" yaml:"deployment_id"`
+	ProjectID        string       `json:"project_id" yaml:"project_id"`
+	ProjectSlug      string       `json:"project_slug" yaml:"project_slug"`
+	OrganizationID   string       `json:"organization_id" yaml:"organization_id"`
+	OrganizationSlug string       `json:"organization_slug" yaml:"organization_slug"`
+	URN              urn.Resource `json:"urn" yaml:"urn"`
+	URI              string       `json:"uri" yaml:"uri"`
 }
 
 // HTTPToolCallPlan describes how to translate a tool call into an HTTP request to be
@@ -106,11 +118,26 @@ type FunctionToolCallPlan struct {
 	Variables         []string `json:"variables" yaml:"variables"`
 }
 
+type ResourceFunctionCallPlan struct {
+	FunctionID        string            `json:"function_id" yaml:"function_id"`
+	FunctionsAccessID string            `json:"functions_access_id" yaml:"functions_access_id"`
+	Runtime           string            `json:"runtime" yaml:"runtime"`
+	URI               string            `json:"uri" yaml:"uri"`
+	MimeType          string            `json:"mime_type" yaml:"mime_type"`
+	Variables         map[string]string `json:"variables" yaml:"variables"`
+}
+
 type ToolKind string
 
 const (
 	ToolKindHTTP     ToolKind = "http"
 	ToolKindFunction ToolKind = "function"
+)
+
+type ResourceKind string
+
+const (
+	ResourceKindFunction ResourceKind = "function"
 )
 
 // ToolCallPlan is a polymorphic type that can represent either an HTTPTool or a FunctionTool.
@@ -142,6 +169,23 @@ func NewFunctionToolCallPlan(tool *ToolDescriptor, plan *FunctionToolCallPlan) *
 		BillingType: billing.ToolCallTypeFunction,
 		Descriptor:  tool,
 		HTTP:        nil,
+		Function:    plan,
+	}
+}
+
+type ResourceCallPlan struct {
+	Kind        ResourceKind
+	BillingType billing.ToolCallType
+	Descriptor  *ResourceDescriptor
+
+	Function *ResourceFunctionCallPlan
+}
+
+func NewResourceFunctionCallPlan(resource *ResourceDescriptor, plan *ResourceFunctionCallPlan) *ResourceCallPlan {
+	return &ResourceCallPlan{
+		Kind:        ResourceKindFunction,
+		BillingType: billing.ToolCallTypeFunction,
+		Descriptor:  resource,
 		Function:    plan,
 	}
 }

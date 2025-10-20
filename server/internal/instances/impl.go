@@ -358,6 +358,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		ToolsetID:        toolsetID,
 		MCPURL:           nil, // Not applicable for direct tool calls
 		MCPSessionID:     nil, // Not applicable for direct tool calls
+		ResourceURI:      "",
 	})
 
 	return nil

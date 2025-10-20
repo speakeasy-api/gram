@@ -31,3 +31,9 @@ type CallToolPayload struct {
 	Input       json.RawMessage   `json:"input"`
 	Environment map[string]string `json:"environment,omitempty,omitzero"`
 }
+
+type ReadResourcePayload struct {
+	URI         string            `json:"uri"`
+	Input       json.RawMessage   `json:"input"`
+	Environment map[string]string `json:"environment,omitempty,omitzero"`
+}

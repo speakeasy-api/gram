@@ -40,8 +40,9 @@ func handleInitialize(ctx context.Context, logger *slog.Logger, req *rawRequest,
 		Result: initializeResult{
 			ProtocolVersion: "2024-11-05",
 			Capabilities: map[string]json.RawMessage{
-				"tools":   json.RawMessage("{}"),
-				"prompts": json.RawMessage("{}"),
+				"tools":     json.RawMessage("{}"),
+				"prompts":   json.RawMessage("{}"),
+				"resources": json.RawMessage("{}"),
 			},
 			ServerInfo: serverInfo{
 				Name:    "Gram",

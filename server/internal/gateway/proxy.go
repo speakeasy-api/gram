@@ -231,18 +231,20 @@ func (tp *ToolProxy) doFunction(
 	}
 
 	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
-		InvocationID:      invocationID,
-		OrganizationID:    descriptor.OrganizationID,
-		OrganizationSlug:  descriptor.OrganizationSlug,
-		ProjectID:         projectID,
-		ProjectSlug:       descriptor.ProjectSlug,
-		DeploymentID:      deploymentID,
-		FunctionsID:       functionID,
-		FunctionsAccessID: accessID,
-		ToolURN:           descriptor.URN,
-		ToolName:          descriptor.Name,
-		ToolInput:         input,
-		ToolEnvironment:   payloadEnv,
+		RunnerBaseRequest: functions.RunnerBaseRequest{
+			InvocationID:      invocationID,
+			OrganizationID:    descriptor.OrganizationID,
+			OrganizationSlug:  descriptor.OrganizationSlug,
+			ProjectID:         projectID,
+			ProjectSlug:       descriptor.ProjectSlug,
+			DeploymentID:      deploymentID,
+			FunctionsID:       functionID,
+			FunctionsAccessID: accessID,
+			Input:             input,
+			Environment:       payloadEnv,
+		},
+		ToolURN:  descriptor.URN,
+		ToolName: descriptor.Name,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to create function tool call request").Log(ctx, logger)
@@ -268,25 +270,31 @@ func (tp *ToolProxy) doFunction(
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
 
-	return reverseProxyRequest(
-		ctx,
-		logger,
-		tp.tracer,
-		w,
-		req,
-		descriptor,
-		&FilterRequest{Type: "none", Filter: ""},
-		DisableResponseFiltering,
-		tp.policy,
-		&responseStatusCode,
-		tp.toolMetrics,
-		func(resp *http.Response) error {
+	return reverseProxyRequest(ctx, ReverseProxyOptions{
+		Logger:                    logger,
+		Tracer:                    tp.tracer,
+		Writer:                    w,
+		Request:                   req,
+		URN:                       descriptor.URN.String(),
+		Expression:                &FilterRequest{Type: "none", Filter: ""},
+		FilterConfig:              DisableResponseFiltering,
+		Policy:                    tp.policy,
+		ResponseStatusCodeCapture: &responseStatusCode,
+		ToolMetricsProvider:       tp.toolMetrics,
+		VerifyResponse: func(resp *http.Response) error {
 			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
 				return fmt.Errorf("failed to verify function invocation ID")
 			}
 			return nil
 		},
-	)
+		ID:               descriptor.ID,
+		Name:             descriptor.Name,
+		DeploymentID:     descriptor.DeploymentID,
+		ProjectID:        descriptor.ProjectID,
+		ProjectSlug:      descriptor.ProjectSlug,
+		OrganizationID:   descriptor.OrganizationID,
+		OrganizationSlug: descriptor.OrganizationSlug,
+	})
 }
 
 func (tp *ToolProxy) doHTTP(
@@ -526,20 +534,26 @@ func (tp *ToolProxy) doHTTP(
 
 	req.Header.Set("X-Gram-Proxy", "1")
 
-	return reverseProxyRequest(
-		ctx,
-		logger,
-		tp.tracer,
-		w,
-		req,
-		descriptor,
-		toolCallBody.ResponseFilter,
-		plan.ResponseFilter,
-		tp.policy,
-		&responseStatusCode,
-		tp.toolMetrics,
-		func(resp *http.Response) error { return nil },
-	)
+	return reverseProxyRequest(ctx, ReverseProxyOptions{
+		Logger:                    logger,
+		Tracer:                    tp.tracer,
+		Writer:                    w,
+		Request:                   req,
+		URN:                       descriptor.URN.String(),
+		Expression:                toolCallBody.ResponseFilter,
+		FilterConfig:              plan.ResponseFilter,
+		Policy:                    tp.policy,
+		ResponseStatusCodeCapture: &responseStatusCode,
+		ToolMetricsProvider:       tp.toolMetrics,
+		VerifyResponse:            func(resp *http.Response) error { return nil },
+		ID:                        descriptor.ID,
+		Name:                      descriptor.Name,
+		DeploymentID:              descriptor.DeploymentID,
+		ProjectID:                 descriptor.ProjectID,
+		ProjectSlug:               descriptor.ProjectSlug,
+		OrganizationID:            descriptor.OrganizationID,
+		OrganizationSlug:          descriptor.OrganizationSlug,
+	})
 }
 
 type retryConfig struct {
@@ -597,26 +611,35 @@ func retryWithBackoff(
 	return resp, err
 }
 
-func reverseProxyRequest(
-	ctx context.Context,
-	logger *slog.Logger,
-	tracer trace.Tracer,
-	w http.ResponseWriter,
-	req *http.Request,
-	tool *ToolDescriptor,
-	expression *FilterRequest,
-	filterConfig *ResponseFilter,
-	policy *guardian.Policy,
-	responseStatusCodeCapture *int,
-	tcm tm.ToolMetricsProvider,
-	verifyResponse func(*http.Response) error,
-) error {
-	ctx, span := tracer.Start(ctx, fmt.Sprintf("tool_proxy.%s", tool.Name))
+type ReverseProxyOptions struct {
+	Logger                    *slog.Logger
+	Tracer                    trace.Tracer
+	Writer                    http.ResponseWriter
+	Request                   *http.Request
+	URN                       string
+	Expression                *FilterRequest
+	FilterConfig              *ResponseFilter
+	Policy                    *guardian.Policy
+	ResponseStatusCodeCapture *int
+	ToolMetricsProvider       tm.ToolMetricsProvider
+	VerifyResponse            func(*http.Response) error
+	// Descriptor fields
+	ID               string
+	Name             string
+	DeploymentID     string
+	ProjectID        string
+	ProjectSlug      string
+	OrganizationID   string
+	OrganizationSlug string
+}
+
+func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
+	ctx, span := opts.Tracer.Start(ctx, fmt.Sprintf("gateway_proxy.%s", opts.Name))
 	defer span.End()
 
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           policy.Dialer().DialContext,
+		DialContext:           opts.Policy.Dialer().DialContext,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
@@ -625,21 +648,20 @@ func reverseProxyRequest(
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 
-	isAllowed, err := tcm.ShouldLog(ctx, tool.OrganizationID)
+	isAllowed, err := opts.ToolMetricsProvider.ShouldLog(ctx, opts.OrganizationID)
 	if err != nil {
 		// If we can't determine if the tool is allowed to log, we won't log the request.
 		isAllowed = false
-		logger.ErrorContext(ctx,
-			"failed to determine if tool is allowed to log",
-			attr.SlogOrganizationID(tool.OrganizationID),
-			attr.SlogToolName(tool.Name),
+		opts.Logger.ErrorContext(ctx,
+			"failed to determine if organization is allowed to request log",
+			attr.SlogOrganizationID(opts.OrganizationID),
 			attr.SlogError(err))
 	}
 
 	var otelTransport *otelhttp.Transport
 	if isAllowed {
 		// Wrap with HTTP logging round tripper
-		loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, tcm, logger, tracer)
+		loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, opts.ToolMetricsProvider, opts.Logger, opts.Tracer)
 		otelTransport = otelhttp.NewTransport(
 			loggingTransport,
 			otelhttp.WithPropagators(propagation.TraceContext{}),
@@ -658,12 +680,12 @@ func reverseProxyRequest(
 
 	// Add tool to context for the round tripper
 	toolInfo := &tm.ToolInfo{
-		ID:             tool.ID,
-		Urn:            tool.URN.String(),
-		Name:           tool.Name,
-		ProjectID:      tool.ProjectID,
-		DeploymentID:   tool.DeploymentID,
-		OrganizationID: tool.OrganizationID,
+		ID:             opts.ID,
+		Urn:            opts.URN,
+		Name:           opts.Name,
+		ProjectID:      opts.ProjectID,
+		DeploymentID:   opts.DeploymentID,
+		OrganizationID: opts.OrganizationID,
 	}
 
 	ctx = context.WithValue(ctx, tm.ToolInfoContextKey, toolInfo)
@@ -673,11 +695,11 @@ func reverseProxyRequest(
 
 	executeRequest := func() (*http.Response, error) {
 		// Clone the request for each retry attempt
-		retryReq := req.Clone(ctx)
+		retryReq := opts.Request.Clone(ctx)
 
 		// Set the fresh body on the cloned request and wrap with counter
-		if req.Body != nil && req.GetBody != nil {
-			freshBody, err := req.GetBody()
+		if opts.Request.Body != nil && opts.Request.GetBody != nil {
+			freshBody, err := opts.Request.GetBody()
 			if err != nil {
 				return nil, fmt.Errorf("retry: clone request body: %w", err)
 			}
@@ -717,15 +739,15 @@ func reverseProxyRequest(
 	}, executeRequest)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		return oops.E(oops.CodeGatewayError, err, "failed to execute request").Log(ctx, logger)
+		return oops.E(oops.CodeGatewayError, err, "failed to execute request").Log(ctx, opts.Logger)
 	}
-	defer o11y.LogDefer(ctx, logger, func() error {
+	defer o11y.LogDefer(ctx, opts.Logger, func() error {
 		return resp.Body.Close()
 	})
 
-	if err := verifyResponse(resp); err != nil {
+	if err := opts.VerifyResponse(resp); err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		return oops.E(oops.CodeGatewayError, err, "tool call response verification failed").Log(ctx, logger)
+		return oops.E(oops.CodeGatewayError, err, "response verification failed").Log(ctx, opts.Logger)
 	}
 
 	if len(resp.Trailer) > 0 {
@@ -733,41 +755,41 @@ func reverseProxyRequest(
 		for key := range resp.Trailer {
 			trailerKeys = append(trailerKeys, key)
 		}
-		w.Header().Set("Trailer", strings.Join(trailerKeys, ", "))
+		opts.Writer.Header().Set("Trailer", strings.Join(trailerKeys, ", "))
 	}
 
 	// We proxy over approved headers
 	for key, values := range resp.Header {
 		for _, value := range values {
 			if slices.Contains(proxiedHeaders, key) {
-				w.Header().Add(key, value)
+				opts.Writer.Header().Add(key, value)
 			}
 		}
 	}
 
 	// Copy cookies from response
 	for _, cookie := range resp.Cookies() {
-		http.SetCookie(w, cookie)
+		http.SetCookie(opts.Writer, cookie)
 	}
 
 	span.SetAttributes(attr.HTTPResponseExternal(true))
-	w.Header().Set(constants.HeaderProxiedResponse, "1")
+	opts.Writer.Header().Set(constants.HeaderProxiedResponse, "1")
 
 	finalStatusCode := resp.StatusCode
 	if strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
-		w.WriteHeader(finalStatusCode)
+		opts.Writer.WriteHeader(finalStatusCode)
 
 		// Streaming mode: flush after each chunk
-		logger.InfoContext(ctx, "streaming with flush", attr.SlogHTTPResponseHeaderContentType(resp.Header.Get("Content-Type")))
+		opts.Logger.InfoContext(ctx, "streaming with flush", attr.SlogHTTPResponseHeaderContentType(resp.Header.Get("Content-Type")))
 
 		buf := make([]byte, 32*1024)
-		flusher, canFlush := w.(http.Flusher)
+		flusher, canFlush := opts.Writer.(http.Flusher)
 
 		for {
 			n, err := resp.Body.Read(buf)
 			if n > 0 {
-				if _, writeErr := w.Write(buf[:n]); writeErr != nil {
-					logger.ErrorContext(ctx, "client write failed", attr.SlogError(writeErr))
+				if _, writeErr := opts.Writer.Write(buf[:n]); writeErr != nil {
+					opts.Logger.ErrorContext(ctx, "client write failed", attr.SlogError(writeErr))
 					break
 				}
 				if canFlush {
@@ -777,7 +799,7 @@ func reverseProxyRequest(
 			if err != nil {
 				if err != io.EOF {
 					span.SetStatus(codes.Error, err.Error())
-					logger.ErrorContext(ctx, "upstream read failed", attr.SlogError(err))
+					opts.Logger.ErrorContext(ctx, "upstream read failed", attr.SlogError(err))
 				}
 				break
 			}
@@ -785,24 +807,24 @@ func reverseProxyRequest(
 	} else {
 		var body io.Reader = resp.Body
 
-		result := handleResponseFiltering(ctx, logger, filterConfig, expression, resp)
+		result := handleResponseFiltering(ctx, opts.Logger, opts.FilterConfig, opts.Expression, resp)
 		if result != nil {
-			w.Header().Set("Content-Type", result.contentType)
-			w.Header().Set(constants.HeaderFilteredResponse, "1")
+			opts.Writer.Header().Set("Content-Type", result.contentType)
+			opts.Writer.Header().Set(constants.HeaderFilteredResponse, "1")
 			span.SetAttributes(attr.HTTPResponseFiltered(true))
 			finalStatusCode = result.statusCode
 			body = result.resp
 		}
 
-		w.WriteHeader(finalStatusCode)
-		if _, err := io.Copy(w, body); err != nil {
+		opts.Writer.WriteHeader(finalStatusCode)
+		if _, err := io.Copy(opts.Writer, body); err != nil {
 			span.SetStatus(codes.Error, err.Error())
-			logger.ErrorContext(ctx, "failed to copy response body", attr.SlogError(err))
+			opts.Logger.ErrorContext(ctx, "failed to copy response body", attr.SlogError(err))
 		}
 	}
 
-	if responseStatusCodeCapture != nil {
-		*responseStatusCodeCapture = finalStatusCode
+	if opts.ResponseStatusCodeCapture != nil {
+		*opts.ResponseStatusCodeCapture = finalStatusCode
 	}
 
 	return nil

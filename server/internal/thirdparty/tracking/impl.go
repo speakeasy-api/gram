@@ -41,6 +41,9 @@ func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCa
 		"disable_notification": true,
 	}
 
+	if event.ResourceURI != "" {
+		properties["resource_uri"] = event.ResourceURI
+	}
 	if event.ProjectSlug != nil {
 		properties["project_slug"] = *event.ProjectSlug
 	}
