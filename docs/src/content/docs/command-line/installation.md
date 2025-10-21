@@ -3,13 +3,29 @@ title: Installation
 description: Install the Gram CLI to deploy MCP servers programmatically
 ---
 
-## Install via Homebrew
+The Gram CLI is available as a beta release via `curl | bash` and `Homebrew`.
 
-The Gram CLI is available as a beta release via Homebrew.
+**Using `curl | bash`:**
+
+```
+curl -fsSL https://go.getgram.ai/cli.sh | bash
+```
+
+**Using Homebrew:**
 
 ```bash
-brew update && brew install speakeasy-api/homebrew-tap/gram
-gram --version
+brew update
+brew install speakeasy-api/homebrew-tap/gram
+```
 
+After installation, verify that the Gram CLI is installed correctly by running:
+
+```bash
+gram --version
+```
+
+Then authenticate with your Gram account:
+
+```bash
 gram auth
 ```
