@@ -28,6 +28,8 @@ type ToolCallUsageEvent struct {
 	Type             ToolCallType
 	ToolsetID        *string
 	MCPSessionID     *string
+	FunctionCPUUsage *int64
+	FunctionMemUsage *int64
 }
 
 type PromptCallUsageEvent struct {

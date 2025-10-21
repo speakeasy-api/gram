@@ -65,6 +65,12 @@ func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCa
 	if event.ToolsetID != nil {
 		properties["toolset_id"] = *event.ToolsetID
 	}
+	if event.FunctionCPUUsage != nil {
+		properties["function_cpu_usage"] = *event.FunctionCPUUsage
+	}
+	if event.FunctionMemUsage != nil {
+		properties["function_mem_usage"] = *event.FunctionMemUsage
+	}
 
 	if err := c.posthog.CaptureEvent(ctx, "tool_call", event.OrganizationID, properties); err != nil {
 		c.logger.ErrorContext(ctx, "failed to capture tool call usage event", attr.SlogError(err))

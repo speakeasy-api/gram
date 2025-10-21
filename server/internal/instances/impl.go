@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -334,6 +335,19 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
 
+	// Extract function metrics from headers (originally trailers from functions runner)
+	var functionCPU, functionMem *int64
+	if cpuStr := interceptor.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
+		if cpu, err := strconv.ParseInt(cpuStr, 10, 64); err == nil {
+			functionCPU = &cpu
+		}
+	}
+	if memStr := interceptor.headers.Get(functions.FunctionsMemoryHeader); memStr != "" {
+		if mem, err := strconv.ParseInt(memStr, 10, 64); err == nil {
+			functionMem = &mem
+		}
+	}
+
 	organizationID := authCtx.ActiveOrganizationID
 	if organizationID == "" && toolset != nil {
 		organizationID = toolset.OrganizationID
@@ -360,6 +374,8 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		MCPURL:           nil, // Not applicable for direct tool calls
 		MCPSessionID:     nil, // Not applicable for direct tool calls
 		ResourceURI:      "",
+		FunctionCPUUsage: functionCPU,
+		FunctionMemUsage: functionMem,
 	})
 
 	return nil

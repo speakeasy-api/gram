@@ -11,13 +11,20 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/speakeasy-api/gram/functions/internal/attr"
 	"github.com/speakeasy-api/gram/functions/internal/ipc"
 	"github.com/speakeasy-api/gram/functions/internal/o11y"
 	"github.com/speakeasy-api/gram/functions/internal/svc"
+)
+
+const (
+	functionsCPUHeader    = "X-Gram-Functions-Cpu"
+	functionsMemoryHeader = "X-Gram-Functions-Memory"
 )
 
 var allowedHeaders = map[string]struct{}{
@@ -157,12 +164,32 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 			w.Header().Add(key, value)
 		}
 	}
+
+	// Announce trailers for resource usage metrics
+	// We currently have to write these after WriteHeader
+	w.Header().Set("Trailer", functionsCPUHeader+", "+functionsMemoryHeader)
+
 	w.WriteHeader(response.StatusCode)
 	if _, err := io.Copy(w, response.Body); err != nil {
 		s.logger.ErrorContext(ctx, "failed to copy response body", attr.SlogError(err))
 	}
 
 	err = cmd.Wait()
+
+	// Write resource usage as trailers after response body is sent
+	if cmd.ProcessState != nil {
+		if sysUsage := cmd.ProcessState.SysUsage(); sysUsage != nil {
+			if usage, ok := sysUsage.(*syscall.Rusage); ok {
+				// Convert CPU time to milliseconds (user + system time)
+				cpuMs := (usage.Utime.Sec*1000 + int64(usage.Utime.Usec)/1000) +
+					(usage.Stime.Sec*1000 + int64(usage.Stime.Usec)/1000)
+				w.Header().Set(functionsCPUHeader, fmt.Sprintf("%d", cpuMs))
+				// Assumed Linux Runtime
+				w.Header().Set(functionsMemoryHeader, fmt.Sprintf("%d", getMemoryUsage(usage)))
+			}
+		}
+	}
+
 	var exitErr *exec.ExitError
 	switch {
 	case errors.As(err, &exitErr):
@@ -247,5 +274,21 @@ func (s *Service) handleError(ctx context.Context, err error, operation string, 
 	case err != nil:
 		s.logger.ErrorContext(ctx, operation, attr.SlogError(err))
 		http.Error(w, "unexpected server error", http.StatusInternalServerError)
+	}
+}
+
+func getMemoryUsage(ru *syscall.Rusage) int64 {
+	if ru == nil {
+		return 0
+	}
+
+	mem := ru.Maxrss
+	switch runtime.GOOS {
+	case "linux":
+		// Linux reports in kilobytes
+		return mem * 1024
+	default:
+		// All others (macOS, BSD, etc.) report in bytes
+		return mem
 	}
 }

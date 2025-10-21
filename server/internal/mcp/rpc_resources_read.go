@@ -11,6 +11,7 @@ import (
 	"mime"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -101,12 +103,15 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	}
 
 	rw := &resourceResponseWriter{
-		body: new(bytes.Buffer),
+		statusCode: http.StatusOK,
+		headers:    make(http.Header),
+		body:       new(bytes.Buffer),
 	}
 
 	requestBodyBytes := []byte("{}")
 	requestBytes := int64(len(requestBodyBytes))
 	var outputBytes int64
+	var functionCPU, functionMem *int64
 
 	mcpURL := payload.sessionID
 	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
@@ -132,6 +137,8 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 			MCPSessionID:     &payload.sessionID,
 			ChatID:           nil,
 			Type:             plan.BillingType,
+			FunctionCPUUsage: functionCPU,
+			FunctionMemUsage: functionMem,
 		})
 	}()
 
@@ -142,6 +149,18 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 
 	// Track output bytes
 	outputBytes = int64(rw.body.Len())
+
+	// Extract function metrics from headers (originally trailers from functions runner)
+	if cpuStr := rw.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
+		if cpu, err := strconv.ParseInt(cpuStr, 10, 64); err == nil {
+			functionCPU = &cpu
+		}
+	}
+	if memStr := rw.headers.Get(functions.FunctionsMemoryHeader); memStr != "" {
+		if mem, err := strconv.ParseInt(memStr, 10, 64); err == nil {
+			functionMem = &mem
+		}
+	}
 
 	mimeType := "text/plain"
 	if plan.Function != nil && plan.Function.MimeType != "" {
@@ -224,11 +243,13 @@ func isBinaryMimeType(ctx context.Context, logger *slog.Logger, mimeType string)
 }
 
 type resourceResponseWriter struct {
-	body *bytes.Buffer
+	statusCode int
+	headers    http.Header
+	body       *bytes.Buffer
 }
 
 func (rw *resourceResponseWriter) Header() http.Header {
-	return make(http.Header)
+	return rw.headers
 }
 
 func (rw *resourceResponseWriter) Write(b []byte) (int, error) {
@@ -239,4 +260,6 @@ func (rw *resourceResponseWriter) Write(b []byte) (int, error) {
 	return n, nil
 }
 
-func (rw *resourceResponseWriter) WriteHeader(statusCode int) {}
+func (rw *resourceResponseWriter) WriteHeader(statusCode int) {
+	rw.statusCode = statusCode
+}

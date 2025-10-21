@@ -11,6 +11,7 @@ import (
 	"mime"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -22,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -122,6 +124,8 @@ func handleToolsCall(
 			OrganizationSlug: nil,
 			ChatID:           nil,
 			ResourceURI:      "",
+			FunctionCPUUsage: nil,
+			FunctionMemUsage: nil,
 		})
 
 		return formatHigherOrderToolResult(ctx, logger, req, promptData)
@@ -189,6 +193,7 @@ func handleToolsCall(
 	requestBodyBytes := params.Arguments
 	requestBytes := int64(len(requestBodyBytes))
 	var outputBytes int64
+	var functionCPU, functionMem *int64
 
 	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
 	if err != nil {
@@ -212,6 +217,8 @@ func handleToolsCall(
 			ChatID:           nil,
 			Type:             plan.BillingType,
 			ResourceURI:      "",
+			FunctionCPUUsage: functionCPU,
+			FunctionMemUsage: functionMem,
 		})
 	}()
 
@@ -222,6 +229,19 @@ func handleToolsCall(
 
 	// Track tool call usage
 	outputBytes = int64(rw.body.Len())
+
+	// Extract function metrics from headers (originally trailers from functions runner)
+	if cpuStr := rw.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
+		if cpu, err := strconv.ParseInt(cpuStr, 10, 64); err == nil {
+			functionCPU = &cpu
+		}
+	}
+	if memStr := rw.headers.Get(functions.FunctionsMemoryHeader); memStr != "" {
+		if mem, err := strconv.ParseInt(memStr, 10, 64); err == nil {
+			functionMem = &mem
+		}
+	}
+
 	chunk, err := formatResult(*rw)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").Log(ctx, logger)
