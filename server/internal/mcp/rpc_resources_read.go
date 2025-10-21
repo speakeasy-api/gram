@@ -111,7 +111,8 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	requestBodyBytes := []byte("{}")
 	requestBytes := int64(len(requestBodyBytes))
 	var outputBytes int64
-	var functionCPU, functionMem *int64
+	var functionCPU *float64
+	var functionMem *int64
 
 	mcpURL := payload.sessionID
 	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
@@ -152,7 +153,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	if cpuStr := rw.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
-		if cpu, err := strconv.ParseInt(cpuStr, 10, 64); err == nil {
+		if cpu, err := strconv.ParseFloat(cpuStr, 64); err == nil {
 			functionCPU = &cpu
 		}
 	}

@@ -178,15 +178,13 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 
 	// Write resource usage as trailers after response body is sent
 	if cmd.ProcessState != nil {
-		if sysUsage := cmd.ProcessState.SysUsage(); sysUsage != nil {
-			if usage, ok := sysUsage.(*syscall.Rusage); ok {
-				// Convert CPU time to milliseconds (user + system time)
-				cpuMs := (usage.Utime.Sec*1000 + int64(usage.Utime.Usec)/1000) +
-					(usage.Stime.Sec*1000 + int64(usage.Stime.Usec)/1000)
-				w.Header().Set(functionsCPUHeader, fmt.Sprintf("%d", cpuMs))
-				// Assumed Linux Runtime
-				w.Header().Set(functionsMemoryHeader, fmt.Sprintf("%d", getMemoryUsage(usage)))
-			}
+		sysUsage := cmd.ProcessState.SysUsage()
+		if usage, ok := sysUsage.(*syscall.Rusage); ok {
+			// Convert CPU time to seconds (user + system time)
+			cpuSeconds := float64(usage.Utime.Sec) + float64(usage.Utime.Usec)/1000000 +
+				float64(usage.Stime.Sec) + float64(usage.Stime.Usec)/1000000
+			w.Header().Set(functionsCPUHeader, fmt.Sprintf("%.2f", cpuSeconds))
+			w.Header().Set(functionsMemoryHeader, fmt.Sprintf("%d", getMemoryUsage(usage)))
 		}
 	}
 

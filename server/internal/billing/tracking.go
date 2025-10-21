@@ -28,7 +28,7 @@ type ToolCallUsageEvent struct {
 	Type             ToolCallType
 	ToolsetID        *string
 	MCPSessionID     *string
-	FunctionCPUUsage *int64
+	FunctionCPUUsage *float64
 	FunctionMemUsage *int64
 }
 

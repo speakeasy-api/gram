@@ -1475,8 +1475,13 @@ func (m *mockToolCaller) ReadResource(ctx context.Context, req functions.RunnerR
 func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	t.Parallel()
 
+	// Track the invocation ID that will be generated
+	var invocationID uuid.UUID
+
 	// Create a mock server that returns trailers for CPU and memory metrics
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set required invocation ID header
+		w.Header().Set("Gram-Invoke-ID", invocationID.String())
 		// Announce trailers
 		w.Header().Set("Trailer", functions.FunctionsCPUHeader+", "+functions.FunctionsMemoryHeader)
 		w.Header().Set("Content-Type", "application/json")
@@ -1486,7 +1491,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 		_, _ = w.Write([]byte(`{"result": "success"}`))
 
 		// Set trailer values (after body is written)
-		w.Header().Set(functions.FunctionsCPUHeader, "1234")
+		w.Header().Set(functions.FunctionsCPUHeader, "1.23")
 		w.Header().Set(functions.FunctionsMemoryHeader, "5678900")
 	}))
 	defer mockServer.Close()
@@ -1519,7 +1524,9 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	// Mock the functions.ToolCaller to return our mock server URL
 	mockFuncCaller := &mockToolCaller{
 		serverURL: mockServer.URL,
-		onCall:    func(invID uuid.UUID) {},
+		onCall: func(invID uuid.UUID) {
+			invocationID = invID
+		},
 	}
 
 	// Create tool proxy
@@ -1566,6 +1573,6 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 	cpuValue := result.Trailer.Get(functions.FunctionsCPUHeader)
 	memValue := result.Trailer.Get(functions.FunctionsMemoryHeader)
 
-	require.Equal(t, "1234", cpuValue, "CPU trailer should be proxied through")
+	require.Equal(t, "1.23", cpuValue, "CPU trailer should be proxied through")
 	require.Equal(t, "5678900", memValue, "Memory trailer should be proxied through")
 }
