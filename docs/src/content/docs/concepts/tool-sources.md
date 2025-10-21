@@ -300,5 +300,3 @@ If you are looking for more information on how to write, understand and manage O
 
 Speakeasy also provides a comprehensive OpenAPI Editor and CLI that help you edit, save and lint OpenAPI documents. You can login to Speakeasy [here](https://app.speakeasy.com) using the same credientials used to access the Gram platform.
 :::
-
-
