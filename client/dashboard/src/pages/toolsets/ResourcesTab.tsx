@@ -19,10 +19,7 @@ import { Button, Stack } from "@speakeasy-api/moonshine";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Toolset, Resource } from "@/lib/toolTypes";
-import {
-  useLatestDeployment,
-  useListResources,
-} from "@/hooks/toolTypes";
+import { useLatestDeployment, useListResources } from "@/hooks/toolTypes";
 
 export function ResourcesTabContent({
   toolset,
@@ -174,9 +171,7 @@ function ResourceSelectPopover({
 
   // Filter out resources that are already in the toolset
   const availableResources = allResources.filter(
-    (r) =>
-      r.resourceUrn &&
-      !currentResourceUrns.includes(r.resourceUrn),
+    (r) => r.resourceUrn && !currentResourceUrns.includes(r.resourceUrn),
   );
 
   if (availableResources.length === 0) {
