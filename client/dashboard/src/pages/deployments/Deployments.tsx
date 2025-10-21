@@ -46,6 +46,8 @@ type DeploymentSummary = {
   createdAt: Date;
   openapiv3AssetCount: number;
   openapiv3ToolCount: number;
+  functionsAssetCount: number;
+  functionsToolCount: number;
 };
 
 function DeploymentActionsDropdown({
@@ -180,13 +182,13 @@ function DeploymentsTable() {
     {
       key: "assetCount",
       header: "Assets",
-      render: (row) => row.openapiv3AssetCount,
+      render: (row) => row.openapiv3AssetCount + row.functionsAssetCount,
       width: "150px",
     },
     {
       key: "toolCount",
       header: "Tools",
-      render: (row) => row.openapiv3ToolCount,
+      render: (row) => row.openapiv3ToolCount + row.functionsToolCount,
       width: "0.5fr",
     },
     {
