@@ -133,7 +133,7 @@ export function ToolCard({
     </>
   );
 
-  if (sourceName === "Custom") {
+  if (tool.type === "prompt") {
     tags = (
       <Badge
         variant="secondary"
@@ -145,8 +145,8 @@ export function ToolCard({
     );
   }
 
-  // TODO: this should get much more granular as the UX gets built out
-  if (sourceName === "Function") {
+  // TODO: this should get much more granular (function asset name) as the UX gets built out
+  if (tool.type === "function") {
     tags = (
       <Badge
         variant="secondary"

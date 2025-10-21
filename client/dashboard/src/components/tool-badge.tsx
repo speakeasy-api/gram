@@ -1,9 +1,9 @@
-import { Stack } from "@speakeasy-api/moonshine";
+import { Tool } from "@/lib/toolTypes";
+import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { HttpRoute } from "./http-route";
 import { Badge } from "./ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Type } from "./ui/type";
-import { Tool } from "@/lib/toolTypes";
 
 export function ToolBadge({
   tool,
@@ -22,9 +22,25 @@ export function ToolBadge({
         </Badge>
       </TooltipTrigger>
       <TooltipContent inverted>
-        <Stack className="max-w-md pt-2" gap={1}>
+        <Stack className="max-w-md" gap={1}>
           {tool.type === "http" && (
-            <HttpRoute method={tool.httpMethod} path={tool.path} />
+            <HttpRoute
+              method={tool.httpMethod}
+              path={tool.path}
+              className="pt-2"
+            />
+          )}
+          {tool.type === "function" && (
+            <Stack direction="horizontal" gap={1} align="end">
+              <Icon
+                name="square-function"
+                size="small"
+                className="text-muted-foreground"
+              />
+              <Type small mono muted>
+                {tool.name}
+              </Type>
+            </Stack>
           )}
           <Type small className="line-clamp-3">
             {tool.description}

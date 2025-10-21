@@ -101,7 +101,7 @@ export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
         groupKey = documentSlug || "unknown";
       } else if (tool.type === "function") {
         // TODO: As the UX gets built out this should get more granular, tying to which function asset
-        groupKey = "function";
+        groupKey = "functions";
       } else {
         groupKey = "custom";
       }

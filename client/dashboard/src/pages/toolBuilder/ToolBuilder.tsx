@@ -209,7 +209,8 @@ function ToolBuilder({ initial }: { initial: ToolBuilderState }) {
     });
   };
 
-  const tools = toolsetData?.tools ?? [];
+  let tools = toolsetData?.tools ?? [];
+  tools = tools.filter((t) => t.id !== initial.id); // Make sure you can't create recursive tools
 
   // Ensures that the canonical tool, tool URN, and update function is set for the step
   const makeStep = (step: Step) => {

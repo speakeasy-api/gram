@@ -10,7 +10,7 @@ import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
-import { ChevronDown, FileCode, Layers, SquareFunction } from "lucide-react";
+import { ChevronDown, FileCode, Layers, PencilRuler, SquareFunction } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ToolVariationBadge } from "../tool-variation-badge";
 import { Type } from "../ui/type";
@@ -37,7 +37,7 @@ interface ToolListProps {
 
 interface ToolGroup {
   type: "package" | "function" | "custom" | "higher_order";
-  icon: "file-code" | "square-function" | "square-stack";
+  icon: "file-code" | "square-function" | "square-stack" | "pencil-ruler";
   title: string;
   tools: Tool[];
   packageName?: string;
@@ -182,7 +182,7 @@ function groupTools(
   if (customTools.length > 0) {
     groups.push({
       type: "custom",
-      icon: "file-code",
+      icon: "pencil-ruler",
       title: "Custom",
       tools: sortToolsByMethod(customTools),
     });
@@ -209,6 +209,8 @@ function getIcon(icon: ToolGroup["icon"]) {
       return SquareFunction;
     case "square-stack":
       return Layers;
+    case "pencil-ruler":
+      return PencilRuler;
   }
 }
 
