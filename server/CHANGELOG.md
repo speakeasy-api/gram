@@ -1,5 +1,16 @@
 # server
 
+## 0.9.0
+
+### Minor Changes
+
+- 7cd9b62: Rename packages in changelogs, git tags and github releases
+
+### Patch Changes
+
+- 671cc0e: Fixes two issues: 1) Producer scoped keys were incorrectly not able to access MCP servers, the app documents them as a superset on consumer and we had a bug. 2) The MCP install page was incorrectly forming a URL without the MCP Slug.
+- 4680971: Implements listing resources into our actual MCP Server layer. Also implements the gateway proxy for resources currently only being served from functions. Billing/Metrics wise we still treat fetching a resources as a tool call, but there are resource attributes added onto this that would allow us to separate in the future.
+
 ## 0.8.1
 
 ### Patch Changes

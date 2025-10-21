@@ -1,5 +1,15 @@
 # dashboard
 
+## 0.16.0
+
+### Minor Changes
+
+- 7cd9b62: Rename packages in changelogs, git tags and github releases
+
+### Patch Changes
+
+- b6b4ed0: Better custom domain model ordering
+
 ## 0.15.1
 
 ### Patch Changes
