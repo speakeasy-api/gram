@@ -87,7 +87,7 @@ export function Type({
   }
 
   if (small) {
-    baseClass += " text-sm";
+    baseClass += mono ? " text-xs" : " text-sm";
   }
 
   const El = Component as React.ComponentType<
