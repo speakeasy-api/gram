@@ -5,15 +5,19 @@ sidebar:
   order: 0
 ---
 
-Gram uses your API as the starting point for the creation of your MCP server. A toolset will be generated with one tool for every API method (`GET`, `POST`, `PUT`, `DELETE`) in your API. This will be a the default toolset.
+Gram uses your API as the starting point for the creation of your MCP server. A toolset will be generated with one tool for every API method (`GET`, `POST`, `PUT`, `DELETE`) in your API, or custom tools defined in Gram Functions. This will be the default toolset.
 
-This toolset is created via an uploaded OpenAPI document.
+This toolset is created via an uploaded [source](/concepts/tool-sources) such as an OpenAPI document or Gram Function.
 
 The default toolset will likely contain too many tools for an LLM to use effectively in production. Before launching the MCP server, [a custom toolset will be curated](/) to contain only the tools that are relevant to the intended use case.
 
-## Generating tools from OpenAPI
+## Generating tools from sources
 
-Gram converts OpenAPI endpoints into tool definitions that MCP clients can understand and use.
+Gram converts sources into tool definitions that MCP clients can understand and use. This guide focuses on OpenAPI documents, but you can also create tools from [Gram Functions](/concepts/tool-sources#gram-functions) for custom logic.
+
+### Using OpenAPI documents
+
+Gram converts OpenAPI endpoints into tool definitions.
 
 To upload an OpenAPI document:
 

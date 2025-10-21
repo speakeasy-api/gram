@@ -5,7 +5,7 @@ sidebar:
   order: 0
 ---
 
-When you upload an [OpenAPI document](/concepts/openapi) or enable an integration in Gram, Gram creates a deployment and begins processing it. During this stage, every operation defined in the OpenAPI document is automatically converted into a corresponding tool definition.
+When you upload a [source](/concepts/tool-sources) (such as an OpenAPI document or Gram Function) or enable an integration in Gram, Gram creates a deployment and begins processing it. During this stage, every operation defined in your source is automatically converted into a corresponding tool definition.
 
 ![Generating tools](/img/concepts/tool-definitions/tools-generation.png)
 
