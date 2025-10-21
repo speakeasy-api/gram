@@ -7,7 +7,7 @@ sidebar:
 
 The Model Context Protocol (MCP) connects your AI assistants to real-world tools and data sources. Instead of manually copying and pasting information between tools and your AI assistant, your AI assistant can interact directly with APIs, databases, and services through standardized tool calls.
 
-[Gram](https://getgram.ai) makes setting up MCP servers simple by hosting servers in the cloud, so you don't need to handle local configurations, manage infrastructure, or deal with authentication complexity. With Gram, you can turn any OpenAPI document into a fully functional MCP server in minutes.
+[Gram](/product/gram) makes setting up MCP servers simple by hosting servers in the cloud, so you don't need to handle local configurations, manage infrastructure, or deal with authentication complexity. With Gram, you can turn any OpenAPI document into a fully functional MCP server in minutes.
 
 This guide shows you how to create a Gram-hosted MCP server using Taskmaster, a full-stack CRUD application for task and project management, and use it across some of the most popular IDE-based MCP clients. Taskmaster includes a web UI for managing projects and tasks, a built-in HTTP API, OAuth 2.0 authentication, and a Neon PostgreSQL database for storing data. Try the [demo app](https://taskmaster-speakeasyapi.vercel.app/) to see it in action.
 
@@ -18,11 +18,11 @@ Find the full code and OpenAPI document in the [Taskmaster repository](https://g
 To follow this guide, you need:
 
 - A [Gram account](https://app.getgram.ai)
-- An MCP client (This guide covers Cursor, VS Code with Copilot, Windsurf, and Amp. For Claude Desktop, see the [dedicated Claude Desktop guide](/clients/using-claude-desktop-with-gram-mcp-server).)
+- An MCP client (This guide covers Cursor, VS Code with Copilot, Windsurf, and Amp. For Claude Desktop, see the [dedicated Claude Desktop guide](clients/using-claude-desktop-with-gram-mcp-server).)
 
 ## Creating an MCP server
 
-Before connecting your IDE to a Taskmaster MCP server, you first need to create one. Follow our guide to [creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server).
+Before connecting your IDE to a Taskmaster MCP server, you first need to create one. Follow our guide to [creating a Taskmaster MCP server](examples/creating-taskmaster-mcp-server).
 
 Once your Taskmaster MCP server is ready, you can connect it to your IDE. The following sections show you how to add the MCP server configuration to the most popular IDE-based MCP clients.
 
@@ -30,7 +30,7 @@ Once your Taskmaster MCP server is ready, you can connect it to your IDE. The fo
 
 Cursor's built-in configuration interface makes it easy to add and manage MCP servers directly from settings.
 
-<div class="flex justify-center">
+<div className="flex justify-center">
   <video controls>
     <source src="/videos/installing-mcp-cursor.mp4" type="video/mp4"></source>
     Your browser does not support the video tag.
@@ -43,7 +43,7 @@ In Cursor, navigate to **Settings -> Cursor Settings** and open **Tools & Integr
 
 ### 2. Add the MCP server configuration
 
-Cursor's global MCP configuration file will open. Add your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server) guide.
+Cursor's global MCP configuration file will open. Add your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](examples/creating-taskmaster-mcp-server) guide.
 
 For a public server, the configuration looks like this:
 
@@ -105,7 +105,7 @@ Open the VS Code command palette with `Ctrl/Cmd + Shift + P` and search for `Add
 
 ![Screenshot showing the VS Code Add HTTP MCP Server dialog](/img/guides/mcp-installing-ide/vscode-add-http-server.png)
 
-Paste in the URL of your Taskmaster MCP server from the [Creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server) guide and enter the server name.
+Paste in the URL of your Taskmaster MCP server from the [Creating a Taskmaster MCP server](examples/creating-taskmaster-mcp-server) guide and enter the server name.
 
 ![Screenshot showing pasting the MCP server URL](/img/guides/mcp-installing-ide/vscode-paste-mcp-url.png)
 
@@ -147,7 +147,7 @@ You can ask questions like:
 Create a new task called "Review code changes" with description "Check the latest commits for quality and security"
 ```
 
-<div class="flex justify-center">
+<div className="flex justify-center">
   <video controls>
     <source src="/videos/vscode-prod-check.mp4" type="video/mp4"></source>
     Your browser does not support the video tag.
@@ -168,7 +168,7 @@ Under the **Plugins (MCP Servers)** section, click **Manage plugins** to access 
 
 ### 2. Add the MCP server configuration
 
-In the `mcp_config.json` file that opens, replace the contents with your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server) guide:
+In the `mcp_config.json` file that opens, replace the contents with your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](examples/creating-taskmaster-mcp-server) guide:
 
 ```json
 {
@@ -268,7 +268,7 @@ The location of the Amp CLI configuration file varies by operating system:
 
 ### 2. Add the MCP server configuration
 
-Add the `amp.mcpServers` setting with your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server) guide to the configuration file.
+Add the `amp.mcpServers` setting with your Taskmaster MCP server configuration from the [Creating a Taskmaster MCP server](examples/creating-taskmaster-mcp-server) guide to the configuration file.
 
 For a public server, the configuration will look like this:
 
@@ -357,5 +357,5 @@ If the tools aren't showing up in your MCP client:
 
 ## What's next
 
-Ready to build your own MCP server? [Try Gram today](https://getgram.ai) and see how easy it is to turn any API into agent-ready tools that work across all your development environments.
+Ready to build your own MCP server? [Try Gram today](/product/gram) and see how easy it is to turn any API into agent-ready tools that work across all your development environments.
 

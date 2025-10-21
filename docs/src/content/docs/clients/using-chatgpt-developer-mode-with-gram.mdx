@@ -1,21 +1,21 @@
 ---
 title: "Using ChatGPT Developer Mode with Gram-hosted MCP servers"
 description: "Connect ChatGPT Developer Mode to Gram-hosted MCP servers to give ChatGPT safe access to your APIs and tools."
-sidebar:
-  order: 8
 ---
+
+import { Callout } from "@/mdx/components";
 
 The new Developer Mode in [ChatGPT](https://chatgpt.com/) lets you wire external capabilities into ChatGPT via custom connectors.
 
-:::note[Developer Mode]
+<Callout title="Developer Mode" type="info">
 Developer Mode is currently only available on Plus and Pro plans. It is not available on Free or Business plans. You can read more about Developer Mode in the [OpenAI documentation](https://platform.openai.com/docs/guides/developer-mode).
-:::
+</Callout>
 
-When combined with [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers hosted on [Gram](/gram-quickstart), you can give ChatGPT access to your APIs and tools in just a few minutes.
+When combined with [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers hosted on [Gram](gram-quickstart), you can give ChatGPT access to your APIs and tools in just a few minutes.
 
 ![Screenshot showing Acme To-Do in ChatGPT preview](/img/guides/chatgpt/acme-todo-in-chatgpt-preview.png)
 
-This guide walks you through connecting ChatGPT to a [Gram-hosted MCP server](https://www.speakeasy.com/blog/release-gram-beta) using the example Acme To-Do API. You'll learn to set up the connection, configure the custom connector, and test it with natural language prompts for managing your to-dos.
+This guide walks you through connecting ChatGPT to a [Gram-hosted MCP server](/blog/release-gram-beta) using the example Acme To-Do API. You'll learn to set up the connection, configure the custom connector, and test it with natural language prompts for managing your to-dos.
 
 We'll use the Acme To-Do API as our example. It's a simple Python Flask REST API for managing to-do list items. You can find the complete OpenAPI document here: [`acmetodo.yaml`](https://github.com/ritza-co/acme-todo/blob/main/acmetodo.yaml).
 
@@ -29,7 +29,7 @@ To follow this tutorial, you need:
 
 ## Creating a Gram MCP server
 
-If you already have a Gram-hosted MCP server configured, skip to the section on [connecting ChatGPT to your Gram-hosted MCP server](#connecting-chatgpt-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and more details on creating a Gram-hosted MCP server, check out the [Gram concepts guide](https://www.speakeasy.com/mcp/core-concepts).
+If you already have a Gram-hosted MCP server configured, skip to the section on [connecting ChatGPT to your Gram-hosted MCP server](#connecting-chatgpt-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and more details on creating a Gram-hosted MCP server, check out the [Gram concepts guide](/mcp/core-concepts).
 
 ## Setting up a Gram project
 
@@ -71,13 +71,13 @@ You can edit individual tools in the toolset by clicking on the name or descript
 
 ## Configuring environment variables
 
-:::note[Server URL]
+<Callout title="Server URL" type="info">
 By default, the server URL is set by the OpenAPI document. The `acmetodo.yaml` OpenAPI document uses a base URL of `https://api.ritzademo.com`, which points to the live demo Acme To-Do API.
 
 If you use your own API, set the server URL to the URL of your deployment. You can either edit the OpenAPI document and skip the step below, or set the server URL in the environment variables.
-:::
+</Callout>
 
-[Environments](/concepts/environments) store API keys and configurations separate from your toolset logic.
+[Environments](concepts/environments) store API keys and configurations separate from your toolset logic.
 
 In the **Environments** tab, click the **Default** environment. Click the three-dot menu in the top-right corner of the environment card and then click **Fill for Toolset**. Select the **Acmetodo** toolset and click **Fill Variables** to automatically populate the required variables.
 
@@ -156,7 +156,7 @@ Ask ChatGPT to perform an action that requires the Acme To-Do API. For example:
 Create a new task. I need to go for a hike this Saturday. Use acme todo.
 ```
 
-<video width="600" controls>
+<video width="600" muted={true} controls>
   <source src="/videos/chatgpt-acme-todo-demo.mp4" type="video/mp4" />
     Your browser does not support the video tag.
 </video>
@@ -172,4 +172,4 @@ Create a new task. I need to go for a hike this Saturday. Use acme todo.
 
 ## What's next
 
-You now have ChatGPT connected to a Gram-hosted MCP server built from the Acme To-Do API. Ready to build your own? [Try Gram today](https://getgram.ai) and turn any OpenAPI document into agent-ready tools your models can use safely.
+You now have ChatGPT connected to a Gram-hosted MCP server built from the Acme To-Do API. Ready to build your own? [Try Gram today](/product/gram) and turn any OpenAPI document into agent-ready tools your models can use safely.

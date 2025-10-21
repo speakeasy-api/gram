@@ -5,7 +5,7 @@ sidebar:
   order: 1
 ---
 
-The OpenAI [Responses API](https://platform.openai.com/docs/api-reference/responses) supports remote MCP servers through its MCP tool feature. This allows you to give GPT models direct access to your tools and infrastructure by connecting to [Gram-hosted MCP servers](/gram-quickstart).
+The OpenAI [Responses API](https://platform.openai.com/docs/api-reference/responses) supports remote MCP servers through its MCP tool feature. This allows you to give GPT models direct access to your tools and infrastructure by connecting to [Gram-hosted MCP servers](gram-quickstart).
 
 This guide shows you how to connect the OpenAI Responses API to a Gram-hosted MCP server using an example [Push Advisor API](https://github.com/ritza-co/gram-examples/blob/main/push-advisor-api/openapi.yaml). You'll learn how to create an MCP server from an OpenAPI document, set up the connection, configure authentication, and use natural language to query the example API.
 
@@ -16,10 +16,10 @@ Find the full code and OpenAPI document in the [Push Advisor API repository](htt
 OpenAI provides three main approaches for integrating with MCP servers:
 
 - **The Responses API (this guide):** An API with a simple request-response pattern, ideal for basic tool calling and quick integrations.
-- **The [Agents SDK](/api-clients/using-openai-agents-sdk-with-gram-mcp-servers):** An advanced agent framework with sessions, handoffs, and persistent context that is perfect for complex conversational workflows.
-- **[ChatGPT Connectors](/clients/using-chatgpt-connectors-with-gram):** Connectors offer direct ChatGPT integration to end users via a web UI.
+- **The [Agents SDK](api-clients/using-openai-agents-sdk-with-gram-mcp-servers):** An advanced agent framework with sessions, handoffs, and persistent context that is perfect for complex conversational workflows.
+- **[ChatGPT Connectors](clients/using-chatgpt-developer-mode-with-gram):** Connectors offer direct ChatGPT integration to end users via a web UI.
 
-If you need more advanced features like persistent conversations or complex workflows, consider the [Agents SDK guide](/api-clients/using-openai-agents-sdk-with-gram-mcp-servers), or try [ChatGPT Connectors](/clients/using-chatgpt-connectors-with-gram) for a web UI solution.
+If you need more advanced features like persistent conversations or complex workflows, consider the [Agents SDK guide](api-clients/using-openai-agents-sdk-with-gram-mcp-servers), or try [ChatGPT Connectors](clients/using-chatgpt-developer-mode-with-gram) for a web UI solution.
 
 ## Prerequisites
 
@@ -32,7 +32,7 @@ You'll need:
 
 ## Creating a Gram MCP server
 
-If you already have a Gram MCP server configured, you can skip to [connecting the Responses API to your Gram-hosted MCP server](#connecting-the-responses-api-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and more details on creating a Gram-hosted MCP server, check out our [introduction to Gram](/introduction).
+If you already have a Gram MCP server configured, you can skip to [connecting the Responses API to your Gram-hosted MCP server](#connecting-the-responses-api-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and more details on creating a Gram-hosted MCP server, check out our [introduction to Gram](introduction).
 
 ### Setting up a Gram project
 
@@ -84,7 +84,7 @@ Scroll down to the **MCP Config** section and note your MCP server URL. For this
 
 `https://app.getgram.ai/mcp/canipushtoprod`
 
-For authenticated servers, you'll need an API key. [Generate an API key](/concepts/api-keys) in the **Settings** tab.
+For authenticated servers, you'll need an API key. [Generate an API key](concepts/api-keys) in the **Settings** tab.
 
 ## Connecting the Responses API to your Gram-hosted MCP server
 
@@ -389,4 +389,4 @@ Use the Inspector to verify that your MCP server responds correctly before integ
 
 You now have OpenAI's GPT models connected to your Gram-hosted MCP server, giving them access to your custom APIs and tools.
 
-Ready to build your own MCP server? [Try Gram today](https://getgram.ai) and see how easy it is to turn any API into agent-ready tools that work with both OpenAI and Anthropic models.
+Ready to build your own MCP server? [Try Gram today](/product/gram) and see how easy it is to turn any API into agent-ready tools that work with both OpenAI and Anthropic models.

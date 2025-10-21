@@ -11,7 +11,7 @@ sidebar:
 
 When combined with [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) servers, Claude Code becomes even more useful. Using MCP servers, you can give Claude access to your tools and infrastructure, allowing it to work with your APIs, databases, and other services.
 
-This guide shows you how to connect Claude Code to a [Gram-hosted MCP server](https://www.speakeasy.com/blog/release-gram-beta) using Taskmaster, a full-stack CRUD application for task and project management. Taskmaster includes a web UI for managing projects and tasks, a built-in HTTP API, OAuth 2.0 authentication, and a Neon PostgreSQL database for storing data. Try the [demo app](https://taskmaster-speakeasyapi.vercel.app/) to see it in action.
+This guide shows you how to connect Claude Code to a [Gram-hosted MCP server](/blog/release-gram-beta) using Taskmaster, a full-stack CRUD application for task and project management. Taskmaster includes a web UI for managing projects and tasks, a built-in HTTP API, OAuth 2.0 authentication, and a Neon PostgreSQL database for storing data. Try the [demo app](https://taskmaster-speakeasyapi.vercel.app/) to see it in action.
 
 You'll learn how to set up the connection, test it, and use natural language to manage tasks, projects, and workflows through Claude Code.
 
@@ -38,7 +38,7 @@ If installation is successful, you'll see Claude Code's available commands and o
 
 ## Creating an MCP server
 
-Before connecting Claude Code to a Taskmaster MCP server, you first need to create one. Follow our guide to [creating a Taskmaster MCP server](/examples/creating-taskmaster-mcp-server).
+Before connecting Claude Code to a Taskmaster MCP server, you first need to create one. Follow our guide to [creating a Taskmaster MCP server](examples/creating-taskmaster-mcp-server).
 
 ## Connecting Claude Code to your Gram-hosted MCP server
 
@@ -132,7 +132,7 @@ claude
 
 Ask Claude a basic question like, *"Can you help me create a new task?"*
 
-<video width="600" controls>
+<video width="600" muted={true} controls>
   <source src="/videos/claude-code-showcase.mp4" type="video/mp4" />
     Your browser does not support the video tag.
 </video>
@@ -179,5 +179,5 @@ If Claude Code isn't calling the tools:
 
 You now have Claude Code connected to a Gram-hosted MCP server with task management capabilities.
 
-Ready to build your own MCP server? [Try Gram today](https://getgram.ai) and see how easy it is to turn any API into agent-ready tools.
+Ready to build your own MCP server? [Try Gram today](/product/gram) and see how easy it is to turn any API into agent-ready tools.
 

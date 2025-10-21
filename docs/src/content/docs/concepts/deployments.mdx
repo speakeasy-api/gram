@@ -1,9 +1,9 @@
 ---
 title: Deployments
 description: The "Git commits" of Gram
-sidebar:
-  order: 5
 ---
+
+import { Callout } from "@/mdx/components";
 
 Deployments represent a snapshot of your Gram project at a specific point in
 time. This snapshot includes all the "sources" for a Gram project (uploaded
@@ -19,14 +19,14 @@ A project's deployment history can be accessed from the "Deployments" page:
 
 A Deployment is created whenever you upload a new asset, or update an existing
 one. Once the deployment process is finished, tool definitions generated from
-it can be used in [Toolsets](/build-mcp/custom-toolsets) and Custom Tools. If a
+it can be used in [Toolsets](build-mcp/custom-toolsets) and Custom Tools. If a
 Deployment includes updates to existing assets, any dependent tool definitions,
 toolsets, custom tools, and MCP servers are updated automatically.
 
-:::tip[Fun fact]
+<Callout title="Fun fact" type="info">
 Each Gram project is backed by its own deployment history. Every new release
 tags a particular deployment with a semantic version.
-:::
+</Callout>
 
 ## Troubleshooting
 

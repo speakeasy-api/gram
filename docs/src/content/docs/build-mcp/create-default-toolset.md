@@ -7,13 +7,13 @@ sidebar:
 
 Gram uses your API as the starting point for the creation of your MCP server. A toolset will be generated with one tool for every API method (`GET`, `POST`, `PUT`, `DELETE`) in your API, or custom tools defined in Gram Functions. This will be the default toolset.
 
-This toolset is created via an uploaded [source](/concepts/tool-sources) such as an OpenAPI document or Gram Function.
+This toolset is created via an uploaded [source](concepts/tool-sources) such as an OpenAPI document or Gram Function.
 
-The default toolset will likely contain too many tools for an LLM to use effectively in production. Before launching the MCP server, [a custom toolset will be curated](/) to contain only the tools that are relevant to the intended use case.
+The default toolset will likely contain too many tools for an LLM to use effectively in production. Before launching the MCP server, [a custom toolset will be curated](build-mcp/custom-toolsets) to contain only the tools that are relevant to the intended use case.
 
 ## Generating tools from sources
 
-Gram converts sources into tool definitions that MCP clients can understand and use. This guide focuses on OpenAPI documents, but you can also create tools from [Gram Functions](/concepts/tool-sources#gram-functions) for custom logic.
+Gram converts sources into tool definitions that MCP clients can understand and use. This guide focuses on OpenAPI documents, but you can also create tools from [Gram Functions](concepts/tool-sources#gram-functions) for custom logic.
 
 ### Using OpenAPI documents
 
@@ -30,7 +30,7 @@ To upload an OpenAPI document:
 
 ![Validating tool definitions](/img/guides/build-mcp/01-upload-openapi-document-done.png)
 
-Gram will parse the uploaded OpenAPI document and generate [tool definitions](/concepts/tool-definitions) for each endpoint method.
+Gram will parse the uploaded OpenAPI document and generate [tool definitions](concepts/tool-definitions) for each endpoint method.
 
 ## How it works
 
@@ -38,4 +38,4 @@ Gram does not make use of the entire OpenAPI document, therefore the document do
 
 In particular, Gram will pull out the URL paths, HTTP methods, request schemas, and operation descriptions.
 
-Most OpenAPI documents, do not contain detailed, contextual descriptions. That's okay. Context can be added via [prompts](/build-mcp/writing-prompts) in the Gram or added to the OpenAPI document with the `x-gram` extension](/concepts/openapi#using-the-x-gram-extension) to help LLM agents understand and use your tools correctly.
+Most OpenAPI documents, do not contain detailed, contextual descriptions. That's okay. Context can be added via [prompts](build-mcp/test-toolsets) in Gram or added to the OpenAPI document with the [`x-gram` extension](concepts/tool-sources#optimizing-openapi-documents) to help LLM agents understand and use your tools correctly.

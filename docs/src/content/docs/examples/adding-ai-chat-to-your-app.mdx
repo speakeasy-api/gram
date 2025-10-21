@@ -1,9 +1,9 @@
 ---
 title: "Add AI chat to an existing app with MCP and Gram"
 description: "Add an NLP interface for your users without changing the logic of your app or API."
-sidebar:
-  order: 1
 ---
+
+import { Callout } from "@/mdx/components";
 
 If you have any kind of SaaS application, you're probably used to your users using it via a frontend. But now, instead of clicking through filters and forms, they want to just ask an AI agent for what they need. For example:
 
@@ -117,7 +117,7 @@ Using the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/docs/ge
 
 ## Prerequisites
 
-- A [Gram account](https://getgram.ai) (free)
+- A [Gram account](/product/gram) (free)
 - An OpenAI API key from the [OpenAI dashboard](https://platform.openai.com/account/api-keys)
 - [Node.js](https://nodejs.org/) and [Docker](https://www.docker.com/) for local development
 
@@ -163,9 +163,9 @@ This creates the complete API specification, including authentication requiremen
 
 The existing JSDoc comments in the API routes (like `/api/items/route.ts`) provide the structure Gram needs to understand the TaskBoard endpoints.
 
-:::tip
+<Callout title="Tip" type="info">
 If you're adding chat functionality to your own CRUD app, you likely already have an OpenAPI document. If not, tools like [`next-swagger-doc`](https://www.npmjs.com/package/next-swagger-doc) and [`swagger-jsdoc`](https://www.npmjs.com/package/swagger-jsdoc) can generate one from your existing code comments. To learn more about how to generate an OpenAPI document in other frameworks, visit the Speakeasy [OpenAPI hub](https://www.speakeasy.com/openapi).
-:::
+</Callout>
 
 ### Upload the OpenAPI document to Gram
 
@@ -220,9 +220,9 @@ In Gram, go to **Environments** from the sidebar, and select the **Default** env
 
 ![TaskBoard dialog for adding environment variables](/img/guides/adding-ai-chat-to-your-app/taskboard-env-var.png)
 
-:::note[Production deployment]
+<Callout title="Production deployment" type="info">
 This guide uses ngrok for local development testing. In production, you'd replace `TASKBOARD_SERVER_URL` with your actual API URL (like `https://api.taskboard.com`).
-:::
+</Callout>
 
 ### Test the MCP server
 
@@ -232,9 +232,9 @@ Try queries like "Show me all my tasks" or "Create a task called 'Review quarter
 
 ![Testing the TaskBoard MCP tools in the Gram Playground](/img/guides/adding-ai-chat-to-your-app/testing-mcp-taskboard.png)
 
-:::note
+<Callout title="Note" type="info">
 In the Playground, you'll need to provide a `userId` or ask the agent to use authentication tools. The chat integration will handle user authentication automatically.
-:::
+</Callout>
 
 ## Step 2: Add a chat popup to the frontend
 
