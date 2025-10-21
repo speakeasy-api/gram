@@ -9,8 +9,8 @@ sidebar:
 AI agents via MCP servers. A source is any input that describes available
 functionality, such as:
 
-- OpenAPI documents, and
-- Gram Functions (Node.js).
+- Gram Functions (Node.js), and
+- OpenAPI documents.
 
 These sources can be uploaded to Gram via the web UI, or using the [Gram
 CLI](/reference/gram-cli). Once uploaded, a deployment creates tool
@@ -18,123 +18,6 @@ definitions. These tools can then be curated into **toolsets**, which are
 organized collections tailored to specific use cases or workflows. Each toolset
 is exposed as an **MCP server**, which can be installed into LLM clients for
 automated usage.
-
-## OpenAPI Documents
-
-OpenAPI documents describe the functionality of REST APIs in a standardized
-format known as the OpenAPI Specification. These files are widely used to
-generate API documentation, SDKs, and client libraries. Similaraly, Gram
-leverages OpenAPI documents to generate tools that enable LLMs to interact with
-REST APIs. OpenAPI-sourced tools are especially useful when:
-
-- You want to make it easy for end-users to leverage your REST API via AI
-  agents.
-- You want to automate workflows that involve multiple API calls.
-- You want to enhance LLMs with real-time data and functionality from your API.
-
-Though most users upload these documents for their own REST APIs, _tools may be
-generated using an OpenAPI document for any API_. Some examples of public APIs
-that have OpenAPI documents include:
-
-<table class="w-full table-auto">
-  <thead>
-    <tr>
-      <th>API</th>
-      <th>Documentation</th>
-      <th>OpenAPI Document</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Asana</td>
-      <td><a href="https://developers.asana.com/reference/rest-api-reference">developers.asana.com</a></td>
-      <td><a href="https://raw.githubusercontent.com/Asana/openapi/master/defs/asana_oas.yaml">asana_oas.yaml</a></td>
-    </tr>
-    <tr>
-      <td>GitHub REST API</td>
-      <td><a href="https://docs.github.com/en/rest">docs.github.com/en/rest</a></td>
-      <td><a href="https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.yaml">api.github.com.yaml</a></td>
-    </tr>
-    <tr>
-      <td>National Weather Service</td>
-      <td><a href="https://www.weather.gov/documentation/services-web-api">weather.gov/documentation/services-web-api</a></td>
-      <td><a href="https://api.weather.gov/openapi.json">openapi.json</a></td>
-    </tr>
-  </tbody>
-</table>
-
-:::note[NOTE]
-Gram works best with documents using [OpenAPI
-3.1.x](https://spec.openapis.org/oas/v3.1.1) and its corresponding JSON Schema
-version. See the section on [Limitations of OpenAPI
-3.0.x](#limitations-of-openapi-30x) for more details.
-:::
-
-### Optimizing OpenAPI Documents 
-
-Because Gram generates tools directly from endpoint descriptions in your OpenAPI document, it's essential that those descriptions are accurate and informative. However, writing descriptions that serve both humans and LLMs can be challenging.
-
-Short descriptions may be readable for humans, but LLMs often require more context to interpret intent and usage correctly. To bridge this gap, Gram supports the `x-gram` extension in OpenAPI documents, allowing you to provide LLM-optimized metadata specifically for tool generation and usage.
-
-```yaml {8,9,22-33}
-openapi: 3.1.0
-info:
-  title: E-commerce API
-  version: 1.0.0
-paths:
-  /products/{merchant_id}/{product_id}:
-    get:
-      summary: Get a product
-      operationId: E-Commerce V1 / product
-      tags: [ecommerce]
-      parameters:
-        - name: merchant_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: product_id
-          in: path
-          required: true
-          schema:
-            type: string
-      x-gram:
-        name: get_product
-        summary: ""
-        description: |
-          <context>
-            This endpoint returns details about a product for a given merchant.
-          </context>
-          <prerequisites>
-            - If you are presented with a product or merchant slug then you must first resolve these to their respective IDs.
-            - Given a merchant slug use the `resolve_merchant_id` tool to get the merchant ID.
-            - Given a product slug use the `resolve_product_id` tool to get the product ID.
-          </prerequisites>
-        responseFilterType: jq
-      responses:
-        "200":
-          description: Details about a product
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Product"
-```
-
-Without the `x-gram` extension, the generated tool would be named `ecommerce_e_commerce_v1_product`, and have the description `"Get a product by its ID"`, resulting in a poor quality tool. The `x-gram` extension allows you to customize a tool's name and description without altering the original information in the OpenAPI document.
-
-The `x-gram` extension also supports [response filtering](/build-mcp/response-filtering) through the `responseFilterType` property, which helps LLMs process API responses more effectively.
-
-Using the `x-gram` extension is optional. With Gram's [tool variations](/concepts/tool-variations) feature, you can modify a tool's name and description when curating tools into toolsets. However, it might be worth using the `x-gram` extension to make your OpenAPI document clean, descriptive, and LLM-ready before bringing it into Gram, so your team doesn't need to fix tool names and descriptions later.
-
-### Limitations of OpenAPI 3.0.x
-
-Many LLMs don't support the JSON Schema version used in OpenAPI 3.0.x documents. When these documents are uploaded to Gram, they are transparently upgraded to 3.1.0 using the steps defined in [Migrating from OpenAPI 3.0 to 3.1.0](https://www.openapis.org/blog/2021/02/16/migrating-from-openapi-3-0-to-3-1-0). When this happens you might notice that line numbers no longer match the original OpenAPI document. It's recommended to upgrade your OpenAPI documents to 3.1.x to have a more streamlined experience.
-
-:::tip[OpenAPI Resources]
-If you are looking for more information on how to write, understand and manage OpenAPI documents we reccomend checking out [Speakeasy's documentation site on OpenAPI](https://www.speakeasy.com/openapi).
-
-Speakeasy also provides a comprehensive OpenAPI Editor and CLI that help you edit, save and lint OpenAPI documents. You can login to Speakeasy [here](https://app.speakeasy.com) using the same credientials used to access the Gram platform.
-:::
 
 ## Gram Functions
 
@@ -290,3 +173,122 @@ The SDK automatically generates the manifest and bundles your code when you run
 For more details on using the SDK to create and deploy Gram Functions, check
 out the framework's [GitHub
 Repository](https://github.com/speakeasy-api/gram/tree/main/ts-framework/create-function/gram-template-gram).
+
+## OpenAPI Documents
+
+OpenAPI documents describe the functionality of REST APIs in a standardized
+format known as the OpenAPI Specification. These files are widely used to
+generate API documentation, SDKs, and client libraries. Similaraly, Gram
+leverages OpenAPI documents to generate tools that enable LLMs to interact with
+REST APIs. OpenAPI-sourced tools are especially useful when:
+
+- You want to make it easy for end-users to leverage your REST API via AI
+  agents.
+- You want to automate workflows that involve multiple API calls.
+- You want to enhance LLMs with real-time data and functionality from your API.
+
+Though most users upload these documents for their own REST APIs, _tools may be
+generated using an OpenAPI document for any API_. Some examples of public APIs
+that have OpenAPI documents include:
+
+<table class="w-full table-auto">
+  <thead>
+    <tr>
+      <th>API</th>
+      <th>Documentation</th>
+      <th>OpenAPI Document</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Asana</td>
+      <td><a href="https://developers.asana.com/reference/rest-api-reference">developers.asana.com</a></td>
+      <td><a href="https://raw.githubusercontent.com/Asana/openapi/master/defs/asana_oas.yaml">asana_oas.yaml</a></td>
+    </tr>
+    <tr>
+      <td>GitHub REST API</td>
+      <td><a href="https://docs.github.com/en/rest">docs.github.com/en/rest</a></td>
+      <td><a href="https://raw.githubusercontent.com/github/rest-api-description/main/descriptions/api.github.com/api.github.com.yaml">api.github.com.yaml</a></td>
+    </tr>
+    <tr>
+      <td>National Weather Service</td>
+      <td><a href="https://www.weather.gov/documentation/services-web-api">weather.gov/documentation/services-web-api</a></td>
+      <td><a href="https://api.weather.gov/openapi.json">openapi.json</a></td>
+    </tr>
+  </tbody>
+</table>
+
+:::note[NOTE]
+Gram works best with documents using [OpenAPI
+3.1.x](https://spec.openapis.org/oas/v3.1.1) and its corresponding JSON Schema
+version. See the section on [Limitations of OpenAPI
+3.0.x](#limitations-of-openapi-30x) for more details.
+:::
+
+### Optimizing OpenAPI Documents 
+
+Because Gram generates tools directly from endpoint descriptions in your OpenAPI document, it's essential that those descriptions are accurate and informative. However, writing descriptions that serve both humans and LLMs can be challenging.
+
+Short descriptions may be readable for humans, but LLMs often require more context to interpret intent and usage correctly. To bridge this gap, Gram supports the `x-gram` extension in OpenAPI documents, allowing you to provide LLM-optimized metadata specifically for tool generation and usage.
+
+```yaml {8,9,22-33}
+openapi: 3.1.0
+info:
+  title: E-commerce API
+  version: 1.0.0
+paths:
+  /products/{merchant_id}/{product_id}:
+    get:
+      summary: Get a product
+      operationId: E-Commerce V1 / product
+      tags: [ecommerce]
+      parameters:
+        - name: merchant_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: product_id
+          in: path
+          required: true
+          schema:
+            type: string
+      x-gram:
+        name: get_product
+        summary: ""
+        description: |
+          <context>
+            This endpoint returns details about a product for a given merchant.
+          </context>
+          <prerequisites>
+            - If you are presented with a product or merchant slug then you must first resolve these to their respective IDs.
+            - Given a merchant slug use the `resolve_merchant_id` tool to get the merchant ID.
+            - Given a product slug use the `resolve_product_id` tool to get the product ID.
+          </prerequisites>
+        responseFilterType: jq
+      responses:
+        "200":
+          description: Details about a product
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+```
+
+Without the `x-gram` extension, the generated tool would be named `ecommerce_e_commerce_v1_product`, and have the description `"Get a product by its ID"`, resulting in a poor quality tool. The `x-gram` extension allows you to customize a tool's name and description without altering the original information in the OpenAPI document.
+
+The `x-gram` extension also supports [response filtering](/build-mcp/response-filtering) through the `responseFilterType` property, which helps LLMs process API responses more effectively.
+
+Using the `x-gram` extension is optional. With Gram's [tool variations](/concepts/tool-variations) feature, you can modify a tool's name and description when curating tools into toolsets. However, it might be worth using the `x-gram` extension to make your OpenAPI document clean, descriptive, and LLM-ready before bringing it into Gram, so your team doesn't need to fix tool names and descriptions later.
+
+### Limitations of OpenAPI 3.0.x
+
+Many LLMs don't support the JSON Schema version used in OpenAPI 3.0.x documents. When these documents are uploaded to Gram, they are transparently upgraded to 3.1.0 using the steps defined in [Migrating from OpenAPI 3.0 to 3.1.0](https://www.openapis.org/blog/2021/02/16/migrating-from-openapi-3-0-to-3-1-0). When this happens you might notice that line numbers no longer match the original OpenAPI document. It's recommended to upgrade your OpenAPI documents to 3.1.x to have a more streamlined experience.
+
+:::tip[OpenAPI Resources]
+If you are looking for more information on how to write, understand and manage OpenAPI documents we reccomend checking out [Speakeasy's documentation site on OpenAPI](https://www.speakeasy.com/openapi).
+
+Speakeasy also provides a comprehensive OpenAPI Editor and CLI that help you edit, save and lint OpenAPI documents. You can login to Speakeasy [here](https://app.speakeasy.com) using the same credientials used to access the Gram platform.
+:::
+
+
