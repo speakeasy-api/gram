@@ -104,6 +104,10 @@ func (k *ByKey) KeyBasedAuth(ctx context.Context, key string, requiredScopes []s
 		return ctx, oops.E(oops.CodeUnexpected, err, "error loading organization")
 	}
 
+	if org.Disabled {
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "This organization is disabled. Please reach out to support@speakeasy.com for more information.")
+	}
+
 	ctx = contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
 		ActiveOrganizationID: apiKey.OrganizationID,
 		UserID:               apiKey.CreatedByUserID,

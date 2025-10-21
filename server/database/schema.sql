@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS organization_metadata (
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  disabled boolean NOT NULL DEFAULT FALSE,
 
   CONSTRAINT organization_metadata_pkey PRIMARY KEY (id)
 );

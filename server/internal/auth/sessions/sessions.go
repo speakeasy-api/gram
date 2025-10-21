@@ -121,6 +121,10 @@ func (s *Manager) Authenticate(ctx context.Context, key string, canStubAuth bool
 	if err != nil {
 		return ctx, oops.E(oops.CodeUnexpected, err, "error getting organization metadata").Log(ctx, s.logger)
 	}
+	if orgMetadata.Disabled {
+		return ctx, oops.E(oops.CodeUnauthorized, nil, "This organization is disabled. Please reach out to support@speakeasy.com for more information.").Log(ctx, s.logger)
+	}
+
 	authCtx.AccountType = orgMetadata.GramAccountType
 	authCtx.OrganizationSlug = orgMetadata.Slug
 	authCtx.Email = &email

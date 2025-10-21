@@ -82,7 +82,7 @@ SELECT
     p.slug as project_slug,
     
     -- Organization metadata fields
-    om.id, om.name, om.slug, om.gram_account_type, om.created_at, om.updated_at
+    om.id, om.name, om.slug, om.gram_account_type, om.created_at, om.updated_at, om.disabled
     
 FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
@@ -100,6 +100,7 @@ type GetProjectWithOrganizationMetadataRow struct {
 	GramAccountType string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	Disabled        bool
 }
 
 func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uuid.UUID) (GetProjectWithOrganizationMetadataRow, error) {
@@ -115,6 +116,7 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 		&i.GramAccountType,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Disabled,
 	)
 	return i, err
 }

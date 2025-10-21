@@ -384,6 +384,7 @@ type OrganizationMetadatum struct {
 	GramAccountType string
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
+	Disabled        bool
 }
 
 type Package struct {
