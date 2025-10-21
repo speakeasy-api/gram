@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-Effective API design does not automatically create effective MCP servers. When uploading a source with hundreds of tools to Gram (such as an OpenAPI document with many endpoints or a Gram Function bundle), avoid placing all tools into a single toolset. This approach overwhelms agents and reduces their effectiveness.
+Effective API design does not automatically create effective MCP servers. When uploading a source with hundreds of tools to Gram, such as an OpenAPI document with many endpoints or a Gram Function bundle, avoid placing all tools into a single toolset. This approach overwhelms agents and reduces their effectiveness.
 
 Tool curation involves thinking like an agent-UX designer. It requires understanding how AI agents navigate complex workflows, make decisions, and discover what they need to accomplish goals. Traditional APIs are flat and expose every endpoint equally. Effective MCP servers use multilayered approaches with progressive disclosure to surface the right tools at the right time.
 
