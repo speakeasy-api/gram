@@ -188,7 +188,7 @@ main() {
     info "Latest version: $version"
 
     # Construct download URLs
-    local encoded_tag="cli%2F${version}"
+    local encoded_tag="cli@${version}"
     local filename="gram_${os}_${arch}.zip"
     local download_url="https://github.com/speakeasy-api/gram/releases/download/${encoded_tag}/${filename}"
     local checksums_url="https://github.com/speakeasy-api/gram/releases/download/${encoded_tag}/checksums.txt"
