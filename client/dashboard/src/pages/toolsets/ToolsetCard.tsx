@@ -21,7 +21,6 @@ type ToolsetForCard = Pick<
   | "updatedAt"
   | "tools"
   | "promptTemplates"
-  | "resourceUrns"
   | "resources"
 >;
 

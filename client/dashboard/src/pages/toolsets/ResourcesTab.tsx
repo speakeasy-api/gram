@@ -1,4 +1,4 @@
-import { Cards } from "@/components/ui/card";
+import { Card, Cards } from "@/components/ui/card";
 import {
   Command,
   CommandEmpty,
@@ -14,16 +14,15 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
-import { Resource as GeneratedResource } from "@gram/client/models/components";
 import {
   useLatestDeployment,
-  useListResources,
   useUpdateToolsetMutation,
 } from "@gram/client/react-query";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Button, Stack } from "@speakeasy-api/moonshine";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Toolset, Resource } from "@/lib/toolTypes";
+import { useListResources } from "@/hooks/toolTypes";
 
 export function ResourcesTabContent({
   toolset,
@@ -135,29 +134,32 @@ function ResourceCard({
   ];
 
   return (
-    <div className="border border-border rounded-lg p-4 flex items-start gap-4">
-      <div className="p-2 rounded-md bg-muted shrink-0">
-        <Newspaper className="size-5 text-muted-foreground" strokeWidth={1.5} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <Stack gap={1}>
-          <Stack direction="horizontal" justify="space-between" align="start">
-            <div className="text-sm font-medium truncate">
-              {resource.name}
-              {functionName && (
-                <span className="text-xs text-muted-foreground font-normal ml-1">
-                  ({functionName})
-                </span>
-              )}
-            </div>
-            <MoreActions actions={actions} />
-          </Stack>
-          <Type small muted className="font-mono truncate">
-            {resource.uri}
-          </Type>
+    <Card>
+      <Card.Header>
+        <Stack direction="horizontal" gap={2} align="center">
+          <div className="p-2 rounded-md bg-muted shrink-0">
+            <Newspaper
+              className="size-5 text-muted-foreground"
+              strokeWidth={1.5}
+            />
+          </div>
+          <Card.Title className="normal-case">
+            {resource.name}
+            {functionName && (
+              <span className="text-xs text-muted-foreground font-normal ml-1">
+                ({functionName})
+              </span>
+            )}
+          </Card.Title>
         </Stack>
-      </div>
-    </div>
+        <MoreActions actions={actions} />
+      </Card.Header>
+      <Card.Content>
+        <Card.Description className="font-mono">
+          {resource.uri}
+        </Card.Description>
+      </Card.Content>
+    </Card>
   );
 }
 
@@ -166,7 +168,7 @@ function ResourceSelectPopover({
   currentResourceUrns,
   onSelect,
 }: {
-  allResources: GeneratedResource[];
+  allResources: Resource[];
   currentResourceUrns: string[];
   onSelect: (resourceUrn: string) => void;
 }) {
@@ -175,8 +177,8 @@ function ResourceSelectPopover({
   // Filter out resources that are already in the toolset
   const availableResources = allResources.filter(
     (r) =>
-      r.functionResourceDefinition?.resourceUrn &&
-      !currentResourceUrns.includes(r.functionResourceDefinition.resourceUrn),
+      r.resourceUrn &&
+      !currentResourceUrns.includes(r.resourceUrn),
   );
 
   if (availableResources.length === 0) {
@@ -186,17 +188,12 @@ function ResourceSelectPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button className="w-full border border-border rounded-lg p-4 flex items-start gap-4 hover:bg-muted transition-colors cursor-pointer">
-          <div className="p-2 rounded-md bg-muted shrink-0">
-            <Newspaper
-              className="size-5 text-muted-foreground"
-              strokeWidth={1.5}
-            />
-          </div>
-          <span className="text-sm text-foreground flex items-center h-9">
-            + Add Resource
-          </span>
-        </button>
+        <Button variant="secondary" className="w-full justify-start">
+          <Button.LeftIcon>
+            <Newspaper className="size-4" />
+          </Button.LeftIcon>
+          <Button.Text>Add Resource</Button.Text>
+        </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[400px] p-0" align="start">
         <Command>
@@ -209,16 +206,15 @@ function ResourceSelectPopover({
             </CommandEmpty>
             <CommandGroup>
               {availableResources.map((resource) => {
-                const def = resource.functionResourceDefinition;
-                if (!def) return null;
+                if (resource.type !== "function") return null;
 
                 return (
                   <CommandItem
-                    key={def.resourceUrn}
-                    value={`${def.name} ${def.description} ${def.uri}`}
+                    key={resource.resourceUrn}
+                    value={`${resource.name} ${resource.description} ${resource.uri}`}
                     className="cursor-pointer"
                     onSelect={() => {
-                      onSelect(def.resourceUrn);
+                      onSelect(resource.resourceUrn);
                       setOpen(false);
                     }}
                   >
@@ -229,17 +225,17 @@ function ResourceSelectPopover({
                       />
                       <Stack gap={0.5} className="flex-1 min-w-0">
                         <Type small className="font-medium">
-                          {def.name}
+                          {resource.name}
                         </Type>
                         <Type small muted className="truncate">
-                          {def.description || "No description"}
+                          {resource.description || "No description"}
                         </Type>
                         <Type
                           small
                           muted
                           className="font-mono truncate text-xs"
                         >
-                          {def.uri}
+                          {resource.uri}
                         </Type>
                       </Stack>
                     </div>

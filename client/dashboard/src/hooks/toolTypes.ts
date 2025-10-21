@@ -3,7 +3,15 @@ import {
   ListToolsRequest,
   ListToolsSecurity,
 } from "@gram/client/models/operations";
+import {
+  ListResourcesRequest,
+  ListResourcesSecurity,
+} from "@gram/client/models/operations/listresources.js";
 import { QueryHookOptions } from "@gram/client/react-query";
+import {
+  ListResourcesQueryData,
+  useListResources as useListResourcesQuery,
+} from "@gram/client/react-query/listResources.js";
 import {
   ListToolsQueryData,
   useListTools as useListToolsQuery,
@@ -40,6 +48,24 @@ export function useListTools(
       ? {
           ...result.data,
           tools: result.data.tools.map(asTool),
+        }
+      : undefined,
+  };
+}
+
+export function useListResources(
+  request?: ListResourcesRequest,
+  security?: ListResourcesSecurity,
+  options?: QueryHookOptions<ListResourcesQueryData>,
+) {
+  const result = useListResourcesQuery(request, security, options);
+
+  return {
+    ...result,
+    data: result.data
+      ? {
+          ...result.data,
+          resources: result.data.resources.map(asResource),
         }
       : undefined,
   };
