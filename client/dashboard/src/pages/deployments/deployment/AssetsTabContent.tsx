@@ -87,12 +87,12 @@ export const AssetsTabContent = () => {
         </div>
       )}
 
-      <div>
-        <Heading variant="h2" className="mb-6">
-          Functions
-        </Heading>
+      {okFunctions.length > 0 ? (
+        <div>
+          <Heading variant="h2" className="mb-6">
+            Functions
+          </Heading>
 
-        {okFunctions.length > 0 ? (
           <ul className="flex flex-col gap-4 flex-wrap">
             {okFunctions.map((asset) => {
               return (
@@ -102,16 +102,14 @@ export const AssetsTabContent = () => {
               );
             })}
           </ul>
-        ) : (
-          <p className="text-muted">No functions found in this deployment.</p>
-        )}
-      </div>
+        </div>
+      ) : null}
 
-      <div>
-        <Heading variant="h2" className="mb-6">
-          OpenAPI
-        </Heading>
-        {okOpenAPI.length > 0 ? (
+      {okOpenAPI.length > 0 ? (
+        <div>
+          <Heading variant="h2" className="mb-6">
+            OpenAPI
+          </Heading>
           <ul className="flex flex-col gap-4 flex-wrap">
             {okOpenAPI.map((asset) => {
               return (
@@ -121,12 +119,8 @@ export const AssetsTabContent = () => {
               );
             })}
           </ul>
-        ) : (
-          <p className="text-muted">
-            No OpenAPI documents found in this deployment.
-          </p>
-        )}
-      </div>
+        </div>
+      ) : null}
     </Stack>
   );
 };
