@@ -42,15 +42,10 @@ jobs:
             # Exclude the root docs index.mdx from being copied and protect any existing
             # destination file from deletion/overwrites.
             rsync -a --delete \
-              --exclude='.git' \
-              --exclude='.git*' \
               --exclude='.DS_Store' \
               --exclude='/index.mdx' \
               --filter='P /index.mdx' \
               "$src_path/" "$dest_path/"
-              # Safety: strip any nested git dirs/files that might have slipped through
-              find "$dest_path" -path '*/.git' -type d -prune -exec rm -rf {} + || true
-              find "$dest_path" -name '.git' -type f -delete || true
           else
             echo "Warning: $src_path does not exist; nothing to sync."
           fi
@@ -62,8 +57,6 @@ jobs:
           if [ -d "$src_assets" ]; then
             mkdir -p "$dest_assets"
             EXCLUDES=(
-              '.git'
-              '.git*'
               '.DS_Store'
               'well-known/security.txt'
               '.well-known/security.txt'
@@ -75,9 +68,6 @@ jobs:
             rsync -a --delete \
               "${EXCLUDES[@]/#/--exclude=}" \
               "$src_assets/" "$dest_assets/"
-                # Safety: strip any nested git dirs/files
-                find "$dest_assets" -path '*/.git' -type d -prune -exec rm -rf {} + || true
-                find "$dest_assets" -name '.git' -type f -delete || true
           else
             echo "Warning: $src_assets does not exist; no assets to sync."
           fi
