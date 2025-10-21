@@ -26,6 +26,7 @@ import {
   useCommandPalette,
 } from "./contexts/CommandPalette";
 import { CommandPalette } from "./components/command-palette";
+import { WebGLCanvas, FontTexture } from "@/components/webgl";
 
 export default function App() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
@@ -111,6 +112,10 @@ function AppContent() {
    * 4. Authenticated user is redirected back to CliCallback.
    */
   const cliFlow = useCliAuthFlow();
+  const location = useLocation();
+
+  // Only render WebGL canvas during onboarding
+  const isOnboarding = location.pathname.includes("/onboarding");
 
   if (cliFlow) {
     return <CliCallback localCallbackUrl={cliFlow.cliCallbackUrl} />;
@@ -119,6 +124,12 @@ function AppContent() {
   return (
     <AuthProvider>
       <ProjectProvider>
+        {isOnboarding && (
+          <>
+            <WebGLCanvas />
+            <FontTexture />
+          </>
+        )}
         <RouteProvider />
       </ProjectProvider>
     </AuthProvider>

@@ -1,6 +1,6 @@
 import { CodeBlock } from "@/components/code";
 import { Page } from "@/components/page-layout";
-import { MiniCard, MiniCards } from "@/components/ui/card-mini";
+import { MiniCards } from "@/components/ui/card-mini";
 import { Dialog } from "@/components/ui/dialog";
 import {
   HoverCard,
@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoreActions } from "@/components/ui/more-actions";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { SimpleTooltip } from "@/components/ui/tooltip";
@@ -29,7 +30,13 @@ import {
 } from "@gram/client/react-query/index.js";
 import { HoverCardPortal } from "@radix-ui/react-hover-card";
 import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
-import { CircleAlertIcon, Loader2Icon, Plus } from "lucide-react";
+import {
+  CircleAlertIcon,
+  FileCode,
+  Loader2Icon,
+  Plus,
+  SquareFunction,
+} from "lucide-react";
 import {
   forwardRef,
   useEffect,
@@ -43,11 +50,13 @@ import { toast } from "sonner";
 import { useUploadOpenAPISteps } from "../../onboarding/UploadOpenAPI";
 import AddOpenAPIDialog, { AddOpenAPIDialogRef } from "./AddOpenAPIDialog";
 import { ApisEmptyState } from "./ApisEmptyState";
+import { useTelemetry } from "@/contexts/Telemetry";
 
 type NamedAsset = Asset & {
   deploymentAssetId: string;
   name: string;
   slug: string;
+  type: "openapi" | "function";
 };
 
 export function useDeploymentIsEmpty() {
@@ -68,6 +77,9 @@ export function useDeploymentIsEmpty() {
 export default function OpenAPIAssets() {
   const client = useSdkClient();
   const routes = useRoutes();
+  const telemetry = useTelemetry();
+  const isFunctionsEnabled =
+    telemetry.isFeatureEnabled("gram-functions") ?? false;
 
   const { data: deploymentResult, refetch, isLoading } = useLatestDeployment();
   const { data: assets, refetch: refetchAssets } = useListAssets();
@@ -81,9 +93,7 @@ export default function OpenAPIAssets() {
   >(null);
 
   const addOpenAPIDialogRef = useRef<AddOpenAPIDialogRef>(null);
-  const removeApiSourceDialogRef = useRef<RemoveAPISourceDialogRef>(null);
-  const removeFunctionSourceDialogRef =
-    useRef<RemoveFunctionSourceDialogRef>(null);
+  const removeSourceDialogRef = useRef<RemoveSourceDialogRef>(null);
 
   const finishUpload = () => {
     addOpenAPIDialogRef.current?.setOpen(false);
@@ -141,12 +151,12 @@ export default function OpenAPIAssets() {
     );
   }, [deployment, deploymentLogsSummary]);
 
-  const deploymentAssets: NamedAsset[] = useMemo(() => {
+  const allSources: NamedAsset[] = useMemo(() => {
     if (!deployment || !assets) {
       return [];
     }
 
-    return deployment.openapiv3Assets.map((deploymentAsset) => {
+    const openApiSources = deployment.openapiv3Assets.map((deploymentAsset) => {
       const asset = assets.assets.find((a) => a.id === deploymentAsset.assetId);
       if (!asset) {
         throw new Error(`Asset ${deploymentAsset.assetId} not found`);
@@ -156,27 +166,29 @@ export default function OpenAPIAssets() {
         deploymentAssetId: deploymentAsset.id,
         name: deploymentAsset.name,
         slug: deploymentAsset.slug,
+        type: "openapi" as const,
       };
     });
-  }, [deployment, assets]);
 
-  const functionAssets: NamedAsset[] = useMemo(() => {
-    if (!deployment || !assets) {
-      return [];
-    }
+    const functionSources = (deployment.functionsAssets ?? []).map(
+      (deploymentAsset) => {
+        const asset = assets.assets.find(
+          (a) => a.id === deploymentAsset.assetId,
+        );
+        if (!asset) {
+          throw new Error(`Asset ${deploymentAsset.assetId} not found`);
+        }
+        return {
+          ...asset,
+          deploymentAssetId: deploymentAsset.id,
+          name: deploymentAsset.name,
+          slug: deploymentAsset.slug,
+          type: "function" as const,
+        };
+      },
+    );
 
-    return (deployment.functionsAssets ?? []).map((deploymentAsset) => {
-      const asset = assets.assets.find((a) => a.id === deploymentAsset.assetId);
-      if (!asset) {
-        throw new Error(`Asset ${deploymentAsset.assetId} not found`);
-      }
-      return {
-        ...asset,
-        deploymentAssetId: deploymentAsset.id,
-        name: deploymentAsset.name,
-        slug: deploymentAsset.slug,
-      };
-    });
+    return [...openApiSources, ...functionSources];
   }, [deployment, assets]);
 
   if (!isLoading && deploymentIsEmpty) {
@@ -190,39 +202,30 @@ export default function OpenAPIAssets() {
     );
   }
 
-  const removeDocument = async (assetId: string) => {
+  const removeSource = async (
+    assetId: string,
+    type: "openapi" | "function",
+  ) => {
     try {
       await client.deployments.evolveDeployment({
         evolveForm: {
           deploymentId: deployment?.id,
-          excludeOpenapiv3Assets: [assetId],
+          ...(type === "openapi"
+            ? { excludeOpenapiv3Assets: [assetId] }
+            : { excludeFunctions: [assetId] }),
         },
       });
 
       await Promise.all([refetch(), refetchAssets()]);
 
-      toast.success("API source deleted successfully");
+      toast.success(
+        `${type === "openapi" ? "API" : "Function"} source deleted successfully`,
+      );
     } catch (error) {
-      console.error("Failed to delete API source:", error);
-      toast.error("Failed to delete API source. Please try again.");
-    }
-  };
-
-  const removeFunctionSource = async (assetId: string) => {
-    try {
-      await client.deployments.evolveDeployment({
-        evolveForm: {
-          deploymentId: deployment?.id,
-          excludeFunctions: [assetId],
-        },
-      });
-
-      await Promise.all([refetch(), refetchAssets()]);
-
-      toast.success("Function source deleted successfully");
-    } catch (error) {
-      console.error("Failed to delete function source:", error);
-      toast.error("Failed to delete function source. Please try again.");
+      console.error(`Failed to delete ${type} source:`, error);
+      toast.error(
+        `Failed to delete ${type === "openapi" ? "API" : "function"} source. Please try again.`,
+      );
     }
   };
 
@@ -237,9 +240,11 @@ export default function OpenAPIAssets() {
   return (
     <>
       <Page.Section>
-        <Page.Section.Title>API Sources</Page.Section.Title>
+        <Page.Section.Title>Sources</Page.Section.Title>
         <Page.Section.Description>
-          OpenAPI documents providing tools for your toolsets
+          {isFunctionsEnabled
+            ? "OpenAPI documents and gram functions providing tools for your toolsets"
+            : "OpenAPI documents providing tools for your toolsets"}
         </Page.Section.Description>
         {logsCta}
         <Page.Section.CTA>
@@ -255,15 +260,15 @@ export default function OpenAPIAssets() {
         </Page.Section.CTA>
         <Page.Section.Body>
           <MiniCards isLoading={isLoading}>
-            {deploymentAssets?.map((asset: NamedAsset) => (
-              <OpenAPICard
+            {allSources?.map((asset: NamedAsset) => (
+              <SourceCard
                 key={asset.id}
                 asset={asset}
                 causingFailure={assetsCausingFailure.has(
                   asset.deploymentAssetId,
                 )}
                 onClickRemove={() => {
-                  removeApiSourceDialogRef.current?.open(asset);
+                  removeSourceDialogRef.current?.open(asset);
                 }}
                 setChangeDocumentTargetSlug={setChangeDocumentTargetSlug}
               />
@@ -318,62 +323,41 @@ export default function OpenAPIAssets() {
               </Dialog.Footer>
             </Dialog.Content>
           </Dialog>
-          <RemoveAPISourceDialog
-            ref={removeApiSourceDialogRef}
-            onConfirmRemoval={removeDocument}
+          <RemoveSourceDialog
+            ref={removeSourceDialogRef}
+            onConfirmRemoval={removeSource}
           />
           <AddOpenAPIDialog ref={addOpenAPIDialogRef} />
         </Page.Section.Body>
       </Page.Section>
-
-      {functionAssets.length > 0 && (
-        <Page.Section>
-          <Page.Section.Title>Function Sources</Page.Section.Title>
-          <Page.Section.Description>
-            Custom gram functions providing tools for your toolsets
-          </Page.Section.Description>
-          <Page.Section.Body>
-            <MiniCards isLoading={isLoading}>
-              {functionAssets.map((asset: NamedAsset) => (
-                <FunctionCard
-                  key={asset.id}
-                  asset={asset}
-                  onClickRemove={() => {
-                    removeFunctionSourceDialogRef.current?.open(asset);
-                  }}
-                />
-              ))}
-            </MiniCards>
-            <RemoveFunctionSourceDialog
-              ref={removeFunctionSourceDialogRef}
-              onConfirmRemoval={removeFunctionSource}
-            />
-          </Page.Section.Body>
-        </Page.Section>
-      )}
     </>
   );
 }
 
-interface RemoveAPISourceDialogRef {
+interface RemoveSourceDialogRef {
   open: (asset: NamedAsset) => void;
   close: () => void;
 }
 
-interface RemoveAPISourceDialogProps {
-  onConfirmRemoval: (assetId: string) => Promise<void>;
+interface RemoveSourceDialogProps {
+  onConfirmRemoval: (
+    assetId: string,
+    type: "openapi" | "function",
+  ) => Promise<void>;
 }
 
-const RemoveAPISourceDialog = forwardRef<
-  RemoveAPISourceDialogRef,
-  RemoveAPISourceDialogProps
+const RemoveSourceDialog = forwardRef<
+  RemoveSourceDialogRef,
+  RemoveSourceDialogProps
 >(({ onConfirmRemoval }, ref) => {
   const [open, setOpen] = useState(false);
   const [asset, setAsset] = useState<NamedAsset>({} as NamedAsset);
   const [pending, setPending] = useState(false);
   const [inputMatches, setInputMatches] = useState(false);
 
-  const apiSourceSlug = slugify(asset.name);
+  const sourceSlug = slugify(asset.name);
+  const sourceLabel =
+    asset.type === "openapi" ? "API Source" : "Function Source";
 
   const resetState = () => {
     setAsset({} as NamedAsset);
@@ -402,7 +386,7 @@ const RemoveAPISourceDialog = forwardRef<
 
   const handleConfirm = async () => {
     setPending(true);
-    await onConfirmRemoval(asset.id);
+    await onConfirmRemoval(asset.id, asset.type);
     setPending(false);
 
     setOpen(false);
@@ -416,7 +400,7 @@ const RemoveAPISourceDialog = forwardRef<
           <Button.LeftIcon>
             <Loader2Icon className="size-4 animate-spin" />
           </Button.LeftIcon>
-          <Button.Text>Deleting API Source</Button.Text>
+          <Button.Text>Deleting {sourceLabel}</Button.Text>
         </Button>
       );
     }
@@ -427,7 +411,7 @@ const RemoveAPISourceDialog = forwardRef<
         variant="destructive-primary"
         onClick={handleConfirm}
       >
-        Delete API Source
+        Delete {sourceLabel}
       </Button>
     );
   };
@@ -436,19 +420,20 @@ const RemoveAPISourceDialog = forwardRef<
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <Dialog.Content>
         <Dialog.Header>
-          <Dialog.Title>Delete API Source</Dialog.Title>
+          <Dialog.Title>Delete {sourceLabel}</Dialog.Title>
           <Dialog.Description>
-            This will permanently delete the API source and related resources
-            such as tools within toolsets.
+            This will permanently delete the{" "}
+            {asset.type === "openapi" ? "API" : "gram function"} source and
+            related resources such as tools within toolsets.
           </Dialog.Description>
         </Dialog.Header>
         <div className="grid gap-2">
           <Label>
             <span>
-              To confirm, type "<strong>{apiSourceSlug}</strong>"
+              To confirm, type "<strong>{sourceSlug}</strong>"
             </span>
           </Label>
-          <Input onChange={(v) => setInputMatches(v === apiSourceSlug)} />
+          <Input onChange={(v) => setInputMatches(v === sourceSlug)} />
         </div>
 
         <Alert variant="error" dismissible={false}>
@@ -470,7 +455,7 @@ const RemoveAPISourceDialog = forwardRef<
   );
 });
 
-function OpenAPICard({
+function SourceCard({
   asset,
   causingFailure,
   onClickRemove,
@@ -482,193 +467,74 @@ function OpenAPICard({
   setChangeDocumentTargetSlug: (slug: string) => void;
 }) {
   const [documentViewOpen, setDocumentViewOpen] = useState(false);
+  const IconComponent = asset.type === "openapi" ? FileCode : SquareFunction;
 
-  return (
-    <MiniCard key={asset.id} className="bg-secondary">
-      <MiniCard.Title
-        onClick={() => setDocumentViewOpen(true)}
-        className="cursor-pointer flex items-center"
-      >
-        {asset.name}
-      </MiniCard.Title>
-
-      <MiniCard.Description className="flex gap-1.5 items-center ">
-        {causingFailure && <AssetIsCausingFailureNotice />}
-        <UpdatedAt date={asset.updatedAt} italic={false} className="text-xs" />
-      </MiniCard.Description>
-      <MiniCard.Actions
-        actions={[
+  const actions =
+    asset.type === "openapi"
+      ? [
           {
             label: "View",
             onClick: () => setDocumentViewOpen(true),
-            icon: "eye",
+            icon: "eye" as const,
           },
           {
             label: "Update",
             onClick: () => setChangeDocumentTargetSlug(asset.slug),
-            icon: "upload",
+            icon: "upload" as const,
           },
           {
             label: "Delete",
             onClick: () => onClickRemove(asset.id),
-            icon: "trash",
+            icon: "trash" as const,
             destructive: true,
           },
-        ]}
-      />
-      <AssetViewDialog
-        asset={asset}
-        open={documentViewOpen}
-        onOpenChange={setDocumentViewOpen}
-      />
-    </MiniCard>
-  );
-}
+        ]
+      : [
+          {
+            label: "Delete",
+            onClick: () => onClickRemove(asset.id),
+            icon: "trash" as const,
+            destructive: true,
+          },
+        ];
 
-function FunctionCard({
-  asset,
-  onClickRemove,
-}: {
-  asset: NamedAsset;
-  onClickRemove: (assetId: string) => void;
-}) {
   return (
-    <MiniCard key={asset.id} className="bg-secondary">
-      <MiniCard.Title className="flex items-center">
-        {asset.name}
-      </MiniCard.Title>
+    <div
+      key={asset.id}
+      className="bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <IconComponent className="size-5 shrink-0" strokeWidth={2} />
+        <MoreActions actions={actions} />
+      </div>
 
-      <MiniCard.Description className="flex gap-1.5 items-center">
-        <UpdatedAt date={asset.updatedAt} italic={false} className="text-xs" />
-      </MiniCard.Description>
-      <MiniCard.Actions
-        actions={[
-          {
-            label: "Delete",
-            onClick: () => onClickRemove(asset.id),
-            icon: "trash",
-            destructive: true,
-          },
-        ]}
-      />
-    </MiniCard>
-  );
-}
-
-interface RemoveFunctionSourceDialogRef {
-  open: (asset: NamedAsset) => void;
-  close: () => void;
-}
-
-interface RemoveFunctionSourceDialogProps {
-  onConfirmRemoval: (assetId: string) => Promise<void>;
-}
-
-const RemoveFunctionSourceDialog = forwardRef<
-  RemoveFunctionSourceDialogRef,
-  RemoveFunctionSourceDialogProps
->(({ onConfirmRemoval }, ref) => {
-  const [open, setOpen] = useState(false);
-  const [asset, setAsset] = useState<NamedAsset>({} as NamedAsset);
-  const [pending, setPending] = useState(false);
-  const [inputMatches, setInputMatches] = useState(false);
-
-  const functionSourceSlug = slugify(asset.name);
-
-  const resetState = () => {
-    setAsset({} as NamedAsset);
-    setInputMatches(false);
-    setPending(false);
-  };
-
-  useImperativeHandle(ref, () => ({
-    open: (assetToDelete: NamedAsset) => {
-      setAsset(assetToDelete);
-      setOpen(true);
-      setInputMatches(false);
-      setPending(false);
-    },
-    close: () => {
-      resetState();
-    },
-  }));
-
-  const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen);
-    if (!newOpen) {
-      resetState();
-    }
-  };
-
-  const handleConfirm = async () => {
-    setPending(true);
-    await onConfirmRemoval(asset.id);
-    setPending(false);
-
-    setOpen(false);
-    setInputMatches(false);
-  };
-
-  const DeleteButton = () => {
-    if (pending) {
-      return (
-        <Button disabled variant="destructive-primary">
-          <Button.LeftIcon>
-            <Loader2Icon className="size-4 animate-spin" />
-          </Button.LeftIcon>
-          <Button.Text>Deleting Function Source</Button.Text>
-        </Button>
-      );
-    }
-
-    return (
-      <Button
-        disabled={!inputMatches}
-        variant="destructive-primary"
-        onClick={handleConfirm}
+      <div
+        onClick={
+          asset.type === "openapi" ? () => setDocumentViewOpen(true) : undefined
+        }
+        className={cn(
+          "leading-none font-normal text-foreground mb-1.5",
+          asset.type === "openapi" && "cursor-pointer",
+        )}
       >
-        Delete Function Source
-      </Button>
-    );
-  };
+        {asset.name}
+      </div>
 
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <Dialog.Content>
-        <Dialog.Header>
-          <Dialog.Title>Delete Function Source</Dialog.Title>
-          <Dialog.Description>
-            This will permanently delete the gram function source and related
-            resources such as tools within toolsets.
-          </Dialog.Description>
-        </Dialog.Header>
-        <div className="grid gap-2">
-          <Label>
-            <span>
-              To confirm, type "<strong>{functionSourceSlug}</strong>"
-            </span>
-          </Label>
-          <Input onChange={(v) => setInputMatches(v === functionSourceSlug)} />
-        </div>
+      <div className="flex gap-1.5 items-center text-muted-foreground text-xs">
+        {causingFailure && <AssetIsCausingFailureNotice />}
+        <UpdatedAt date={asset.updatedAt} italic={false} className="text-xs" />
+      </div>
 
-        <Alert variant="error" dismissible={false}>
-          Deleting {asset.name} cannot be undone.
-        </Alert>
-
-        <Dialog.Footer>
-          <Button
-            hidden={pending}
-            onClick={() => handleOpenChange(false)}
-            variant="tertiary"
-          >
-            Cancel
-          </Button>
-          <DeleteButton />
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
+      {asset.type === "openapi" && (
+        <AssetViewDialog
+          asset={asset}
+          open={documentViewOpen}
+          onOpenChange={setDocumentViewOpen}
+        />
+      )}
+    </div>
   );
-});
+}
 
 const AssetIsCausingFailureNotice = () => {
   const latestDeployment = useLatestDeployment();
