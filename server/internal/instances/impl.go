@@ -316,8 +316,10 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 
 	// Write the modified response to the original response writer
-	w.WriteHeader(interceptor.statusCode)
 	for k, v := range interceptor.headers {
+		if k == functions.FunctionsCPUHeader || k == functions.FunctionsMemoryHeader {
+			continue
+		}
 		for _, val := range v {
 			w.Header().Add(k, val)
 		}
@@ -326,6 +328,8 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	for _, cookie := range interceptor.cookies {
 		http.SetCookie(w, cookie)
 	}
+
+	w.WriteHeader(interceptor.statusCode)
 
 	_, err = w.Write(interceptor.buffer.Bytes())
 	if err != nil {
