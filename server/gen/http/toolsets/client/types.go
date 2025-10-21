@@ -2462,6 +2462,8 @@ type ResourceEntryResponseBody struct {
 	ResourceUrn *string `form:"resource_urn,omitempty" json:"resource_urn,omitempty" xml:"resource_urn,omitempty"`
 	// The name of the resource
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// The uri of the resource
+	URI *string `form:"uri,omitempty" json:"uri,omitempty" xml:"uri,omitempty"`
 }
 
 // PromptTemplateEntryResponseBody is used to define fields on response body
@@ -7939,6 +7941,9 @@ func ValidateResourceEntryResponseBody(body *ResourceEntryResponseBody) (err err
 	}
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.URI == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uri", "body"))
 	}
 	if body.ResourceUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_urn", "body"))

@@ -2,21 +2,24 @@ import {
   Tool as GeneratedTool,
   Toolset as GeneratedToolset,
   HTTPToolDefinition,
+  FunctionResourceDefinition,
   PromptTemplate,
   PromptTemplateEntry,
   PromptTemplateKind,
   FunctionToolDefinition,
+  Resource as GeneratedResource,
 } from "@gram/client/models/components";
-import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
+import { useLatestDeployment } from "@/hooks/toolTypes";
 
 export type ToolWithDisplayName = Tool & { displayName: string };
 export type HttpToolWithDisplayName = Tool & { type: "http" } & {
   displayName: string;
 };
 
-export type Toolset = Omit<GeneratedToolset, "tools"> & {
+export type Toolset = Omit<GeneratedToolset, "tools" | "resources"> & {
   tools: Tool[];
+  resources?: Resource[];
 };
 
 export type Tool =
@@ -46,6 +49,19 @@ export const asTool = (tool: GeneratedTool): Tool => {
   }
 };
 
+export type Resource = { type: "function" } & FunctionResourceDefinition;
+
+export const asResource = (resource: GeneratedResource): Resource => {
+  if (resource.functionResourceDefinition) {
+    return {
+      type: "function",
+      ...resource.functionResourceDefinition,
+    };
+  } else {
+    throw new Error("Unexpected resource type");
+  }
+};
+
 export const useGroupedToolDefinitions = (
   toolset: GeneratedToolset | undefined,
 ): ToolGroup[] => {
@@ -62,9 +78,7 @@ export const useGroupedHttpTools = (
 };
 
 export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
-  const { data: deployment } = useLatestDeployment(undefined, undefined, {
-    staleTime: 1000 * 60 * 60,
-  });
+  const { data: deployment } = useLatestDeployment();
 
   const documentIdToSlug = useMemo(() => {
     return deployment?.deployment?.openapiv3Assets?.reduce(

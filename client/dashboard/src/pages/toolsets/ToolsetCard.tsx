@@ -1,5 +1,6 @@
 import { CopyableSlug } from "@/components/name-and-slug";
 import {
+  ResourcesBadge,
   ToolCollectionBadge,
   ToolsetPromptsBadge,
 } from "@/components/tool-collection-badge";
@@ -20,6 +21,7 @@ type ToolsetForCard = Pick<
   | "updatedAt"
   | "tools"
   | "promptTemplates"
+  | "resources"
 >;
 
 const BoundToolsBadge = ({
@@ -95,6 +97,9 @@ export function ToolsetCard({
         <Card.Footer>
           <Stack direction="horizontal" gap={1} align="center">
             <BoundToolsBadge toolset={toolset} />
+            <ResourcesBadge
+              resourceUris={toolset.resources?.map((r) => r.uri) ?? []}
+            />
             <ToolsetPromptsBadge toolset={toolset} />
           </Stack>
           <UpdatedAt date={new Date(toolset.updatedAt)} />

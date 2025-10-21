@@ -28,6 +28,10 @@ export type ResourceEntry = {
    */
   resourceUrn: string;
   type: Type;
+  /**
+   * The uri of the resource
+   */
+  uri: string;
 };
 
 /** @internal */
@@ -60,6 +64,7 @@ export const ResourceEntry$inboundSchema: z.ZodType<
   name: z.string(),
   resource_urn: z.string(),
   type: Type$inboundSchema,
+  uri: z.string(),
 }).transform((v) => {
   return remap$(v, {
     "resource_urn": "resourceUrn",
@@ -72,6 +77,7 @@ export type ResourceEntry$Outbound = {
   name: string;
   resource_urn: string;
   type: string;
+  uri: string;
 };
 
 /** @internal */
@@ -84,6 +90,7 @@ export const ResourceEntry$outboundSchema: z.ZodType<
   name: z.string(),
   resourceUrn: z.string(),
   type: Type$outboundSchema,
+  uri: z.string(),
 }).transform((v) => {
   return remap$(v, {
     resourceUrn: "resource_urn",

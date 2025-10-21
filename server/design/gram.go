@@ -17,6 +17,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/mcpmetadata"
 	_ "github.com/speakeasy-api/gram/server/design/packages"
 	_ "github.com/speakeasy-api/gram/server/design/projects"
+	_ "github.com/speakeasy-api/gram/server/design/resources"
 	_ "github.com/speakeasy-api/gram/server/design/slack"
 	_ "github.com/speakeasy-api/gram/server/design/templates"
 	_ "github.com/speakeasy-api/gram/server/design/toolmetrics"

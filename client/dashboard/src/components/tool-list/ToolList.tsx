@@ -5,10 +5,10 @@ import { Input } from "@/components/ui/input";
 import { MoreActions } from "@/components/ui/more-actions";
 import { TextArea } from "@/components/ui/textarea";
 import { useCommandPalette } from "@/contexts/CommandPalette";
+import { useLatestDeployment } from "@/hooks/toolTypes";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
-import { useLatestDeployment } from "@gram/client/react-query/index.js";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { ChevronDown, FileCode, Layers, SquareFunction } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -470,9 +470,7 @@ export function ToolList({
   selectedUrns = [],
   onSelectionChange,
 }: ToolListProps) {
-  const { data: deployment } = useLatestDeployment(undefined, undefined, {
-    staleTime: 1000 * 60 * 60,
-  });
+  const { data: deployment } = useLatestDeployment();
 
   const documentIdToName = useMemo(() => {
     return deployment?.deployment?.openapiv3Assets?.reduce(
