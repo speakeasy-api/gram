@@ -41,7 +41,7 @@ Use capital letters and proper grammar in your changelogs. Omit the qualifier pr
 
 ```
 ---
-"@gram/dashboard": patch
+dashboard: patch
 ---
 
 fix: prevents double submit on upgrade button
@@ -51,7 +51,7 @@ fix: prevents double submit on upgrade button
 
 ```
 ---
-"@gram/dashboard": patch
+dashboard: patch
 ---
 
 Prevent double submit on upgrade button <feel free to elaborate if it is warranted. you have room to breath here.>

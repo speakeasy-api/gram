@@ -10,14 +10,17 @@ import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
-import { OpenAPIv3DeploymentAsset } from "@gram/client/models/components";
+import {
+  DeploymentFunctions,
+  OpenAPIv3DeploymentAsset,
+} from "@gram/client/models/components";
 import {
   buildDeploymentQuery,
   buildListToolsQuery,
 } from "@gram/client/react-query";
 import { Badge, Stack } from "@speakeasy-api/moonshine";
 import { useSuspenseQueries } from "@tanstack/react-query";
-import { FileCodeIcon } from "lucide-react";
+import { FileCodeIcon, SquareFunctionIcon } from "lucide-react";
 import React from "react";
 import { useParams } from "react-router";
 import { useDeploymentSearchParams } from "./use-deployment-search-params";
@@ -28,22 +31,28 @@ export const AssetsTabContent = () => {
 
   const deploymentAssets = useDeploymentAssetsSuspense();
 
-  const [okAssets, errAssets] = React.useMemo(() => {
-    const ok: DeploymentAsset[] = [];
+  const [okOpenAPI, okFunctions, errAll] = React.useMemo(() => {
+    const okOpenAPI: OpenAPIAsset[] = [];
+    const okFunctions: FunctionAsset[] = [];
     const err: DeploymentAsset[] = [];
-    for (const asset of deploymentAssets.data) {
+    for (const asset of [
+      ...deploymentAssets.data.openapiv3,
+      ...deploymentAssets.data.function,
+    ]) {
       if (asset.report.toolCount === 0) {
         err.push(asset);
-      } else {
-        ok.push(asset);
+      } else if (asset.type === "function") {
+        okFunctions.push(asset);
+      } else if (asset.type === "openapiv3") {
+        okOpenAPI.push(asset);
       }
     }
-    return [ok, err];
+    return [okOpenAPI, okFunctions, err];
   }, [deploymentAssets.data]);
 
   return (
     <Stack gap={12}>
-      {errAssets.length > 0 && (
+      {errAll.length > 0 && (
         <div>
           <Stack gap={2} className="mb-6">
             <Heading variant="h2">Invalid Assets</Heading>
@@ -67,7 +76,7 @@ export const AssetsTabContent = () => {
           </Stack>
 
           <ul className="flex flex-col gap-4 flex-wrap">
-            {errAssets.map((asset) => {
+            {errAll.map((asset) => {
               return (
                 <li key={asset.id}>
                   <AssetItem asset={asset} />
@@ -78,20 +87,40 @@ export const AssetsTabContent = () => {
         </div>
       )}
 
-      <div>
-        <Heading variant="h2" className="mb-6">
-          Assets
-        </Heading>
-        <ul className="flex flex-col gap-4 flex-wrap">
-          {okAssets.map((asset) => {
-            return (
-              <li key={asset.id}>
-                <AssetItem asset={asset} />
-              </li>
-            );
-          })}
-        </ul>
-      </div>
+      {okFunctions.length > 0 ? (
+        <div>
+          <Heading variant="h2" className="mb-6">
+            Functions
+          </Heading>
+
+          <ul className="flex flex-col gap-4 flex-wrap">
+            {okFunctions.map((asset) => {
+              return (
+                <li key={asset.id}>
+                  <AssetItem asset={asset} />
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
+      {okOpenAPI.length > 0 ? (
+        <div>
+          <Heading variant="h2" className="mb-6">
+            OpenAPI
+          </Heading>
+          <ul className="flex flex-col gap-4 flex-wrap">
+            {okOpenAPI.map((asset) => {
+              return (
+                <li key={asset.id}>
+                  <AssetItem asset={asset} />
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
     </Stack>
   );
 };
@@ -102,18 +131,30 @@ type AssetItemProps = {
 
 const AssetItem = ({ asset }: AssetItemProps) => {
   const handleDownload = useDownloadAsset();
+  let icon = <FileCodeIcon strokeWidth={1} className="size-12 min-w-12" />;
+  if (asset.type === "function") {
+    icon = <SquareFunctionIcon strokeWidth={1} className="size-12 min-w-12" />;
+  }
+  let type = (
+    <span className="text-xs text-muted leading-5">OpenAPI Document</span>
+  );
+  if (asset.type === "function") {
+    type = (
+      <span className="text-xs text-muted leading-5 font-mono">
+        {asset.runtime}
+      </span>
+    );
+  }
 
   return (
     <MiniCard className="w-full max-w-full bg-surface-secondary-default border-neutral-softest p-6">
       <MiniCard.Title>
         <div className="flex gap-4 w-full items-center">
-          <FileCodeIcon strokeWidth={1} className="size-12 min-w-12" />
+          {icon}
           <div className="flex flex-col">
             <span className="text-base leading-7">{asset.name}</span>
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted leading-5">
-                OpenAPI Document
-              </span>
+              <span className="text-xs text-muted leading-5">{type}</span>
               {asset.report.toolCount === 0 && <AssetErrorBadge />}
             </div>
           </div>
@@ -167,13 +208,24 @@ const useDownloadAsset = () => {
   };
 };
 
-type DeploymentAsset = OpenAPIv3DeploymentAsset & {
+interface OpenAPIAsset extends OpenAPIv3DeploymentAsset {
+  type: "openapiv3";
   report: { toolCount: number };
-};
+}
+
+interface FunctionAsset extends DeploymentFunctions {
+  type: "function";
+  report: { toolCount: number };
+}
+
+type DeploymentAsset = OpenAPIAsset | FunctionAsset;
 
 type DeploymentAssetsResult = {
   status: "success";
-  data: DeploymentAsset[];
+  data: {
+    openapiv3: OpenAPIAsset[];
+    function: FunctionAsset[];
+  };
 };
 
 const useDeploymentAssetsSuspense = () => {
@@ -186,7 +238,6 @@ const useDeploymentAssetsSuspense = () => {
       buildListToolsQuery(client, { deploymentId: deploymentId! }),
     ],
     combine: ([deploymentQuery, toolsQuery]) => {
-      const result: DeploymentAsset[] = [];
       if (deploymentQuery.isError || toolsQuery.isError) {
         const errors = [];
         if (deploymentQuery.isError) {
@@ -202,8 +253,8 @@ const useDeploymentAssetsSuspense = () => {
         throw new Error(`Failed to fetch ${errors.join(" and ")}`);
       }
 
-      const assets = deploymentQuery.data.openapiv3Assets;
-      const toolByAssetIdCounts = toolsQuery.data.tools.reduce(
+      const oapiAssets = deploymentQuery.data.openapiv3Assets;
+      const oapiToolByAssetIdCounts = toolsQuery.data.tools.reduce(
         (acc, tool) => {
           const assetId = tool.httpToolDefinition?.openapiv3DocumentId;
           if (!assetId) return acc;
@@ -213,16 +264,46 @@ const useDeploymentAssetsSuspense = () => {
         {} as Record<string, number>,
       );
 
-      for (const asset of assets) {
-        result.push({
+      const oapi: OpenAPIAsset[] = [];
+      for (const asset of oapiAssets) {
+        oapi.push({
           ...asset,
+          type: "openapiv3",
           report: {
-            toolCount: toolByAssetIdCounts[asset.id] || 0,
+            toolCount: oapiToolByAssetIdCounts[asset.id] || 0,
           },
         });
       }
 
-      return { status: "success", data: result };
+      const funcAssets = deploymentQuery.data.functionsAssets ?? [];
+      const funcToolByAssetIdCounts = toolsQuery.data.tools.reduce(
+        (acc, tool) => {
+          const assetId = tool.functionToolDefinition?.functionId;
+          if (!assetId) return acc;
+          acc[assetId] = (acc[assetId] || 0) + 1;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+
+      const funcs: FunctionAsset[] = [];
+      for (const asset of funcAssets) {
+        funcs.push({
+          type: "function",
+          ...asset,
+          report: {
+            toolCount: funcToolByAssetIdCounts[asset.id] || 0,
+          },
+        });
+      }
+
+      return {
+        status: "success",
+        data: {
+          openapiv3: oapi,
+          function: funcs,
+        },
+      };
     },
   });
 

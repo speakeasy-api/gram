@@ -126,7 +126,9 @@ services:
       - clickhouse_data:/var/lib/clickhouse
       - ./local/clickhouse/config.d/config.xml:/etc/clickhouse-server/config.d/config.xml
       - ./local/clickhouse/config.d/limits.xml:/etc/clickhouse-server/config.d/limits.xml
+      - ./local/clickhouse/config.d/ssl.xml:/etc/clickhouse-server/config.d/ssl.xml
       - ./local/clickhouse/users.d/dev_profile.xml:/etc/clickhouse-server/users.d/dev_profile.xml
+      - ./local/clickhouse/certs:/etc/clickhouse-server/certs:ro
     ulimits:
       nofile:
         soft: 262144

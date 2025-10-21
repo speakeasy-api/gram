@@ -209,6 +209,10 @@ run();
 * [list](docs/sdks/projects/README.md#list) - listProjects projects
 * [setLogo](docs/sdks/projects/README.md#setlogo) - setLogo projects
 
+### [resources](docs/sdks/resources/README.md)
+
+* [list](docs/sdks/resources/README.md#list) - listResources resources
+
 ### [slack](docs/sdks/slack/README.md)
 
 * [slackLogin](docs/sdks/slack/README.md#slacklogin) - login slack
@@ -322,6 +326,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`projectsCreate`](docs/sdks/projects/README.md#create) - createProject projects
 - [`projectsList`](docs/sdks/projects/README.md#list) - listProjects projects
 - [`projectsSetLogo`](docs/sdks/projects/README.md#setlogo) - setLogo projects
+- [`resourcesList`](docs/sdks/resources/README.md#list) - listResources resources
 - [`slackDeleteSlackConnection`](docs/sdks/slack/README.md#deleteslackconnection) - deleteSlackConnection slack
 - [`slackGetSlackConnection`](docs/sdks/slack/README.md#getslackconnection) - getSlackConnection slack
 - [`slackSlackCallback`](docs/sdks/slack/README.md#slackcallback) - callback slack
@@ -417,6 +422,7 @@ To learn about this feature and how to get started, check
 - [`useListIntegrations`](docs/sdks/integrations/README.md#list) - list integrations
 - [`useListPackages`](docs/sdks/packages/README.md#list) - listPackages packages
 - [`useListProjects`](docs/sdks/projects/README.md#list) - listProjects projects
+- [`useListResources`](docs/sdks/resources/README.md#list) - listResources resources
 - [`useListToolLogs`](docs/sdks/logs/README.md#list) - listLogs logs
 - [`useListTools`](docs/sdks/tools/README.md#list) - listTools tools
 - [`useListToolsets`](docs/sdks/toolsets/README.md#list) - listToolsets toolsets

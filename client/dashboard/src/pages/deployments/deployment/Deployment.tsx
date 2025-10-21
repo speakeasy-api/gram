@@ -190,6 +190,10 @@ const StatsSection = ({
   );
 
   const humanizedDate = humanizeDeploymentDate(deployment.createdAt);
+  let assetCount = deployment.openapiv3Assets.length;
+  if (deployment.functionsAssets) {
+    assetCount += deployment.functionsAssets.length;
+  }
 
   return (
     <div className="text-sm flex items-center gap-3 h-4">
@@ -206,7 +210,7 @@ const StatsSection = ({
         onClick={() => onClickAssets?.()}
       >
         <FileCodeIcon size={16} />
-        {deployment.openapiv3Assets.length} Assets
+        {assetCount} Assets
       </button>
       <Separator orientation="vertical" />
       <button
@@ -214,7 +218,7 @@ const StatsSection = ({
         onClick={() => onClickTools?.()}
       >
         <WrenchIcon size={16} />
-        {deployment.openapiv3ToolCount} Tools
+        {deployment.openapiv3ToolCount + deployment.functionsToolCount} Tools
       </button>
     </div>
   );

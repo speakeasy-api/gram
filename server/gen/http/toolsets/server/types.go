@@ -2464,6 +2464,8 @@ type ResourceEntryResponseBody struct {
 	ResourceUrn string `form:"resource_urn" json:"resource_urn" xml:"resource_urn"`
 	// The name of the resource
 	Name string `form:"name" json:"name" xml:"name"`
+	// The uri of the resource
+	URI string `form:"uri" json:"uri" xml:"uri"`
 }
 
 // PromptTemplateEntryResponseBody is used to define fields on response body

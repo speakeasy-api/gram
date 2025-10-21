@@ -46,7 +46,7 @@ jobs:
         shell: pwsh
         run: |
           $version = (Get-Content cli/package.json | ConvertFrom-Json).version
-          $tag = "@gram/cli@$version"
+          $tag = "cli/$version"
           git tag -f $tag
           Write-Host "Created local tag $tag"
       - name: goreleaser

@@ -1,8 +1,8 @@
 {
   "type": "module",
-  "name": "@gram/functions",
+  "name": "function-runners",
   "private": true,
-  "version": "0.0.4",
+  "version": "0.1.0",
   "description": "",
   "main": "index.js",
   "scripts": {

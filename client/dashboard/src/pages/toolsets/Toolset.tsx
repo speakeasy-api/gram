@@ -35,6 +35,7 @@ import { toast } from "sonner";
 import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
 import { AddToolsDialog } from "./AddToolsDialog";
 import { PromptsTabContent } from "./PromptsTab";
+import { ResourcesTabContent } from "./ResourcesTab";
 import { ToolsetAuth } from "./ToolsetAuth";
 import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
 import { ToolsetEmptyState } from "./ToolsetEmptyState";
@@ -239,7 +240,7 @@ export default function ToolsetPage() {
   );
 }
 
-type ToolsetTabs = "tools" | "prompts" | "auth" | "mcp";
+type ToolsetTabs = "tools" | "prompts" | "resources" | "auth" | "mcp";
 
 export function ToolsetView({
   toolsetSlug,
@@ -570,6 +571,7 @@ export function ToolsetView({
       >
         <TabsList className="mb-4">
           <TabsTrigger value="tools">Tools</TabsTrigger>
+          <TabsTrigger value="resources">Resources</TabsTrigger>
           <TabsTrigger value="prompts">Prompts</TabsTrigger>
           <TabsTrigger value="auth">Auth</TabsTrigger>
           <TabsTrigger value="mcp">MCP</TabsTrigger>
@@ -595,6 +597,14 @@ export function ToolsetView({
         <TabsContent value="prompts">
           {toolset && (
             <PromptsTabContent
+              toolset={toolset}
+              updateToolsetMutation={updateToolsetMutation}
+            />
+          )}
+        </TabsContent>
+        <TabsContent value="resources">
+          {toolset && (
+            <ResourcesTabContent
               toolset={toolset}
               updateToolsetMutation={updateToolsetMutation}
             />

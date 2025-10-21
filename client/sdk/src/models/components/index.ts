@@ -67,6 +67,7 @@ export * from "./listkeysresult.js";
 export * from "./listpackagesresult.js";
 export * from "./listprojectsresult.js";
 export * from "./listprompttemplatesresult.js";
+export * from "./listresourcesresult.js";
 export * from "./listtoollogresponse.js";
 export * from "./listtoolsetsresult.js";
 export * from "./listtoolsresult.js";

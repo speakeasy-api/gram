@@ -2523,6 +2523,7 @@ func marshalTypesResourceEntryToResourceEntryResponseBody(v *types.ResourceEntry
 		ID:          v.ID,
 		ResourceUrn: v.ResourceUrn,
 		Name:        v.Name,
+		URI:         v.URI,
 	}
 
 	return res

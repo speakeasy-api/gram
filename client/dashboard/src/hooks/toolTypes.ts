@@ -1,9 +1,21 @@
-import { asTool } from "@/lib/toolTypes";
+import { asResource, asTool } from "@/lib/toolTypes";
 import {
   ListToolsRequest,
   ListToolsSecurity,
 } from "@gram/client/models/operations";
+import {
+  ListResourcesRequest,
+  ListResourcesSecurity,
+} from "@gram/client/models/operations/listresources.js";
 import { QueryHookOptions } from "@gram/client/react-query";
+import {
+  LatestDeploymentQueryData,
+  useLatestDeployment as useLatestDeploymentQuery,
+} from "@gram/client/react-query/latestDeployment.js";
+import {
+  ListResourcesQueryData,
+  useListResources as useListResourcesQuery,
+} from "@gram/client/react-query/listResources.js";
 import {
   ListToolsQueryData,
   useListTools as useListToolsQuery,
@@ -21,6 +33,7 @@ export function useToolset(toolsetSlug: string | undefined) {
       ? {
           ...result.data,
           tools: result.data.tools.map(asTool),
+          resources: result.data.resources?.map(asResource) ?? [],
         }
       : undefined,
   };
@@ -42,4 +55,36 @@ export function useListTools(
         }
       : undefined,
   };
+}
+
+export function useListResources(
+  request?: ListResourcesRequest,
+  security?: ListResourcesSecurity,
+  options?: QueryHookOptions<ListResourcesQueryData>,
+) {
+  const result = useListResourcesQuery(request, security, options);
+
+  return {
+    ...result,
+    data: result.data
+      ? {
+          ...result.data,
+          resources: result.data.resources.map(asResource),
+        }
+      : undefined,
+  };
+}
+
+/**
+ * Hook for fetching the latest deployment with a 1-hour stale time.
+ * Use this when you need deployment data that doesn't need to be
+ * immediately fresh (e.g., asset lists, function metadata).
+ */
+export function useLatestDeployment(
+  options?: QueryHookOptions<LatestDeploymentQueryData>,
+) {
+  return useLatestDeploymentQuery(undefined, undefined, {
+    staleTime: 1000 * 60 * 60, // 1 hour
+    ...options,
+  });
 }

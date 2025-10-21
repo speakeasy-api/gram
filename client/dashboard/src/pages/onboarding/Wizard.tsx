@@ -1,5 +1,4 @@
 import { Expandable } from "@/components/expandable";
-import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ProjectSelector } from "@/components/project-menu";
@@ -11,6 +10,7 @@ import { SkeletonParagraph } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
 import { FullWidthUpload } from "@/components/upload";
+import { AsciiVideo, useWebGLStore } from "@/components/webgl";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useApiError } from "@/hooks/useApiError";
@@ -30,35 +30,57 @@ import {
   Check,
   ChevronRight,
   CircleCheckIcon,
+  Copy,
   FileJson2,
+  RefreshCcw,
   ServerCog,
   Upload,
   Wrench,
   X,
 } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useMotionValue } from "motion/react";
+import { Typewriter } from "motion-plus/react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
 import { useListTools } from "@/hooks/toolTypes";
+import { GramLogo } from "@/components/gram-logo";
+import { useCliConnection } from "@/hooks/useCliConnection";
+import { useTelemetry } from "@/contexts/Telemetry";
+
+type OnboardingPath = "openapi" | "cli";
+type OnboardingStep = "choice" | "upload" | "cli-setup" | "toolset" | "mcp";
 
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
+  const telemetry = useTelemetry();
 
-  const [currentStep, setCurrentStep] = useState<"upload" | "toolset" | "mcp">(
-    "upload",
+  // Feature flag for Gram functions flow
+  const isFunctionsEnabled =
+    telemetry.isFeatureEnabled("gram-functions") ?? false;
+
+  const [selectedPath, setSelectedPath] = useState<OnboardingPath>();
+  const [currentStep, setCurrentStep] = useState<OnboardingStep>(
+    isFunctionsEnabled ? "choice" : "upload",
   );
   const [toolsetName, setToolsetName] = useState<string>();
   const [mcpSlug, setMcpSlug] = useState<string>();
+
+  // Auto-select OpenAPI path if functions are disabled
+  useEffect(() => {
+    if (!isFunctionsEnabled && !selectedPath) {
+      setSelectedPath("openapi");
+    }
+  }, [isFunctionsEnabled, selectedPath]);
 
   // Initialize mcpSlug when toolsetName changes
   useEffect(() => {
     if (toolsetName && !mcpSlug) {
       setMcpSlug(`${orgSlug}-${toolsetName}`);
     }
-  }, [toolsetName, mcpSlug]);
+  }, [toolsetName, mcpSlug, orgSlug]);
 
   return (
     <Stack direction={"horizontal"} className="h-[100vh] w-full">
@@ -66,10 +88,13 @@ export function OnboardingWizard() {
         <LHS
           currentStep={currentStep}
           setCurrentStep={setCurrentStep}
+          selectedPath={selectedPath}
+          setSelectedPath={setSelectedPath}
           toolsetName={toolsetName}
           setToolsetName={setToolsetName}
           mcpSlug={mcpSlug}
           setMcpSlug={setMcpSlug}
+          isFunctionsEnabled={isFunctionsEnabled}
         />
       </div>
       <div className="w-1/2 h-full bg-background overflow-hidden">
@@ -98,8 +123,10 @@ const Step = ({
     <Stack direction={"horizontal"} gap={2} align={"center"}>
       <span
         className={cn(
-          "rounded-full bg-muted h-8 w-8 flex items-center justify-center",
-          active && "bg-success text-success-foreground",
+          "rounded-lg bg-muted h-8 w-8 flex items-center justify-center border border-border",
+          completed &&
+            "bg-success text-success-foreground border-success-softest",
+          !active && !completed && "border-neutral-softest",
         )}
       >
         {completed ? <Check className="w-4 h-4" /> : icon}
@@ -114,17 +141,23 @@ const Step = ({
 const LHS = ({
   currentStep,
   setCurrentStep,
+  selectedPath,
+  setSelectedPath,
   toolsetName,
   setToolsetName,
   mcpSlug,
   setMcpSlug,
+  isFunctionsEnabled,
 }: {
-  currentStep: "upload" | "toolset" | "mcp";
-  setCurrentStep: (step: "upload" | "toolset" | "mcp") => void;
+  currentStep: OnboardingStep;
+  setCurrentStep: (step: OnboardingStep) => void;
+  selectedPath: OnboardingPath | undefined;
+  setSelectedPath: (path: OnboardingPath) => void;
   toolsetName: string | undefined;
   setToolsetName: (name: string) => void;
   mcpSlug: string | undefined;
   setMcpSlug: (slug: string) => void;
+  isFunctionsEnabled: boolean;
 }) => {
   const [createdToolset, setCreatedToolset] = useState<Toolset>();
   const { organization } = useSession();
@@ -157,37 +190,49 @@ const LHS = ({
             </Type>
           </a>
         </Stack>
-        <Stack direction={"horizontal"} gap={6} align={"center"}>
-          <Step
-            text="Upload OpenAPI"
-            icon={<Upload className="w-4 h-4" />}
-            active={currentStep === "upload"}
-            completed={currentStep !== "upload"}
-          />
-          <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          <Step
-            text="Create Toolset"
-            icon={<Wrench className="w-4 h-4" />}
-            active={currentStep === "toolset"}
-            completed={currentStep === "mcp"}
-          />
-          <ChevronRight className="w-4 h-4 text-muted-foreground" />
-          <Step
-            text="Configure MCP"
-            icon={<ServerCog className="w-4 h-4" />}
-            active={currentStep === "mcp"}
-          />
-        </Stack>
+        {currentStep !== "choice" && (
+          <Stack direction={"horizontal"} gap={6} align={"center"}>
+            <Step
+              text={selectedPath === "cli" ? "Setup CLI" : "Upload OpenAPI"}
+              icon={<Upload className="w-4 h-4" />}
+              active={currentStep === "upload" || currentStep === "cli-setup"}
+              completed={currentStep === "toolset" || currentStep === "mcp"}
+            />
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            <Step
+              text="Create Toolset"
+              icon={<Wrench className="w-4 h-4" />}
+              active={currentStep === "toolset"}
+              completed={currentStep === "mcp"}
+            />
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            <Step
+              text="Configure MCP"
+              icon={<ServerCog className="w-4 h-4" />}
+              active={currentStep === "mcp"}
+            />
+          </Stack>
+        )}
       </Stack>
 
       {/* Content - absolutely positioned within left container */}
       <div className="absolute inset-x-0 top-0 bottom-0 flex items-center justify-center px-16 pointer-events-none">
         <Stack className="w-full max-w-3xl gap-8 pointer-events-auto z-10">
+          {currentStep === "choice" && (
+            <ChoiceStep
+              setCurrentStep={setCurrentStep}
+              setSelectedPath={setSelectedPath}
+              isFunctionsEnabled={isFunctionsEnabled}
+            />
+          )}
           {currentStep === "upload" && (
             <UploadStep
               setCurrentStep={setCurrentStep}
               setToolsetName={setToolsetName}
             />
+          )}
+          {currentStep === "cli-setup" && (
+            <CliSetupStep setCurrentStep={setCurrentStep} />
           )}
           {currentStep === "toolset" && (
             <ToolsetStep
@@ -220,6 +265,161 @@ const LHS = ({
         </a>
       </Stack>
     </div>
+  );
+};
+
+const ChoiceStep = ({
+  setCurrentStep,
+  setSelectedPath,
+  isFunctionsEnabled,
+}: {
+  setCurrentStep: (step: OnboardingStep) => void;
+  setSelectedPath: (path: OnboardingPath) => void;
+  isFunctionsEnabled: boolean;
+}) => {
+  const handleChoice = (path: OnboardingPath) => {
+    setSelectedPath(path);
+    setCurrentStep(path === "openapi" ? "upload" : "cli-setup");
+  };
+
+  return (
+    <>
+      <Stack gap={1}>
+        <span className="text-heading-md">Get Started with Gram</span>
+        <span className="text-body-sm">
+          Choose how you want to create your tools
+        </span>
+      </Stack>
+      <Stack gap={4}>
+        <button
+          onClick={() => handleChoice("openapi")}
+          className="w-full p-6 border rounded-lg hover:border-primary hover:bg-accent transition-colors text-left group"
+        >
+          <Stack gap={2}>
+            <Stack direction="horizontal" gap={2} align="center">
+              <FileJson2 className="w-5 h-5 text-primary" />
+              <Type className="text-heading-sm">Start from API</Type>
+            </Stack>
+            <Type small className="text-muted-foreground">
+              Upload an OpenAPI specification to automatically generate tools
+              for your API
+            </Type>
+          </Stack>
+        </button>
+        {isFunctionsEnabled && (
+          <button
+            onClick={() => handleChoice("cli")}
+            className="w-full p-6 border rounded-lg hover:border-primary hover:bg-accent transition-colors text-left group"
+          >
+            <Stack gap={2}>
+              <Stack direction="horizontal" gap={2} align="center">
+                <ServerCog className="w-5 h-5 text-primary" />
+                <Type className="text-heading-sm">Start from Code</Type>
+              </Stack>
+              <Type small className="text-muted-foreground">
+                Use the Gram CLI to upload functions and build custom tools
+              </Type>
+            </Stack>
+          </button>
+        )}
+      </Stack>
+    </>
+  );
+};
+
+const CliSetupStep = ({
+  setCurrentStep,
+}: {
+  setCurrentStep: (step: OnboardingStep) => void;
+}) => {
+  const cliState = useCliConnection();
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+
+  // Auto-advance when deployment is complete
+  useEffect(() => {
+    if (cliState.deploymentStatus === "complete") {
+      setTimeout(() => {
+        setCurrentStep("toolset");
+      }, 1000);
+    }
+  }, [cliState.deploymentStatus, setCurrentStep]);
+
+  const commands = [
+    { label: "Install the Gram CLI", command: "npm install -g @gram/cli" },
+    {
+      label: "Authenticate with Gram",
+      command: "gram auth",
+    },
+    {
+      label: "Upload your functions",
+      command:
+        'gram upload --type function --location ./functions.zip --name "My Functions" --slug my-functions --runtime nodejs:22',
+    },
+  ];
+
+  const handleCopy = (command: string, index: number) => {
+    navigator.clipboard.writeText(command);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  return (
+    <>
+      <Stack gap={1}>
+        <span className="text-heading-md">Setup Gram CLI</span>
+        <span className="text-body-sm">
+          Run these commands in your terminal
+        </span>
+      </Stack>
+
+      <Stack gap={4}>
+        {commands.map((item, index) => (
+          <Stack key={index} gap={2}>
+            <Type small className="font-medium">
+              {index + 1}. {item.label}
+            </Type>
+            <div className="relative group">
+              <pre className="p-4 rounded-md font-mono text-sm overflow-x-auto border">
+                {item.command}
+              </pre>
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={() => handleCopy(item.command, index)}
+                className="absolute top-2 right-2"
+              >
+                {copiedIndex === index ? (
+                  <Check className="w-4 h-4" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+          </Stack>
+        ))}
+
+        {cliState.deploymentStatus !== "none" && (
+          <Stack gap={2}>
+            <Type
+              small
+              className={cn(
+                "font-medium",
+                cliState.deploymentStatus === "processing" && "text-primary",
+                cliState.deploymentStatus === "complete" &&
+                  "text-success-foreground",
+                cliState.deploymentStatus === "error" && "text-destructive",
+              )}
+            >
+              {cliState.deploymentStatus === "processing" &&
+                "⏳ Deployment in progress..."}
+              {cliState.deploymentStatus === "complete" &&
+                "✓ Deployment complete!"}
+              {cliState.deploymentStatus === "error" && "✗ Deployment failed"}
+            </Type>
+          </Stack>
+        )}
+      </Stack>
+    </>
   );
 };
 
@@ -305,7 +505,7 @@ const UploadStep = ({
     <Stack gap={4}>
       <Stack gap={1}>
         <Stack direction={"horizontal"} gap={1} align={"center"}>
-          <CircleCheckIcon className="w-4 h-4 text-emerald-500 dark:text-success" />
+          <CircleCheckIcon className="w-4 h-4 text-success-foreground" />
           <Type small className="font-normal">
             OpenAPI Document
           </Type>
@@ -627,21 +827,55 @@ const AnimatedRightSide = ({
   toolsetName,
   mcpSlug,
 }: {
-  currentStep: "upload" | "toolset" | "mcp";
+  currentStep: OnboardingStep;
   toolsetName: string | undefined;
   mcpSlug: string | undefined;
 }) => {
+  const setCanvasZIndex = useWebGLStore((state) => state.setCanvasZIndex);
+  const setShowAsciiStars = useWebGLStore((state) => state.setShowAsciiStars);
+
+  // Set canvas to be visible (but still allow pointer events through)
+  useEffect(() => {
+    setCanvasZIndex(1);
+    setShowAsciiStars(true);
+    return () => {
+      setCanvasZIndex(-1);
+      setShowAsciiStars(false);
+    };
+  }, [setCanvasZIndex, setShowAsciiStars]);
+
   return (
     <div className="w-full h-full bg-background flex items-center justify-center relative overflow-hidden">
-      <AnimatePresence mode="wait">
-        {currentStep === "toolset" ? (
-          <ToolsetAnimation key="toolset" toolsetName={toolsetName} />
-        ) : currentStep === "mcp" ? (
-          <McpAnimation key="mcp" mcpSlug={mcpSlug} />
-        ) : (
-          <DefaultLogo key="default" />
-        )}
-      </AnimatePresence>
+      {/* ASCII shader decorations in corners */}
+      {/* Top right corner */}
+      <div className="absolute top-0 right-0 w-[300px] h-[300px] opacity-30 pointer-events-none -z-10">
+        <AsciiVideo videoSrc="/webgl/stars.mp4" className="w-full h-full" />
+      </div>
+
+      {/* Bottom left corner - flipped both ways */}
+      <div className="absolute bottom-0 left-0 w-[300px] h-[300px] opacity-30 pointer-events-none -z-10">
+        <AsciiVideo
+          videoSrc="/webgl/stars.mp4"
+          flipX={true}
+          flipY={true}
+          className="w-full h-full"
+        />
+      </div>
+
+      {/* Content layer */}
+      <div className="relative z-10 w-full h-full flex items-center justify-center">
+        <AnimatePresence mode="wait">
+          {currentStep === "cli-setup" ? (
+            <TerminalAnimationWithLogs key="terminal" />
+          ) : currentStep === "toolset" ? (
+            <ToolsetAnimation key="toolset" toolsetName={toolsetName} />
+          ) : currentStep === "mcp" ? (
+            <McpAnimation key="mcp" mcpSlug={mcpSlug} />
+          ) : (
+            <DefaultLogo key="default" />
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 };
@@ -661,6 +895,178 @@ const DefaultLogo = () => (
     </motion.span>
   </motion.div>
 );
+
+const TerminalSpinner = () => {
+  const spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  const [frame, setFrame] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFrame((prev) => (prev + 1) % spinnerFrames.length);
+    }, 80);
+    return () => clearInterval(interval);
+  }, []);
+
+  return <span className="text-primary">{spinnerFrames[frame]}</span>;
+};
+
+const TerminalAnimationWithLogs = () => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [hasMoved, setHasMoved] = useState(false);
+  const [typedCommands, setTypedCommands] = useState<Set<string>>(new Set());
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const cliState = useCliConnection();
+
+  useEffect(() => {
+    const unsubscribeX = x.on("change", (latest) => {
+      if (!hasMoved && Math.abs(latest) > 5) {
+        setHasMoved(true);
+      }
+    });
+    const unsubscribeY = y.on("change", (latest) => {
+      if (!hasMoved && Math.abs(latest) > 5) {
+        setHasMoved(true);
+      }
+    });
+
+    return () => {
+      unsubscribeX();
+      unsubscribeY();
+    };
+  }, [hasMoved, x, y]);
+
+  const handleReset = () => {
+    x.set(0);
+    y.set(0);
+    setHasMoved(false);
+  };
+
+  return (
+    <div className="relative w-full h-full flex items-center justify-center">
+      <motion.div
+        layoutId="main-container"
+        drag
+        dragMomentum={false}
+        dragElastic={0}
+        dragConstraints={{
+          top: -200,
+          bottom: 200,
+          left: -200,
+          right: 200,
+        }}
+        dragListener={false}
+        style={{ x, y }}
+        onDragStart={() => setIsDragging(true)}
+        onDragEnd={() => setIsDragging(false)}
+        transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
+        className={cn(
+          "w-[600px] bg-card border rounded-lg overflow-hidden",
+          isDragging && "cursor-grabbing",
+        )}
+      >
+        {/* Terminal header - draggable handle */}
+        <motion.div
+          drag
+          dragListener={false}
+          dragControls={undefined}
+          onPointerDown={(e) =>
+            e.currentTarget.parentElement?.dispatchEvent(
+              new PointerEvent("pointerdown", e.nativeEvent),
+            )
+          }
+          className="bg-muted border-b px-4 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing"
+        >
+          <div className="flex gap-1.5">
+            <div className="w-3 h-3 rounded-full border border-muted-foreground/30" />
+            <div className="w-3 h-3 rounded-full border border-muted-foreground/30" />
+            <div className="w-3 h-3 rounded-full border border-muted-foreground/30" />
+          </div>
+          <Type
+            small
+            className="text-muted-foreground absolute left-1/2 -translate-x-1/2"
+          >
+            gram-cli {cliState.connected && "• connected"}
+          </Type>
+          <div className="w-[42px]" /> {/* Spacer to balance the dots */}
+        </motion.div>
+
+        {/* Terminal content with real logs */}
+        <div className="p-4 font-mono text-sm space-y-1 min-h-[300px] max-h-[400px] overflow-y-auto">
+          {cliState.logs.map((log) => {
+            const shouldShowLoading =
+              log.loading &&
+              typedCommands.has(log.id.replace("-status", "-cmd"));
+
+            return (
+              <div
+                key={log.id}
+                className={cn(
+                  log.type === "success" && "text-success-foreground",
+                  log.type === "error" && "text-destructive",
+                  log.type === "info" && "text-foreground",
+                )}
+              >
+                {shouldShowLoading ? (
+                  <>
+                    <TerminalSpinner /> {log.message}
+                  </>
+                ) : log.loading ? null : log.message.startsWith("$") ? (
+                  <Typewriter
+                    speed="fast"
+                    cursorStyle={{ display: "none" }}
+                    onComplete={() => {
+                      setTypedCommands((prev) => new Set(prev).add(log.id));
+                    }}
+                  >
+                    {log.message}
+                  </Typewriter>
+                ) : (
+                  log.message
+                )}
+              </div>
+            );
+          })}
+          {cliState.logs.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{
+                duration: 0.5,
+                repeat: Infinity,
+                repeatType: "reverse",
+              }}
+              className="inline-block w-2 h-4 bg-primary ml-1"
+            />
+          )}
+        </div>
+      </motion.div>
+
+      {/* Reset button - only show when moved */}
+      <AnimatePresence>
+        {hasMoved && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ duration: 0.2 }}
+            className="absolute bottom-8 right-8"
+          >
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleReset}
+              className="gap-2"
+            >
+              <RefreshCcw className="w-4 h-4" />
+              Reset Position
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 const ToolsetAnimation = ({
   toolsetName,

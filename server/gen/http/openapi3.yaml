@@ -4875,6 +4875,117 @@ paths:
             x-speakeasy-name-override: setLogo
             x-speakeasy-react-hook:
                 name: setProjectLogo
+    /rpc/resources.list:
+        get:
+            description: List all resources for a project
+            operationId: listResources
+            parameters:
+                - allowEmptyValue: true
+                  description: The cursor to fetch results from
+                  in: query
+                  name: cursor
+                  schema:
+                    description: The cursor to fetch results from
+                    type: string
+                - allowEmptyValue: true
+                  description: The number of resources to return per page
+                  in: query
+                  name: limit
+                  schema:
+                    description: The number of resources to return per page
+                    format: int32
+                    type: integer
+                - allowEmptyValue: true
+                  description: The deployment ID. If unset, latest deployment will be used.
+                  in: query
+                  name: deployment_id
+                  schema:
+                    description: The deployment ID. If unset, latest deployment will be used.
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListResourcesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listResources resources
+            tags:
+                - resources
+            x-speakeasy-name-override: list
+            x-speakeasy-react-hook:
+                name: ListResources
     /rpc/slack.callback:
         get:
             description: Handles the authentication callback.
@@ -9644,6 +9755,19 @@ components:
                     description: The created prompt template
             required:
                 - templates
+        ListResourcesResult:
+            type: object
+            properties:
+                next_cursor:
+                    type: string
+                    description: The cursor to fetch results from
+                resources:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Resource'
+                    description: The list of resources
+            required:
+                - resources
         ListToolLogResponse:
             type: object
             properties:
@@ -10332,10 +10456,14 @@ components:
                     type: string
                     enum:
                         - function
+                uri:
+                    type: string
+                    description: The uri of the resource
             required:
                 - type
                 - id
                 - name
+                - uri
                 - resource_urn
         ResponseFilter:
             type: object
@@ -11315,6 +11443,8 @@ tags:
       description: Manages packages in Gram.
     - name: projects
       description: Manages projects in Gram.
+    - name: resources
+      description: Dashboard API for interacting with resources.
     - name: slack
       description: Auth and interactions for the Gram Slack App.
     - name: templates

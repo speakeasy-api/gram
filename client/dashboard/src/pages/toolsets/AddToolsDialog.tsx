@@ -8,9 +8,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useListTools } from "@/hooks/toolTypes";
+import { useLatestDeployment, useListTools } from "@/hooks/toolTypes";
 import { Tool, Toolset } from "@/lib/toolTypes";
-import { useLatestDeployment } from "@gram/client/react-query/index.js";
 import { Button } from "@speakeasy-api/moonshine";
 import { useMemo, useState } from "react";
 
@@ -59,9 +58,7 @@ export function AddToolsDialog({
   const [sourceFilter, setSourceFilter] = useState<string>("all");
 
   const { data: allTools, isLoading } = useListTools();
-  const { data: deployment } = useLatestDeployment(undefined, undefined, {
-    staleTime: 1000 * 60 * 60,
-  });
+  const { data: deployment } = useLatestDeployment();
 
   // Get URNs of tools already in the toolset
   const existingToolUrns = useMemo(() => {

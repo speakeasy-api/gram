@@ -68,6 +68,7 @@ var ResourceEntry = Type("ResourceEntry", func() {
 	Attribute("id", String, "The ID of the resource")
 	Attribute("resource_urn", String, "The URN of the resource")
 	Attribute("name", String, "The name of the resource")
+	Attribute("uri", String, "The uri of the resource")
 
-	Required("type", "id", "name", "resource_urn")
+	Required("type", "id", "name", "uri", "resource_urn")
 })
