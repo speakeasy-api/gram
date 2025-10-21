@@ -5,7 +5,7 @@ on:
     paths:
       - "docs/src/content/docs/**"
       - "docs/public/**"
-  workflow_dispatch: {}
+  pull_request:
 permissions:
   contents: read
   pull-requests: write
