@@ -10,7 +10,13 @@ import { TOOL_NAME_REGEX } from "@/lib/constants";
 import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
-import { ChevronDown, FileCode, Layers, PencilRuler, SquareFunction } from "lucide-react";
+import {
+  ChevronDown,
+  FileCode,
+  Layers,
+  PencilRuler,
+  SquareFunction,
+} from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ToolVariationBadge } from "../tool-variation-badge";
 import { Type } from "../ui/type";
