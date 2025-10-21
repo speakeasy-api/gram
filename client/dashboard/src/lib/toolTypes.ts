@@ -9,8 +9,8 @@ import {
   FunctionToolDefinition,
   Resource as GeneratedResource,
 } from "@gram/client/models/components";
-import { useLatestDeployment } from "@gram/client/react-query";
 import { useMemo } from "react";
+import { useLatestDeployment } from "@/hooks/toolTypes";
 
 export type ToolWithDisplayName = Tool & { displayName: string };
 export type HttpToolWithDisplayName = Tool & { type: "http" } & {
@@ -78,9 +78,7 @@ export const useGroupedHttpTools = (
 };
 
 export const useGroupedTools = (tools: Tool[]): ToolGroup[] => {
-  const { data: deployment } = useLatestDeployment(undefined, undefined, {
-    staleTime: 1000 * 60 * 60,
-  });
+  const { data: deployment } = useLatestDeployment();
 
   const documentIdToSlug = useMemo(() => {
     return deployment?.deployment?.openapiv3Assets?.reduce(

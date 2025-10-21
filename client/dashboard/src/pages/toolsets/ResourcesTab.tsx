@@ -14,15 +14,15 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
-import {
-  useLatestDeployment,
-  useUpdateToolsetMutation,
-} from "@gram/client/react-query";
+import { useUpdateToolsetMutation } from "@gram/client/react-query";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Toolset, Resource } from "@/lib/toolTypes";
-import { useListResources } from "@/hooks/toolTypes";
+import {
+  useLatestDeployment,
+  useListResources,
+} from "@/hooks/toolTypes";
 
 export function ResourcesTabContent({
   toolset,
@@ -34,9 +34,7 @@ export function ResourcesTabContent({
   const { data: resourcesResponse } = useListResources({});
   const allResources = resourcesResponse?.resources ?? [];
 
-  const { data: deployment } = useLatestDeployment(undefined, undefined, {
-    staleTime: 1000 * 60 * 60,
-  });
+  const { data: deployment } = useLatestDeployment();
 
   // Create a mapping of function ID to function name (slug)
   const functionIdToName = useMemo(() => {
