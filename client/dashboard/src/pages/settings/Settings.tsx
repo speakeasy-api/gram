@@ -529,6 +529,35 @@ export default function Settings() {
                   Step 1
                 </Type>
                 <Type variant="body" className="text-muted-foreground mb-2">
+                  Enter your custom domain:
+                </Type>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Enter your domain (chat.yourdomain.com)"
+                    value={domainInput}
+                    onChange={handleDomainInputChange}
+                    className={cn(
+                      domainError && "border-red-500",
+                      domain?.domain &&
+                        "bg-muted text-muted-foreground cursor-not-allowed",
+                    )}
+                    readOnly={!!domain?.domain}
+                  />
+                  {domainError && (
+                    <Type variant="body" className="text-red-500 text-sm">
+                      {domainError}
+                    </Type>
+                  )}
+                </div>
+              </div>
+              <div>
+                <Type
+                  variant="body"
+                  className="font-extrabold text-lg mb-2 block"
+                >
+                  Step 2
+                </Type>
+                <Type variant="body" className="text-muted-foreground mb-2">
                   Create a CNAME record for{" "}
                   <span className="font-mono">{subdomain}</span> pointing to the
                   following:
@@ -554,7 +583,7 @@ export default function Settings() {
                   variant="body"
                   className="font-extrabold text-lg mb-2 block"
                 >
-                  Step 2
+                  Step 3
                 </Type>
                 <Type variant="body" className="text-muted-foreground mb-2">
                   Create a TXT record at{" "}
@@ -577,50 +606,21 @@ export default function Settings() {
                   </Button>
                 </div>
               </div>
-              <div>
-                <Type
-                  variant="body"
-                  className="font-extrabold text-lg mb-2 block"
+              <div className="flex justify-end mt-4">
+                <Button
+                  onClick={handleRegisterDomain}
+                  disabled={
+                    !domainInput.trim() ||
+                    !!domainError ||
+                    registerDomainMutation.isPending
+                  }
                 >
-                  Step 3
-                </Type>
-                <Type variant="body" className="text-muted-foreground mb-2">
-                  Enter a custom domain:
-                </Type>
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Enter your domain (chat.yourdomain.com)"
-                    value={domainInput}
-                    onChange={handleDomainInputChange}
-                    className={cn(
-                      domainError && "border-red-500",
-                      domain?.domain &&
-                        "bg-muted text-muted-foreground cursor-not-allowed",
-                    )}
-                    readOnly={!!domain?.domain}
-                  />
-                  {domainError && (
-                    <Type variant="body" className="text-red-500 text-sm">
-                      {domainError}
-                    </Type>
-                  )}
-                </div>
-                <div className="flex justify-end mt-4">
-                  <Button
-                    onClick={handleRegisterDomain}
-                    disabled={
-                      !domainInput.trim() ||
-                      !!domainError ||
-                      registerDomainMutation.isPending
-                    }
-                  >
-                    {registerDomainMutation.isPending
-                      ? "Registering..."
-                      : domain?.domain
-                        ? "Verify"
-                        : "Register"}
-                  </Button>
-                </div>
+                  {registerDomainMutation.isPending
+                    ? "Registering..."
+                    : domain?.domain
+                      ? "Verify"
+                      : "Register"}
+                </Button>
               </div>
             </div>
           </Dialog.Content>

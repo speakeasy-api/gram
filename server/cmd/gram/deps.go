@@ -71,6 +71,7 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 	username := c.String("clickhouse-username")
 	password := c.String("clickhouse-password")
 	nativePort := c.String("clickhouse-native-port")
+	insecure := c.Bool("clickhouse-insecure")
 
 	// validate cli args
 	err := inv.Check("clickhouse config options",
@@ -84,7 +85,7 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		return nil, nilFunc, fmt.Errorf("invalid clickhouse config: %w", err)
 	}
 
-	conn, err := clickhouse.Open(&clickhouse.Options{
+	opts := &clickhouse.Options{
 		Protocol: clickhouse.Native,
 		Addr:     []string{fmt.Sprintf("%s:%s", host, nativePort)},
 		Auth: clickhouse.Auth{
@@ -95,7 +96,13 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 		Settings: clickhouse.Settings{
 			"max_execution_time": 60, // query timeout
 		},
-	})
+		TLS: &tls.Config{
+			// #nosec G402 -- we're reading the value from an environment variable.
+			InsecureSkipVerify: insecure,
+		},
+	}
+
+	conn, err := clickhouse.Open(opts)
 	if err != nil {
 		logger.WarnContext(ctx, "error connecting to clickhouse; falling back to stub tool call metrics client")
 		return &tm.StubToolMetricsClient{}, func(context.Context) error { return nil }, nil

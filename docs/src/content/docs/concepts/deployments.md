@@ -33,6 +33,6 @@ tags a particular deployment with a semantic version.
 Information about each deployment can be accessed from the "Deployments" page of
 a Gram project. Deployment logs, assets, and tool definitions can be viewed after clicking
 on a specific deployment. Deployment logs are especially useful for debugging issues with assets
-that caused a deployment to fail, or discovering why a tool was skipped when being created or updated from an OpenAPI source.
+that caused a deployment to fail, or discovering why a tool was skipped when being created or updated from a source (OpenAPI document or Gram Function).
 
 ![Deployments logs](/img/concepts/deployments/failed-deployment-logs.png)

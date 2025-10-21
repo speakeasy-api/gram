@@ -39,6 +39,13 @@
   font-style: normal;
   font-display: block;
 }
+@font-face {
+  font-family: "speakeasyAscii";
+  src: url("/fonts/speakeasy/speakeasy-ascii.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
 
 :root {
   --optional-label: "optional";

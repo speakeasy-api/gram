@@ -68,7 +68,7 @@ func (c *CustomDomainIngress) Do(ctx context.Context, args CustomDomainIngressAr
 		}
 
 		// Wait for ingress to be created
-		time.Sleep(60 * time.Second)
+		time.Sleep(120 * time.Second)
 
 		_, err = c.k8s.GetIngress(ctx, ingressName)
 		if err != nil {

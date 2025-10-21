@@ -385,7 +385,9 @@ func (s *Service) resolveMCPURLFromContext(ctx context.Context, toolset toolsets
 		baseURL = fmt.Sprintf("https://%s/mcp", customDomain.Domain)
 	}
 
-	MCPURL, err := url.JoinPath(baseURL, toolset.Slug)
+	// We will always have a valid McpSlug here, because we would not make it to this install view without it
+	// MCP Slug is also always set on toolset creation
+	MCPURL, err := url.JoinPath(baseURL, toolset.McpSlug.String)
 	if err != nil {
 		return "", fmt.Errorf("failed to join URL path: %w", err)
 	}

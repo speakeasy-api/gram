@@ -46,6 +46,8 @@ type DeploymentSummary = {
   createdAt: Date;
   openapiv3AssetCount: number;
   openapiv3ToolCount: number;
+  functionsAssetCount: number;
+  functionsToolCount: number;
 };
 
 function DeploymentActionsDropdown({
@@ -180,13 +182,13 @@ function DeploymentsTable() {
     {
       key: "assetCount",
       header: "Assets",
-      render: (row) => row.openapiv3AssetCount,
+      render: (row) => row.openapiv3AssetCount + row.functionsAssetCount,
       width: "150px",
     },
     {
       key: "toolCount",
       header: "Tools",
-      render: (row) => row.openapiv3ToolCount,
+      render: (row) => row.openapiv3ToolCount + row.functionsToolCount,
       width: "0.5fr",
     },
     {
@@ -208,19 +210,20 @@ function DeploymentsTable() {
     <>
       <Heading variant="h2">Recent Deployments</Heading>
 
-      <div className="bg-secondary p-6 rounded-lg mb-6 space-y-4">
+      <div className="bg-secondary p-6 rounded-lg mb-6 space-y-2">
         <p className="text-sm text-muted-foreground">
-          Each time you upload a new OpenAPI document or update a previously
-          uploaded one, you create a new deployment in Gram.
+          Each time you upload a new Gram Function or OpenAPI document or update
+          a previously uploaded one, you create a new deployment in Gram. These
+          are collectively called assets.
         </p>
         <p className="text-sm text-muted-foreground">
-          For each deployment, Gram analyzes all related OpenAPI documents to
-          generate or update the corresponding tool definitions.
+          For each deployment, Gram analyzes all related assets to generate or
+          update the corresponding tool definitions.
         </p>
         <p className="text-sm text-muted-foreground">
-          Gram generates logs for every deployment, showing what was processed
-          successfully and which operations or endpoints failed to convert into
-          tools.
+          Gram also generates logs for every deployment, showing what was
+          processed successfully and which functions or endpoints failed to
+          convert into tools.
         </p>
       </div>
 

@@ -824,6 +824,7 @@ CREATE TABLE IF NOT EXISTS prompt_templates (
   -- Any referenced tools in the prompt template. This can be used to suggest
   -- including them in toolsets where a prompt template is added.
   tools_hint TEXT[] DEFAULT ARRAY[]::TEXT[] CHECK (array_length(tools_hint, 1) <= 20),
+  tool_urns_hint TEXT[] DEFAULT ARRAY[]::TEXT[],
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
