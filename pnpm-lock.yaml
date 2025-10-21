@@ -428,6 +428,9 @@ importers:
       typescript:
         specifier: ^5
         version: 5.8.3
+      zx:
+        specifier: 8.8.4-lite
+        version: 8.8.4-lite
 
   ts-framework/create-function/gram-template-mcp:
     dependencies:

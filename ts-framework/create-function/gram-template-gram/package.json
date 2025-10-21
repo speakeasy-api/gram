@@ -34,6 +34,6 @@
     "@types/node": "22.x",
     "hono": "^4",
     "typescript": "^5",
-    "zx": "^8.8.5-lite"
+    "zx": "8.8.4-lite"
   }
 }
