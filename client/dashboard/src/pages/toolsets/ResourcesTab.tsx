@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
 import { useUpdateToolsetMutation } from "@gram/client/react-query";
-import { Button, Stack } from "@speakeasy-api/moonshine";
+import { Stack } from "@speakeasy-api/moonshine";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Toolset, Resource } from "@/lib/toolTypes";
@@ -181,12 +181,26 @@ function ResourceSelectPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="secondary" className="w-full justify-start">
-          <Button.LeftIcon>
-            <Newspaper className="size-4" />
-          </Button.LeftIcon>
-          <Button.Text>Add Resource</Button.Text>
-        </Button>
+        <div>
+          <Card className="cursor-pointer hover:bg-muted/50 transition-colors">
+            <Card.Header>
+              <Stack direction="horizontal" gap={2} align="center">
+                <div className="p-2 rounded-md bg-muted shrink-0">
+                  <Newspaper
+                    className="size-5 text-muted-foreground"
+                    strokeWidth={1.5}
+                  />
+                </div>
+                <Card.Title className="normal-case">+ Add Resource</Card.Title>
+              </Stack>
+            </Card.Header>
+            <Card.Content>
+              <Card.Description>
+                Click to add a resource to this toolset
+              </Card.Description>
+            </Card.Content>
+          </Card>
+        </div>
       </PopoverTrigger>
       <PopoverContent className="w-[400px] p-0" align="start">
         <Command>
