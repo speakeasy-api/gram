@@ -437,47 +437,6 @@ importers:
         specifier: ^3.25.76
         version: 3.25.76
 
-  ts-framework/create-function/gram-template-gram:
-    dependencies:
-      '@gram-ai/functions':
-        specifier: 'workspace:'
-        version: link:../../functions
-      zod:
-        specifier: ^4
-        version: 4.1.12
-    devDependencies:
-      '@hono/node-server':
-        specifier: ^1.19.5
-        version: 1.19.5(hono@4.9.11)
-      '@types/node':
-        specifier: 22.x
-        version: 22.18.6
-      hono:
-        specifier: ^4
-        version: 4.9.11
-      typescript:
-        specifier: ^5
-        version: 5.8.3
-
-  ts-framework/create-function/gram-template-mcp:
-    dependencies:
-      '@gram-ai/functions':
-        specifier: 'workspace:'
-        version: link:../../functions
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.19.1
-        version: 1.19.1
-      zod:
-        specifier: ^3
-        version: 3.25.76
-    devDependencies:
-      '@types/node':
-        specifier: 22.x
-        version: 22.18.6
-      typescript:
-        specifier: ^5
-        version: 5.8.3
-
   ts-framework/functions:
     dependencies:
       '@modelcontextprotocol/sdk':
@@ -1313,12 +1272,6 @@ packages:
     resolution: {integrity: sha512-rc1hOQtjIWGxcxpb9aHAfLpIctjEnsDehj0DAiVfBlmT84uvR0uUtN2hEi/ecvWVjXUGf5qPF4qEgiLOx1YIMQ==}
     engines: {node: '>=6'}
     hasBin: true
-
-  '@hono/node-server@1.19.5':
-    resolution: {integrity: sha512-iBuhh+uaaggeAuf+TftcjZyWh2GEgZcVGXkNtskLVoWaXhnJtC5HLHrU8W1KHDoucqO1MswwglmkWLFyiDn4WQ==}
-    engines: {node: '>=18.14.1'}
-    peerDependencies:
-      hono: ^4
 
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
@@ -4746,10 +4699,6 @@ packages:
 
   hls.js@1.6.13:
     resolution: {integrity: sha512-hNEzjZNHf5bFrUNvdS4/1RjIanuJ6szpWNfTaX5I6WfGynWXGT7K/YQLYtemSvFExzeMdgdE4SsyVLJbd5PcZA==}
-
-  hono@4.9.11:
-    resolution: {integrity: sha512-MyJ4xop3boTyXl8bJBh4i20AAZTLM3AXUJphyrUb0CpgTKYb1N703z53XiKUKchGUpcPqiiYkiLOXA3kqK3icA==}
-    engines: {node: '>=16.9.0'}
 
   html-entities@2.6.0:
     resolution: {integrity: sha512-kig+rMn/QOVRvr7c86gQ8lWXq+Hkv6CbAH1hLu+RG338StTpE8Z0b44SDVaqVu7HGKf27frdmUYEs9hTUX/cLQ==}
@@ -9231,10 +9180,6 @@ snapshots:
       protobufjs: 7.5.4
       yargs: 17.7.2
 
-  '@hono/node-server@1.19.5(hono@4.9.11)':
-    dependencies:
-      hono: 4.9.11
-
   '@humanfs/core@0.19.1': {}
 
   '@humanfs/node@0.16.7':
@@ -13400,8 +13345,6 @@ snapshots:
   hex-rgb@4.3.0: {}
 
   hls.js@1.6.13: {}
-
-  hono@4.9.11: {}
 
   html-entities@2.6.0: {}
 
