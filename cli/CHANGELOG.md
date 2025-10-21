@@ -1,5 +1,11 @@
 # cli
 
+## 0.11.0
+
+### Minor Changes
+
+- 7cd9b62: Rename packages in changelogs, git tags and github releases
+
 ## 0.10.0
 
 ### Minor Changes

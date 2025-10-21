@@ -1,5 +1,11 @@
 # function-runners
 
+## 0.1.0
+
+### Minor Changes
+
+- 7cd9b62: Rename packages in changelogs, git tags and github releases
+
 ## 0.0.4
 
 ### Patch Changes
