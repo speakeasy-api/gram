@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	functionsCPUHeader    = "X-Gram-Functions-Cpu"
-	functionsMemoryHeader = "X-Gram-Functions-Memory"
+	cpuHeader    = "X-Gram-Functions-Cpu"
+	memoryHeader = "X-Gram-Functions-Memory"
 )
 
 var allowedHeaders = map[string]struct{}{
@@ -167,7 +167,7 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 
 	// Announce trailers for resource usage metrics
 	// We currently have to write these after WriteHeader
-	w.Header().Set("Trailer", functionsCPUHeader+", "+functionsMemoryHeader)
+	w.Header().Set("Trailer", cpuHeader+", "+memoryHeader)
 
 	w.WriteHeader(response.StatusCode)
 	if _, err := io.Copy(w, response.Body); err != nil {
@@ -183,8 +183,8 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 			// Convert CPU time to seconds (user + system time)
 			cpuSeconds := float64(usage.Utime.Sec) + float64(usage.Utime.Usec)/1000000 +
 				float64(usage.Stime.Sec) + float64(usage.Stime.Usec)/1000000
-			w.Header().Set(functionsCPUHeader, fmt.Sprintf("%.2f", cpuSeconds))
-			w.Header().Set(functionsMemoryHeader, fmt.Sprintf("%d", getMemoryUsage(usage)))
+			w.Header().Set(cpuHeader, fmt.Sprintf("%.2f", cpuSeconds))
+			w.Header().Set(memoryHeader, fmt.Sprintf("%d", getMemoryUsage(usage)))
 		}
 	}
 
