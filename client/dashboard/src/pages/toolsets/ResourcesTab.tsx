@@ -79,7 +79,10 @@ export function ResourcesTabContent({
   if (allResources.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Type muted>No current sources provide resources</Type>
+        <Type muted>
+          No resources present. Custom resources can be created through Gram
+          Functions.
+        </Type>
       </div>
     );
   }
