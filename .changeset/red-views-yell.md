@@ -1,5 +1,5 @@
 ---
-"@gram/dashboard": patch
+"dashboard": patch
 ---
 
 Better custom domain model ordering

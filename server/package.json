@@ -1,5 +1,5 @@
 {
-  "name": "@gram/server",
+  "name": "server",
   "version": "0.8.1",
   "description": "",
   "private": true,

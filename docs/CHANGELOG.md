@@ -1,4 +1,4 @@
-# @gram/docs
+# docs
 
 ## 0.0.2
 

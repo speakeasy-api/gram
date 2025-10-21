@@ -29,7 +29,7 @@ release:
   mode: keep-existing
 
 monorepo:
-  tag_prefix: "@gram/cli@"
+  tag_prefix: "cli/"
 
 brews:
   - name: gram
