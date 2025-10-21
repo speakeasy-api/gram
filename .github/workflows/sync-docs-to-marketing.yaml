@@ -5,6 +5,7 @@ on:
     paths:
       - "docs/src/content/docs/**"
       - "docs/public/**"
+  workflow_dispatch: {}
 permissions:
   contents: read
   pull-requests: write
@@ -134,7 +135,7 @@ jobs:
             echo "_No file changes detected after sync._" >> ../PR_BODY.md
           fi
       - name: Create pull request in Marketing
-        uses: peter-evans/create-pull-request@4851eb8d498411fd05b06f54537670583e8acf1f  # v6.1.0
+        uses: peter-evans/create-pull-request@c5a7806660adbe173f04e3e038b0ccdcd758773c  # v6.1.0
         with:
           token: ${{ secrets.SERVICE_BOT_TOKEN }}
           path: marketing-repo
