@@ -1,4 +1,4 @@
-# @gram/dashboard
+# dashboard
 
 ## 0.15.1
 

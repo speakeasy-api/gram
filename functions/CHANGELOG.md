@@ -1,4 +1,4 @@
-# @gram/functions
+# function-runners
 
 ## 0.0.4
 

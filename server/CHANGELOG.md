@@ -1,4 +1,4 @@
-# @gram/server
+# server
 
 ## 0.8.1
 

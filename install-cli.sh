@@ -77,9 +77,9 @@ get_latest_tag() {
     local latest_tag
 
     if command_exists curl; then
-        latest_tag=$(curl -sf "$tags_url" | grep -o '"name": *"@gram/cli@[^"]*"' | head -n1 | sed 's/"name": "@gram\/cli@\([^"]*\)"/\1/')
+        latest_tag=$(curl -sf "$tags_url" | grep -o '"name": *"cli/[^"]*"' | head -n1 | sed 's/"name": "cli\/\([^"]*\)"/\1/')
     elif command_exists wget; then
-        latest_tag=$(wget -qO- "$tags_url" | grep -o '"name": *"@gram/cli@[^"]*"' | head -n1 | sed 's/"name": "@gram\/cli@\([^"]*\)"/\1/')
+        latest_tag=$(wget -qO- "$tags_url" | grep -o '"name": *"cli/[^"]*"' | head -n1 | sed 's/"name": "cli\/\([^"]*\)"/\1/')
     else
         error "curl or wget is required"
     fi
@@ -188,10 +188,10 @@ main() {
     info "Latest version: $version"
 
     # Construct download URLs
-    local tag="@gram/cli@${version}"
+    local encoded_tag="cli%2F${version}"
     local filename="gram_${os}_${arch}.zip"
-    local download_url="https://github.com/speakeasy-api/gram/releases/download/${tag}/${filename}"
-    local checksums_url="https://github.com/speakeasy-api/gram/releases/download/${tag}/checksums.txt"
+    local download_url="https://github.com/speakeasy-api/gram/releases/download/${encoded_tag}/${filename}"
+    local checksums_url="https://github.com/speakeasy-api/gram/releases/download/${encoded_tag}/checksums.txt"
 
     # Create temporary directory
     tmp_dir=$(mktemp -d)
