@@ -21,6 +21,8 @@ type PromptTemplate struct {
 	Kind string
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string
+	// The suggested tool URNS associated with the prompt template
+	ToolUrnsHint []string
 	// The ID of the tool
 	ID string
 	// The URN of this tool

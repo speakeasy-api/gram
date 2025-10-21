@@ -82,6 +82,8 @@ type CreateTemplatePayload struct {
 	Kind string
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string
+	// The suggested tool URNS associated with the prompt template
+	ToolUrnsHint []string
 }
 
 // DeleteTemplatePayload is the payload type of the templates service
@@ -194,6 +196,8 @@ type UpdateTemplatePayload struct {
 	Kind *string
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string
+	// The suggested tool URNS associated with the prompt template
+	ToolUrnsHint []string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

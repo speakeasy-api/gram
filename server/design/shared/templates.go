@@ -26,6 +26,10 @@ var PromptTemplate = Type("PromptTemplate", func() {
 		Description("The suggested tool names associated with the prompt template")
 		MaxLength(20)
 	})
+	Attribute("tool_urns_hint", ArrayOf(String), func() {
+		Description("The suggested tool URNS associated with the prompt template")
+		MaxLength(20)
+	})
 })
 
 var PromptTemplateEntry = Type("PromptTemplateEntry", func() {

@@ -380,6 +380,8 @@ type PromptTemplateResponseBody struct {
 	Kind string `form:"kind" json:"kind" xml:"kind"`
 	// The suggested tool names associated with the prompt template
 	ToolsHint []string `form:"tools_hint" json:"tools_hint" xml:"tools_hint"`
+	// The suggested tool URNS associated with the prompt template
+	ToolUrnsHint []string `form:"tool_urns_hint,omitempty" json:"tool_urns_hint,omitempty" xml:"tool_urns_hint,omitempty"`
 	// The ID of the tool
 	ID string `form:"id" json:"id" xml:"id"`
 	// The URN of this tool

@@ -334,11 +334,6 @@ func DescribeToolset(
 
 	promptTemplates := make([]*types.PromptTemplate, 0, len(ptrows))
 	for _, pt := range ptrows {
-		hint := pt.ToolsHint
-		if hint == nil {
-			hint = []string{}
-		}
-
 		promptTemplates = append(promptTemplates, &types.PromptTemplate{
 			ID:            pt.ID.String(),
 			ToolUrn:       pt.ToolUrn,
@@ -351,7 +346,8 @@ func DescribeToolset(
 			SchemaVersion: nil,
 			Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
 			Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
-			ToolsHint:     hint,
+			ToolsHint:     pt.ToolsHint,
+			ToolUrnsHint:  pt.ToolUrnsHint,
 			CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
 			UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
 			ProjectID:     pt.ProjectID.String(),
@@ -597,6 +593,7 @@ func readToolsetTools(
 					Engine:        conv.PtrValOrEmpty(conv.FromPGText[string](pt.Engine), "none"),
 					Kind:          conv.PtrValOrEmpty(conv.FromPGText[string](pt.Kind), "prompt"),
 					ToolsHint:     pt.ToolsHint,
+					ToolUrnsHint:  pt.ToolUrnsHint,
 					CreatedAt:     pt.CreatedAt.Time.Format(time.RFC3339),
 					UpdatedAt:     pt.UpdatedAt.Time.Format(time.RFC3339),
 					ProjectID:     pt.ProjectID.String(),

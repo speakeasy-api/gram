@@ -188,6 +188,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 			Engine:        template.Engine,
 			Kind:          template.Kind,
 			ToolsHint:     template.ToolsHint,
+			ToolUrnsHint:  template.ToolUrnsHint,
 			CreatedAt:     template.CreatedAt,
 			UpdatedAt:     template.UpdatedAt,
 			CanonicalName: template.CanonicalName,

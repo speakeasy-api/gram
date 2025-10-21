@@ -66,6 +66,10 @@ export type UpdatePromptTemplateForm = {
    */
   prompt?: string | undefined;
   /**
+   * The suggested tool URNS associated with the prompt template
+   */
+  toolUrnsHint?: Array<string> | undefined;
+  /**
    * The suggested tool names associated with the prompt template
    */
   toolsHint?: Array<string> | undefined;
@@ -126,9 +130,11 @@ export const UpdatePromptTemplateForm$inboundSchema: z.ZodType<
   kind: UpdatePromptTemplateFormKind$inboundSchema.optional(),
   name: z.string().optional(),
   prompt: z.string().optional(),
+  tool_urns_hint: z.array(z.string()).optional(),
   tools_hint: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
+    "tool_urns_hint": "toolUrnsHint",
     "tools_hint": "toolsHint",
   });
 });
@@ -142,6 +148,7 @@ export type UpdatePromptTemplateForm$Outbound = {
   kind?: string | undefined;
   name?: string | undefined;
   prompt?: string | undefined;
+  tool_urns_hint?: Array<string> | undefined;
   tools_hint?: Array<string> | undefined;
 };
 
@@ -158,9 +165,11 @@ export const UpdatePromptTemplateForm$outboundSchema: z.ZodType<
   kind: UpdatePromptTemplateFormKind$outboundSchema.optional(),
   name: z.string().optional(),
   prompt: z.string().optional(),
+  toolUrnsHint: z.array(z.string()).optional(),
   toolsHint: z.array(z.string()).optional(),
 }).transform((v) => {
   return remap$(v, {
+    toolUrnsHint: "tool_urns_hint",
     toolsHint: "tools_hint",
   });
 });

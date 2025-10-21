@@ -7,7 +7,7 @@ import { TextArea } from "@/components/ui/textarea";
 import { useCommandPalette } from "@/contexts/CommandPalette";
 import { useLatestDeployment } from "@/hooks/toolTypes";
 import { TOOL_NAME_REGEX } from "@/lib/constants";
-import { Tool, isHttpTool } from "@/lib/toolTypes";
+import { Tool, Toolset, isHttpTool } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { Icon, Stack } from "@speakeasy-api/moonshine";
 import { ChevronDown, FileCode, Layers, SquareFunction } from "lucide-react";
@@ -15,9 +15,11 @@ import { useEffect, useMemo, useState } from "react";
 import { ToolVariationBadge } from "../tool-variation-badge";
 import { Type } from "../ui/type";
 import { MethodBadge } from "./MethodBadge";
+import { SubtoolsBadge } from "./SubtoolsBadge";
 
 interface ToolListProps {
   tools: Tool[];
+  toolset?: Toolset; // Optionally specificy the toolset to provide rows with additional context
   onToolUpdate?: (
     tool: Tool,
     updates: { name?: string; description?: string },
@@ -212,6 +214,7 @@ function getIcon(icon: ToolGroup["icon"]) {
 
 function ToolRow({
   tool,
+  availableToolUrns, // Context for the subtools badge
   groupName,
   onUpdate,
   isSelected,
@@ -221,6 +224,7 @@ function ToolRow({
   onRemove,
 }: {
   tool: Tool;
+  availableToolUrns?: string[];
   groupName: string;
   onUpdate?: (updates: { name?: string; description?: string }) => void;
   isSelected: boolean;
@@ -336,6 +340,12 @@ function ToolRow({
         <div className="flex gap-4 items-center shrink-0">
           {tool.type === "http" && tool.httpMethod && (
             <MethodBadge method={tool.httpMethod} />
+          )}
+          {tool.type === "prompt" && (
+            <SubtoolsBadge
+              tool={tool}
+              availableToolUrns={availableToolUrns ?? []}
+            />
           )}
           <MoreActions actions={actions} />
         </div>
@@ -460,6 +470,7 @@ function ToolGroupHeader({
 
 export function ToolList({
   tools,
+  toolset,
   onToolUpdate,
   onToolsRemove,
   onAddToToolset,
@@ -743,10 +754,15 @@ export function ToolList({
                 {group.tools.map((tool) => {
                   const toolId = getToolIdentifier(tool);
                   const toolIndex = toolIndexMap.get(toolId) ?? -1;
+
                   return (
                     <ToolRow
                       key={tool.canonicalName}
                       groupName={group.title}
+                      availableToolUrns={toolset?.tools
+                        ?.map((t) => t.toolUrn)
+                        .concat(selectionMode === "add" ? selectedUrns : [])
+                        .filter((urn) => !selectedForRemoval.has(urn))}
                       tool={tool}
                       onUpdate={(updates) => onToolUpdate?.(tool, updates)}
                       isSelected={

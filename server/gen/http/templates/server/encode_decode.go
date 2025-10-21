@@ -1670,6 +1670,12 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 	} else {
 		res.ToolsHint = []string{}
 	}
+	if v.ToolUrnsHint != nil {
+		res.ToolUrnsHint = make([]string, len(v.ToolUrnsHint))
+		for i, val := range v.ToolUrnsHint {
+			res.ToolUrnsHint[i] = val
+		}
+	}
 	if v.Canonical != nil {
 		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
 	}

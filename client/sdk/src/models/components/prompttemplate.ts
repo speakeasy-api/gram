@@ -121,6 +121,10 @@ export type PromptTemplate = {
    */
   toolUrn: string;
   /**
+   * The suggested tool URNS associated with the prompt template
+   */
+  toolUrnsHint?: Array<string> | undefined;
+  /**
    * The suggested tool names associated with the prompt template
    */
   toolsHint: Array<string>;
@@ -195,6 +199,7 @@ export const PromptTemplate$inboundSchema: z.ZodType<
   schema_version: z.string().optional(),
   summarizer: z.string().optional(),
   tool_urn: z.string(),
+  tool_urns_hint: z.array(z.string()).optional(),
   tools_hint: z.array(z.string()),
   updated_at: z.string().datetime({ offset: true }).transform(v => new Date(v)),
   variation: ToolVariation$inboundSchema.optional(),
@@ -208,6 +213,7 @@ export const PromptTemplate$inboundSchema: z.ZodType<
     "project_id": "projectId",
     "schema_version": "schemaVersion",
     "tool_urn": "toolUrn",
+    "tool_urns_hint": "toolUrnsHint",
     "tools_hint": "toolsHint",
     "updated_at": "updatedAt",
   });
@@ -233,6 +239,7 @@ export type PromptTemplate$Outbound = {
   schema_version?: string | undefined;
   summarizer?: string | undefined;
   tool_urn: string;
+  tool_urns_hint?: Array<string> | undefined;
   tools_hint: Array<string>;
   updated_at: string;
   variation?: ToolVariation$Outbound | undefined;
@@ -262,6 +269,7 @@ export const PromptTemplate$outboundSchema: z.ZodType<
   schemaVersion: z.string().optional(),
   summarizer: z.string().optional(),
   toolUrn: z.string(),
+  toolUrnsHint: z.array(z.string()).optional(),
   toolsHint: z.array(z.string()),
   updatedAt: z.date().transform(v => v.toISOString()),
   variation: ToolVariation$outboundSchema.optional(),
@@ -275,6 +283,7 @@ export const PromptTemplate$outboundSchema: z.ZodType<
     projectId: "project_id",
     schemaVersion: "schema_version",
     toolUrn: "tool_urn",
+    toolUrnsHint: "tool_urns_hint",
     toolsHint: "tools_hint",
     updatedAt: "updated_at",
   });

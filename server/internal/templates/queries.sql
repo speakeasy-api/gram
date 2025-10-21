@@ -42,7 +42,8 @@ INSERT INTO prompt_templates (
   arguments,
   engine,
   kind,
-  tools_hint
+  tools_hint,
+  tool_urns_hint
 )
 SELECT
   @project_id,
@@ -54,7 +55,8 @@ SELECT
   @arguments,
   @engine,
   @kind,
-  @tools_hint
+  @tools_hint,
+  @tool_urns_hint
 RETURNING id;
 
 -- name: UpdateTemplate :one
@@ -69,7 +71,8 @@ INSERT INTO prompt_templates (
   arguments,
   engine,
   kind,
-  tools_hint
+  tools_hint,
+  tool_urns_hint
 )
 SELECT
   c.project_id,
@@ -82,7 +85,8 @@ SELECT
   sqlc.narg(arguments),
   COALESCE(NULLIF(sqlc.narg(engine), ''), c.engine),
   COALESCE(NULLIF(sqlc.narg(kind), ''), c.kind),
-  COALESCE(sqlc.narg(tools_hint), ARRAY[]::TEXT[])
+  COALESCE(sqlc.narg(tools_hint), ARRAY[]::TEXT[]),
+  COALESCE(sqlc.narg(tool_urns_hint), ARRAY[]::TEXT[])
 FROM prompt_templates c
 WHERE project_id = @project_id
   AND id = @id
@@ -93,6 +97,7 @@ WHERE project_id = @project_id
     OR (NULLIF(sqlc.narg(engine), '') IS NOT NULL AND sqlc.narg(engine) != c.engine)
     OR (NULLIF(sqlc.narg(kind), '') IS NOT NULL AND NULLIF(sqlc.narg(kind), '') != c.kind)
     OR (sqlc.narg(tools_hint) IS DISTINCT FROM c.tools_hint)
+    OR (sqlc.narg(tool_urns_hint) IS DISTINCT FROM c.tool_urns_hint)
   )
 RETURNING id;
 
