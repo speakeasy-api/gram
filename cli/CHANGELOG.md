@@ -1,5 +1,11 @@
 # cli
 
+## 0.11.1
+
+### Patch Changes
+
+- 54b14bb: fixed GitHub release name
+
 ## 0.11.0
 
 ### Minor Changes
