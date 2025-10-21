@@ -13,7 +13,7 @@ Consumer keys are for accessing Gram servers with managed authentication. Use th
 
 ### Producer keys
 
-Producer keys are for accessing Gram platform capabilities, like spec updates and toolset management. Use these when you need to programmatically create or modify toolsets, upload OpenAPI documents, or trigger deployments.
+Producer keys are for accessing Gram platform capabilities, like spec updates and toolset management. Use these when you need to programmatically create or modify toolsets, upload sources (OpenAPI documents or Gram Functions), or trigger deployments.
 
 ### Creating an API key
 

@@ -5,13 +5,13 @@ sidebar:
   order: 2
 ---
 
-Effective API design does not automatically create effective MCP servers. When uploading an OpenAPI document with hundreds of endpoints to Gram, avoid placing all tools into a single toolset. This approach overwhelms agents and reduces their effectiveness.
+Effective API design does not automatically create effective MCP servers. When uploading a source with hundreds of tools to Gram, such as an OpenAPI document with many endpoints or a Gram Function bundle, avoid placing all tools into a single toolset. This approach overwhelms agents and reduces their effectiveness.
 
 Tool curation involves thinking like an agent-UX designer. It requires understanding how AI agents navigate complex workflows, make decisions, and discover what they need to accomplish goals. Traditional APIs are flat and expose every endpoint equally. Effective MCP servers use multilayered approaches with progressive disclosure to surface the right tools at the right time.
 
 ## Understanding tools and toolsets
 
-**[Tools](/concepts/tool-definitions)** are individual callable API actions. When uploading an OpenAPI document to Gram, each operation becomes a tool definition — a single endpoint that an agent can invoke. For example, a CRM API might generate tools like `search_users`, `create_deal`, and `list_pipelines`.
+**[Tools](/concepts/tool-definitions)** are individual callable actions. When uploading a [source](/concepts/tool-sources) to Gram, API operations and function bundles become tool definitions - a single action that an agent can invoke. For example, a CRM API's OpenAPI document might generate tools like `search_users`, `create_deal`, and `list_pipelines`, while a Gram Function could define custom workflow tools.
 
 **[Toolsets](/concepts/toolsets)** are curated bundles of tools organized around specific use cases or workflows. Rather than giving an agent access to every available tool, select only the ones needed to accomplish particular tasks. Think of toolsets as specialized toolkits — bring only the necessary tools for each job.
 

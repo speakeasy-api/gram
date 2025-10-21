@@ -7,7 +7,7 @@ sidebar:
 
 ## Creating and hosting an MCP server in three simple steps
 
-Gram takes your OpenAPI document and, in just three steps, generates a fully functional, scoped MCP server, ready to use across environments, teams, and agents.
+Gram takes your [source](/concepts/tool-sources) (OpenAPI document or Gram Function) and, in just three steps, generates a fully functional, scoped MCP server, ready to use across environments, teams, and agents.
 
 ![Running MCP server with Gram](/img/blog/the-easiest-way-to-host-mcp-servers/gram-ai-hosting.png)
 
@@ -17,7 +17,7 @@ Let's see how easy it is to create an MCP server with Gram.
 
 ### Step 1: Create an MCP server
 
-First, upload an OpenAPI document.
+First, upload a source. This quickstart uses an OpenAPI document as an example, but you can also upload [Gram Functions](/concepts/tool-sources#gram-functions) for custom tool logic.
 
 :::tip[NOTE]
 The quality of your OpenAPI document directly impacts the quality of your MCP server. Learn about writing better OpenAPI documents in the [OpenAPI hub](https://www.speakeasy.com/openapi).

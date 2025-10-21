@@ -1,6 +1,6 @@
 ---
 title: Introducing Gram 👋
-description: Gram effortlessly turns OpenAPI documents into LLM-ready tools, generating optimized tool definitions from your APIs for powerful agentic workflows.
+description: Gram effortlessly turns API specifications and code into LLM-ready tools, generating optimized tool definitions from OpenAPI documents and Gram Functions for powerful agentic workflows.
 sidebar:
   order: 0
 ---
@@ -43,7 +43,7 @@ Existing REST APIs are a starting point, but to create a functional MCP server, 
 2. **Add Context** - A user reading an API reference is coming in with some implicit context about the relevant business domain. The same is not true of an LLM examining a list of tools on an MCP server. It is up to the MCP server maintainer to make sure the server provides the LLM with the context it needs. Adding rich tool descriptions, prompts, and examples, greatly improves the performance of the MCP server. Focus on the _when_ and _why_ of the tool. Gram gives you the ability to add additional context to your tools.
 3. **Define Custom Tools** - REST APIs are resource-oriented: create a company, update the contact field, etc. MCP servers work best when they're workflow-based: "summarize recent channel activity". Gram gives you the ability to distribute custom tools that wrap multiple API endpoints and additional steps as a single tool.
 
-Gram makes tool creation & curation easy. [Tools](/concepts/tool-definitions) are bootstrapped by pulling API paths, input schemas, security schemes, and descriptions out of OpenAPI documents. Once an API is uploaded to the Gram platform the day 0 workflow looks like this:
+Gram makes tool creation & curation easy. [Tools](/concepts/tool-definitions) are bootstrapped from [sources](/concepts/tool-sources) like OpenAPI documents (which provide API paths, input schemas, security schemes, and descriptions) or Gram Functions (custom Node.js code). Once a source is uploaded to the Gram platform the day 0 workflow looks like this:
 
 * Remove unnecessary tools from your toolset
 * Combine tools into use case specific toolsets.
