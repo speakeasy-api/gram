@@ -1,0 +1,27 @@
+<clickhouse>
+    <openSSL>
+        <server>
+            <certificateFile>/etc/clickhouse-server/certs/server-cert.pem</certificateFile>
+            <privateKeyFile>/etc/clickhouse-server/certs/server-key.pem</privateKeyFile>
+            <caConfig>/etc/clickhouse-server/certs/ca-cert.pem</caConfig>
+            <verificationMode>none</verificationMode>
+            <loadDefaultCAFile>false</loadDefaultCAFile>
+            <cacheSessions>true</cacheSessions>
+            <disableProtocols>sslv2,sslv3</disableProtocols>
+            <preferServerCiphers>true</preferServerCiphers>
+        </server>
+    </openSSL>
+
+    <!-- Enable secure native protocol port -->
+    <tcp_port_secure>9440</tcp_port_secure>
+
+    <!-- Enable secure HTTP port -->
+    <https_port>8443</https_port>
+
+    <grpc>
+        <enable_ssl>1</enable_ssl>
+        <ssl_cert_file>/etc/clickhouse-server/certs/server-cert.pem</ssl_cert_file>
+        <ssl_key_file>/etc/clickhouse-server/certs/server-key.pem</ssl_key_file>
+        <ssl_ca_cert_file>/etc/clickhouse-server/certs/ca-cert.pem</ssl_ca_cert_file>
+    </grpc>
+</clickhouse>
