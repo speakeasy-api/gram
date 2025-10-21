@@ -117,8 +117,8 @@ zip -9 gram.zip manifest.json functions.js
 
 ### Environment Variables
 
-Environment variables defined in your Gram project can be accessed within the
-function's under the `process.env` object. For example, if you define an
+Environment variables defined in your Gram project can be accessed within
+functions using the `process.env` object. For example, if you define an
 environment variable named `MY_MCP_MULTIPLIER`, you can access it in a function
 like this:
 
