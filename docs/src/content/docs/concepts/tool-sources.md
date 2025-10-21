@@ -21,10 +21,11 @@ automated usage.
 
 ## Gram Functions
 
-Gram Functions are custom tools written in Node.js that enable you to write
-arbitrary code for AI agents to execute via MCP servers. Unlike OpenAPI-based
-tools that map to existing REST API endpoints, Gram Functions give you complete
-programmatic control to implement any logic your agents need.
+Gram Functions are snippets of code written in TypeScript that enable you to
+define arbitrary tasks for AI agents to execute via MCP servers. Unlike
+OpenAPI-based tools that map to existing REST API endpoints, Gram Functions can
+call multiple APIs, connect to remote databases over TCP/HTTP, and perform
+complex data transformations with third-party libraries.
 
 Functions are particularly useful when:
 
@@ -102,7 +103,16 @@ Gram Functions support TypeSript as well as JavaScript.
 :::
 
 :::note[Bundle Size Limit]
-The zipped bundle (containing both `manifest.json` and `functions.js`) must not exceed **700KB**. Keep your functions lean by avoiding large dependencies and using tree-shaking when bundling.
+
+The zipped bundle (containing both `manifest.json` and `functions.js`) must not
+exceed **700KB**. Keep your functions lean by avoiding large dependencies and
+using tree-shaking when bundling. For many use cases, this provides a lot of
+headroom, especially when using the highest zip compression:
+
+```bash
+zip -9 gram.zip manifest.json functions.js
+```
+
 :::
 
 ### Environment Variables
