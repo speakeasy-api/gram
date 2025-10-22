@@ -10,7 +10,7 @@ import (
 )
 
 const getOrganizationMetadata = `-- name: GetOrganizationMetadata :one
-SELECT id, name, slug, gram_account_type, created_at, updated_at, disabled
+SELECT id, name, slug, gram_account_type, created_at, updated_at, disabled_at
 FROM organization_metadata
 WHERE id = $1
 `
@@ -25,7 +25,7 @@ func (q *Queries) GetOrganizationMetadata(ctx context.Context, id string) (Organ
 		&i.GramAccountType,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.Disabled,
+		&i.DisabledAt,
 	)
 	return i, err
 }
@@ -61,7 +61,7 @@ ON CONFLICT (id) DO UPDATE SET
     name = EXCLUDED.name,
     slug = EXCLUDED.slug,
     updated_at = clock_timestamp()
-RETURNING id, name, slug, gram_account_type, created_at, updated_at, disabled
+RETURNING id, name, slug, gram_account_type, created_at, updated_at, disabled_at
 `
 
 type UpsertOrganizationMetadataParams struct {
@@ -80,7 +80,7 @@ func (q *Queries) UpsertOrganizationMetadata(ctx context.Context, arg UpsertOrga
 		&i.GramAccountType,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.Disabled,
+		&i.DisabledAt,
 	)
 	return i, err
 }
