@@ -216,7 +216,13 @@ async function init(argv: string[]): Promise<void> {
     .replaceAll("$PACKAGE_MANAGER", packageManager)
     .replaceAll("$DIR", dir);
 
-  tlog.success(successMessage);
+  // Format backtick-wrapped text with cyan color
+  const formattedMessage = successMessage.replace(
+    /`([^`]+)`/g,
+    "\x1b[36m$1\x1b[0m"
+  );
+
+  tlog.success(formattedMessage);
 }
 
 try {
