@@ -215,51 +215,53 @@ export default function Logs() {
               </div>
 
               {/* Table */}
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>TIMESTAMP</TableHead>
-                    <TableHead>SERVER_NAME</TableHead>
-                    <TableHead>TOOL_NAME</TableHead>
-                    <TableHead>STATUS</TableHead>
-                    <TableHead>CLIENT</TableHead>
-                    <TableHead>DURATION</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {logs.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell className="text-muted-foreground">
-                        {formatTimestamp(log.ts)}
-                      </TableCell>
-                      <TableCell className="font-medium">
-                        {log.toolUrn || log.httpRoute}
-                      </TableCell>
-                      <TableCell>
-                        <code className="text-sm">
-                          {log.httpMethod} {log.httpRoute}
-                        </code>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`w-2 h-2 rounded-full ${getStatusColor(
-                              log.statusCode
-                            )}`}
-                          />
-                          <span className="text-sm">{log.statusCode}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {log.userAgent}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDuration(log.durationMs)}
-                      </TableCell>
+              <div className="border border-neutral-softest rounded-lg overflow-hidden w-full">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-surface-secondary-default border-b border-neutral-softest">
+                      <TableHead>TIMESTAMP</TableHead>
+                      <TableHead>SERVER NAME</TableHead>
+                      <TableHead>TOOL NAME</TableHead>
+                      <TableHead>STATUS</TableHead>
+                      <TableHead>CLIENT</TableHead>
+                      <TableHead>DURATION</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {logs.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell className="text-muted-foreground">
+                          {formatTimestamp(log.ts)}
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          {log.toolUrn || log.httpRoute}
+                        </TableCell>
+                        <TableCell>
+                          <code className="text-sm">
+                            {log.httpMethod} {log.httpRoute}
+                          </code>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className={`w-2 h-2 rounded-full ${getStatusColor(
+                                log.statusCode
+                              )}`}
+                            />
+                            <span className="text-sm">{log.statusCode}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {log.userAgent}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatDuration(log.durationMs)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </Page.Section.Body>
         </Page.Section>
