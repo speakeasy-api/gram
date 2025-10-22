@@ -194,7 +194,7 @@ func handleToolsCall(
 	requestBytes := int64(len(requestBodyBytes))
 	var outputBytes int64
 	var functionCPU *float64
-	var functionMem *int64
+	var functionMem *float64
 
 	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
 	if err != nil {
@@ -238,7 +238,7 @@ func handleToolsCall(
 		}
 	}
 	if memStr := rw.headers.Get(functions.FunctionsMemoryHeader); memStr != "" {
-		if mem, err := strconv.ParseInt(memStr, 10, 64); err == nil {
+		if mem, err := strconv.ParseFloat(memStr, 64); err == nil {
 			functionMem = &mem
 		}
 	}

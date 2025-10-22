@@ -341,14 +341,14 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	var functionCPU *float64
-	var functionMem *int64
+	var functionMem *float64
 	if cpuStr := interceptor.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
 		if cpu, err := strconv.ParseFloat(cpuStr, 64); err == nil {
 			functionCPU = &cpu
 		}
 	}
 	if memStr := interceptor.headers.Get(functions.FunctionsMemoryHeader); memStr != "" {
-		if mem, err := strconv.ParseInt(memStr, 10, 64); err == nil {
+		if mem, err := strconv.ParseFloat(memStr, 64); err == nil {
 			functionMem = &mem
 		}
 	}

@@ -249,7 +249,7 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallU
 
 	if event.FunctionMemUsage != nil {
 		metadata["function_mem_usage"] = polarComponents.EventCreateExternalCustomerMetadata{
-			Integer: event.FunctionMemUsage,
+			Number: event.FunctionMemUsage,
 		}
 	}
 

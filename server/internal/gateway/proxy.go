@@ -55,6 +55,7 @@ var proxiedHeaders = []string{
 	"Pragma",
 	functions.FunctionsCPUHeader,
 	functions.FunctionsMemoryHeader,
+	functions.FuncionsExecutionTimeHeader,
 }
 
 type FilterRequest struct {
