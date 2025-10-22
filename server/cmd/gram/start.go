@@ -338,6 +338,7 @@ func newStartCommand() *cli.Command {
 			shutdown, err := o11y.SetupOTelSDK(ctx, logger, o11y.SetupOTelSDKOptions{
 				ServiceName:    serviceName,
 				ServiceVersion: shortGitSHA(),
+				GitSHA:         GitSHA,
 				EnableTracing:  c.Bool("with-otel-tracing"),
 				EnableMetrics:  c.Bool("with-otel-metrics"),
 			})

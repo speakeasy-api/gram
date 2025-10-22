@@ -46,10 +46,12 @@ const (
 	ReasonKey   = attribute.Key("reason")
 	ValueKey    = attribute.Key("value")
 
-	SpanIDKey         = attribute.Key("span.id")
-	TraceIDKey        = attribute.Key("trace.id")
-	DataDogTraceIDKey = attribute.Key("dd.trace_id")
-	DataDogSpanIDKey  = attribute.Key("dd.span_id")
+	SpanIDKey              = attribute.Key("span.id")
+	TraceIDKey             = attribute.Key("trace.id")
+	DataDogGitCommitSHAKey = attribute.Key("git.commit.sha")
+	DataDogGitRepoURLKey   = attribute.Key("git.repository_url")
+	DataDogTraceIDKey      = attribute.Key("dd.trace_id")
+	DataDogSpanIDKey       = attribute.Key("dd.span_id")
 
 	FlyAppNameKey    = attribute.Key("fly.app.name")
 	FlyOrgIDKey      = attribute.Key("fly.org.id")
@@ -279,6 +281,14 @@ func SlogSpanID(v string) slog.Attr      { return slog.String(string(SpanIDKey),
 
 func TraceID(v string) attribute.KeyValue { return TraceIDKey.String(v) }
 func SlogTraceID(v string) slog.Attr      { return slog.String(string(TraceIDKey), v) }
+
+func DataDogGitCommitSHA(v string) attribute.KeyValue { return DataDogGitCommitSHAKey.String(v) }
+func SlogDataDogGitCommitSHA(v string) slog.Attr {
+	return slog.String(string(DataDogGitCommitSHAKey), v)
+}
+
+func DataDogGitRepoURL(v string) attribute.KeyValue { return DataDogGitRepoURLKey.String(v) }
+func SlogDataDogGitRepoURL(v string) slog.Attr      { return slog.String(string(DataDogGitRepoURLKey), v) }
 
 func DataDogTraceID(v string) attribute.KeyValue { return DataDogTraceIDKey.String(v) }
 func SlogDataDogTraceID(v string) slog.Attr {
