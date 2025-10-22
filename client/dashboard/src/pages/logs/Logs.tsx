@@ -141,15 +141,13 @@ export default function Logs() {
   };
 
   const formatTimestamp = (date: Date) => {
-    return date.toLocaleString("en-US", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    const hours = String(date.getHours()).padStart(2, "0");
+    const minutes = String(date.getMinutes()).padStart(2, "0");
+    const seconds = String(date.getSeconds()).padStart(2, "0");
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
   };
 
   const formatDuration = (ms: number) => {
@@ -219,27 +217,27 @@ export default function Logs() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-surface-secondary-default border-b border-neutral-softest">
-                      <TableHead>TIMESTAMP</TableHead>
-                      <TableHead>SERVER NAME</TableHead>
-                      <TableHead>TOOL NAME</TableHead>
-                      <TableHead>STATUS</TableHead>
-                      <TableHead>CLIENT</TableHead>
-                      <TableHead>DURATION</TableHead>
+                      <TableHead className="font-mono">TIMESTAMP</TableHead>
+                      <TableHead className="font-mono">SERVER NAME</TableHead>
+                      <TableHead className="font-mono">TOOL NAME</TableHead>
+                      <TableHead className="font-mono">STATUS</TableHead>
+                      <TableHead className="font-mono">CLIENT</TableHead>
+                      <TableHead className="font-mono">DURATION</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {logs.map((log) => (
                       <TableRow key={log.id}>
-                        <TableCell className="text-muted-foreground">
+                        <TableCell className="text-muted-foreground font-mono">
                           {formatTimestamp(log.ts)}
                         </TableCell>
                         <TableCell className="font-medium">
                           {log.toolUrn || log.httpRoute}
                         </TableCell>
-                        <TableCell>
-                          <code className="text-sm">
+                        <TableCell className="font-mono">
+                          <span className="text-sm">
                             {log.httpMethod} {log.httpRoute}
-                          </code>
+                          </span>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -254,7 +252,7 @@ export default function Logs() {
                         <TableCell className="text-muted-foreground text-sm">
                           {log.userAgent}
                         </TableCell>
-                        <TableCell className="text-muted-foreground">
+                        <TableCell className="text-muted-foreground font-mono">
                           {formatDuration(log.durationMs)}
                         </TableCell>
                       </TableRow>
