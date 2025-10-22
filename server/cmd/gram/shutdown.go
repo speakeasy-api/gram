@@ -22,6 +22,11 @@ func runShutdown(logger *slog.Logger, logCtx context.Context, shutdownFuncs []fu
 	defer cancel()
 
 	for _, shutdown := range shutdownFuncs {
+		if shutdown == nil {
+			wg.Done()
+			continue
+		}
+
 		go func(shutdown func(context.Context) error) {
 			defer wg.Done()
 			if err := shutdown(ctx); err != nil {
