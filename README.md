@@ -106,6 +106,6 @@ Version bumps are determined by the git commit's prefix:
 | `feat:`  | Minor        | `feat: new status fields`               |
 | `fix:`   | Patch        | `patch: update help docs`               |
 
-<!-- ## Documentation
+## Documentation
 
-Documentation for Gram is also open source in this respository and can be found [here](https://docs.getgram.ai/). -->
+Documentation for Gram is also open source. View it [here](https://www.speakeasy.com/docs/gram/introduction) and contribute [here](https://github.com/speakeasy-api/developer-docs/tree/main/docs/gram).
