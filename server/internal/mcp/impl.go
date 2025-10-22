@@ -279,7 +279,7 @@ func (s *Service) HandleWellKnownOAuthProtectedResourceMetadata(w http.ResponseW
 	}
 
 	switch {
-	case toolset.OauthProxyServerID.Valid:
+	case toolset.OauthProxyServerID.Valid, toolset.ExternalOauthServerID.Valid:
 		// Continue processing
 	default:
 		return oops.E(oops.CodeNotFound, nil, "not found").Log(ctx, s.logger)
