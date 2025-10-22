@@ -1,5 +1,5 @@
 import { Page } from "@/components/page-layout";
-import { Input } from "@/components/ui/input";
+import { SearchBar } from "@/components/ui/search-bar";
 import {
   Select,
   SelectContent,
@@ -15,7 +15,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { SearchIcon } from "lucide-react";
 import { useState } from "react";
 
 // Dummy data for logs (using real data structure)
@@ -170,17 +169,13 @@ export default function Logs() {
           <Page.Section.Body>
             <div className="flex flex-col gap-4">
               {/* Search and Filters Row */}
-              <div className="flex items-center justify-between gap-4">
-                {/* Search Input */}
-                <div className="relative flex-1 max-w-xs">
-                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search"
+              <div className="flex items-center justify-between gap-4">{/* Search Input */}
+                <SearchBar
                     value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
+                    onChange={setSearchQuery}
+                    placeholder="Search"
+                    className="w-1/3"
+                />
 
                 {/* Filters */}
                 <div className="flex items-center gap-2">
