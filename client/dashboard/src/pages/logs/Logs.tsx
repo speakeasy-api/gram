@@ -19,6 +19,21 @@ import { Icon } from "@speakeasy-api/moonshine";
 import { FileCode, SquareFunction } from "lucide-react";
 import { useState } from "react";
 
+function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
+  if (isSuccess) {
+    return (
+      <div style={{ color: "var(--fill-success-default, #5a8250)" }}>
+        <Icon name="check" className="items-center size-4 fill-success-default" />
+      </div>
+    );
+  }
+  return (
+    <div style={{ color: "var(--fill-destructive-default, #c83228)" }}>
+      <Icon name="x" className="size-4 fill-destructive-default" />
+    </div>
+  );
+}
+
 // Dummy data for logs (using real data structure)
 const DUMMY_LOGS = [
   {
@@ -267,15 +282,7 @@ export default function Logs() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center">
-                            {isSuccessfulCall(log) ? (
-                              <div style={{ color: "var(--fill-success-default, #5a8250)" }}>
-                                <Icon name="check" className="size-4" />
-                              </div>
-                            ) : (
-                              <div style={{ color: "var(--fill-destructive-default, #c83228)" }}>
-                                <Icon name="x" className="size-4" />
-                              </div>
-                            )}
+                            <StatusIcon isSuccess={isSuccessfulCall(log)} />
                           </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
