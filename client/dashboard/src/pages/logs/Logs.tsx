@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Icon } from "@speakeasy-api/moonshine";
 import { FileCode, SquareFunction } from "lucide-react";
 import { useState } from "react";
 
@@ -149,15 +150,14 @@ export default function Logs() {
     return toolUrn;
   };
 
-  const getStatusColor = (statusCode: number) => {
-    if (statusCode >= 200 && statusCode < 300) {
-      return "bg-success";
-    } else if (statusCode >= 400 && statusCode < 500) {
-      return "bg-warning";
-    } else if (statusCode >= 500) {
-      return "bg-destructive";
+  const isSuccessfulCall = (log: typeof DUMMY_LOGS[0]) => {
+    // For HTTP tools, check status code
+    if (log.httpMethod && log.statusCode) {
+      return log.statusCode >= 200 && log.statusCode < 300;
     }
-    return "bg-muted";
+    // For function tools, check success field (when available)
+    // For now, default to success for functions
+    return true;
   };
 
   const formatTimestamp = (date: Date) => {
@@ -247,7 +247,7 @@ export default function Logs() {
                   </TableHeader>
                   <TableBody>
                     {logs.map((log) => {
-                      const Icon = getToolIcon(log.toolUrn);
+                      const ToolIcon = getToolIcon(log.toolUrn);
                       const sourceName = getSourceFromUrn(log.toolUrn);
                       return (
                         <TableRow key={log.id}>
@@ -256,7 +256,7 @@ export default function Logs() {
                           </TableCell>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
-                              <Icon className="size-4 shrink-0" strokeWidth={1.5} />
+                              <ToolIcon className="size-4 shrink-0" strokeWidth={1.5} />
                               <span>{sourceName}</span>
                             </div>
                           </TableCell>
@@ -266,13 +266,12 @@ export default function Logs() {
                           </span>
                         </TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div
-                              className={`w-2 h-2 rounded-full ${getStatusColor(
-                                log.statusCode
-                              )}`}
-                            />
-                            <span className="text-sm">{log.statusCode}</span>
+                          <div className="flex items-center justify-center">
+                            {isSuccessfulCall(log) ? (
+                              <Icon name="check" className="text-success size-4" />
+                            ) : (
+                              <Icon name="x" className="text-destructive size-4" />
+                            )}
                           </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
