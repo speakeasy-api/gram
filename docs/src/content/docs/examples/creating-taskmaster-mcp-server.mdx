@@ -1,9 +1,9 @@
 ---
 title: "Creating an MCP server for Taskmaster"
 description: "Learn how to create a Gram-hosted MCP server for a CRUD API, such as Taskmaster."
-sidebar:
-  order: 5
 ---
+
+import { Callout } from "@/mdx/components";
 
 This guide walks you through creating a Gram-hosted MCP server for Taskmaster. You'll learn how to upload an OpenAPI document, create a toolset, configure authentication, and publish your MCP server.
 
@@ -11,9 +11,9 @@ This guide walks you through creating a Gram-hosted MCP server for Taskmaster. Y
 
 ## What is Taskmaster?
 
-:::note[Try it out]
+<Callout title="Try it out" type="info">
 You can try out Taskmaster [here](https://taskmaster-speakeasyapi.vercel.app/).
-:::
+</Callout>
 
 Taskmaster is a full-stack CRUD application for tasks and projects. It includes:
 
@@ -81,14 +81,14 @@ Before configuring environment variables, create an API key:
 - Give it a label and click **Create**.
 - Copy the API key. You will not be able to see it again.
 
-<video width="600" controls>
+<video width="600" muted={true} controls>
   <source src="/videos/creating-api-key-taskmaster.mp4" type="video/mp4" />
     Your browser does not support the video tag.
 </video>
 
 ## Configuring environment variables
 
-[Environments](/concepts/environments) store API keys and configuration separately from your toolset logic.
+[Environments](concepts/environments) store API keys and configuration separately from your toolset logic.
 
 In the **Environments** tab, click the **Default** environment. Click the three-dot menu in the top-right corner of the environment card, and in the dropdown, click **Fill for Toolset**. Select the **Taskmaster** toolset and click **Fill Variables** to automatically populate the required variables.
 
@@ -171,7 +171,7 @@ The authenticated server configuration looks something like this:
 
 Before connecting to external clients, test your setup by using the **Gram Playground** to verify that your tools are working correctly.
 
-<video width="600" controls>
+<video width="600" muted={true} controls>
   <source src="/videos/taskmaster-playground.mp4" type="video/mp4" />
     Your browser does not support the video tag.
 </video>
@@ -180,10 +180,10 @@ Before connecting to external clients, test your setup by using the **Gram Playg
 
 Your Taskmaster MCP server is now ready to use with any MCP client. You can connect it to:
 
-- [Claude Code](/clients/using-claude-code-with-gram-mcp-servers)
-- [Claude Desktop](/clients/using-claude-desktop-with-gram-mcp-server)  
-- [Your IDE](/clients/using-your-ide-with-gram-mcp-server)
-- [Cline](/clients/using-cline-with-gram-mcp-server)
+- [Claude Code](clients/using-claude-code-with-gram-mcp-servers)
+- [Claude Desktop](clients/using-claude-desktop-with-gram-mcp-server)  
+- [Your IDE](clients/using-your-ide-with-gram-mcp-server)
+- [Cline](clients/using-cline-with-gram-mcp-server)
 - Any other MCP-compatible client
 
 

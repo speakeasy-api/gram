@@ -10,6 +10,7 @@ Gram allows you to manage settings that control how users access your Gram-hoste
 ![Four MCP server configuration options showing combinations of public/private and passthrough/managed authentication](/img/guides/mcp-server-four-options.png)
 
 Common use cases for each combination:
+
 - **Public + Pass-through**: Production APIs where customers already have their own API keys
 - **Public + Managed**: Free trials or demos where you provide temporary access without exposing your API keys
 - **Private + Pass-through**: Internal tools where team members use their individual API credentials
@@ -21,14 +22,13 @@ Public servers are the easiest way to use Gram and are typically what you'd use 
 
 ![Example of a Gram-hosted MCP documentation page showing available tools and endpoints](/img/guides/gram-example-public-docs.png)
 
-Public servers also support [MCP Managed OAuth](/build-mcp/adding-oauth) for simplified authentication.
+Public servers also support [MCP Managed OAuth](host-mcp/adding-oauth) for simplified authentication.
 
 ## Private Servers
 
 Private servers require users to have a valid Gram API Key to access the MCP server. This is ideal for internal tools, development environments, or when you want to control who can discover and use your server. Private servers give you complete control over access while still benefiting from Gram's hosting and management features.
 
 With private servers, you cannot make the documentation page public. To grant access, create a Gram API key in your account settings and share it with the users who should have access to your server.
-
 
 # Pass-through Authentication vs. Managed Authentication
 
@@ -60,7 +60,7 @@ Pass-through authentication can be used with both public and private Gram server
 
 ## Managed Authentication
 
-Managed authentication lets you store API credentials centrally in Gram [environments](/concepts/environments), so users only need a Gram API key to access your server. This is perfect for demos, trials, or team scenarios where you want to provide easy access without exposing your actual API keys.
+Managed authentication lets you store API credentials centrally in Gram [environments](concepts/environments), so users only need a Gram API key to access your server. This is perfect for demos, trials, or team scenarios where you want to provide easy access without exposing your actual API keys.
 
 For example, you could give potential customers a temporary Gram API key to test your service. They get instant access to your tools without needing to sign up for your API or handle sensitive credentials directly. All the actual API keys and configuration stay securely stored in your Gram environment.
 
@@ -87,6 +87,6 @@ For example, you could give potential customers a temporary Gram API key to test
 
 The `Gram-Environment` header specifies which Gram environment to link - you can use different environments for development, staging, or production configurations.
 
-Before using managed authentication, use the [Playground](/build-mcp/test-toolsets#_top) to ensure your environment is properly configured with all required API keys. The Playground will automatically prompt you to create any missing keys with the correct names.
+Before using managed authentication, use the [Playground](build-mcp/test-toolsets#_top) to ensure your environment is properly configured with all required API keys. The Playground will automatically prompt you to create any missing keys with the correct names.
 
 You can also mix managed and pass-through authentication, using Gram environments for some credentials while letting users provide others directly.

@@ -11,9 +11,9 @@ Tool curation involves thinking like an agent-UX designer. It requires understan
 
 ## Understanding tools and toolsets
 
-**[Tools](/concepts/tool-definitions)** are individual callable actions. When uploading a [source](/concepts/tool-sources) to Gram, API operations and function bundles become tool definitions - a single action that an agent can invoke. For example, a CRM API's OpenAPI document might generate tools like `search_users`, `create_deal`, and `list_pipelines`, while a Gram Function could define custom workflow tools.
+**[Tools](concepts/tool-definitions)** are individual callable actions. When uploading a [source](concepts/tool-sources) to Gram, API operations and function bundles become tool definitions - a single action that an agent can invoke. For example, a CRM API's OpenAPI document might generate tools like `search_users`, `create_deal`, and `list_pipelines`, while a Gram Function could define custom workflow tools.
 
-**[Toolsets](/concepts/toolsets)** are curated bundles of tools organized around specific use cases or workflows. Rather than giving an agent access to every available tool, select only the ones needed to accomplish particular tasks. Think of toolsets as specialized toolkits — bring only the necessary tools for each job.
+**[Toolsets](concepts/toolsets)** are curated bundles of tools organized around specific use cases or workflows. Rather than giving an agent access to every available tool, select only the ones needed to accomplish particular tasks. Think of toolsets as specialized toolkits — bring only the necessary tools for each job.
 
 ## The tool curation challenge
 

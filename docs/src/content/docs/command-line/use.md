@@ -5,9 +5,9 @@ description: How to use the Gram CLI for deployments
 
 ## About
 
-The Gram CLI helps you manage [Deployments](/concepts/deployments) without leaving the command line.
+The Gram CLI helps you manage [Deployments](concepts/deployments) without leaving the command line.
 
-It can also integrate with CI/CD pipelines. See our [Deploy from GitHub Actions](/examples/deploy-from-github-actions) guide.
+It can also integrate with CI/CD pipelines. See our [Deploy from GitHub Actions](examples/deploy-from-github-actions) guide.
 
 ## Authentication
 
@@ -23,7 +23,7 @@ Then, inspect your current user information:
 gram whoami
 ```
 
-The first time you run `gram auth`, it will create and save a [Producer key](/concepts/api-keys#producer-keys) in your Gram dashboard.
+The first time you run `gram auth`, it will create and save a [Producer key](concepts/api-keys#producer-keys) in your Gram dashboard.
 
 ## Usage
 

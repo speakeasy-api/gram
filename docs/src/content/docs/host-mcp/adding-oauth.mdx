@@ -1,9 +1,9 @@
 ---
 title: Add OAuth to an MCP Server
 description: Configure authentication for MCP servers using different OAuth methods
-sidebar:
-  order: 3
 ---
+
+import { Callout } from "@/mdx/components";
 
 Starting March 2025, the MCP specification recommends OAuth-based authentication for MCP Servers. However, it's important to understand that **user-facing OAuth exchange is not actually a true requirement for an MCP server**. There are several valid approaches to authentication:
 
@@ -76,13 +76,13 @@ If your API uses the `clientCredentials` flow, Gram allows you to pass a client_
 
 ## Authorization Code
 
-:::tip[NOTE]
+<Callout title="Note" type="info">
 Placing Managed OAuth in front of a server is a Pro and Enterprise feature.
 
 An MCP Server must be marked `public` to attach Managed OAuth in front of it.
 
 Please [book in time with our team](https://calendly.com/sagar-speakeasy/30min) for white-glove service with proxy setup or DCR compliance. We'll get you up and running.
-:::
+</Callout>
 
 
 When the MCP spec refers to placing a user-facing OAuth flow in front of a server, it is typically referring to the `authorizationCode` flow.
@@ -134,7 +134,7 @@ The artifact you are able to produce should look something like this:
 
 Note: An MCP Client such as Claude will use the same client_id in perpetuity unless you explicitly provide a `client_secret_expires_at` value in your `/register` response. When implementing DCR, it is extremely important that you persist the client_ids you issue. MCP clients follow the OAuth specification precisely when it comes to retaining client_ids from DCR and they will not forget them when you uninstall a server!
 
-See our [guide](https://docs.getgram.ai/examples/oauth-external-server) on integrating a DCR compliant OAuth setup into a Gram MCP Server.
+See our [guide](examples/oauth-external-server) on integrating a DCR compliant OAuth setup into a Gram MCP Server.
 
 ## Summary
 

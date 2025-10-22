@@ -1,13 +1,13 @@
 ---
 title: "Quickstart ⭐"
 description: "Get started with Gram in three simple steps: create an MCP server, configure toolsets, and connect to AI agents."
-sidebar:
-  order: 2
 ---
+
+import { Callout } from "@/mdx/components";
 
 ## Creating and hosting an MCP server in three simple steps
 
-Gram takes your [source](/concepts/tool-sources) (OpenAPI document or Gram Function) and, in just three steps, generates a fully functional, scoped MCP server, ready to use across environments, teams, and agents.
+Gram takes your [source](concepts/tool-sources) (OpenAPI document or Gram Function) and, in just three steps, generates a fully functional, scoped MCP server, ready to use across environments, teams, and agents.
 
 ![Running MCP server with Gram](/img/blog/the-easiest-way-to-host-mcp-servers/gram-ai-hosting.png)
 
@@ -17,22 +17,22 @@ Let's see how easy it is to create an MCP server with Gram.
 
 ### Step 1: Create an MCP server
 
-First, upload a source. This quickstart uses an OpenAPI document as an example, but you can also upload [Gram Functions](/concepts/tool-sources#gram-functions) for custom tool logic.
+First, upload a source. This quickstart uses an OpenAPI document as an example, but you can also upload [Gram Functions](concepts/tool-sources#gram-functions) for custom tool logic.
 
-:::tip[NOTE]
+<Callout title="Note" type="info">
 The quality of your OpenAPI document directly impacts the quality of your MCP server. Learn about writing better OpenAPI documents in the [OpenAPI hub](https://www.speakeasy.com/openapi).
-:::
+</Callout>
 
-<video width="600" controls>
+<video width="600" muted={true} controls>
   <source src="/img/blog/concepts/add-openapi-spec.mp4" type="video/mp4" />
   Your browser does not support the video tag.
 </video>
 
 ### Step 2: Create a toolset
 
-A [toolset](https://docs.getgram.ai/concepts/toolsets) is a curated bundle of tools for a specific use case or team. In the Gram interface, you can select which tools to include and which to ignore based on your needs.
+A [toolset](concepts/toolsets) is a curated bundle of tools for a specific use case or team. In the Gram interface, you can select which tools to include and which to ignore based on your needs.
 
-<video width="600" controls>
+<video width="600" muted={true} controls>
   <source src="/img/blog/concepts/creating-a-toolset.mp4" type="video/mp4" />
   Your browser does not support the video tag.
 </video>
@@ -41,7 +41,7 @@ A [toolset](https://docs.getgram.ai/concepts/toolsets) is a curated bundle of to
 
 Click **Environments** in the sidebar, and then **+ New Environment**.
 
-<video width="600" controls>
+<video width="600" muted={true} controls>
   <source src="/img/blog/concepts/creating-environment.mp4" type="video/mp4" />
   Your browser does not support the video tag.
 </video>
@@ -120,4 +120,4 @@ Gram also offers:
 - Custom domains for distribution
 - Integrations with popular platforms like Slack and GitHub
 
-[Try Gram now](https://getgram.ai/) and see how easy it is to host and share your MCP server.
+[Try Gram now](/product/gram) and see how easy it is to host and share your MCP server.

@@ -1,9 +1,9 @@
 ---
 title: Toolsets
 description: Organize your agentic tools into cohesive sets that help agents solve specific problems
-sidebar:
-  order: 1
 ---
+
+import { Callout } from "@/mdx/components";
 
 Giving an LLM access to too many tools can exhaust the context window, which may prevent agents from functioning properly or cause the LLM to choose the wrong tools.
 
@@ -15,9 +15,9 @@ You can also use toolsets to scope separate toolsets for different teams, for ex
 
 ![Toolsets](/img/concepts/toolsets/toolsets-listing.png)
 
-:::tip[Good to know]
+<Callout title="Good to know" type="info">
 Certain language models place a hard cap on the total number of tools that can be passed to them in a chat completion call.
-:::
+</Callout>
 
 ## Designing effective toolsets
 
@@ -25,7 +25,7 @@ When creating a toolset, start by identifying the specific task you want an LLM 
 
 To ensure your toolsets are LLM-friendly:
 
-- Refine tool names and descriptions using Gram's [tool-variations](/concepts/tool-variations) feature to improve clarity and usability for the LLM.
+- Refine tool names and descriptions using Gram's [tool-variations](concepts/tool-variations) feature to improve clarity and usability for the LLM.
 - Keep toolsets focused by including only what's needed for the task. Avoid unrelated tools that may confuse the agent.
 
 ## Experimenting with toolsets

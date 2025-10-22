@@ -5,7 +5,7 @@ sidebar:
   order: 4
 ---
 
-[LangChain](https://www.langchain.com/) and [LangGraph](https://www.langchain.com/langgraph) support MCP servers through the `langchain-mcp-adapters` library, which allows you to give your LangChain agents and LangGraph workflows direct access to your tools and infrastructure by connecting to [Gram-hosted MCP servers](/gram-quickstart).
+[LangChain](https://www.langchain.com/) and [LangGraph](https://www.langchain.com/langgraph) support MCP servers through the `langchain-mcp-adapters` library, which allows you to give your LangChain agents and LangGraph workflows direct access to your tools and infrastructure by connecting to [Gram-hosted MCP servers](gram-quickstart).
 
 This guide demonstrates how to connect LangChain to a Gram-hosted MCP server using an example [Push Advisor API](https://github.com/ritza-co/gram-examples/blob/main/push-advisor-api/openapi.yaml). You'll learn how to create an MCP server from an OpenAPI document, set up the connection, configure authentication, and use natural language to query the example API.
 
@@ -22,7 +22,7 @@ You'll need:
 
 ## Creating a Gram MCP server
 
-If you already have a Gram MCP server configured, you can skip to [connecting LangChain to your Gram-hosted MCP server](#connecting-langchain-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and to creating a Gram-hosted MCP server, check out our [introduction to Gram](/introduction).
+If you already have a Gram MCP server configured, you can skip to [connecting LangChain to your Gram-hosted MCP server](#connecting-langchain-to-your-gram-hosted-mcp-server). For an in-depth guide to how Gram works and to creating a Gram-hosted MCP server, check out our [introduction to Gram](introduction).
 
 ### Setting up a new Gram project
 
@@ -34,7 +34,7 @@ Follow the steps to configure a toolset and publish an MCP server. At the end of
 
 For this guide, we'll use the public server URL `https://app.getgram.ai/mcp/canipushtoprod`
 
-For authenticated servers, you'll need an API key. [Generate an API key](/concepts/api-keys) in the **Settings** tab.
+For authenticated servers, you'll need an API key. [Generate an API key](concepts/api-keys) in the **Settings** tab.
 
 ## Connecting LangChain to your Gram-hosted MCP server
 
@@ -642,4 +642,4 @@ You now have LangChain and LangGraph connected to your Gram-hosted MCP server, g
 
 LangChain's powerful abstractions for agents, chains, and workflows, combined with MCP tools, enable you to build sophisticated AI applications that can interact with your infrastructure.
 
-Ready to build your own MCP server? [Try Gram today](https://getgram.ai) and see how easy it is to turn any API into agent-ready tools that work with LangChain and all major AI frameworks.
+Ready to build your own MCP server? [Try Gram today](/product/gram) and see how easy it is to turn any API into agent-ready tools that work with LangChain and all major AI frameworks.
