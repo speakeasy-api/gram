@@ -19,7 +19,6 @@ import {
   AlertTriangleIcon,
   ChartNoAxesCombinedIcon,
   MinusIcon,
-  TestTubeDiagonal,
 } from "lucide-react";
 import * as React from "react";
 import { FeatureRequestModal } from "./FeatureRequestModal";
@@ -31,7 +30,6 @@ import { Type } from "./ui/type";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
-  const [evalsModalOpen, setEvalsModalOpen] = React.useState(false);
 
   const topNavGroups = {
     create: [routes.toolsets, routes.customTools, routes.prompts],
@@ -81,8 +79,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarMenuItem>
                 <NavButton
                   title="Logs"
-                  Icon={TestTubeDiagonal}
-                  onClick={() => setEvalsModalOpen(true)}
+                  Icon={routes.logs.Icon}
+                  href={routes.logs.href()}
+                  active={routes.logs.active}
                 />
               </SidebarMenuItem>
             </SidebarMenu>
@@ -105,14 +104,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         description="Metrics are coming soon! We'll let you know when this feature is available."
         actionType="metrics"
         icon={ChartNoAxesCombinedIcon}
-      />
-      <FeatureRequestModal
-        isOpen={evalsModalOpen}
-        onClose={() => setEvalsModalOpen(false)}
-        title="Logs Coming Soon"
-        description="Logs are coming soon! We'll let you know when this feature is available."
-        actionType="evals"
-        icon={TestTubeDiagonal}
       />
     </Sidebar>
   );
