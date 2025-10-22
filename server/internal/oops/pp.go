@@ -115,7 +115,7 @@ func (e *ShareableError) LogValue() slog.Value {
 func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
 	span := trace.SpanFromContext(ctx)
 	span.SetStatus(codes.Error, e.String())
-	span.RecordError(e)
+	span.RecordError(e, trace.WithStackTrace(true))
 
 	var pcs [1]uintptr
 	runtime.Callers(2, pcs[:]) // skip [Callers, Log]
