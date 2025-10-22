@@ -109,23 +109,24 @@ func handleToolsCall(
 		}
 
 		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
-			OrganizationID:   toolset.OrganizationID,
-			RequestBytes:     requestBytes,
-			OutputBytes:      outputBytes,
-			ToolID:           higherOrderTool.ID,
-			ToolName:         higherOrderTool.Name,
-			Type:             billing.ToolCallTypeHigherOrder,
-			ProjectID:        payload.projectID.String(),
-			ToolsetSlug:      &payload.toolset,
-			ToolsetID:        &toolset.ID,
-			MCPURL:           &mcpURL,
-			MCPSessionID:     &payload.sessionID,
-			ProjectSlug:      nil, // This data is only there for debugging, but we don't have it here
-			OrganizationSlug: nil,
-			ChatID:           nil,
-			ResourceURI:      "",
-			FunctionCPUUsage: nil,
-			FunctionMemUsage: nil,
+			OrganizationID:        toolset.OrganizationID,
+			RequestBytes:          requestBytes,
+			OutputBytes:           outputBytes,
+			ToolID:                higherOrderTool.ID,
+			ToolName:              higherOrderTool.Name,
+			Type:                  billing.ToolCallTypeHigherOrder,
+			ProjectID:             payload.projectID.String(),
+			ToolsetSlug:           &payload.toolset,
+			ToolsetID:             &toolset.ID,
+			MCPURL:                &mcpURL,
+			MCPSessionID:          &payload.sessionID,
+			ProjectSlug:           nil, // This data is only there for debugging, but we don't have it here
+			OrganizationSlug:      nil,
+			ChatID:                nil,
+			ResourceURI:           "",
+			FunctionCPUUsage:      nil,
+			FunctionMemUsage:      nil,
+			FunctionExecutionTime: nil,
 		})
 
 		return formatHigherOrderToolResult(ctx, logger, req, promptData)
@@ -195,6 +196,7 @@ func handleToolsCall(
 	var outputBytes int64
 	var functionCPU *float64
 	var functionMem *float64
+	var functionsExecutionTime *float64
 
 	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
 	if err != nil {
@@ -203,23 +205,24 @@ func handleToolsCall(
 
 	defer func() {
 		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
-			OrganizationID:   toolset.OrganizationID,
-			RequestBytes:     requestBytes,
-			OutputBytes:      outputBytes,
-			ToolID:           conv.ToBaseTool(tool).ID,
-			ToolName:         params.Name,
-			ProjectID:        payload.projectID.String(),
-			ProjectSlug:      &descriptor.ProjectSlug,
-			OrganizationSlug: &descriptor.OrganizationSlug,
-			ToolsetSlug:      &payload.toolset,
-			ToolsetID:        &toolset.ID,
-			MCPURL:           &mcpURL,
-			MCPSessionID:     &payload.sessionID,
-			ChatID:           nil,
-			Type:             plan.BillingType,
-			ResourceURI:      "",
-			FunctionCPUUsage: functionCPU,
-			FunctionMemUsage: functionMem,
+			OrganizationID:        toolset.OrganizationID,
+			RequestBytes:          requestBytes,
+			OutputBytes:           outputBytes,
+			ToolID:                conv.ToBaseTool(tool).ID,
+			ToolName:              params.Name,
+			ProjectID:             payload.projectID.String(),
+			ProjectSlug:           &descriptor.ProjectSlug,
+			OrganizationSlug:      &descriptor.OrganizationSlug,
+			ToolsetSlug:           &payload.toolset,
+			ToolsetID:             &toolset.ID,
+			MCPURL:                &mcpURL,
+			MCPSessionID:          &payload.sessionID,
+			ChatID:                nil,
+			Type:                  plan.BillingType,
+			ResourceURI:           "",
+			FunctionCPUUsage:      functionCPU,
+			FunctionMemUsage:      functionMem,
+			FunctionExecutionTime: functionsExecutionTime,
 		})
 	}()
 
@@ -240,6 +243,11 @@ func handleToolsCall(
 	if memStr := rw.headers.Get(functions.FunctionsMemoryHeader); memStr != "" {
 		if mem, err := strconv.ParseFloat(memStr, 64); err == nil {
 			functionMem = &mem
+		}
+	}
+	if execTimeStr := rw.headers.Get(functions.FunctionsExecutionTimeHeader); execTimeStr != "" {
+		if execTime, err := strconv.ParseFloat(execTimeStr, 64); err == nil {
+			functionsExecutionTime = &execTime
 		}
 	}
 

@@ -98,6 +98,7 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
 	}
 
+	startTime := time.Now()
 	err = cmd.Start()
 	if err != nil {
 		return svc.NewPermanentError(
@@ -167,7 +168,7 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 
 	// Announce trailers for resource usage metrics
 	// We currently have to write these after WriteHeader
-	w.Header().Set("Trailer", cpuHeader+", "+memoryHeader)
+	w.Header().Set("Trailer", cpuHeader+", "+memoryHeader+", "+executionTimeHeader)
 
 	w.WriteHeader(response.StatusCode)
 	if _, err := io.Copy(w, response.Body); err != nil {
@@ -175,8 +176,11 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 	}
 
 	err = cmd.Wait()
+	executionTime := time.Since(startTime).Seconds()
 
 	// Write resource usage as trailers after response body is sent
+	w.Header().Set(executionTimeHeader, fmt.Sprintf("%.2f", executionTime))
+
 	if cmd.ProcessState != nil {
 		sysUsage := cmd.ProcessState.SysUsage()
 		if usage, ok := sysUsage.(*syscall.Rusage); ok {

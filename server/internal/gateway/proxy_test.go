@@ -1483,7 +1483,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 		// Set required invocation ID header
 		w.Header().Set("Gram-Invoke-ID", invocationID.String())
 		// Announce trailers
-		w.Header().Set("Trailer", functions.FunctionsCPUHeader+", "+functions.FunctionsMemoryHeader)
+		w.Header().Set("Trailer", functions.FunctionsCPUHeader+", "+functions.FunctionsMemoryHeader+", "+functions.FunctionsExecutionTimeHeader)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
@@ -1493,6 +1493,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 		// Set trailer values (after body is written)
 		w.Header().Set(functions.FunctionsCPUHeader, "1.23")
 		w.Header().Set(functions.FunctionsMemoryHeader, "5678900")
+		w.Header().Set(functions.FunctionsExecutionTimeHeader, "2.50")
 	}))
 	defer mockServer.Close()
 

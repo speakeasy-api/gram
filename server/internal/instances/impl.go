@@ -342,6 +342,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	// Extract function metrics from headers (originally trailers from functions runner)
 	var functionCPU *float64
 	var functionMem *float64
+	var functionsExecutionTime *float64
 	if cpuStr := interceptor.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
 		if cpu, err := strconv.ParseFloat(cpuStr, 64); err == nil {
 			functionCPU = &cpu
@@ -350,6 +351,11 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	if memStr := interceptor.headers.Get(functions.FunctionsMemoryHeader); memStr != "" {
 		if mem, err := strconv.ParseFloat(memStr, 64); err == nil {
 			functionMem = &mem
+		}
+	}
+	if execTimeStr := interceptor.headers.Get(functions.FunctionsExecutionTimeHeader); execTimeStr != "" {
+		if execTime, err := strconv.ParseFloat(execTimeStr, 64); err == nil {
+			functionsExecutionTime = &execTime
 		}
 	}
 
@@ -364,23 +370,24 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 	toolName := descriptor.Name
 	go s.tracking.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
-		OrganizationID:   organizationID,
-		RequestBytes:     requestNumBytes,
-		OutputBytes:      outputNumBytes,
-		ToolID:           toolID,
-		ToolName:         toolName,
-		ProjectID:        authCtx.ProjectID.String(),
-		ProjectSlug:      authCtx.ProjectSlug,
-		Type:             plan.BillingType,
-		OrganizationSlug: &descriptor.OrganizationSlug,
-		ToolsetSlug:      &toolsetSlug,
-		ChatID:           &chatID,
-		ToolsetID:        toolsetID,
-		MCPURL:           nil, // Not applicable for direct tool calls
-		MCPSessionID:     nil, // Not applicable for direct tool calls
-		ResourceURI:      "",
-		FunctionCPUUsage: functionCPU,
-		FunctionMemUsage: functionMem,
+		OrganizationID:        organizationID,
+		RequestBytes:          requestNumBytes,
+		OutputBytes:           outputNumBytes,
+		ToolID:                toolID,
+		ToolName:              toolName,
+		ProjectID:             authCtx.ProjectID.String(),
+		ProjectSlug:           authCtx.ProjectSlug,
+		Type:                  plan.BillingType,
+		OrganizationSlug:      &descriptor.OrganizationSlug,
+		ToolsetSlug:           &toolsetSlug,
+		ChatID:                &chatID,
+		ToolsetID:             toolsetID,
+		MCPURL:                nil, // Not applicable for direct tool calls
+		MCPSessionID:          nil, // Not applicable for direct tool calls
+		ResourceURI:           "",
+		FunctionCPUUsage:      functionCPU,
+		FunctionMemUsage:      functionMem,
+		FunctionExecutionTime: functionsExecutionTime,
 	})
 
 	return nil

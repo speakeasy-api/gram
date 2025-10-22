@@ -13,23 +13,24 @@ const (
 )
 
 type ToolCallUsageEvent struct {
-	OrganizationID   string
-	RequestBytes     int64
-	OutputBytes      int64
-	ToolID           string
-	ToolName         string
-	ResourceURI      string
-	ProjectID        string
-	ProjectSlug      *string
-	OrganizationSlug *string
-	ToolsetSlug      *string
-	ChatID           *string
-	MCPURL           *string
-	Type             ToolCallType
-	ToolsetID        *string
-	MCPSessionID     *string
-	FunctionCPUUsage *float64
-	FunctionMemUsage *float64
+	OrganizationID        string
+	RequestBytes          int64
+	OutputBytes           int64
+	ToolID                string
+	ToolName              string
+	ResourceURI           string
+	ProjectID             string
+	ProjectSlug           *string
+	OrganizationSlug      *string
+	ToolsetSlug           *string
+	ChatID                *string
+	MCPURL                *string
+	Type                  ToolCallType
+	ToolsetID             *string
+	MCPSessionID          *string
+	FunctionCPUUsage      *float64
+	FunctionMemUsage      *float64
+	FunctionExecutionTime *float64
 }
 
 type PromptCallUsageEvent struct {

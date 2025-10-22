@@ -113,6 +113,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	var outputBytes int64
 	var functionCPU *float64
 	var functionMem *float64
+	var functionsExecutionTime *float64
 
 	mcpURL := payload.sessionID
 	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
@@ -123,23 +124,24 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	defer func() {
 		// for billing purposes we still treat fetching a resource as a type of tool call right now
 		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
-			OrganizationID:   toolset.OrganizationID,
-			RequestBytes:     requestBytes,
-			OutputBytes:      outputBytes,
-			ToolID:           descriptor.ID,
-			ToolName:         resourceName,
-			ResourceURI:      plan.Descriptor.URI,
-			ProjectID:        payload.projectID.String(),
-			ProjectSlug:      &descriptor.ProjectSlug,
-			OrganizationSlug: &descriptor.OrganizationSlug,
-			ToolsetSlug:      &payload.toolset,
-			ToolsetID:        &toolset.ID,
-			MCPURL:           &mcpURL,
-			MCPSessionID:     &payload.sessionID,
-			ChatID:           nil,
-			Type:             plan.BillingType,
-			FunctionCPUUsage: functionCPU,
-			FunctionMemUsage: functionMem,
+			OrganizationID:        toolset.OrganizationID,
+			RequestBytes:          requestBytes,
+			OutputBytes:           outputBytes,
+			ToolID:                descriptor.ID,
+			ToolName:              resourceName,
+			ResourceURI:           plan.Descriptor.URI,
+			ProjectID:             payload.projectID.String(),
+			ProjectSlug:           &descriptor.ProjectSlug,
+			OrganizationSlug:      &descriptor.OrganizationSlug,
+			ToolsetSlug:           &payload.toolset,
+			ToolsetID:             &toolset.ID,
+			MCPURL:                &mcpURL,
+			MCPSessionID:          &payload.sessionID,
+			ChatID:                nil,
+			Type:                  plan.BillingType,
+			FunctionCPUUsage:      functionCPU,
+			FunctionMemUsage:      functionMem,
+			FunctionExecutionTime: functionsExecutionTime,
 		})
 	}()
 
@@ -160,6 +162,12 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	if memStr := rw.headers.Get(functions.FunctionsMemoryHeader); memStr != "" {
 		if mem, err := strconv.ParseFloat(memStr, 64); err == nil {
 			functionMem = &mem
+		}
+	}
+
+	if execTimeStr := rw.headers.Get(functions.FunctionsExecutionTimeHeader); execTimeStr != "" {
+		if execTime, err := strconv.ParseFloat(execTimeStr, 64); err == nil {
+			functionsExecutionTime = &execTime
 		}
 	}
 
