@@ -166,12 +166,17 @@ func (s *Service) Callback(ctx context.Context, payload *gen.CallbackPayload) (r
 		}
 	}
 
-	if _, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
+	orgMetadata, err := s.orgRepo.UpsertOrganizationMetadata(ctx, orgRepo.UpsertOrganizationMetadataParams{
 		ID:   activeOrg.ID,
 		Name: activeOrg.Name,
 		Slug: activeOrg.Slug,
-	}); err != nil {
+	})
+	if err != nil {
 		return redirectWithError(authErrInit, err)
+	}
+
+	if orgMetadata.DisabledAt.Valid {
+		return redirectWithError(authErrInit, errors.New("this organization is disabled, please reach out to support@speakeasy.com for more information"))
 	}
 
 	session.ActiveOrganizationID = activeOrg.ID
