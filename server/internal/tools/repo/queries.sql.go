@@ -84,14 +84,16 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  function_tool_definitions.id, function_tool_definitions.tool_urn, function_tool_definitions.project_id, function_tool_definitions.deployment_id, function_tool_definitions.function_id, function_tool_definitions.runtime, function_tool_definitions.name, function_tool_definitions.description, function_tool_definitions.input_schema, function_tool_definitions.variables, function_tool_definitions.created_at, function_tool_definitions.updated_at, function_tool_definitions.deleted_at, function_tool_definitions.deleted,
-  (select id from deployment) as owning_deployment_id
-FROM function_tool_definitions
+  ftd.id, ftd.tool_urn, ftd.project_id, ftd.deployment_id, ftd.function_id, ftd.runtime, ftd.name, ftd.description, ftd.input_schema, ftd.variables, ftd.created_at, ftd.updated_at, ftd.deleted_at, ftd.deleted,
+  (select id from deployment) as owning_deployment_id,
+  df.asset_id
+FROM function_tool_definitions ftd
+LEFT JOIN deployments_functions df ON ftd.function_id = df.id
 WHERE
-  function_tool_definitions.deployment_id = (SELECT id FROM deployment)
-  AND function_tool_definitions.deleted IS FALSE
-  AND function_tool_definitions.tool_urn = ANY ($1::text[])
-ORDER BY function_tool_definitions.id DESC
+  ftd.deployment_id = (SELECT id FROM deployment)
+  AND ftd.deleted IS FALSE
+  AND ftd.tool_urn = ANY ($1::text[])
+ORDER BY ftd.id DESC
 `
 
 type FindFunctionToolsByUrnParams struct {
@@ -102,6 +104,7 @@ type FindFunctionToolsByUrnParams struct {
 type FindFunctionToolsByUrnRow struct {
 	FunctionToolDefinition FunctionToolDefinition
 	OwningDeploymentID     uuid.UUID
+	AssetID                uuid.NullUUID
 }
 
 func (q *Queries) FindFunctionToolsByUrn(ctx context.Context, arg FindFunctionToolsByUrnParams) ([]FindFunctionToolsByUrnRow, error) {
@@ -129,6 +132,7 @@ func (q *Queries) FindFunctionToolsByUrn(ctx context.Context, arg FindFunctionTo
 			&i.FunctionToolDefinition.DeletedAt,
 			&i.FunctionToolDefinition.Deleted,
 			&i.OwningDeploymentID,
+			&i.AssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -226,6 +230,7 @@ external_deployments AS (
 SELECT 
   http_tool_definitions.id, http_tool_definitions.tool_urn, http_tool_definitions.project_id, http_tool_definitions.deployment_id, http_tool_definitions.openapiv3_document_id, http_tool_definitions.confirm, http_tool_definitions.confirm_prompt, http_tool_definitions.summarizer, http_tool_definitions.name, http_tool_definitions.untruncated_name, http_tool_definitions.summary, http_tool_definitions.description, http_tool_definitions.openapiv3_operation, http_tool_definitions.tags, http_tool_definitions.x_gram, http_tool_definitions.original_name, http_tool_definitions.original_summary, http_tool_definitions.original_description, http_tool_definitions.server_env_var, http_tool_definitions.default_server_url, http_tool_definitions.security, http_tool_definitions.http_method, http_tool_definitions.path, http_tool_definitions.schema_version, http_tool_definitions.schema, http_tool_definitions.header_settings, http_tool_definitions.query_settings, http_tool_definitions.path_settings, http_tool_definitions.request_content_type, http_tool_definitions.response_filter, http_tool_definitions.created_at, http_tool_definitions.updated_at, http_tool_definitions.deleted_at, http_tool_definitions.deleted,
   (select id from deployment) as owning_deployment_id,
+  doa.asset_id,
   (CASE
     WHEN http_tool_definitions.project_id = $1 THEN ''
     WHEN packages.id IS NOT NULL THEN packages.name
@@ -233,6 +238,7 @@ SELECT
   END) as package_name
 FROM http_tool_definitions
 LEFT JOIN packages ON http_tool_definitions.project_id = packages.project_id
+LEFT JOIN deployments_openapiv3_assets doa ON http_tool_definitions.openapiv3_document_id = doa.id
 WHERE
   http_tool_definitions.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
   AND http_tool_definitions.deleted IS FALSE
@@ -248,6 +254,7 @@ type FindHttpToolsByUrnParams struct {
 type FindHttpToolsByUrnRow struct {
 	HttpToolDefinition HttpToolDefinition
 	OwningDeploymentID uuid.UUID
+	AssetID            uuid.NullUUID
 	PackageName        string
 }
 
@@ -296,6 +303,7 @@ func (q *Queries) FindHttpToolsByUrn(ctx context.Context, arg FindHttpToolsByUrn
 			&i.HttpToolDefinition.DeletedAt,
 			&i.HttpToolDefinition.Deleted,
 			&i.OwningDeploymentID,
+			&i.AssetID,
 			&i.PackageName,
 		); err != nil {
 			return nil, err
@@ -437,7 +445,7 @@ third_party AS (
     AND htd.id = $1
     AND NOT EXISTS(SELECT 1 FROM first_party)
   LIMIT 1
-)
+  )
 SELECT id, tool_urn, project_id, deployment_id, openapiv3_document_id, confirm, confirm_prompt, summarizer, name, untruncated_name, summary, description, openapiv3_operation, tags, x_gram, original_name, original_summary, original_description, server_env_var, default_server_url, security, http_method, path, schema_version, schema, header_settings, query_settings, path_settings, request_content_type, response_filter, created_at, updated_at, deleted_at, deleted
 FROM http_tool_definitions
 WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party))
@@ -631,9 +639,11 @@ SELECT
   ftd.variables,
   ftd.runtime,
   ftd.function_id,
+  df.asset_id,
   ftd.created_at,
   ftd.updated_at
 FROM function_tool_definitions ftd
+LEFT JOIN deployments_functions df ON ftd.function_id = df.id
 WHERE
   ftd.deployment_id = (SELECT id FROM deployment)
   AND ftd.deleted IS FALSE
@@ -659,6 +669,7 @@ type ListFunctionToolsRow struct {
 	Variables    []byte
 	Runtime      string
 	FunctionID   uuid.UUID
+	AssetID      uuid.NullUUID
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 }
@@ -690,6 +701,7 @@ func (q *Queries) ListFunctionTools(ctx context.Context, arg ListFunctionToolsPa
 			&i.Variables,
 			&i.Runtime,
 			&i.FunctionID,
+			&i.AssetID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -725,7 +737,7 @@ all_deployment_ids AS (
     JOIN deployments_packages dp ON dp.deployment_id = d.id
     JOIN package_versions pv ON dp.version_id = pv.id
 )
-SELECT 
+SELECT
   (SELECT id FROM deployment) as deployment_id,
   htd.id,
   htd.tool_urn,
@@ -738,6 +750,7 @@ SELECT
   htd.summarizer,
   htd.response_filter,
   htd.path,
+  doa.asset_id,
   htd.openapiv3_document_id,
   htd.openapiv3_operation,
   htd.schema_version,
@@ -754,6 +767,7 @@ SELECT
   END) as package_name
 FROM http_tool_definitions htd
 LEFT JOIN packages ON htd.project_id = packages.project_id
+LEFT JOIN deployments_openapiv3_assets doa ON htd.openapiv3_document_id = doa.id
 WHERE
   htd.deployment_id IN (SELECT id FROM all_deployment_ids)
   AND htd.deleted IS FALSE
@@ -782,6 +796,7 @@ type ListHttpToolsRow struct {
 	Summarizer          pgtype.Text
 	ResponseFilter      *models.ResponseFilter
 	Path                string
+	AssetID             uuid.NullUUID
 	Openapiv3DocumentID uuid.NullUUID
 	Openapiv3Operation  pgtype.Text
 	SchemaVersion       string
@@ -824,6 +839,7 @@ func (q *Queries) ListHttpTools(ctx context.Context, arg ListHttpToolsParams) ([
 			&i.Summarizer,
 			&i.ResponseFilter,
 			&i.Path,
+			&i.AssetID,
 			&i.Openapiv3DocumentID,
 			&i.Openapiv3Operation,
 			&i.SchemaVersion,

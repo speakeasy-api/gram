@@ -23,7 +23,7 @@ all_deployment_ids AS (
     JOIN deployments_packages dp ON dp.deployment_id = d.id
     JOIN package_versions pv ON dp.version_id = pv.id
 )
-SELECT 
+SELECT
   (SELECT id FROM deployment) as deployment_id,
   htd.id,
   htd.tool_urn,
@@ -36,6 +36,7 @@ SELECT
   htd.summarizer,
   htd.response_filter,
   htd.path,
+  doa.asset_id,
   htd.openapiv3_document_id,
   htd.openapiv3_operation,
   htd.schema_version,
@@ -52,6 +53,7 @@ SELECT
   END) as package_name
 FROM http_tool_definitions htd
 LEFT JOIN packages ON htd.project_id = packages.project_id
+LEFT JOIN deployments_openapiv3_assets doa ON htd.openapiv3_document_id = doa.id
 WHERE
   htd.deployment_id IN (SELECT id FROM all_deployment_ids)
   AND htd.deleted IS FALSE
@@ -78,6 +80,7 @@ external_deployments AS (
 SELECT 
   sqlc.embed(http_tool_definitions),
   (select id from deployment) as owning_deployment_id,
+  doa.asset_id,
   (CASE
     WHEN http_tool_definitions.project_id = @project_id THEN ''
     WHEN packages.id IS NOT NULL THEN packages.name
@@ -85,6 +88,7 @@ SELECT
   END) as package_name
 FROM http_tool_definitions
 LEFT JOIN packages ON http_tool_definitions.project_id = packages.project_id
+LEFT JOIN deployments_openapiv3_assets doa ON http_tool_definitions.openapiv3_document_id = doa.id
 WHERE
   http_tool_definitions.deployment_id = ANY (SELECT id FROM deployment UNION ALL SELECT id FROM external_deployments)
   AND http_tool_definitions.deleted IS FALSE
@@ -153,7 +157,7 @@ third_party AS (
     AND htd.id = @id
     AND NOT EXISTS(SELECT 1 FROM first_party)
   LIMIT 1
-)
+  )
 SELECT *
 FROM http_tool_definitions
 WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party));
@@ -185,9 +189,11 @@ SELECT
   ftd.variables,
   ftd.runtime,
   ftd.function_id,
+  df.asset_id,
   ftd.created_at,
   ftd.updated_at
 FROM function_tool_definitions ftd
+LEFT JOIN deployments_functions df ON ftd.function_id = df.id
 WHERE
   ftd.deployment_id = (SELECT id FROM deployment)
   AND ftd.deleted IS FALSE
@@ -206,14 +212,16 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  sqlc.embed(function_tool_definitions),
-  (select id from deployment) as owning_deployment_id
-FROM function_tool_definitions
+  sqlc.embed(ftd),
+  (select id from deployment) as owning_deployment_id,
+  df.asset_id
+FROM function_tool_definitions ftd
+LEFT JOIN deployments_functions df ON ftd.function_id = df.id
 WHERE
-  function_tool_definitions.deployment_id = (SELECT id FROM deployment)
-  AND function_tool_definitions.deleted IS FALSE
-  AND function_tool_definitions.tool_urn = ANY (@urns::text[])
-ORDER BY function_tool_definitions.id DESC;
+  ftd.deployment_id = (SELECT id FROM deployment)
+  AND ftd.deleted IS FALSE
+  AND ftd.tool_urn = ANY (@urns::text[])
+ORDER BY ftd.id DESC;
 
 -- name: FindFunctionToolEntriesByUrn :many
 WITH deployment AS (

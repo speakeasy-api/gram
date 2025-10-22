@@ -233,6 +233,8 @@ type ToolResponseBody struct {
 type HTTPToolDefinitionResponseBody struct {
 	// The ID of the deployment
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// The ID of the asset
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
 	// Summary of the tool
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// Response filter metadata for the tool
@@ -344,6 +346,8 @@ type ToolVariationResponseBody struct {
 type FunctionToolDefinitionResponseBody struct {
 	// The ID of the deployment
 	DeploymentID *string `form:"deployment_id,omitempty" json:"deployment_id,omitempty" xml:"deployment_id,omitempty"`
+	// The ID of the asset
+	AssetID *string `form:"asset_id,omitempty" json:"asset_id,omitempty" xml:"asset_id,omitempty"`
 	// The ID of the function
 	FunctionID *string `form:"function_id,omitempty" json:"function_id,omitempty" xml:"function_id,omitempty"`
 	// Runtime environment (e.g., nodejs:22, python:3.12)
@@ -1029,6 +1033,9 @@ func ValidateHTTPToolDefinitionResponseBody(body *HTTPToolDefinitionResponseBody
 	if body.DeploymentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
 	}
+	if body.AssetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("asset_id", "body"))
+	}
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
@@ -1136,6 +1143,9 @@ func ValidateToolVariationResponseBody(body *ToolVariationResponseBody) (err err
 func ValidateFunctionToolDefinitionResponseBody(body *FunctionToolDefinitionResponseBody) (err error) {
 	if body.DeploymentID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("deployment_id", "body"))
+	}
+	if body.AssetID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("asset_id", "body"))
 	}
 	if body.FunctionID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("function_id", "body"))

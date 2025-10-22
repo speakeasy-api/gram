@@ -277,6 +277,7 @@ func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTT
 	}
 	res := &HTTPToolDefinitionResponseBody{
 		DeploymentID:        v.DeploymentID,
+		AssetID:             v.AssetID,
 		Summary:             v.Summary,
 		Openapiv3DocumentID: v.Openapiv3DocumentID,
 		Openapiv3Operation:  v.Openapiv3Operation,
@@ -400,6 +401,7 @@ func marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody(v *t
 	}
 	res := &FunctionToolDefinitionResponseBody{
 		DeploymentID:  v.DeploymentID,
+		AssetID:       v.AssetID,
 		FunctionID:    v.FunctionID,
 		Runtime:       v.Runtime,
 		Variables:     v.Variables,

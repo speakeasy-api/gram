@@ -25,6 +25,10 @@ import {
  */
 export type FunctionToolDefinition = {
   /**
+   * The ID of the asset
+   */
+  assetId: string;
+  /**
    * The original details of a tool
    */
   canonical?: CanonicalToolAttributes | undefined;
@@ -105,6 +109,7 @@ export const FunctionToolDefinition$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  asset_id: z.string(),
   canonical: CanonicalToolAttributes$inboundSchema.optional(),
   canonical_name: z.string(),
   confirm: z.string().optional(),
@@ -126,6 +131,7 @@ export const FunctionToolDefinition$inboundSchema: z.ZodType<
   variation: ToolVariation$inboundSchema.optional(),
 }).transform((v) => {
   return remap$(v, {
+    "asset_id": "assetId",
     "canonical_name": "canonicalName",
     "confirm_prompt": "confirmPrompt",
     "created_at": "createdAt",
@@ -140,6 +146,7 @@ export const FunctionToolDefinition$inboundSchema: z.ZodType<
 
 /** @internal */
 export type FunctionToolDefinition$Outbound = {
+  asset_id: string;
   canonical?: CanonicalToolAttributes$Outbound | undefined;
   canonical_name: string;
   confirm?: string | undefined;
@@ -167,6 +174,7 @@ export const FunctionToolDefinition$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   FunctionToolDefinition
 > = z.object({
+  assetId: z.string(),
   canonical: CanonicalToolAttributes$outboundSchema.optional(),
   canonicalName: z.string(),
   confirm: z.string().optional(),
@@ -188,6 +196,7 @@ export const FunctionToolDefinition$outboundSchema: z.ZodType<
   variation: ToolVariation$outboundSchema.optional(),
 }).transform((v) => {
   return remap$(v, {
+    assetId: "asset_id",
     canonicalName: "canonical_name",
     confirmPrompt: "confirm_prompt",
     createdAt: "created_at",

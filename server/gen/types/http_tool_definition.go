@@ -11,6 +11,8 @@ package types
 type HTTPToolDefinition struct {
 	// The ID of the deployment
 	DeploymentID string
+	// The ID of the asset
+	AssetID string
 	// Summary of the tool
 	Summary string
 	// Response filter metadata for the tool
