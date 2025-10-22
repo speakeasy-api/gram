@@ -392,20 +392,22 @@ func newFunctionOrchestrator(
 	assetStore assets.BlobStore,
 	enc *encryption.Client,
 ) (functions.Orchestrator, func(context.Context) error, error) {
+	nilShutdown := func(context.Context) error { return nil }
+
 	switch provider := c.String("functions-provider"); provider {
 	case "local":
 		codeRootDir := filepath.Clean(c.String("functions-local-runner-root"))
 		if codeRootDir == "" {
-			return nil, nil, fmt.Errorf("--functions-local-runner-root must be set in local environment")
+			return nil, nilShutdown, fmt.Errorf("--functions-local-runner-root must be set in local environment")
 		}
 
 		if err := os.MkdirAll(codeRootDir, 0750); err != nil && !errors.Is(err, fs.ErrExist) {
-			return nil, nil, fmt.Errorf("create local functions root directory: %w", err)
+			return nil, nilShutdown, fmt.Errorf("create local functions root directory: %w", err)
 		}
 
 		codeRoot, err := os.OpenRoot(codeRootDir)
 		if err != nil {
-			return nil, nil, fmt.Errorf("open local functions root directory: %w", err)
+			return nil, nilShutdown, fmt.Errorf("open local functions root directory: %w", err)
 		}
 
 		shutdown := func(ctx context.Context) error {
@@ -426,13 +428,13 @@ func newFunctionOrchestrator(
 			"default org is set", defaultOrg != "",
 			"default region is set", defaultRegion != "",
 		); err != nil {
-			return nil, nil, fmt.Errorf("invalid configuration for functions: %w", err)
+			return nil, nilShutdown, fmt.Errorf("invalid configuration for functions: %w", err)
 		}
 
 		tpl := fmt.Sprintf("%s:{{.Version}}-{{.Runtime.OCITag}}", ociImage)
 		imgSelector, err := functions.NewTemplateImageSelector(tpl)
 		if err != nil {
-			return nil, nil, fmt.Errorf("create functions image selector: %w", err)
+			return nil, nilShutdown, fmt.Errorf("create functions image selector: %w", err)
 		}
 
 		return functions.NewFlyRunner(
@@ -451,8 +453,8 @@ func newFunctionOrchestrator(
 				FlyAPIURL:          "", // use default
 				FlyMachinesBaseURL: "", // use default
 			},
-		), nil, nil
+		), nilShutdown, nil
 	default:
-		return nil, nil, fmt.Errorf("unrecognized functions provider: %s", provider)
+		return nil, nilShutdown, fmt.Errorf("unrecognized functions provider: %s", provider)
 	}
 }
