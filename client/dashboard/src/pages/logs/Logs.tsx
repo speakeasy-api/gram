@@ -268,9 +268,13 @@ export default function Logs() {
                         <TableCell>
                           <div className="flex items-center justify-center">
                             {isSuccessfulCall(log) ? (
-                              <Icon name="check" className="text-success size-4" />
+                              <div style={{ color: "var(--fill-success-default, #5a8250)" }}>
+                                <Icon name="check" className="size-4" />
+                              </div>
                             ) : (
-                              <Icon name="x" className="text-destructive size-4" />
+                              <div style={{ color: "var(--fill-destructive-default, #c83228)" }}>
+                                <Icon name="x" className="size-4" />
+                              </div>
                             )}
                           </div>
                         </TableCell>
