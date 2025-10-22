@@ -11,11 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/speakeasy-api/gram/functions/internal/attr"
 	"github.com/speakeasy-api/gram/functions/internal/ipc"
@@ -279,47 +277,4 @@ func (s *Service) handleError(ctx context.Context, err error, operation string, 
 		s.logger.ErrorContext(ctx, operation, attr.SlogError(err))
 		http.Error(w, "unexpected server error", http.StatusInternalServerError)
 	}
-}
-
-func getTotalMemoryGB() float64 {
-	// This function uses syscall.Sysinfo which is Linux-specific
-	// On non-Linux systems at compile time, we skip it
-	// At runtime on Linux, it will work correctly
-
-	// Skip on non-Linux to avoid compile errors
-	if runtime.GOOS != "linux" {
-		return 0
-	}
-
-	// Define the sysinfo struct inline to avoid compile-time issues on macOS
-	type sysinfo_t struct {
-		Uptime    int64
-		Loads     [3]uint64
-		Totalram  uint64
-		Freeram   uint64
-		Sharedram uint64
-		Bufferram uint64
-		Totalswap uint64
-		Freeswap  uint64
-		Procs     uint16
-		Pad       uint16
-		Totalhigh uint64
-		Freehigh  uint64
-		Unit      uint32
-		_         [0]byte
-	}
-
-	var info sysinfo_t
-	// Call sysinfo syscall directly (syscall number 99 on Linux amd64)
-	const SYS_SYSINFO = 99
-	// #nosec G103 - unsafe.Pointer required for syscall to sysinfo
-	_, _, errno := syscall.Syscall(SYS_SYSINFO, uintptr(unsafe.Pointer(&info)), 0, 0)
-	if errno != 0 {
-		return 0
-	}
-
-	// Total physical memory in bytes (Totalram * Unit)
-	totalRAM := info.Totalram * uint64(info.Unit)
-	// Convert to GB
-	return float64(totalRAM) / (1024 * 1024 * 1024)
 }
