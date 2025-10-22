@@ -1,5 +1,21 @@
 # dashboard
 
+## 0.17.0
+
+### Minor Changes
+
+- aaad92f: Show Gram Functions on deployment pages
+
+### Patch Changes
+
+- 0b51c20: Add WebGL ASCII shader effects to onboarding wizard with interactive star particles
+- d6f5579: Adds a basic toolset UX for managing resources in the system adding/subtracting them per toolset
+- 321699e: Function-based tools can now be used in Custom Tools
+- 2fb24e6: Adds UI hints for custom tools, indicating which "subtools" are missing (if any), or just surfacing the list of subtools otherwise. Begins tracking the required subtools more powerfully in order to support Gram Functions.
+- Updated dependencies [d6f5579]
+- Updated dependencies [2fb24e6]
+  - @gram/client@0.14.16
+
 ## 0.16.0
 
 ### Minor Changes
