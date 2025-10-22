@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/httputil"
 	"net/http"
 	"net/url"
 	"slices"
@@ -10,6 +11,7 @@ import (
 var mcpOpenAccessControlRoutes = []string{
 	"/.well-known/oauth-authorization-server/mcp",
 	"/.well-known/oauth-protected-resource/mcp",
+	"/mcp/",
 }
 
 func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.Handler {
@@ -44,9 +46,9 @@ func CORSMiddleware(env string, serverURL string) func(next http.Handler) http.H
 			// These need to be accessible from the browser on any origin
 			if slices.ContainsFunc(mcpOpenAccessControlRoutes, func(route string) bool {
 				return strings.HasPrefix(r.URL.Path, route)
-			}) {
+			}) && !httputil.IsBrowserPageRequest(r) {
 				w.Header().Set("Access-Control-Allow-Origin", "*")
-				w.Header().Set("Access-Control-Allow-Methods", "GET")
+				w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 				w.Header().Del("Access-Control-Allow-Credentials")
 			}
 

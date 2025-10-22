@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"mime"
 	"net/http"
 	"net/url"
 	"slices"
@@ -38,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/httputil"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	metadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -170,13 +170,11 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 // and delegating to metadata service, or returning method not allowed for others.
 func (s *Service) HandleGetServer(w http.ResponseWriter, r *http.Request, metadataService *mcpmetadata.Service) error {
 	// Check if this is a browser request (HTML Accept header)
-	for mediaTypeFull := range strings.SplitSeq(r.Header.Get("Accept"), ",") {
-		if mediatype, _, err := mime.ParseMediaType(mediaTypeFull); err == nil && (mediatype == "text/html" || mediatype == "application/xhtml+xml") {
-			if err := metadataService.ServeInstallPage(w, r); err != nil {
-				return fmt.Errorf("failed to serve install page: %w", err)
-			}
-			return nil
+	if httputil.IsBrowserPageRequest(r) {
+		if err := metadataService.ServeInstallPage(w, r); err != nil {
+			return fmt.Errorf("failed to serve install page: %w", err)
 		}
+		return nil
 	}
 
 	body, err := json.Marshal(rpcError{
