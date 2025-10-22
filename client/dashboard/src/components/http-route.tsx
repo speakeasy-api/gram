@@ -4,12 +4,14 @@ import { Type } from "./ui/type";
 export const HttpRoute = ({
   method,
   path,
+  className,
 }: {
   method: string;
   path: string;
+  className?: string;
 }) => {
   return (
-    <div className="flex gap-2 font-mono items-start">
+    <div className={cn("flex gap-2 font-mono items-start", className)}>
       <HttpMethod method={method} />
       <Type className="text-xs text-muted-foreground wrap-anywhere">
         {path}
