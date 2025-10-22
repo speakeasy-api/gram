@@ -13,10 +13,12 @@ import { MoreActions } from "@/components/ui/more-actions";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { SimpleTooltip } from "@/components/ui/tooltip";
+import { Type } from "@/components/ui/type";
 import { UpdatedAt } from "@/components/updated-at";
 import { FullWidthUpload } from "@/components/upload";
 import { useProject } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { slugify } from "@/lib/constants";
 import { cn, getServerURL } from "@/lib/utils";
 import { useDeploymentLogsSummary } from "@/pages/deployments/deployment/Deployment";
@@ -50,7 +52,6 @@ import { toast } from "sonner";
 import { useUploadOpenAPISteps } from "../../onboarding/UploadOpenAPI";
 import AddOpenAPIDialog, { AddOpenAPIDialogRef } from "./AddOpenAPIDialog";
 import { ApisEmptyState } from "./ApisEmptyState";
-import { useTelemetry } from "@/contexts/Telemetry";
 
 type NamedAsset = Asset & {
   deploymentAssetId: string;
@@ -70,11 +71,12 @@ export function useDeploymentIsEmpty() {
   return (
     !deployment ||
     (deployment.openapiv3Assets.length === 0 &&
+      (deployment.functionsAssets?.length ?? 0) === 0 &&
       deployment.packages.length === 0)
   );
 }
 
-export default function OpenAPIAssets() {
+export default function Sources() {
   const client = useSdkClient();
   const routes = useRoutes();
   const telemetry = useTelemetry();
@@ -243,7 +245,7 @@ export default function OpenAPIAssets() {
         <Page.Section.Title>Sources</Page.Section.Title>
         <Page.Section.Description>
           {isFunctionsEnabled
-            ? "OpenAPI documents and gram functions providing tools for your toolsets"
+            ? "OpenAPI documents and Gram Functions providing tools for your toolsets"
             : "OpenAPI documents providing tools for your toolsets"}
         </Page.Section.Description>
         {logsCta}
@@ -503,7 +505,7 @@ function SourceCard({
       key={asset.id}
       className="bg-secondary max-w-sm text-card-foreground flex flex-col rounded-md border px-3 py-3"
     >
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-2">
         <IconComponent className="size-5 shrink-0" strokeWidth={2} />
         <MoreActions actions={actions} />
       </div>
@@ -513,11 +515,11 @@ function SourceCard({
           asset.type === "openapi" ? () => setDocumentViewOpen(true) : undefined
         }
         className={cn(
-          "leading-none font-normal text-foreground mb-1.5",
+          "leading-none mb-1.5",
           asset.type === "openapi" && "cursor-pointer",
         )}
       >
-        {asset.name}
+        <Type>{asset.name}</Type>
       </div>
 
       <div className="flex gap-1.5 items-center text-muted-foreground text-xs">

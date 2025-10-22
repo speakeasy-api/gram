@@ -536,6 +536,7 @@ func readToolsetTools(
 				ProjectID:           def.HttpToolDefinition.Description,
 				DeploymentID:        def.HttpToolDefinition.DeploymentID.String(),
 				Openapiv3DocumentID: conv.FromNullableUUID(def.HttpToolDefinition.Openapiv3DocumentID),
+				AssetID:             def.AssetID.UUID.String(),
 				Name:                name,
 				CanonicalName:       name,
 				Summary:             "", // Slowly phasing this out
@@ -622,6 +623,7 @@ func readToolsetTools(
 				ProjectID:     def.FunctionToolDefinition.ProjectID.String(),
 				DeploymentID:  def.FunctionToolDefinition.DeploymentID.String(),
 				FunctionID:    def.FunctionToolDefinition.FunctionID.String(),
+				AssetID:       def.AssetID.UUID.String(),
 				Runtime:       def.FunctionToolDefinition.Runtime,
 				Name:          def.FunctionToolDefinition.Name,
 				CanonicalName: def.FunctionToolDefinition.Name,

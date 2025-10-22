@@ -2103,6 +2103,8 @@ type ToolResponseBody struct {
 type HTTPToolDefinitionResponseBody struct {
 	// The ID of the deployment
 	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
+	// The ID of the asset
+	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
 	// Summary of the tool
 	Summary string `form:"summary" json:"summary" xml:"summary"`
 	// Response filter metadata for the tool
@@ -2214,6 +2216,8 @@ type ToolVariationResponseBody struct {
 type FunctionToolDefinitionResponseBody struct {
 	// The ID of the deployment
 	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
+	// The ID of the asset
+	AssetID string `form:"asset_id" json:"asset_id" xml:"asset_id"`
 	// The ID of the function
 	FunctionID string `form:"function_id" json:"function_id" xml:"function_id"`
 	// Runtime environment (e.g., nodejs:22, python:3.12)

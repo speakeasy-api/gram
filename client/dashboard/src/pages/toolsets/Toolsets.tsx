@@ -1,5 +1,6 @@
 import { InputDialog } from "@/components/input-dialog";
 import { Page } from "@/components/page-layout";
+import { ServerCard } from "@/components/server-card";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useApiError } from "@/hooks/useApiError";
 import { useRoutes } from "@/routes";
@@ -7,14 +8,13 @@ import {
   useCreateToolsetMutation,
   useListToolsets,
 } from "@gram/client/react-query/index.js";
+import { Button } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@speakeasy-api/moonshine";
 import { Outlet } from "react-router";
-import { ServerCard } from "@/components/server-card";
-import { ToolsetsEmptyState } from "./ToolsetsEmptyState";
-import OpenAPIAssets, { useDeploymentIsEmpty } from "./openapi/OpenAPI";
+import Sources, { useDeploymentIsEmpty } from "./sources/Sources";
 import { useCloneToolset } from "./Toolset";
+import { ToolsetsEmptyState } from "./ToolsetsEmptyState";
 
 export function useToolsets() {
   const { data: toolsets, refetch, isLoading } = useListToolsets();
@@ -63,7 +63,7 @@ export default function Toolsets() {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <OpenAPIAssets />
+        <Sources />
         <ToolsetsContent
           setCreateToolsetDialogOpen={setCreateToolsetDialogOpen}
         />
