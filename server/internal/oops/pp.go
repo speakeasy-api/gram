@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime"
-	"sync"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -17,8 +16,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goa "goa.design/goa/v3/pkg"
 )
-
-var funcMemo sync.Map
 
 // E creates a new ShareableError with the given code, cause, public message,
 // and optional formatting arguments to interpolate into the public message. The
@@ -116,7 +113,9 @@ func (e *ShareableError) LogValue() slog.Value {
 // OpenTelemetry span status to error. Additional arguments can be provided to
 // include more context in the log entry.
 func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
-	trace.SpanFromContext(ctx).SetStatus(codes.Error, e.String())
+	span := trace.SpanFromContext(ctx)
+	span.SetStatus(codes.Error, e.String())
+	span.RecordError(e)
 
 	var pcs [1]uintptr
 	runtime.Callers(2, pcs[:]) // skip [Callers, Log]
@@ -128,7 +127,7 @@ func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...s
 		r.AddAttrs(attr.SlogErrorID(e.id), attr.SlogErrorMessage(e.String()))
 	}
 
-	logger.Handler().Handle(ctx, r)
+	_ = logger.Handler().Handle(ctx, r)
 	return e
 }
 
