@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { FileCode, SquareFunction } from "lucide-react";
 import { useState } from "react";
 
 // Dummy data for logs (using real data structure)
@@ -22,7 +23,7 @@ const DUMMY_LOGS = [
   {
     id: "1",
     ts: new Date("2025-10-01T11:00:00Z"),
-    toolUrn: "UserRegistration",
+    toolUrn: "tools:http:convoy:convoy_create_event_type",
     httpMethod: "POST",
     httpRoute: "/api/register",
     statusCode: 200,
@@ -32,7 +33,7 @@ const DUMMY_LOGS = [
   {
     id: "2",
     ts: new Date("2025-10-01T11:01:30Z"),
-    toolUrn: "PayoutRequest",
+    toolUrn: "tools:http:taskmaster:taskmaster_create_project",
     httpMethod: "POST",
     httpRoute: "/api/refund",
     statusCode: 200,
@@ -42,7 +43,7 @@ const DUMMY_LOGS = [
   {
     id: "3",
     ts: new Date("2025-10-01T11:03:00Z"),
-    toolUrn: "UserSettings",
+    toolUrn: "tools:function:analytics:calculate_metrics",
     httpMethod: "PUT",
     httpRoute: "/api/sync",
     statusCode: 200,
@@ -52,7 +53,7 @@ const DUMMY_LOGS = [
   {
     id: "4",
     ts: new Date("2025-10-01T11:05:00Z"),
-    toolUrn: "InventoryCheck",
+    toolUrn: "tools:function:data_processing:transform_data",
     httpMethod: "GET",
     httpRoute: "/api/inventory",
     statusCode: 200,
@@ -62,7 +63,7 @@ const DUMMY_LOGS = [
   {
     id: "5",
     ts: new Date("2025-10-01T11:07:00Z"),
-    toolUrn: "EmailDispatch",
+    toolUrn: "tools:http:convoy:convoy_get_event_types",
     httpMethod: "GET",
     httpRoute: "/api/orders/preview",
     statusCode: 200,
@@ -72,7 +73,7 @@ const DUMMY_LOGS = [
   {
     id: "6",
     ts: new Date("2025-10-01T11:09:00Z"),
-    toolUrn: "AssetUploadView",
+    toolUrn: "tools:http:taskmaster:taskmaster_create_task",
     httpMethod: "POST",
     httpRoute: "/api/content/share",
     statusCode: 200,
@@ -82,7 +83,7 @@ const DUMMY_LOGS = [
   {
     id: "7",
     ts: new Date("2025-10-01T11:09:00Z"),
-    toolUrn: "InventoryCheck",
+    toolUrn: "tools:function:notifications:send_notification",
     httpMethod: "GET",
     httpRoute: "/api/plugin/keystore",
     statusCode: 404,
@@ -92,7 +93,7 @@ const DUMMY_LOGS = [
   {
     id: "8",
     ts: new Date("2025-10-01T11:10:15Z"),
-    toolUrn: "EmailDispatch",
+    toolUrn: "tools:http:convoy:convoy_update_event_type",
     httpMethod: "POST",
     httpRoute: "/api/feedback",
     statusCode: 200,
@@ -102,7 +103,7 @@ const DUMMY_LOGS = [
   {
     id: "9",
     ts: new Date("2025-10-01T11:11:30Z"),
-    toolUrn: "OrderValidation",
+    toolUrn: "tools:http:taskmaster:taskmaster_get_tasks",
     httpMethod: "GET",
     httpRoute: "/api/logs",
     statusCode: 500,
@@ -112,7 +113,7 @@ const DUMMY_LOGS = [
   {
     id: "10",
     ts: new Date("2025-10-01T11:13:00Z"),
-    toolUrn: "PaymentRequest",
+    toolUrn: "tools:http:taskmaster:taskmaster_update_task",
     httpMethod: "GET",
     httpRoute: "/api/products/search",
     statusCode: 200,
@@ -128,6 +129,25 @@ export default function Logs() {
   const [statusFilter, setStatusFilter] = useState<string>("");
 
   const logs = DUMMY_LOGS;
+
+  const getToolIcon = (toolUrn: string) => {
+    // Parse URN format: tools:{kind}:{source}:{name}
+    const parts = toolUrn.split(":");
+    if (parts.length >= 2 && parts[1] === "http") {
+      return FileCode;
+    }
+    // Otherwise it's a function tool
+    return SquareFunction;
+  };
+
+  const getSourceFromUrn = (toolUrn: string) => {
+    // Parse URN format: tools:{kind}:{source}:{name}
+    const parts = toolUrn.split(":");
+    if (parts.length >= 3) {
+      return parts[2]; // Return the source (e.g., "convoy", "taskmaster", "con")
+    }
+    return toolUrn;
+  };
 
   const getStatusColor = (statusCode: number) => {
     if (statusCode >= 200 && statusCode < 300) {
@@ -226,14 +246,20 @@ export default function Logs() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {logs.map((log) => (
-                      <TableRow key={log.id}>
-                        <TableCell className="text-muted-foreground font-mono">
-                          {formatTimestamp(log.ts)}
-                        </TableCell>
-                        <TableCell className="font-medium">
-                          {log.toolUrn || log.httpRoute}
-                        </TableCell>
+                    {logs.map((log) => {
+                      const Icon = getToolIcon(log.toolUrn);
+                      const sourceName = getSourceFromUrn(log.toolUrn);
+                      return (
+                        <TableRow key={log.id}>
+                          <TableCell className="text-muted-foreground font-mono">
+                            {formatTimestamp(log.ts)}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <Icon className="size-4 shrink-0" strokeWidth={1.5} />
+                              <span>{sourceName}</span>
+                            </div>
+                          </TableCell>
                         <TableCell className="font-mono">
                           <span className="text-sm">
                             {log.httpMethod} {log.httpRoute}
@@ -255,8 +281,9 @@ export default function Logs() {
                         <TableCell className="text-muted-foreground font-mono">
                           {formatDuration(log.durationMs)}
                         </TableCell>
-                      </TableRow>
-                    ))}
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
