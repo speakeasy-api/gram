@@ -457,7 +457,7 @@ export default function Logs() {
 
       {/* Log Detail Sheet */}
       <Sheet open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
-        <SheetContent className="w-[540px] min-w-[540px] sm:max-w-[540px] overflow-y-auto p-0">
+        <SheetContent className="w-[540px] min-w-[540px] max-w-[540px] overflow-y-auto p-0">
           {selectedLog && (
             <div className="flex flex-col gap-8 pt-8 px-6 pb-6">
               {/* Header */}
