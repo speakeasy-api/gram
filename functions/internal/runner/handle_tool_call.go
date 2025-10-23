@@ -12,12 +12,19 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/speakeasy-api/gram/functions/internal/attr"
 	"github.com/speakeasy-api/gram/functions/internal/ipc"
 	"github.com/speakeasy-api/gram/functions/internal/o11y"
 	"github.com/speakeasy-api/gram/functions/internal/svc"
+)
+
+const (
+	cpuHeader           = "X-Gram-Functions-Cpu"
+	memoryHeader        = "X-Gram-Functions-Memory"
+	executionTimeHeader = "X-Gram-Functions-Execution-Time"
 )
 
 var allowedHeaders = map[string]struct{}{
@@ -91,6 +98,7 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
 	}
 
+	startTime := time.Now()
 	err = cmd.Start()
 	if err != nil {
 		return svc.NewPermanentError(
@@ -157,12 +165,37 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 			w.Header().Add(key, value)
 		}
 	}
+
+	// Announce trailers for resource usage metrics
+	// We currently have to write these after WriteHeader
+	w.Header().Set("Trailer", cpuHeader+", "+memoryHeader+", "+executionTimeHeader)
+
 	w.WriteHeader(response.StatusCode)
 	if _, err := io.Copy(w, response.Body); err != nil {
 		s.logger.ErrorContext(ctx, "failed to copy response body", attr.SlogError(err))
 	}
 
 	err = cmd.Wait()
+	executionTime := time.Since(startTime).Seconds()
+
+	// Write resource usage as trailers after response body is sent
+	w.Header().Set(executionTimeHeader, fmt.Sprintf("%.17g", executionTime))
+
+	if cmd.ProcessState != nil {
+		sysUsage := cmd.ProcessState.SysUsage()
+		if usage, ok := sysUsage.(*syscall.Rusage); ok {
+			// Convert CPU time to seconds (user + system time)
+			cpuSeconds := float64(usage.Utime.Sec) + float64(usage.Utime.Usec)/1000000 +
+				float64(usage.Stime.Sec) + float64(usage.Stime.Usec)/1000000
+			w.Header().Set(cpuHeader, fmt.Sprintf("%.17g", cpuSeconds))
+
+			// Get total system RAM in GB
+			if memGB := getTotalMemoryGB(); memGB > 0 {
+				w.Header().Set(memoryHeader, fmt.Sprintf("%.17g", memGB))
+			}
+		}
+	}
+
 	var exitErr *exec.ExitError
 	switch {
 	case errors.As(err, &exitErr):

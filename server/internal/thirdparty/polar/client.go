@@ -241,6 +241,24 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallU
 		}
 	}
 
+	if event.FunctionCPUUsage != nil {
+		metadata["function_cpu_usage"] = polarComponents.EventCreateExternalCustomerMetadata{
+			Number: event.FunctionCPUUsage,
+		}
+	}
+
+	if event.FunctionMemUsage != nil {
+		metadata["function_mem_usage"] = polarComponents.EventCreateExternalCustomerMetadata{
+			Number: event.FunctionMemUsage,
+		}
+	}
+
+	if event.FunctionExecutionTime != nil {
+		metadata["function_execution_time"] = polarComponents.EventCreateExternalCustomerMetadata{
+			Number: event.FunctionExecutionTime,
+		}
+	}
+
 	_, err := p.polar.Events.Ingest(ctx, polarComponents.EventsIngest{
 		Events: []polarComponents.Events{
 			{

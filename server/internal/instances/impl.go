@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -315,8 +316,10 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 
 	// Write the modified response to the original response writer
-	w.WriteHeader(interceptor.statusCode)
 	for k, v := range interceptor.headers {
+		if k == functions.FunctionsCPUHeader || k == functions.FunctionsMemoryHeader {
+			continue
+		}
 		for _, val := range v {
 			w.Header().Add(k, val)
 		}
@@ -326,6 +329,8 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		http.SetCookie(w, cookie)
 	}
 
+	w.WriteHeader(interceptor.statusCode)
+
 	_, err = w.Write(interceptor.buffer.Bytes())
 	if err != nil {
 		return fmt.Errorf("failed to write response: %w", err)
@@ -333,6 +338,26 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
+
+	// Extract function metrics from headers (originally trailers from functions runner)
+	var functionCPU *float64
+	var functionMem *float64
+	var functionsExecutionTime *float64
+	if cpuStr := interceptor.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
+		if cpu, err := strconv.ParseFloat(cpuStr, 64); err == nil {
+			functionCPU = &cpu
+		}
+	}
+	if memStr := interceptor.headers.Get(functions.FunctionsMemoryHeader); memStr != "" {
+		if mem, err := strconv.ParseFloat(memStr, 64); err == nil {
+			functionMem = &mem
+		}
+	}
+	if execTimeStr := interceptor.headers.Get(functions.FunctionsExecutionTimeHeader); execTimeStr != "" {
+		if execTime, err := strconv.ParseFloat(execTimeStr, 64); err == nil {
+			functionsExecutionTime = &execTime
+		}
+	}
 
 	organizationID := authCtx.ActiveOrganizationID
 	if organizationID == "" && toolset != nil {
@@ -345,21 +370,24 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 	toolName := descriptor.Name
 	go s.tracking.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
-		OrganizationID:   organizationID,
-		RequestBytes:     requestNumBytes,
-		OutputBytes:      outputNumBytes,
-		ToolID:           toolID,
-		ToolName:         toolName,
-		ProjectID:        authCtx.ProjectID.String(),
-		ProjectSlug:      authCtx.ProjectSlug,
-		Type:             plan.BillingType,
-		OrganizationSlug: &descriptor.OrganizationSlug,
-		ToolsetSlug:      &toolsetSlug,
-		ChatID:           &chatID,
-		ToolsetID:        toolsetID,
-		MCPURL:           nil, // Not applicable for direct tool calls
-		MCPSessionID:     nil, // Not applicable for direct tool calls
-		ResourceURI:      "",
+		OrganizationID:        organizationID,
+		RequestBytes:          requestNumBytes,
+		OutputBytes:           outputNumBytes,
+		ToolID:                toolID,
+		ToolName:              toolName,
+		ProjectID:             authCtx.ProjectID.String(),
+		ProjectSlug:           authCtx.ProjectSlug,
+		Type:                  plan.BillingType,
+		OrganizationSlug:      &descriptor.OrganizationSlug,
+		ToolsetSlug:           &toolsetSlug,
+		ChatID:                &chatID,
+		ToolsetID:             toolsetID,
+		MCPURL:                nil, // Not applicable for direct tool calls
+		MCPSessionID:          nil, // Not applicable for direct tool calls
+		ResourceURI:           "",
+		FunctionCPUUsage:      functionCPU,
+		FunctionMemUsage:      functionMem,
+		FunctionExecutionTime: functionsExecutionTime,
 	})
 
 	return nil

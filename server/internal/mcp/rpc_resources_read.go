@@ -11,6 +11,7 @@ import (
 	"mime"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -19,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -101,12 +103,17 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	}
 
 	rw := &resourceResponseWriter{
-		body: new(bytes.Buffer),
+		statusCode: http.StatusOK,
+		headers:    make(http.Header),
+		body:       new(bytes.Buffer),
 	}
 
 	requestBodyBytes := []byte("{}")
 	requestBytes := int64(len(requestBodyBytes))
 	var outputBytes int64
+	var functionCPU *float64
+	var functionMem *float64
+	var functionsExecutionTime *float64
 
 	mcpURL := payload.sessionID
 	err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
@@ -117,21 +124,24 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	defer func() {
 		// for billing purposes we still treat fetching a resource as a type of tool call right now
 		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
-			OrganizationID:   toolset.OrganizationID,
-			RequestBytes:     requestBytes,
-			OutputBytes:      outputBytes,
-			ToolID:           descriptor.ID,
-			ToolName:         resourceName,
-			ResourceURI:      plan.Descriptor.URI,
-			ProjectID:        payload.projectID.String(),
-			ProjectSlug:      &descriptor.ProjectSlug,
-			OrganizationSlug: &descriptor.OrganizationSlug,
-			ToolsetSlug:      &payload.toolset,
-			ToolsetID:        &toolset.ID,
-			MCPURL:           &mcpURL,
-			MCPSessionID:     &payload.sessionID,
-			ChatID:           nil,
-			Type:             plan.BillingType,
+			OrganizationID:        toolset.OrganizationID,
+			RequestBytes:          requestBytes,
+			OutputBytes:           outputBytes,
+			ToolID:                descriptor.ID,
+			ToolName:              resourceName,
+			ResourceURI:           plan.Descriptor.URI,
+			ProjectID:             payload.projectID.String(),
+			ProjectSlug:           &descriptor.ProjectSlug,
+			OrganizationSlug:      &descriptor.OrganizationSlug,
+			ToolsetSlug:           &payload.toolset,
+			ToolsetID:             &toolset.ID,
+			MCPURL:                &mcpURL,
+			MCPSessionID:          &payload.sessionID,
+			ChatID:                nil,
+			Type:                  plan.BillingType,
+			FunctionCPUUsage:      functionCPU,
+			FunctionMemUsage:      functionMem,
+			FunctionExecutionTime: functionsExecutionTime,
 		})
 	}()
 
@@ -142,6 +152,24 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 
 	// Track output bytes
 	outputBytes = int64(rw.body.Len())
+
+	// Extract function metrics from headers (originally trailers from functions runner)
+	if cpuStr := rw.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
+		if cpu, err := strconv.ParseFloat(cpuStr, 64); err == nil {
+			functionCPU = &cpu
+		}
+	}
+	if memStr := rw.headers.Get(functions.FunctionsMemoryHeader); memStr != "" {
+		if mem, err := strconv.ParseFloat(memStr, 64); err == nil {
+			functionMem = &mem
+		}
+	}
+
+	if execTimeStr := rw.headers.Get(functions.FunctionsExecutionTimeHeader); execTimeStr != "" {
+		if execTime, err := strconv.ParseFloat(execTimeStr, 64); err == nil {
+			functionsExecutionTime = &execTime
+		}
+	}
 
 	mimeType := "text/plain"
 	if plan.Function != nil && plan.Function.MimeType != "" {
@@ -224,11 +252,13 @@ func isBinaryMimeType(ctx context.Context, logger *slog.Logger, mimeType string)
 }
 
 type resourceResponseWriter struct {
-	body *bytes.Buffer
+	statusCode int
+	headers    http.Header
+	body       *bytes.Buffer
 }
 
 func (rw *resourceResponseWriter) Header() http.Header {
-	return make(http.Header)
+	return rw.headers
 }
 
 func (rw *resourceResponseWriter) Write(b []byte) (int, error) {
@@ -239,4 +269,6 @@ func (rw *resourceResponseWriter) Write(b []byte) (int, error) {
 	return n, nil
 }
 
-func (rw *resourceResponseWriter) WriteHeader(statusCode int) {}
+func (rw *resourceResponseWriter) WriteHeader(statusCode int) {
+	rw.statusCode = statusCode
+}

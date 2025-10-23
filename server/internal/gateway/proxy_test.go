@@ -1471,3 +1471,109 @@ func (m *mockToolCaller) ReadResource(ctx context.Context, req functions.RunnerR
 	}
 	return httpReq, nil
 }
+
+func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
+	t.Parallel()
+
+	// Track the invocation ID that will be generated
+	var invocationID uuid.UUID
+
+	// Create a mock server that returns trailers for CPU and memory metrics
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set required invocation ID header
+		w.Header().Set("Gram-Invoke-ID", invocationID.String())
+		// Announce trailers
+		w.Header().Set("Trailer", functions.FunctionsCPUHeader+", "+functions.FunctionsMemoryHeader+", "+functions.FunctionsExecutionTimeHeader)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		// Write response body
+		_, _ = w.Write([]byte(`{"result": "success"}`))
+
+		// Set trailer values (after body is written)
+		w.Header().Set(functions.FunctionsCPUHeader, "1.23")
+		w.Header().Set(functions.FunctionsMemoryHeader, "5678900")
+		w.Header().Set(functions.FunctionsExecutionTimeHeader, "2.50")
+	}))
+	defer mockServer.Close()
+
+	// Setup test dependencies
+	ctx := context.Background()
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	meterProvider := testenv.NewMeterProvider(t)
+	enc := testenv.NewEncryptionClient(t)
+	policy, err := guardian.NewUnsafePolicy([]string{})
+	require.NoError(t, err)
+
+	tool := newTestToolDescriptor()
+
+	// Create function call plan for functions runner path
+	functionID := uuid.New().String()
+	accessID := uuid.New().String()
+	plan := &FunctionToolCallPlan{
+		FunctionID:        functionID,
+		FunctionsAccessID: accessID,
+		Runtime:           "nodejs",
+		InputSchema:       []byte{},
+		Variables:         []string{},
+	}
+	toolCallPlan := NewFunctionToolCallPlan(tool, plan)
+
+	chClient := newClickhouseClient(t, tool.OrganizationID)
+
+	// Mock the functions.ToolCaller to return our mock server URL
+	mockFuncCaller := &mockToolCaller{
+		serverURL: mockServer.URL,
+		onCall: func(invID uuid.UUID) {
+			invocationID = invID
+		},
+	}
+
+	// Create tool proxy
+	proxy := NewToolProxy(
+		logger,
+		tracerProvider,
+		meterProvider,
+		ToolCallSourceDirect,
+		enc,
+		nil,
+		policy,
+		mockFuncCaller,
+		chClient,
+	)
+
+	// Create request body
+	requestBody := ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 json.RawMessage(`{"test": "data"}`),
+		ResponseFilter:       nil,
+		EnvironmentVariables: nil,
+		GramRequestSummary:   "",
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	// Create response recorder
+	recorder := httptest.NewRecorder()
+
+	// Execute the proxy call
+	ciEnv := NewCaseInsensitiveEnv()
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, toolCallPlan)
+
+	require.NoError(t, err)
+
+	// Verify trailers were proxied through
+	result := recorder.Result()
+	require.NotNil(t, result)
+
+	// Check that CPU and memory trailers are present
+	cpuValue := result.Trailer.Get(functions.FunctionsCPUHeader)
+	memValue := result.Trailer.Get(functions.FunctionsMemoryHeader)
+
+	require.Equal(t, "1.23", cpuValue, "CPU trailer should be proxied through")
+	require.Equal(t, "5678900", memValue, "Memory trailer should be proxied through")
+}
