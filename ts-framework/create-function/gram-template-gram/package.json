@@ -21,7 +21,8 @@
   "scripts": {
     "dev": "node ./src/server.ts",
     "lint": "tsc --noEmit",
-    "build": "gram-build",
+    "build": "node -e \"console.log('Stubbed out')\"",
+    "_:build": "gram-build",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build"
   },
