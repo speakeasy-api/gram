@@ -27669,7 +27669,7 @@ definitions:
                   user_agent: Modi voluptas eaque incidunt voluptatem.
             pagination:
                 has_next_page: false
-                next_page_cursor: "1999-04-25T01:26:06Z"
+                next_page_cursor: 65d88c82-d9fe-49b0-981a-6939d081e902
                 per_page: 1078678197552800101
         required:
             - logs
@@ -34731,8 +34731,8 @@ definitions:
             next_page_cursor:
                 type: string
                 description: Cursor for next page
-                example: "1989-01-21T22:45:28Z"
-                format: date-time
+                example: 8539f5a9-140b-4c0f-9666-232b4dabeab9
+                format: uuid
             per_page:
                 type: integer
                 description: Number of items per page
@@ -34741,7 +34741,7 @@ definitions:
         description: Pagination metadata for list responses
         example:
             has_next_page: false
-            next_page_cursor: "2007-02-17T01:06:40Z"
+            next_page_cursor: 1af6a1b9-d59f-4f2f-82db-fceace6214ba
             per_page: 8202036197219851991
     PeriodUsage:
         title: PeriodUsage

@@ -25,7 +25,7 @@ import { useListToolLogs } from "@gram/client/react-query";
 import { HTTPToolLog } from "@gram/client/models/components";
 import { Icon } from "@speakeasy-api/moonshine";
 import { Copy, ExternalLink, FileCode, SquareFunction } from "lucide-react";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
   if (isSuccess) {
@@ -49,18 +49,76 @@ export default function Logs() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [selectedLog, setSelectedLog] = useState<HTTPToolLog | null>(null);
 
+  // Infinite scroll state
+  const [allLogs, setAllLogs] = useState<HTTPToolLog[]>([]);
+  const [currentCursor, setCurrentCursor] = useState<string | undefined>(undefined);
+  const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const tableContainerRef = useRef<HTMLDivElement>(null);
+  const perPage = 50;
+
   const { data, isLoading } = useListToolLogs(
     {
-      perPage: 100,
+      perPage,
+      cursor: currentCursor,
     },
     undefined,
     {
       staleTime: 30000, // Cache for 30 seconds
       refetchOnWindowFocus: false,
+      enabled: !isFetchingMore, // Prevent duplicate fetches
     },
   );
 
-  const logs = data?.logs ?? [];
+  // Update accumulated logs when new data arrives
+  useEffect(() => {
+    if (data?.logs && !isLoading) {
+      if (currentCursor === undefined) {
+        // Initial load - replace all logs
+        setAllLogs(data.logs);
+      } else {
+        // Append new logs for infinite scroll
+        setAllLogs((prev) => [...prev, ...data.logs]);
+      }
+      setIsFetchingMore(false);
+    }
+  }, [data, isLoading, currentCursor]);
+
+  const pagination = data?.pagination;
+  const hasNextPage = pagination?.hasNextPage ?? false;
+
+  // Load more logs when scrolling near bottom
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const container = e.currentTarget;
+
+    const scrollTop = container.scrollTop;
+    const scrollHeight = container.scrollHeight;
+    const clientHeight = container.clientHeight;
+
+    console.log('Scroll detected:', {
+      scrollTop,
+      scrollHeight,
+      clientHeight,
+      distanceFromBottom: scrollHeight - (scrollTop + clientHeight),
+      isFetchingMore,
+      hasNextPage,
+      isLoading,
+      nextCursor: pagination?.nextPageCursor,
+    });
+
+    // Check if we're near the bottom and can load more
+    if (isFetchingMore || !hasNextPage || isLoading) {
+      console.log('Skip loading:', { isFetchingMore, hasNextPage, isLoading });
+      return;
+    }
+
+    // Trigger when within 200px of bottom
+    const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+    if (distanceFromBottom < 200 && pagination?.nextPageCursor) {
+      console.log('Loading more logs with cursor:', pagination.nextPageCursor);
+      setIsFetchingMore(true);
+      setCurrentCursor(pagination.nextPageCursor);
+    }
+  };
 
   const getToolIcon = (toolUrn: string) => {
     // Parse URN format: tools:{kind}:{source}:{name}
@@ -191,32 +249,37 @@ export default function Logs() {
               </div>
 
               {/* Table */}
-              <div className="border border-neutral-softest rounded-lg overflow-hidden w-full">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-surface-secondary-default border-b border-neutral-softest">
-                      <TableHead className="font-mono">TIMESTAMP</TableHead>
-                      <TableHead className="font-mono">SERVER NAME</TableHead>
-                      <TableHead className="font-mono">TOOL NAME</TableHead>
-                      <TableHead className="font-mono">STATUS</TableHead>
-                      <TableHead className="font-mono">CLIENT</TableHead>
-                      <TableHead className="font-mono">DURATION</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {isLoading ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                          Loading logs...
-                        </TableCell>
+              <div className="border border-neutral-softest rounded-lg overflow-hidden w-full flex flex-col">
+                <div
+                  ref={tableContainerRef}
+                  className="overflow-y-auto max-h-[600px]"
+                  onScroll={handleScroll}
+                >
+                  <Table>
+                    <TableHeader className="sticky top-0 z-10">
+                      <TableRow className="bg-surface-secondary-default border-b border-neutral-softest">
+                        <TableHead className="font-mono">TIMESTAMP</TableHead>
+                        <TableHead className="font-mono">SERVER NAME</TableHead>
+                        <TableHead className="font-mono">TOOL NAME</TableHead>
+                        <TableHead className="font-mono">STATUS</TableHead>
+                        <TableHead className="font-mono">CLIENT</TableHead>
+                        <TableHead className="font-mono">DURATION</TableHead>
                       </TableRow>
-                    ) : logs.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                          No logs found
-                        </TableCell>
-                      </TableRow>
-                    ) : logs.map((log) => {
+                    </TableHeader>
+                    <TableBody>
+                      {isLoading && allLogs.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                            Loading logs...
+                          </TableCell>
+                        </TableRow>
+                      ) : allLogs.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                            No logs found
+                          </TableCell>
+                        </TableRow>
+                      ) : allLogs.map((log) => {
                       const ToolIcon = getToolIcon(log.toolUrn);
                       const sourceName = getSourceFromUrn(log.toolUrn);
                       return (
@@ -253,8 +316,29 @@ export default function Logs() {
                         </TableRow>
                       );
                     })}
+
+                    {/* Loading indicator at bottom when fetching more */}
+                    {isFetchingMore && (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-4 text-muted-foreground">
+                          <div className="flex items-center justify-center gap-2">
+                            <Icon name="loader-circle" className="size-4 animate-spin" />
+                            <span>Loading more logs...</span>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )}
                   </TableBody>
                 </Table>
+              </div>
+
+                {/* Footer with total count */}
+                {allLogs.length > 0 && (
+                  <div className="px-4 py-3 bg-surface-secondary-default border-t border-neutral-softest text-sm text-muted-foreground">
+                    Showing {allLogs.length} {allLogs.length === 1 ? "log" : "logs"}
+                    {hasNextPage && " • Scroll down to load more"}
+                  </div>
+                )}
               </div>
             </div>
           </Page.Section.Body>
