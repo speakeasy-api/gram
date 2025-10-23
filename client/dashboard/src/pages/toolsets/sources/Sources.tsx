@@ -49,9 +49,9 @@ import {
 } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
-import { useUploadOpenAPISteps } from "../../onboarding/UploadOpenAPI";
+import { useUploadOpenAPISteps } from "@/pages/onboarding/UploadOpenAPI";
 import AddOpenAPIDialog, { AddOpenAPIDialogRef } from "./AddOpenAPIDialog";
-import { ApisEmptyState } from "./ApisEmptyState";
+import { SourcesEmptyState } from "./SourcesEmptyState";
 
 type NamedAsset = Asset & {
   deploymentAssetId: string;
@@ -196,7 +196,7 @@ export default function Sources() {
   if (!isLoading && deploymentIsEmpty) {
     return (
       <>
-        <ApisEmptyState
+        <SourcesEmptyState
           onNewUpload={() => addOpenAPIDialogRef.current?.setOpen(true)}
         />
         <AddOpenAPIDialog ref={addOpenAPIDialogRef} />
@@ -257,7 +257,7 @@ export default function Sources() {
             <Button.LeftIcon>
               <Plus className="w-4 h-4" />
             </Button.LeftIcon>
-            <Button.Text>Add API</Button.Text>
+            <Button.Text>Add Source</Button.Text>
           </Button>
         </Page.Section.CTA>
         <Page.Section.Body>

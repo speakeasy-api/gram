@@ -2,17 +2,21 @@ import { EmptyState } from "@/components/page-layout";
 import { Button } from "@speakeasy-api/moonshine";
 import { CheckCircle } from "lucide-react";
 
-export function ApisEmptyState({ onNewUpload }: { onNewUpload: () => void }) {
+export function SourcesEmptyState({
+  onNewUpload,
+}: {
+  onNewUpload: () => void;
+}) {
   const cta = (
     <Button size="sm" onClick={onNewUpload}>
-      UPLOAD OPENAPI
+      ADD SOURCE
     </Button>
   );
 
   return (
     <EmptyState
-      heading="No OpenAPI documents yet"
-      description="Gram generates MCP-ready tools from your OpenAPI documents. Upload an OpenAPI document to get started."
+      heading="No sources yet"
+      description="Gram generates MCP-ready tools from your OpenAPI documents and gram functions. Add a source to get started."
       nonEmptyProjectCTA={cta}
       graphic={<OpenapiGraphic />}
     />

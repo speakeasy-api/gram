@@ -7,9 +7,12 @@ import UploadAssetStep from "@/components/upload-asset/step";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment, useListAssets } from "@gram/client/react-query";
-import { Button, Dialog } from "@speakeasy-api/moonshine";
-import { ArrowRightIcon, RefreshCcwIcon } from "lucide-react";
+import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
+import { ArrowRightIcon, RefreshCcwIcon, Check, Copy } from "lucide-react";
 import React from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { Type } from "@/components/ui/type";
 
 export interface AddOpenAPIDialogRef {
   setOpen: (open: boolean) => void;
@@ -38,11 +41,20 @@ const AddOpenAPIDialogInternals = ({
 }) => {
   const stepper = useStepper();
   const dialogRef = React.useRef<HTMLDivElement>(null);
+  const telemetry = useTelemetry();
+  const isFunctionsEnabled =
+    telemetry.isFeatureEnabled("gram-functions") ?? false;
+  const [activeTab, setActiveTab] = React.useState<"openapi" | "functions">(
+    "openapi",
+  );
 
   // Reset the stepper when the dialog is closed and the close animation ends
   React.useEffect(() => {
     const cleanup = () => {
-      if (!open) stepper.reset();
+      if (!open) {
+        stepper.reset();
+        setActiveTab("openapi");
+      }
     };
 
     dialogRef.current?.addEventListener("animationend", cleanup);
@@ -60,46 +72,99 @@ const AddOpenAPIDialogInternals = ({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <Dialog.Content ref={dialogRef} className="max-w-2xl!">
         <Dialog.Header>
-          <Dialog.Title>New OpenAPI Source</Dialog.Title>
+          <Dialog.Title>Add Source</Dialog.Title>
           <Dialog.Description>
-            Upload a new OpenAPI document to use in addition to your existing
-            documents.
+            {isFunctionsEnabled
+              ? "Upload an OpenAPI document or add Gram Functions to create tools"
+              : "Upload an OpenAPI document to create tools"}
           </Dialog.Description>
         </Dialog.Header>
-        <UploadAssetStepper.Frame className="p-8">
-          <UploadAssetStep step={1}>
-            <UploadAssetStep.Indicator />
-            <UploadAssetStep.Header
-              title="Upload OpenAPI Specification"
-              description="Upload your OpenAPI specification to get started."
-            />
-            <UploadAssetStep.Content>
-              <UploadFileStep />
-            </UploadAssetStep.Content>
-          </UploadAssetStep>
+        {isFunctionsEnabled ? (
+          <Tabs
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as "openapi" | "functions")}
+            className="px-6"
+          >
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="openapi">OpenAPI</TabsTrigger>
+              <TabsTrigger value="functions">Functions</TabsTrigger>
+            </TabsList>
+            <TabsContent value="openapi" className="mt-0">
+              <UploadAssetStepper.Frame className="p-8">
+                <UploadAssetStep step={1}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Upload OpenAPI Specification"
+                    description="Upload your OpenAPI specification to get started."
+                  />
+                  <UploadAssetStep.Content>
+                    <UploadFileStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
 
-          <UploadAssetStep step={2}>
-            <UploadAssetStep.Indicator />
-            <UploadAssetStep.Header
-              title="Name Your API"
-              description="The tools generated will be scoped under this name."
-            />
-            <UploadAssetStep.Content>
-              <NameDeploymentStep />
-            </UploadAssetStep.Content>
-          </UploadAssetStep>
+                <UploadAssetStep step={2}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Name Your API"
+                    description="The tools generated will be scoped under this name."
+                  />
+                  <UploadAssetStep.Content>
+                    <NameDeploymentStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
 
-          <UploadAssetStep step={3}>
-            <UploadAssetStep.Indicator />
-            <UploadAssetStep.Header
-              title="Generate Tools"
-              description="Gram will generate tools for your API."
-            />
-            <UploadAssetStep.Content>
-              <DeployStep />
-            </UploadAssetStep.Content>
-          </UploadAssetStep>
-        </UploadAssetStepper.Frame>
+                <UploadAssetStep step={3}>
+                  <UploadAssetStep.Indicator />
+                  <UploadAssetStep.Header
+                    title="Generate Tools"
+                    description="Gram will generate tools for your API."
+                  />
+                  <UploadAssetStep.Content>
+                    <DeployStep />
+                  </UploadAssetStep.Content>
+                </UploadAssetStep>
+              </UploadAssetStepper.Frame>
+            </TabsContent>
+            <TabsContent value="functions" className="mt-0">
+              <FunctionsInstructions />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <UploadAssetStepper.Frame className="p-8">
+            <UploadAssetStep step={1}>
+              <UploadAssetStep.Indicator />
+              <UploadAssetStep.Header
+                title="Upload OpenAPI Specification"
+                description="Upload your OpenAPI specification to get started."
+              />
+              <UploadAssetStep.Content>
+                <UploadFileStep />
+              </UploadAssetStep.Content>
+            </UploadAssetStep>
+
+            <UploadAssetStep step={2}>
+              <UploadAssetStep.Indicator />
+              <UploadAssetStep.Header
+                title="Name Your API"
+                description="The tools generated will be scoped under this name."
+              />
+              <UploadAssetStep.Content>
+                <NameDeploymentStep />
+              </UploadAssetStep.Content>
+            </UploadAssetStep>
+
+            <UploadAssetStep step={3}>
+              <UploadAssetStep.Indicator />
+              <UploadAssetStep.Header
+                title="Generate Tools"
+                description="Gram will generate tools for your API."
+              />
+              <UploadAssetStep.Content>
+                <DeployStep />
+              </UploadAssetStep.Content>
+            </UploadAssetStep>
+          </UploadAssetStepper.Frame>
+        )}
         <Dialog.Footer>
           <FooterActions onClose={() => handleOpenChange(false)} />
         </Dialog.Footer>
@@ -167,6 +232,67 @@ function FooterActions({ onClose }: { onClose?: () => void }) {
         </>
       );
   }
+}
+
+function FunctionsInstructions() {
+  const [copiedIndex, setCopiedIndex] = React.useState<number | null>(null);
+
+  const commands = [
+    {
+      label: "Install the Gram CLI",
+      command: "npm install -g @gram-ai/cli",
+    },
+    {
+      label: "Authenticate with Gram",
+      command: "gram auth",
+    },
+    {
+      label: "Build your functions",
+      command: "npm run build",
+    },
+    {
+      label: "Upload to Gram",
+      command:
+        'gram upload --type function --location dist/functions.zip --name "My Functions" --slug my-functions',
+    },
+  ];
+
+  const handleCopy = (command: string, index: number) => {
+    navigator.clipboard.writeText(command);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  return (
+    <div className="p-8">
+      <Stack gap={4}>
+        {commands.map((item, index) => (
+          <Stack key={index} gap={2}>
+            <Type small className="font-medium">
+              {index + 1}. {item.label}
+            </Type>
+            <div className="relative group">
+              <pre className="p-4 rounded-md font-mono text-sm overflow-x-auto border">
+                {item.command}
+              </pre>
+              <Button
+                variant="tertiary"
+                size="sm"
+                onClick={() => handleCopy(item.command, index)}
+                className="absolute top-2 right-2"
+              >
+                {copiedIndex === index ? (
+                  <Check className="w-4 h-4" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
+          </Stack>
+        ))}
+      </Stack>
+    </div>
+  );
 }
 
 export default AddOpenAPIDialog;
