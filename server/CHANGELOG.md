@@ -1,5 +1,17 @@
 # server
 
+## 0.9.2
+
+### Patch Changes
+
+- 3c00725: Set of improvements for functions onboarding UX, including better support for mixed OpenAPI / Functions projects
+- 99ef7d6: reinstroduced oauth protected resource, the way we are exposing this is generally correct even though many clients don't really process it yet
+- 1a46e29: Allows MCP to work in browser based MCP inspector which was the original intention
+- 6a2eecf: Sets up the ability to track gram functions memory and cpu usage per tool call coming from the function runner
+- 12fef9e: Prevent nil pointer dereference panic during server and worker shutdown. This
+  was happening because the Gram Functions orchestrator was retuning nil shutdown
+  functions at various code paths.
+
 ## 0.9.1
 
 ### Patch Changes

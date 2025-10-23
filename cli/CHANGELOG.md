@@ -1,5 +1,19 @@
 # cli
 
+## 0.11.3
+
+### Patch Changes
+
+- f824633: Fixed an issue where Go's http.Client used by CLI was stripping the
+  `Content-Length` header. This happens when Go cannot determine the content
+  length from a given `io.Reader`. It will prefer to drop any custom
+  `Content-Length` header in favor of using chunked transfer encoding. However
+  this won't work when hitting Gram's assets API which expects an explicit
+  `Content-Length` header to be on the request.
+- dbf6700: When adding duplicate sources via `gram stage`, the last occurrence of
+  each source slug is now retained, ensuring predictable behavior without
+  erroring out.
+
 ## 0.11.2
 
 ### Patch Changes

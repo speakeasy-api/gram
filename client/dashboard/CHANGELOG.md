@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.17.1
+
+### Patch Changes
+
+- 3c00725: Set of improvements for functions onboarding UX, including better support for mixed OpenAPI / Functions projects
+- Updated dependencies [3c00725]
+  - @gram/client@0.14.17
+
 ## 0.17.0
 
 ### Minor Changes
