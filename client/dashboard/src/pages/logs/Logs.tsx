@@ -40,107 +40,223 @@ function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
   );
 }
 
-// Dummy data for logs (using real data structure)
+// Real data from ClickHouse http_requests_raw table
 const DUMMY_LOGS = [
   {
-    id: "1",
-    ts: new Date("2025-10-01T11:00:00Z"),
-    toolUrn: "tools:http:convoy:convoy_create_event_type",
-    httpMethod: "POST",
-    httpRoute: "/api/register",
-    statusCode: 200,
-    userAgent: "Mozilla/5.0",
-    durationMs: 1500,
-  },
-  {
-    id: "2",
-    ts: new Date("2025-10-01T11:01:30Z"),
-    toolUrn: "tools:http:taskmaster:taskmaster_create_project",
-    httpMethod: "POST",
-    httpRoute: "/api/refund",
-    statusCode: 200,
-    userAgent: "Mozilla/5.0",
-    durationMs: 1500,
-  },
-  {
-    id: "3",
-    ts: new Date("2025-10-01T11:03:00Z"),
-    toolUrn: "tools:function:analytics:calculate_metrics",
-    httpMethod: "PUT",
-    httpRoute: "/api/sync",
-    statusCode: 200,
-    userAgent: "Mozilla/5.0",
-    durationMs: 300,
-  },
-  {
-    id: "4",
-    ts: new Date("2025-10-01T11:05:00Z"),
-    toolUrn: "tools:function:data_processing:transform_data",
-    httpMethod: "GET",
-    httpRoute: "/api/inventory",
-    statusCode: 200,
-    userAgent: "Mozilla/5.0",
-    durationMs: 1500,
-  },
-  {
-    id: "5",
-    ts: new Date("2025-10-01T11:07:00Z"),
+    id: "019a00f1-d533-74ce-be34-0e78f5b5f89a",
+    ts: new Date("2025-10-20T09:27:20Z"),
     toolUrn: "tools:http:convoy:convoy_get_event_types",
     httpMethod: "GET",
-    httpRoute: "/api/orders/preview",
+    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
     statusCode: 200,
-    userAgent: "Mozilla/5.0",
-    durationMs: 1500,
+    userAgent: "",
+    durationMs: 421.016708,
+    requestHeaders: {},
+    responseHeaders: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
+      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
+      "Access-Control-Max-Age": "1728000",
+      "Date": "Mon, 20 Oct 2025 09:27:19 GMT",
+      "Content-Type": "application/json",
+    },
   },
   {
-    id: "6",
-    ts: new Date("2025-10-01T11:09:00Z"),
-    toolUrn: "tools:http:taskmaster:taskmaster_create_task",
-    httpMethod: "POST",
-    httpRoute: "/api/content/share",
-    statusCode: 200,
-    userAgent: "Mozilla/5.0",
-    durationMs: 1500,
-  },
-  {
-    id: "7",
-    ts: new Date("2025-10-01T11:09:00Z"),
-    toolUrn: "tools:function:notifications:send_notification",
-    httpMethod: "GET",
-    httpRoute: "/api/plugin/keystore",
-    statusCode: 404,
-    userAgent: "Mozilla/5.0",
-    durationMs: 1500,
-  },
-  {
-    id: "8",
-    ts: new Date("2025-10-01T11:10:15Z"),
+    id: "019a00f1-ac71-75eb-9643-534e88459d6d",
+    ts: new Date("2025-10-20T09:27:09Z"),
     toolUrn: "tools:http:convoy:convoy_update_event_type",
+    httpMethod: "PUT",
+    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types/{eventTypeId}",
+    statusCode: 400,
+    userAgent: "",
+    durationMs: 422.14858300000003,
+    requestHeaders: {
+      "Content-Type": "application/json",
+    },
+    responseHeaders: {
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
+      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
+      "Access-Control-Max-Age": "1728000",
+      "Date": "Mon, 20 Oct 2025 09:27:09 GMT",
+      "Content-Type": "application/json",
+      "Content-Length": "50",
+    },
+  },
+  {
+    id: "019a00f1-6dab-7989-b688-5f6a863d3cb2",
+    ts: new Date("2025-10-20T09:26:53Z"),
+    toolUrn: "tools:http:convoy:convoy_create_event_type",
     httpMethod: "POST",
-    httpRoute: "/api/feedback",
-    statusCode: 200,
-    userAgent: "Mozilla/5.0",
-    durationMs: 300,
+    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
+    statusCode: 201,
+    userAgent: "",
+    durationMs: 403.456125,
+    requestHeaders: {
+      "Content-Type": "application/json",
+    },
+    responseHeaders: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Credentials": "true",
+      "Content-Length": "210",
+      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
+      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
+      "Access-Control-Max-Age": "1728000",
+      "Date": "Mon, 20 Oct 2025 09:26:53 GMT",
+    },
   },
   {
-    id: "9",
-    ts: new Date("2025-10-01T11:11:30Z"),
-    toolUrn: "tools:http:taskmaster:taskmaster_get_tasks",
-    httpMethod: "GET",
-    httpRoute: "/api/logs",
-    statusCode: 500,
-    userAgent: "Mozilla/5.0",
-    durationMs: 1500,
+    id: "019a00f1-3e5c-79b0-9547-c504b1e44c6c",
+    ts: new Date("2025-10-20T09:26:41Z"),
+    toolUrn: "tools:http:convoy:convoy_deprecate_event_type",
+    httpMethod: "POST",
+    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types/01K6YQ618QJ1B3EWW126WK5973/deprecate",
+    statusCode: 200,
+    userAgent: "",
+    durationMs: 424.365625,
+    requestHeaders: {},
+    responseHeaders: {
+      "Date": "Mon, 20 Oct 2025 09:26:41 GMT",
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
+      "Content-Length": "241",
+      "Access-Control-Max-Age": "1728000",
+    },
   },
   {
-    id: "10",
-    ts: new Date("2025-10-01T11:13:00Z"),
-    toolUrn: "tools:http:taskmaster:taskmaster_update_task",
+    id: "019a00f0-e735-7b90-b349-64d575ee7d44",
+    ts: new Date("2025-10-20T09:26:19Z"),
+    toolUrn: "tools:http:convoy:convoy_get_event_types",
     httpMethod: "GET",
-    httpRoute: "/api/products/search",
+    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
     statusCode: 200,
-    userAgent: "Mozilla/5.0",
-    durationMs: 1200,
+    userAgent: "",
+    durationMs: 413.30962500000004,
+    requestHeaders: {},
+    responseHeaders: {
+      "Access-Control-Max-Age": "1728000",
+      "Access-Control-Allow-Credentials": "true",
+      "Content-Type": "application/json",
+      "Date": "Mon, 20 Oct 2025 09:26:19 GMT",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
+      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
+    },
+  },
+  {
+    id: "0199eea1-a2c4-7cd5-8e73-8f2e0d2ac3bc",
+    ts: new Date("2025-10-16T20:06:34Z"),
+    toolUrn: "tools:http:convoy:convoy_get_event_types",
+    httpMethod: "GET",
+    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
+    statusCode: 200,
+    userAgent: "",
+    durationMs: 402.313333,
+    requestHeaders: {},
+    responseHeaders: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Max-Age": "1728000",
+      "Date": "Thu, 16 Oct 2025 20:06:34 GMT",
+      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
+      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Credentials": "true",
+    },
+  },
+  {
+    id: "0199ec6c-66cb-74af-8aa5-02798eeeb499",
+    ts: new Date("2025-10-16T09:49:11Z"),
+    toolUrn: "tools:http:convoy:convoy_get_event_types",
+    httpMethod: "GET",
+    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
+    statusCode: 200,
+    userAgent: "",
+    durationMs: 420.721667,
+    requestHeaders: {},
+    responseHeaders: {
+      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
+      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Max-Age": "1728000",
+      "Date": "Thu, 16 Oct 2025 09:49:11 GMT",
+      "Content-Type": "application/json",
+    },
+  },
+  {
+    id: "0199ec6c-57a8-7da0-ad01-fc7fe4f3e91a",
+    ts: new Date("2025-10-16T09:49:07Z"),
+    toolUrn: "tools:http:convoy:convoy_update_event_type",
+    httpMethod: "PUT",
+    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types/{eventTypeId}",
+    statusCode: 400,
+    userAgent: "",
+    durationMs: 405.02187499999997,
+    requestHeaders: {
+      "Content-Type": "application/json",
+    },
+    responseHeaders: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
+      "Access-Control-Max-Age": "1728000",
+      "Content-Length": "50",
+      "Date": "Thu, 16 Oct 2025 09:49:07 GMT",
+      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
+    },
+  },
+  {
+    id: "0199ec6c-3dae-7cfc-80e2-ace159ad1361",
+    ts: new Date("2025-10-16T09:49:00Z"),
+    toolUrn: "tools:http:convoy:convoy_create_event_type",
+    httpMethod: "POST",
+    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
+    statusCode: 201,
+    userAgent: "",
+    durationMs: 444.025958,
+    requestHeaders: {
+      "Content-Type": "application/json",
+    },
+    responseHeaders: {
+      "Content-Type": "application/json",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Max-Age": "1728000",
+      "Content-Length": "214",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
+      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
+      "Date": "Thu, 16 Oct 2025 09:49:00 GMT",
+    },
+  },
+  {
+    id: "0199ec6c-20be-735f-b905-4371edb9abaf",
+    ts: new Date("2025-10-16T09:48:53Z"),
+    toolUrn: "tools:http:convoy:convoy_create_event_type",
+    httpMethod: "POST",
+    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
+    statusCode: 400,
+    userAgent: "",
+    durationMs: 410.610708,
+    requestHeaders: {
+      "Content-Type": "application/json",
+    },
+    responseHeaders: {
+      "Content-Length": "136",
+      "Access-Control-Max-Age": "1728000",
+      "Access-Control-Allow-Origin": "*",
+      "Date": "Thu, 16 Oct 2025 09:48:53 GMT",
+      "Access-Control-Allow-Credentials": "true",
+      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
+      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
+      "Content-Type": "application/json",
+    },
   },
 ];
 
@@ -314,7 +430,7 @@ export default function Logs() {
                           </TableCell>
                         <TableCell className="font-mono">
                           <span className="text-sm">
-                            {log.httpMethod} {log.httpRoute}
+                            {getToolNameFromUrn(log.toolUrn)}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -323,7 +439,7 @@ export default function Logs() {
                           </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {log.userAgent}
+                          {log.userAgent || "-"}
                         </TableCell>
                         <TableCell className="text-muted-foreground font-mono">
                           {formatDuration(log.durationMs)}
@@ -341,7 +457,7 @@ export default function Logs() {
 
       {/* Log Detail Sheet */}
       <Sheet open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
-        <SheetContent className="w-[540px] sm:max-w-[540px] overflow-y-auto p-0">
+        <SheetContent className="w-[540px] min-w-[540px] sm:max-w-[540px] overflow-y-auto p-0">
           {selectedLog && (
             <div className="flex flex-col gap-8 pt-8 px-6 pb-6">
               {/* Header */}
@@ -377,69 +493,58 @@ export default function Logs() {
                       </div>
                     </div>
 
-                    {/* Headers */}
+                    {/* Request Headers */}
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-sm">Headers</h3>
-                        <button
-                          className="p-1 rounded hover:bg-surface-secondary-default"
-                          onClick={() => {
-                            const headers = {
-                              "Content-Type": "application/json",
-                              "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
-                              "User-Agent": selectedLog.userAgent,
-                            };
-                            navigator.clipboard.writeText(JSON.stringify(headers, null, 2));
-                          }}
-                        >
-                          <Copy className="size-4" />
-                        </button>
+                        <h3 className="text-sm">Request Headers</h3>
+                        {Object.keys(selectedLog.requestHeaders).length > 0 && (
+                          <button
+                            className="p-1 rounded hover:bg-surface-secondary-default"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(JSON.stringify(selectedLog.requestHeaders, null, 2));
+                            }}
+                          >
+                            <Copy className="size-4" />
+                          </button>
+                        )}
                       </div>
                       <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4">
-                        <pre className="font-mono text-xs text-default whitespace-pre-wrap">
-{`{
-  "Content-Type": "application/json",
-  "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...",
-  "User-Agent": "${selectedLog.userAgent}"
-}`}
-                        </pre>
-                      </div>
-                    </div>
-
-                    {/* Request Body */}
-                    <div className="flex flex-col gap-3">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-sm">Request Body</h3>
-                        <button
-                          className="p-1 rounded hover:bg-surface-secondary-default"
-                          onClick={() => {
-                            const body = {
-                              name: "Premium Widget Pro",
-                              category: "electronics",
-                              price: 299.99,
-                              description: "High-quality premium widget with advanced features",
-                            };
-                            navigator.clipboard.writeText(JSON.stringify(body, null, 2));
-                          }}
-                        >
-                          <Copy className="size-4" />
-                        </button>
-                      </div>
-                      <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4">
-                        <pre className="font-mono text-xs text-default whitespace-pre-wrap">
-{`{
-  "name": "Premium Widget Pro",
-  "category": "electronics",
-  "price": 299.99,
-  "description": "High-quality premium widget with advanced features"
-}`}
-                        </pre>
+                        {Object.keys(selectedLog.requestHeaders).length > 0 ? (
+                          <pre className="font-mono text-xs text-default whitespace-pre-wrap">
+                            {JSON.stringify(selectedLog.requestHeaders, null, 2)}
+                          </pre>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">No request headers logged</div>
+                        )}
                       </div>
                     </div>
                   </TabsContent>
                   <TabsContent value="response" className="flex flex-col gap-6 mt-6">
-                    {/* Response section - placeholder for now */}
-                    <div className="text-sm text-muted-foreground">Response data will be displayed here</div>
+                    {/* Response Headers */}
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-sm">Response Headers</h3>
+                        {Object.keys(selectedLog.responseHeaders).length > 0 && (
+                          <button
+                            className="p-1 rounded hover:bg-surface-secondary-default"
+                            onClick={() => {
+                              void navigator.clipboard.writeText(JSON.stringify(selectedLog.responseHeaders, null, 2));
+                            }}
+                          >
+                            <Copy className="size-4" />
+                          </button>
+                        )}
+                      </div>
+                      <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4">
+                        {Object.keys(selectedLog.responseHeaders).length > 0 ? (
+                          <pre className="font-mono text-xs text-default whitespace-pre-wrap">
+                            {JSON.stringify(selectedLog.responseHeaders, null, 2)}
+                          </pre>
+                        ) : (
+                          <div className="text-sm text-muted-foreground">No response headers logged</div>
+                        )}
+                      </div>
+                    </div>
                   </TabsContent>
                 </Tabs>
               </div>
@@ -499,7 +604,7 @@ export default function Logs() {
                   <button
                     className="flex items-center gap-1 text-sm hover:underline"
                     onClick={() => {
-                      navigator.clipboard.writeText(selectedLog.id);
+                      void navigator.clipboard.writeText(selectedLog.id);
                     }}
                   >
                     <Copy className="size-3" />
