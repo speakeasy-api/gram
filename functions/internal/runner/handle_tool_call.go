@@ -179,7 +179,7 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 	executionTime := time.Since(startTime).Seconds()
 
 	// Write resource usage as trailers after response body is sent
-	w.Header().Set(executionTimeHeader, fmt.Sprintf("%.2f", executionTime))
+	w.Header().Set(executionTimeHeader, fmt.Sprintf("%.17g", executionTime))
 
 	if cmd.ProcessState != nil {
 		sysUsage := cmd.ProcessState.SysUsage()
@@ -187,11 +187,11 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 			// Convert CPU time to seconds (user + system time)
 			cpuSeconds := float64(usage.Utime.Sec) + float64(usage.Utime.Usec)/1000000 +
 				float64(usage.Stime.Sec) + float64(usage.Stime.Usec)/1000000
-			w.Header().Set(cpuHeader, fmt.Sprintf("%.2f", cpuSeconds))
+			w.Header().Set(cpuHeader, fmt.Sprintf("%.17g", cpuSeconds))
 
 			// Get total system RAM in GB
 			if memGB := getTotalMemoryGB(); memGB > 0 {
-				w.Header().Set(memoryHeader, fmt.Sprintf("%.2f", memGB))
+				w.Header().Set(memoryHeader, fmt.Sprintf("%.17g", memGB))
 			}
 		}
 	}
