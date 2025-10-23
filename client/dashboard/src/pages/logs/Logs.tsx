@@ -53,6 +53,7 @@ export default function Logs() {
   const [allLogs, setAllLogs] = useState<HTTPToolLog[]>([]);
   const [currentCursor, setCurrentCursor] = useState<string | undefined>(undefined);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
+  const lastProcessedCursorRef = useRef<string | undefined>(undefined);
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const perPage = 50;
 
@@ -71,13 +72,25 @@ export default function Logs() {
   // Update accumulated logs when new data arrives
   useEffect(() => {
     if (data?.logs && !isLoading) {
+      // Check if we've already processed this cursor to avoid duplicates
+      // Skip check for initial load (both undefined is OK for first load)
+      if (currentCursor !== undefined && lastProcessedCursorRef.current === currentCursor) {
+        return;
+      }
+
       if (currentCursor === undefined) {
         // Initial load - replace all logs
         setAllLogs(data.logs);
       } else {
-        // Append new logs for infinite scroll
-        setAllLogs((prev) => [...prev, ...data.logs]);
+        // Append new logs for infinite scroll, deduplicating by ID
+        setAllLogs((prev) => {
+          const existingIds = new Set(prev.map((log) => log.id));
+          const newLogs = data.logs.filter((log) => !existingIds.has(log.id));
+          return [...prev, ...newLogs];
+        });
       }
+
+      lastProcessedCursorRef.current = currentCursor;
       setIsFetchingMore(false);
     }
   }, [data, isLoading, currentCursor]);
