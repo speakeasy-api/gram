@@ -60,6 +60,14 @@ async function buildFunctionsManifest(options: {
     name: string;
     description?: string | undefined;
     inputSchema: unknown;
+    _meta?: unknown;
+  }>;
+  resources?: Array<{
+    name: string;
+    description?: string | undefined;
+    uri: string;
+    mimeType?: string | undefined;
+    _meta?: unknown;
   }>;
 }> {
   const cwd = options.cwd ?? process.cwd();
@@ -98,10 +106,29 @@ async function buildFunctionsManifest(options: {
       name: tool.name,
       description: tool.description,
       inputSchema: tool.inputSchema,
+      _meta: {
+        "gram.ai/kind": "mcp-passthrough",
+        ...tool._meta,
+      },
     };
   });
 
-  return { version: "0.0.0", tools };
+  const resourcesResponse = await mcpClient.listResources();
+  const resources = resourcesResponse.resources.map((resource) => {
+    return {
+      name: resource.name,
+      description: resource.description,
+      uri: resource.uri,
+      mimeType: resource.mimeType,
+      title: resource.title,
+      _meta: {
+        "gram.ai/kind": "mcp-passthrough",
+        ...resource._meta,
+      },
+    };
+  });
+
+  return { version: "0.0.0", tools, resources };
 }
 
 async function bundleFunction(options: {
