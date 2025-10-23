@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -66,10 +65,12 @@ func (d *DeployFunctionRunners) Do(ctx context.Context, args DeployFunctionRunne
 	err := d.do(ctx, args)
 	if err != nil {
 		if logErr := deploymentsRepo.LogDeploymentEvent(ctx, deploymentsrepo.LogDeploymentEventParams{
-			DeploymentID: args.DeploymentID,
-			ProjectID:    args.ProjectID,
-			Event:        "log:error",
-			Message:      fmt.Sprintf("Failed to deploy function runners: %s", err.Error()),
+			DeploymentID:   args.DeploymentID,
+			ProjectID:      args.ProjectID,
+			Event:          "log:error",
+			Message:        fmt.Sprintf("Failed to deploy function runners: %s", err.Error()),
+			AttachmentID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			AttachmentType: conv.ToPGTextEmpty(""),
 		}); logErr != nil {
 			d.logger.ErrorContext(ctx, "error logging deployment event", attr.SlogError(logErr))
 		}
@@ -91,7 +92,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 	})
 
 	arepo := assetsrepo.New(dbtx)
-	drepo := repo.New(dbtx)
+	drepo := deploymentsrepo.New(dbtx)
 	orgRepo := orgrepo.New(dbtx)
 
 	orgMetadata, err := mv.DescribeOrganization(ctx, d.logger, orgRepo, d.billingRepo, args.OrganizationID)
@@ -99,7 +100,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		return oops.E(oops.CodeUnexpected, err, "error describing organization").Log(ctx, d.logger)
 	}
 
-	depfuncs, err := drepo.GetDeploymentFunctions(ctx, repo.GetDeploymentFunctionsParams{
+	depfuncs, err := drepo.GetDeploymentFunctions(ctx, deploymentsrepo.GetDeploymentFunctionsParams{
 		ProjectID:    args.ProjectID,
 		DeploymentID: args.DeploymentID,
 	})
@@ -114,7 +115,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		assetids = append(assetids, df.AssetID)
 	}
 
-	credrows, err := drepo.GetFunctionCredentialsBatch(ctx, repo.GetFunctionCredentialsBatchParams{
+	credrows, err := drepo.GetFunctionCredentialsBatch(ctx, deploymentsrepo.GetFunctionCredentialsBatchParams{
 		ProjectID:    args.ProjectID,
 		DeploymentID: args.DeploymentID,
 		FunctionIds:  ids,
@@ -123,7 +124,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		return oops.E(oops.CodeUnexpected, err, "error fetching function credentials").Log(ctx, d.logger)
 	}
 
-	creds := make(map[uuid.UUID]repo.GetFunctionCredentialsBatchRow, len(credrows))
+	creds := make(map[uuid.UUID]deploymentsrepo.GetFunctionCredentialsBatchRow, len(credrows))
 	for _, row := range credrows {
 		creds[row.FunctionID] = row
 	}
@@ -174,7 +175,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		}
 
 		if err := d.deployer.Validate(ctx, request); err != nil {
-			return oops.E(oops.CodeUnexpected, err, fmt.Sprintf("error validating function runner deploy request: %s", err.Error())).Log(ctx, d.logger)
+			return err
 		}
 
 		_, err := d.deployer.Deploy(ctx, request)
@@ -209,8 +210,8 @@ func (d *DeployFunctionRunners) preflightFunction(
 	ctx context.Context,
 	logger *slog.Logger,
 	args DeployFunctionRunnersRequest,
-	fnc repo.DeploymentsFunction,
-	credentials map[uuid.UUID]repo.GetFunctionCredentialsBatchRow,
+	fnc deploymentsrepo.DeploymentsFunction,
+	credentials map[uuid.UUID]deploymentsrepo.GetFunctionCredentialsBatchRow,
 	assetURLs map[uuid.UUID][2]string,
 ) (deployFunctionRunnerTask, error) {
 	var empty deployFunctionRunnerTask

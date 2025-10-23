@@ -301,12 +301,18 @@ func (f *FlyRunner) Validate(ctx context.Context, req RunnerDeployRequest) error
 	switch req.OrganizationTier {
 	case billing.TierFree:
 		if len(req.Assets) > 5 {
-			return oops.E(oops.CodeForbidden, nil, "free tier only allows up to 5 function sources. Please contact Speakeasy support for assistance.").Log(ctx, f.logger)
+			return oops.E(oops.CodeForbidden, nil, "Free tier only allows up to 5 function sources. Please contact Speakeasy support for assistance.").Log(ctx, f.logger)
 		}
 	case billing.TierPro:
 		if len(req.Assets) > 10 {
-			return oops.E(oops.CodeForbidden, nil, "pro tier only allows up to 10 function sources. Please contact Speakeasy support for assistance.").Log(ctx, f.logger)
+			return oops.E(oops.CodeForbidden, nil, "Pro tier only allows up to 10 function sources. Please contact Speakeasy support for assistance.").Log(ctx, f.logger)
 		}
+	case billing.TierEnterprise:
+		if len(req.Assets) > 100 {
+			return oops.E(oops.CodeForbidden, nil, "Enterprise tier only allows up to 100 function sources. Please contact Speakeasy support for assistance.").Log(ctx, f.logger)
+		}
+	default:
+		return oops.E(oops.CodeForbidden, nil, "Unsupported organization tier").Log(ctx, f.logger)
 	}
 
 	return nil
