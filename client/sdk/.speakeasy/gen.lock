@@ -3,17 +3,17 @@ id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
   docChecksum: 367dc050adc26d72a12e4e015dbd05c0
   docVersion: 0.0.1
-  speakeasyVersion: 1.637.2
-  generationVersion: 2.727.9
-  releaseVersion: 0.14.15
-  configChecksum: eb13bc4d53a18781224f0fd2dcdd18fc
+  speakeasyVersion: 1.606.9
+  generationVersion: 2.687.13
+  releaseVersion: 0.15.1
+  configChecksum: 14914cdd37a0efba9f4154dffb71b631
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.12
-    core: 3.22.0
+    core: 3.21.20
     defaultEnabledRetries: 0.1.0
-    devContainers: 2.90.1
+    devContainers: 2.90.0
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
@@ -406,6 +406,7 @@ generatedFiles:
   - docs/sdks/deployments/README.md
   - docs/sdks/domains/README.md
   - docs/sdks/environments/README.md
+  - docs/sdks/gram/README.md
   - docs/sdks/instances/README.md
   - docs/sdks/integrations/README.md
   - docs/sdks/keys/README.md
