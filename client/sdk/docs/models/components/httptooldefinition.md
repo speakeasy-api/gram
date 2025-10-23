@@ -8,6 +8,7 @@ An HTTP tool
 import { HTTPToolDefinition } from "@gram/client/models/components";
 
 let value: HTTPToolDefinition = {
+  assetId: "<id>",
   canonicalName: "<value>",
   createdAt: new Date("2025-03-04T09:26:20.697Z"),
   deploymentId: "<id>",
@@ -30,6 +31,7 @@ let value: HTTPToolDefinition = {
 
 | Field                                                                                         | Type                                                                                          | Required                                                                                      | Description                                                                                   |
 | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `assetId`                                                                                     | *string*                                                                                      | :heavy_check_mark:                                                                            | The ID of the asset                                                                           |
 | `canonical`                                                                                   | [components.CanonicalToolAttributes](../../models/components/canonicaltoolattributes.md)      | :heavy_minus_sign:                                                                            | The original details of a tool                                                                |
 | `canonicalName`                                                                               | *string*                                                                                      | :heavy_check_mark:                                                                            | The canonical name of the tool. Will be the same as the name if there is no variation.        |
 | `confirm`                                                                                     | *string*                                                                                      | :heavy_minus_sign:                                                                            | Confirmation mode for the tool                                                                |

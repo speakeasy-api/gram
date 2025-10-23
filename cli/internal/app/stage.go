@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/urfave/cli/v2"
 
@@ -48,7 +47,7 @@ YAML/JSON documents.
 			&cli.PathFlag{
 				Name:  "config",
 				Usage: "Path to the deployment config file",
-				Value: "gram.json",
+				Value: "gram.deploy.json",
 			},
 		},
 		Subcommands: []*cli.Command{
@@ -216,18 +215,16 @@ func appendSourcesToConfig(configPath string, sources []deploy.Source) error {
 
 	config.Sources = append(config.Sources, sources...)
 
-	seen := make(map[string]bool)
-	duplicates := []string{}
+	seen := make(map[string]int)
 	for i, source := range config.Sources {
-		if seen[source.Slug] {
-			duplicates = append(duplicates, fmt.Sprintf("  - index %d: %s: %s", i, source.Slug, source.Location))
-		} else {
-			seen[source.Slug] = true
-		}
+		seen[source.Slug] = i
 	}
-	if len(duplicates) > 0 {
-		return fmt.Errorf("duplicate sources found:\n%v", strings.Join(duplicates, "\n"))
+
+	deduped := make([]deploy.Source, 0, len(seen))
+	for _, idx := range seen {
+		deduped = append(deduped, config.Sources[idx])
 	}
+	config.Sources = deduped
 
 	file, err := os.OpenFile(configPath, os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {

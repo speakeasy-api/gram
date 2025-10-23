@@ -31,15 +31,16 @@ import {
   ChevronRight,
   CircleCheckIcon,
   Copy,
+  FileCode,
   FileJson2,
   RefreshCcw,
   ServerCog,
+  SquareFunction,
   Upload,
   Wrench,
   X,
 } from "lucide-react";
 import { AnimatePresence, motion, useMotionValue } from "motion/react";
-import { Typewriter } from "motion-plus/react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
@@ -47,7 +48,6 @@ import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
 import { useListTools } from "@/hooks/toolTypes";
 import { GramLogo } from "@/components/gram-logo";
-import { useCliConnection } from "@/hooks/useCliConnection";
 import { useTelemetry } from "@/contexts/Telemetry";
 
 type OnboardingPath = "openapi" | "cli";
@@ -290,70 +290,110 @@ const ChoiceStep = ({
           Choose how you want to create your tools
         </span>
       </Stack>
-      <Stack gap={4}>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <button
           onClick={() => handleChoice("openapi")}
-          className="w-full p-6 border rounded-lg hover:border-primary hover:bg-accent transition-colors text-left group"
+          className="p-8 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
         >
-          <Stack gap={2}>
-            <Stack direction="horizontal" gap={2} align="center">
-              <FileJson2 className="w-5 h-5 text-primary" />
-              <Type className="text-heading-sm">Start from API</Type>
-            </Stack>
-            <Type small className="text-muted-foreground">
-              Upload an OpenAPI specification to automatically generate tools
-              for your API
+          <FileCode
+            className="w-8 h-8 text-primary mb-3 shrink-0"
+            strokeWidth={1.5}
+          />
+          <div className="flex flex-col gap-1">
+            <Type className="text-heading-sm">Start from API</Type>
+            <Type small className="text-muted">
+              Generate tools from your OpenAPI specification
             </Type>
-          </Stack>
+          </div>
         </button>
         {isFunctionsEnabled && (
           <button
             onClick={() => handleChoice("cli")}
-            className="w-full p-6 border rounded-lg hover:border-primary hover:bg-accent transition-colors text-left group"
+            className="p-8 bg-secondary rounded-lg hover:bg-accent transition-colors text-left group flex flex-col items-start relative shadow-[inset_0px_1px_1px_0px_rgba(255,255,255,0.24),inset_0px_-1px_1px_0px_rgba(0,0,0,0.08)]"
           >
-            <Stack gap={2}>
-              <Stack direction="horizontal" gap={2} align="center">
-                <ServerCog className="w-5 h-5 text-primary" />
-                <Type className="text-heading-sm">Start from Code</Type>
-              </Stack>
-              <Type small className="text-muted-foreground">
-                Use the Gram CLI to upload functions and build custom tools
+            <SquareFunction
+              className="w-8 h-8 text-primary mb-3 shrink-0"
+              strokeWidth={1.5}
+            />
+            <div className="flex flex-col gap-1">
+              <Type className="text-heading-sm">Start from Code</Type>
+              <Type small className="text-muted">
+                Deploy custom functions using the Gram CLI
               </Type>
-            </Stack>
+            </div>
           </button>
         )}
-      </Stack>
+      </div>
     </>
   );
 };
+
+type LogEntry = {
+  id: string;
+  message: string;
+  type: "info" | "success";
+  loading?: boolean;
+};
+
+const DEMO_LOGS: LogEntry[] = [
+  { id: "1", message: "$ gram auth", type: "info" },
+  { id: "2", message: "✓ Authentication successful", type: "success" },
+  { id: "3", message: "$ npm run build", type: "info" },
+  { id: "4", message: "✓ dist/functions.zip", type: "success" },
+  {
+    id: "5",
+    message:
+      '$ gram upload --type function --location dist/functions.zip --name "My Functions" --slug my-functions',
+    type: "info",
+  },
+  {
+    id: "6",
+    message: "⏳ Uploading functions...",
+    type: "info",
+    loading: true,
+  },
+];
 
 const CliSetupStep = ({
   setCurrentStep,
 }: {
   setCurrentStep: (step: OnboardingStep) => void;
 }) => {
-  const cliState = useCliConnection();
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [installMethod, setInstallMethod] = useState<"npm" | "brew">("npm");
+  const { data: tools } = useListTools();
 
-  // Auto-advance when deployment is complete
+  // Auto-advance when tools are detected
   useEffect(() => {
-    if (cliState.deploymentStatus === "complete") {
+    const hasTools = tools?.tools && tools.tools.length > 0;
+    if (hasTools) {
       setTimeout(() => {
         setCurrentStep("toolset");
-      }, 1000);
+      }, 2000);
     }
-  }, [cliState.deploymentStatus, setCurrentStep]);
+  }, [tools, setCurrentStep]);
 
   const commands = [
-    { label: "Install the Gram CLI", command: "npm install -g @gram/cli" },
+    {
+      label: "Install the Gram CLI",
+      command:
+        installMethod === "npm"
+          ? "npm install -g @gram-ai/cli"
+          : "brew install speakeasy-api/homebrew-tap/gram",
+      showToggle: true,
+    },
     {
       label: "Authenticate with Gram",
       command: "gram auth",
     },
     {
-      label: "Upload your functions",
+      label: "Build your functions",
+      command: "npm run build",
+    },
+    {
+      label: "Upload to Gram",
       command:
-        'gram upload --type function --location ./functions.zip --name "My Functions" --slug my-functions --runtime nodejs:22',
+        'gram upload --type function --location dist/functions.zip --name "My Functions" --slug my-functions',
     },
   ];
 
@@ -375,9 +415,33 @@ const CliSetupStep = ({
       <Stack gap={4}>
         {commands.map((item, index) => (
           <Stack key={index} gap={2}>
-            <Type small className="font-medium">
-              {index + 1}. {item.label}
-            </Type>
+            <Stack
+              direction="horizontal"
+              justify="space-between"
+              align="center"
+            >
+              <Type small className="font-medium">
+                {index + 1}. {item.label}
+              </Type>
+              {item.showToggle && (
+                <Stack direction="horizontal" gap={1}>
+                  <Button
+                    variant={installMethod === "npm" ? "primary" : "tertiary"}
+                    size="sm"
+                    onClick={() => setInstallMethod("npm")}
+                  >
+                    npm
+                  </Button>
+                  <Button
+                    variant={installMethod === "brew" ? "primary" : "tertiary"}
+                    size="sm"
+                    onClick={() => setInstallMethod("brew")}
+                  >
+                    brew
+                  </Button>
+                </Stack>
+              )}
+            </Stack>
             <div className="relative group">
               <pre className="p-4 rounded-md font-mono text-sm overflow-x-auto border">
                 {item.command}
@@ -397,27 +461,6 @@ const CliSetupStep = ({
             </div>
           </Stack>
         ))}
-
-        {cliState.deploymentStatus !== "none" && (
-          <Stack gap={2}>
-            <Type
-              small
-              className={cn(
-                "font-medium",
-                cliState.deploymentStatus === "processing" && "text-primary",
-                cliState.deploymentStatus === "complete" &&
-                  "text-success-foreground",
-                cliState.deploymentStatus === "error" && "text-destructive",
-              )}
-            >
-              {cliState.deploymentStatus === "processing" &&
-                "⏳ Deployment in progress..."}
-              {cliState.deploymentStatus === "complete" &&
-                "✓ Deployment complete!"}
-              {cliState.deploymentStatus === "error" && "✗ Deployment failed"}
-            </Type>
-          </Stack>
-        )}
       </Stack>
     </>
   );
@@ -913,10 +956,54 @@ const TerminalSpinner = () => {
 const TerminalAnimationWithLogs = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [hasMoved, setHasMoved] = useState(false);
-  const [typedCommands, setTypedCommands] = useState<Set<string>>(new Set());
   const x = useMotionValue(0);
   const y = useMotionValue(0);
-  const cliState = useCliConnection();
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [deploymentStatus, setDeploymentStatus] = useState<
+    "none" | "processing" | "complete"
+  >("none");
+
+  const { data: tools } = useListTools(undefined, undefined, {
+    refetchInterval: deploymentStatus !== "complete" ? 2000 : false,
+  });
+
+  // Animate logs appearing one by one
+  useEffect(() => {
+    const timers: NodeJS.Timeout[] = [];
+
+    DEMO_LOGS.forEach((log, index) => {
+      const timer = setTimeout(() => {
+        setLogs((prev) => [...prev, log]);
+      }, index * 800);
+      timers.push(timer);
+    });
+
+    return () => timers.forEach(clearTimeout);
+  }, []);
+
+  // Check for actual tools deployment
+  useEffect(() => {
+    const hasTools = tools?.tools && tools.tools.length > 0;
+
+    if (hasTools && deploymentStatus === "none") {
+      setDeploymentStatus("processing");
+
+      setTimeout(() => {
+        setDeploymentStatus("complete");
+        setLogs((prev) =>
+          prev.map((log) =>
+            log.id === "6"
+              ? {
+                  id: log.id,
+                  message: "✓ Upload successful",
+                  type: "success" as const,
+                }
+              : log,
+          ),
+        );
+      }, 500);
+    }
+  }, [tools, deploymentStatus]);
 
   useEffect(() => {
     const unsubscribeX = x.on("change", (latest) => {
@@ -986,24 +1073,21 @@ const TerminalAnimationWithLogs = () => {
             small
             className="text-muted-foreground absolute left-1/2 -translate-x-1/2"
           >
-            gram-cli {cliState.connected && "• connected"}
+            gram-cli {deploymentStatus !== "none" && "• connected"}
           </Type>
           <div className="w-[42px]" /> {/* Spacer to balance the dots */}
         </motion.div>
 
         {/* Terminal content with real logs */}
         <div className="p-4 font-mono text-sm space-y-1 min-h-[300px] max-h-[400px] overflow-y-auto">
-          {cliState.logs.map((log) => {
-            const shouldShowLoading =
-              log.loading &&
-              typedCommands.has(log.id.replace("-status", "-cmd"));
+          {logs.map((log) => {
+            const shouldShowLoading = log.loading;
 
             return (
               <div
                 key={log.id}
                 className={cn(
                   log.type === "success" && "text-success-foreground",
-                  log.type === "error" && "text-destructive",
                   log.type === "info" && "text-foreground",
                 )}
               >
@@ -1011,23 +1095,13 @@ const TerminalAnimationWithLogs = () => {
                   <>
                     <TerminalSpinner /> {log.message}
                   </>
-                ) : log.loading ? null : log.message.startsWith("$") ? (
-                  <Typewriter
-                    speed="fast"
-                    cursorStyle={{ display: "none" }}
-                    onComplete={() => {
-                      setTypedCommands((prev) => new Set(prev).add(log.id));
-                    }}
-                  >
-                    {log.message}
-                  </Typewriter>
-                ) : (
+                ) : log.loading ? null : (
                   log.message
                 )}
               </div>
             );
           })}
-          {cliState.logs.length > 0 && (
+          {logs.length > 0 && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}

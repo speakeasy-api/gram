@@ -49,7 +49,10 @@ func newApp() *cli.App {
 				RawLevel:    c.String("log-level"),
 				Pretty:      c.Bool("log-pretty"),
 				DataDogAttr: os.Getenv("DD_SERVICE") != "",
-			}))
+			})).With(
+				attr.SlogDataDogGitCommitSHA(GitSHA),
+				attr.SlogDataDogGitRepoURL("github.com/speakeasy-api/gram"),
+			)
 
 			// Sets `GOMEMLIMIT` to 90% of cgroup's memory limit.
 			_, err := memlimit.SetGoMemLimitWithOpts(memlimit.WithLogger(nil))

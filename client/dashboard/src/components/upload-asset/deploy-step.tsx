@@ -193,27 +193,8 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
       throw new Error("Asset or file not found");
     }
 
-    const shouldCreateNew =
-      !latestDeployment ||
-      latestDeployment.data?.deployment?.openapiv3ToolCount === 0;
-
-    let deployment: Deployment | undefined;
-    if (shouldCreateNew) {
-      const result = await client.deployments.create({
-        idempotencyKey: crypto.randomUUID(),
-        createDeploymentRequestBody: {
-          openapiv3Assets: [
-            {
-              assetId: uploadResult.asset.id,
-              name: assetName,
-              slug: slugify(assetName),
-            },
-          ],
-        },
-      });
-      deployment = result.deployment;
-    } else {
-      const result = await client.deployments.evolveDeployment({
+    const deployment = await client.deployments
+      .evolveDeployment({
         evolveForm: {
           upsertOpenapiv3Assets: [
             {
@@ -223,23 +204,11 @@ const useCreateDeployment = (): (() => Promise<Deployment>) => {
             },
           ],
         },
-      });
-      deployment = result.deployment;
-    }
+      })
+      .then((result) => result.deployment);
 
     if (!deployment) {
       throw new Error("Deployment not found");
-    }
-
-    // Wait for deployment to finish
-    while (
-      deployment.status !== "completed" &&
-      deployment.status !== "failed"
-    ) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      deployment = await client.deployments.getById({
-        id: deployment.id,
-      });
     }
 
     return deployment;

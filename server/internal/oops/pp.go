@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"runtime"
-	"sync"
+	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -17,17 +17,12 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
-var funcMemo sync.Map
-
 // E creates a new ShareableError with the given code, cause, public message,
 // and optional formatting arguments to interpolate into the public message. The
 // cause can be nil if there is no underlying error to capture.
 //
 //go:noinline
 func E(code Code, cause error, public string, args ...any) *ShareableError {
-	var pc [1]uintptr
-	runtime.Callers(2, pc[:])
-
 	msg := public
 	if len(args) > 0 {
 		msg = fmt.Sprintf(public, args...)
@@ -39,7 +34,6 @@ func E(code Code, cause error, public string, args ...any) *ShareableError {
 		cause:   cause,
 		private: "",
 		public:  msg,
-		pc:      pc[0],
 	}
 }
 
@@ -49,16 +43,12 @@ func E(code Code, cause error, public string, args ...any) *ShareableError {
 //
 //go:noinline
 func C(code Code) *ShareableError {
-	var pc [1]uintptr
-	runtime.Callers(2, pc[:])
-
 	return &ShareableError{
 		Code:    code,
 		id:      goa.NewErrorID(),
 		cause:   nil,
 		private: "",
 		public:  code.UserMessage(),
-		pc:      pc[0],
 	}
 }
 
@@ -72,7 +62,6 @@ type ShareableError struct {
 	cause   error
 	public  string
 	private string
-	pc      uintptr
 }
 
 // Error implements the error interface.
@@ -89,10 +78,10 @@ func (e *ShareableError) String() string {
 	}
 
 	if e.cause == nil {
-		return fmt.Sprintf("%s [%s]", msg, funcForPC(e.pc))
+		return msg
 	}
 
-	return fmt.Sprintf("%s: %s [%s]", msg, e.cause.Error(), funcForPC(e.pc))
+	return fmt.Sprintf("%s: %s", msg, e.cause.Error())
 }
 
 // Unwrap returns the underlying cause of the error, if any.
@@ -123,14 +112,22 @@ func (e *ShareableError) LogValue() slog.Value {
 // Log logs the error using the provided logger and context. It also sets the
 // OpenTelemetry span status to error. Additional arguments can be provided to
 // include more context in the log entry.
-func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...any) *ShareableError {
-	trace.SpanFromContext(ctx).SetStatus(codes.Error, e.String())
+func (e *ShareableError) Log(ctx context.Context, logger *slog.Logger, args ...slog.Attr) *ShareableError {
+	span := trace.SpanFromContext(ctx)
+	span.SetStatus(codes.Error, e.String())
+	span.RecordError(e, trace.WithStackTrace(true))
+
+	var pcs [1]uintptr
+	runtime.Callers(2, pcs[:]) // skip [Callers, Log]
+	r := slog.NewRecord(time.Now(), slog.LevelError, e.public, pcs[0])
 
 	if len(args) > 0 {
-		logger.ErrorContext(ctx, e.public, append(args, attr.SlogErrorID(e.id), attr.SlogErrorMessage(e.String()))...)
+		r.AddAttrs(append(args, attr.SlogErrorID(e.id), attr.SlogErrorMessage(e.String()))...)
 	} else {
-		logger.ErrorContext(ctx, e.public, attr.SlogErrorID(e.id), attr.SlogErrorMessage(e.String()))
+		r.AddAttrs(attr.SlogErrorID(e.id), attr.SlogErrorMessage(e.String()))
 	}
+
+	_ = logger.Handler().Handle(ctx, r)
 	return e
 }
 
@@ -163,25 +160,4 @@ func (e *ShareableError) AsGoa() *goa.ServiceError {
 // Error.
 func (e *ShareableError) HTTPStatus() int {
 	return conv.Default(StatusCodes[e.Code], http.StatusInternalServerError)
-}
-
-func funcForPC(pc uintptr) string {
-	if f, ok := funcMemo.Load(pc); ok {
-		val, ok := f.(string)
-		if !ok {
-			panic(fmt.Sprintf("funcForPC: expected string, got %T", f))
-		}
-		return val
-	}
-
-	fnc := runtime.FuncForPC(pc)
-	if fnc == nil {
-		funcMemo.Store(pc, "")
-		return ""
-	}
-
-	file, line := fnc.FileLine(pc)
-	loc := fmt.Sprintf("%s:%d", file, line)
-	funcMemo.Store(pc, loc)
-	return loc
 }

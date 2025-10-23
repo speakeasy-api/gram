@@ -37,6 +37,8 @@ To build a zip file that can be deployed to Gram, run:
 pnpm build
 ```
 
+## Testing Locally
+
 If you want to poke at the tools you've built during local development, you can
 start a Hono server with:
 

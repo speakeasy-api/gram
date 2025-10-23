@@ -62,6 +62,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Extend(BaseToolAttributes)
 
 	Attribute("deployment_id", String, "The ID of the deployment")
+	Attribute("asset_id", String, "The ID of the asset")
 
 	Attribute("summary", String, "Summary of the tool")
 	Attribute("response_filter", ResponseFilter, "Response filter metadata for the tool")
@@ -75,7 +76,7 @@ var HTTPToolDefinition = Type("HTTPToolDefinition", func() {
 	Attribute("path", String, "Path for the request")
 	Attribute("package_name", String, "The name of the source package")
 
-	Required("summary", "tags", "http_method", "path", "schema", "deployment_id")
+	Required("summary", "tags", "http_method", "path", "schema", "deployment_id", "asset_id")
 })
 
 // FunctionToolDefinition represents a function-based tool with all its attributes
@@ -87,11 +88,12 @@ var FunctionToolDefinition = Type("FunctionToolDefinition", func() {
 	Extend(BaseToolAttributes)
 
 	Attribute("deployment_id", String, "The ID of the deployment")
+	Attribute("asset_id", String, "The ID of the asset")
 	Attribute("function_id", String, "The ID of the function")
 	Attribute("runtime", String, "Runtime environment (e.g., nodejs:22, python:3.12)")
 	Attribute("variables", Any, "Variables configuration for the function")
 
-	Required("deployment_id", "function_id", "runtime")
+	Required("deployment_id", "asset_id", "function_id", "runtime")
 })
 
 // Tool is a discriminated union of HTTP tools and prompt templates.
