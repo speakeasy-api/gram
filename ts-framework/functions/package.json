@@ -13,6 +13,9 @@
     "url": "https://github.com/speakeasy-api/gram.git",
     "directory": "ts-framework/functions"
   },
+  "bin": {
+    "gram-build": "./dist/bin/build.js"
+  },
   "scripts": {
     "test": "vitest run",
     "build": "tsc -p tsconfig.json",
@@ -37,8 +40,7 @@
     }
   },
   "peerDependencies": {
-    "@modelcontextprotocol/sdk": "^1.19.1",
-    "zod": "^4"
+    "@modelcontextprotocol/sdk": "^1.19.1"
   },
   "peerDependenciesMeta": {
     "@modelcontextprotocol/sdk": {
@@ -46,8 +48,11 @@
     }
   },
   "dependencies": {
+    "@logtape/logtape": "^1.1.1",
+    "@logtape/pretty": "^1.1.1",
     "archiver": "^7.0.1",
-    "esbuild": "^0.25.10"
+    "esbuild": "^0.25.10",
+    "zod": "^4"
   },
   "devDependencies": {
     "@types/archiver": "^6.0.3",
