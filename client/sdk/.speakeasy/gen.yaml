@@ -27,7 +27,7 @@ generation:
   schemas:
     allOfMergeStrategy: shallowMerge
 typescript:
-  version: 0.15.2
+  version: 0.15.3
   acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}

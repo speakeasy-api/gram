@@ -1,5 +1,11 @@
 # cli
 
+## 0.11.2
+
+### Patch Changes
+
+- 6a816ad: Add a more inviting page for successful authentication
+
 ## 0.11.1
 
 ### Patch Changes

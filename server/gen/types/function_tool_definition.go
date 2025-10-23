@@ -11,6 +11,8 @@ package types
 type FunctionToolDefinition struct {
 	// The ID of the deployment
 	DeploymentID string
+	// The ID of the asset
+	AssetID string
 	// The ID of the function
 	FunctionID string
 	// Runtime environment (e.g., nodejs:22, python:3.12)

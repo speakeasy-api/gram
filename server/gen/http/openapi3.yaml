@@ -8966,6 +8966,9 @@ components:
         FunctionToolDefinition:
             type: object
             properties:
+                asset_id:
+                    type: string
+                    description: The ID of the asset
                 canonical:
                     $ref: '#/components/schemas/CanonicalToolAttributes'
                 canonical_name:
@@ -9025,6 +9028,7 @@ components:
             description: A function tool
             required:
                 - deployment_id
+                - asset_id
                 - function_id
                 - runtime
                 - id
@@ -9283,6 +9287,9 @@ components:
         HTTPToolDefinition:
             type: object
             properties:
+                asset_id:
+                    type: string
+                    description: The ID of the asset
                 canonical:
                     $ref: '#/components/schemas/CanonicalToolAttributes'
                 canonical_name:
@@ -9370,6 +9377,7 @@ components:
                 - path
                 - schema
                 - deployment_id
+                - asset_id
                 - id
                 - project_id
                 - name

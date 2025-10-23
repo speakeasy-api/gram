@@ -29,6 +29,7 @@ import (
 type SetupOTelSDKOptions struct {
 	ServiceName    string
 	ServiceVersion string
+	GitSHA         string
 	EnableTracing  bool
 	EnableMetrics  bool
 }
@@ -97,6 +98,7 @@ func SetupOTelSDK(ctx context.Context, logger *slog.Logger, options SetupOTelSDK
 		ctx,
 		options.ServiceName,
 		options.ServiceVersion,
+		options.GitSHA,
 		metricExporter,
 		spanExporter,
 		prop,
@@ -127,6 +129,7 @@ func newClueConfig(
 	ctx context.Context,
 	svcName string,
 	svcVersion string,
+	gitSHA string,
 	metricExporter sdkmetric.Exporter,
 	spanExporter sdktrace.SpanExporter,
 	propagators propagation.TextMapPropagator,
@@ -139,6 +142,8 @@ func newClueConfig(
 			semconv.SchemaURL,
 			semconv.ServiceNameKey.String(svcName),
 			semconv.ServiceVersionKey.String(svcVersion),
+			attr.DataDogGitCommitSHA(gitSHA),
+			attr.DataDogGitRepoURL("github.com/speakeasy-api/gram"),
 		))
 	if err != nil {
 		return nil, fmt.Errorf("create resource: %w", err)

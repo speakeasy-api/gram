@@ -6,7 +6,7 @@
    </picture>
  </a>
 
-<h3 align="center">Gram</h3>
+<h3 align="center">Gram - MCP Cloud Platform</h3>
 
 <p align="center">
     The platform to create, curate and host MCP servers.
@@ -35,7 +35,7 @@ Gram is a platform for creating, curating, and hosting MCP servers. Create agent
 
 With Gram you can:  
 └ Host one or more remote MCP servers at `mcp.{your-company}.com`.  
-└ Power agentic workflows or chat in your product by exposing context from your internal APIs to LLMs.    
+└ Power agentic workflows or chat in your product by exposing context from your internal APIs to LLMs.
 └ Manage and secure MCP servers for your entire organization through a unified control plane.  
 
 If you are looking to get started on the hosted platform you can do that [here](https://app.getgram.ai/) or check out the [quickstart guide](https://docs.getgram.ai/gram-quickstart).
@@ -87,8 +87,8 @@ The `gram` CLI a tool for programmatic access to Gram. Get started with document
 Quickstart:
 
 ```bash
-$ cd cli
-$ go run . --help
+cd cli
+go run . --help
 ```
 
 ### Releases
@@ -108,4 +108,4 @@ Version bumps are determined by the git commit's prefix:
 
 ## Documentation
 
-Documentation for Gram is also open source in this respository and can be found [here](https://docs.getgram.ai/).
+Documentation for Gram is also open source. View it [here](https://www.speakeasy.com/docs/gram/introduction) and contribute [here](https://github.com/speakeasy-api/developer-docs/tree/main/docs/gram).

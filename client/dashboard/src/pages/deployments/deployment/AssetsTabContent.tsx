@@ -256,7 +256,7 @@ const useDeploymentAssetsSuspense = () => {
       const oapiAssets = deploymentQuery.data.openapiv3Assets;
       const oapiToolByAssetIdCounts = toolsQuery.data.tools.reduce(
         (acc, tool) => {
-          const assetId = tool.httpToolDefinition?.openapiv3DocumentId;
+          const assetId = tool.httpToolDefinition?.assetId;
           if (!assetId) return acc;
           acc[assetId] = (acc[assetId] || 0) + 1;
           return acc;
@@ -270,7 +270,7 @@ const useDeploymentAssetsSuspense = () => {
           ...asset,
           type: "openapiv3",
           report: {
-            toolCount: oapiToolByAssetIdCounts[asset.id] || 0,
+            toolCount: oapiToolByAssetIdCounts[asset.assetId] || 0,
           },
         });
       }
@@ -278,7 +278,7 @@ const useDeploymentAssetsSuspense = () => {
       const funcAssets = deploymentQuery.data.functionsAssets ?? [];
       const funcToolByAssetIdCounts = toolsQuery.data.tools.reduce(
         (acc, tool) => {
-          const assetId = tool.functionToolDefinition?.functionId;
+          const assetId = tool.functionToolDefinition?.assetId;
           if (!assetId) return acc;
           acc[assetId] = (acc[assetId] || 0) + 1;
           return acc;
@@ -292,7 +292,7 @@ const useDeploymentAssetsSuspense = () => {
           type: "function",
           ...asset,
           report: {
-            toolCount: funcToolByAssetIdCounts[asset.id] || 0,
+            toolCount: funcToolByAssetIdCounts[asset.assetId] || 0,
           },
         });
       }

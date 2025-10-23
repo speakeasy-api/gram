@@ -9,17 +9,18 @@ import {
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { Type } from "@/components/ui/type";
+import { FullWidthUpload } from "@/components/upload";
+import DeployStep from "@/components/upload-asset/deploy-step";
+import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadAssetStep from "@/components/upload-asset/step";
 import UploadAssetStepper, {
   useStepper,
 } from "@/components/upload-asset/stepper";
-import DeployStep from "@/components/upload-asset/deploy-step";
-import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
-import { FullWidthUpload } from "@/components/upload";
 import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { useListTools } from "@/hooks/toolTypes";
 import { slugify } from "@/lib/constants";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -37,7 +38,6 @@ import { Alert, Button, CodeSnippet, Stack } from "@speakeasy-api/moonshine";
 import { ArrowRightIcon, CheckIcon, RefreshCcwIcon } from "lucide-react";
 import { useState } from "react";
 import { useParams } from "react-router";
-import { useListTools } from "@/hooks/toolTypes";
 
 export default function UploadOpenAPI() {
   return (
@@ -546,6 +546,7 @@ function isDeploymentEmpty(deployment: GetDeploymentResult | undefined) {
   return (
     !deployment ||
     (deployment?.openapiv3Assets.length === 0 &&
+      (deployment.functionsAssets?.length ?? 0) === 0 &&
       deployment?.packages.length === 0)
   );
 }

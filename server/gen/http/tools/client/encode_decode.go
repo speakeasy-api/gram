@@ -291,6 +291,7 @@ func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToo
 	}
 	res := &types.HTTPToolDefinition{
 		DeploymentID:        *v.DeploymentID,
+		AssetID:             *v.AssetID,
 		Summary:             *v.Summary,
 		Openapiv3DocumentID: v.Openapiv3DocumentID,
 		Openapiv3Operation:  v.Openapiv3Operation,
@@ -402,6 +403,7 @@ func unmarshalFunctionToolDefinitionResponseBodyToTypesFunctionToolDefinition(v 
 	}
 	res := &types.FunctionToolDefinition{
 		DeploymentID:  *v.DeploymentID,
+		AssetID:       *v.AssetID,
 		FunctionID:    *v.FunctionID,
 		Runtime:       *v.Runtime,
 		Variables:     v.Variables,

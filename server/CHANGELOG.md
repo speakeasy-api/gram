@@ -1,5 +1,13 @@
 # server
 
+## 0.9.1
+
+### Patch Changes
+
+- d6f5579: Adds a basic toolset UX for managing resources in the system adding/subtracting them per toolset
+- 44cfc3b: Pass the appropriate uintptr value in the slog Record when logging in `oops.ShareableError.Log()`. Previously, all log messages had their source location being the Log method itself which was not helpful.
+- 2fb24e6: Adds UI hints for custom tools, indicating which "subtools" are missing (if any), or just surfacing the list of subtools otherwise. Begins tracking the required subtools more powerfully in order to support Gram Functions.
+
 ## 0.9.0
 
 ### Minor Changes
