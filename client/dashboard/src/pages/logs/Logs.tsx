@@ -23,13 +23,13 @@ function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
   if (isSuccess) {
     return (
       <div style={{ color: "var(--fill-success-default, #5a8250)" }}>
-        <Icon name="check" className="items-center size-4 fill-success-default" />
+        <Icon name="check" className="items-center size-4" />
       </div>
     );
   }
   return (
     <div style={{ color: "var(--fill-destructive-default, #c83228)" }}>
-      <Icon name="x" className="size-4 fill-destructive-default" />
+      <Icon name="x" className="size-4" />
     </div>
   );
 }
