@@ -35,7 +35,7 @@ import { toast } from "sonner";
 import { MCPDetails, MCPEnableButton } from "../mcp/MCPDetails";
 import { AddToolsDialog } from "./AddToolsDialog";
 import { PromptsTabContent } from "./PromptsTab";
-import { ResourcesTabContent } from "./ResourcesTab";
+import { ResourcesTabContent } from "./resources/ResourcesTab";
 import { ToolsetAuth } from "./ToolsetAuth";
 import { ToolsetAuthAlert } from "./ToolsetAuthAlert";
 import { ToolsetEmptyState } from "./ToolsetEmptyState";

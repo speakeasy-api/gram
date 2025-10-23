@@ -14,12 +14,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Type } from "@/components/ui/type";
+import { useLatestDeployment, useListResources } from "@/hooks/toolTypes";
+import { Resource, Toolset } from "@/lib/toolTypes";
 import { useUpdateToolsetMutation } from "@gram/client/react-query";
-import { Stack } from "@speakeasy-api/moonshine";
+import { Dialog, Stack } from "@speakeasy-api/moonshine";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Toolset, Resource } from "@/lib/toolTypes";
-import { useLatestDeployment, useListResources } from "@/hooks/toolTypes";
+import { FunctionsInstructions } from "../sources/AddSourceDialog";
+import { ResourcesEmptyState } from "./ResourcesEmptyState";
 
 export function ResourcesTabContent({
   toolset,
@@ -30,6 +32,7 @@ export function ResourcesTabContent({
 }) {
   const { data: resourcesResponse } = useListResources({});
   const allResources = resourcesResponse?.resources ?? [];
+  const [instructionsOpen, setInstructionsOpen] = useState(false);
 
   const { data: deployment } = useLatestDeployment();
 
@@ -78,12 +81,20 @@ export function ResourcesTabContent({
   // Show empty state if no resources exist at all in the system
   if (allResources.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Type muted>
-          No resources present. Custom resources can be created through Gram
-          Functions.
-        </Type>
-      </div>
+      <>
+        <ResourcesEmptyState onAddResources={() => setInstructionsOpen(true)} />
+        <Dialog open={instructionsOpen} onOpenChange={setInstructionsOpen}>
+          <Dialog.Content className="max-w-2xl!">
+            <Dialog.Header>
+              <Dialog.Title>Add Resources</Dialog.Title>
+              <Dialog.Description>
+                Add Gram Functions to create resources
+              </Dialog.Description>
+            </Dialog.Header>
+            <FunctionsInstructions />
+          </Dialog.Content>
+        </Dialog>
+      </>
     );
   }
 
