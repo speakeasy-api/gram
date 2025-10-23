@@ -69,7 +69,7 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 	projectID := authCtx.ProjectID
 
 	// Parse time parameters with defaults
-	tsStart := parseTimeOrDefault(payload.TsStart, time.Now().Add(-48*time.Hour).UTC())
+	tsStart := parseTimeOrDefault(payload.TsStart, time.Now().Add(-744*time.Hour).UTC())
 	tsEnd := parseTimeOrDefault(payload.TsEnd, time.Now().UTC())
 
 	id, err := uuid.NewV7()

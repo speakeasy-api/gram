@@ -21,6 +21,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useListToolLogs } from "@gram/client/react-query";
+import { HTTPToolLog } from "@gram/client/models/components";
 import { Icon } from "@speakeasy-api/moonshine";
 import { Copy, ExternalLink, FileCode, SquareFunction } from "lucide-react";
 import { useState } from "react";
@@ -40,234 +42,25 @@ function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
   );
 }
 
-// Real data from ClickHouse http_requests_raw table
-const DUMMY_LOGS = [
-  {
-    id: "019a00f1-d533-74ce-be34-0e78f5b5f89a",
-    ts: new Date("2025-10-20T09:27:20Z"),
-    toolUrn: "tools:http:convoy:convoy_get_event_types",
-    httpMethod: "GET",
-    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
-    statusCode: 200,
-    userAgent: "",
-    durationMs: 421.016708,
-    requestHeaders: {},
-    responseHeaders: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
-      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
-      "Access-Control-Max-Age": "1728000",
-      "Date": "Mon, 20 Oct 2025 09:27:19 GMT",
-      "Content-Type": "application/json",
-    },
-  },
-  {
-    id: "019a00f1-ac71-75eb-9643-534e88459d6d",
-    ts: new Date("2025-10-20T09:27:09Z"),
-    toolUrn: "tools:http:convoy:convoy_update_event_type",
-    httpMethod: "PUT",
-    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types/{eventTypeId}",
-    statusCode: 400,
-    userAgent: "",
-    durationMs: 422.14858300000003,
-    requestHeaders: {
-      "Content-Type": "application/json",
-    },
-    responseHeaders: {
-      "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
-      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
-      "Access-Control-Max-Age": "1728000",
-      "Date": "Mon, 20 Oct 2025 09:27:09 GMT",
-      "Content-Type": "application/json",
-      "Content-Length": "50",
-    },
-  },
-  {
-    id: "019a00f1-6dab-7989-b688-5f6a863d3cb2",
-    ts: new Date("2025-10-20T09:26:53Z"),
-    toolUrn: "tools:http:convoy:convoy_create_event_type",
-    httpMethod: "POST",
-    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
-    statusCode: 201,
-    userAgent: "",
-    durationMs: 403.456125,
-    requestHeaders: {
-      "Content-Type": "application/json",
-    },
-    responseHeaders: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Credentials": "true",
-      "Content-Length": "210",
-      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
-      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
-      "Access-Control-Max-Age": "1728000",
-      "Date": "Mon, 20 Oct 2025 09:26:53 GMT",
-    },
-  },
-  {
-    id: "019a00f1-3e5c-79b0-9547-c504b1e44c6c",
-    ts: new Date("2025-10-20T09:26:41Z"),
-    toolUrn: "tools:http:convoy:convoy_deprecate_event_type",
-    httpMethod: "POST",
-    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types/01K6YQ618QJ1B3EWW126WK5973/deprecate",
-    statusCode: 200,
-    userAgent: "",
-    durationMs: 424.365625,
-    requestHeaders: {},
-    responseHeaders: {
-      "Date": "Mon, 20 Oct 2025 09:26:41 GMT",
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
-      "Content-Length": "241",
-      "Access-Control-Max-Age": "1728000",
-    },
-  },
-  {
-    id: "019a00f0-e735-7b90-b349-64d575ee7d44",
-    ts: new Date("2025-10-20T09:26:19Z"),
-    toolUrn: "tools:http:convoy:convoy_get_event_types",
-    httpMethod: "GET",
-    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
-    statusCode: 200,
-    userAgent: "",
-    durationMs: 413.30962500000004,
-    requestHeaders: {},
-    responseHeaders: {
-      "Access-Control-Max-Age": "1728000",
-      "Access-Control-Allow-Credentials": "true",
-      "Content-Type": "application/json",
-      "Date": "Mon, 20 Oct 2025 09:26:19 GMT",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
-      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
-    },
-  },
-  {
-    id: "0199eea1-a2c4-7cd5-8e73-8f2e0d2ac3bc",
-    ts: new Date("2025-10-16T20:06:34Z"),
-    toolUrn: "tools:http:convoy:convoy_get_event_types",
-    httpMethod: "GET",
-    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
-    statusCode: 200,
-    userAgent: "",
-    durationMs: 402.313333,
-    requestHeaders: {},
-    responseHeaders: {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Max-Age": "1728000",
-      "Date": "Thu, 16 Oct 2025 20:06:34 GMT",
-      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
-      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Credentials": "true",
-    },
-  },
-  {
-    id: "0199ec6c-66cb-74af-8aa5-02798eeeb499",
-    ts: new Date("2025-10-16T09:49:11Z"),
-    toolUrn: "tools:http:convoy:convoy_get_event_types",
-    httpMethod: "GET",
-    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
-    statusCode: 200,
-    userAgent: "",
-    durationMs: 420.721667,
-    requestHeaders: {},
-    responseHeaders: {
-      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
-      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
-      "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Max-Age": "1728000",
-      "Date": "Thu, 16 Oct 2025 09:49:11 GMT",
-      "Content-Type": "application/json",
-    },
-  },
-  {
-    id: "0199ec6c-57a8-7da0-ad01-fc7fe4f3e91a",
-    ts: new Date("2025-10-16T09:49:07Z"),
-    toolUrn: "tools:http:convoy:convoy_update_event_type",
-    httpMethod: "PUT",
-    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types/{eventTypeId}",
-    statusCode: 400,
-    userAgent: "",
-    durationMs: 405.02187499999997,
-    requestHeaders: {
-      "Content-Type": "application/json",
-    },
-    responseHeaders: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
-      "Access-Control-Max-Age": "1728000",
-      "Content-Length": "50",
-      "Date": "Thu, 16 Oct 2025 09:49:07 GMT",
-      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
-    },
-  },
-  {
-    id: "0199ec6c-3dae-7cfc-80e2-ace159ad1361",
-    ts: new Date("2025-10-16T09:49:00Z"),
-    toolUrn: "tools:http:convoy:convoy_create_event_type",
-    httpMethod: "POST",
-    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
-    statusCode: 201,
-    userAgent: "",
-    durationMs: 444.025958,
-    requestHeaders: {
-      "Content-Type": "application/json",
-    },
-    responseHeaders: {
-      "Content-Type": "application/json",
-      "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Max-Age": "1728000",
-      "Content-Length": "214",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
-      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
-      "Date": "Thu, 16 Oct 2025 09:49:00 GMT",
-    },
-  },
-  {
-    id: "0199ec6c-20be-735f-b905-4371edb9abaf",
-    ts: new Date("2025-10-16T09:48:53Z"),
-    toolUrn: "tools:http:convoy:convoy_create_event_type",
-    httpMethod: "POST",
-    httpRoute: "/api/v1/projects/01J9M0QHWYSCST790SYNWM8ABQ/event-types",
-    statusCode: 400,
-    userAgent: "",
-    durationMs: 410.610708,
-    requestHeaders: {
-      "Content-Type": "application/json",
-    },
-    responseHeaders: {
-      "Content-Length": "136",
-      "Access-Control-Max-Age": "1728000",
-      "Access-Control-Allow-Origin": "*",
-      "Date": "Thu, 16 Oct 2025 09:48:53 GMT",
-      "Access-Control-Allow-Credentials": "true",
-      "Access-Control-Allow-Headers": "DNT,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization",
-      "Access-Control-Allow-Methods": "GET, PUT, POST, DELETE, PATCH, OPTIONS",
-      "Content-Type": "application/json",
-    },
-  },
-];
-
 export default function Logs() {
   const [searchQuery, setSearchQuery] = useState("");
   const [toolTypeFilter, setToolTypeFilter] = useState<string>("");
   const [serverNameFilter, setServerNameFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
-  const [selectedLog, setSelectedLog] = useState<typeof DUMMY_LOGS[0] | null>(null);
+  const [selectedLog, setSelectedLog] = useState<HTTPToolLog | null>(null);
 
-  const logs = DUMMY_LOGS;
+  const { data, isLoading } = useListToolLogs(
+    {
+      perPage: 100,
+    },
+    undefined,
+    {
+      staleTime: 30000, // Cache for 30 seconds
+      refetchOnWindowFocus: false,
+    },
+  );
+
+  const logs = data?.logs ?? [];
 
   const getToolIcon = (toolUrn: string) => {
     // Parse URN format: tools:{kind}:{source}:{name}
@@ -288,7 +81,7 @@ export default function Logs() {
     return toolUrn;
   };
 
-  const isSuccessfulCall = (log: typeof DUMMY_LOGS[0]) => {
+  const isSuccessfulCall = (log: HTTPToolLog) => {
     // For HTTP tools, check status code
     if (log.httpMethod && log.statusCode) {
       return log.statusCode >= 200 && log.statusCode < 300;
@@ -348,6 +141,7 @@ export default function Logs() {
       </Page.Header>
       <Page.Body>
         <Page.Section>
+          {null}
           <Page.Section.Body>
             <div className="flex flex-col gap-4">
               {/* Search and Filters Row */}
@@ -410,7 +204,19 @@ export default function Logs() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {logs.map((log) => {
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          Loading logs...
+                        </TableCell>
+                      </TableRow>
+                    ) : logs.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                          No logs found
+                        </TableCell>
+                      </TableRow>
+                    ) : logs.map((log) => {
                       const ToolIcon = getToolIcon(log.toolUrn);
                       const sourceName = getSourceFromUrn(log.toolUrn);
                       return (
@@ -497,7 +303,7 @@ export default function Logs() {
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm">Request Headers</h3>
-                        {Object.keys(selectedLog.requestHeaders).length > 0 && (
+                        {selectedLog.requestHeaders && Object.keys(selectedLog.requestHeaders).length > 0 && (
                           <button
                             className="p-1 rounded hover:bg-surface-secondary-default"
                             onClick={() => {
@@ -509,7 +315,7 @@ export default function Logs() {
                         )}
                       </div>
                       <div className="bg-surface-secondary-default border border-neutral-softest flex rounded-lg p-4 max-h-[400px] overflow-y-auto overflow-x-hidden">
-                        {Object.keys(selectedLog.requestHeaders).length > 0 ? (
+                        {selectedLog.requestHeaders && Object.keys(selectedLog.requestHeaders).length > 0 ? (
                           <pre className="font-mono text-xs text-default whitespace-pre-wrap">
                             {JSON.stringify(selectedLog.requestHeaders, null, 2)}
                           </pre>
@@ -524,7 +330,7 @@ export default function Logs() {
                     <div className="flex flex-col gap-3">
                       <div className="flex items-center justify-between">
                         <h3 className="text-sm">Response Headers</h3>
-                        {Object.keys(selectedLog.responseHeaders).length > 0 && (
+                        {selectedLog.responseHeaders && Object.keys(selectedLog.responseHeaders).length > 0 && (
                           <button
                             className="p-1 rounded hover:bg-surface-secondary-default"
                             onClick={() => {
@@ -536,7 +342,7 @@ export default function Logs() {
                         )}
                       </div>
                       <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 max-h-[400px] overflow-y-auto overflow-x-hidden">
-                        {Object.keys(selectedLog.responseHeaders).length > 0 ? (
+                        {selectedLog.responseHeaders && Object.keys(selectedLog.responseHeaders).length > 0 ? (
                           <pre className="font-mono text-xs text-default whitespace-pre-wrap break-all">
                             {JSON.stringify(selectedLog.responseHeaders, null, 2)}
                           </pre>
@@ -601,15 +407,17 @@ export default function Logs() {
                     <ExternalLink className="size-3" />
                     <span>View in new tab</span>
                   </button>
-                  <button
-                    className="flex items-center gap-1 text-sm hover:underline"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(selectedLog.id);
-                    }}
-                  >
-                    <Copy className="size-3" />
-                    <span>Copy log ID</span>
-                  </button>
+                  {selectedLog.id && (
+                    <button
+                      className="flex items-center gap-1 text-sm hover:underline"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(selectedLog.id!);
+                      }}
+                    >
+                      <Copy className="size-3" />
+                      <span>Copy log ID</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
