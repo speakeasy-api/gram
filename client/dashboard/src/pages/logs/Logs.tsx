@@ -457,7 +457,7 @@ export default function Logs() {
 
       {/* Log Detail Sheet */}
       <Sheet open={!!selectedLog} onOpenChange={(open) => !open && setSelectedLog(null)}>
-        <SheetContent className="w-[540px] min-w-[540px] max-w-[540px] overflow-y-auto p-0">
+        <SheetContent className="w-[1040px] max-w-[1040px]">
           {selectedLog && (
             <div className="flex flex-col gap-8 pt-8 px-6 pb-6">
               {/* Header */}
@@ -485,7 +485,7 @@ export default function Logs() {
                     {/* Endpoint */}
                     <div className="flex flex-col gap-3">
                       <h3 className="text-sm">Endpoint</h3>
-                      <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 flex items-center gap-3">
+                      <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 flex items-center gap-3 max-h-[100px] overflow-y-auto border-hidden">
                         <Badge variant={getHttpMethodVariant(selectedLog.httpMethod)}>
                           {selectedLog.httpMethod}
                         </Badge>
@@ -508,7 +508,7 @@ export default function Logs() {
                           </button>
                         )}
                       </div>
-                      <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4">
+                      <div className="bg-surface-secondary-default border border-neutral-softest flex rounded-lg p-4 max-h-[400px] overflow-y-auto overflow-x-hidden">
                         {Object.keys(selectedLog.requestHeaders).length > 0 ? (
                           <pre className="font-mono text-xs text-default whitespace-pre-wrap">
                             {JSON.stringify(selectedLog.requestHeaders, null, 2)}
@@ -535,9 +535,9 @@ export default function Logs() {
                           </button>
                         )}
                       </div>
-                      <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4">
+                      <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 max-h-[400px] overflow-y-auto overflow-x-hidden">
                         {Object.keys(selectedLog.responseHeaders).length > 0 ? (
-                          <pre className="font-mono text-xs text-default whitespace-pre-wrap">
+                          <pre className="font-mono text-xs text-default whitespace-pre-wrap break-all">
                             {JSON.stringify(selectedLog.responseHeaders, null, 2)}
                           </pre>
                         ) : (
@@ -597,7 +597,7 @@ export default function Logs() {
               <div className="flex flex-col gap-3 border-t border-neutral-softest pt-4">
                 <h3 className="text-sm">Actions</h3>
                 <div className="flex flex-col gap-2">
-                  <button className="flex items-center gap-1 text-sm hover:underline">
+                  <button className="hidden items-center gap-1 text-sm hover:underline">
                     <ExternalLink className="size-3" />
                     <span>View in new tab</span>
                   </button>
