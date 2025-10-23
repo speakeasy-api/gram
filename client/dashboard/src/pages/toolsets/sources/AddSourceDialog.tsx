@@ -1,24 +1,24 @@
-import UploadAssetStepper, {
-  useStepper,
-} from "@/components/upload-asset/stepper";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Type } from "@/components/ui/type";
 import DeployStep from "@/components/upload-asset/deploy-step";
 import NameDeploymentStep from "@/components/upload-asset/name-deployment-step";
 import UploadAssetStep from "@/components/upload-asset/step";
+import UploadAssetStepper, {
+  useStepper,
+} from "@/components/upload-asset/stepper";
 import UploadFileStep from "@/components/upload-asset/upload-file-step";
+import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment, useListAssets } from "@gram/client/react-query";
 import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
-import { ArrowRightIcon, RefreshCcwIcon, Check, Copy } from "lucide-react";
+import { ArrowRightIcon, Check, Copy, RefreshCcwIcon } from "lucide-react";
 import React from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useTelemetry } from "@/contexts/Telemetry";
-import { Type } from "@/components/ui/type";
 
-export interface AddOpenAPIDialogRef {
+export interface AddSourceDialogRef {
   setOpen: (open: boolean) => void;
 }
 
-const AddOpenAPIDialog = React.forwardRef<AddOpenAPIDialogRef>((_, ref) => {
+const AddSourceDialog = React.forwardRef<AddSourceDialogRef>((_, ref) => {
   const [open, setOpen] = React.useState(false);
 
   React.useImperativeHandle(ref, () => ({
@@ -27,12 +27,12 @@ const AddOpenAPIDialog = React.forwardRef<AddOpenAPIDialogRef>((_, ref) => {
 
   return (
     <UploadAssetStepper.Provider step={1}>
-      <AddOpenAPIDialogInternals open={open} onOpenChange={setOpen} />
+      <AddSourceDialogInternals open={open} onOpenChange={setOpen} />
     </UploadAssetStepper.Provider>
   );
 });
 
-const AddOpenAPIDialogInternals = ({
+const AddSourceDialogInternals = ({
   open,
   onOpenChange,
 }: {
@@ -234,7 +234,7 @@ function FooterActions({ onClose }: { onClose?: () => void }) {
   }
 }
 
-function FunctionsInstructions() {
+export function FunctionsInstructions() {
   const [copiedIndex, setCopiedIndex] = React.useState<number | null>(null);
 
   const commands = [
@@ -272,7 +272,7 @@ function FunctionsInstructions() {
               {index + 1}. {item.label}
             </Type>
             <div className="relative group">
-              <pre className="p-4 rounded-md font-mono text-sm overflow-x-auto border">
+              <pre className="p-4 rounded-md font-mono text-sm text-wrap overflow-x-auto border">
                 {item.command}
               </pre>
               <Button
@@ -295,4 +295,4 @@ function FunctionsInstructions() {
   );
 }
 
-export default AddOpenAPIDialog;
+export default AddSourceDialog;
