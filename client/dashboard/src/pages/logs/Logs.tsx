@@ -65,7 +65,6 @@ export default function Logs() {
     {
       staleTime: 30000, // Cache for 30 seconds
       refetchOnWindowFocus: false,
-      enabled: !isFetchingMore, // Prevent duplicate fetches
     },
   );
 
@@ -86,35 +85,41 @@ export default function Logs() {
   const pagination = data?.pagination;
   const hasNextPage = pagination?.hasNextPage ?? false;
 
+  // Auto-load more if container isn't scrollable after initial load
+  useEffect(() => {
+    const container = tableContainerRef.current;
+    if (container && allLogs.length > 0 && !isFetchingMore && !isLoading) {
+      setTimeout(() => {
+        const isScrollable = container.scrollHeight > container.clientHeight;
+
+        // If not scrollable and we have more data, load it automatically
+        if (!isScrollable && hasNextPage && pagination?.nextPageCursor) {
+          setIsFetchingMore(true);
+          setCurrentCursor(pagination.nextPageCursor);
+        }
+      }, 100);
+    }
+  }, [allLogs.length, hasNextPage, pagination?.nextPageCursor, isFetchingMore, isLoading]);
+
   // Load more logs when scrolling near bottom
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
-
     const scrollTop = container.scrollTop;
     const scrollHeight = container.scrollHeight;
     const clientHeight = container.clientHeight;
-
-    console.log('Scroll detected:', {
-      scrollTop,
-      scrollHeight,
-      clientHeight,
-      distanceFromBottom: scrollHeight - (scrollTop + clientHeight),
-      isFetchingMore,
-      hasNextPage,
-      isLoading,
-      nextCursor: pagination?.nextPageCursor,
-    });
+    const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
 
     // Check if we're near the bottom and can load more
-    if (isFetchingMore || !hasNextPage || isLoading) {
-      console.log('Skip loading:', { isFetchingMore, hasNextPage, isLoading });
+    if (isFetchingMore || isLoading) {
+      return;
+    }
+
+    if (!hasNextPage || !pagination?.nextPageCursor) {
       return;
     }
 
     // Trigger when within 200px of bottom
-    const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
-    if (distanceFromBottom < 200 && pagination?.nextPageCursor) {
-      console.log('Loading more logs with cursor:', pagination.nextPageCursor);
+    if (distanceFromBottom < 200) {
       setIsFetchingMore(true);
       setCurrentCursor(pagination.nextPageCursor);
     }
@@ -252,7 +257,8 @@ export default function Logs() {
               <div className="border border-neutral-softest rounded-lg overflow-hidden w-full flex flex-col">
                 <div
                   ref={tableContainerRef}
-                  className="overflow-y-auto max-h-[600px]"
+                  className="overflow-y-auto"
+                  style={{ maxHeight: 'calc(100vh - 250px)' }}
                   onScroll={handleScroll}
                 >
                   <Table>
