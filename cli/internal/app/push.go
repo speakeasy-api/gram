@@ -44,6 +44,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			flags.APIEndpoint(),
 			flags.APIKey(),
 			flags.Project(),
+			flags.Org(),
 			&cli.PathFlag{
 				Name:     "config",
 				Usage:    "Path to the deployment file",
@@ -142,12 +143,14 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			slogID := slog.String("deployment_id", result.Deployment.ID)
 			status := result.Deployment.Status
 
+			deploymentLogsURL := fmt.Sprintf("https://localhost:5173/%s/%s/deployments/%s", workflowParams.OrgSlug, workflowParams.ProjectSlug, result.Deployment.ID)
+
 			switch status {
 			case "completed":
-				logger.InfoContext(ctx, "Deployment succeeded", slogID)
+				logger.InfoContext(ctx, "Deployment succeeded", slogID, slog.String("logs_url", deploymentLogsURL))
 				return nil
 			case "failed":
-				logger.ErrorContext(ctx, "Deployment failed", slogID)
+				logger.ErrorContext(ctx, "Deployment failed", slogID, slog.String("logs_url", deploymentLogsURL))
 				return fmt.Errorf("deployment failed")
 			default:
 				logger.InfoContext(

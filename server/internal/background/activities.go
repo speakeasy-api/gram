@@ -70,7 +70,7 @@ func NewActivities(
 		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
 		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage),
 		provisionFunctionsAccess:      activities.NewProvisionFunctionsAccess(logger, db, encryption),
-		deployFunctionRunners:         activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption), // FIXME
+		deployFunctionRunners:         activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption, billingRepo),
 		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),

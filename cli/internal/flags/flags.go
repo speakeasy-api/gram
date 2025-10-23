@@ -21,10 +21,18 @@ func APIEndpoint() *cli.StringFlag {
 	}
 }
 
+func Org() *cli.StringFlag {
+	return &cli.StringFlag{
+		Name:    "org",
+		Usage:   "The target Gram organization (slug)",
+		EnvVars: []string{"GRAM_ORG"},
+	}
+}
+
 func Project() *cli.StringFlag {
 	return &cli.StringFlag{
 		Name:    "project",
-		Usage:   "The target Gram project",
+		Usage:   "The target Gram project (slug)",
 		EnvVars: []string{"GRAM_PROJECT"},
 	}
 }

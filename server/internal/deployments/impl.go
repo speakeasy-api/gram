@@ -329,11 +329,12 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	organizationID := authCtx.ActiveOrganizationID
 	projectID := *authCtx.ProjectID
 
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
-		attr.OrganizationID(authCtx.ActiveOrganizationID),
+		attr.OrganizationID(organizationID),
 		attr.ProjectID(projectID.String()),
 		attr.UserID(authCtx.UserID),
 		attr.SessionID(conv.PtrValOr(authCtx.SessionID, "")),
@@ -439,7 +440,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	status := dep.Status
 	if status == "created" {
-		s, err := s.startDeployment(ctx, logger, projectID, newID, dep)
+		s, err := s.startDeployment(ctx, logger, organizationID, projectID, newID, dep)
 		if err != nil {
 			return nil, err
 		}
@@ -470,10 +471,11 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
+	organizationID := authCtx.ActiveOrganizationID
 	projectID := *authCtx.ProjectID
 
-	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
-	span.SetAttributes(attr.ProjectID(projectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()), attr.SlogOrganizationID(organizationID))
+	span.SetAttributes(attr.ProjectID(projectID.String()), attr.OrganizationID(organizationID))
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -649,7 +651,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 	status := dep.Status
 	if status == "created" {
-		s, err := s.startDeployment(ctx, logger, projectID, cloneID, dep)
+		s, err := s.startDeployment(ctx, logger, organizationID, projectID, cloneID, dep)
 		if err != nil {
 			return nil, err
 		}
@@ -682,9 +684,10 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 		return nil, oops.E(oops.CodeInvalid, nil, "deployment id is required").Log(ctx, s.logger)
 	}
 
+	organizationID := authCtx.ActiveOrganizationID
 	projectID := *authCtx.ProjectID
 
-	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
+	logger := s.logger.With(attr.SlogProjectID(projectID.String()), attr.SlogOrganizationID(organizationID))
 	span.SetAttributes(attr.ProjectID(projectID.String()))
 
 	dbtx, err := s.db.Begin(ctx)
@@ -735,7 +738,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 	status := dep.Status
 	if status == "created" {
-		s, err := s.startDeployment(ctx, logger, projectID, newID, dep)
+		s, err := s.startDeployment(ctx, logger, organizationID, projectID, newID, dep)
 		if err != nil {
 			return nil, err
 		}
@@ -823,8 +826,9 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 	return res, nil
 }
 
-func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
+func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, organizationID string, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
 	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, s.temporal, background.ProcessDeploymentWorkflowParams{
+		OrganizationID: organizationID,
 		ProjectID:      projectID,
 		DeploymentID:   deploymentID,
 		IdempotencyKey: conv.PtrValOr(dep.IdempotencyKey, ""),

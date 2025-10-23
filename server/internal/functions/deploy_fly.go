@@ -28,6 +28,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/events"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -285,6 +286,32 @@ func (f *FlyRunner) ReadResource(ctx context.Context, req RunnerResourceReadRequ
 	return httpreq, nil
 }
 
+func (f *FlyRunner) Validate(ctx context.Context, req RunnerDeployRequest) error {
+	if err := inv.Check(
+		"fly runner deploy",
+		"project id cannot be nil", req.ProjectID != uuid.Nil,
+		"deployment id cannot be nil", req.DeploymentID != uuid.Nil,
+		"deployment function id cannot be nil", req.FunctionID != uuid.Nil,
+		"runner version cannot be empty", req.Version != "",
+		"organization tier cannot be empty", req.OrganizationTier != "",
+	); err != nil {
+		return oops.E(oops.CodeInvalid, err, "invalid function runner deploy request").Log(ctx, f.logger)
+	}
+
+	switch req.OrganizationTier {
+	case billing.TierFree:
+		if len(req.Assets) > 5 {
+			return oops.E(oops.CodeForbidden, nil, "free tier only allows up to 5 function sources. Please contact Speakeasy support for assistance.").Log(ctx, f.logger)
+		}
+	case billing.TierPro:
+		if len(req.Assets) > 10 {
+			return oops.E(oops.CodeForbidden, nil, "pro tier only allows up to 10 function sources. Please contact Speakeasy support for assistance.").Log(ctx, f.logger)
+		}
+	}
+
+	return nil
+}
+
 func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *RunnerDeployResult, err error) {
 	// ⚠️ IMPLEMENTATION NOTE: Do as much preparation and validation as possible
 	// before starting to create resources on fly.io. This is to avoid leaving
@@ -315,16 +342,6 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 			)
 		}
 	}()
-
-	if err := inv.Check(
-		"fly runner deploy",
-		"project id cannot be nil", req.ProjectID != uuid.Nil,
-		"deployment id cannot be nil", req.DeploymentID != uuid.Nil,
-		"deployment function id cannot be nil", req.FunctionID != uuid.Nil,
-		"runner version cannot be empty", req.Version != "",
-	); err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "invalid function runner deploy request").Log(ctx, logger)
-	}
 
 	networkName := fmt.Sprint("gram-fn-", req.FunctionID.String())
 	orgSlug := f.defaultOrg
@@ -485,7 +502,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to mark fly.io app as ready").Log(ctx, logger)
 	}
 
-	msg := fmt.Sprintf("created fly.io function runner app (app=%s, org=%s, scale=%d)", appName, orgSlug, len(ms))
+	msg := fmt.Sprintf("created function runner app (app=%s, org=%s, scale=%d)", appName, orgSlug, len(ms))
 	logger.InfoContext(ctx, msg, attr.SlogFlyMachineIDs(machineIDs))
 
 	return &RunnerDeployResult{

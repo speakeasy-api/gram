@@ -16,6 +16,7 @@ import (
 )
 
 type ProcessDeploymentWorkflowParams struct {
+	OrganizationID string
 	ProjectID      uuid.UUID
 	DeploymentID   uuid.UUID
 	IdempotencyKey string
@@ -118,8 +119,9 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 		ctx,
 		a.DeployFunctionRunners,
 		activities.DeployFunctionRunnersRequest{
-			ProjectID:    params.ProjectID,
-			DeploymentID: params.DeploymentID,
+			OrganizationID: params.OrganizationID,
+			ProjectID:      params.ProjectID,
+			DeploymentID:   params.DeploymentID,
 		},
 	).Get(ctx, nil)
 	if err != nil {

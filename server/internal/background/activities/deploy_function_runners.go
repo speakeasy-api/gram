@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 
@@ -13,18 +14,23 @@ import (
 
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	funcrepo "github.com/speakeasy-api/gram/server/internal/functions/repo"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 type DeployFunctionRunnersRequest struct {
-	ProjectID    uuid.UUID
-	DeploymentID uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	DeploymentID   uuid.UUID
 }
 
 type DeployFunctionRunners struct {
@@ -33,6 +39,7 @@ type DeployFunctionRunners struct {
 	deployer       functions.Deployer
 	defaultVersion functions.RunnerVersion
 	enc            *encryption.Client
+	billingRepo    billing.Repository
 }
 
 func NewDeployFunctionRunners(
@@ -41,6 +48,7 @@ func NewDeployFunctionRunners(
 	deployer functions.Deployer,
 	defaultVersion functions.RunnerVersion,
 	enc *encryption.Client,
+	billingRepo billing.Repository,
 ) *DeployFunctionRunners {
 	return &DeployFunctionRunners{
 		logger:         logger.With(attr.SlogComponent("deploy-function-runner")),
@@ -48,12 +56,24 @@ func NewDeployFunctionRunners(
 		deployer:       deployer,
 		defaultVersion: defaultVersion,
 		enc:            enc,
+		billingRepo:    billingRepo,
 	}
 }
 
 func (d *DeployFunctionRunners) Do(ctx context.Context, args DeployFunctionRunnersRequest) error {
+	deploymentsRepo := deploymentsrepo.New(d.db)
+
 	err := d.do(ctx, args)
 	if err != nil {
+		if logErr := deploymentsRepo.LogDeploymentEvent(ctx, deploymentsrepo.LogDeploymentEventParams{
+			DeploymentID: args.DeploymentID,
+			ProjectID:    args.ProjectID,
+			Event:        "log:error",
+			Message:      fmt.Sprintf("Failed to deploy function runners: %s", err.Error()),
+		}); logErr != nil {
+			d.logger.ErrorContext(ctx, "error logging deployment event", attr.SlogError(logErr))
+		}
+
 		return temporal.NewNonRetryableApplicationError("failed to deploy function runners", "deployment_error", err)
 	}
 	return nil
@@ -72,6 +92,12 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 
 	arepo := assetsrepo.New(dbtx)
 	drepo := repo.New(dbtx)
+	orgRepo := orgrepo.New(dbtx)
+
+	orgMetadata, err := mv.DescribeOrganization(ctx, d.logger, orgRepo, d.billingRepo, args.OrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "error describing organization").Log(ctx, d.logger)
+	}
 
 	depfuncs, err := drepo.GetDeploymentFunctions(ctx, repo.GetDeploymentFunctionsParams{
 		ProjectID:    args.ProjectID,
@@ -130,13 +156,14 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 
 	for _, task := range tasks {
 		version := d.resolveRunnerVersion(ctx, logger, task.projectID, task.deploymentID, task.functionID)
-		_, err := d.deployer.Deploy(ctx, functions.RunnerDeployRequest{
-			Version:      version,
-			ProjectID:    task.projectID,
-			DeploymentID: task.deploymentID,
-			FunctionID:   task.functionID,
-			AccessID:     task.accessID,
-			Runtime:      task.runtime,
+		request := functions.RunnerDeployRequest{
+			Version:          version,
+			ProjectID:        task.projectID,
+			DeploymentID:     task.deploymentID,
+			FunctionID:       task.functionID,
+			OrganizationTier: billing.Tier(orgMetadata.GramAccountType),
+			AccessID:         task.accessID,
+			Runtime:          task.runtime,
 			Assets: []functions.RunnerAsset{{
 				AssetURL:  task.assetURL,
 				GuestPath: "/data/code.zip",
@@ -144,7 +171,13 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 				SHA256Sum: task.assetSHA256,
 			}},
 			BearerSecret: task.bearerSecret,
-		})
+		}
+
+		if err := d.deployer.Validate(ctx, request); err != nil {
+			return oops.E(oops.CodeUnexpected, err, fmt.Sprintf("error validating function runner deploy request: %s", err.Error())).Log(ctx, d.logger)
+		}
+
+		_, err := d.deployer.Deploy(ctx, request)
 		var serr *oops.ShareableError
 		switch {
 		case errors.As(err, &serr):

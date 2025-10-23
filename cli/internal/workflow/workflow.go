@@ -17,10 +17,14 @@ import (
 type Params struct {
 	APIKey      secret.Secret
 	APIURL      *url.URL
+	OrgSlug     string
 	ProjectSlug string
 }
 
 func (p Params) Validate() error {
+	if p.OrgSlug == "" {
+		return fmt.Errorf("organization slug is required")
+	}
 	if p.ProjectSlug == "" {
 		return fmt.Errorf("project slug is required")
 	}
