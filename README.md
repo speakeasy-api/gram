@@ -6,7 +6,7 @@
    </picture>
  </a>
 
-<h3 align="center">Gram</h3>
+<h3 align="center">Gram - MCP Cloud Platform</h3>
 
 <p align="center">
     The platform to create, curate and host MCP servers.
