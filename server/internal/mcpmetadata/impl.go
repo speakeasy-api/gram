@@ -284,10 +284,9 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnexpected, err, "failed to describe toolset").Log(ctx, s.logger)
 	}
 
-	var (
-		logoAssetURL string
-		docsURL      string
-	)
+	logoAssetURL := os.Getenv("GRAM_SITE_URL") + "/external/sticker-logo.png"
+
+	var docsURL string
 	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, toolset.ID)
 	if metadataErr != nil {
 		if !errors.Is(metadataErr, pgx.ErrNoRows) {

@@ -1,6 +1,6 @@
 import { zip } from "./fflate.js";
 
-function downloadDxtHandler(event) {
+async function downloadDxtHandler(event) {
   const manifestElement = document.getElementById("manifest-json-blob");
   if (manifestElement) {
     const manifestContent = manifestElement.textContent;
@@ -8,6 +8,18 @@ function downloadDxtHandler(event) {
     const files = {
       "manifest.json": new TextEncoder().encode(manifestContent),
     };
+
+    // Get logo image and fetch its binary data
+    const logoImg = document.getElementById("logo");
+    if (logoImg && logoImg.src) {
+      try {
+        const response = await fetch(logoImg.src);
+        const arrayBuffer = await response.arrayBuffer();
+        files["icon.png"] = new Uint8Array(arrayBuffer);
+      } catch (err) {
+        console.error("Error fetching logo:", err);
+      }
+    }
 
     zip(files, (err, data) => {
       if (err) {
