@@ -291,7 +291,7 @@ importers:
         specifier: ^18 || ^19
         version: 19.1.1(react@19.1.1)
       zod:
-        specifier: ^3.20.0
+        specifier: ^3.25.0 || ^4.0.0
         version: 3.25.76
     devDependencies:
       '@eslint/js':
@@ -364,7 +364,7 @@ importers:
         specifier: 'catalog:'
         version: 5.9.2
       zod:
-        specifier: ^3.25.0 || ^4.0.0
+        specifier: ^3.25.76
         version: 3.25.76
 
   ts-framework/create-function/gram-template-gram:
