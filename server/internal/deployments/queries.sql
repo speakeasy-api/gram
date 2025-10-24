@@ -579,8 +579,7 @@ FROM deployments_functions df
 INNER JOIN deployments d ON df.deployment_id = d.id
 WHERE 
   d.project_id = @project_id
-  AND df.deployment_id = @deployment_id
-LIMIT 1;
+  AND df.deployment_id = @deployment_id;
 
 -- name: GetFunctionCredentialsBatch :many
 SELECT DISTINCT ON (function_id)
