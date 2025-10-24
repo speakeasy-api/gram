@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 	"time"
 
@@ -56,6 +55,7 @@ type Service struct {
 	domainsRepo  *customdomains_repo.Queries
 	auth         *auth.Auth
 	serverURL    *url.URL
+	siteURL      *url.URL
 	toolsetCache cache.TypedCacheObject[mv.ToolsetBaseContents]
 }
 
@@ -102,7 +102,7 @@ type hostedPageData struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, cacheAdapter cache.Cache) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, serverURL *url.URL, siteURL *url.URL, cacheAdapter cache.Cache) *Service {
 	logger = logger.With(attr.SlogComponent("mcp_install_page"))
 
 	return &Service{
@@ -115,6 +115,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manage
 		domainsRepo:  customdomains_repo.New(db),
 		auth:         auth.New(logger, db, sessions),
 		serverURL:    serverURL,
+		siteURL:      siteURL,
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
 	}
 }
@@ -284,7 +285,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnexpected, err, "failed to describe toolset").Log(ctx, s.logger)
 	}
 
-	logoAssetURL := os.Getenv("GRAM_SITE_URL") + "/external/sticker-logo.png"
+	logoAssetURL := s.siteURL.String() + "/external/sticker-logo.png"
 
 	var docsURL string
 	metadataRecord, metadataErr := s.repo.GetMetadataForToolset(ctx, toolset.ID)
@@ -345,7 +346,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		MCPConfig:           configSnippet.String(),
 		MCPConfigURIEncoded: url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
 		OrganizationName:    organization.Name,
-		SiteURL:             os.Getenv("GRAM_SITE_URL"),
+		SiteURL:             s.siteURL.String(),
 		LogoAssetURL:        logoAssetURL,
 		DocsURL:             docsURL,
 		IsPublic:            toolset.McpIsPublic,

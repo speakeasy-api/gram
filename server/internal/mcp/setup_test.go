@@ -54,6 +54,7 @@ type testInstance struct {
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
 	serverURL      *url.URL
+	siteURL        *url.URL
 	logger         *slog.Logger
 	cacheAdapter   cache.Cache
 }
@@ -83,6 +84,9 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 	serverURL, err := url.Parse("http://0.0.0.0")
 	require.NoError(t, err)
 
+	siteURL, err := url.Parse("http://0.0.0.0")
+	require.NoError(t, err)
+
 	enc := testenv.NewEncryptionClient(t)
 	env := environments.NewEnvironmentEntries(logger, conn, enc)
 	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host")
@@ -105,6 +109,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 		conn:           conn,
 		sessionManager: sessionManager,
 		serverURL:      serverURL,
+		siteURL:        siteURL,
 		logger:         logger,
 		cacheAdapter:   cacheAdapter,
 	}
