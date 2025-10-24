@@ -100,6 +100,15 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 			Log(ctx, s.logger, attr.SlogProjectID(projectID.String()))
 	}
 
+	// write now the stub client is returning nil, ensure we don't panic
+	if result == nil {
+		return &gen.ListToolLogResponse{Logs: make([]*gen.HTTPToolLog, 0), Pagination: &gen.PaginationResponse{
+			PerPage:        conv.Ptr(0),
+			HasNextPage:    conv.Ptr(false),
+			NextPageCursor: conv.Ptr(""),
+		}}, nil
+	}
+
 	// Convert results to gen.HTTPToolLog
 	logs := make([]*gen.HTTPToolLog, 0, len(result.Logs))
 	for _, r := range result.Logs {
