@@ -94,4 +94,20 @@ export const dateTimeFormatters = {
     hour: "numeric",
     minute: "numeric",
   }),
+  logTimestamp: new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }),
+};
+
+export const formatDuration = (ms: number) => {
+  if (ms < 1000) {
+    return `${ms.toFixed(0)}ms`;
+  }
+  return `${(ms / 1000).toFixed(1)}s`;
 };

@@ -747,7 +747,7 @@ func ValidateHTTPToolLogResponseBody(body *HTTPToolLogResponseBody) (err error) 
 // PaginationResponseResponseBody
 func ValidatePaginationResponseResponseBody(body *PaginationResponseResponseBody) (err error) {
 	if body.NextPageCursor != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_page_cursor", *body.NextPageCursor, goa.FormatDateTime))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.next_page_cursor", *body.NextPageCursor, goa.FormatUUID))
 	}
 	return
 }

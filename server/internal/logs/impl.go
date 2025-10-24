@@ -69,7 +69,7 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 	projectID := authCtx.ProjectID
 
 	// Parse time parameters with defaults
-	tsStart := parseTimeOrDefault(payload.TsStart, time.Now().Add(-48*time.Hour).UTC())
+	tsStart := parseTimeOrDefault(payload.TsStart, time.Now().Add(-744*time.Hour).UTC())
 	tsEnd := parseTimeOrDefault(payload.TsEnd, time.Now().UTC())
 
 	id, err := uuid.NewV7()
@@ -98,6 +98,15 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing logs").
 			Log(ctx, s.logger, attr.SlogProjectID(projectID.String()))
+	}
+
+	// write now the stub client is returning nil, ensure we don't panic
+	if result == nil {
+		return &gen.ListToolLogResponse{Logs: make([]*gen.HTTPToolLog, 0), Pagination: &gen.PaginationResponse{
+			PerPage:        conv.Ptr(0),
+			HasNextPage:    conv.Ptr(false),
+			NextPageCursor: conv.Ptr(""),
+		}}, nil
 	}
 
 	// Convert results to gen.HTTPToolLog
