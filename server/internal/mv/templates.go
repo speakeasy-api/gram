@@ -128,6 +128,5 @@ func fromPromptTemplateRow(row repo.PromptTemplate) *types.PromptTemplate {
 		Summarizer:    nil,
 		Canonical:     nil,
 		Variation:     nil,
-		Meta:          nil,
 	}
 }

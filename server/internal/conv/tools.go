@@ -61,7 +61,6 @@ func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 			UpdatedAt:     tool.HTTPToolDefinition.UpdatedAt,
 			Canonical:     tool.HTTPToolDefinition.Canonical,
 			Variation:     tool.HTTPToolDefinition.Variation,
-			Meta:          tool.HTTPToolDefinition.Meta,
 		}
 	}
 
@@ -86,7 +85,6 @@ func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 			UpdatedAt:     tool.PromptTemplate.UpdatedAt,
 			Canonical:     tool.PromptTemplate.Canonical,
 			Variation:     tool.PromptTemplate.Variation,
-			Meta:          tool.PromptTemplate.Meta,
 		}
 	}
 
@@ -110,7 +108,6 @@ func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 			UpdatedAt:     tool.FunctionToolDefinition.UpdatedAt,
 			Canonical:     tool.FunctionToolDefinition.Canonical,
 			Variation:     tool.FunctionToolDefinition.Variation,
-			Meta:          tool.FunctionToolDefinition.Meta,
 		}
 	}
 

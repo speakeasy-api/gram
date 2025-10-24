@@ -89,10 +89,6 @@ export type PromptTemplate = {
    */
   kind: PromptTemplateKind;
   /**
-   * Meta tags for the tool
-   */
-  meta?: { [k: string]: string } | undefined;
-  /**
    * The name of the tool
    */
   name: string;
@@ -195,7 +191,6 @@ export const PromptTemplate$inboundSchema: z.ZodType<
   history_id: z.string(),
   id: z.string(),
   kind: PromptTemplateKind$inboundSchema,
-  meta: z.record(z.string()).optional(),
   name: z.string(),
   predecessor_id: z.string().optional(),
   project_id: z.string(),
@@ -236,7 +231,6 @@ export type PromptTemplate$Outbound = {
   history_id: string;
   id: string;
   kind: string;
-  meta?: { [k: string]: string } | undefined;
   name: string;
   predecessor_id?: string | undefined;
   project_id: string;
@@ -267,7 +261,6 @@ export const PromptTemplate$outboundSchema: z.ZodType<
   historyId: z.string(),
   id: z.string(),
   kind: PromptTemplateKind$outboundSchema,
-  meta: z.record(z.string()).optional(),
   name: z.string(),
   predecessorId: z.string().optional(),
   projectId: z.string(),

@@ -1453,8 +1453,6 @@ type PromptTemplateResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 	// The last update date of the tool.
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
-	// Meta tags for the tool
-	Meta map[string]string `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
 	// The original details of a tool, excluding any variations
 	Canonical *CanonicalToolAttributesResponseBody `form:"canonical,omitempty" json:"canonical,omitempty" xml:"canonical,omitempty"`
 	// The variation details of a tool. Only includes explicitly varied fields.

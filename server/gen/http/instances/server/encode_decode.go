@@ -323,14 +323,6 @@ func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTT
 	} else {
 		res.Tags = []string{}
 	}
-	if v.Meta != nil {
-		res.Meta = make(map[string]string, len(v.Meta))
-		for key, val := range v.Meta {
-			tk := key
-			tv := val
-			res.Meta[tk] = tv
-		}
-	}
 	if v.Canonical != nil {
 		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
 	}
@@ -495,14 +487,6 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 		res.ToolUrnsHint = make([]string, len(v.ToolUrnsHint))
 		for i, val := range v.ToolUrnsHint {
 			res.ToolUrnsHint[i] = val
-		}
-	}
-	if v.Meta != nil {
-		res.Meta = make(map[string]string, len(v.Meta))
-		for key, val := range v.Meta {
-			tk := key
-			tv := val
-			res.Meta[tk] = tv
 		}
 	}
 	if v.Canonical != nil {

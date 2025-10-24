@@ -7898,11 +7898,6 @@ components:
                 id:
                     type: string
                     description: The ID of the resource
-                meta:
-                    type: object
-                    description: Meta tags for the tool
-                    additionalProperties:
-                        type: string
                 mime_type:
                     type: string
                     description: Optional MIME type of the resource
@@ -7959,11 +7954,6 @@ components:
                 id:
                     type: string
                     description: The ID of the tool
-                meta:
-                    type: object
-                    description: Meta tags for the tool
-                    additionalProperties:
-                        type: string
                 name:
                     type: string
                     description: The name of the tool
@@ -9340,11 +9330,6 @@ components:
                 id:
                     type: string
                     description: The ID of the tool
-                meta:
-                    type: object
-                    description: Meta tags for the tool
-                    additionalProperties:
-                        type: string
                 name:
                     type: string
                     description: The name of the tool
@@ -10295,11 +10280,6 @@ components:
                     enum:
                         - prompt
                         - higher_order_tool
-                meta:
-                    type: object
-                    description: Meta tags for the tool
-                    additionalProperties:
-                        type: string
                 name:
                     type: string
                     description: The name of the tool

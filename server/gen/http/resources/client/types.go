@@ -221,6 +221,8 @@ type FunctionResourceDefinitionResponseBody struct {
 	Runtime *string `form:"runtime,omitempty" json:"runtime,omitempty" xml:"runtime,omitempty"`
 	// Variables configuration for the resource
 	Variables any `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
+	// Meta tags for the tool
+	Meta map[string]string `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
 	// The ID of the resource
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 	// The URN of this resource
@@ -237,8 +239,6 @@ type FunctionResourceDefinitionResponseBody struct {
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Optional MIME type of the resource
 	MimeType *string `form:"mime_type,omitempty" json:"mime_type,omitempty" xml:"mime_type,omitempty"`
-	// Meta tags for the tool
-	Meta map[string]string `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
 	// The creation date of the resource.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
 	// The last update date of the resource.

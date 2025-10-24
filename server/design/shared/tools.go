@@ -47,8 +47,6 @@ var BaseToolAttributes = Type("BaseToolAttributes", func() {
 		Format(FormatDateTime)
 	})
 
-	Attribute("meta", MapOf(String, String), "Meta tags for the tool")
-
 	Attribute("canonical", CanonicalToolAttributes, "The original details of a tool, excluding any variations")
 	Attribute("variation", ToolVariation, "The variation details of a tool. Only includes explicitly varied fields.")
 
@@ -94,6 +92,7 @@ var FunctionToolDefinition = Type("FunctionToolDefinition", func() {
 	Attribute("function_id", String, "The ID of the function")
 	Attribute("runtime", String, "Runtime environment (e.g., nodejs:22, python:3.12)")
 	Attribute("variables", Any, "Variables configuration for the function")
+	Attribute("meta", MapOf(String, String), "Meta tags for the tool")
 
 	Required("deployment_id", "asset_id", "function_id", "runtime")
 })

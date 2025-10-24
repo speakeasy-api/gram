@@ -75,10 +75,6 @@ export type HTTPToolDefinition = {
    */
   id: string;
   /**
-   * Meta tags for the tool
-   */
-  meta?: { [k: string]: string } | undefined;
-  /**
    * The name of the tool
    */
   name: string;
@@ -158,7 +154,6 @@ export const HTTPToolDefinition$inboundSchema: z.ZodType<
   description: z.string(),
   http_method: z.string(),
   id: z.string(),
-  meta: z.record(z.string()).optional(),
   name: z.string(),
   openapiv3_document_id: z.string().optional(),
   openapiv3_operation: z.string().optional(),
@@ -208,7 +203,6 @@ export type HTTPToolDefinition$Outbound = {
   description: string;
   http_method: string;
   id: string;
-  meta?: { [k: string]: string } | undefined;
   name: string;
   openapiv3_document_id?: string | undefined;
   openapiv3_operation?: string | undefined;
@@ -244,7 +238,6 @@ export const HTTPToolDefinition$outboundSchema: z.ZodType<
   description: z.string(),
   httpMethod: z.string(),
   id: z.string(),
-  meta: z.record(z.string()).optional(),
   name: z.string(),
   openapiv3DocumentId: z.string().optional(),
   openapiv3Operation: z.string().optional(),

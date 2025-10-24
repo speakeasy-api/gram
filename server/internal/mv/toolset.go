@@ -357,7 +357,6 @@ func DescribeToolset(
 			Summarizer:    nil,
 			Canonical:     nil,
 			Variation:     nil,
-			Meta:          nil,
 		})
 	}
 
@@ -559,7 +558,6 @@ func readToolsetTools(
 				ResponseFilter:      responseFilter,
 				Variation:           nil, // Applied later
 				Canonical:           nil,
-				Meta:                nil,
 			}
 
 			envQueries = append(envQueries, toolEnvLookupParams{
@@ -606,7 +604,6 @@ func readToolsetTools(
 					Summarizer:    nil,
 					Canonical:     nil,
 					Variation:     nil,
-					Meta:          nil,
 				},
 			})
 		}

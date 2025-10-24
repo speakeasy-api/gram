@@ -321,14 +321,6 @@ func unmarshalHTTPToolDefinitionResponseBodyToTypesHTTPToolDefinition(v *HTTPToo
 	for i, val := range v.Tags {
 		res.Tags[i] = val
 	}
-	if v.Meta != nil {
-		res.Meta = make(map[string]string, len(v.Meta))
-		for key, val := range v.Meta {
-			tk := key
-			tv := val
-			res.Meta[tk] = tv
-		}
-	}
 	if v.Canonical != nil {
 		res.Canonical = unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v.Canonical)
 	}
@@ -481,14 +473,6 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 		res.ToolUrnsHint = make([]string, len(v.ToolUrnsHint))
 		for i, val := range v.ToolUrnsHint {
 			res.ToolUrnsHint[i] = val
-		}
-	}
-	if v.Meta != nil {
-		res.Meta = make(map[string]string, len(v.Meta))
-		for key, val := range v.Meta {
-			tk := key
-			tv := val
-			res.Meta[tk] = tv
 		}
 	}
 	if v.Canonical != nil {
