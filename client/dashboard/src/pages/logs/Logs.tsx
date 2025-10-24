@@ -23,26 +23,19 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useListToolLogs } from "@gram/client/react-query";
 import { HTTPToolLog } from "@gram/client/models/components";
-import { Icon } from "@speakeasy-api/moonshine";
+import {cn, Icon} from "@speakeasy-api/moonshine";
 import { Copy, ExternalLink, FileCode, SquareFunction } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 
 function StatusIcon({ isSuccess }: { isSuccess: boolean }) {
-  if (isSuccess) {
-    return (
-      <div style={{ color: "var(--fill-success-default, #5a8250)" }}>
-        <Icon name="check" className="items-center size-4" />
-      </div>
-    );
-  }
   return (
-    <div style={{ color: "var(--fill-destructive-default, #c83228)" }}>
-      <Icon name="x" className="size-4" />
-    </div>
+      <div>
+        <Icon name={isSuccess ? "check" : "x"} className={cn("size-4", isSuccess ? 'fill-success-default' : 'fill-destructive-default')}/>
+      </div>
   );
 }
 
-export default function Logs() {
+export default function LogsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [toolTypeFilter, setToolTypeFilter] = useState<string>("");
   const [serverNameFilter, setServerNameFilter] = useState<string>("");

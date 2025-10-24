@@ -32,7 +32,7 @@ import {
 import ToolsetPage, { ToolsetRoot } from "./pages/toolsets/Toolset";
 import Toolsets, { ToolsetsRoot } from "./pages/toolsets/Toolsets";
 import Billing from "./pages/billing/Billing";
-import Logs from "./pages/logs/Logs";
+import Logs from "./pages/logs/Logs.tsx";
 
 type AppRouteBasic = {
   title: string;
