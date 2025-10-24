@@ -82,54 +82,81 @@ func ProcessDeploymentWorkflow(ctx workflow.Context, params ProcessDeploymentWor
 
 	finalStatus := "completed"
 
-	err = workflow.ExecuteActivity(
-		ctx,
-		a.ProcessDeployment,
-		params.ProjectID,
-		params.DeploymentID,
-	).Get(ctx, nil)
-	if err != nil {
-		finalStatus = "failed"
-		logger.Error(
-			"failed to process deployment",
-			"error", err.Error(),
-			string(attr.ProjectIDKey), params.ProjectID,
-			string(attr.DeploymentIDKey), params.DeploymentID,
-		)
-	}
-
-	err = workflow.ExecuteActivity(
-		ctx,
-		a.ProvisionFunctionsAccess,
-		params.ProjectID,
-		params.DeploymentID,
-	).Get(ctx, nil)
-	if err != nil {
-		finalStatus = "failed"
-		logger.Error(
-			"failed to provision access credentials for functions",
-			"error", err.Error(),
-			string(attr.ProjectIDKey), params.ProjectID,
-			string(attr.DeploymentIDKey), params.DeploymentID,
-		)
-	}
-
-	err = workflow.ExecuteActivity(
-		ctx,
-		a.DeployFunctionRunners,
-		activities.DeployFunctionRunnersRequest{
-			ProjectID:    params.ProjectID,
-			DeploymentID: params.DeploymentID,
+	// Validate deployment with no retries
+	noRetryCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 2 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 1,
 		},
-	).Get(ctx, nil)
-	if err != nil {
+	})
+
+	validationErr := workflow.ExecuteActivity(
+		noRetryCtx,
+		a.ValidateDeployment,
+		params.ProjectID,
+		params.DeploymentID,
+	).Get(noRetryCtx, nil)
+	if validationErr != nil {
 		finalStatus = "failed"
 		logger.Error(
-			"failed to deploy function runners",
-			"error", err.Error(),
+			"failed to validate deployment",
+			"error", validationErr.Error(),
 			string(attr.ProjectIDKey), params.ProjectID,
 			string(attr.DeploymentIDKey), params.DeploymentID,
 		)
+	}
+
+	// Only process deployment if validation passed
+	if validationErr == nil {
+		err = workflow.ExecuteActivity(
+			ctx,
+			a.ProcessDeployment,
+			params.ProjectID,
+			params.DeploymentID,
+		).Get(ctx, nil)
+		if err != nil {
+			finalStatus = "failed"
+			logger.Error(
+				"failed to process deployment",
+				"error", err.Error(),
+				string(attr.ProjectIDKey), params.ProjectID,
+				string(attr.DeploymentIDKey), params.DeploymentID,
+			)
+		}
+
+		err = workflow.ExecuteActivity(
+			ctx,
+			a.ProvisionFunctionsAccess,
+			params.ProjectID,
+			params.DeploymentID,
+		).Get(ctx, nil)
+		if err != nil {
+			finalStatus = "failed"
+			logger.Error(
+				"failed to provision access credentials for functions",
+				"error", err.Error(),
+				string(attr.ProjectIDKey), params.ProjectID,
+				string(attr.DeploymentIDKey), params.DeploymentID,
+			)
+		}
+
+		err = workflow.ExecuteActivity(
+			ctx,
+			a.DeployFunctionRunners,
+			activities.DeployFunctionRunnersRequest{
+				ProjectID:    params.ProjectID,
+				DeploymentID: params.DeploymentID,
+			},
+		).Get(ctx, nil)
+		if err != nil {
+			finalStatus = "failed"
+			logger.Error(
+				"failed to deploy function runners",
+				"error", err.Error(),
+				string(attr.ProjectIDKey), params.ProjectID,
+				string(attr.DeploymentIDKey), params.DeploymentID,
+			)
+		}
 	}
 
 	var finalTransition activities.TransitionDeploymentResult

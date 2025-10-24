@@ -62,7 +62,7 @@ func (c *AssetsClient) UploadOpenAPIv3(
 
 	result, err := c.client.UploadOpenAPIv3(ctx, payload, req.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to upload OpenAPI asset: %w", err)
+		return nil, fmt.Errorf("failed to upload OpenAPI source: %w", err)
 	}
 
 	return result.Asset, nil
@@ -82,7 +82,7 @@ func (c *AssetsClient) UploadFunctions(
 
 	result, err := c.client.UploadFunctions(ctx, payload, req.Reader)
 	if err != nil {
-		return nil, fmt.Errorf("failed to upload OpenAPI asset: %w", err)
+		return nil, fmt.Errorf("failed to upload Functions source: %w", err)
 	}
 
 	return result.Asset, nil

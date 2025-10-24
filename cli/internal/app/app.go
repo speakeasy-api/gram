@@ -38,6 +38,7 @@ func newApp() *cli.App {
 			flags.APIKey(),
 			flags.APIEndpoint(),
 			flags.Project(),
+			flags.Org(),
 			&cli.StringFlag{
 				Name:    "log-level",
 				Value:   "info",
