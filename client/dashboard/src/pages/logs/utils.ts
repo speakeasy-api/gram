@@ -1,5 +1,6 @@
 import { HTTPToolLog } from "@gram/client/models/components";
 import { FileCode, SquareFunction } from "lucide-react";
+import { dateTimeFormatters } from "@/lib/dates";
 
 export interface ParsedUrn {
   kind: string;
@@ -47,32 +48,11 @@ export const isSuccessfulCall = (log: HTTPToolLog) => {
 };
 
 export const formatTimestamp = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-  const seconds = String(date.getSeconds()).padStart(2, "0");
-  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-};
-
-export const formatDuration = (ms: number) => {
-  if (ms < 1000) {
-    return `${ms.toFixed(0)}ms`;
-  }
-  return `${(ms / 1000).toFixed(1)}s`;
+  return dateTimeFormatters.logTimestamp.format(date);
 };
 
 export const formatDetailTimestamp = (date: Date) => {
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    second: "2-digit",
-    timeZoneName: "short",
-  });
+  return dateTimeFormatters.full.format(date);
 };
 
 export const getHttpMethodVariant = (method: string): "default" | "secondary" => {
