@@ -161,6 +161,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.FreeTierReportingUsageMetrics)
 	temporalWorker.RegisterActivity(activities.RefreshBillingUsage)
 	temporalWorker.RegisterActivity(activities.GetAllOrganizations)
+	temporalWorker.RegisterActivity(activities.ValidateDeployment)
 
 	temporalWorker.RegisterWorkflow(ProcessDeploymentWorkflow)
 	temporalWorker.RegisterWorkflow(SlackEventWorkflow)

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/url"
 
@@ -14,22 +13,18 @@ import (
 
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
+	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	funcrepo "github.com/speakeasy-api/gram/server/internal/functions/repo"
-	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 )
 
 type DeployFunctionRunnersRequest struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	DeploymentID   uuid.UUID
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
 }
 
 type DeployFunctionRunners struct {
@@ -38,7 +33,6 @@ type DeployFunctionRunners struct {
 	deployer       functions.Deployer
 	defaultVersion functions.RunnerVersion
 	enc            *encryption.Client
-	billingRepo    billing.Repository
 }
 
 func NewDeployFunctionRunners(
@@ -47,7 +41,6 @@ func NewDeployFunctionRunners(
 	deployer functions.Deployer,
 	defaultVersion functions.RunnerVersion,
 	enc *encryption.Client,
-	billingRepo billing.Repository,
 ) *DeployFunctionRunners {
 	return &DeployFunctionRunners{
 		logger:         logger.With(attr.SlogComponent("deploy-function-runner")),
@@ -55,26 +48,12 @@ func NewDeployFunctionRunners(
 		deployer:       deployer,
 		defaultVersion: defaultVersion,
 		enc:            enc,
-		billingRepo:    billingRepo,
 	}
 }
 
 func (d *DeployFunctionRunners) Do(ctx context.Context, args DeployFunctionRunnersRequest) error {
-	deploymentsRepo := deploymentsrepo.New(d.db)
-
 	err := d.do(ctx, args)
 	if err != nil {
-		if logErr := deploymentsRepo.LogDeploymentEvent(ctx, deploymentsrepo.LogDeploymentEventParams{
-			DeploymentID:   args.DeploymentID,
-			ProjectID:      args.ProjectID,
-			Event:          "log:error",
-			Message:        fmt.Sprintf("Failed to deploy function runners: %s", err.Error()),
-			AttachmentID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			AttachmentType: conv.ToPGTextEmpty(""),
-		}); logErr != nil {
-			d.logger.ErrorContext(ctx, "error logging deployment event", attr.SlogError(logErr))
-		}
-
 		return temporal.NewNonRetryableApplicationError("failed to deploy function runners", "deployment_error", err)
 	}
 	return nil
@@ -92,15 +71,9 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 	})
 
 	arepo := assetsrepo.New(dbtx)
-	drepo := deploymentsrepo.New(dbtx)
-	orgRepo := orgrepo.New(dbtx)
+	drepo := repo.New(dbtx)
 
-	orgMetadata, err := mv.DescribeOrganization(ctx, d.logger, orgRepo, d.billingRepo, args.OrganizationID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "error describing organization").Log(ctx, d.logger)
-	}
-
-	depfuncs, err := drepo.GetDeploymentFunctions(ctx, deploymentsrepo.GetDeploymentFunctionsParams{
+	depfuncs, err := drepo.GetDeploymentFunctions(ctx, repo.GetDeploymentFunctionsParams{
 		ProjectID:    args.ProjectID,
 		DeploymentID: args.DeploymentID,
 	})
@@ -115,7 +88,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		assetids = append(assetids, df.AssetID)
 	}
 
-	credrows, err := drepo.GetFunctionCredentialsBatch(ctx, deploymentsrepo.GetFunctionCredentialsBatchParams{
+	credrows, err := drepo.GetFunctionCredentialsBatch(ctx, repo.GetFunctionCredentialsBatchParams{
 		ProjectID:    args.ProjectID,
 		DeploymentID: args.DeploymentID,
 		FunctionIds:  ids,
@@ -124,7 +97,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 		return oops.E(oops.CodeUnexpected, err, "error fetching function credentials").Log(ctx, d.logger)
 	}
 
-	creds := make(map[uuid.UUID]deploymentsrepo.GetFunctionCredentialsBatchRow, len(credrows))
+	creds := make(map[uuid.UUID]repo.GetFunctionCredentialsBatchRow, len(credrows))
 	for _, row := range credrows {
 		creds[row.FunctionID] = row
 	}
@@ -157,14 +130,13 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 
 	for _, task := range tasks {
 		version := d.resolveRunnerVersion(ctx, logger, task.projectID, task.deploymentID, task.functionID)
-		request := functions.RunnerDeployRequest{
-			Version:          version,
-			ProjectID:        task.projectID,
-			DeploymentID:     task.deploymentID,
-			FunctionID:       task.functionID,
-			OrganizationTier: billing.Tier(orgMetadata.GramAccountType),
-			AccessID:         task.accessID,
-			Runtime:          task.runtime,
+		_, err := d.deployer.Deploy(ctx, functions.RunnerDeployRequest{
+			Version:      version,
+			ProjectID:    task.projectID,
+			DeploymentID: task.deploymentID,
+			FunctionID:   task.functionID,
+			AccessID:     task.accessID,
+			Runtime:      task.runtime,
 			Assets: []functions.RunnerAsset{{
 				AssetURL:  task.assetURL,
 				GuestPath: "/data/code.zip",
@@ -172,13 +144,7 @@ func (d *DeployFunctionRunners) do(ctx context.Context, args DeployFunctionRunne
 				SHA256Sum: task.assetSHA256,
 			}},
 			BearerSecret: task.bearerSecret,
-		}
-
-		if err := d.deployer.Validate(ctx, request); err != nil {
-			return err
-		}
-
-		_, err := d.deployer.Deploy(ctx, request)
+		})
 		var serr *oops.ShareableError
 		switch {
 		case errors.As(err, &serr):
@@ -210,8 +176,8 @@ func (d *DeployFunctionRunners) preflightFunction(
 	ctx context.Context,
 	logger *slog.Logger,
 	args DeployFunctionRunnersRequest,
-	fnc deploymentsrepo.DeploymentsFunction,
-	credentials map[uuid.UUID]deploymentsrepo.GetFunctionCredentialsBatchRow,
+	fnc repo.DeploymentsFunction,
+	credentials map[uuid.UUID]repo.GetFunctionCredentialsBatchRow,
 	assetURLs map[uuid.UUID][2]string,
 ) (deployFunctionRunnerTask, error) {
 	var empty deployFunctionRunnerTask

@@ -7,7 +7,6 @@ import (
 	"net/url"
 
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -19,7 +18,6 @@ type Orchestrator interface {
 }
 
 type Deployer interface {
-	Validate(context.Context, RunnerDeployRequest) error
 	Deploy(context.Context, RunnerDeployRequest) (*RunnerDeployResult, error)
 }
 
@@ -39,11 +37,10 @@ type RunnerImageRequest struct {
 type RunnerDeployRequest struct {
 	Version RunnerVersion
 
-	ProjectID        uuid.UUID
-	DeploymentID     uuid.UUID
-	FunctionID       uuid.UUID
-	AccessID         uuid.UUID
-	OrganizationTier billing.Tier
+	ProjectID    uuid.UUID
+	DeploymentID uuid.UUID
+	FunctionID   uuid.UUID
+	AccessID     uuid.UUID
 
 	Runtime Runtime
 	Assets  []RunnerAsset

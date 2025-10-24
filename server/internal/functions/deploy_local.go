@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/hashicorp/go-retryablehttp"
+
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -32,10 +33,6 @@ func (l *LocalRunner) ToolCall(ctx context.Context, call RunnerToolCallRequest) 
 
 func (l *LocalRunner) ReadResource(ctx context.Context, readReq RunnerResourceReadRequest) (*http.Request, error) {
 	return nil, oops.Permanent(errors.New("not implemented"))
-}
-
-func (l *LocalRunner) Validate(ctx context.Context, req RunnerDeployRequest) error {
-	return nil
 }
 
 func (l *LocalRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (*RunnerDeployResult, error) {

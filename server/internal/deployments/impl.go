@@ -440,7 +440,7 @@ func (s *Service) CreateDeployment(ctx context.Context, form *gen.CreateDeployme
 
 	status := dep.Status
 	if status == "created" {
-		s, err := s.startDeployment(ctx, logger, organizationID, projectID, newID, dep)
+		s, err := s.startDeployment(ctx, logger, projectID, newID, dep)
 		if err != nil {
 			return nil, err
 		}
@@ -651,7 +651,7 @@ func (s *Service) Evolve(ctx context.Context, form *gen.EvolvePayload) (*gen.Evo
 
 	status := dep.Status
 	if status == "created" {
-		s, err := s.startDeployment(ctx, logger, organizationID, projectID, cloneID, dep)
+		s, err := s.startDeployment(ctx, logger, projectID, cloneID, dep)
 		if err != nil {
 			return nil, err
 		}
@@ -738,7 +738,7 @@ func (s *Service) Redeploy(ctx context.Context, payload *gen.RedeployPayload) (*
 
 	status := dep.Status
 	if status == "created" {
-		s, err := s.startDeployment(ctx, logger, organizationID, projectID, newID, dep)
+		s, err := s.startDeployment(ctx, logger, projectID, newID, dep)
 		if err != nil {
 			return nil, err
 		}
@@ -826,9 +826,8 @@ func (s *Service) resolvePackages(ctx context.Context, tx *packagesRepo.Queries,
 	return res, nil
 }
 
-func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, organizationID string, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
+func (s *Service) startDeployment(ctx context.Context, logger *slog.Logger, projectID uuid.UUID, deploymentID uuid.UUID, dep *types.Deployment) (string, error) {
 	wr, err := background.ExecuteProcessDeploymentWorkflow(ctx, s.temporal, background.ProcessDeploymentWorkflowParams{
-		OrganizationID: organizationID,
 		ProjectID:      projectID,
 		DeploymentID:   deploymentID,
 		IdempotencyKey: conv.PtrValOr(dep.IdempotencyKey, ""),
