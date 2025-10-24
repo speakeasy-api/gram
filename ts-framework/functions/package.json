@@ -8,6 +8,9 @@
   "keywords": [],
   "license": "MIT",
   "homepage": "https://github.com/speakeasy-api/gram",
+  "engines": {
+    "node": ">=22.18.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/speakeasy-api/gram.git",
