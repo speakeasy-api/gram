@@ -52,7 +52,8 @@
     "@logtape/pretty": "^1.1.1",
     "archiver": "^7.0.1",
     "esbuild": "^0.25.10",
-    "zod": "^4"
+    "zod": "^4",
+    "zx": "8.8.4-lite"
   },
   "devDependencies": {
     "@types/archiver": "^6.0.3",
