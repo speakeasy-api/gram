@@ -1402,7 +1402,6 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 		URI:               "resource://test",
 		MimeType:          "text/plain",
 		Variables:         map[string]string{},
-		Meta:              nil,
 	}
 
 	resourcePlan := NewResourceFunctionCallPlan(descriptor, plan)
