@@ -22,6 +22,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { slugify } from "@/lib/constants";
 import { cn, getServerURL } from "@/lib/utils";
 import { useDeploymentLogsSummary } from "@/pages/deployments/deployment/Deployment";
+import { useUploadOpenAPISteps } from "@/pages/onboarding/UploadOpenAPI";
 import { UploadedDocument } from "@/pages/onboarding/Wizard";
 import { useRoutes } from "@/routes";
 import { Asset } from "@gram/client/models/components";
@@ -49,8 +50,7 @@ import {
 } from "react";
 import { useParams } from "react-router";
 import { toast } from "sonner";
-import { useUploadOpenAPISteps } from "@/pages/onboarding/UploadOpenAPI";
-import AddOpenAPIDialog, { AddOpenAPIDialogRef } from "./AddOpenAPIDialog";
+import AddSourceDialog, { AddSourceDialogRef } from "./AddSourceDialog";
 import { SourcesEmptyState } from "./SourcesEmptyState";
 
 type NamedAsset = Asset & {
@@ -94,7 +94,7 @@ export default function Sources() {
     string | null
   >(null);
 
-  const addOpenAPIDialogRef = useRef<AddOpenAPIDialogRef>(null);
+  const addOpenAPIDialogRef = useRef<AddSourceDialogRef>(null);
   const removeSourceDialogRef = useRef<RemoveSourceDialogRef>(null);
 
   const finishUpload = () => {
@@ -199,7 +199,7 @@ export default function Sources() {
         <SourcesEmptyState
           onNewUpload={() => addOpenAPIDialogRef.current?.setOpen(true)}
         />
-        <AddOpenAPIDialog ref={addOpenAPIDialogRef} />
+        <AddSourceDialog ref={addOpenAPIDialogRef} />
       </>
     );
   }
@@ -329,7 +329,7 @@ export default function Sources() {
             ref={removeSourceDialogRef}
             onConfirmRemoval={removeSource}
           />
-          <AddOpenAPIDialog ref={addOpenAPIDialogRef} />
+          <AddSourceDialog ref={addOpenAPIDialogRef} />
         </Page.Section.Body>
       </Page.Section>
     </>

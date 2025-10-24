@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import gram from "./functions.ts";
+import { gram } from "./gram.ts";
 
 const app = new Hono();
 

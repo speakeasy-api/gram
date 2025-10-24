@@ -1,5 +1,16 @@
 # @gram-ai/create-function
 
+## 0.3.2
+
+## 0.3.1
+
+## 0.3.0
+
+### Minor Changes
+
+- 8fa3809: Updated the Gram Functions TypeScript SDK and the Gram Functions template to
+  support seamless build and deploy powered by the SDK and Gram CLI.
+
 ## 0.2.1
 
 ### Patch Changes

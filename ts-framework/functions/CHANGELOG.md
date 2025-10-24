@@ -1,5 +1,28 @@
 # @gram-ai/functions
 
+## 0.3.2
+
+### Patch Changes
+
+- a609f61: Added an "engines" field to the package.json files of the `@gram-ai/functions`
+  requiring Node.js version 22.18.0 or higher. This ensures that we are in a
+  runtime that supports import assertions and native support for running
+  TypeScript files without experimental flags.
+
+## 0.3.1
+
+### Patch Changes
+
+- cd9df97: Added the missing 'zx' dependency to the Gram TS SDK's `package.json`. It is
+  needed for the build process.
+
+## 0.3.0
+
+### Minor Changes
+
+- 8fa3809: Updated the Gram Functions TypeScript SDK and the Gram Functions template to
+  support seamless build and deploy powered by the SDK and Gram CLI.
+
 ## 0.2.1
 
 ### Patch Changes

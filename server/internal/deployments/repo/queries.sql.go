@@ -962,7 +962,6 @@ INNER JOIN deployments d ON df.deployment_id = d.id
 WHERE 
   d.project_id = $1
   AND df.deployment_id = $2
-LIMIT 1
 `
 
 type GetDeploymentFunctionsParams struct {

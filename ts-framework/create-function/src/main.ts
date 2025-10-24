@@ -181,6 +181,15 @@ async function init(argv: string[]): Promise<void> {
     deps["@gram-ai/functions"] = gramFuncsVersion;
   }
 
+  const scripts = { ...dstPkg.scripts };
+  for (const [scriptName, scriptCmd] of Object.entries(dstPkg.scripts || {})) {
+    if (scriptName.startsWith("_:")) {
+      delete scripts[scriptName];
+    }
+    scripts[scriptName.slice(2)] = scriptCmd;
+  }
+  dstPkg.scripts = scripts;
+
   await fs.writeFile(
     join(dir, "package.json"),
     JSON.stringify(dstPkg, null, 2),
@@ -219,7 +228,7 @@ async function init(argv: string[]): Promise<void> {
   // Format backtick-wrapped text with cyan color
   const formattedMessage = successMessage.replace(
     /`([^`]+)`/g,
-    "\x1b[36m$1\x1b[0m"
+    "\x1b[36m$1\x1b[0m",
   );
 
   tlog.success(formattedMessage);

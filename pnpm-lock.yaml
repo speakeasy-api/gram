@@ -410,6 +410,12 @@ importers:
 
   ts-framework/functions:
     dependencies:
+      '@logtape/logtape':
+        specifier: ^1.1.1
+        version: 1.1.1
+      '@logtape/pretty':
+        specifier: ^1.1.1
+        version: 1.1.1(@logtape/logtape@1.1.1)
       '@modelcontextprotocol/sdk':
         specifier: ^1.19.1
         version: 1.19.1
@@ -422,6 +428,9 @@ importers:
       zod:
         specifier: ^4
         version: 4.1.12
+      zx:
+        specifier: 8.8.4-lite
+        version: 8.8.4-lite
     devDependencies:
       '@types/archiver':
         specifier: ^6.0.3
@@ -1244,6 +1253,14 @@ packages:
 
   '@kwsites/promise-deferred@1.1.1':
     resolution: {integrity: sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==}
+
+  '@logtape/logtape@1.1.1':
+    resolution: {integrity: sha512-/zpMuB2BZnL3LnBsy6PfFJp/4qP/60U9hE5j6eFwk25wBVtLpd7/bF3B1j7cnMD37R02fFyDyyHEmRSOz6+Qfg==}
+
+  '@logtape/pretty@1.1.1':
+    resolution: {integrity: sha512-rKqmPa+QLaQ8BsmzIl09j1PbepcoAJsJXlt5VScPcUOXhY/BaG2nF8rSuC3aS43oavHUgrbNGjgLOD3yCiYZow==}
+    peerDependencies:
+      '@logtape/logtape': ^1.1.1
 
   '@manypkg/find-root@1.1.0':
     resolution: {integrity: sha512-mki5uBvhHzO8kYYix/WRy2WX8S3B5wdVSc9D6KcU5lQNglP2yt58/VfLuAK49glRXChosY8ap2oJ1qgma3GUVA==}
@@ -7369,6 +7386,12 @@ snapshots:
       - supports-color
 
   '@kwsites/promise-deferred@1.1.1': {}
+
+  '@logtape/logtape@1.1.1': {}
+
+  '@logtape/pretty@1.1.1(@logtape/logtape@1.1.1)':
+    dependencies:
+      '@logtape/logtape': 1.1.1
 
   '@manypkg/find-root@1.1.0':
     dependencies:

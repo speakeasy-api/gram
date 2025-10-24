@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.14.17
+
+### Patch Changes
+
+- 3c00725: Set of improvements for functions onboarding UX, including better support for mixed OpenAPI / Functions projects
+
 ## 0.14.16
 
 ### Patch Changes

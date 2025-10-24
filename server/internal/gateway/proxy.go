@@ -53,6 +53,9 @@ var proxiedHeaders = []string{
 	"Expires",
 	"Last-Modified",
 	"Pragma",
+	functions.FunctionsCPUHeader,
+	functions.FunctionsMemoryHeader,
+	functions.FunctionsExecutionTimeHeader,
 }
 
 type FilterRequest struct {
@@ -820,6 +823,16 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		if _, err := io.Copy(opts.Writer, body); err != nil {
 			span.SetStatus(codes.Error, err.Error())
 			opts.Logger.ErrorContext(ctx, "failed to copy response body", attr.SlogError(err))
+		}
+	}
+
+	// Copy trailer values from upstream to client response (respecting allowlist)
+	for key, values := range resp.Trailer {
+		if !slices.Contains(proxiedHeaders, key) {
+			continue
+		}
+		for _, value := range values {
+			opts.Writer.Header().Add(key, value)
 		}
 	}
 
