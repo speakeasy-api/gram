@@ -4,11 +4,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HTTPToolLog } from "@gram/client/models/components";
 import { cn, Icon } from "@speakeasy-api/moonshine";
 import { Copy } from "lucide-react";
+import { formatDuration } from "@/lib/dates";
 import {
   getToolIcon,
   getSourceFromUrn,
   isSuccessfulCall,
-  formatDuration,
   getToolNameFromUrn,
   formatDetailTimestamp,
   getHttpMethodVariant,

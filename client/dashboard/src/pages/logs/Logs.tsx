@@ -8,7 +8,7 @@ import {cn, Icon} from "@speakeasy-api/moonshine";
 import {useEffect, useRef, useState} from "react";
 import {LogDetailSheet} from "./LogDetailSheet";
 import {formatTimestamp, getSourceFromUrn, getToolIcon, getToolNameFromUrn, isSuccessfulCall,} from "./utils";
-import {formatDuration} from "@/lib/dates.ts";
+import {formatDuration} from "@/lib/dates";
 
 function StatusIcon({isSuccess}: { isSuccess: boolean }) {
     return (
@@ -20,10 +20,17 @@ function StatusIcon({isSuccess}: { isSuccess: boolean }) {
 }
 
 export default function LogsPage() {
-    const [searchQuery, setSearchQuery] = useState<string>("");
-    const [toolTypeFilter, setToolTypeFilter] = useState<string>("");
-    const [serverNameFilter, setServerNameFilter] = useState<string>("");
-    const [statusFilter, setStatusFilter] = useState<string>("");
+    const [filters, setFilters] = useState<{
+        searchQuery: string | null;
+        toolTypeFilter: string | null;
+        serverNameFilter: string | null;
+        statusFilter: string | null;
+    }>({
+        searchQuery: null,
+        toolTypeFilter: null,
+        serverNameFilter: null,
+        statusFilter: null,
+    });
     const [selectedLog, setSelectedLog] = useState<HTTPToolLog | null>(null);
 
     // Infinite scroll state
@@ -128,27 +135,30 @@ export default function LogsPage() {
                             {/* Search and Filters Row */}
                             <div className="flex items-center justify-between gap-4">{/* Search Input */}
                                 <SearchBar
-                                    value={searchQuery}
-                                    onChange={setSearchQuery}
+                                    value={filters.searchQuery ?? ""}
+                                    onChange={(value) => setFilters(prev => ({ ...prev, searchQuery: value || null }))}
                                     placeholder="Search"
                                     className="w-1/3"
                                 />
 
                                 {/* Filters */}
                                 <div className="flex items-center gap-2">
-                                    <Select value={toolTypeFilter} onValueChange={setToolTypeFilter}>
+                                    <Select
+                                        value={filters.toolTypeFilter ?? ""}
+                                        onValueChange={(value) => setFilters(prev => ({ ...prev, toolTypeFilter: value || null }))}
+                                    >
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Tool Type"/>
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">All Types</SelectItem>
-                                            {/* Add more tool type options here */}
+                                            <SelectItem value="http">HTTP</SelectItem>
                                         </SelectContent>
                                     </Select>
 
                                     <Select
-                                        value={serverNameFilter}
-                                        onValueChange={setServerNameFilter}
+                                        value={filters.serverNameFilter ?? ""}
+                                        onValueChange={(value) => setFilters(prev => ({ ...prev, serverNameFilter: value || null }))}
                                     >
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Server Name"/>
@@ -159,13 +169,17 @@ export default function LogsPage() {
                                         </SelectContent>
                                     </Select>
 
-                                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                                    <Select
+                                        value={filters.statusFilter ?? ""}
+                                        onValueChange={(value) => setFilters(prev => ({ ...prev, statusFilter: value || null }))}
+                                    >
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Status"/>
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">All Statuses</SelectItem>
-                                            {/* Add more status options here */}
+                                            <SelectItem value="success">Success</SelectItem>
+                                            <SelectItem value="failure">Failure</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
