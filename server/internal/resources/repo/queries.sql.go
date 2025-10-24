@@ -85,7 +85,7 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  function_resource_definitions.id, function_resource_definitions.resource_urn, function_resource_definitions.project_id, function_resource_definitions.deployment_id, function_resource_definitions.function_id, function_resource_definitions.runtime, function_resource_definitions.name, function_resource_definitions.description, function_resource_definitions.uri, function_resource_definitions.title, function_resource_definitions.mime_type, function_resource_definitions.variables, function_resource_definitions.created_at, function_resource_definitions.updated_at, function_resource_definitions.deleted_at, function_resource_definitions.deleted,
+  function_resource_definitions.id, function_resource_definitions.resource_urn, function_resource_definitions.project_id, function_resource_definitions.deployment_id, function_resource_definitions.function_id, function_resource_definitions.runtime, function_resource_definitions.name, function_resource_definitions.description, function_resource_definitions.uri, function_resource_definitions.title, function_resource_definitions.mime_type, function_resource_definitions.variables, function_resource_definitions.meta, function_resource_definitions.created_at, function_resource_definitions.updated_at, function_resource_definitions.deleted_at, function_resource_definitions.deleted,
   (select id from deployment) as owning_deployment_id
 FROM function_resource_definitions
 WHERE
@@ -127,6 +127,7 @@ func (q *Queries) FindFunctionResourcesByUrn(ctx context.Context, arg FindFuncti
 			&i.FunctionResourceDefinition.Title,
 			&i.FunctionResourceDefinition.MimeType,
 			&i.FunctionResourceDefinition.Variables,
+			&i.FunctionResourceDefinition.Meta,
 			&i.FunctionResourceDefinition.CreatedAt,
 			&i.FunctionResourceDefinition.UpdatedAt,
 			&i.FunctionResourceDefinition.DeletedAt,
@@ -165,6 +166,7 @@ SELECT
   , resource.title
   , resource.mime_type
   , resource.variables
+  , resource.meta
   , access.id AS access_id
 FROM deployment dep
 INNER JOIN function_resource_definitions resource
@@ -199,6 +201,7 @@ type GetFunctionResourceByURNRow struct {
 	Title        pgtype.Text
 	MimeType     pgtype.Text
 	Variables    []byte
+	Meta         []byte
 	AccessID     uuid.NullUUID
 }
 
@@ -218,6 +221,7 @@ func (q *Queries) GetFunctionResourceByURN(ctx context.Context, arg GetFunctionR
 		&i.Title,
 		&i.MimeType,
 		&i.Variables,
+		&i.Meta,
 		&i.AccessID,
 	)
 	return i, err
@@ -249,6 +253,7 @@ SELECT
   frd.variables,
   frd.runtime,
   frd.function_id,
+  frd.meta,
   frd.created_at,
   frd.updated_at
 FROM function_resource_definitions frd
@@ -279,6 +284,7 @@ type ListFunctionResourcesRow struct {
 	Variables    []byte
 	Runtime      string
 	FunctionID   uuid.UUID
+	Meta         []byte
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 }
@@ -312,6 +318,7 @@ func (q *Queries) ListFunctionResources(ctx context.Context, arg ListFunctionRes
 			&i.Variables,
 			&i.Runtime,
 			&i.FunctionID,
+			&i.Meta,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

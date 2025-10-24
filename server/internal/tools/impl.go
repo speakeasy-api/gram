@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
 
@@ -179,12 +180,19 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				UpdatedAt:           tool.UpdatedAt.Time.Format(time.RFC3339),
 				Variation:           nil, // Applied later
 				Canonical:           nil,
+				Meta:                nil,
 			},
 		})
 	}
 
 	for _, tool := range functionTools {
-		// TODO: Chase to look at what applies from variations here
+		var meta map[string]string
+		if tool.Meta != nil {
+			err = json.Unmarshal(tool.Meta, &meta)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta tags").Log(ctx, s.logger)
+			}
+		}
 		result.Tools = append(result.Tools, &types.Tool{
 			FunctionToolDefinition: &types.FunctionToolDefinition{
 				ID:            tool.ID.String(),
@@ -198,6 +206,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				CanonicalName: tool.Name,
 				Description:   tool.Description,
 				Variables:     tool.Variables,
+				Meta:          meta,
 				SchemaVersion: nil,
 				Schema:        string(tool.InputSchema),
 				Confirm:       nil,
@@ -237,6 +246,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 				Summarizer:    nil,
 				Canonical:     nil,
 				Variation:     nil,
+				Meta:          nil,
 			},
 		})
 	}

@@ -363,6 +363,8 @@ CREATE TABLE IF NOT EXISTS function_tool_definitions (
   input_schema JSONB,
   -- Record<string, { description?: string }>
   variables JSONB,
+  -- Record<string, string>
+  meta JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -389,6 +391,8 @@ CREATE TABLE IF NOT EXISTS function_resource_definitions (
   title TEXT,
   mime_type TEXT,
   variables JSONB,
+  -- Record<string, string>
+  meta JSONB,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),

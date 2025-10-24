@@ -2,6 +2,7 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
 
@@ -102,6 +103,13 @@ func (s *Service) ListResources(ctx context.Context, payload *gen.ListResourcesP
 	}
 
 	for i, resource := range resources {
+		var meta map[string]string
+		if resource.Meta != nil {
+			err = json.Unmarshal(resource.Meta, &meta)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta").Log(ctx, s.logger)
+			}
+		}
 		result.Resources[i] = &types.Resource{
 			FunctionResourceDefinition: &types.FunctionResourceDefinition{
 				ID:           resource.ID.String(),
@@ -116,6 +124,7 @@ func (s *Service) ListResources(ctx context.Context, payload *gen.ListResourcesP
 				Title:        conv.FromPGText[string](resource.Title),
 				MimeType:     conv.FromPGText[string](resource.MimeType),
 				Variables:    resource.Variables,
+				Meta:         meta,
 				CreatedAt:    resource.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:    resource.UpdatedAt.Time.Format(time.RFC3339),
 			},

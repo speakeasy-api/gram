@@ -82,7 +82,7 @@ func DescribePromptTemplates(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
 	}
 
-  templates := make([]*types.PromptTemplate, 0, len(rows))
+	templates := make([]*types.PromptTemplate, 0, len(rows))
 	for _, row := range rows {
 		pt := fromPromptTemplateRow(row)
 		err = ApplyVariations(ctx, logger, tx, pid, []*types.Tool{{PromptTemplate: pt}})
@@ -128,5 +128,6 @@ func fromPromptTemplateRow(row repo.PromptTemplate) *types.PromptTemplate {
 		Summarizer:    nil,
 		Canonical:     nil,
 		Variation:     nil,
+		Meta:          nil,
 	}
 }

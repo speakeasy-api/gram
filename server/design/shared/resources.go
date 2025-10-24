@@ -21,6 +21,7 @@ var BaseResourceAttributes = Type("BaseResourceAttributes", func() {
 	Attribute("uri", String, "The URI of the resource")
 	Attribute("title", String, "Optional title for the resource")
 	Attribute("mime_type", String, "Optional MIME type of the resource")
+	Attribute("meta", MapOf(String, String), "Meta tags for the tool")
 
 	Attribute("created_at", String, func() {
 		Description("The creation date of the resource.")

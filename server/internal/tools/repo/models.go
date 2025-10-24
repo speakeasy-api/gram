@@ -22,6 +22,7 @@ type FunctionToolDefinition struct {
 	Description  string
 	InputSchema  []byte
 	Variables    []byte
+	Meta         []byte
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz

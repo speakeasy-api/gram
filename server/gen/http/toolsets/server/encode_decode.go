@@ -2132,6 +2132,14 @@ func marshalTypesHTTPToolDefinitionToHTTPToolDefinitionResponseBody(v *types.HTT
 	} else {
 		res.Tags = []string{}
 	}
+	if v.Meta != nil {
+		res.Meta = make(map[string]string, len(v.Meta))
+		for key, val := range v.Meta {
+			tk := key
+			tv := val
+			res.Meta[tk] = tv
+		}
+	}
 	if v.Canonical != nil {
 		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
 	}
@@ -2240,6 +2248,14 @@ func marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody(v *t
 		CreatedAt:     v.CreatedAt,
 		UpdatedAt:     v.UpdatedAt,
 	}
+	if v.Meta != nil {
+		res.Meta = make(map[string]string, len(v.Meta))
+		for key, val := range v.Meta {
+			tk := key
+			tv := val
+			res.Meta[tk] = tv
+		}
+	}
 	if v.Canonical != nil {
 		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
 	}
@@ -2290,6 +2306,14 @@ func marshalTypesPromptTemplateToPromptTemplateResponseBody(v *types.PromptTempl
 			res.ToolUrnsHint[i] = val
 		}
 	}
+	if v.Meta != nil {
+		res.Meta = make(map[string]string, len(v.Meta))
+		for key, val := range v.Meta {
+			tk := key
+			tv := val
+			res.Meta[tk] = tv
+		}
+	}
 	if v.Canonical != nil {
 		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
 	}
@@ -2333,6 +2357,14 @@ func marshalTypesFunctionResourceDefinitionToFunctionResourceDefinitionResponseB
 		MimeType:     v.MimeType,
 		CreatedAt:    v.CreatedAt,
 		UpdatedAt:    v.UpdatedAt,
+	}
+	if v.Meta != nil {
+		res.Meta = make(map[string]string, len(v.Meta))
+		for key, val := range v.Meta {
+			tk := key
+			tv := val
+			res.Meta[tk] = tv
+		}
 	}
 
 	return res

@@ -84,7 +84,7 @@ WITH deployment AS (
     LIMIT 1
 )
 SELECT
-  ftd.id, ftd.tool_urn, ftd.project_id, ftd.deployment_id, ftd.function_id, ftd.runtime, ftd.name, ftd.description, ftd.input_schema, ftd.variables, ftd.created_at, ftd.updated_at, ftd.deleted_at, ftd.deleted,
+  ftd.id, ftd.tool_urn, ftd.project_id, ftd.deployment_id, ftd.function_id, ftd.runtime, ftd.name, ftd.description, ftd.input_schema, ftd.variables, ftd.meta, ftd.created_at, ftd.updated_at, ftd.deleted_at, ftd.deleted,
   (select id from deployment) as owning_deployment_id,
   df.asset_id
 FROM function_tool_definitions ftd
@@ -127,6 +127,7 @@ func (q *Queries) FindFunctionToolsByUrn(ctx context.Context, arg FindFunctionTo
 			&i.FunctionToolDefinition.Description,
 			&i.FunctionToolDefinition.InputSchema,
 			&i.FunctionToolDefinition.Variables,
+			&i.FunctionToolDefinition.Meta,
 			&i.FunctionToolDefinition.CreatedAt,
 			&i.FunctionToolDefinition.UpdatedAt,
 			&i.FunctionToolDefinition.DeletedAt,
@@ -336,6 +337,7 @@ SELECT
   , tool.description
   , tool.input_schema
   , tool.variables
+  , tool.meta
   , access.id AS access_id
 FROM deployment dep
 INNER JOIN function_tool_definitions tool
@@ -368,6 +370,7 @@ type GetFunctionToolByURNRow struct {
 	Description  string
 	InputSchema  []byte
 	Variables    []byte
+	Meta         []byte
 	AccessID     uuid.NullUUID
 }
 
@@ -385,13 +388,14 @@ func (q *Queries) GetFunctionToolByURN(ctx context.Context, arg GetFunctionToolB
 		&i.Description,
 		&i.InputSchema,
 		&i.Variables,
+		&i.Meta,
 		&i.AccessID,
 	)
 	return i, err
 }
 
 const getFunctionToolDefinitionByID = `-- name: GetFunctionToolDefinitionByID :one
-SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, meta, created_at, updated_at, deleted_at, deleted
 FROM function_tool_definitions
 WHERE function_tool_definitions.id = $1
   AND function_tool_definitions.project_id = $2
@@ -418,6 +422,7 @@ func (q *Queries) GetFunctionToolDefinitionByID(ctx context.Context, arg GetFunc
 		&i.Description,
 		&i.InputSchema,
 		&i.Variables,
+		&i.Meta,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -639,6 +644,7 @@ SELECT
   ftd.variables,
   ftd.runtime,
   ftd.function_id,
+  ftd.meta,
   df.asset_id,
   ftd.created_at,
   ftd.updated_at
@@ -669,6 +675,7 @@ type ListFunctionToolsRow struct {
 	Variables    []byte
 	Runtime      string
 	FunctionID   uuid.UUID
+	Meta         []byte
 	AssetID      uuid.NullUUID
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
@@ -701,6 +708,7 @@ func (q *Queries) ListFunctionTools(ctx context.Context, arg ListFunctionToolsPa
 			&i.Variables,
 			&i.Runtime,
 			&i.FunctionID,
+			&i.Meta,
 			&i.AssetID,
 			&i.CreatedAt,
 			&i.UpdatedAt,

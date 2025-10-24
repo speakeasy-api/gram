@@ -36,6 +36,8 @@ type BaseToolAttributes struct {
 	CreatedAt string
 	// The last update date of the tool.
 	UpdatedAt string
+	// Meta tags for the tool
+	Meta map[string]string
 	// The original details of a tool, excluding any variations
 	Canonical *CanonicalToolAttributes
 	// The variation details of a tool. Only includes explicitly varied fields.

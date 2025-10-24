@@ -304,6 +304,7 @@ func processManifestToolV0(
 	description := tool.Description
 	inputSchema := tool.InputSchema
 	variables := tool.Variables
+	metaTags := tool.Meta
 
 	if variables == nil {
 		variables = map[string]*ManifestVariableAttributeV0{}
@@ -312,6 +313,14 @@ func processManifestToolV0(
 	varBs, err := json.Marshal(variables)
 	if err != nil {
 		return nil, fmt.Errorf("serialize variables to json: %w", err)
+	}
+
+	var metaBs []byte
+	if metaTags != nil {
+		metaBs, err = json.Marshal(metaTags)
+		if err != nil {
+			return nil, fmt.Errorf("serialize meta to json: %w", err)
+		}
 	}
 
 	t, err := tx.CreateFunctionsTool(ctx, repo.CreateFunctionsToolParams{
@@ -324,6 +333,7 @@ func processManifestToolV0(
 		Description:  description,
 		InputSchema:  inputSchema,
 		Variables:    varBs,
+		Meta:         metaBs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("save tool: %w", err)
@@ -350,6 +360,7 @@ func processManifestResourceV0(
 	description := resource.Description
 	uri := resource.URI
 	variables := resource.Variables
+	metaTags := resource.Meta
 
 	if variables == nil {
 		variables = map[string]*ManifestVariableAttributeV0{}
@@ -358,6 +369,14 @@ func processManifestResourceV0(
 	varBs, err := json.Marshal(variables)
 	if err != nil {
 		return nil, fmt.Errorf("serialize variables to json: %w", err)
+	}
+
+	var metaBs []byte
+	if metaTags != nil {
+		metaBs, err = json.Marshal(metaTags)
+		if err != nil {
+			return nil, fmt.Errorf("serialize meta to json: %w", err)
+		}
 	}
 
 	var title, mimeType pgtype.Text
@@ -383,6 +402,7 @@ func processManifestResourceV0(
 		Title:        title,
 		MimeType:     mimeType,
 		Variables:    varBs,
+		Meta:         metaBs,
 	}
 
 	r, err := tx.CreateFunctionsResource(ctx, params)

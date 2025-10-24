@@ -908,3 +908,75 @@ func TestToolsService_ListTools_WithDeploymentIDAndFunctionTools(t *testing.T) {
 	}
 	require.GreaterOrEqual(t, functionToolCount, 1, "should have at least one function tool")
 }
+
+func TestToolsService_ListTools_FunctionToolsWithMetaTags(t *testing.T) {
+	t.Parallel()
+
+	assetStorage := assetstest.NewTestBlobStore(t)
+	ctx, ti := newTestToolsService(t, assetStorage)
+
+	// Upload functions file with manifest that includes meta tags
+	fres := uploadFunctionsWithManifest(t, ctx, ti.assets, "fixtures/manifest-todo.json", "nodejs:22")
+
+	// Create deployment with function tools
+	deployment, err := ti.deployments.CreateDeployment(ctx, &dgen.CreateDeploymentPayload{
+		IdempotencyKey:  "test-list-tools-meta-tags",
+		Openapiv3Assets: []*dgen.AddOpenAPIv3DeploymentAssetForm{},
+		Functions: []*dgen.AddFunctionsForm{
+			{
+				AssetID: fres.Asset.ID,
+				Name:    "test-functions-meta",
+				Slug:    "test-functions-meta",
+				Runtime: "nodejs:22",
+			},
+		},
+		Packages:         []*dgen.AddDeploymentPackageForm{},
+		ApikeyToken:      nil,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		GithubRepo:       nil,
+		GithubPr:         nil,
+		GithubSha:        nil,
+		ExternalID:       nil,
+		ExternalURL:      nil,
+	})
+	require.NoError(t, err, "create deployment")
+	require.Equal(t, "completed", deployment.Deployment.Status, "deployment should be completed")
+
+	// Test ListTools
+	result, err := ti.service.ListTools(ctx, &gen.ListToolsPayload{
+		Cursor:           nil,
+		DeploymentID:     &deployment.Deployment.ID,
+		SessionToken:     nil,
+		ProjectSlugInput: nil,
+		Limit:            nil,
+	})
+	require.NoError(t, err, "list tools")
+	require.NotNil(t, result.Tools, "tools should not be nil")
+
+	// Verify meta tags on function tools
+	foundCreateTodo := false
+	foundListAllTodos := false
+
+	for _, tool := range result.Tools {
+		if tool.FunctionToolDefinition != nil {
+			if tool.FunctionToolDefinition.Name == "create_todo" {
+				foundCreateTodo = true
+				require.NotNil(t, tool.FunctionToolDefinition.Meta, "create_todo should have meta tags")
+				require.NotEmpty(t, tool.FunctionToolDefinition.Meta, "create_todo meta should not be empty")
+
+				// Verify meta tags values
+				require.Equal(t, "productivity", tool.FunctionToolDefinition.Meta["category"])
+				require.Equal(t, "1.0", tool.FunctionToolDefinition.Meta["version"])
+			}
+
+			if tool.FunctionToolDefinition.Name == "list_all_todos" {
+				foundListAllTodos = true
+				require.Nil(t, tool.FunctionToolDefinition.Meta, "list_all_todos should not have meta tags")
+			}
+		}
+	}
+
+	require.True(t, foundCreateTodo, "should find create_todo tool")
+	require.True(t, foundListAllTodos, "should find list_all_todos tool")
+}

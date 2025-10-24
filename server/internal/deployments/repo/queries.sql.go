@@ -360,6 +360,7 @@ INSERT INTO function_resource_definitions (
   , title
   , mime_type
   , variables
+  , meta
 ) VALUES (
     $1
   , $2
@@ -372,8 +373,9 @@ INSERT INTO function_resource_definitions (
   , $9
   , $10
   , $11
+  , $12
 )
-RETURNING id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, created_at, updated_at, deleted_at, deleted
+RETURNING id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, meta, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateFunctionsResourceParams struct {
@@ -388,6 +390,7 @@ type CreateFunctionsResourceParams struct {
 	Title        pgtype.Text
 	MimeType     pgtype.Text
 	Variables    []byte
+	Meta         []byte
 }
 
 func (q *Queries) CreateFunctionsResource(ctx context.Context, arg CreateFunctionsResourceParams) (FunctionResourceDefinition, error) {
@@ -403,6 +406,7 @@ func (q *Queries) CreateFunctionsResource(ctx context.Context, arg CreateFunctio
 		arg.Title,
 		arg.MimeType,
 		arg.Variables,
+		arg.Meta,
 	)
 	var i FunctionResourceDefinition
 	err := row.Scan(
@@ -418,6 +422,7 @@ func (q *Queries) CreateFunctionsResource(ctx context.Context, arg CreateFunctio
 		&i.Title,
 		&i.MimeType,
 		&i.Variables,
+		&i.Meta,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -437,6 +442,7 @@ INSERT INTO function_tool_definitions (
   , description
   , input_schema
   , variables
+  , meta
 ) VALUES (
     $1
   , $2
@@ -447,8 +453,9 @@ INSERT INTO function_tool_definitions (
   , $7
   , $8
   , $9
+  , $10
 )
-RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
+RETURNING id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, meta, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateFunctionsToolParams struct {
@@ -461,6 +468,7 @@ type CreateFunctionsToolParams struct {
 	Description  string
 	InputSchema  []byte
 	Variables    []byte
+	Meta         []byte
 }
 
 func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsToolParams) (FunctionToolDefinition, error) {
@@ -474,6 +482,7 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		arg.Description,
 		arg.InputSchema,
 		arg.Variables,
+		arg.Meta,
 	)
 	var i FunctionToolDefinition
 	err := row.Scan(
@@ -487,6 +496,7 @@ func (q *Queries) CreateFunctionsTool(ctx context.Context, arg CreateFunctionsTo
 		&i.Description,
 		&i.InputSchema,
 		&i.Variables,
+		&i.Meta,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

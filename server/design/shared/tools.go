@@ -47,6 +47,8 @@ var BaseToolAttributes = Type("BaseToolAttributes", func() {
 		Format(FormatDateTime)
 	})
 
+	Attribute("meta", MapOf(String, String), "Meta tags for the tool")
+
 	Attribute("canonical", CanonicalToolAttributes, "The original details of a tool, excluding any variations")
 	Attribute("variation", ToolVariation, "The variation details of a tool. Only includes explicitly varied fields.")
 

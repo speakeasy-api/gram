@@ -1741,6 +1741,14 @@ func unmarshalPromptTemplateResponseBodyToTypesPromptTemplate(v *PromptTemplateR
 			res.ToolUrnsHint[i] = val
 		}
 	}
+	if v.Meta != nil {
+		res.Meta = make(map[string]string, len(v.Meta))
+		for key, val := range v.Meta {
+			tk := key
+			tv := val
+			res.Meta[tk] = tv
+		}
+	}
 	if v.Canonical != nil {
 		res.Canonical = unmarshalCanonicalToolAttributesResponseBodyToTypesCanonicalToolAttributes(v.Canonical)
 	}

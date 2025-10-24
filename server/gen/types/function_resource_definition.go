@@ -33,6 +33,8 @@ type FunctionResourceDefinition struct {
 	Title *string
 	// Optional MIME type of the resource
 	MimeType *string
+	// Meta tags for the tool
+	Meta map[string]string
 	// The creation date of the resource.
 	CreatedAt string
 	// The last update date of the resource.

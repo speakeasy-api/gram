@@ -20,6 +20,7 @@ type ManifestToolV0 struct {
 	Description string                                  `json:"description"`
 	InputSchema json.RawMessage                         `json:"inputSchema"`
 	Variables   map[string]*ManifestVariableAttributeV0 `json:"variables"`
+	Meta        map[string]string                       `json:"_meta"`
 }
 
 type ManifestResourceV0 struct {
@@ -29,6 +30,7 @@ type ManifestResourceV0 struct {
 	MimeType    *string                                 `json:"mimeType,omitempty"`
 	Title       *string                                 `json:"title,omitempty"`
 	Variables   map[string]*ManifestVariableAttributeV0 `json:"variables"`
+	Meta        map[string]string                       `json:"_meta"`
 }
 
 type ManifestVariableAttributeV0 struct {

@@ -198,6 +198,7 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 			Summarizer:    template.Summarizer,
 			Canonical:     template.Canonical,
 			Variation:     template.Variation,
+			Meta:          template.Meta,
 		}
 	}
 
