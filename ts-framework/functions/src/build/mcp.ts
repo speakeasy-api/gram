@@ -106,7 +106,7 @@ async function buildFunctionsManifest(options: {
       name: tool.name,
       description: tool.description,
       inputSchema: tool.inputSchema,
-      _meta: {
+      meta: {
         "gram.ai/kind": "mcp-passthrough",
         ...tool._meta,
       },
@@ -121,7 +121,7 @@ async function buildFunctionsManifest(options: {
       uri: resource.uri,
       mimeType: resource.mimeType,
       title: resource.title,
-      _meta: {
+      meta: {
         "gram.ai/kind": "mcp-passthrough",
         ...resource._meta,
       },
