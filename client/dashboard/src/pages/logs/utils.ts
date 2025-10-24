@@ -1,10 +1,25 @@
 import { HTTPToolLog } from "@gram/client/models/components";
 import { FileCode, SquareFunction } from "lucide-react";
 
-export const getToolIcon = (toolUrn: string) => {
-  // Parse URN format: tools:{kind}:{source}:{name}
+export interface ParsedUrn {
+  kind: string;
+  source: string;
+  name: string;
+}
+
+// Parse URN format: tools:{kind}:{source}:{name}
+export const parseUrn = (toolUrn: string): ParsedUrn => {
   const parts = toolUrn.split(":");
-  if (parts.length >= 2 && parts[1] === "http") {
+  return {
+    kind: parts[1] || "",
+    source: parts[2] || "",
+    name: parts[3] || "",
+  };
+};
+
+export const getToolIcon = (toolUrn: string) => {
+  const { kind } = parseUrn(toolUrn);
+  if (kind === "http") {
     return FileCode;
   }
   // Otherwise it's a function tool
@@ -12,12 +27,13 @@ export const getToolIcon = (toolUrn: string) => {
 };
 
 export const getSourceFromUrn = (toolUrn: string) => {
-  // Parse URN format: tools:{kind}:{source}:{name}
-  const parts = toolUrn.split(":");
-  if (parts.length >= 3) {
-    return parts[2]; // Return the source (e.g., "convoy", "taskmaster", "con")
-  }
-  return toolUrn;
+  const { source } = parseUrn(toolUrn);
+  return source || toolUrn;
+};
+
+export const getToolNameFromUrn = (toolUrn: string) => {
+  const { name } = parseUrn(toolUrn);
+  return name || toolUrn;
 };
 
 export const isSuccessfulCall = (log: HTTPToolLog) => {
@@ -45,15 +61,6 @@ export const formatDuration = (ms: number) => {
     return `${ms.toFixed(0)}ms`;
   }
   return `${(ms / 1000).toFixed(1)}s`;
-};
-
-export const getToolNameFromUrn = (toolUrn: string) => {
-  // Parse URN format: tools:{kind}:{source}:{name}
-  const parts = toolUrn.split(":");
-  if (parts.length >= 4) {
-    return parts[3]; // Return the name (e.g., "convoy_create_event_type")
-  }
-  return toolUrn;
 };
 
 export const formatDetailTimestamp = (date: Date) => {
