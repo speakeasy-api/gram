@@ -1,5 +1,12 @@
 # @gram-ai/functions
 
+## 0.3.1
+
+### Patch Changes
+
+- cd9df97: Added the missing 'zx' dependency to the Gram TS SDK's `package.json`. It is
+  needed for the build process.
+
 ## 0.3.0
 
 ### Minor Changes
