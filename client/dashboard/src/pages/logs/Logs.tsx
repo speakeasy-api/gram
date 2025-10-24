@@ -4,20 +4,20 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@/
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow,} from "@/components/ui/table";
 import {useListToolLogs} from "@gram/client/react-query";
 import {HTTPToolLog} from "@gram/client/models/components";
-import {cn, Icon} from "@speakeasy-api/moonshine";
+import {Icon} from "@speakeasy-api/moonshine";
 import {useEffect, useRef, useState} from "react";
 import {LogDetailSheet} from "./LogDetailSheet";
 import {formatTimestamp, getSourceFromUrn, getToolIcon, getToolNameFromUrn, isSuccessfulCall,} from "./utils";
 import {formatDuration} from "@/lib/dates";
+import {CheckIcon, XIcon} from "lucide-react";
 
 function StatusIcon({isSuccess}: { isSuccess: boolean }) {
-    return (
-        <div>
-            <Icon name={isSuccess ? "check" : "x"}
-                  className={cn("size-4", isSuccess ? 'fill-success-default' : 'fill-destructive-default')}/>
-        </div>
-    );
+    if (isSuccess) {
+        return <CheckIcon className="size-4 stroke-success-default"/>;
+    }
+    return <XIcon className="size-4 stroke-destructive-default"/>
 }
+
 
 export default function LogsPage() {
     const [filters, setFilters] = useState<{
@@ -136,7 +136,7 @@ export default function LogsPage() {
                             <div className="flex items-center justify-between gap-4">{/* Search Input */}
                                 <SearchBar
                                     value={filters.searchQuery ?? ""}
-                                    onChange={(value) => setFilters(prev => ({ ...prev, searchQuery: value || null }))}
+                                    onChange={(value) => setFilters(prev => ({...prev, searchQuery: value || null}))}
                                     placeholder="Search"
                                     className="w-1/3"
                                 />
@@ -145,7 +145,10 @@ export default function LogsPage() {
                                 <div className="flex items-center gap-2">
                                     <Select
                                         value={filters.toolTypeFilter ?? ""}
-                                        onValueChange={(value) => setFilters(prev => ({ ...prev, toolTypeFilter: value || null }))}
+                                        onValueChange={(value) => setFilters(prev => ({
+                                            ...prev,
+                                            toolTypeFilter: value || null
+                                        }))}
                                     >
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Tool Type"/>
@@ -158,7 +161,10 @@ export default function LogsPage() {
 
                                     <Select
                                         value={filters.serverNameFilter ?? ""}
-                                        onValueChange={(value) => setFilters(prev => ({ ...prev, serverNameFilter: value || null }))}
+                                        onValueChange={(value) => setFilters(prev => ({
+                                            ...prev,
+                                            serverNameFilter: value || null
+                                        }))}
                                     >
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Server Name"/>
@@ -171,7 +177,10 @@ export default function LogsPage() {
 
                                     <Select
                                         value={filters.statusFilter ?? ""}
-                                        onValueChange={(value) => setFilters(prev => ({ ...prev, statusFilter: value || null }))}
+                                        onValueChange={(value) => setFilters(prev => ({
+                                            ...prev,
+                                            statusFilter: value || null
+                                        }))}
                                     >
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Status"/>
@@ -250,7 +259,7 @@ export default function LogsPage() {
                                                                 <StatusIcon isSuccess={isSuccessfulCall(log)}/>
                                                             </div>
                                                         </TableCell>
-                                                        <TableCell className="text-muted-foreground text-sm">
+                                                        <TableCell className="text-muted-foreground flex text-sm">
                                                             {log.userAgent || "-"}
                                                         </TableCell>
                                                         <TableCell className="text-muted-foreground font-mono">
