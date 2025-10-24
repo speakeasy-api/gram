@@ -46,6 +46,7 @@ var FunctionResourceDefinition = Type("FunctionResourceDefinition", func() {
 	Attribute("function_id", String, "The ID of the function")
 	Attribute("runtime", String, "Runtime environment (e.g., nodejs:22, python:3.12)")
 	Attribute("variables", Any, "Variables configuration for the resource")
+	Attribute("meta", MapOf(String, String), "Meta tags for the tool")
 
 	Required("deployment_id", "function_id", "runtime")
 })

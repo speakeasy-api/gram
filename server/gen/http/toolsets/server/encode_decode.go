@@ -2240,6 +2240,14 @@ func marshalTypesFunctionToolDefinitionToFunctionToolDefinitionResponseBody(v *t
 		CreatedAt:     v.CreatedAt,
 		UpdatedAt:     v.UpdatedAt,
 	}
+	if v.Meta != nil {
+		res.Meta = make(map[string]string, len(v.Meta))
+		for key, val := range v.Meta {
+			tk := key
+			tv := val
+			res.Meta[tk] = tv
+		}
+	}
 	if v.Canonical != nil {
 		res.Canonical = marshalTypesCanonicalToolAttributesToCanonicalToolAttributesResponseBody(v.Canonical)
 	}
@@ -2333,6 +2341,14 @@ func marshalTypesFunctionResourceDefinitionToFunctionResourceDefinitionResponseB
 		MimeType:     v.MimeType,
 		CreatedAt:    v.CreatedAt,
 		UpdatedAt:    v.UpdatedAt,
+	}
+	if v.Meta != nil {
+		res.Meta = make(map[string]string, len(v.Meta))
+		for key, val := range v.Meta {
+			tk := key
+			tv := val
+			res.Meta[tk] = tv
+		}
 	}
 
 	return res

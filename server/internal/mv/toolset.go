@@ -617,6 +617,13 @@ func readToolsetTools(
 		}
 
 		for _, def := range functionDefinitions {
+			var meta map[string]string
+			if def.FunctionToolDefinition.Meta != nil {
+				err = json.Unmarshal(def.FunctionToolDefinition.Meta, &meta)
+				if err != nil {
+					return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta tags").Log(ctx, logger)
+				}
+			}
 			functionTool := &types.FunctionToolDefinition{
 				ID:            def.FunctionToolDefinition.ID.String(),
 				ToolUrn:       def.FunctionToolDefinition.ToolUrn.String(),
@@ -629,6 +636,7 @@ func readToolsetTools(
 				CanonicalName: def.FunctionToolDefinition.Name,
 				Description:   def.FunctionToolDefinition.Description,
 				Variables:     def.FunctionToolDefinition.Variables,
+				Meta:          meta,
 				SchemaVersion: nil,
 				Schema:        string(def.FunctionToolDefinition.InputSchema),
 				Confirm:       nil,
@@ -673,6 +681,13 @@ func readToolsetTools(
 		}
 
 		for _, def := range functionResourceDefinitions {
+			var meta map[string]string
+			if def.FunctionResourceDefinition.Meta != nil {
+				err = json.Unmarshal(def.FunctionResourceDefinition.Meta, &meta)
+				if err != nil {
+					return nil, oops.E(oops.CodeUnexpected, err, "failed to unmarshal meta tags").Log(ctx, logger)
+				}
+			}
 			functionResource := &types.FunctionResourceDefinition{
 				ID:           def.FunctionResourceDefinition.ID.String(),
 				ResourceUrn:  def.FunctionResourceDefinition.ResourceUrn.String(),
@@ -686,6 +701,7 @@ func readToolsetTools(
 				Title:        conv.FromPGText[string](def.FunctionResourceDefinition.Title),
 				MimeType:     conv.FromPGText[string](def.FunctionResourceDefinition.MimeType),
 				Variables:    def.FunctionResourceDefinition.Variables,
+				Meta:         meta,
 				CreatedAt:    def.FunctionResourceDefinition.CreatedAt.Time.Format(time.RFC3339),
 				UpdatedAt:    def.FunctionResourceDefinition.UpdatedAt.Time.Format(time.RFC3339),
 			}

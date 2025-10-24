@@ -23,6 +23,7 @@ type FunctionResourceDefinition struct {
 	Title        pgtype.Text
 	MimeType     pgtype.Text
 	Variables    []byte
+	Meta         []byte
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz

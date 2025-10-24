@@ -508,6 +508,7 @@ INSERT INTO function_tool_definitions (
   , description
   , input_schema
   , variables
+  , meta
 ) VALUES (
     @deployment_id
   , @function_id
@@ -518,6 +519,7 @@ INSERT INTO function_tool_definitions (
   , @description
   , @input_schema
   , @variables
+  , @meta
 )
 RETURNING *;
 
@@ -534,6 +536,7 @@ INSERT INTO function_resource_definitions (
   , title
   , mime_type
   , variables
+  , meta
 ) VALUES (
     @deployment_id
   , @function_id
@@ -546,6 +549,7 @@ INSERT INTO function_resource_definitions (
   , @title
   , @mime_type
   , @variables
+  , @meta
 )
 RETURNING *;
 
