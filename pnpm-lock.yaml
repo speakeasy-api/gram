@@ -428,6 +428,9 @@ importers:
       zod:
         specifier: ^4
         version: 4.1.12
+      zx:
+        specifier: 8.8.4-lite
+        version: 8.8.4-lite
     devDependencies:
       '@types/archiver':
         specifier: ^6.0.3
