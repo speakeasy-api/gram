@@ -21,9 +21,10 @@ type toolsListResult struct {
 }
 
 type toolListEntry struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema,omitempty,omitzero"`
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	InputSchema json.RawMessage   `json:"inputSchema,omitempty,omitzero"`
+	Meta        map[string]string `json:"_meta,omitempty"`
 }
 
 func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, productMetrics *posthog.Posthog, toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents]) (json.RawMessage, error) {
@@ -60,6 +61,7 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 			Name:        baseTool.Name,
 			Description: baseTool.Description,
 			InputSchema: json.RawMessage(baseTool.Schema),
+			Meta:        conv.ExtractToolMetaTags(tool),
 		})
 	}
 

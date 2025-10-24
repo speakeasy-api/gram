@@ -277,6 +277,13 @@ func (t *Toolsets) extractFunctionResourceCallPlan(ctx context.Context, resource
 		mimeType = resource.MimeType.String
 	}
 
+	var meta map[string]string
+	if resource.Meta != nil {
+		if err := json.Unmarshal(resource.Meta, &meta); err != nil {
+			return nil, fmt.Errorf("unmarshal function resource meta: %w", err)
+		}
+	}
+
 	descriptor := &gateway.ResourceDescriptor{
 		ID:               resource.ID.String(),
 		Name:             resource.Name,
@@ -300,6 +307,7 @@ func (t *Toolsets) extractFunctionResourceCallPlan(ctx context.Context, resource
 		URI:               resource.Uri,
 		MimeType:          mimeType,
 		Variables:         envconfig,
+		Meta:              meta,
 	}
 
 	return gateway.NewResourceFunctionCallPlan(descriptor, plan), nil

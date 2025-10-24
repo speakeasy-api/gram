@@ -125,6 +125,7 @@ type ResourceFunctionCallPlan struct {
 	URI               string            `json:"uri" yaml:"uri"`
 	MimeType          string            `json:"mime_type" yaml:"mime_type"`
 	Variables         map[string]string `json:"variables" yaml:"variables"`
+	Meta              map[string]string `json:"_meta,omitempty" yaml:"_meta,omitempty"`
 }
 
 type ToolKind string

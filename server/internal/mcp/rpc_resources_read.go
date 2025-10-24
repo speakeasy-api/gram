@@ -171,6 +171,16 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		}
 	}
 
+	var meta map[string]string
+	if plan.Function != nil {
+		meta = plan.Function.Meta
+	}
+
+	if isMCPPassthrough(meta) {
+		// For MCP passthrough tools, return the raw response as-is
+		return rw.body.Bytes(), nil
+	}
+
 	mimeType := "text/plain"
 	if plan.Function != nil && plan.Function.MimeType != "" {
 		mimeType = plan.Function.MimeType
