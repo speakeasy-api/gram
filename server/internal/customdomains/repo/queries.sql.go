@@ -122,7 +122,7 @@ func (q *Queries) GetCustomDomainByID(ctx context.Context, id uuid.UUID) (Custom
 	return i, err
 }
 
-const getCustomDomainsByOrganization = `-- name: GetCustomDomainsByOrganization :one
+const getCustomDomainByOrganization = `-- name: GetCustomDomainByOrganization :one
 SELECT id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, created_at, updated_at, deleted_at, deleted
 FROM custom_domains
 WHERE organization_id = $1
@@ -130,8 +130,8 @@ WHERE organization_id = $1
 LIMIT 1
 `
 
-func (q *Queries) GetCustomDomainsByOrganization(ctx context.Context, organizationID string) (CustomDomain, error) {
-	row := q.db.QueryRow(ctx, getCustomDomainsByOrganization, organizationID)
+func (q *Queries) GetCustomDomainByOrganization(ctx context.Context, organizationID string) (CustomDomain, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainByOrganization, organizationID)
 	var i CustomDomain
 	err := row.Scan(
 		&i.ID,
