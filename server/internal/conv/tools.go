@@ -37,6 +37,14 @@ func GetToolURN(tool types.Tool) (*urn.Tool, error) {
 	return nil, urn.ErrInvalid
 }
 
+func ExtractToolMetaTags(tool *types.Tool) map[string]string {
+	if tool.FunctionToolDefinition != nil {
+		return tool.FunctionToolDefinition.Meta
+	}
+
+	return nil
+}
+
 func ToBaseTool(tool *types.Tool) types.BaseToolAttributes {
 	schema := constants.DefaultEmptyToolSchema
 
