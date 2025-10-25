@@ -73,8 +73,11 @@ func newTestMCPMetadataService(t *testing.T) (context.Context, *testInstance) {
 	serverURL, err := url.Parse("http://0.0.0.0")
 	require.NoError(t, err)
 
+	siteURL, err := url.Parse("http://0.0.0.0")
+	require.NoError(t, err)
+
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
-	svc := mcpmetadata.NewService(logger, conn, sessionManager, serverURL, cacheAdapter)
+	svc := mcpmetadata.NewService(logger, conn, sessionManager, serverURL, siteURL, cacheAdapter)
 
 	return ctx, &testInstance{
 		service:        svc,

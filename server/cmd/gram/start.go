@@ -482,6 +482,11 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to parse server url: %w", err)
 			}
 
+			siteURL, err := url.Parse(c.String("site-url"))
+			if err != nil {
+				return fmt.Errorf("failed to parse site url: %w", err)
+			}
+
 			guardianPolicy := guardian.NewDefaultPolicy()
 			blockedCIDRs := c.StringSlice("disallowed-cidr-blocks")
 			if blockedCIDRs != nil {
@@ -532,7 +537,7 @@ func newStartCommand() *cli.Command {
 			oauthService := oauth.NewService(logger, tracerProvider, meterProvider, db, serverURL, cache.NewRedisCacheAdapter(redisClient), encryptionClient, env)
 			oauth.Attach(mux, oauthService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, billingTracker, tcm))
-			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, cache.NewRedisCacheAdapter(redisClient))
+			mcpMetadataService := mcpmetadata.NewService(logger, db, sessionManager, serverURL, siteURL, cache.NewRedisCacheAdapter(redisClient))
 			mcpmetadata.Attach(mux, mcpMetadataService)
 			mcp.Attach(mux, mcp.NewService(logger, tracerProvider, meterProvider, db, sessionManager, env, posthogClient, serverURL, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, oauthService, billingTracker, billingRepo, tcm), mcpMetadataService)
 			chat.Attach(mux, chat.NewService(logger, db, sessionManager, openRouter))
