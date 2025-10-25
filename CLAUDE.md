@@ -25,13 +25,23 @@ Speak like a software engineer team member and don't be pointlessly agreeable su
 
 ## Key Directories
 
+<structure>
+
+- `/`: Root directory of the Gram project
+  - `go.mod`: Go module definition for the entire project
+  - `server/`: Main backend service codebase
+  - `cli/`: Command-line interface for Gram that users use to interact with the Gram service
+  - `functions/`: Serverless function runner powering the Gram Functions feature
+  - `client/`: Frontend React application for Gram
+
+</structure>
+
 ### server
 
 Contains the main application code for the Gram server:
 
 <structure>
 
-- `go.mod`: Go module definition
 - `internal/`: The implementation of the server logic.
   - `background/`: Temporal workflows and activities are implemented here.
   - `conv/`: Useful conversion functions for converting between different Go types.
@@ -63,39 +73,6 @@ Contains the main application code for the Gram server:
 - `mise db:migrate`: Apply pending migrations to local database
 
 </commands>
-
-### infra/helm
-
-Contains Kubernetes Helm charts for deploying Gram:
-
-<structure>
-
-- `gram/`: Main Helm chart
-  - `Chart.yaml`: Chart definition
-  - `templates/`: Kubernetes manifest templates
-  - `migrations/`: Database migration files
-  - `values*.yaml`: Configuration values for different environments
-
-</structure>
-
-To validate helm charts, run the command `mise helm:validate`
-
-### infra/terraform
-
-Infrastructure as Code (IaC) configuration:
-
-<structure>
-
-- `base/`: Core infrastructure resources
-  - `dev/`, `prod/`: Environment-specific configs
-  - `*.tf`: Terraform configuration files for GKE, Redis, SQL, etc.
-- `k8s/`: Kubernetes-specific resources
-  - `dev/`, `prod/`: Environment-specific configs
-  - `*.tf`: Resources like Atlas, Cert Manager, Ingress, etc.
-
-</structure>
-
-To validate terraform, run the command `mise helm:gcp:validate`
 
 ## Mise CLI
 
@@ -136,7 +113,6 @@ You are an expert AI programming assistant specializing in building APIs with Go
 ## Database design guidelines
 
 - **Code Formatting and Comments:**
-
   - Maintain consistent code formatting using a tool like `pgformatter` or similar.
   - Use clear and concise comments to explain complex logic and intentions. Update comments regularly to avoid confusion.
   - Use inline comments sparingly; prefer block comments for detailed explanations.
@@ -145,14 +121,12 @@ You are an expert AI programming assistant specializing in building APIs with Go
   - Keep comments up-to-date; incorrect comments are worse than no comments.
 
 - **Naming Conventions:**
-
   - Use `snake_case` for identifiers (e.g., `user_id`, `customer_name`).
   - Use plural nouns for table names (e.g., `customers`, `products`).
   - Use consistent naming conventions for functions, procedures, and triggers.
   - Choose descriptive and meaningful names for all database objects.
 
 - **Data Integrity and Data Types:**
-
   - Use appropriate data types for columns to ensure data integrity (e.g., `INTEGER`, `VARCHAR`, `TIMESTAMP`).
   - Use constraints (e.g., `NOT NULL`, `UNIQUE`, `CHECK`, `FOREIGN KEY`) to enforce data integrity.
   - Define primary keys for all tables.
@@ -161,7 +135,6 @@ You are an expert AI programming assistant specializing in building APIs with Go
   - All foreign keys constraints must ALWAYS specify an `ON DELETE SET NULL` clause.
 
 - **Indexing:**
-
   - Create indexes on columns frequently used in `WHERE` clauses and `JOIN` conditions.
   - Avoid over-indexing, as it can slow down write operations.
   - Consider using partial indexes for specific query patterns.

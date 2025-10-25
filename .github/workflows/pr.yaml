@@ -68,7 +68,7 @@ jobs:
 
   docker-build-server:
     runs-on: ubicloud-standard-4
-    needs: changes
+    needs: [changes, server-build-lint]
     env:
       GOMAXPROCS: 4
     steps:
@@ -79,6 +79,14 @@ jobs:
       - name: Checkout
         if: ${{ needs.changes.outputs.server == 'true' }}
         uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493 # v5.0.0
+
+      - name: Download server build artifact
+        if: ${{ needs.changes.outputs.server == 'true' }}
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
+        with:
+          name: server-bin
+          path: server/bin
+
       - id: "auth"
         if: ${{ needs.changes.outputs.server == 'true' }}
         name: "Authenticate to Google Cloud"
@@ -178,6 +186,14 @@ jobs:
         with:
           install-mode: none
           working-directory: server
+
+      - name: Upload server build
+        if: ${{ needs.changes.outputs.server == 'true' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: server-bin
+          path: server/bin
+          retention-days: 2
 
       - name: Install Go tools
         if: ${{ needs.changes.outputs.server == 'true' }}

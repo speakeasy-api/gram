@@ -30,15 +30,7 @@ async function setupGoCaching() {
 
   const hash = crypto.createHash("sha256");
 
-  const iter = await fs.glob(["./*/go.mod", "./*/go.sum"]);
-  const gomodsuniq = new Set<string>();
-  for await (const entry of iter) {
-    gomodsuniq.add(entry);
-  }
-
-  const gomods = Array.from(gomodsuniq).sort();
-
-  for (const entry of gomods) {
+  for (const entry of ["go.mod", "go.sum"]) {
     console.log("Hashing:", entry);
     const goMod = await fs.readFile(entry);
     hash.update(goMod);
