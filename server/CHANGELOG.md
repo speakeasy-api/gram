@@ -1,5 +1,12 @@
 # server
 
+## 0.9.3
+
+### Patch Changes
+
+- 4ae6852: Adds an icon to the mcpb installation method that will render in Claude Desktop alongside your tool calls
+- 5038166: Introduced the ability to register \_meta tags for tools and resources
+
 ## 0.9.2
 
 ### Patch Changes

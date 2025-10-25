@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.17.2
+
+### Patch Changes
+
+- 4ae6852: Adds an icon to the mcpb installation method that will render in Claude Desktop alongside your tool calls
+- Updated dependencies [5038166]
+  - @gram/client@0.15.3
+
 ## 0.17.1
 
 ### Patch Changes
