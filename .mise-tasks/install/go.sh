@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #MISE description="Install Go dependencies"
 #MISE hide=true
-#MISE dir="{{ config_root }}/server"
+#MISE dir="{{ config_root }}"
 
 set -e
 
