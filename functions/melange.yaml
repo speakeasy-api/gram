@@ -25,6 +25,7 @@ vars:
 pipeline:
   - uses: go/build
     with:
+      modroot: ..
       packages: cmd/runner/main.go
       output: gram-runner
       extra-args: -trimpath
