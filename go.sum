@@ -525,8 +525,8 @@ github.com/spiffe/go-spiffe/v2 v2.5.0 h1:N2I01KCUkv1FAjZXJMwh95KK1ZIQLYbPfhaxw8W
 github.com/spiffe/go-spiffe/v2 v2.5.0/go.mod h1:P+NxobPc6wXhVtINNtFjNWGBTreew1GBUCwT2wPmb7g=
 github.com/spyzhov/ajson v0.8.0 h1:sFXyMbi4Y/BKjrsfkUZHSjA2JM1184enheSjjoT/zCc=
 github.com/spyzhov/ajson v0.8.0/go.mod h1:63V+CGM6f1Bu/p4nLIN8885ojBdt88TbLoSFzyqMuVA=
-github.com/sqlc-dev/sqlc v1.30.0 h1:H4HrNwPc0hntxGWzAbhlfplPRN4bQpXFx+CaEMcKz6c=
-github.com/sqlc-dev/sqlc v1.30.0/go.mod h1:QnEN+npugyhUg1A+1kkYM3jc2OMOFsNlZ1eh8mdhad0=
+github.com/sqlc-dev/sqlc v1.29.0 h1:HQctoD7y/i29Bao53qXO7CZ/BV9NcvpGpsJWvz9nKWs=
+github.com/sqlc-dev/sqlc v1.29.0/go.mod h1:BavmYw11px5AdPOjAVHmb9fctP5A8GTziC38wBF9tp0=
 github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20250711233419-a173a6c0125c h1:Mm99t6GdFMtZOwyyvu3q8gXeZX0sqnjvimTC9QCJwQc=
 github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20250711233419-a173a6c0125c/go.mod h1:L1MQhA6x4dn9r007T033lsaZMv9EmBAdXyU/+EF40fo=
 github.com/stoewer/go-strcase v1.3.0 h1:g0eASXYtp+yvN9fK8sH94oCIk0fau9uV1/ZdJ0AVEzs=

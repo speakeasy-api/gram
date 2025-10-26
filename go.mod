@@ -225,7 +225,7 @@ require (
 	github.com/spf13/pflag v1.0.9 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.5.0 // indirect
 	github.com/spyzhov/ajson v0.8.0 // indirect
-	github.com/sqlc-dev/sqlc v1.30.0 // indirect
+	github.com/sqlc-dev/sqlc v1.29.0 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/superfly/graphql v0.2.6 // indirect
