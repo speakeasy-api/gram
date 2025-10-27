@@ -37,7 +37,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/speakeasy-api/openapi v1.7.3
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.0-20250711233419-a173a6c0125c
-	github.com/superfly/fly-go v0.1.57
+	github.com/superfly/fly-go v0.1.65
 	github.com/testcontainers/testcontainers-go v0.39.0
 	github.com/testcontainers/testcontainers-go/modules/clickhouse v0.39.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.39.0
