@@ -25,7 +25,7 @@ vars:
 pipeline:
   - uses: go/build
     with:
-      packages: cmd/runner/main.go
+      packages: functions/cmd/runner/main.go
       output: gram-runner
       extra-args: -trimpath
       ldflags: >-

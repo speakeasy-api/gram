@@ -24,6 +24,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 		testInstance.conn,
 		testInstance.sessionManager,
 		testInstance.serverURL,
+		testInstance.siteURL,
 		testInstance.cacheAdapter,
 	)
 

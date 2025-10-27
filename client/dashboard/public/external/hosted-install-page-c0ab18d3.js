@@ -1,13 +1,43 @@
 import { zip } from "./fflate.js";
 
-function downloadDxtHandler(event) {
+
+async function fileExtensionFromResponse(response) {
+  const contentType = response.headers.get("content-type");
+  if (contentType) {
+    if (contentType.includes("image/png")) {
+      return "png";
+    } else if (contentType.includes("image/jpeg") || contentType.includes("image/jpg")) {
+      return "jpg";
+    } else if (contentType.includes("image/svg")) {
+      return "svg";
+    }
+  }
+  return "png";
+}
+
+async function downloadDxtHandler(event) {
   const manifestElement = document.getElementById("manifest-json-blob");
   if (manifestElement) {
     const manifestContent = manifestElement.textContent;
+    let manifest = JSON.parse(manifestContent);
+    let files = {}
 
-    const files = {
-      "manifest.json": new TextEncoder().encode(manifestContent),
-    };
+    // Get logo image and fetch its binary data
+    const logoImg = document.getElementById("logo");
+    if (logoImg && logoImg.src) {
+      try {
+        const response = await fetch(logoImg.src);
+        const arrayBuffer = await response.arrayBuffer();
+        const extension = await fileExtensionFromResponse(response)
+
+        files[`icon.${extension}`] = new Uint8Array(arrayBuffer);
+        manifest.icon = `icon.${extension}`;
+      } catch (err) {
+        console.error("Error fetching logo:", err);
+      }
+    }
+
+    files['manifest.json'] = new TextEncoder().encode(JSON.stringify(manifest)),
 
     zip(files, (err, data) => {
       if (err) {
@@ -20,9 +50,8 @@ function downloadDxtHandler(event) {
       const ourEl = document.querySelector(".install-targets");
       const a = document.createElement("a");
       a.href = url;
-      let manifest = JSON.parse(manifestContent);
-      a.download = `${manifest.name}.mcpb`;
       ourEl.appendChild(a);
+      a.download = `${manifest.name}.mcpb`;
       a.click();
       ourEl.removeChild(a);
       URL.revokeObjectURL(url);

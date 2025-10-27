@@ -1,9 +1,4 @@
 **
 
-!/cmd
-!/internal
-!/gen
+!/bin
 !/migrations
-!go.mod
-!go.sum
-!main.go

@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.15.3
+
+### Patch Changes
+
+- 5038166: Introduced the ability to register \_meta tags for tools and resources
+
 ## 0.14.17
 
 ### Patch Changes
