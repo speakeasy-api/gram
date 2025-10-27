@@ -300,27 +300,6 @@ func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.Ra
 
 	switch {
 	case strings.HasPrefix(mt, "text/"), contenttypes.IsJSON(mt), contenttypes.IsYAML(mt):
-		// Special handling for prompt results from the proxy
-		if toolKind == gateway.ToolKindPrompt && contenttypes.IsJSON(mt) {
-			var promptResult struct {
-				Description string `json:"description"`
-				Prompt      string `json:"prompt"`
-			}
-			if err := json.Unmarshal(body, &promptResult); err == nil && promptResult.Prompt != "" {
-				// This is a prompt result, return just the prompt text
-				bs, err := json.Marshal(contentChunk[string, json.RawMessage]{
-					Type:     "text",
-					Text:     promptResult.Prompt,
-					MimeType: nil,
-					Data:     nil,
-				})
-				if err != nil {
-					return nil, fmt.Errorf("serialize prompt content: %w", err)
-				}
-				return bs, nil
-			}
-		}
-
 		bs, err := json.Marshal(contentChunk[string, json.RawMessage]{
 			Type:     "text",
 			Text:     string(body),
