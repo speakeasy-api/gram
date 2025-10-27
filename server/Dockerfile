@@ -4,7 +4,7 @@ WORKDIR /app
 
 USER nonroot
 
-COPY ./bin/gram .
+COPY --chown=nonroot:nonroot ./bin/gram ./
 # Add this line to copy the migrations folder
 COPY ./migrations ./migrations
 
