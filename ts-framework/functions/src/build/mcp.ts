@@ -82,8 +82,14 @@ async function buildFunctionsManifest(options: {
   const server = await import(entrypoint).then((mod) => {
     const exportsym = options.serverExport ?? "server";
     const serverExport = mod[exportsym];
+    if (typeof serverExport === "undefined") {
+      throw new Error(
+        `Export "${exportsym}" in entrypoint "${entrypoint}" is undefined`,
+      );
+    }
+
     const klass = serverExport?.constructor?.name;
-    if (klass !== "McpServer") {
+    if (klass !== "McpServer" && klass !== "Server") {
       throw new Error(
         `Export "${exportsym}" does not appear to be an instance of McpServer`,
       );
