@@ -251,6 +251,15 @@ func handleToolsCall(
 		}
 	}
 
+	var meta map[string]string
+	if tool.FunctionToolDefinition != nil {
+		meta = tool.FunctionToolDefinition.Meta
+	}
+	if isMCPPassthrough(meta) {
+		// For MCP passthrough tools, return the raw response as-is
+		return rw.body.Bytes(), nil
+	}
+
 	chunk, err := formatResult(*rw)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").Log(ctx, logger)

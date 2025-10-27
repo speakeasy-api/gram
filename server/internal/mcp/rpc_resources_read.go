@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -64,13 +65,13 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	}
 
 	var resourceURN urn.Resource
-	var resourceName string
+	var resourceDef *types.FunctionResourceDefinition
 	for _, resource := range toolset.Resources {
 		if resource.FunctionResourceDefinition != nil && resource.FunctionResourceDefinition.URI == params.URI {
 			if err := resourceURN.UnmarshalText([]byte(resource.FunctionResourceDefinition.ResourceUrn)); err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to parse resource URN").Log(ctx, logger)
 			}
-			resourceName = resource.FunctionResourceDefinition.Name
+			resourceDef = resource.FunctionResourceDefinition
 			break
 		}
 	}
@@ -128,7 +129,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 			RequestBytes:          requestBytes,
 			OutputBytes:           outputBytes,
 			ToolID:                descriptor.ID,
-			ToolName:              resourceName,
+			ToolName:              resourceDef.Name,
 			ResourceURI:           plan.Descriptor.URI,
 			ProjectID:             payload.projectID.String(),
 			ProjectSlug:           &descriptor.ProjectSlug,
@@ -171,6 +172,11 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		}
 	}
 
+	if isMCPPassthrough(resourceDef.Meta) {
+		// For MCP passthrough tools, return the raw response as-is
+		return rw.body.Bytes(), nil
+	}
+
 	mimeType := "text/plain"
 	if plan.Function != nil && plan.Function.MimeType != "" {
 		mimeType = plan.Function.MimeType
@@ -180,7 +186,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 
 	content := resourceContent{
 		URI:      params.URI,
-		Name:     &resourceName,
+		Name:     &resourceDef.Name,
 		MimeType: &mimeType,
 		Text:     "",
 		Blob:     "",
