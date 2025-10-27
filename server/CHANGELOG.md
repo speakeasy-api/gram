@@ -1,5 +1,11 @@
 # server
 
+## 0.9.4
+
+### Patch Changes
+
+- 5b8a324: Supports returning meta tags in list tools and list resources. Supports a specific gram.ai/kind meta tag that tells us to treat the underlying function as an MCP server and a direct passthrough
+
 ## 0.9.3
 
 ### Patch Changes
