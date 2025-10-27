@@ -2,6 +2,8 @@ All done! Jump in with `cd $DIR`.
 
 Some next steps:
 
+- Start a local development MCP server with `$PACKAGE_MANAGER run dev`
+
 - Ensure the `Gram CLI` is installed and authenticated (`gram auth`): https://docs.getgram.ai/command-line/installation
 
 - Build your function with `$PACKAGE_MANAGER run build`

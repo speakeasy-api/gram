@@ -40,20 +40,16 @@ pnpm build
 ## Testing Locally
 
 If you want to poke at the tools you've built during local development, you can
-start a Hono server with:
+start a local MCP server over stdio transport with:
 
 ```bash
 pnpm dev
 ```
 
-Now you can simulate tool calls with:
+Specifically, this command will spin up [MCP inspector][mcp-inspector] to let
+you interactively test your tools.
 
-```bash
-curl \
-  --data '{"name": "greet", "input": {"name": "Georges"}}' \
-  -H "Content-Type: application/json" \
-  http://localhost:3000/tool-call
-```
+[mcp-inspector]: https://github.com/modelcontextprotocol/inspector
 
 ## What next?
 
