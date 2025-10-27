@@ -2,10 +2,6 @@ import { writeFile, open, stat, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import esbuild from "esbuild";
 import archiver from "archiver";
-import {
-  McpError,
-  ErrorCode as McpErrorCode,
-} from "@modelcontextprotocol/sdk/types.js";
 import type { Client } from "@modelcontextprotocol/sdk/client";
 
 export type BuildMCPServerResult = {
@@ -112,6 +108,9 @@ async function buildFunctionsManifest(options: {
 }
 
 async function collectTools(client: Client) {
+  const { McpError, ErrorCode: McpErrorCode } = await import(
+    "@modelcontextprotocol/sdk/types.js"
+  );
   try {
     const res = await client.listTools();
     return res.tools.map((tool) => {
@@ -136,6 +135,9 @@ async function collectTools(client: Client) {
 }
 
 async function collectResources(client: Client) {
+  const { McpError, ErrorCode: McpErrorCode } = await import(
+    "@modelcontextprotocol/sdk/types.js"
+  );
   try {
     const resourcesResponse = await client.listResources();
     return resourcesResponse.resources.map((resource) => {
