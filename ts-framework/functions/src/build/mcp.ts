@@ -2,6 +2,11 @@ import { writeFile, open, stat, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import esbuild from "esbuild";
 import archiver from "archiver";
+import {
+  McpError,
+  ErrorCode as McpErrorCode,
+} from "@modelcontextprotocol/sdk/types.js";
+import type { Client } from "@modelcontextprotocol/sdk/client";
 
 export type BuildMCPServerResult = {
   files: Array<{ path: string; size: number }>;
@@ -100,35 +105,61 @@ async function buildFunctionsManifest(options: {
   await server.connect(serverTransport);
   await mcpClient.connect(clientTransport);
 
-  const res = await mcpClient.listTools();
-  const tools = res.tools.map((tool) => {
-    return {
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-      meta: {
-        "gram.ai/kind": "mcp-passthrough",
-        ...tool._meta,
-      },
-    };
-  });
-
-  const resourcesResponse = await mcpClient.listResources();
-  const resources = resourcesResponse.resources.map((resource) => {
-    return {
-      name: resource.name,
-      description: resource.description,
-      uri: resource.uri,
-      mimeType: resource.mimeType,
-      title: resource.title,
-      meta: {
-        "gram.ai/kind": "mcp-passthrough",
-        ...resource._meta,
-      },
-    };
-  });
+  let tools = await collectTools(mcpClient);
+  let resources = await collectResources(mcpClient);
 
   return { version: "0.0.0", tools, resources };
+}
+
+async function collectTools(client: Client) {
+  try {
+    const res = await client.listTools();
+    return res.tools.map((tool) => {
+      return {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        meta: {
+          "gram.ai/kind": "mcp-passthrough",
+          ...tool._meta,
+        },
+      };
+    });
+  } catch (err) {
+    if (err instanceof McpError && err.code === McpErrorCode.MethodNotFound) {
+      console.warn("No tools registered");
+    } else {
+      throw err;
+    }
+    return [];
+  }
+}
+
+async function collectResources(client: Client) {
+  try {
+    const resourcesResponse = await client.listResources();
+    return resourcesResponse.resources.map((resource) => {
+      return {
+        name: resource.name,
+        description: resource.description,
+        uri: resource.uri,
+        mimeType: resource.mimeType,
+        title: resource.title,
+        meta: {
+          "gram.ai/kind": "mcp-passthrough",
+          ...resource._meta,
+        },
+      };
+    });
+  } catch (err) {
+    if (err instanceof McpError && err.code === McpErrorCode.MethodNotFound) {
+      console.warn("No tools registered");
+    } else {
+      throw err;
+    }
+  }
+
+  return [];
 }
 
 async function bundleFunction(options: {

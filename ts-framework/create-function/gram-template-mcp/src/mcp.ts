@@ -20,3 +20,24 @@ server.registerTool(
     };
   },
 );
+
+server.registerResource(
+  "a-cool-photo",
+  "resources://a-cool-photo",
+  {
+    mimeType: "image/jpg",
+    description: "This photo is really something",
+    title: "A Cool Photo",
+  },
+  async (uri) => {
+    let res = await fetch("https://picsum.photos/200/300.jpg");
+    return {
+      contents: [
+        {
+          uri: uri.href,
+          blob: Buffer.from(await res.arrayBuffer()).toString("base64"),
+        },
+      ],
+    };
+  },
+);
