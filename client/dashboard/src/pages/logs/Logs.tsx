@@ -41,9 +41,9 @@ export default function LogsPage() {
     const [isFetchingMore, setIsFetchingMore] = useState(false);
     const lastProcessedCursorRef = useRef<string | undefined>(undefined);
     const tableContainerRef = useRef<HTMLDivElement>(null);
-    const perPage = 50;
+    const perPage = 25;
 
-    const {data, isLoading} = useListToolLogs(
+    const {data, isLoading, error} = useListToolLogs(
         {
             perPage,
             cursor: currentCursor,
@@ -216,7 +216,22 @@ export default function LogsPage() {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {isLoading && allLogs.length === 0 ? (
+                                            {error ? (
+                                                <TableRow>
+                                                    <TableCell colSpan={6}
+                                                               className="text-center py-8">
+                                                        <div className="flex flex-col items-center gap-2">
+                                                            <XIcon className="size-6 stroke-destructive-default"/>
+                                                            <span className="text-destructive-default font-medium">
+                                                                Error loading logs
+                                                            </span>
+                                                            <span className="text-sm text-muted-foreground">
+                                                                {error instanceof Error ? error.message : "An unexpected error occurred"}
+                                                            </span>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : isLoading && allLogs.length === 0 ? (
                                                 <TableRow>
                                                     <TableCell colSpan={6}
                                                                className="text-center py-8 text-muted-foreground">
@@ -229,7 +244,7 @@ export default function LogsPage() {
                                                                className="text-center py-8 text-muted-foreground">
                                                         {isLogsEnabled ?
                                                             "No logs found" :
-                                                            "Logs are opt-in. Please reach out of you would like this enabled for your account"
+                                                            "Logs are opt-in. Please reach out if you would like this enabled for your account"
                                                         }
                                                     </TableCell>
                                                 </TableRow>
