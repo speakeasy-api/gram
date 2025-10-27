@@ -138,8 +138,7 @@ export default function LogsPage() {
                                     value={filters.searchQuery ?? ""}
                                     onChange={(value) => setFilters(prev => ({...prev, searchQuery: value || null}))}
                                     placeholder="Search"
-                                    className="w-1/3"
-                                />
+                                    className="w-1/3"/>
 
                                 {/* Filters */}
                                 <div className="flex items-center gap-2">
@@ -148,8 +147,7 @@ export default function LogsPage() {
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
                                             toolTypeFilter: value || null
-                                        }))}
-                                    >
+                                        }))}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Tool Type"/>
                                         </SelectTrigger>
@@ -164,8 +162,7 @@ export default function LogsPage() {
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
                                             serverNameFilter: value || null
-                                        }))}
-                                    >
+                                        }))}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Server Name"/>
                                         </SelectTrigger>
@@ -180,8 +177,7 @@ export default function LogsPage() {
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
                                             statusFilter: value || null
-                                        }))}
-                                    >
+                                        }))}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Status"/>
                                         </SelectTrigger>
@@ -201,8 +197,7 @@ export default function LogsPage() {
                                     ref={tableContainerRef}
                                     className="overflow-y-auto"
                                     style={{maxHeight: 'calc(100vh - 250px)'}}
-                                    onScroll={handleScroll}
-                                >
+                                    onScroll={handleScroll}>
                                     <Table>
                                         <TableHeader className="sticky top-0 z-10">
                                             <TableRow
@@ -237,32 +232,31 @@ export default function LogsPage() {
                                                     <TableRow
                                                         key={log.id}
                                                         className="cursor-pointer hover:bg-surface-secondary-default"
-                                                        onClick={() => setSelectedLog(log)}
-                                                    >
-                                                        <TableCell className="text-muted-foreground font-mono">
+                                                        onClick={() => setSelectedLog(log)}>
+                                                        <TableCell className="text-muted-foreground font-mono py-4">
                                                             {formatTimestamp(log.ts)}
                                                         </TableCell>
-                                                        <TableCell className="font-medium">
+                                                        <TableCell className="font-medium py-4">
                                                             <div className="flex items-center gap-2">
                                                                 <ToolIcon className="size-4 shrink-0"
                                                                           strokeWidth={1.5}/>
                                                                 <span>{sourceName}</span>
                                                             </div>
                                                         </TableCell>
-                                                        <TableCell className="font-mono">
-                          <span className="text-sm">
-                            {getToolNameFromUrn(log.toolUrn)}
-                          </span>
+                                                        <TableCell className="font-mono py-4">
+                                                          <span className="text-sm">
+                                                            {getToolNameFromUrn(log.toolUrn)}
+                                                          </span>
                                                         </TableCell>
-                                                        <TableCell>
+                                                        <TableCell className="py-4">
                                                             <div className="flex items-center justify-center">
                                                                 <StatusIcon isSuccess={isSuccessfulCall(log)}/>
                                                             </div>
                                                         </TableCell>
-                                                        <TableCell className="text-muted-foreground flex text-sm">
+                                                        <TableCell className="text-muted-foreground flex text-sm py-4">
                                                             {log.userAgent || "-"}
                                                         </TableCell>
-                                                        <TableCell className="text-muted-foreground font-mono">
+                                                        <TableCell className="text-muted-foreground font-mono py-4">
                                                             {formatDuration(log.durationMs)}
                                                         </TableCell>
                                                     </TableRow>
