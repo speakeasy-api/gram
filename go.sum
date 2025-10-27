@@ -437,8 +437,10 @@ github.com/opencontainers/image-spec v1.1.1/go.mod h1:qpqAh3Dmcf36wStyyWU+kCeDgr
 github.com/paulmach/orb v0.11.1 h1:3koVegMC4X/WeiXYz9iswopaTwMem53NzTJuTF20JzU=
 github.com/paulmach/orb v0.11.1/go.mod h1:5mULz1xQfs3bmQm63QEJA6lNGujuRafwA5S/EnuLaLU=
 github.com/paulmach/protoscan v0.2.1/go.mod h1:SpcSwydNLrxUGSDvXvO0P7g7AuhJ7lcKfDlhJCDw2gY=
-github.com/pb33f/libopenapi v0.25.3 h1:B0rf9Reo63tAx54gpoP9778Y84gk3JQoFtj7yg8vKfo=
-github.com/pb33f/libopenapi v0.25.3/go.mod h1:IefJDi7uJpflLs2wEnkiier/Y21w+dEbOrMCP5LB2aw=
+github.com/pb33f/jsonpath v0.1.2 h1:PlqXjEyecMqoYJupLxYeClCGWEpAFnh4pmzgspbXDPI=
+github.com/pb33f/jsonpath v0.1.2/go.mod h1:TtKnUnfqZm48q7a56DxB3WtL3ipkVtukMKGKxaR/uXU=
+github.com/pb33f/libopenapi v0.28.1 h1:vqE1Q08F6ohABsyKcK8kX7HYkR/+sILXGwCgFzF+aOg=
+github.com/pb33f/libopenapi v0.28.1/go.mod h1:mHMHA3ZKSZDTInNAuUtqkHlKLIjPm2HN1vgsGR57afc=
 github.com/pb33f/ordered-map/v2 v2.3.0 h1:k2OhVEQkhTCQMhAicQ3Z6iInzoZNQ7L9MVomwKBZ5WQ=
 github.com/pb33f/ordered-map/v2 v2.3.0/go.mod h1:oe5ue+6ZNhy7QN9cPZvPA23Hx0vMHnNVeMg4fGdCANw=
 github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 h1:onHthvaw9LFnH4t2DcNVpwGmV9E1BkGknEliJkfwQj0=
