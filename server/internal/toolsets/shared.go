@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/openapi"
 	projectsRepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	resourcesRepo "github.com/speakeasy-api/gram/server/internal/resources/repo"
+	templatesRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 	toolsRepo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	"github.com/speakeasy-api/gram/server/internal/tools/security"
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -22,6 +23,7 @@ import (
 type Toolsets struct {
 	repo          *repo.Queries
 	toolsRepo     *toolsRepo.Queries
+	templatesRepo *templatesRepo.Queries
 	resourcesRepo *resourcesRepo.Queries
 	projects      *projectsRepo.Queries
 }
@@ -30,6 +32,7 @@ func NewToolsets(tx repo.DBTX) *Toolsets {
 	return &Toolsets{
 		repo:          repo.New(tx),
 		toolsRepo:     toolsRepo.New(tx),
+		templatesRepo: templatesRepo.New(tx),
 		resourcesRepo: resourcesRepo.New(tx),
 		projects:      projectsRepo.New(tx),
 	}
@@ -57,28 +60,19 @@ func (t *Toolsets) GetToolCallPlanByURN(ctx context.Context, toolUrn urn.Tool, p
 		}
 		return t.extractFunctionToolCallPlan(ctx, tool)
 
+	case urn.ToolKindPrompt:
+		tool, err := t.templatesRepo.GetTemplateByURN(ctx, templatesRepo.GetTemplateByURNParams{
+			ProjectID: projectID,
+			Urn:       toolUrn.String(),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("get prompt template by urn: %w", err)
+		}
+		return t.extractPromptToolCallPlan(ctx, tool)
+
 	default:
 		return nil, fmt.Errorf("unsupported tool kind: %s", toolUrn.Kind)
 	}
-}
-
-// TODO: should we consider moving /rpc/instances.invoke/tool onto URNs, only the playground uses it right now.
-func (t *Toolsets) GetToolCallPlanByID(ctx context.Context, id uuid.UUID, projectID uuid.UUID) (*gateway.ToolCallPlan, error) {
-	toolUrnStr, err := t.toolsRepo.GetToolUrnByID(ctx, toolsRepo.GetToolUrnByIDParams{
-		ProjectID: projectID,
-		ID:        id,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("get tool urn by id: %w", err)
-	}
-
-	var toolURN urn.Tool
-	err = toolURN.UnmarshalText([]byte(toolUrnStr))
-	if err != nil {
-		return nil, fmt.Errorf("unmarshal tool urn: %w", err)
-	}
-
-	return t.GetToolCallPlanByURN(ctx, toolURN, projectID)
 }
 
 func (t *Toolsets) extractHTTPToolCallPlan(ctx context.Context, tool toolsRepo.HttpToolDefinition) (*gateway.ToolCallPlan, error) {
@@ -203,7 +197,7 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 		Name:             tool.Name,
 		DeploymentID:     tool.DeploymentID.String(),
 		ProjectID:        tool.ProjectID.String(),
-		ProjectSlug:      orgData.Slug,
+		ProjectSlug:      orgData.ProjectSlug,
 		OrganizationID:   orgData.ID,
 		OrganizationSlug: orgData.Slug,
 		URN:              tool.ToolUrn,
@@ -217,6 +211,43 @@ func (t *Toolsets) extractFunctionToolCallPlan(ctx context.Context, tool toolsRe
 	}
 
 	return gateway.NewFunctionToolCallPlan(descriptor, plan), nil
+}
+
+func (t *Toolsets) extractPromptToolCallPlan(ctx context.Context, tool templatesRepo.PromptTemplate) (*gateway.ToolCallPlan, error) {
+	orgData, err := t.projects.GetProjectWithOrganizationMetadata(ctx, tool.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("get project with organization metadata: %w", err)
+	}
+
+	descriptor := &gateway.ToolDescriptor{
+		ID:               tool.ID.String(),
+		Name:             tool.Name,
+		ProjectID:        tool.ProjectID.String(),
+		ProjectSlug:      orgData.ProjectSlug,
+		OrganizationID:   orgData.ID,
+		OrganizationSlug: orgData.Slug,
+		URN:              tool.ToolUrn,
+		DeploymentID:     "", // Prompts have no deployment ID
+	}
+
+	var description *string
+	if tool.Description.Valid {
+		description = &tool.Description.String
+	}
+
+	var engine string
+	if tool.Engine.Valid {
+		engine = tool.Engine.String
+	}
+
+	plan := &gateway.PromptToolCallPlan{
+		TemplateID:  tool.ID.String(),
+		Description: description,
+		Engine:      engine,
+		Prompt:      tool.Prompt,
+		Kind:        tool.Kind.String,
+	}
+	return gateway.NewPromptToolCallPlan(descriptor, plan), nil
 }
 
 func UnmarshalParameterSettings(settings []byte) (map[string]*gateway.HTTPParameter, error) {

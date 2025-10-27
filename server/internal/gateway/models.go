@@ -118,6 +118,14 @@ type FunctionToolCallPlan struct {
 	Variables         []string `json:"variables" yaml:"variables"`
 }
 
+type PromptToolCallPlan struct {
+	TemplateID  string  `json:"template_id" yaml:"template_id"`
+	Description *string `json:"description" yaml:"description"`
+	Prompt      string  `json:"prompt" yaml:"prompt"`
+	Engine      string  `json:"engine" yaml:"engine"`
+	Kind        string  `json:"kind" yaml:"kind"`
+}
+
 type ResourceFunctionCallPlan struct {
 	FunctionID        string            `json:"function_id" yaml:"function_id"`
 	FunctionsAccessID string            `json:"functions_access_id" yaml:"functions_access_id"`
@@ -132,6 +140,7 @@ type ToolKind string
 const (
 	ToolKindHTTP     ToolKind = "http"
 	ToolKindFunction ToolKind = "function"
+	ToolKindPrompt   ToolKind = "prompt"
 )
 
 type ResourceKind string
@@ -149,6 +158,7 @@ type ToolCallPlan struct {
 
 	HTTP     *HTTPToolCallPlan
 	Function *FunctionToolCallPlan
+	Prompt   *PromptToolCallPlan
 }
 
 // NewHTTPToolCallPlan creates a new Tool wrapping an HTTPTool.
@@ -159,6 +169,7 @@ func NewHTTPToolCallPlan(tool *ToolDescriptor, plan *HTTPToolCallPlan) *ToolCall
 		Descriptor:  tool,
 		HTTP:        plan,
 		Function:    nil,
+		Prompt:      nil,
 	}
 }
 
@@ -170,6 +181,19 @@ func NewFunctionToolCallPlan(tool *ToolDescriptor, plan *FunctionToolCallPlan) *
 		Descriptor:  tool,
 		HTTP:        nil,
 		Function:    plan,
+		Prompt:      nil,
+	}
+}
+
+// NewPromptToolCallPlan creates a new Tool wrapping a PromptTool.
+func NewPromptToolCallPlan(tool *ToolDescriptor, plan *PromptToolCallPlan) *ToolCallPlan {
+	return &ToolCallPlan{
+		Kind:        ToolKindPrompt,
+		BillingType: billing.ToolCallTypeHigherOrder,
+		Descriptor:  tool,
+		HTTP:        nil,
+		Function:    nil,
+		Prompt:      plan,
 	}
 }
 

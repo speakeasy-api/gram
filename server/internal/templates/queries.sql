@@ -23,6 +23,14 @@ WHERE pt.project_id = @project_id
   AND pt.deleted IS FALSE
 ORDER BY pt.project_id, pt.tool_urn, pt.id DESC;
 
+-- name: GetTemplateByURN :one
+SELECT DISTINCT ON (pt.project_id, pt.tool_urn) *
+FROM prompt_templates pt
+WHERE pt.project_id = @project_id
+  AND pt.tool_urn = @urn::TEXT
+  AND pt.deleted IS FALSE
+ORDER BY pt.project_id, pt.tool_urn, pt.id DESC;
+
 -- name: FindPromptTemplatesByUrns :many
 SELECT DISTINCT ON (pt.project_id, pt.tool_urn) *
 FROM prompt_templates pt

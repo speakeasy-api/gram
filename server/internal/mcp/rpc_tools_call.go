@@ -75,7 +75,6 @@ func handleToolsCall(
 	envSlug := payload.environment
 	var tool *types.Tool
 
-	// TODO: make sure this properly finds HOTs
 	for _, t := range toolset.Tools {
 		baseTool := conv.ToBaseTool(t)
 		if baseTool.Name == params.Name {
@@ -86,55 +85,6 @@ func handleToolsCall(
 
 	if tool == nil {
 		return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").Log(ctx, logger)
-	}
-
-	if tool.PromptTemplate != nil {
-		higherOrderTool := tool.PromptTemplate
-		var args map[string]any
-		if err := json.Unmarshal(params.Arguments, &args); err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse higher order tool arguments").Log(ctx, logger)
-		}
-
-		promptData, err := executePrompt(higherOrderTool.Engine, higherOrderTool.Prompt, args)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to execute prompt").Log(ctx, logger)
-		}
-
-		requestBytes := int64(len(params.Arguments))
-		outputBytes := int64(len(promptData))
-
-		err = checkToolUsageLimits(ctx, logger, toolset.OrganizationID, toolset.AccountType, billingRepository)
-		if err != nil {
-			return nil, err
-		}
-
-		go billingTracker.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
-			OrganizationID:        toolset.OrganizationID,
-			RequestBytes:          requestBytes,
-			OutputBytes:           outputBytes,
-			ToolID:                higherOrderTool.ID,
-			ToolName:              higherOrderTool.Name,
-			Type:                  billing.ToolCallTypeHigherOrder,
-			ProjectID:             payload.projectID.String(),
-			ToolsetSlug:           &payload.toolset,
-			ToolsetID:             &toolset.ID,
-			MCPURL:                &mcpURL,
-			MCPSessionID:          &payload.sessionID,
-			ProjectSlug:           nil, // This data is only there for debugging, but we don't have it here
-			OrganizationSlug:      nil,
-			ChatID:                nil,
-			ResourceURI:           "",
-			FunctionCPUUsage:      nil,
-			FunctionMemUsage:      nil,
-			FunctionExecutionTime: nil,
-		})
-
-		return formatHigherOrderToolResult(ctx, logger, req, promptData)
-	}
-
-	// At this point, non-http tools have already been handled
-	if tool.HTTPToolDefinition == nil && tool.FunctionToolDefinition == nil {
-		return nil, oops.E(oops.CodeUnexpected, errors.New("tool is not an HTTP tool"), "tool is not an HTTP tool").Log(ctx, logger)
 	}
 
 	ciEnv := gateway.NewCaseInsensitiveEnv()
@@ -208,7 +158,7 @@ func handleToolsCall(
 			OrganizationID:        toolset.OrganizationID,
 			RequestBytes:          requestBytes,
 			OutputBytes:           outputBytes,
-			ToolID:                conv.ToBaseTool(tool).ID,
+			ToolURN:               toolURN.String(),
 			ToolName:              params.Name,
 			ProjectID:             payload.projectID.String(),
 			ProjectSlug:           &descriptor.ProjectSlug,
@@ -269,7 +219,7 @@ func handleToolsCall(
 		return bs, nil
 	}
 
-	chunk, err := formatResult(*rw)
+	chunk, err := formatResult(*rw, plan.Kind)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed format tool call result").Log(ctx, logger)
 	}
@@ -336,32 +286,7 @@ func (w *toolCallResponseWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-func formatHigherOrderToolResult(ctx context.Context, logger *slog.Logger, req *rawRequest, promptData string) (json.RawMessage, error) {
-	content, err := json.Marshal(contentChunk[string, json.RawMessage]{
-		Type:     "text",
-		Text:     promptData,
-		MimeType: nil,
-		Data:     nil,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal content chunk").Log(ctx, logger)
-	}
-
-	bs, err := json.Marshal(result[toolCallResult]{
-		ID: req.ID,
-		Result: toolCallResult{
-			Content: []json.RawMessage{content},
-			IsError: false,
-		},
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to marshal custom tool call result").Log(ctx, logger)
-	}
-
-	return bs, nil
-}
-
-func formatResult(rw toolCallResponseWriter) (json.RawMessage, error) {
+func formatResult(rw toolCallResponseWriter, toolKind gateway.ToolKind) (json.RawMessage, error) {
 	body := rw.body.Bytes()
 	if len(body) == 0 {
 		return nil, nil
@@ -375,6 +300,27 @@ func formatResult(rw toolCallResponseWriter) (json.RawMessage, error) {
 
 	switch {
 	case strings.HasPrefix(mt, "text/"), contenttypes.IsJSON(mt), contenttypes.IsYAML(mt):
+		// Special handling for prompt results from the proxy
+		if toolKind == gateway.ToolKindPrompt && contenttypes.IsJSON(mt) {
+			var promptResult struct {
+				Description string `json:"description"`
+				Prompt      string `json:"prompt"`
+			}
+			if err := json.Unmarshal(body, &promptResult); err == nil && promptResult.Prompt != "" {
+				// This is a prompt result, return just the prompt text
+				bs, err := json.Marshal(contentChunk[string, json.RawMessage]{
+					Type:     "text",
+					Text:     promptResult.Prompt,
+					MimeType: nil,
+					Data:     nil,
+				})
+				if err != nil {
+					return nil, fmt.Errorf("serialize prompt content: %w", err)
+				}
+				return bs, nil
+			}
+		}
+
 		bs, err := json.Marshal(contentChunk[string, json.RawMessage]{
 			Type:     "text",
 			Text:     string(body),

@@ -241,6 +241,45 @@ func (q *Queries) GetTemplateByName(ctx context.Context, arg GetTemplateByNamePa
 	return i, err
 }
 
+const getTemplateByURN = `-- name: GetTemplateByURN :one
+SELECT DISTINCT ON (pt.project_id, pt.tool_urn) id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, tool_urns_hint, created_at, updated_at, deleted_at, deleted
+FROM prompt_templates pt
+WHERE pt.project_id = $1
+  AND pt.tool_urn = $2::TEXT
+  AND pt.deleted IS FALSE
+ORDER BY pt.project_id, pt.tool_urn, pt.id DESC
+`
+
+type GetTemplateByURNParams struct {
+	ProjectID uuid.UUID
+	Urn       string
+}
+
+func (q *Queries) GetTemplateByURN(ctx context.Context, arg GetTemplateByURNParams) (PromptTemplate, error) {
+	row := q.db.QueryRow(ctx, getTemplateByURN, arg.ProjectID, arg.Urn)
+	var i PromptTemplate
+	err := row.Scan(
+		&i.ID,
+		&i.ToolUrn,
+		&i.ProjectID,
+		&i.HistoryID,
+		&i.PredecessorID,
+		&i.Name,
+		&i.Description,
+		&i.Arguments,
+		&i.Prompt,
+		&i.Engine,
+		&i.Kind,
+		&i.ToolsHint,
+		&i.ToolUrnsHint,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const listTemplates = `-- name: ListTemplates :many
 SELECT DISTINCT ON (pt.project_id, pt.name) id, tool_urn, project_id, history_id, predecessor_id, name, description, arguments, prompt, engine, kind, tools_hint, tool_urns_hint, created_at, updated_at, deleted_at, deleted
 FROM prompt_templates pt

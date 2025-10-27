@@ -128,7 +128,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 			OrganizationID:        toolset.OrganizationID,
 			RequestBytes:          requestBytes,
 			OutputBytes:           outputBytes,
-			ToolID:                descriptor.ID,
+			ToolURN:               resourceURN.String(),
 			ToolName:              resourceDef.Name,
 			ResourceURI:           plan.Descriptor.URI,
 			ProjectID:             payload.projectID.String(),

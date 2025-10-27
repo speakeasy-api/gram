@@ -16,7 +16,7 @@ type ToolCallUsageEvent struct {
 	OrganizationID        string
 	RequestBytes          int64
 	OutputBytes           int64
-	ToolID                string
+	ToolURN               string
 	ToolName              string
 	ResourceURI           string
 	ProjectID             string

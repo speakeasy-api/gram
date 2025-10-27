@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -43,6 +43,7 @@ import (
 )
 
 const tooldIdQueryParam = "tool_id"
+const toolUrnQueryParam = "tool_urn"
 const environmentSlugQueryParam = "environment_slug"
 
 type Service struct {
@@ -252,12 +253,16 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnauthorized, nil, "project ID is required").Log(ctx, logger)
 	}
 
-	toolID := r.URL.Query().Get(tooldIdQueryParam)
-	if toolID == "" {
-		return oops.E(oops.CodeBadRequest, nil, "tool_id query parameter is required").Log(ctx, logger)
+	toolURNParam := r.URL.Query().Get(toolUrnQueryParam)
+	if toolURNParam == "" {
+		return oops.E(oops.CodeBadRequest, nil, "tool_urn query parameter is required").Log(ctx, logger)
+	}
+	toolURN, err := urn.ParseTool(toolURNParam)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "failed to parse tool URN").Log(ctx, logger)
 	}
 
-	// These variabels will come in our playground chats
+	// These variables will come in our playground chats
 	toolsetSlug := r.URL.Query().Get("toolset_slug")
 	chatID := r.URL.Query().Get("chat_id")
 
@@ -281,8 +286,8 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		}
 	}
 
-	plan, err := s.toolset.GetToolCallPlanByID(ctx, uuid.MustParse(toolID), *authCtx.ProjectID)
-	if err != nil {
+	plan, err := s.toolset.GetToolCallPlanByURN(ctx, toolURN, *authCtx.ProjectID)
+	if err != nil || plan == nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to load tool call plan").Log(ctx, logger)
 	}
 
@@ -373,7 +378,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		OrganizationID:        organizationID,
 		RequestBytes:          requestNumBytes,
 		OutputBytes:           outputNumBytes,
-		ToolID:                toolID,
+		ToolURN:               toolURN.String(),
 		ToolName:              toolName,
 		ProjectID:             authCtx.ProjectID.String(),
 		ProjectSlug:           authCtx.ProjectSlug,
