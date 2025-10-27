@@ -1,5 +1,11 @@
 # server
 
+## 0.9.5
+
+### Patch Changes
+
+- 7334ac8: fix the mcp server passthrough in gram functions. We receive the result content and respond with that
+
 ## 0.9.4
 
 ### Patch Changes
