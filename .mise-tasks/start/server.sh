@@ -2,7 +2,6 @@
 
 #MISE dir="{{ config_root }}/server"
 #MISE description="Start up the API server"
-#MISE sources=["server/**/*.go"]
 
 GIT_SHA=$(git rev-parse HEAD)
 
