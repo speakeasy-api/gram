@@ -20,7 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	slack_client "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/client"
-	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
+	slacktypes "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/types"
 )
 
 type Activities struct {
@@ -38,6 +38,7 @@ type Activities struct {
 	refreshOpenRouterKey          *activities.RefreshOpenRouterKey
 	slackChatCompletion           *activities.SlackChatCompletion
 	transitionDeployment          *activities.TransitionDeployment
+	validateDeployment            *activities.ValidateDeployment
 	verifyCustomDomain            *activities.VerifyCustomDomain
 }
 
@@ -68,13 +69,14 @@ func NewActivities(
 		getAllOrganizations:           activities.NewGetAllOrganizations(logger, db),
 		getSlackProjectContext:        activities.NewSlackProjectContextActivity(logger, db, slackClient),
 		postSlackMessage:              activities.NewPostSlackMessageActivity(logger, slackClient),
-		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage),
+		processDeployment:             activities.NewProcessDeployment(logger, tracerProvider, meterProvider, db, features, assetStorage, billingRepo),
 		provisionFunctionsAccess:      activities.NewProvisionFunctionsAccess(logger, db, encryption),
-		deployFunctionRunners:         activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption), // FIXME
+		deployFunctionRunners:         activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		refreshBillingUsage:           activities.NewRefreshBillingUsage(logger, db, billingRepo),
 		refreshOpenRouterKey:          activities.NewRefreshOpenRouterKey(logger, db, openrouter),
 		slackChatCompletion:           activities.NewSlackChatCompletionActivity(logger, slackClient, chatClient),
 		transitionDeployment:          activities.NewTransitionDeployment(logger, db),
+		validateDeployment:            activities.NewValidateDeployment(logger, db, billingRepo),
 		verifyCustomDomain:            activities.NewVerifyCustomDomain(logger, db, expectedTargetCNAME),
 	}
 }
@@ -87,7 +89,7 @@ func (a *Activities) ProcessDeployment(ctx context.Context, projectID uuid.UUID,
 	return a.processDeployment.Do(ctx, projectID, deploymentID)
 }
 
-func (a *Activities) GetSlackProjectContext(ctx context.Context, event types.SlackEvent) (*activities.SlackProjectContextResponse, error) {
+func (a *Activities) GetSlackProjectContext(ctx context.Context, event slacktypes.SlackEvent) (*activities.SlackProjectContextResponse, error) {
 	return a.getSlackProjectContext.Do(ctx, event)
 }
 
@@ -137,4 +139,8 @@ func (a *Activities) ProvisionFunctionsAccess(ctx context.Context, projectID uui
 
 func (a *Activities) DeployFunctionRunners(ctx context.Context, req activities.DeployFunctionRunnersRequest) error {
 	return a.deployFunctionRunners.Do(ctx, req)
+}
+
+func (a *Activities) ValidateDeployment(ctx context.Context, projectID uuid.UUID, deploymentID uuid.UUID) error {
+	return a.validateDeployment.Do(ctx, projectID, deploymentID)
 }

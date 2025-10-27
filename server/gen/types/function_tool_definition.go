@@ -19,6 +19,8 @@ type FunctionToolDefinition struct {
 	Runtime string
 	// Variables configuration for the function
 	Variables any
+	// Meta tags for the tool
+	Meta map[string]string
 	// The ID of the tool
 	ID string
 	// The URN of this tool

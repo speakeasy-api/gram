@@ -17,6 +17,8 @@ type FunctionResourceDefinition struct {
 	Runtime string
 	// Variables configuration for the resource
 	Variables any
+	// Meta tags for the tool
+	Meta map[string]string
 	// The ID of the resource
 	ID string
 	// The URN of this resource

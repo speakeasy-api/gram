@@ -29,6 +29,7 @@ Example:
 			flags.APIEndpoint(),
 			flags.APIKey(),
 			flags.Project(),
+			flags.Org(),
 			&cli.StringFlag{
 				Name:     "type",
 				Usage:    fmt.Sprintf("The type of asset to upload: %+v", deploy.AllowedTypes),

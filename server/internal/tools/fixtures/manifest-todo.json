@@ -52,6 +52,10 @@
         "SLACK_API_KEY": {
           "description": "API key for slack"
         }
+      },
+      "meta": {
+        "category": "productivity",
+        "version": "1.0"
       }
     },
     {

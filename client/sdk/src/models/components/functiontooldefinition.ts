@@ -65,6 +65,10 @@ export type FunctionToolDefinition = {
    */
   id: string;
   /**
+   * Meta tags for the tool
+   */
+  meta?: { [k: string]: string } | undefined;
+  /**
    * The name of the tool
    */
   name: string;
@@ -119,6 +123,7 @@ export const FunctionToolDefinition$inboundSchema: z.ZodType<
   description: z.string(),
   function_id: z.string(),
   id: z.string(),
+  meta: z.record(z.string()).optional(),
   name: z.string(),
   project_id: z.string(),
   runtime: z.string(),
@@ -156,6 +161,7 @@ export type FunctionToolDefinition$Outbound = {
   description: string;
   function_id: string;
   id: string;
+  meta?: { [k: string]: string } | undefined;
   name: string;
   project_id: string;
   runtime: string;
@@ -184,6 +190,7 @@ export const FunctionToolDefinition$outboundSchema: z.ZodType<
   description: z.string(),
   functionId: z.string(),
   id: z.string(),
+  meta: z.record(z.string()).optional(),
   name: z.string(),
   projectId: z.string(),
   runtime: z.string(),

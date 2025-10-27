@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetsRepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -46,6 +47,7 @@ type ProcessDeployment struct {
 	resources      *resourcesRepo.Queries
 	assetStorage   assets.BlobStore
 	projects       *projectsRepo.Queries
+	billingRepo    billing.Repository
 }
 
 func NewProcessDeployment(
@@ -55,6 +57,7 @@ func NewProcessDeployment(
 	db *pgxpool.Pool,
 	features feature.Provider,
 	assetStorage assets.BlobStore,
+	billingRepo billing.Repository,
 ) *ProcessDeployment {
 	return &ProcessDeployment{
 		logger:         logger,
@@ -69,6 +72,7 @@ func NewProcessDeployment(
 		tools:          toolsRepo.New(db),
 		resources:      resourcesRepo.New(db),
 		projects:       projectsRepo.New(db),
+		billingRepo:    billingRepo,
 	}
 }
 
@@ -85,7 +89,7 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 
 	workers := pool.New().WithErrors().WithMaxGoroutines(max(2, runtime.GOMAXPROCS(0)))
 
-	if err := p.doFunctions(ctx, workers, projectID, deploymentID, orgData.Slug, orgData.ProjectSlug, deployment); err != nil {
+	if err := p.doFunctions(ctx, workers, orgData.ID, projectID, deploymentID, orgData.Slug, orgData.ProjectSlug, deployment); err != nil {
 		return err
 	}
 
@@ -286,29 +290,30 @@ func (p *ProcessDeployment) doOpenAPIv3(
 func (p *ProcessDeployment) doFunctions(
 	ctx context.Context,
 	pool *pool.ErrorPool,
+	orgID string,
 	projectID uuid.UUID,
 	deploymentID uuid.UUID,
 	orgSlug string,
 	projectSlug string,
 	deployment *types.Deployment,
 ) error {
-	for _, attachement := range deployment.FunctionsAssets {
+	for _, attachment := range deployment.FunctionsAssets {
 		logger := p.logger.With(
 			attr.SlogDeploymentID(deployment.ID),
 			attr.SlogProjectID(deployment.ProjectID),
-			attr.SlogDeploymentFunctionsID(attachement.ID),
-			attr.SlogDeploymentFunctionsSlug(attachement.Slug),
-			attr.SlogAssetID(attachement.AssetID),
+			attr.SlogDeploymentFunctionsID(attachment.ID),
+			attr.SlogDeploymentFunctionsSlug(attachment.Slug),
+			attr.SlogAssetID(attachment.AssetID),
 			attr.SlogOrganizationSlug(orgSlug),
 			attr.SlogProjectSlug(projectSlug),
 		)
 
-		attachmentID, err := uuid.Parse(attachement.ID)
+		attachmentID, err := uuid.Parse(attachment.ID)
 		if err != nil {
 			return oops.E(oops.CodeInvariantViolation, err, "error parsing functions attachment id").Log(ctx, logger)
 		}
 
-		assetID, err := uuid.Parse(attachement.AssetID)
+		assetID, err := uuid.Parse(attachment.AssetID)
 		if err != nil {
 			return oops.E(oops.CodeInvariantViolation, err, "error parsing functions asset id").Log(ctx, logger)
 		}
@@ -332,9 +337,9 @@ func (p *ProcessDeployment) doFunctions(
 				attr.ProjectID(deployment.ProjectID),
 				attr.ProjectSlug(projectSlug),
 				attr.DeploymentID(deployment.ID),
-				attr.DeploymentFunctionsID(attachement.ID),
-				attr.DeploymentFunctionsSlug(attachement.Slug),
-				attr.AssetID(attachement.AssetID),
+				attr.DeploymentFunctionsID(attachment.ID),
+				attr.DeploymentFunctionsSlug(attachment.Slug),
+				attr.AssetID(attachment.AssetID),
 			))
 			defer func() {
 				if err != nil {
@@ -351,7 +356,7 @@ func (p *ProcessDeployment) doFunctions(
 				ProjectID:    projectID,
 				DeploymentID: deploymentID,
 				AttachmentID: attachmentID,
-				Attachment:   attachement,
+				Attachment:   attachment,
 				AssetURL:     u,
 				ProjectSlug:  projectSlug,
 				OrgSlug:      orgSlug,
@@ -368,11 +373,11 @@ func (p *ProcessDeployment) doFunctions(
 
 			outcome := o11y.OutcomeFromError(err)
 			if err == nil {
-				p.metrics.RecordFunctionsProcessed(ctx, time.Since(start), outcome, "-", 0, attachement.Runtime)
+				p.metrics.RecordFunctionsProcessed(ctx, time.Since(start), outcome, "-", 0, attachment.Runtime)
 			}
 
 			if res != nil {
-				p.metrics.RecordFunctionsProcessed(ctx, time.Since(start), outcome, res.ManifestVersion, res.NumTools, attachement.Runtime)
+				p.metrics.RecordFunctionsProcessed(ctx, time.Since(start), outcome, res.ManifestVersion, res.NumTools, attachment.Runtime)
 			}
 
 			return err

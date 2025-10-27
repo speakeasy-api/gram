@@ -65,6 +65,10 @@
         "DATA_REGION": {
           "description": "Region for data access"
         }
+      },
+      "meta": {
+        "provider": "example-api",
+        "refreshInterval": "300"
       }
     }
   ]

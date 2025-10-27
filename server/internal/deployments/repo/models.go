@@ -59,6 +59,7 @@ type FunctionResourceDefinition struct {
 	Title        pgtype.Text
 	MimeType     pgtype.Text
 	Variables    []byte
+	Meta         []byte
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz
@@ -76,6 +77,7 @@ type FunctionToolDefinition struct {
 	Description  string
 	InputSchema  []byte
 	Variables    []byte
+	Meta         []byte
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 	DeletedAt    pgtype.Timestamptz

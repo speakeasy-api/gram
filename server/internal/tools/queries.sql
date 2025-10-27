@@ -189,6 +189,7 @@ SELECT
   ftd.variables,
   ftd.runtime,
   ftd.function_id,
+  ftd.meta,
   df.asset_id,
   ftd.created_at,
   ftd.updated_at
@@ -262,6 +263,7 @@ SELECT
   , tool.description
   , tool.input_schema
   , tool.variables
+  , tool.meta
   , access.id AS access_id
 FROM deployment dep
 INNER JOIN function_tool_definitions tool

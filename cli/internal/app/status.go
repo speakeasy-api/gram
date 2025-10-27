@@ -27,6 +27,7 @@ If no deployment ID is provided, shows the status of the latest deployment.`,
 			flags.APIEndpoint(),
 			flags.APIKey(),
 			flags.Project(),
+			flags.Org(),
 			&cli.StringFlag{
 				Name:  "id",
 				Usage: "The deployment ID to check status for (if not provided, shows latest deployment)",

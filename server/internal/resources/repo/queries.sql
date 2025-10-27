@@ -27,6 +27,7 @@ SELECT
   frd.variables,
   frd.runtime,
   frd.function_id,
+  frd.meta,
   frd.created_at,
   frd.updated_at
 FROM function_resource_definitions frd
@@ -98,6 +99,7 @@ SELECT
   , resource.title
   , resource.mime_type
   , resource.variables
+  , resource.meta
   , access.id AS access_id
 FROM deployment dep
 INNER JOIN function_resource_definitions resource

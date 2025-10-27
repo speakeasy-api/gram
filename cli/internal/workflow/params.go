@@ -30,6 +30,11 @@ func ResolveParams(
 		return Params{}, fmt.Errorf("api-key required: not found in --api-key flag, $GRAM_API_KEY environment variable, or profile")
 	}
 
+	orgSlug := ResolveOrgSlug(c, prof)
+	if orgSlug == "" {
+		return Params{}, fmt.Errorf("organization required: not found in --org flag, $GRAM_ORG environment variable, or profile")
+	}
+
 	projectSlug := ResolveProject(c, prof)
 	if projectSlug == "" {
 		return Params{}, fmt.Errorf("project required: not found in --project flag, $GRAM_PROJECT environment variable, or profile")
@@ -43,6 +48,7 @@ func ResolveParams(
 	return Params{
 		APIKey:      apiKey,
 		APIURL:      apiURL,
+		OrgSlug:     orgSlug,
 		ProjectSlug: projectSlug,
 	}, nil
 }
@@ -57,6 +63,18 @@ func ResolveKey(c *cli.Context, prof *profile.Profile) secret.Secret {
 	}
 
 	return secret.Secret("")
+}
+
+func ResolveOrgSlug(c *cli.Context, prof *profile.Profile) string {
+	if c.IsSet("org") {
+		return c.String("org")
+	}
+
+	if prof != nil && prof.Org != nil {
+		return prof.Org.Slug
+	}
+
+	return ""
 }
 
 func ResolveProject(c *cli.Context, prof *profile.Profile) string {

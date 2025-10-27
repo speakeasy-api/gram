@@ -35,3 +35,5 @@ dist/
 **/.claude/settings.local.json
 .vercel
 cover.*
+*gram.deploy.json
+.tmp-melange/

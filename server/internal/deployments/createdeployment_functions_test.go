@@ -2,6 +2,7 @@ package deployments_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"testing"
 
@@ -126,6 +127,26 @@ func TestCreateDeployment_FunctionsWithManifestValidation(t *testing.T) {
 		require.NotEmpty(t, tool.Description, "tool should have a description")
 		require.Equal(t, "nodejs:22", tool.Runtime, "tool should have correct runtime")
 	}
+
+	// Verify meta tags on tools
+	createTodoTool, ok := lo.Find(functionTools, func(t testrepo.FunctionToolDefinition) bool {
+		return t.Name == "create_todo"
+	})
+	require.True(t, ok, "create_todo tool not found")
+	require.NotNil(t, createTodoTool.Meta, "create_todo should have meta")
+
+	var toolMeta map[string]string
+	err = json.Unmarshal(createTodoTool.Meta, &toolMeta)
+	require.NoError(t, err, "tool meta should unmarshal to map[string]string")
+	require.Equal(t, "productivity", toolMeta["category"])
+	require.Equal(t, "1.0", toolMeta["version"])
+
+	// Verify tools without meta tags have nil meta
+	listAllTodosTool, ok := lo.Find(functionTools, func(t testrepo.FunctionToolDefinition) bool {
+		return t.Name == "list_all_todos"
+	})
+	require.True(t, ok, "list_all_todos tool not found")
+	require.Nil(t, listAllTodosTool.Meta, "list_all_todos should have no meta tags")
 
 	accessCount, err := repo.CountFunctionsAccess(ctx, testrepo.CountFunctionsAccessParams{
 		DeploymentID: uuid.MustParse(dep.Deployment.ID),
@@ -1045,6 +1066,22 @@ func TestDeploymentsService_CreateDeployment_WithResources(t *testing.T) {
 		require.False(t, resource.MimeType.Valid, "should have no mime type")
 		require.NotNil(t, resource.Variables, "should have variables")
 		require.JSONEq(t, `{"DATA_API_KEY": {"description": "API key for data source"}, "DATA_REGION": {"description": "Region for data access"}}`, string(resource.Variables))
+		require.NotNil(t, resource.Meta, "should have meta")
+
+		var meta map[string]string
+		err = json.Unmarshal(resource.Meta, &meta)
+		require.NoError(t, err, "meta should unmarshal to map[string]string")
+	})
+
+	t.Run("verify user_guide has no meta tags", func(t *testing.T) {
+		t.Parallel()
+
+		resource, ok := lo.Find(resources, func(r testrepo.FunctionResourceDefinition) bool {
+			return r.Name == "user_guide"
+		})
+
+		require.True(t, ok, "resource user_guide not found")
+		require.Nil(t, resource.Meta, "user_guide should have no meta tags")
 	})
 }
 

@@ -32,7 +32,7 @@ func (q *Queries) CountFunctionsAccess(ctx context.Context, arg CountFunctionsAc
 }
 
 const listDeploymentFunctionsResources = `-- name: ListDeploymentFunctionsResources :many
-SELECT id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, created_at, updated_at, deleted_at, deleted
+SELECT id, resource_urn, project_id, deployment_id, function_id, runtime, name, description, uri, title, mime_type, variables, meta, created_at, updated_at, deleted_at, deleted
 FROM function_resource_definitions
 WHERE deployment_id = $1
 `
@@ -59,6 +59,7 @@ func (q *Queries) ListDeploymentFunctionsResources(ctx context.Context, deployme
 			&i.Title,
 			&i.MimeType,
 			&i.Variables,
+			&i.Meta,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -75,7 +76,7 @@ func (q *Queries) ListDeploymentFunctionsResources(ctx context.Context, deployme
 }
 
 const listDeploymentFunctionsTools = `-- name: ListDeploymentFunctionsTools :many
-SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, created_at, updated_at, deleted_at, deleted
+SELECT id, tool_urn, project_id, deployment_id, function_id, runtime, name, description, input_schema, variables, meta, created_at, updated_at, deleted_at, deleted
 FROM function_tool_definitions
 WHERE deployment_id = $1
 `
@@ -100,6 +101,7 @@ func (q *Queries) ListDeploymentFunctionsTools(ctx context.Context, deploymentID
 			&i.Description,
 			&i.InputSchema,
 			&i.Variables,
+			&i.Meta,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
