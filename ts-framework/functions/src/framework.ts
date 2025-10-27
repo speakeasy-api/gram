@@ -1,11 +1,11 @@
-import type * as z from "zod";
+import * as z from "zod";
 import * as zm from "zod/mini";
 
 type Prettify<T> = {
   [K in keyof T]: T[K];
 } & {};
 
-type VarDef = { description?: string };
+type VarDef = { description?: string | undefined };
 
 export class ResponseError extends Error {
   constructor(message?: string, options?: ErrorOptions) {
@@ -17,15 +17,14 @@ export class ResponseError extends Error {
 export type ToolDefinition<
   TName extends string,
   TInputSchema extends z.core.$ZodShape,
-  Vars extends string,
+  Env,
   Result extends Response,
 > = {
   name: TName;
   description?: string;
   inputSchema: TInputSchema;
-  variables?: Record<string, VarDef>;
   execute: (
-    ctx: ToolContext<Record<Vars, string | undefined>>,
+    ctx: ToolContext<Env>,
     input: z.infer<z.ZodObject<TInputSchema>>,
   ) => Promise<Result>;
 };
@@ -72,33 +71,12 @@ export function assert<V extends { error: string; stack?: never }>(
   }
 }
 
-class ToolContext<
-  Vars extends Record<string, string | undefined> = Record<
-    string,
-    string | undefined
-  >,
-> {
-  #keys: Set<string>;
-  #env: Record<string, string | undefined>;
+class ToolContext<Env> {
+  readonly env: Env;
   readonly signal: AbortSignal;
-  constructor(
-    signal: AbortSignal,
-    vardef: Record<keyof Vars, VarDef>,
-    env?: Record<string, string | undefined>,
-  ) {
+  constructor(signal: AbortSignal, env: Env) {
     this.signal = signal;
-    this.#keys = new Set(Object.keys(vardef));
-    this.#env = env || {};
-  }
-
-  get vars(): Vars {
-    const result: Record<string, string> = {};
-    for (const key of this.#keys) {
-      if (Object.hasOwn(this.#env, key) && this.#env[key] != null) {
-        result[key] = this.#env[key] || "";
-      }
-    }
-    return result as Vars;
+    this.env = env;
   }
 
   fail<V extends { error: string; stack?: never }>(
@@ -134,6 +112,11 @@ class ToolContext<
   }
 }
 
+export type InferEnv<V extends z.core.$ZodShape> = z.core.$InferObjectOutput<
+  V,
+  Record<string, string | undefined>
+>;
+
 export interface JSONResponse<T> extends Response {
   json(): Promise<T>;
 }
@@ -146,32 +129,57 @@ export class Gram<
   TTools extends {
     [k: string]: ToolDefinition<any, any, string, Response>;
   } = {},
+  EnvSchema extends z.core.$ZodShape = {
+    readonly [x: string]: z.core.$ZodOptional<z.core.$ZodString>;
+  },
 > {
-  private tools: Map<string, ToolDefinition<any, any, string, Response>>;
-  private lax: boolean;
-  private env: Record<string, string | undefined> | undefined;
+  #tools: Map<string, ToolDefinition<any, any, InferEnv<EnvSchema>, Response>>;
+  #lax: boolean;
+  #inputEnv?: Record<string, string | undefined> | undefined;
+  #envSchema: EnvSchema;
+  #envMemo!: InferEnv<EnvSchema>;
 
-  constructor(opts?: { lax?: boolean; env?: Record<string, string> }) {
-    this.tools = new Map();
-    this.lax = Boolean(opts?.lax);
-    this.env = opts?.env;
+  constructor(opts?: {
+    lax?: boolean;
+    env?: Record<string, string>;
+    envSchema?: EnvSchema;
+  }) {
+    this.#tools = new Map();
+    this.#lax = Boolean(opts?.lax);
+    this.#inputEnv = opts?.env;
+    this.#envSchema = opts?.envSchema as EnvSchema;
+  }
+
+  get #env() {
+    if (this.#envMemo == null) {
+      const schema = this.#envSchema ? z.object(this.#envSchema) : z.unknown();
+      this.#envMemo = schema.parse(
+        this.#inputEnv ?? process.env,
+      ) as InferEnv<EnvSchema>;
+    }
+    return this.#envMemo;
   }
 
   tool<
     TName extends string,
     TInputSchema extends z.core.$ZodShape,
-    TVariables extends string,
     Res extends Response,
   >(
-    definition: ToolDefinition<TName, TInputSchema, TVariables, Res>,
+    definition: ToolDefinition<TName, TInputSchema, InferEnv<EnvSchema>, Res>,
   ): Gram<
     Prettify<
       TTools & {
-        [k in TName]: ToolDefinition<TName, TInputSchema, TVariables, Res>;
+        [k in TName]: ToolDefinition<
+          TName,
+          TInputSchema,
+          InferEnv<EnvSchema>,
+          Res
+        >;
       }
-    >
+    >,
+    EnvSchema
   > {
-    this.tools.set(definition.name, definition as any);
+    this.#tools.set(definition.name, definition as any);
     return this as any;
   }
 
@@ -182,15 +190,14 @@ export class Gram<
     },
     options?: { signal?: AbortSignal },
   ): Promise<InferResult<TTools[TName]>> {
-    const tool = this.tools.get(request.name);
+    const tool = this.#tools.get(request.name);
     if (!tool) {
       throw new Error(`Tool not found: ${request.name}`);
     }
 
     const ctx = new ToolContext(
       options?.signal || new AbortController().signal,
-      tool.variables || {},
-      this.env || process.env,
+      this.#env,
     );
 
     const schema = zm.object(tool.inputSchema);
@@ -199,7 +206,7 @@ export class Gram<
     if (vres.success) {
       validatedInput = vres.data;
     } else if (
-      this.lax &&
+      this.#lax &&
       typeof request.input === "object" &&
       request.input !== null
     ) {
@@ -217,7 +224,7 @@ export class Gram<
   }
 
   manifest(): Manifest {
-    const tools = Array.from(this.tools.values()).map((tool) => {
+    const tools = Array.from(this.#tools.values()).map((tool) => {
       const schema = zm.object(tool.inputSchema);
       const inputSchema = zm.toJSONSchema(schema);
       const result: {
@@ -232,9 +239,11 @@ export class Gram<
       if (tool.description != null) {
         result.description = tool.description;
       }
-      if (tool.variables != null && Object.keys(tool.variables).length > 0) {
-        result.variables = tool.variables;
+      if (this.#envSchema != null) {
+        const obj = zm.object(this.#envSchema);
+        result.variables = envMapFromJSONSchema(zm.toJSONSchema(obj));
       }
+
       return result;
     });
 
@@ -243,4 +252,26 @@ export class Gram<
       tools,
     };
   }
+}
+
+function envMapFromJSONSchema(jsonSchema: unknown): Record<string, VarDef> {
+  const parsed = zm
+    .object({
+      properties: zm.record(
+        zm.string(),
+        zm.object({
+          description: zm.optional(zm.string()),
+        }),
+      ),
+    })
+    .parse(jsonSchema);
+
+  const out: Record<string, VarDef> = {};
+  for (const [key, value] of Object.entries(parsed.properties)) {
+    out[key] = {
+      ...(value.description != null ? { description: value.description } : {}),
+    };
+  }
+
+  return out;
 }

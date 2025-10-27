@@ -1,55 +1,6 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
-import { z } from "zod/mini";
-import {
-  Gram,
-  assert,
-  type JSONResponse,
-  type TextResponse,
-  type ToolSignature,
-} from "./framework.ts";
-
-test("static types", () => {
-  const g = new Gram()
-    .tool({
-      name: "echo",
-      description: "Echoes the input",
-      inputSchema: { message: z.string() },
-      async execute(ctx, input) {
-        return ctx.json({ echoed: input.message });
-      },
-    })
-    .tool({
-      name: "add",
-      description: "Add two numbers",
-      inputSchema: { a: z.number(), b: z.number() },
-      async execute(ctx, input) {
-        return ctx.json({ sum: input.a + input.b });
-      },
-    })
-    .tool({
-      name: "shout",
-      description: "Shouts the input",
-      inputSchema: {},
-      variables: { MESSAGE: { description: "The message to shout" } },
-      async execute(ctx) {
-        return ctx.text(ctx.vars["MESSAGE"]?.toUpperCase() + "!!!");
-      },
-    });
-
-  type G = typeof g extends Gram<infer TTools> ? TTools : never;
-  const val: any = null;
-  const all = [
-    val as ToolSignature<G["echo"]>,
-    val as ToolSignature<G["add"]>,
-    val as ToolSignature<G["shout"]>,
-  ] as const;
-
-  all satisfies readonly [
-    ["echo", { message: string }, string, JSONResponse<{ echoed: string }>],
-    ["add", { a: number; b: number }, string, JSONResponse<{ sum: number }>],
-    ["shout", {}, string, TextResponse<string>],
-  ];
-});
+import * as z from "zod";
+import { Gram, assert } from "./framework.ts";
 
 test("calls one registered tool", async () => {
   const g = new Gram().tool({
@@ -144,13 +95,15 @@ test("throws on unrecognized tool", async () => {
 });
 
 test("supports environment variables", async () => {
-  const g = new Gram({ env: { GREETING: "Hello!" } }).tool({
+  const g = new Gram({
+    env: { GREETING: "Hello!" },
+    envSchema: { GREETING: z.string() },
+  }).tool({
     name: "echo",
     description: "Echoes the input",
     inputSchema: {},
-    variables: { GREETING: { description: "The message to echo" } },
     async execute(ctx) {
-      return ctx.json({ echoed: ctx.vars["GREETING"] || "fail" });
+      return ctx.json({ echoed: ctx.env?.["GREETING"] || "fail" });
     },
   });
 
@@ -253,7 +206,12 @@ test("supports plain Response values", async () => {
 });
 
 test("generates a manifest", () => {
-  const g = new Gram()
+  const g = new Gram({
+    envSchema: {
+      MESSAGE: z.string().describe("The message to shout"),
+      API_KEY: z.string(),
+    },
+  })
     .tool({
       name: "echo",
       inputSchema: { message: z.string() },
@@ -273,9 +231,8 @@ test("generates a manifest", () => {
       name: "shout",
       description: "Shouts the input",
       inputSchema: {},
-      variables: { MESSAGE: { description: "The message to shout" } },
       async execute(ctx) {
-        return ctx.text(ctx.vars["MESSAGE"]?.toUpperCase() + "!!!");
+        return ctx.text(ctx.env?.["MESSAGE"]?.toUpperCase() + "!!!");
       },
     });
 
@@ -289,6 +246,10 @@ test("generates a manifest", () => {
           properties: { message: { type: "string" } },
           required: ["message"],
         }),
+        variables: {
+          MESSAGE: { description: "The message to shout" },
+          API_KEY: {},
+        },
       },
       {
         name: "add",
@@ -298,6 +259,10 @@ test("generates a manifest", () => {
           properties: { a: { type: "number" }, b: { type: "number" } },
           required: ["a", "b"],
         }),
+        variables: {
+          MESSAGE: { description: "The message to shout" },
+          API_KEY: {},
+        },
       },
       {
         name: "shout",
@@ -308,6 +273,7 @@ test("generates a manifest", () => {
         }),
         variables: {
           MESSAGE: { description: "The message to shout" },
+          API_KEY: {},
         },
       },
     ],

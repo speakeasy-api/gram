@@ -1,5 +1,15 @@
 # @gram-ai/create-function
 
+## 0.5.0
+
+### Minor Changes
+
+- 24118c5: Updated the Gram Functions framework template to include an MCP server for local
+  development that wraps a `Gram` instance. This will provide developers a better
+  feedback loop when developing tools before deploying them to Gram.
+
+## 0.4.0
+
 ## 0.3.2
 
 ## 0.3.1

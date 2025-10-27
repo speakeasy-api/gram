@@ -26,3 +26,20 @@ export async function handleToolCall(call: {
     headers: { "Content-Type": "application/json; mcp=tools_call" },
   });
 }
+
+export async function handleResources(call: {
+  uri: string;
+  input: string;
+  _meta?: Record<string, unknown>;
+}): Promise<Response> {
+  const response = await client.readResource({
+    uri: call.uri,
+    _meta: call._meta,
+  });
+
+  const body = JSON.stringify(response);
+  return new Response(body, {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}

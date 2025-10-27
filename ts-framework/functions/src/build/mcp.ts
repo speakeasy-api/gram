@@ -2,6 +2,7 @@ import { writeFile, open, stat, mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import esbuild from "esbuild";
 import archiver from "archiver";
+import type { Client } from "@modelcontextprotocol/sdk/client";
 
 export type BuildMCPServerResult = {
   files: Array<{ path: string; size: number }>;
@@ -60,6 +61,14 @@ async function buildFunctionsManifest(options: {
     name: string;
     description?: string | undefined;
     inputSchema: unknown;
+    _meta?: unknown;
+  }>;
+  resources?: Array<{
+    name: string;
+    description?: string | undefined;
+    uri: string;
+    mimeType?: string | undefined;
+    _meta?: unknown;
   }>;
 }> {
   const cwd = options.cwd ?? process.cwd();
@@ -73,8 +82,14 @@ async function buildFunctionsManifest(options: {
   const server = await import(entrypoint).then((mod) => {
     const exportsym = options.serverExport ?? "server";
     const serverExport = mod[exportsym];
+    if (typeof serverExport === "undefined") {
+      throw new Error(
+        `Export "${exportsym}" in entrypoint "${entrypoint}" is undefined`,
+      );
+    }
+
     const klass = serverExport?.constructor?.name;
-    if (klass !== "McpServer") {
+    if (klass !== "McpServer" && klass !== "Server") {
       throw new Error(
         `Export "${exportsym}" does not appear to be an instance of McpServer`,
       );
@@ -92,16 +107,67 @@ async function buildFunctionsManifest(options: {
   await server.connect(serverTransport);
   await mcpClient.connect(clientTransport);
 
-  const res = await mcpClient.listTools();
-  const tools = res.tools.map((tool) => {
-    return {
-      name: tool.name,
-      description: tool.description,
-      inputSchema: tool.inputSchema,
-    };
-  });
+  let tools = await collectTools(mcpClient);
+  let resources = await collectResources(mcpClient);
 
-  return { version: "0.0.0", tools };
+  return { version: "0.0.0", tools, resources };
+}
+
+async function collectTools(client: Client) {
+  const { McpError, ErrorCode: McpErrorCode } = await import(
+    "@modelcontextprotocol/sdk/types.js"
+  );
+  try {
+    const res = await client.listTools();
+    return res.tools.map((tool) => {
+      return {
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.inputSchema,
+        meta: {
+          "gram.ai/kind": "mcp-passthrough",
+          ...tool._meta,
+        },
+      };
+    });
+  } catch (err) {
+    if (err instanceof McpError && err.code === McpErrorCode.MethodNotFound) {
+      console.warn("No tools registered");
+    } else {
+      throw err;
+    }
+    return [];
+  }
+}
+
+async function collectResources(client: Client) {
+  const { McpError, ErrorCode: McpErrorCode } = await import(
+    "@modelcontextprotocol/sdk/types.js"
+  );
+  try {
+    const resourcesResponse = await client.listResources();
+    return resourcesResponse.resources.map((resource) => {
+      return {
+        name: resource.name,
+        description: resource.description,
+        uri: resource.uri,
+        mimeType: resource.mimeType,
+        title: resource.title,
+        meta: {
+          "gram.ai/kind": "mcp-passthrough",
+          ...resource._meta,
+        },
+      };
+    });
+  } catch (err) {
+    if (err instanceof McpError && err.code === McpErrorCode.MethodNotFound) {
+      console.warn("No tools registered");
+    } else {
+      throw err;
+    }
+  }
+
+  return [];
 }
 
 async function bundleFunction(options: {
