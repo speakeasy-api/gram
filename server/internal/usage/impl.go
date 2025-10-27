@@ -86,6 +86,10 @@ func (s *Service) HandlePolarWebhook(w http.ResponseWriter, r *http.Request) err
 		"subscription.canceled",
 		"subscription.uncanceled",
 		"subscription.revoked",
+		"benefit_grant.created",
+		"benefit_grant.cycled",
+		"benefit_grant.updated",
+		"benefit_grant.revoked",
 	}
 	ctx := r.Context()
 
