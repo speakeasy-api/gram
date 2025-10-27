@@ -9,7 +9,7 @@ tool (
 )
 
 require (
-	cloud.google.com/go/storage v1.56.2
+	cloud.google.com/go/storage v1.57.0
 	github.com/ClickHouse/clickhouse-go/v2 v2.40.3
 	github.com/KimMachineGun/automemlimit v0.7.4
 	github.com/Masterminds/semver/v3 v3.4.0
