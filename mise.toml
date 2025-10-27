@@ -43,12 +43,12 @@ GRAM_DATABASE_URL = "postgres://{{env.DB_USER}}:{{env.DB_PASSWORD}}@{{env.DB_HOS
 ##############################
 ## ClickHouse configuration ##
 ##############################
-CLICKHOUSE_USERNAME = "grasam"
+CLICKHOUSE_USERNAME = "gram"
 CLICKHOUSE_PASSWORD = "gram"
 CLICKHOUSE_HOST = "127.0.0.1"
-CLICKHOUSE_NATIVE_PORT = "sdads"
-CLICKHOUSE_DATABASE = "sadsa"
-CLICKHOUSE_INSECURE = false
+CLICKHOUSE_NATIVE_PORT = "9440"
+CLICKHOUSE_DATABASE = "default"
+CLICKHOUSE_INSECURE = true
 GRAM_CLICKHOUSE_URL = "clickhouse://{{env.CLICKHOUSE_USERNAME}}:{{env.CLICKHOUSE_PASSWORD}}@{{env.CLICKHOUSE_HOST}}:{{env.CLICKHOUSE_NATIVE_PORT}}/{{env.CLICKHOUSE_DATABASE}}?secure=true&skip_verify=true"
 
 ############################

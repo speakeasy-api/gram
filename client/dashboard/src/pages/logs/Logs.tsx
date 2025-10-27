@@ -244,7 +244,7 @@ export default function LogsPage() {
                                                                className="text-center py-8 text-muted-foreground">
                                                         {isLogsEnabled ?
                                                             "No logs found" :
-                                                            "Logs are opt-in. Please reach out if you would like this enabled for your account"
+                                                            "Logs are opt-in feature. Please reach out to gram@speakeasyapi.dev if you would like this enabled for your account"
                                                         }
                                                     </TableCell>
                                                 </TableRow>
