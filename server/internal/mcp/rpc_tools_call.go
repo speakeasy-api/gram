@@ -255,9 +255,18 @@ func handleToolsCall(
 	if tool.FunctionToolDefinition != nil {
 		meta = tool.FunctionToolDefinition.Meta
 	}
+
 	if isMCPPassthrough(meta) {
-		// For MCP passthrough tools, return the raw response as-is
-		return rw.body.Bytes(), nil
+		// For MCP passthrough tools, return the raw result we get from the underlying mcp server
+		bs, err := json.Marshal(result[json.RawMessage]{
+			ID:     req.ID,
+			Result: json.RawMessage(rw.body.Bytes()),
+		})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize MCP passthrough result").Log(ctx, logger)
+		}
+
+		return bs, nil
 	}
 
 	chunk, err := formatResult(*rw)
