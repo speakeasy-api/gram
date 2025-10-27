@@ -10,6 +10,7 @@ import {LogDetailSheet} from "./LogDetailSheet";
 import {formatTimestamp, getSourceFromUrn, getToolIcon, getToolNameFromUrn, isSuccessfulCall,} from "./utils";
 import {formatDuration} from "@/lib/dates";
 import {CheckIcon, XIcon} from "lucide-react";
+import {useTelemetry} from "@/contexts/Telemetry.tsx";
 
 function StatusIcon({isSuccess}: { isSuccess: boolean }) {
     if (isSuccess) {
@@ -17,7 +18,6 @@ function StatusIcon({isSuccess}: { isSuccess: boolean }) {
     }
     return <XIcon className="size-4 stroke-destructive-default"/>
 }
-
 
 export default function LogsPage() {
     const [filters, setFilters] = useState<{
@@ -32,6 +32,8 @@ export default function LogsPage() {
         statusFilter: null,
     });
     const [selectedLog, setSelectedLog] = useState<HTTPToolLog | null>(null);
+    const telemetry = useTelemetry();
+    const isLogsEnabled = telemetry.isFeatureEnabled("clickhouse-tool-metrics") ?? false;
 
     // Infinite scroll state
     const [allLogs, setAllLogs] = useState<HTTPToolLog[]>([]);
@@ -136,7 +138,10 @@ export default function LogsPage() {
                             <div className="flex items-center justify-between gap-4">{/* Search Input */}
                                 <SearchBar
                                     value={filters.searchQuery ?? ""}
-                                    onChange={(value) => setFilters(prev => ({...prev, searchQuery: value || null}))}
+                                    onChange={(value) => setFilters(prev => ({
+                                        ...prev,
+                                        searchQuery: value || null
+                                    }))}
                                     placeholder="Search"
                                     className="w-1/3"/>
 
@@ -222,7 +227,10 @@ export default function LogsPage() {
                                                 <TableRow>
                                                     <TableCell colSpan={6}
                                                                className="text-center py-8 text-muted-foreground">
-                                                        No logs found
+                                                        {isLogsEnabled ?
+                                                            "No logs found" :
+                                                            "Logs are opt-in. Please reach out of you would like this enabled for your account"
+                                                        }
                                                     </TableCell>
                                                 </TableRow>
                                             ) : allLogs.map((log) => {
@@ -253,7 +261,8 @@ export default function LogsPage() {
                                                                 <StatusIcon isSuccess={isSuccessfulCall(log)}/>
                                                             </div>
                                                         </TableCell>
-                                                        <TableCell className="text-muted-foreground flex text-sm py-4">
+                                                        <TableCell
+                                                            className="text-muted-foreground flex text-sm py-4">
                                                             {log.userAgent || "-"}
                                                         </TableCell>
                                                         <TableCell className="text-muted-foreground font-mono py-4">

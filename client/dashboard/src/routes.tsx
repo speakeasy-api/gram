@@ -205,7 +205,7 @@ const ROUTE_STRUCTURE = {
   logs: {
     title: "Logs",
     url: "logs",
-    icon: "test-tube",
+    icon: "test-tube-diagonal",
     component: Logs,
   },
   environments: {
