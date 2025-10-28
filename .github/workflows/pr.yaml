@@ -513,6 +513,11 @@ jobs:
         if: ${{ needs.changes.outputs.functions == 'true' }}
         run: pnpm install --frozen-lockfile
 
+      - name: Test functions runner
+        working-directory: functions
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: mise run test:functions
+
       - name: Test functions entrypoint
         working-directory: functions
         if: ${{ needs.changes.outputs.functions == 'true' }}
