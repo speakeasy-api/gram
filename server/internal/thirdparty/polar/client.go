@@ -191,8 +191,8 @@ func (p *Client) TrackToolCallUsage(ctx context.Context, event billing.ToolCallU
 		"total_bytes": {
 			Integer: &totalBytes,
 		},
-		"tool_id": {
-			Str: &event.ToolID,
+		"tool_urn": {
+			Str: &event.ToolURN,
 		},
 		"tool_name": {
 			Str: &event.ToolName,

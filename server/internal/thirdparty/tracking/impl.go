@@ -34,7 +34,7 @@ func (c *Composite) TrackToolCallUsage(ctx context.Context, event billing.ToolCa
 		"request_bytes":        event.RequestBytes,
 		"output_bytes":         event.OutputBytes,
 		"total_bytes":          event.RequestBytes + event.OutputBytes,
-		"tool_id":              event.ToolID,
+		"tool_urn":             event.ToolURN,
 		"tool_name":            event.ToolName,
 		"project_id":           event.ProjectID,
 		"type":                 string(event.Type),

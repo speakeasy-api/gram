@@ -6,12 +6,10 @@ import { Slider } from "@/components/ui/slider";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
 import { Telemetry, useTelemetry } from "@/contexts/Telemetry";
-import { asTool, filterHttpTools, filterPromptTools } from "@/lib/toolTypes";
+import { asTool, Tool } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import { Message, useChat } from "@ai-sdk/react";
-import { HTTPToolDefinition } from "@gram/client/models/components";
 import { useInstance } from "@gram/client/react-query/index.js";
 import {
   AIChatContainer,
@@ -19,11 +17,11 @@ import {
   useToolCallApproval,
 } from "@speakeasy-api/moonshine";
 import {
+  Tool as AiSdkTool,
   generateObject,
   jsonSchema,
   smoothStream,
   streamText,
-  Tool,
   ToolCall,
 } from "ai";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -101,9 +99,9 @@ export function ChatWindow({
   );
 }
 
-type Toolset = Record<
+type AiSdkToolset = Record<
   string,
-  Tool & { id?: string; method?: string; path?: string }
+  AiSdkTool & { urn: string; method?: string; path?: string }
 >;
 
 function ChatInner({
@@ -130,7 +128,6 @@ function ChatInner({
   const session = useSession();
   const project = useProject();
   const telemetry = useTelemetry();
-  const client = useSdkClient();
 
   const chat = useChatContext();
   const { setMessages } = chat;
@@ -180,12 +177,11 @@ function ChatInner({
     [],
   );
 
-  const executeHttpToolFn =
-    (tool: HTTPToolDefinition, toolsetSlug: string) =>
-    async (args: unknown) => {
+  const executeTool =
+    (tool: Tool, toolsetSlug: string) => async (args: unknown) => {
       const response = await fetch(
-        `${getServerURL()}/rpc/instances.invoke/tool?tool_id=${
-          tool.id
+        `${getServerURL()}/rpc/instances.invoke/tool?tool_urn=${
+          tool.toolUrn
         }&environment_slug=${configRef.current.environmentSlug}&chat_id=${
           chat.id
         }&toolset_slug=${toolsetSlug}`,
@@ -211,45 +207,28 @@ function ChatInner({
       return result || `status code: ${response.status}`;
     };
 
-  const allTools: Toolset = useMemo(() => {
+  const allTools: AiSdkToolset = useMemo(() => {
     const baseTools = instance.data?.tools.map(asTool);
 
-    const tools: Toolset = Object.fromEntries(
-      filterHttpTools(baseTools).map((tool) => {
+    const tools: AiSdkToolset = Object.fromEntries(
+      baseTools?.map((tool) => {
         return [
           tool.name,
           {
-            id: tool.id,
-            method: tool.httpMethod,
-            path: tool.path,
+            urn: tool.toolUrn,
             description: tool.description,
             parameters: jsonSchema(tool.schema ? JSON.parse(tool.schema) : {}),
-            execute: executeHttpToolFn(
-              tool,
-              configRef.current.toolsetSlug || "",
-            ),
+            execute: executeTool(tool, configRef.current.toolsetSlug || ""),
+            ...(tool.type === "http"
+              ? {
+                  method: tool.httpMethod,
+                  path: tool.path,
+                }
+              : {}),
           },
         ];
       }) ?? [],
     );
-
-    filterPromptTools(baseTools).forEach((pt) => {
-      tools[pt.name] = {
-        id: pt.id as string,
-        description: pt.description ?? "",
-        parameters: jsonSchema(JSON.parse(pt.schema ?? "{}")),
-        execute: async (args) => {
-          const res = await client.templates.renderByID({
-            id: pt.id as `${string}.${string}`,
-            renderTemplateByIDRequestBody: {
-              arguments: args as Record<string, unknown>,
-            },
-          });
-
-          return res.prompt;
-        },
-      };
-    });
 
     return tools;
   }, [instance.data]);
@@ -257,7 +236,7 @@ function ChatInner({
   // Create a list of tools for the mention system
   const mentionTools: MentionTool[] = useMemo(() => {
     return Object.entries(allTools).map(([name, tool]) => {
-      const toolWithId = tool as Tool & { id?: string };
+      const toolWithId = tool as AiSdkTool & { id?: string };
       return {
         id: toolWithId.id || name,
         name,
@@ -275,7 +254,7 @@ function ChatInner({
 
   const openrouterBasic = useMiniModel();
 
-  const updateToolsTool: Tool & { name: string } = {
+  const updateToolsTool: AiSdkTool & { name: string } = {
     name: "refresh_tools",
     description: `If you are unable to fulfill the user's request with the current set of tools, use this tool to get a new set of tools.
     The request is a description of the task you are trying to complete based on the conversation history. 
@@ -352,7 +331,7 @@ function ChatInner({
         // Filter tools to only include mentioned ones
         tools = Object.fromEntries(
           Object.entries(allTools).filter(([_, tool]) => {
-            const toolWithId = tool as Tool & { id?: string };
+            const toolWithId = tool as AiSdkTool & { id?: string };
             return mentionedIds.includes(toolWithId.id || _);
           }),
         );
@@ -651,7 +630,7 @@ function ChatInner({
   );
 }
 
-const toolCallComponents = (tools: Toolset, telemetry: Telemetry) => {
+const toolCallComponents = (tools: AiSdkToolset, telemetry: Telemetry) => {
   const JsonDisplay = ({ json }: { json: string }) => {
     let pretty = json;
     // Particularly when loading chat history from the database, the JSON formatting needs to be restored
