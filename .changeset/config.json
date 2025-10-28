@@ -9,7 +9,6 @@
   ],
   "fixed": [["@gram-ai/functions", "@gram-ai/create-function"]],
   "linked": [],
-  "ignore": ["ts-framework/create-function/gram-template-*"],
   "access": "restricted",
   "baseBranch": "origin/main",
   "updateInternalDependencies": "patch",
