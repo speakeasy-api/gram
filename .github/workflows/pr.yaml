@@ -509,6 +509,10 @@ jobs:
           path: |
             ${{ env.PNPM_STORE_PATH }}
 
+      - name: Install Go tools
+        if: ${{ needs.changes.outputs.functions == 'true' }}
+        run: go install tool
+
       - name: Install dependencies
         if: ${{ needs.changes.outputs.functions == 'true' }}
         run: pnpm install --frozen-lockfile
@@ -527,11 +531,6 @@ jobs:
         working-directory: functions
         if: ${{ needs.changes.outputs.functions == 'true' }}
         run: pnpm check
-
-      - name: Install Go tools
-        if: ${{ needs.changes.outputs.functions == 'true' }}
-        run: go install tool
-        working-directory: functions
 
       - name: Lint Go server
         if: ${{ needs.changes.outputs.functions == 'true' }}
