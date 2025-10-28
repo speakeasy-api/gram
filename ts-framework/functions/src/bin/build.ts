@@ -65,7 +65,6 @@ async function run(logger: Logger, args: ReturnType<typeof parseArgs>) {
 }
 
 async function main(argv: string[]) {
-  console.log("HERE I AM");
   const { name, version } = pkg;
   const args = parseArgs(argv);
   if (args.values.help) {
