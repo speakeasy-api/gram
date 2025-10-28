@@ -3,6 +3,12 @@ import { join, resolve } from "node:path";
 import esbuild from "esbuild";
 import archiver from "archiver";
 import type { Client } from "@modelcontextprotocol/sdk/client";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { Client as MCPClient } from "@modelcontextprotocol/sdk/client/index.js";
+import {
+  McpError,
+  ErrorCode as McpErrorCode,
+} from "@modelcontextprotocol/sdk/types.js";
 
 export type BuildMCPServerResult = {
   files: Array<{ path: string; size: number }>;
@@ -74,11 +80,6 @@ async function buildFunctionsManifest(options: {
   const cwd = options.cwd ?? process.cwd();
   const entrypoint = resolve(cwd, options.entrypoint);
 
-  const { InMemoryTransport } = await import(
-    "@modelcontextprotocol/sdk/inMemory.js"
-  );
-  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
-
   const server = await import(entrypoint).then((mod) => {
     const exportsym = options.serverExport ?? "server";
     const serverExport = mod[exportsym];
@@ -98,7 +99,7 @@ async function buildFunctionsManifest(options: {
     return serverExport;
   });
 
-  const mcpClient = new Client({
+  const mcpClient = new MCPClient({
     name: "@gram-ai/functions",
     version: "0.0.0",
   });
@@ -114,9 +115,6 @@ async function buildFunctionsManifest(options: {
 }
 
 async function collectTools(client: Client) {
-  const { McpError, ErrorCode: McpErrorCode } = await import(
-    "@modelcontextprotocol/sdk/types.js"
-  );
   try {
     const res = await client.listTools();
     return res.tools.map((tool) => {
@@ -141,9 +139,6 @@ async function collectTools(client: Client) {
 }
 
 async function collectResources(client: Client) {
-  const { McpError, ErrorCode: McpErrorCode } = await import(
-    "@modelcontextprotocol/sdk/types.js"
-  );
   try {
     const resourcesResponse = await client.listResources();
     return resourcesResponse.resources.map((resource) => {
