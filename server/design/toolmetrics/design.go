@@ -93,7 +93,7 @@ var PaginationResponse = Type("PaginationResponse", func() {
 	Attribute("per_page", Int, "Number of items per page")
 	Attribute("has_next_page", Boolean, "Whether there is a next page")
 	Attribute("next_page_cursor", String, "Cursor for next page", func() {
-		Format(FormatDateTime)
+		Format(FormatUUID)
 	})
 })
 

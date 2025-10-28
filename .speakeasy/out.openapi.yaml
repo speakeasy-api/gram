@@ -10228,7 +10228,7 @@ components:
         next_page_cursor:
           type: string
           description: Cursor for next page
-          format: date-time
+          format: uuid
         per_page:
           type: integer
           description: Number of items per page

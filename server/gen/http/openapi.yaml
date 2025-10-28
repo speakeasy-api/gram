@@ -27845,7 +27845,7 @@ definitions:
                   user_agent: Molestias voluptates quidem minus et quod.
             pagination:
                 has_next_page: true
-                next_page_cursor: "1978-02-15T17:06:25Z"
+                next_page_cursor: c2cb269e-34c5-4b30-9623-b9c52e8234dd
                 per_page: 4723543569620129378
         required:
             - logs
@@ -33937,8 +33937,8 @@ definitions:
             next_page_cursor:
                 type: string
                 description: Cursor for next page
-                example: "1976-06-01T16:56:34Z"
-                format: date-time
+                example: e9613eca-3614-4151-a5be-06b85d72be3e
+                format: uuid
             per_page:
                 type: integer
                 description: Number of items per page
@@ -33947,7 +33947,7 @@ definitions:
         description: Pagination metadata for list responses
         example:
             has_next_page: true
-            next_page_cursor: "1973-05-12T20:33:25Z"
+            next_page_cursor: a1ad9ee8-83d6-4e29-bd55-9489d1cf0e5d
             per_page: 2223529902255785190
     PeriodUsage:
         title: PeriodUsage

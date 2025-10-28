@@ -19,7 +19,7 @@ export type PaginationResponse = {
   /**
    * Cursor for next page
    */
-  nextPageCursor?: Date | undefined;
+  nextPageCursor?: string | undefined;
   /**
    * Number of items per page
    */
@@ -33,9 +33,7 @@ export const PaginationResponse$inboundSchema: z.ZodType<
   unknown
 > = z.object({
   has_next_page: z.boolean().optional(),
-  next_page_cursor: z.string().datetime({ offset: true }).transform(v =>
-    new Date(v)
-  ).optional(),
+  next_page_cursor: z.string().optional(),
   per_page: z.number().int().optional(),
 }).transform((v) => {
   return remap$(v, {
@@ -59,7 +57,7 @@ export const PaginationResponse$outboundSchema: z.ZodType<
   PaginationResponse
 > = z.object({
   hasNextPage: z.boolean().optional(),
-  nextPageCursor: z.date().transform(v => v.toISOString()).optional(),
+  nextPageCursor: z.string().optional(),
   perPage: z.number().int().optional(),
 }).transform((v) => {
   return remap$(v, {

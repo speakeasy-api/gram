@@ -19,9 +19,10 @@ import {
   AlertTriangleIcon,
   ChartNoAxesCombinedIcon,
   MinusIcon,
-  TestTubeDiagonal,
+  TestTube2Icon,
 } from "lucide-react";
 import * as React from "react";
+import { useState } from "react";
 import { FeatureRequestModal } from "./FeatureRequestModal";
 import { GramLogo } from "./gram-logo";
 import { ProjectMenu } from "./project-menu";
@@ -31,7 +32,11 @@ import { Type } from "./ui/type";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const routes = useRoutes();
   const [metricsModalOpen, setMetricsModalOpen] = React.useState(false);
-  const [evalsModalOpen, setEvalsModalOpen] = React.useState(false);
+  const session = useSession();
+  const [isUpgradeModalOpen, setIsUpgradeModalOpen] = useState(false);
+
+  // For free tier users, show the upgrade modal
+  const isFreeUser = session.gramAccountType === "free";
 
   const topNavGroups = {
     create: [routes.toolsets, routes.customTools, routes.prompts],
@@ -79,11 +84,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 />
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <NavButton
-                  title="Logs"
-                  Icon={TestTubeDiagonal}
-                  onClick={() => setEvalsModalOpen(true)}
-                />
+                {isFreeUser ? (
+                  <NavButton
+                    title="Logs"
+                    Icon={routes.logs.Icon}
+                    onClick={() => setIsUpgradeModalOpen(true)}
+                  />
+                ) : (
+                  <NavButton
+                    title="Logs"
+                    Icon={routes.logs.Icon}
+                    href={routes.logs.href()}
+                    active={routes.logs.active}
+                  />
+                )}
               </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroupContent>
@@ -107,12 +121,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         icon={ChartNoAxesCombinedIcon}
       />
       <FeatureRequestModal
-        isOpen={evalsModalOpen}
-        onClose={() => setEvalsModalOpen(false)}
-        title="Logs Coming Soon"
-        description="Logs are coming soon! We'll let you know when this feature is available."
-        actionType="evals"
-        icon={TestTubeDiagonal}
+        isOpen={isUpgradeModalOpen}
+        onClose={() => setIsUpgradeModalOpen(false)}
+        title="Access Logs"
+        description="Logs are available for Pro and Enterprise customers. Upgrade your account to access detailed logging and analytics for your tools."
+        actionType="logs_page_access"
+        icon={TestTube2Icon}
+        accountUpgrade={true}
       />
     </Sidebar>
   );
