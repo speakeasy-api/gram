@@ -2988,6 +2988,35 @@ paths:
                   name: cursor
                   required: false
                   type: string
+                - default: success
+                  description: Status filter
+                  enum:
+                    - success
+                    - failure
+                  in: query
+                  name: status
+                  required: false
+                  type: string
+                - description: Server name filter
+                  in: query
+                  name: server_name
+                  required: false
+                  type: string
+                - description: Tool name filter
+                  in: query
+                  name: tool_name
+                  required: false
+                  type: string
+                - default: http
+                  description: Tool type filter
+                  enum:
+                    - http
+                    - function
+                    - prompt
+                  in: query
+                  name: tool_type
+                  required: false
+                  type: string
                 - default: 20
                   description: Number of items per page (1-100)
                   in: query
@@ -27747,106 +27776,110 @@ definitions:
                 items:
                     $ref: '#/definitions/HTTPToolLog'
                 example:
-                    - deployment_id: 5ce8d311-a053-413e-8403-d38fa51b835b
-                      duration_ms: 0.6144405269565508
-                      http_method: Veniam id vel officia.
-                      http_route: Temporibus est.
-                      id: 46d5ab1f-b44b-40cf-a11b-781deca4b22d
-                      organization_id: f4088aa0-750e-4550-aa55-b2042143355e
-                      project_id: 2824149e-eb7a-4be2-8c47-cfcf5bee8197
-                      request_body_bytes: 369660443624048134
+                    - deployment_id: c2c0f017-b0c9-4932-b757-f848b073c601
+                      duration_ms: 0.13687706154585952
+                      http_method: Quod qui molestias voluptates quidem.
+                      http_route: Et quod accusantium ea molestiae expedita repudiandae.
+                      id: 46d5fd33-8c05-4c82-bfc6-cb6afe79f8d9
+                      organization_id: 491058e8-00e7-4c9c-a060-517274c1cfd2
+                      project_id: f849dc99-2a1f-44b7-946b-9ee54689d5fb
+                      request_body_bytes: 2138613603150872165
                       request_headers:
-                        Eligendi inventore aut repellat.: Omnis ea quis autem quia voluptatem dolor.
-                        Molestiae expedita repudiandae.: Tenetur voluptatem dolor voluptas dolores possimus et.
-                      response_body_bytes: 9148377140498588453
+                        Dolor quod est est.: Aut ab ut minima at dolor vel.
+                        Quasi minus.: Autem nostrum possimus omnis maiores quae nam.
+                        Qui eligendi inventore aut repellat qui omnis.: Quis autem quia.
+                      response_body_bytes: 4020337678435375530
                       response_headers:
-                        Autem nostrum possimus omnis maiores quae nam.: Occaecati dolore modi.
-                        Officia aut ab ut minima at.: Vel dicta quasi minus.
-                      span_id: Amet laboriosam tempore.
-                      status_code: 8928774686661433843
-                      tool_id: 2778c133-6de9-4322-ac9e-6dbc7f70b9db
+                        Modi eum repellat reprehenderit quaerat omnis.: Est unde.
+                        Repellat iste tempore quae porro.: Deleniti nesciunt amet.
+                      span_id: Temporibus est.
+                      status_code: 6002381808419711747
+                      tool_id: 4cf2a7b3-d06e-4623-ba88-5e6d604438c3
                       tool_type: prompt
-                      tool_urn: Porro recusandae excepturi.
-                      trace_id: Voluptatibus et sit laudantium ducimus eum et.
-                      ts: "1978-06-06T23:50:55Z"
-                      user_agent: Molestias voluptates quidem minus et quod.
-                    - deployment_id: 5ce8d311-a053-413e-8403-d38fa51b835b
-                      duration_ms: 0.6144405269565508
-                      http_method: Veniam id vel officia.
-                      http_route: Temporibus est.
-                      id: 46d5ab1f-b44b-40cf-a11b-781deca4b22d
-                      organization_id: f4088aa0-750e-4550-aa55-b2042143355e
-                      project_id: 2824149e-eb7a-4be2-8c47-cfcf5bee8197
-                      request_body_bytes: 369660443624048134
+                      tool_urn: Ducimus eum et reprehenderit amet laboriosam.
+                      trace_id: Veniam id vel officia.
+                      ts: "1975-05-28T02:16:08Z"
+                      user_agent: Dolor voluptas dolores.
+                    - deployment_id: c2c0f017-b0c9-4932-b757-f848b073c601
+                      duration_ms: 0.13687706154585952
+                      http_method: Quod qui molestias voluptates quidem.
+                      http_route: Et quod accusantium ea molestiae expedita repudiandae.
+                      id: 46d5fd33-8c05-4c82-bfc6-cb6afe79f8d9
+                      organization_id: 491058e8-00e7-4c9c-a060-517274c1cfd2
+                      project_id: f849dc99-2a1f-44b7-946b-9ee54689d5fb
+                      request_body_bytes: 2138613603150872165
                       request_headers:
-                        Eligendi inventore aut repellat.: Omnis ea quis autem quia voluptatem dolor.
-                        Molestiae expedita repudiandae.: Tenetur voluptatem dolor voluptas dolores possimus et.
-                      response_body_bytes: 9148377140498588453
+                        Dolor quod est est.: Aut ab ut minima at dolor vel.
+                        Quasi minus.: Autem nostrum possimus omnis maiores quae nam.
+                        Qui eligendi inventore aut repellat qui omnis.: Quis autem quia.
+                      response_body_bytes: 4020337678435375530
                       response_headers:
-                        Autem nostrum possimus omnis maiores quae nam.: Occaecati dolore modi.
-                        Officia aut ab ut minima at.: Vel dicta quasi minus.
-                      span_id: Amet laboriosam tempore.
-                      status_code: 8928774686661433843
-                      tool_id: 2778c133-6de9-4322-ac9e-6dbc7f70b9db
+                        Modi eum repellat reprehenderit quaerat omnis.: Est unde.
+                        Repellat iste tempore quae porro.: Deleniti nesciunt amet.
+                      span_id: Temporibus est.
+                      status_code: 6002381808419711747
+                      tool_id: 4cf2a7b3-d06e-4623-ba88-5e6d604438c3
                       tool_type: prompt
-                      tool_urn: Porro recusandae excepturi.
-                      trace_id: Voluptatibus et sit laudantium ducimus eum et.
-                      ts: "1978-06-06T23:50:55Z"
-                      user_agent: Molestias voluptates quidem minus et quod.
+                      tool_urn: Ducimus eum et reprehenderit amet laboriosam.
+                      trace_id: Veniam id vel officia.
+                      ts: "1975-05-28T02:16:08Z"
+                      user_agent: Dolor voluptas dolores.
             pagination:
                 $ref: '#/definitions/PaginationResponse'
         example:
             logs:
-                - deployment_id: 5ce8d311-a053-413e-8403-d38fa51b835b
-                  duration_ms: 0.6144405269565508
-                  http_method: Veniam id vel officia.
-                  http_route: Temporibus est.
-                  id: 46d5ab1f-b44b-40cf-a11b-781deca4b22d
-                  organization_id: f4088aa0-750e-4550-aa55-b2042143355e
-                  project_id: 2824149e-eb7a-4be2-8c47-cfcf5bee8197
-                  request_body_bytes: 369660443624048134
+                - deployment_id: c2c0f017-b0c9-4932-b757-f848b073c601
+                  duration_ms: 0.13687706154585952
+                  http_method: Quod qui molestias voluptates quidem.
+                  http_route: Et quod accusantium ea molestiae expedita repudiandae.
+                  id: 46d5fd33-8c05-4c82-bfc6-cb6afe79f8d9
+                  organization_id: 491058e8-00e7-4c9c-a060-517274c1cfd2
+                  project_id: f849dc99-2a1f-44b7-946b-9ee54689d5fb
+                  request_body_bytes: 2138613603150872165
                   request_headers:
-                    Eligendi inventore aut repellat.: Omnis ea quis autem quia voluptatem dolor.
-                    Molestiae expedita repudiandae.: Tenetur voluptatem dolor voluptas dolores possimus et.
-                  response_body_bytes: 9148377140498588453
+                    Dolor quod est est.: Aut ab ut minima at dolor vel.
+                    Quasi minus.: Autem nostrum possimus omnis maiores quae nam.
+                    Qui eligendi inventore aut repellat qui omnis.: Quis autem quia.
+                  response_body_bytes: 4020337678435375530
                   response_headers:
-                    Autem nostrum possimus omnis maiores quae nam.: Occaecati dolore modi.
-                    Officia aut ab ut minima at.: Vel dicta quasi minus.
-                  span_id: Amet laboriosam tempore.
-                  status_code: 8928774686661433843
-                  tool_id: 2778c133-6de9-4322-ac9e-6dbc7f70b9db
+                    Modi eum repellat reprehenderit quaerat omnis.: Est unde.
+                    Repellat iste tempore quae porro.: Deleniti nesciunt amet.
+                  span_id: Temporibus est.
+                  status_code: 6002381808419711747
+                  tool_id: 4cf2a7b3-d06e-4623-ba88-5e6d604438c3
                   tool_type: prompt
-                  tool_urn: Porro recusandae excepturi.
-                  trace_id: Voluptatibus et sit laudantium ducimus eum et.
-                  ts: "1978-06-06T23:50:55Z"
-                  user_agent: Molestias voluptates quidem minus et quod.
-                - deployment_id: 5ce8d311-a053-413e-8403-d38fa51b835b
-                  duration_ms: 0.6144405269565508
-                  http_method: Veniam id vel officia.
-                  http_route: Temporibus est.
-                  id: 46d5ab1f-b44b-40cf-a11b-781deca4b22d
-                  organization_id: f4088aa0-750e-4550-aa55-b2042143355e
-                  project_id: 2824149e-eb7a-4be2-8c47-cfcf5bee8197
-                  request_body_bytes: 369660443624048134
+                  tool_urn: Ducimus eum et reprehenderit amet laboriosam.
+                  trace_id: Veniam id vel officia.
+                  ts: "1975-05-28T02:16:08Z"
+                  user_agent: Dolor voluptas dolores.
+                - deployment_id: c2c0f017-b0c9-4932-b757-f848b073c601
+                  duration_ms: 0.13687706154585952
+                  http_method: Quod qui molestias voluptates quidem.
+                  http_route: Et quod accusantium ea molestiae expedita repudiandae.
+                  id: 46d5fd33-8c05-4c82-bfc6-cb6afe79f8d9
+                  organization_id: 491058e8-00e7-4c9c-a060-517274c1cfd2
+                  project_id: f849dc99-2a1f-44b7-946b-9ee54689d5fb
+                  request_body_bytes: 2138613603150872165
                   request_headers:
-                    Eligendi inventore aut repellat.: Omnis ea quis autem quia voluptatem dolor.
-                    Molestiae expedita repudiandae.: Tenetur voluptatem dolor voluptas dolores possimus et.
-                  response_body_bytes: 9148377140498588453
+                    Dolor quod est est.: Aut ab ut minima at dolor vel.
+                    Quasi minus.: Autem nostrum possimus omnis maiores quae nam.
+                    Qui eligendi inventore aut repellat qui omnis.: Quis autem quia.
+                  response_body_bytes: 4020337678435375530
                   response_headers:
-                    Autem nostrum possimus omnis maiores quae nam.: Occaecati dolore modi.
-                    Officia aut ab ut minima at.: Vel dicta quasi minus.
-                  span_id: Amet laboriosam tempore.
-                  status_code: 8928774686661433843
-                  tool_id: 2778c133-6de9-4322-ac9e-6dbc7f70b9db
+                    Modi eum repellat reprehenderit quaerat omnis.: Est unde.
+                    Repellat iste tempore quae porro.: Deleniti nesciunt amet.
+                  span_id: Temporibus est.
+                  status_code: 6002381808419711747
+                  tool_id: 4cf2a7b3-d06e-4623-ba88-5e6d604438c3
                   tool_type: prompt
-                  tool_urn: Porro recusandae excepturi.
-                  trace_id: Voluptatibus et sit laudantium ducimus eum et.
-                  ts: "1978-06-06T23:50:55Z"
-                  user_agent: Molestias voluptates quidem minus et quod.
+                  tool_urn: Ducimus eum et reprehenderit amet laboriosam.
+                  trace_id: Veniam id vel officia.
+                  ts: "1975-05-28T02:16:08Z"
+                  user_agent: Dolor voluptas dolores.
             pagination:
-                has_next_page: true
-                next_page_cursor: c2cb269e-34c5-4b30-9623-b9c52e8234dd
-                per_page: 4723543569620129378
+                has_next_page: false
+                next_page_cursor: 596fec7b-201d-4b8d-9949-1413b1b5b3d9
+                per_page: 2544835981898472520
         required:
             - logs
             - pagination

@@ -17,7 +17,7 @@ import (
 
 // BuildListLogsPayload builds the payload for the logs listLogs endpoint from
 // CLI flags.
-func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string, logsListLogsTsEnd string, logsListLogsCursor string, logsListLogsPerPage string, logsListLogsDirection string, logsListLogsSort string, logsListLogsApikeyToken string, logsListLogsSessionToken string, logsListLogsProjectSlugInput string) (*logs.ListLogsPayload, error) {
+func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string, logsListLogsTsEnd string, logsListLogsCursor string, logsListLogsStatus string, logsListLogsServerName string, logsListLogsToolName string, logsListLogsToolType string, logsListLogsPerPage string, logsListLogsDirection string, logsListLogsSort string, logsListLogsApikeyToken string, logsListLogsSessionToken string, logsListLogsProjectSlugInput string) (*logs.ListLogsPayload, error) {
 	var err error
 	var toolID *string
 	{
@@ -54,6 +54,42 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 		if logsListLogsCursor != "" {
 			cursor = &logsListLogsCursor
 			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var status string
+	{
+		if logsListLogsStatus != "" {
+			status = logsListLogsStatus
+			if !(status == "success" || status == "failure") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", status, []any{"success", "failure"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var serverName *string
+	{
+		if logsListLogsServerName != "" {
+			serverName = &logsListLogsServerName
+		}
+	}
+	var toolName *string
+	{
+		if logsListLogsToolName != "" {
+			toolName = &logsListLogsToolName
+		}
+	}
+	var toolType string
+	{
+		if logsListLogsToolType != "" {
+			toolType = logsListLogsToolType
+			if !(toolType == "http" || toolType == "function" || toolType == "prompt") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_type", toolType, []any{"http", "function", "prompt"}))
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -126,6 +162,10 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 	v.TsStart = tsStart
 	v.TsEnd = tsEnd
 	v.Cursor = cursor
+	v.Status = status
+	v.ServerName = serverName
+	v.ToolName = toolName
+	v.ToolType = toolType
 	v.PerPage = perPage
 	v.Direction = direction
 	v.Sort = sort

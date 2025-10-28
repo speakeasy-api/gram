@@ -40,6 +40,10 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 			tsStart          *string
 			tsEnd            *string
 			cursor           *string
+			status           string
+			serverName       *string
+			toolName         *string
+			toolType         string
 			perPage          int
 			direction        string
 			sort             string
@@ -76,6 +80,32 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		}
 		if cursor != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+		}
+		statusRaw := qp.Get("status")
+		if statusRaw != "" {
+			status = statusRaw
+		} else {
+			status = "success"
+		}
+		if !(status == "success" || status == "failure") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", status, []any{"success", "failure"}))
+		}
+		serverNameRaw := qp.Get("server_name")
+		if serverNameRaw != "" {
+			serverName = &serverNameRaw
+		}
+		toolNameRaw := qp.Get("tool_name")
+		if toolNameRaw != "" {
+			toolName = &toolNameRaw
+		}
+		toolTypeRaw := qp.Get("tool_type")
+		if toolTypeRaw != "" {
+			toolType = toolTypeRaw
+		} else {
+			toolType = "http"
+		}
+		if !(toolType == "http" || toolType == "function" || toolType == "prompt") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_type", toolType, []any{"http", "function", "prompt"}))
 		}
 		{
 			perPageRaw := qp.Get("per_page")
@@ -128,7 +158,7 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListLogsPayload(toolID, tsStart, tsEnd, cursor, perPage, direction, sort, apikeyToken, sessionToken, projectSlugInput)
+		payload := NewListLogsPayload(toolID, tsStart, tsEnd, cursor, status, serverName, toolName, toolType, perPage, direction, sort, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

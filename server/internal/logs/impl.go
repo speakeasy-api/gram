@@ -79,10 +79,14 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 	}
 
 	options := tm.ListToolLogsOptions{
-		ProjectID: projectID.String(),
-		TsStart:   tsStart,
-		TsEnd:     tsEnd,
-		Cursor:    conv.PtrValOr(payload.Cursor, id.String()),
+		ProjectID:  projectID.String(),
+		TsStart:    tsStart,
+		TsEnd:      tsEnd,
+		Cursor:     conv.PtrValOr(payload.Cursor, id.String()),
+		Status:     payload.Status,
+		ServerName: conv.PtrValOr(payload.ServerName, ""),
+		ToolName:   conv.PtrValOr(payload.ToolName, ""),
+		ToolType:   payload.ToolType,
 		Pagination: &tm.Pagination{
 			PerPage:    payload.PerPage,
 			Sort:       payload.Sort,

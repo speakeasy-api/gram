@@ -70,10 +70,14 @@ type ToolHTTPRequest struct {
 
 // ListToolLogsOptions contains options for listing tool logs.
 type ListToolLogsOptions struct {
-	ProjectID string
-	TsStart   time.Time
-	TsEnd     time.Time
-	Cursor    string
+	ProjectID  string
+	TsStart    time.Time
+	TsEnd      time.Time
+	Cursor     string
+	Status     string
+	ServerName string
+	ToolName   string
+	ToolType   string
 	*Pagination
 }
 

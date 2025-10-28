@@ -39,6 +39,10 @@ var _ = Service("logs", func() {
 			Param("ts_start")
 			Param("ts_end")
 			Param("cursor")
+			Param("status")
+			Param("server_name")
+			Param("tool_name")
+			Param("tool_type")
 			Param("per_page")
 			Param("direction")
 			Param("sort")
@@ -78,6 +82,16 @@ var ListToolLogsRequest = Type("ListToolLogsRequest", func() {
 	Attribute("sort", String, "Sort order", func() {
 		Enum("ASC", "DESC")
 		Default("DESC")
+	})
+	Attribute("status", String, "Status filter", func() {
+		Enum("success", "failure")
+		Default("success")
+	})
+	Attribute("server_name", String, "Server name filter")
+	Attribute("tool_name", String, "Tool name filter")
+	Attribute("tool_type", String, "Tool type filter", func() {
+		Enum("http", "function", "prompt")
+		Default("http")
 	})
 })
 

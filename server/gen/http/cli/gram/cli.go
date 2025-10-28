@@ -442,6 +442,10 @@ func ParseEndpoint(
 		logsListLogsTsStartFlag          = logsListLogsFlags.String("ts-start", "", "")
 		logsListLogsTsEndFlag            = logsListLogsFlags.String("ts-end", "", "")
 		logsListLogsCursorFlag           = logsListLogsFlags.String("cursor", "", "")
+		logsListLogsStatusFlag           = logsListLogsFlags.String("status", "success", "")
+		logsListLogsServerNameFlag       = logsListLogsFlags.String("server-name", "", "")
+		logsListLogsToolNameFlag         = logsListLogsFlags.String("tool-name", "", "")
+		logsListLogsToolTypeFlag         = logsListLogsFlags.String("tool-type", "http", "")
 		logsListLogsPerPageFlag          = logsListLogsFlags.String("per-page", "20", "")
 		logsListLogsDirectionFlag        = logsListLogsFlags.String("direction", "next", "")
 		logsListLogsSortFlag             = logsListLogsFlags.String("sort", "DESC", "")
@@ -1335,7 +1339,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list-logs":
 				endpoint = c.ListLogs()
-				data, err = logsc.BuildListLogsPayload(*logsListLogsToolIDFlag, *logsListLogsTsStartFlag, *logsListLogsTsEndFlag, *logsListLogsCursorFlag, *logsListLogsPerPageFlag, *logsListLogsDirectionFlag, *logsListLogsSortFlag, *logsListLogsApikeyTokenFlag, *logsListLogsSessionTokenFlag, *logsListLogsProjectSlugInputFlag)
+				data, err = logsc.BuildListLogsPayload(*logsListLogsToolIDFlag, *logsListLogsTsStartFlag, *logsListLogsTsEndFlag, *logsListLogsCursorFlag, *logsListLogsStatusFlag, *logsListLogsServerNameFlag, *logsListLogsToolNameFlag, *logsListLogsToolTypeFlag, *logsListLogsPerPageFlag, *logsListLogsDirectionFlag, *logsListLogsSortFlag, *logsListLogsApikeyTokenFlag, *logsListLogsSessionTokenFlag, *logsListLogsProjectSlugInputFlag)
 			}
 		case "tools":
 			c := toolsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -3005,6 +3009,10 @@ func logsListLogsUsage() {
 	fmt.Fprint(os.Stderr, " -ts-start STRING")
 	fmt.Fprint(os.Stderr, " -ts-end STRING")
 	fmt.Fprint(os.Stderr, " -cursor STRING")
+	fmt.Fprint(os.Stderr, " -status STRING")
+	fmt.Fprint(os.Stderr, " -server-name STRING")
+	fmt.Fprint(os.Stderr, " -tool-name STRING")
+	fmt.Fprint(os.Stderr, " -tool-type STRING")
 	fmt.Fprint(os.Stderr, " -per-page INT")
 	fmt.Fprint(os.Stderr, " -direction STRING")
 	fmt.Fprint(os.Stderr, " -sort STRING")
@@ -3022,6 +3030,10 @@ func logsListLogsUsage() {
 	fmt.Fprintln(os.Stderr, `    -ts-start STRING: `)
 	fmt.Fprintln(os.Stderr, `    -ts-end STRING: `)
 	fmt.Fprintln(os.Stderr, `    -cursor STRING: `)
+	fmt.Fprintln(os.Stderr, `    -status STRING: `)
+	fmt.Fprintln(os.Stderr, `    -server-name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -tool-name STRING: `)
+	fmt.Fprintln(os.Stderr, `    -tool-type STRING: `)
 	fmt.Fprintln(os.Stderr, `    -per-page INT: `)
 	fmt.Fprintln(os.Stderr, `    -direction STRING: `)
 	fmt.Fprintln(os.Stderr, `    -sort STRING: `)
@@ -3031,7 +3043,7 @@ func logsListLogsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "logs list-logs --tool-id \"41da96c6-302c-4073-8c15-e7b42915c21f\" --ts-start \"2013-09-24T01:00:12Z\" --ts-end \"1987-11-07T22:36:55Z\" --cursor \"d8e4d501-965b-4255-9844-41f2fd8413da\" --per-page 91 --direction \"next\" --sort \"ASC\" --apikey-token \"Voluptas voluptates hic repellat iure.\" --session-token \"Quaerat quidem id sed adipisci qui deleniti.\" --project-slug-input \"Atque pariatur maxime error.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "logs list-logs --tool-id \"41da96c6-302c-4073-8c15-e7b42915c21f\" --ts-start \"2013-09-24T01:00:12Z\" --ts-end \"1987-11-07T22:36:55Z\" --cursor \"d8e4d501-965b-4255-9844-41f2fd8413da\" --status \"failure\" --server-name \"Et corporis voluptas voluptates hic.\" --tool-name \"Iure aut quaerat quidem.\" --tool-type \"function\" --per-page 38 --direction \"prev\" --sort \"ASC\" --apikey-token \"Hic atque pariatur maxime error et laborum.\" --session-token \"Atque qui possimus beatae quaerat numquam.\" --project-slug-input \"Iste exercitationem saepe soluta.\"")
 }
 
 // toolsUsage displays the usage of the tools command and its subcommands.
@@ -3067,7 +3079,7 @@ func toolsListToolsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tools list-tools --cursor \"Qui voluptas at consectetur neque voluptatem dolores.\" --limit 138846164 --deployment-id \"Magnam eos enim et quo laudantium natus.\" --session-token \"Saepe dolore ut reprehenderit veniam alias non.\" --project-slug-input \"Quo rerum sunt.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tools list-tools --cursor \"Eum saepe dolore.\" --limit 1186563272 --deployment-id \"Veniam alias non.\" --session-token \"Quo rerum sunt.\" --project-slug-input \"Aperiam veniam in sapiente laboriosam.\"")
 }
 
 // toolsetsUsage displays the usage of the toolsets command and its subcommands.
@@ -3107,7 +3119,7 @@ func toolsetsCreateToolsetUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets create-toolset --body '{\n      \"default_environment_slug\": \"8b1\",\n      \"description\": \"Laboriosam doloremque non et.\",\n      \"name\": \"Dolor officia quia dolorum ut quo voluptates.\",\n      \"resource_urns\": [\n         \"Temporibus cumque.\",\n         \"Ullam sed sit est nesciunt tenetur.\",\n         \"Officia animi.\",\n         \"Repellat cumque.\"\n      ],\n      \"tool_urns\": [\n         \"Voluptas ut.\",\n         \"Quisquam provident modi facere ipsa.\",\n         \"Veritatis ut quia quas.\"\n      ]\n   }' --session-token \"Adipisci veniam non.\" --project-slug-input \"Reprehenderit mollitia nostrum et voluptas beatae veniam.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets create-toolset --body '{\n      \"default_environment_slug\": \"8b1\",\n      \"description\": \"Et nihil reiciendis.\",\n      \"name\": \"Ut quo voluptates sint laboriosam doloremque.\",\n      \"resource_urns\": [\n         \"Nesciunt tenetur perspiciatis officia animi.\",\n         \"Repellat cumque.\"\n      ],\n      \"tool_urns\": [\n         \"Laboriosam quisquam provident.\",\n         \"Facere ipsa repellat veritatis ut quia.\",\n         \"Voluptate eius temporibus cumque dolore ullam sed.\"\n      ]\n   }' --session-token \"Adipisci veniam non.\" --project-slug-input \"Reprehenderit mollitia nostrum et voluptas beatae veniam.\"")
 }
 
 func toolsetsListToolsetsUsage() {
