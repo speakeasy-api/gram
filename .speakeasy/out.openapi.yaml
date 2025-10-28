@@ -3775,6 +3775,41 @@ paths:
             format: uuid
             type: string
         - allowEmptyValue: true
+          description: Status filter
+          in: query
+          name: status
+          schema:
+            description: Status filter
+            enum:
+              - success
+              - failure
+            type: string
+        - allowEmptyValue: true
+          description: Server name filter
+          in: query
+          name: server_name
+          schema:
+            description: Server name filter
+            type: string
+        - allowEmptyValue: true
+          description: Tool name filter
+          in: query
+          name: tool_name
+          schema:
+            description: Tool name filter
+            type: string
+        - allowEmptyValue: true
+          description: Tool type filter
+          in: query
+          name: tool_type
+          schema:
+            description: Tool type filter
+            enum:
+              - http
+              - function
+              - prompt
+            type: string
+        - allowEmptyValue: true
           description: Number of items per page (1-100)
           in: query
           name: per_page
@@ -9893,6 +9928,9 @@ components:
           format: int64
           minimum: 1
           maximum: 100
+        server_name:
+          type: string
+          description: Server name filter
         sort:
           type: string
           description: Sort order
@@ -9900,10 +9938,26 @@ components:
           enum:
             - ASC
             - DESC
+        status:
+          type: string
+          description: Status filter
+          enum:
+            - success
+            - failure
         tool_id:
           type: string
           description: Tool ID
           format: uuid
+        tool_name:
+          type: string
+          description: Tool name filter
+        tool_type:
+          type: string
+          description: Tool type filter
+          enum:
+            - http
+            - function
+            - prompt
         ts_end:
           type: string
           description: End timestamp

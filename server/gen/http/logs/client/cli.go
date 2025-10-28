@@ -59,12 +59,12 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 			}
 		}
 	}
-	var status string
+	var status *string
 	{
 		if logsListLogsStatus != "" {
-			status = logsListLogsStatus
-			if !(status == "success" || status == "failure") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", status, []any{"success", "failure"}))
+			status = &logsListLogsStatus
+			if !(*status == "success" || *status == "failure") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"success", "failure"}))
 			}
 			if err != nil {
 				return nil, err
@@ -83,12 +83,12 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 			toolName = &logsListLogsToolName
 		}
 	}
-	var toolType string
+	var toolType *string
 	{
 		if logsListLogsToolType != "" {
-			toolType = logsListLogsToolType
-			if !(toolType == "http" || toolType == "function" || toolType == "prompt") {
-				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_type", toolType, []any{"http", "function", "prompt"}))
+			toolType = &logsListLogsToolType
+			if !(*toolType == "http" || *toolType == "function" || *toolType == "prompt") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_type", *toolType, []any{"http", "function", "prompt"}))
 			}
 			if err != nil {
 				return nil, err

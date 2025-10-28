@@ -99,8 +99,12 @@ async function $do(
     "cursor": payload?.cursor,
     "direction": payload?.direction,
     "per_page": payload?.per_page,
+    "server_name": payload?.server_name,
     "sort": payload?.sort,
+    "status": payload?.status,
     "tool_id": payload?.tool_id,
+    "tool_name": payload?.tool_name,
+    "tool_type": payload?.tool_type,
     "ts_end": payload?.ts_end,
     "ts_start": payload?.ts_start,
   });

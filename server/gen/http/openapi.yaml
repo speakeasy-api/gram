@@ -2988,8 +2988,7 @@ paths:
                   name: cursor
                   required: false
                   type: string
-                - default: success
-                  description: Status filter
+                - description: Status filter
                   enum:
                     - success
                     - failure
@@ -3007,8 +3006,7 @@ paths:
                   name: tool_name
                   required: false
                   type: string
-                - default: http
-                  description: Tool type filter
+                - description: Tool type filter
                   enum:
                     - http
                     - function

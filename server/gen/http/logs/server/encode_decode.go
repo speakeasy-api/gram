@@ -40,10 +40,10 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 			tsStart          *string
 			tsEnd            *string
 			cursor           *string
-			status           string
+			status           *string
 			serverName       *string
 			toolName         *string
-			toolType         string
+			toolType         *string
 			perPage          int
 			direction        string
 			sort             string
@@ -83,12 +83,12 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		}
 		statusRaw := qp.Get("status")
 		if statusRaw != "" {
-			status = statusRaw
-		} else {
-			status = "success"
+			status = &statusRaw
 		}
-		if !(status == "success" || status == "failure") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", status, []any{"success", "failure"}))
+		if status != nil {
+			if !(*status == "success" || *status == "failure") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"success", "failure"}))
+			}
 		}
 		serverNameRaw := qp.Get("server_name")
 		if serverNameRaw != "" {
@@ -100,12 +100,12 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		}
 		toolTypeRaw := qp.Get("tool_type")
 		if toolTypeRaw != "" {
-			toolType = toolTypeRaw
-		} else {
-			toolType = "http"
+			toolType = &toolTypeRaw
 		}
-		if !(toolType == "http" || toolType == "function" || toolType == "prompt") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_type", toolType, []any{"http", "function", "prompt"}))
+		if toolType != nil {
+			if !(*toolType == "http" || *toolType == "function" || *toolType == "prompt") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_type", *toolType, []any{"http", "function", "prompt"}))
+			}
 		}
 		{
 			perPageRaw := qp.Get("per_page")

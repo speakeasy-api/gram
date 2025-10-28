@@ -85,13 +85,11 @@ var ListToolLogsRequest = Type("ListToolLogsRequest", func() {
 	})
 	Attribute("status", String, "Status filter", func() {
 		Enum("success", "failure")
-		Default("success")
 	})
 	Attribute("server_name", String, "Server name filter")
 	Attribute("tool_name", String, "Tool name filter")
 	Attribute("tool_type", String, "Tool type filter", func() {
 		Enum("http", "function", "prompt")
-		Default("http")
 	})
 })
 

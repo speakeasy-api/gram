@@ -104,13 +104,13 @@ type ListLogsPayload struct {
 	// Sort order
 	Sort string
 	// Status filter
-	Status string
+	Status *string
 	// Server name filter
 	ServerName *string
 	// Tool name filter
 	ToolName *string
 	// Tool type filter
-	ToolType string
+	ToolType *string
 }
 
 // ListToolLogResponse is the result type of the logs service listLogs method.

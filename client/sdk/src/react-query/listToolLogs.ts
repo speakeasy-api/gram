@@ -97,6 +97,10 @@ export function setListToolLogsData(
       tsStart?: Date | undefined;
       tsEnd?: Date | undefined;
       cursor?: string | undefined;
+      status?: operations.Status | undefined;
+      serverName?: string | undefined;
+      toolName?: string | undefined;
+      toolType?: operations.ToolType | undefined;
       perPage?: number | undefined;
       direction?: operations.Direction | undefined;
       sort?: operations.Sort | undefined;
@@ -120,6 +124,10 @@ export function invalidateListToolLogs(
       tsStart?: Date | undefined;
       tsEnd?: Date | undefined;
       cursor?: string | undefined;
+      status?: operations.Status | undefined;
+      serverName?: string | undefined;
+      toolName?: string | undefined;
+      toolType?: operations.ToolType | undefined;
       perPage?: number | undefined;
       direction?: operations.Direction | undefined;
       sort?: operations.Sort | undefined;
@@ -161,6 +169,10 @@ export function buildListToolLogsQuery(
       tsStart: request?.tsStart,
       tsEnd: request?.tsEnd,
       cursor: request?.cursor,
+      status: request?.status,
+      serverName: request?.serverName,
+      toolName: request?.toolName,
+      toolType: request?.toolType,
       perPage: request?.perPage,
       direction: request?.direction,
       sort: request?.sort,
@@ -193,6 +205,10 @@ export function queryKeyListToolLogs(
     tsStart?: Date | undefined;
     tsEnd?: Date | undefined;
     cursor?: string | undefined;
+    status?: operations.Status | undefined;
+    serverName?: string | undefined;
+    toolName?: string | undefined;
+    toolType?: operations.ToolType | undefined;
     perPage?: number | undefined;
     direction?: operations.Direction | undefined;
     sort?: operations.Sort | undefined;

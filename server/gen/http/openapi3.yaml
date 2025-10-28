@@ -3744,7 +3744,6 @@ paths:
                   in: query
                   name: status
                   schema:
-                    default: success
                     description: Status filter
                     enum:
                         - success
@@ -3769,7 +3768,6 @@ paths:
                   in: query
                   name: tool_type
                   schema:
-                    default: http
                     description: Tool type filter
                     enum:
                         - http
@@ -9869,7 +9867,6 @@ components:
                 status:
                     type: string
                     description: Status filter
-                    default: success
                     enum:
                         - success
                         - failure
@@ -9883,7 +9880,6 @@ components:
                 tool_type:
                     type: string
                     description: Tool type filter
-                    default: http
                     enum:
                         - http
                         - function

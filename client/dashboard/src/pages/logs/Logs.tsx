@@ -47,10 +47,13 @@ export default function LogsPage() {
         {
             perPage,
             cursor: currentCursor,
+            toolType: (filters.toolTypeFilter as "http" | "function" | "prompt" | undefined) || undefined,
+            serverName: filters.serverNameFilter || undefined,
+            status: (filters.statusFilter as "success" | "failure" | undefined) || undefined,
         },
         undefined,
         {
-            staleTime: 30000, // Cache for 30 seconds
+            staleTime: 0, // Don't cache to ensure fresh data on filter changes
             refetchOnWindowFocus: false,
         },
     );
@@ -83,6 +86,14 @@ export default function LogsPage() {
 
     const pagination = data?.pagination;
     const hasNextPage = pagination?.hasNextPage ?? false;
+
+    // Reset logs when filters change
+    useEffect(() => {
+        setAllLogs([]);
+        setCurrentCursor(undefined);
+        lastProcessedCursorRef.current = undefined;
+        setIsFetchingMore(false);
+    }, [filters.toolTypeFilter, filters.serverNameFilter, filters.statusFilter]);
 
     // Auto-load more if container isn't scrollable after initial load
     useEffect(() => {
@@ -148,10 +159,10 @@ export default function LogsPage() {
                                 {/* Filters */}
                                 <div className="flex items-center gap-2">
                                     <Select
-                                        value={filters.toolTypeFilter ?? ""}
+                                        value={filters.toolTypeFilter ?? "all"}
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
-                                            toolTypeFilter: value || null
+                                            toolTypeFilter: value === "all" ? null : value
                                         }))}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Tool Type"/>
@@ -163,10 +174,10 @@ export default function LogsPage() {
                                     </Select>
 
                                     <Select
-                                        value={filters.serverNameFilter ?? ""}
+                                        value={filters.serverNameFilter ?? "all"}
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
-                                            serverNameFilter: value || null
+                                            serverNameFilter: value === "all" ? null : value
                                         }))}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Server Name"/>
@@ -178,10 +189,10 @@ export default function LogsPage() {
                                     </Select>
 
                                     <Select
-                                        value={filters.statusFilter ?? ""}
+                                        value={filters.statusFilter ?? "all"}
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
-                                            statusFilter: value || null
+                                            statusFilter: value === "all" ? null : value
                                         }))}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Status"/>

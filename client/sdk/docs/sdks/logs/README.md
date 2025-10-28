@@ -22,7 +22,10 @@ import { Gram } from "@gram/client";
 const gram = new Gram();
 
 async function run() {
-  const result = await gram.logs.list({});
+  const result = await gram.logs.list({
+    status: "success",
+    toolType: "http",
+  });
 
   console.log(result);
 }
@@ -43,7 +46,10 @@ import { logsList } from "@gram/client/funcs/logsList.js";
 const gram = new GramCore();
 
 async function run() {
-  const res = await logsList(gram, {});
+  const res = await logsList(gram, {
+    status: "success",
+    toolType: "http",
+  });
   if (res.ok) {
     const { value: result } = res;
     console.log(result);
