@@ -1,4 +1,5 @@
 import { Expandable } from "@/components/expandable";
+import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ProjectSelector } from "@/components/project-menu";
@@ -13,6 +14,8 @@ import { FullWidthUpload } from "@/components/upload";
 import { AsciiVideo, useWebGLStore } from "@/components/webgl";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { useListTools } from "@/hooks/toolTypes";
 import { useApiError } from "@/hooks/useApiError";
 import { slugify } from "@/lib/constants";
 import { filterHttpTools, useGroupedHttpTools } from "@/lib/toolTypes";
@@ -46,9 +49,6 @@ import { useParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
-import { useListTools } from "@/hooks/toolTypes";
-import { GramLogo } from "@/components/gram-logo";
-import { useTelemetry } from "@/contexts/Telemetry";
 
 type OnboardingPath = "openapi" | "cli";
 type OnboardingStep = "choice" | "upload" | "cli-setup" | "toolset" | "mcp";
@@ -361,17 +361,8 @@ const CliSetupStep = ({
 }) => {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [installMethod, setInstallMethod] = useState<"npm" | "brew">("npm");
-  const { data: tools } = useListTools();
 
-  // Auto-advance when tools are detected
-  useEffect(() => {
-    const hasTools = tools?.tools && tools.tools.length > 0;
-    if (hasTools) {
-      setTimeout(() => {
-        setCurrentStep("toolset");
-      }, 2000);
-    }
-  }, [tools, setCurrentStep]);
+  // We explicitly don't poll to advance this step because the expected flow is that the CLI opens a new window with the next step.
 
   const commands = [
     {
