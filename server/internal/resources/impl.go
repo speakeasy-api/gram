@@ -103,7 +103,7 @@ func (s *Service) ListResources(ctx context.Context, payload *gen.ListResourcesP
 	}
 
 	for i, resource := range resources {
-		var meta map[string]string
+		var meta map[string]any
 		if resource.Meta != nil {
 			err = json.Unmarshal(resource.Meta, &meta)
 			if err != nil {

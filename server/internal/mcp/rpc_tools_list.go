@@ -21,10 +21,10 @@ type toolsListResult struct {
 }
 
 type toolListEntry struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	InputSchema json.RawMessage   `json:"inputSchema,omitempty,omitzero"`
-	Meta        map[string]string `json:"_meta,omitempty"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	InputSchema json.RawMessage `json:"inputSchema,omitempty,omitzero"`
+	Meta        map[string]any  `json:"_meta,omitempty"`
 }
 
 func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, productMetrics *posthog.Posthog, toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents]) (json.RawMessage, error) {
@@ -56,7 +56,7 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 	tools := make([]*toolListEntry, 0)
 
 	for _, tool := range toolset.Tools {
-		var meta map[string]string
+		var meta map[string]any
 		if tool.FunctionToolDefinition != nil {
 			meta = tool.FunctionToolDefinition.Meta
 		}

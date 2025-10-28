@@ -2360,7 +2360,7 @@ func unmarshalFunctionToolDefinitionResponseBodyToTypesFunctionToolDefinition(v 
 		UpdatedAt:     *v.UpdatedAt,
 	}
 	if v.Meta != nil {
-		res.Meta = make(map[string]string, len(v.Meta))
+		res.Meta = make(map[string]any, len(v.Meta))
 		for key, val := range v.Meta {
 			tk := key
 			tv := val
@@ -2458,7 +2458,7 @@ func unmarshalFunctionResourceDefinitionResponseBodyToTypesFunctionResourceDefin
 		UpdatedAt:    *v.UpdatedAt,
 	}
 	if v.Meta != nil {
-		res.Meta = make(map[string]string, len(v.Meta))
+		res.Meta = make(map[string]any, len(v.Meta))
 		for key, val := range v.Meta {
 			tk := key
 			tv := val

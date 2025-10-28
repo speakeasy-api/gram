@@ -8926,8 +8926,7 @@ components:
                 meta:
                     type: object
                     description: Meta tags for the tool
-                    additionalProperties:
-                        type: string
+                    additionalProperties: true
                 mime_type:
                     type: string
                     description: Optional MIME type of the resource
@@ -9004,8 +9003,7 @@ components:
                 meta:
                     type: object
                     description: Meta tags for the tool
-                    additionalProperties:
-                        type: string
+                    additionalProperties: true
                 name:
                     type: string
                     description: The name of the tool
