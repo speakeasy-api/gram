@@ -82,6 +82,7 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	cmd.Env = make([]string, 0, len(req.environment))
 	for key, value := range req.environment {
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
 	}
