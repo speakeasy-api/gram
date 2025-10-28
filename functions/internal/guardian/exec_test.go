@@ -28,8 +28,6 @@ func TestNewCommand(t *testing.T) {
 }
 
 func TestCommandNoEnvInheritance(t *testing.T) {
-	t.Parallel()
-
 	stdout := new(bytes.Buffer)
 	stderr := new(bytes.Buffer)
 	t.Setenv("AUTH_SECRET", "fancy-secret")
@@ -50,8 +48,6 @@ func TestCommandNoEnvInheritance(t *testing.T) {
 // is working as intended by showing that a normal exec.Command does inherit
 // the environment variables.
 func TestCommandNoEnvInheritance_Negative(t *testing.T) {
-	t.Parallel()
-
 	out := new(bytes.Buffer)
 	ctx := context.Background()
 	t.Setenv("AUTH_SECRET", "fancy-secret")
