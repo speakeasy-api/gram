@@ -201,7 +201,7 @@ func handleToolsCall(
 		}
 	}
 
-	var meta map[string]string
+	var meta map[string]any
 	if tool.FunctionToolDefinition != nil {
 		meta = tool.FunctionToolDefinition.Meta
 	}

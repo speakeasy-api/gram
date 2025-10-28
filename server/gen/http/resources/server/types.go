@@ -221,7 +221,7 @@ type FunctionResourceDefinitionResponseBody struct {
 	// Variables configuration for the resource
 	Variables any `form:"variables,omitempty" json:"variables,omitempty" xml:"variables,omitempty"`
 	// Meta tags for the tool
-	Meta map[string]string `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
+	Meta map[string]any `form:"meta,omitempty" json:"meta,omitempty" xml:"meta,omitempty"`
 	// The ID of the resource
 	ID string `form:"id" json:"id" xml:"id"`
 	// The URN of this resource
