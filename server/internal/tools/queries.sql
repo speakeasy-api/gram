@@ -137,31 +137,6 @@ WHERE http_tool_definitions.tool_urn = @urn
   AND http_tool_definitions.deployment_id = (SELECT id FROM deployment)
 LIMIT 1;
 
--- name: GetHTTPToolDefinitionByID :one
-WITH first_party AS (
-  SELECT id
-  FROM http_tool_definitions
-  WHERE http_tool_definitions.id = @id
-    AND http_tool_definitions.project_id = @project_id
-    AND http_tool_definitions.deleted IS FALSE
-  LIMIT 1
-),
--- This CTE is for integrating third party tools by checking for tool definitions from external deployments/packages.
-third_party AS (
-  SELECT htd.id
-  FROM deployments d
-  INNER JOIN deployments_packages dp ON d.id =  dp.deployment_id
-  INNER JOIN package_versions pv ON dp.version_id = pv.id
-  INNER JOIN http_tool_definitions htd ON htd.deployment_id = pv.deployment_id
-  WHERE d.project_id = @project_id
-    AND htd.id = @id
-    AND NOT EXISTS(SELECT 1 FROM first_party)
-  LIMIT 1
-  )
-SELECT *
-FROM http_tool_definitions
-WHERE id = COALESCE((SELECT id FROM first_party), (SELECT id FROM  third_party));
-
 -- name: ListFunctionTools :many
 -- Two use cases:
 -- 1. List all tools from the latest successful deployment (when deployment_id is NULL)
@@ -279,14 +254,6 @@ LEFT JOIN functions_access access
 ORDER BY access.seq DESC NULLS LAST
 LIMIT 1;
 
--- name: GetFunctionToolDefinitionByID :one
-SELECT *
-FROM function_tool_definitions
-WHERE function_tool_definitions.id = @id
-  AND function_tool_definitions.project_id = @project_id
-  AND function_tool_definitions.deleted IS FALSE
-LIMIT 1;
-
 -- name: PokeToolDefinitionByUrn :one
 WITH first_party AS (
   SELECT id
@@ -324,41 +291,3 @@ SELECT
     (SELECT id FROM third_party),
     (SELECT id FROM function_tools)
   ) AS id;
-
--- name: GetToolUrnByID :one
-WITH first_party_http AS (
-  SELECT tool_urn::text as tool_urn
-  FROM http_tool_definitions
-  WHERE http_tool_definitions.id = @id
-    AND http_tool_definitions.project_id = @project_id
-    AND http_tool_definitions.deleted IS FALSE
-  LIMIT 1
-),
--- This CTE is for integrating third party tools by checking for tool definitions from external deployments/packages.
-third_party_http AS (
-  SELECT htd.tool_urn::text as tool_urn
-  FROM deployments d
-  INNER JOIN deployments_packages dp ON d.id = dp.deployment_id
-  INNER JOIN package_versions pv ON dp.version_id = pv.id
-  INNER JOIN http_tool_definitions htd ON htd.deployment_id = pv.deployment_id
-  WHERE d.project_id = @project_id
-    AND htd.id = @id
-    AND NOT EXISTS(SELECT 1 FROM first_party_http)
-  LIMIT 1
-),
-function_tools AS (
-  SELECT tool_urn::text as tool_urn
-  FROM function_tool_definitions
-  WHERE function_tool_definitions.id = @id
-    AND function_tool_definitions.project_id = @project_id
-    AND function_tool_definitions.deleted IS FALSE
-    AND NOT EXISTS(SELECT 1 FROM first_party_http)
-    AND NOT EXISTS(SELECT 1 FROM third_party_http)
-  LIMIT 1
-)
-SELECT
-  COALESCE(
-    (SELECT tool_urn FROM first_party_http),
-    (SELECT tool_urn FROM third_party_http),
-    (SELECT tool_urn FROM function_tools)
-  )::text AS tool_urn;

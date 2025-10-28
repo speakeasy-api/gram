@@ -6,7 +6,6 @@ import { Slider } from "@/components/ui/slider";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { Type } from "@/components/ui/type";
 import { useProject, useSession } from "@/contexts/Auth";
-import { useSdkClient } from "@/contexts/Sdk";
 import { Telemetry, useTelemetry } from "@/contexts/Telemetry";
 import { asTool, Tool } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
@@ -129,7 +128,6 @@ function ChatInner({
   const session = useSession();
   const project = useProject();
   const telemetry = useTelemetry();
-  const client = useSdkClient();
 
   const chat = useChatContext();
   const { setMessages } = chat;

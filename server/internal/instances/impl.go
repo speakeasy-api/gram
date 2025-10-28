@@ -42,7 +42,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
-const tooldIdQueryParam = "tool_id"
 const toolUrnQueryParam = "tool_urn"
 const environmentSlugQueryParam = "environment_slug"
 
