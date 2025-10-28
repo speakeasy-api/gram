@@ -10,7 +10,6 @@ import {LogDetailSheet} from "./LogDetailSheet";
 import {formatTimestamp, getSourceFromUrn, getToolIcon, getToolNameFromUrn, isSuccessfulCall,} from "./utils";
 import {formatDuration} from "@/lib/dates";
 import {CheckIcon, XIcon} from "lucide-react";
-import {useTelemetry} from "@/contexts/Telemetry.tsx";
 
 function StatusIcon({isSuccess}: { isSuccess: boolean }) {
     if (isSuccess) {
