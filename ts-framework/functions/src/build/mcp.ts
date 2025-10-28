@@ -8,18 +8,43 @@ export type BuildMCPServerResult = {
   files: Array<{ path: string; size: number }>;
 };
 
+interface GramVariables {
+  [key: string]: { description?: string };
+}
+
+interface GramTool {
+  name: string;
+  description?: string | undefined;
+  inputSchema: unknown;
+  variables?: GramVariables;
+  meta?: unknown;
+}
+
+interface GramResource {
+  name: string;
+  title?: string | undefined;
+  description?: string | undefined;
+  uri: string;
+  mimeType?: string | undefined;
+  variables?: GramVariables;
+  meta?: unknown;
+}
+
 export async function buildMCPServer(options: {
   serverEntrypoint: string;
   serverExport: string;
   functionEntrypoint: string;
   outDir: string;
+  envSchema?: GramVariables;
 }): Promise<BuildMCPServerResult> {
   await mkdir(options.outDir, { recursive: true });
 
-  const manifest = await buildFunctionsManifest({
+  let manifest = await buildFunctionsManifest({
     entrypoint: options.serverEntrypoint,
     serverExport: options.serverExport,
+    variables: options.envSchema,
   });
+
   await writeFile(
     join(options.outDir, "manifest.json"),
     JSON.stringify(manifest, null, 2),
@@ -55,21 +80,11 @@ async function buildFunctionsManifest(options: {
   entrypoint: string;
   serverExport?: string;
   cwd?: string;
+  variables?: GramVariables | undefined;
 }): Promise<{
   version: string;
-  tools: Array<{
-    name: string;
-    description?: string | undefined;
-    inputSchema: unknown;
-    _meta?: unknown;
-  }>;
-  resources?: Array<{
-    name: string;
-    description?: string | undefined;
-    uri: string;
-    mimeType?: string | undefined;
-    _meta?: unknown;
-  }>;
+  tools: GramTool[];
+  resources?: GramResource[];
 }> {
   const cwd = options.cwd ?? process.cwd();
   const entrypoint = resolve(cwd, options.entrypoint);
@@ -107,20 +122,23 @@ async function buildFunctionsManifest(options: {
   await server.connect(serverTransport);
   await mcpClient.connect(clientTransport);
 
-  let tools = await collectTools(mcpClient);
-  let resources = await collectResources(mcpClient);
+  let tools = await collectTools(mcpClient, options.variables);
+  let resources = await collectResources(mcpClient, options.variables);
 
   return { version: "0.0.0", tools, resources };
 }
 
-async function collectTools(client: Client) {
+async function collectTools(
+  client: Client,
+  variables: GramVariables | undefined,
+): Promise<GramTool[]> {
   const { McpError, ErrorCode: McpErrorCode } = await import(
     "@modelcontextprotocol/sdk/types.js"
   );
   try {
     const res = await client.listTools();
     return res.tools.map((tool) => {
-      return {
+      let gramTool: GramTool = {
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema,
@@ -129,6 +147,8 @@ async function collectTools(client: Client) {
           ...tool._meta,
         },
       };
+      if (variables) gramTool.variables = variables;
+      return gramTool;
     });
   } catch (err) {
     if (err instanceof McpError && err.code === McpErrorCode.MethodNotFound) {
@@ -140,14 +160,17 @@ async function collectTools(client: Client) {
   }
 }
 
-async function collectResources(client: Client) {
+async function collectResources(
+  client: Client,
+  variables: GramVariables | undefined,
+): Promise<GramResource[]> {
   const { McpError, ErrorCode: McpErrorCode } = await import(
     "@modelcontextprotocol/sdk/types.js"
   );
   try {
     const resourcesResponse = await client.listResources();
     return resourcesResponse.resources.map((resource) => {
-      return {
+      let gramResource: GramResource = {
         name: resource.name,
         description: resource.description,
         uri: resource.uri,
@@ -158,6 +181,9 @@ async function collectResources(client: Client) {
           ...resource._meta,
         },
       };
+
+      if (variables) gramResource.variables = variables;
+      return gramResource;
     });
   } catch (err) {
     if (err instanceof McpError && err.code === McpErrorCode.MethodNotFound) {
