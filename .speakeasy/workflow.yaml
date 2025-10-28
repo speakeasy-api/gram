@@ -1,5 +1,5 @@
 workflowVersion: 1.0.0
-speakeasyVersion: latest
+speakeasyVersion: pinned
 sources:
     Gram-Internal:
         inputs:
