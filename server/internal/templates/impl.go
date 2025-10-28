@@ -403,7 +403,7 @@ func (s *Service) RenderTemplate(ctx context.Context, payload *gen.RenderTemplat
 
 	data, err := RenderTemplate(ctx, logger, payload.Prompt, payload.Kind, payload.Engine, payload.Arguments)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
+		return nil, err
 	}
 
 	return &gen.RenderTemplateResult{Prompt: data}, nil
