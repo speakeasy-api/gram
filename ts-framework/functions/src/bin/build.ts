@@ -1,4 +1,3 @@
-import util from "node:util";
 import {
   configure,
   getConsoleSink,
@@ -8,12 +7,13 @@ import {
   type LogLevel,
 } from "@logtape/logtape";
 import { getPrettyFormatter } from "@logtape/pretty";
+import util from "node:util";
 
-import { buildFunctions } from "../build/gram.ts";
+import { existsSync } from "node:fs";
+import * as z from "zod";
 import pkg from "../../package.json" with { type: "json" };
 import { loadConfig } from "../build/config.ts";
-import * as z from "zod";
-import { existsSync } from "node:fs";
+import { buildFunctions } from "../build/gram.ts";
 
 const usage = `
 ${pkg.name}/${pkg.version}
@@ -65,6 +65,7 @@ async function run(logger: Logger, args: ReturnType<typeof parseArgs>) {
 }
 
 async function main(argv: string[]) {
+  console.log("HERE I AM");
   const { name, version } = pkg;
   const args = parseArgs(argv);
   if (args.values.help) {

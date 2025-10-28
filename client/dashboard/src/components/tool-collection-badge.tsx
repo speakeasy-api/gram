@@ -36,8 +36,10 @@ export const ToolsetPromptsBadge = ({
   return names && names.length > 0 ? (
     <Tooltip>
       <TooltipTrigger>
-        <Badge variant={variant}>
-          {names.length} Prompt{names.length === 1 ? "" : "s"}
+        <Badge variant={variant} className="bg-card">
+          <Badge.Text>
+            {names.length} Prompt{names.length === 1 ? "" : "s"}
+          </Badge.Text>
         </Badge>
       </TooltipTrigger>
       <TooltipPortal>
@@ -73,13 +75,10 @@ export const ResourcesBadge = ({
   return (
     <Tooltip>
       <TooltipTrigger>
-        <Badge
-          variant={variant}
-          className={cn("bg-card flex items-center py-1 gap-1", className)}
-        >
-          <span>
+        <Badge variant={variant} className={cn("bg-card", className)}>
+          <Badge.Text>
             {resourceUris.length} Resource{resourceUris.length === 1 ? "" : "s"}
-          </span>
+          </Badge.Text>
         </Badge>
       </TooltipTrigger>
       <TooltipPortal>
@@ -135,11 +134,7 @@ export const ToolCollectionBadge = ({
       <TooltipTrigger>
         <Badge
           variant={toolsWarnings ? "warning" : variant}
-          className={cn(
-            !toolsWarnings && "bg-card",
-            "flex items-center py-1 gap-1",
-            className,
-          )}
+          className={cn(!toolsWarnings && "bg-card", className)}
         >
           {toolsWarnings && (
             <Badge.LeftIcon>

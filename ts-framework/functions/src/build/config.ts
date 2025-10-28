@@ -49,6 +49,11 @@ const userConfigSchema = z.object({
    * using the `name` field.
    */
   slug: z.string().optional(),
+  /**
+   * Whether to open the browser after deploying. If not set, the user will be
+   * prompted once and their choice will be remembered.
+   */
+  openBrowserAfterDeploy: z.boolean().optional(),
 });
 
 export type UserConfig = z.input<typeof userConfigSchema>;

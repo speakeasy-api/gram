@@ -360,31 +360,20 @@ const CliSetupStep = ({
   setCurrentStep: (step: OnboardingStep) => void;
 }) => {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-  const [installMethod, setInstallMethod] = useState<"npm" | "brew">("npm");
+  const [installMethod, setInstallMethod] = useState<"npm" | "pnpm">("npm");
+  const client = useSdkClient();
 
   // We explicitly don't poll to advance this step because the expected flow is that the CLI opens a new window with the next step.
 
   const commands = [
     {
-      label: "Install the Gram CLI",
-      command:
-        installMethod === "npm"
-          ? "npm install -g @gram-ai/cli"
-          : "brew install speakeasy-api/homebrew-tap/gram",
+      label: "Create a new project",
+      command: `${installMethod} create @gram-ai/function`,
       showToggle: true,
     },
     {
-      label: "Authenticate with Gram",
-      command: "gram auth",
-    },
-    {
       label: "Build your functions",
-      command: "npm run build",
-    },
-    {
-      label: "Upload to Gram",
-      command:
-        'gram upload --type function --location dist/functions.zip --name "My Functions" --slug my-functions',
+      command: `${installMethod} run build`,
     },
   ];
 
@@ -392,6 +381,15 @@ const CliSetupStep = ({
     navigator.clipboard.writeText(command);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const handleContinue = async () => {
+    const tools = await client.tools.list();
+    if (tools.tools.length > 0) {
+      setCurrentStep("toolset");
+    } else {
+      toast.error("No tools found. Please retry the build command.");
+    }
   };
 
   return (
@@ -424,11 +422,11 @@ const CliSetupStep = ({
                     npm
                   </Button>
                   <Button
-                    variant={installMethod === "brew" ? "primary" : "tertiary"}
+                    variant={installMethod === "pnpm" ? "primary" : "tertiary"}
                     size="sm"
-                    onClick={() => setInstallMethod("brew")}
+                    onClick={() => setInstallMethod("pnpm")}
                   >
-                    brew
+                    pnpm
                   </Button>
                 </Stack>
               )}
@@ -453,6 +451,18 @@ const CliSetupStep = ({
           </Stack>
         ))}
       </Stack>
+
+      <span className="text-body-sm">
+        The build command should open a new window with the next step. If it
+        doesn't, click{" "}
+        <span
+          onClick={handleContinue}
+          className="text-primary underline cursor-pointer"
+        >
+          here
+        </span>{" "}
+        to continue.
+      </span>
     </>
   );
 };
