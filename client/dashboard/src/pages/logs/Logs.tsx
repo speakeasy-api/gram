@@ -32,8 +32,6 @@ export default function LogsPage() {
         statusFilter: null,
     });
     const [selectedLog, setSelectedLog] = useState<HTTPToolLog | null>(null);
-    const telemetry = useTelemetry();
-    const isLogsEnabled = telemetry.isFeatureEnabled("clickhouse-tool-metrics") ?? false;
 
     // Infinite scroll state
     const [allLogs, setAllLogs] = useState<HTTPToolLog[]>([]);
@@ -242,7 +240,7 @@ export default function LogsPage() {
                                                 <TableRow>
                                                     <TableCell colSpan={6}
                                                                className="text-center py-8 text-muted-foreground">
-                                                        {isLogsEnabled ?
+                                                        {data?.enabled ?
                                                             "No logs found" :
                                                             "Logs are opt-in feature. Please reach out to gram@speakeasy.com if you would like this enabled for your account"
                                                         }
