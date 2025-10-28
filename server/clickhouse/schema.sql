@@ -32,5 +32,5 @@ create table if not exists http_requests_raw
 
 CREATE INDEX idx_tool_type ON http_requests_raw (tool_type) TYPE set(0) GRANULARITY 4;
 CREATE INDEX idx_status_code ON http_requests_raw (status_code) TYPE set(100) GRANULARITY 4;
-CREATE INDEX idx_tool_urn ON http_requests_raw (tool_urn) TYPE tokenbf_v1(30720, 3, 0) GRANULARITY 4;
+CREATE INDEX idx_tool_urn ON http_requests_raw (tool_urn) TYPE ngrambf_v1(4, 30720, 3, 0) GRANULARITY 4;
 

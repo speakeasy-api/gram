@@ -42,14 +42,14 @@ func buildListLogsQuery(opts ListToolLogsOptions) (string, []any) {
 	}
 
 	if opts.ServerName != "" {
-		baseQuery += fmt.Sprintf(" and hasToken(tool_urn, $%d)", paramIndex)
-		args = append(args, opts.ServerName)
+		baseQuery += fmt.Sprintf(" and tool_urn LIKE $%d", paramIndex)
+		args = append(args, "%"+opts.ServerName+"%")
 		paramIndex++
 	}
 
 	if opts.ToolName != "" {
-		baseQuery += fmt.Sprintf(" and tool_urn = $%d", paramIndex)
-		args = append(args, opts.ToolName)
+		baseQuery += fmt.Sprintf(" and tool_urn LIKE $%d", paramIndex)
+		args = append(args, "%"+opts.ToolName+"%")
 		paramIndex++
 	}
 
