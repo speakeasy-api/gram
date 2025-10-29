@@ -322,22 +322,17 @@ async function handleOpenBrowser(
     return;
   }
 
-  if (cfg.openBrowserAfterDeploy === true) {
-    await openBrowser(logger, "https://app.getgram.ai");
-    return;
-  }
-
-  // Not configured, prompt the user
+  // Always prompt unless explicitly disabled
   const shouldOpen = await promptYesNo(
-    "Would you like to open https://app.getgram.ai in your browser?",
+    "Would you like to open the Gram dashboard to create an MCP server?",
   );
 
   if (shouldOpen) {
-    await openBrowser(logger, "https://app.getgram.ai");
+    await openBrowser(logger, "https://app.getgram.ai?from=cli");
+  } else {
+    // Only persist when user says no
+    await updateConfigFile(cwd, false);
   }
-
-  // Update config file to remember choice
-  await updateConfigFile(cwd, shouldOpen);
 }
 
 async function promptYesNo(question: string): Promise<boolean> {
@@ -346,8 +341,17 @@ async function promptYesNo(question: string): Promise<boolean> {
     output: process.stdout,
   });
 
+  // Prettify the prompt
+  const cyan = "\x1b[36m";
+  const bold = "\x1b[1m";
+  const grey = "\x1b[90m";
+  const reset = "\x1b[0m";
+  const icon = "●";
+
+  process.stdout.write(`${cyan}${icon}${reset} ${bold}${question}${reset}\n`);
+
   return new Promise((resolve) => {
-    rl.question(`${question} (y/n): `, (answer) => {
+    rl.question(`${grey}(y/n):${reset} `, (answer) => {
       rl.close();
       const normalized = answer.trim().toLowerCase();
       resolve(normalized === "y" || normalized === "yes");

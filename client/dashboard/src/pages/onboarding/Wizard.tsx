@@ -45,7 +45,7 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion, useMotionValue } from "motion/react";
 import { useEffect, useState } from "react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
@@ -53,9 +53,13 @@ import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
 type OnboardingPath = "openapi" | "cli";
 type OnboardingStep = "choice" | "upload" | "cli-setup" | "toolset" | "mcp";
 
+export const START_PATH_PARAM = "start-path";
+export const START_STEP_PARAM = "start-step";
+
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
   const telemetry = useTelemetry();
+  const [searchParams] = useSearchParams();
 
   // Feature flag for Gram functions flow
   const isFunctionsEnabled =
@@ -67,6 +71,17 @@ export function OnboardingWizard() {
   );
   const [toolsetName, setToolsetName] = useState<string>();
   const [mcpSlug, setMcpSlug] = useState<string>();
+
+  const startStep = searchParams.get(START_STEP_PARAM);
+  const startPath = searchParams.get(START_PATH_PARAM);
+
+  // If we have a start path and step, set the selected path and step
+  useEffect(() => {
+    if (startPath && startStep) {
+      setSelectedPath(startPath as OnboardingPath);
+      setCurrentStep(startStep as OnboardingStep);
+    }
+  }, [startPath, startStep]);
 
   // Auto-select OpenAPI path if functions are disabled
   useEffect(() => {
