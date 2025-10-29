@@ -1,5 +1,15 @@
 # @gram-ai/functions
 
+## 0.5.2
+
+### Patch Changes
+
+- abcbfd9: Switched away from `import.meta.main` to `import.meta.url`. The former approach
+  is supported primarily by Deno and Bun and only gained experimental support in
+  Node.js 22.18.0. To ensure broader compatibility across different Node.js
+  versions, we replace these checks with a more traditional method that compares
+  `import.meta.url` to the script's file URL derived from `process.argv[1]`.
+
 ## 0.5.1
 
 ### Patch Changes
