@@ -431,7 +431,6 @@ const CliSetupStep = ({
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [installMethod, setInstallMethod] = useState<"npm" | "pnpm">("npm");
   const client = useSdkClient();
-  const { data: tools } = useListTools();
 
   // We explicitly don't poll to advance this step because the expected flow is that the CLI opens a new window with the next step.
 
