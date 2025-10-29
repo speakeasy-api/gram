@@ -1,7 +1,8 @@
-import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useAsciiStore } from "./hooks/use-ascii-store";
+import { useWebGLStore } from "./store";
 
 interface AsciiStarsProps {
   count?: number;
@@ -25,7 +26,8 @@ export function AsciiStars({
   const { geometry, material } = useMemo(() => {
     const geometry = new THREE.BufferGeometry();
     const maxClickStars = 50; // Reserve space for click-spawned stars
-    const totalCount = count + maxClickStars;
+    const maxTrailStars = 100; // Reserve space for window trail stars
+    const totalCount = count + maxClickStars + maxTrailStars;
 
     const positions = new Float32Array(totalCount * 3);
     const sizes = new Float32Array(totalCount);
@@ -80,17 +82,17 @@ export function AsciiStars({
       durations[i] = 5 + Math.random() * 5; // Live for 5-10 seconds
     }
 
-    // Initialize click stars area with invisible stars (far away)
+    // Initialize click stars and trail stars area with invisible stars (far away)
     for (let i = count; i < totalCount; i++) {
-      positions[i * 3] = 1000; // Far off screen
-      positions[i * 3 + 1] = 1000;
-      positions[i * 3 + 2] = -100;
+      positions[i * 3] = 10000; // Far off screen
+      positions[i * 3 + 1] = 10000;
+      positions[i * 3 + 2] = -1000;
       sizes[i] = 0;
       phases[i] = 0;
       speeds[i] = 1;
       charIndices[i] = 0;
-      lifetimes[i] = -1000; // Already "expired"
-      durations[i] = 1;
+      lifetimes[i] = -10000; // Already "expired" long ago
+      durations[i] = 0.001; // Very short duration
     }
 
     geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -104,12 +106,17 @@ export function AsciiStars({
     geometry.setAttribute("lifetime", new THREE.BufferAttribute(lifetimes, 1));
     geometry.setAttribute("duration", new THREE.BufferAttribute(durations, 1));
 
+    // Only render background stars - trail handled by WindowTrail component
+    geometry.setDrawRange(0, count);
+
     const material = new THREE.ShaderMaterial({
       uniforms: {
         time: { value: 0 },
         fontTexture: { value: fontTexture },
         opacity: { value: opacity },
         asciiLength: { value: asciiLength },
+        terminalPos: { value: new THREE.Vector2(-75, 75) },
+        editorPos: { value: new THREE.Vector2(75, -75) },
       },
       vertexShader: `
         attribute float size;
@@ -134,7 +141,7 @@ export function AsciiStars({
           float fadeInTime = 1.0;
           float fadeOutTime = 1.0;
           float fadeIn = smoothstep(0.0, fadeInTime, age);
-          float fadeOut = smoothstep(duration, duration - fadeOutTime, age);
+          float fadeOut = 1.0 - smoothstep(duration - fadeOutTime, duration, age);
           float lifecycle = fadeIn * fadeOut;
 
           // Calculate twinkling alpha based on phase and time
@@ -213,97 +220,18 @@ export function AsciiStars({
     return { geometry, material };
   }, [fontTexture, count, area, opacity, asciiLength, centerExclusionRadius]);
 
-  const { camera, size } = useThree();
-  const [clickStars, setClickStars] = useState<
-    Array<{ x: number; y: number; z: number; time: number; id: number }>
-  >([]);
-  const nextIdRef = useRef(0);
+  // Get dragging state from store to pause animation
+  const isDraggingWindow = useWebGLStore((state) => state.isDraggingWindow);
 
-  // Handle click to spawn stars - only when stars are visible
-  useEffect(() => {
-    // Only add listener when component is active (showAsciiStars is managed by Wizard)
-    const handleClick = (event: MouseEvent) => {
-      // Convert screen coordinates to normalized device coordinates
-      const x = (event.clientX / size.width) * 2 - 1;
-      const y = -(event.clientY / size.height) * 2 + 1;
+  // Note: Click-to-spawn stars feature removed as it interfered with window dragging
+  // Trail star spawning is now handled by the separate WindowTrail component
 
-      // Only spawn if click is on right half of screen
-      if (x > 0) {
-        // Convert to world space using camera's FOV and position
-        // Camera is at z=10, fov=20 degrees
-        const vFOV = (20 * Math.PI) / 180; // Convert to radians
-        const height = 2 * Math.tan(vFOV / 2) * 10; // Height at z=0
-        const width = height * (size.width / size.height);
-
-        const worldX = x * (width / 2);
-        const worldY = y * (height / 2);
-
-        // Spawn a burst of 5-8 stars around click position
-        const burstCount = 5 + Math.floor(Math.random() * 4);
-        const newStars: Array<{
-          x: number;
-          y: number;
-          z: number;
-          time: number;
-          id: number;
-        }> = [];
-
-        for (let i = 0; i < burstCount; i++) {
-          const offset = 1.5; // Tighter cluster
-          newStars.push({
-            x: worldX + (Math.random() - 0.5) * offset,
-            y: worldY + (Math.random() - 0.5) * offset,
-            z: (Math.random() - 0.5) * 2, // Random depth
-            time: Date.now(),
-            id: nextIdRef.current++,
-          });
-        }
-
-        setClickStars((prev) => [...prev, ...newStars]);
-
-        // Remove these stars after their lifecycle (6 seconds)
-        setTimeout(() => {
-          setClickStars((prev) =>
-            prev.filter((s) => !newStars.find((ns) => ns.id === s.id)),
-          );
-        }, 6000);
-      }
-    };
-
-    // Only add listener when this component is rendered (which only happens when showAsciiStars is true)
-    window.addEventListener("click", handleClick);
-    return () => window.removeEventListener("click", handleClick);
-  }, [camera, size]);
-
-  // Update geometry with click stars
+  // Update shader time uniform
   useFrame((state) => {
-    if (meshRef.current && material) {
-      material.uniforms.time.value = state.clock.elapsedTime;
-
-      // Update click stars
-      if (geometry && clickStars.length > 0) {
-        const posAttr = geometry.attributes.position;
-        const sizeAttr = geometry.attributes.size;
-        const lifetimeAttr = geometry.attributes.lifetime;
-        const durationAttr = geometry.attributes.duration;
-        const charIndexAttr = geometry.attributes.charIndex;
-
-        clickStars.forEach((star, idx) => {
-          const i = count + idx; // Append after base stars
-          if (i >= posAttr.count) return; // Safety check
-
-          posAttr.setXYZ(i, star.x, star.y, star.z);
-          sizeAttr.setX(i, 60 + Math.random() * 60); // Medium to large
-          lifetimeAttr.setX(i, star.time / 1000); // When it was spawned
-          durationAttr.setX(i, 5); // Live for 5 seconds
-          charIndexAttr.setX(i, 2 + Math.floor(Math.random() * 3)); // Use fancy shapes (8-point, plus, sparkle)
-        });
-
-        posAttr.needsUpdate = true;
-        sizeAttr.needsUpdate = true;
-        lifetimeAttr.needsUpdate = true;
-        durationAttr.needsUpdate = true;
-        charIndexAttr.needsUpdate = true;
+    if (material) {
+      // Pause time updates when dragging to freeze the background stars
+      if (!isDraggingWindow) {
+        material.uniforms.time.value = state.clock.elapsedTime;
       }
     }
   });

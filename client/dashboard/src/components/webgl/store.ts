@@ -7,6 +7,13 @@ interface WebGLElement {
   customUniforms?: Record<string, THREE.Uniform>;
 }
 
+interface DraggableWindow {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 interface WebGLStore {
   heroCanvasReady: boolean;
   elements: WebGLElement[];
@@ -18,6 +25,11 @@ interface WebGLStore {
   screenHeight: number;
   dpr: number;
   showAsciiStars: boolean;
+  isDraggingWindow: boolean;
+  draggableWindows: {
+    terminal: DraggableWindow;
+    editor: DraggableWindow;
+  };
   setHeroCanvasReady: (ready: boolean) => void;
   setElements: (
     elements: WebGLElement[] | ((prev: WebGLElement[]) => WebGLElement[]),
@@ -28,6 +40,11 @@ interface WebGLStore {
   setScreenHeight: (height: number) => void;
   setDpr: (dpr: number) => void;
   setShowAsciiStars: (show: boolean) => void;
+  setIsDraggingWindow: (isDragging: boolean) => void;
+  setDraggableWindowPosition: (
+    window: "terminal" | "editor",
+    position: DraggableWindow,
+  ) => void;
 }
 
 export const useWebGLStore = create<WebGLStore>((set) => ({
@@ -46,6 +63,11 @@ export const useWebGLStore = create<WebGLStore>((set) => ({
   screenHeight: 0,
   dpr: 1,
   showAsciiStars: false,
+  isDraggingWindow: false,
+  draggableWindows: {
+    terminal: { x: -75, y: 75, width: 0, height: 0 },
+    editor: { x: 75, y: -75, width: 0, height: 0 },
+  },
   setHeroCanvasReady: (ready) => set({ heroCanvasReady: ready }),
   setCanvasZIndex: (zIndex) => set({ canvasZIndex: zIndex }),
   setCanvasBlendMode: (blendMode) => set({ canvasBlendMode: blendMode }),
@@ -53,4 +75,12 @@ export const useWebGLStore = create<WebGLStore>((set) => ({
   setScreenHeight: (height) => set({ screenHeight: height }),
   setDpr: (dpr) => set({ dpr: dpr }),
   setShowAsciiStars: (show) => set({ showAsciiStars: show }),
+  setIsDraggingWindow: (isDragging) => set({ isDraggingWindow: isDragging }),
+  setDraggableWindowPosition: (window, position) =>
+    set((state) => ({
+      draggableWindows: {
+        ...state.draggableWindows,
+        [window]: position,
+      },
+    })),
 }));
