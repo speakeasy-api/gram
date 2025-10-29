@@ -8,6 +8,7 @@
 package client
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -17,7 +18,7 @@ import (
 
 // BuildListLogsPayload builds the payload for the logs listLogs endpoint from
 // CLI flags.
-func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string, logsListLogsTsEnd string, logsListLogsCursor string, logsListLogsStatus string, logsListLogsServerName string, logsListLogsToolName string, logsListLogsToolType string, logsListLogsPerPage string, logsListLogsDirection string, logsListLogsSort string, logsListLogsApikeyToken string, logsListLogsSessionToken string, logsListLogsProjectSlugInput string) (*logs.ListLogsPayload, error) {
+func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string, logsListLogsTsEnd string, logsListLogsCursor string, logsListLogsStatus string, logsListLogsServerName string, logsListLogsToolName string, logsListLogsToolType string, logsListLogsToolUrns string, logsListLogsPerPage string, logsListLogsDirection string, logsListLogsSort string, logsListLogsApikeyToken string, logsListLogsSessionToken string, logsListLogsProjectSlugInput string) (*logs.ListLogsPayload, error) {
 	var err error
 	var toolID *string
 	{
@@ -95,6 +96,15 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 			}
 		}
 	}
+	var toolUrns []string
+	{
+		if logsListLogsToolUrns != "" {
+			err = json.Unmarshal([]byte(logsListLogsToolUrns), &toolUrns)
+			if err != nil {
+				return nil, fmt.Errorf("invalid JSON for toolUrns, \nerror: %s, \nexample of valid JSON:\n%s", err, "'[\n      \"Ea nulla ullam.\",\n      \"Corporis voluptas explicabo voluptatibus asperiores labore.\",\n      \"Pariatur quaerat iste cum sequi quia.\",\n      \"Voluptatem quas illum est aut.\"\n   ]'")
+			}
+		}
+	}
 	var perPage int
 	{
 		if logsListLogsPerPage != "" {
@@ -166,6 +176,7 @@ func BuildListLogsPayload(logsListLogsToolID string, logsListLogsTsStart string,
 	v.ServerName = serverName
 	v.ToolName = toolName
 	v.ToolType = toolType
+	v.ToolUrns = toolUrns
 	v.PerPage = perPage
 	v.Direction = direction
 	v.Sort = sort

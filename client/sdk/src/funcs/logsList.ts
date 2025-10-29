@@ -105,6 +105,7 @@ async function $do(
     "tool_id": payload?.tool_id,
     "tool_name": payload?.tool_name,
     "tool_type": payload?.tool_type,
+    "tool_urns": payload?.tool_urns,
     "ts_end": payload?.ts_end,
     "ts_start": payload?.ts_start,
   });

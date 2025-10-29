@@ -44,6 +44,7 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 			serverName       *string
 			toolName         *string
 			toolType         *string
+			toolUrns         []string
 			perPage          int
 			direction        string
 			sort             string
@@ -107,6 +108,7 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_type", *toolType, []any{"http", "function", "prompt"}))
 			}
 		}
+		toolUrns = qp["tool_urns"]
 		{
 			perPageRaw := qp.Get("per_page")
 			if perPageRaw == "" {
@@ -158,7 +160,7 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListLogsPayload(toolID, tsStart, tsEnd, cursor, status, serverName, toolName, toolType, perPage, direction, sort, apikeyToken, sessionToken, projectSlugInput)
+		payload := NewListLogsPayload(toolID, tsStart, tsEnd, cursor, status, serverName, toolName, toolType, toolUrns, perPage, direction, sort, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

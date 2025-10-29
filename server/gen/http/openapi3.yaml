@@ -3775,6 +3775,15 @@ paths:
                         - prompt
                     type: string
                 - allowEmptyValue: true
+                  description: Tool URNs filter
+                  in: query
+                  name: tool_urns
+                  schema:
+                    description: Tool URNs filter
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
                   description: Number of items per page (1-100)
                   in: query
                   name: per_page
@@ -9884,6 +9893,11 @@ components:
                         - http
                         - function
                         - prompt
+                tool_urns:
+                    type: array
+                    items:
+                        type: string
+                    description: Tool URNs filter
                 ts_end:
                     type: string
                     description: End timestamp

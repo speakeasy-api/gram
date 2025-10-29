@@ -111,6 +111,8 @@ type ListLogsPayload struct {
 	ToolName *string
 	// Tool type filter
 	ToolType *string
+	// Tool URNs filter
+	ToolUrns []string
 }
 
 // ListToolLogResponse is the result type of the logs service listLogs method.

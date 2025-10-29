@@ -78,6 +78,7 @@ type ListToolLogsOptions struct {
 	ServerName string
 	ToolName   string
 	ToolType   string
+	ToolURNs   []string
 	*Pagination
 }
 

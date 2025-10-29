@@ -43,6 +43,7 @@ var _ = Service("logs", func() {
 			Param("server_name")
 			Param("tool_name")
 			Param("tool_type")
+			Param("tool_urns")
 			Param("per_page")
 			Param("direction")
 			Param("sort")
@@ -91,6 +92,7 @@ var ListToolLogsRequest = Type("ListToolLogsRequest", func() {
 	Attribute("tool_type", String, "Tool type filter", func() {
 		Enum("http", "function", "prompt")
 	})
+	Attribute("tool_urns", ArrayOf(String), "Tool URNs filter")
 })
 
 var ListToolLogResponse = Type("ListToolLogResponse", func() {

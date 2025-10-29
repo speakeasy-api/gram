@@ -59,6 +59,19 @@ func buildListLogsQuery(opts ListToolLogsOptions) (string, []any) {
 		paramIndex++
 	}
 
+	if len(opts.ToolURNs) > 0 {
+		placeholders := ""
+		for i := range opts.ToolURNs {
+			if i > 0 {
+				placeholders += ", "
+			}
+			placeholders += fmt.Sprintf("$%d", paramIndex)
+			args = append(args, opts.ToolURNs[i])
+			paramIndex++
+		}
+		baseQuery += fmt.Sprintf(" and tool_urn IN (%s)", placeholders)
+	}
+
 	// Add ordering and limit
 	if opts.SortOrder() == "ASC" {
 		baseQuery += " order by ts"

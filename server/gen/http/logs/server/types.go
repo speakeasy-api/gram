@@ -411,7 +411,7 @@ func NewListLogsGatewayErrorResponseBody(res *goa.ServiceError) *ListLogsGateway
 }
 
 // NewListLogsPayload builds a logs service listLogs endpoint payload.
-func NewListLogsPayload(toolID *string, tsStart *string, tsEnd *string, cursor *string, status *string, serverName *string, toolName *string, toolType *string, perPage int, direction string, sort string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.ListLogsPayload {
+func NewListLogsPayload(toolID *string, tsStart *string, tsEnd *string, cursor *string, status *string, serverName *string, toolName *string, toolType *string, toolUrns []string, perPage int, direction string, sort string, apikeyToken *string, sessionToken *string, projectSlugInput *string) *logs.ListLogsPayload {
 	v := &logs.ListLogsPayload{}
 	v.ToolID = toolID
 	v.TsStart = tsStart
@@ -421,6 +421,7 @@ func NewListLogsPayload(toolID *string, tsStart *string, tsEnd *string, cursor *
 	v.ServerName = serverName
 	v.ToolName = toolName
 	v.ToolType = toolType
+	v.ToolUrns = toolUrns
 	v.PerPage = perPage
 	v.Direction = direction
 	v.Sort = sort

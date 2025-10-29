@@ -101,6 +101,7 @@ export function setListToolLogsData(
       serverName?: string | undefined;
       toolName?: string | undefined;
       toolType?: operations.ToolType | undefined;
+      toolUrns?: Array<string> | undefined;
       perPage?: number | undefined;
       direction?: operations.Direction | undefined;
       sort?: operations.Sort | undefined;
@@ -128,6 +129,7 @@ export function invalidateListToolLogs(
       serverName?: string | undefined;
       toolName?: string | undefined;
       toolType?: operations.ToolType | undefined;
+      toolUrns?: Array<string> | undefined;
       perPage?: number | undefined;
       direction?: operations.Direction | undefined;
       sort?: operations.Sort | undefined;
@@ -173,6 +175,7 @@ export function buildListToolLogsQuery(
       serverName: request?.serverName,
       toolName: request?.toolName,
       toolType: request?.toolType,
+      toolUrns: request?.toolUrns,
       perPage: request?.perPage,
       direction: request?.direction,
       sort: request?.sort,
@@ -209,6 +212,7 @@ export function queryKeyListToolLogs(
     serverName?: string | undefined;
     toolName?: string | undefined;
     toolType?: operations.ToolType | undefined;
+    toolUrns?: Array<string> | undefined;
     perPage?: number | undefined;
     direction?: operations.Direction | undefined;
     sort?: operations.Sort | undefined;

@@ -87,6 +87,7 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 		ServerName: conv.PtrValOr(payload.ServerName, ""),
 		ToolName:   conv.PtrValOr(payload.ToolName, ""),
 		ToolType:   conv.PtrValOr(payload.ToolType, ""),
+		ToolURNs:   payload.ToolUrns,
 		Pagination: &tm.Pagination{
 			PerPage:    payload.PerPage,
 			Sort:       payload.Sort,

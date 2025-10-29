@@ -107,6 +107,10 @@ export type ListToolLogsRequest = {
    */
   toolType?: ToolType | undefined;
   /**
+   * Tool URNs filter
+   */
+  toolUrns?: Array<string> | undefined;
+  /**
    * Number of items per page (1-100)
    */
   perPage?: number | undefined;
@@ -430,6 +434,7 @@ export const ListToolLogsRequest$inboundSchema: z.ZodType<
   server_name: z.string().optional(),
   tool_name: z.string().optional(),
   tool_type: ToolType$inboundSchema.optional(),
+  tool_urns: z.array(z.string()).optional(),
   per_page: z.number().int().default(20),
   direction: Direction$inboundSchema.default("next"),
   sort: Sort$inboundSchema.default("DESC"),
@@ -444,6 +449,7 @@ export const ListToolLogsRequest$inboundSchema: z.ZodType<
     "server_name": "serverName",
     "tool_name": "toolName",
     "tool_type": "toolType",
+    "tool_urns": "toolUrns",
     "per_page": "perPage",
     "Gram-Key": "gramKey",
     "Gram-Session": "gramSession",
@@ -461,6 +467,7 @@ export type ListToolLogsRequest$Outbound = {
   server_name?: string | undefined;
   tool_name?: string | undefined;
   tool_type?: string | undefined;
+  tool_urns?: Array<string> | undefined;
   per_page: number;
   direction: string;
   sort: string;
@@ -483,6 +490,7 @@ export const ListToolLogsRequest$outboundSchema: z.ZodType<
   serverName: z.string().optional(),
   toolName: z.string().optional(),
   toolType: ToolType$outboundSchema.optional(),
+  toolUrns: z.array(z.string()).optional(),
   perPage: z.number().int().default(20),
   direction: Direction$outboundSchema.default("next"),
   sort: Sort$outboundSchema.default("DESC"),
@@ -497,6 +505,7 @@ export const ListToolLogsRequest$outboundSchema: z.ZodType<
     serverName: "server_name",
     toolName: "tool_name",
     toolType: "tool_type",
+    toolUrns: "tool_urns",
     perPage: "per_page",
     gramKey: "Gram-Key",
     gramSession: "Gram-Session",

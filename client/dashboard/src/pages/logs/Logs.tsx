@@ -2,10 +2,10 @@ import {Page} from "@/components/page-layout";
 import {SearchBar} from "@/components/ui/search-bar";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@/components/ui/select";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow,} from "@/components/ui/table";
-import {useListToolLogs} from "@gram/client/react-query";
+import {useListToolLogs, useListToolsets} from "@gram/client/react-query";
 import {HTTPToolLog} from "@gram/client/models/components";
 import {Icon} from "@speakeasy-api/moonshine";
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {LogDetailSheet} from "./LogDetailSheet";
 import {formatTimestamp, getSourceFromUrn, getToolIcon, getToolNameFromUrn, isSuccessfulCall,} from "./utils";
 import {formatDuration} from "@/lib/dates";
@@ -35,6 +35,23 @@ export default function LogsPage() {
     const telemetry = useTelemetry();
     const isLogsEnabled = telemetry.isFeatureEnabled("clickhouse-tool-metrics") ?? false;
 
+    // Fetch toolsets for server name dropdown
+    const {data: toolsetsData} = useListToolsets();
+    const serverNames = useMemo(() => {
+        return toolsetsData?.toolsets?.map(t =>
+            ({slug: t.slug, id: t.id, toolUrns: t.toolUrns}))
+            .filter(Boolean) || [];
+    }, [toolsetsData]);
+
+    // Get tool URNs for selected server
+    const selectedToolUrns = useMemo(() => {
+        if (!filters.serverNameFilter) return undefined;
+        const selectedToolset = serverNames.find(s => s.slug === filters.serverNameFilter);
+        return selectedToolset?.toolUrns && selectedToolset.toolUrns.length > 0
+            ? selectedToolset.toolUrns
+            : undefined;
+    }, [filters.serverNameFilter, serverNames]);
+
     // Infinite scroll state
     const [allLogs, setAllLogs] = useState<HTTPToolLog[]>([]);
     const [currentCursor, setCurrentCursor] = useState<string | undefined>(undefined);
@@ -48,7 +65,7 @@ export default function LogsPage() {
             perPage,
             cursor: currentCursor,
             toolType: (filters.toolTypeFilter as "http" | "function" | "prompt" | undefined) || undefined,
-            serverName: filters.serverNameFilter || undefined,
+            toolUrns: selectedToolUrns,
             status: (filters.statusFilter as "success" | "failure" | undefined) || undefined,
         },
         undefined,
@@ -184,7 +201,11 @@ export default function LogsPage() {
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">All Servers</SelectItem>
-                                            {/* Add more server name options here */}
+                                            {serverNames.map((serverName) => (
+                                                <SelectItem key={serverName.id} value={serverName.slug}>
+                                                    {serverName.slug}
+                                                </SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
 
