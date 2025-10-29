@@ -1,5 +1,13 @@
 # @gram-ai/functions
 
+## 0.5.3
+
+### Patch Changes
+
+- 2155915: Removed `import.meta.url` check for bin scripts. The value for that meta
+  property is not resolving to be equal to process.argv[1] when running the
+  compiled JavaScript files as bin scripts.
+
 ## 0.5.2
 
 ### Patch Changes
