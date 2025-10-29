@@ -17,6 +17,8 @@ import (
 type ListLogsResponseBody struct {
 	Logs       []*HTTPToolLogResponseBody      `form:"logs,omitempty" json:"logs,omitempty" xml:"logs,omitempty"`
 	Pagination *PaginationResponseResponseBody `form:"pagination,omitempty" json:"pagination,omitempty" xml:"pagination,omitempty"`
+	// Whether tool metrics are enabled for the organization
+	Enabled *bool `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
 }
 
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
@@ -255,7 +257,9 @@ type PaginationResponseResponseBody struct {
 // NewListLogsListToolLogResponseOK builds a "logs" service "listLogs" endpoint
 // result from a HTTP "OK" response.
 func NewListLogsListToolLogResponseOK(body *ListLogsResponseBody) *logs.ListToolLogResponse {
-	v := &logs.ListToolLogResponse{}
+	v := &logs.ListToolLogResponse{
+		Enabled: *body.Enabled,
+	}
 	v.Logs = make([]*logs.HTTPToolLog, len(body.Logs))
 	for i, val := range body.Logs {
 		v.Logs[i] = unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(val)
@@ -419,6 +423,9 @@ func ValidateListLogsResponseBody(body *ListLogsResponseBody) (err error) {
 	}
 	if body.Pagination == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pagination", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
 	}
 	for _, e := range body.Logs {
 		if e != nil {
