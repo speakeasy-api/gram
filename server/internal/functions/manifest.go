@@ -30,7 +30,7 @@ type ManifestResourceV0 struct {
 	MimeType    *string                                 `json:"mimeType,omitempty"`
 	Title       *string                                 `json:"title,omitempty"`
 	Variables   map[string]*ManifestVariableAttributeV0 `json:"variables"`
-	Meta        map[string]string                       `json:"meta"`
+	Meta        map[string]any                          `json:"meta"`
 }
 
 type ManifestVariableAttributeV0 struct {

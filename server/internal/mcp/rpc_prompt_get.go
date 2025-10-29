@@ -3,13 +3,12 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 
-	"github.com/cbroglie/mustache"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	templates "github.com/speakeasy-api/gram/server/internal/templates/repo"
+	"github.com/speakeasy-api/gram/server/internal/templates"
+	templatesRepo "github.com/speakeasy-api/gram/server/internal/templates/repo"
 )
 
 type prompGetParams struct {
@@ -27,25 +26,6 @@ type promptGetResult struct {
 	Messages    []promptMessage `json:"messages"`
 }
 
-// TODO: We will probably want to refactor this into a common prompt execution utility
-func executePrompt(engine, prompt string, args map[string]any) (string, error) {
-	var data string
-	var err error
-	switch engine {
-	case "":
-		data = prompt
-	case "mustache":
-		data, err = mustache.Render(prompt, args)
-		if err != nil {
-			return "", errors.New("failed to render template")
-		}
-	default:
-		return "", errors.New("unsupported template engine")
-	}
-
-	return data, nil
-}
-
 func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest) (json.RawMessage, error) {
 	var params prompGetParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -56,8 +36,8 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		return nil, oops.E(oops.CodeInvalid, nil, "promp name is required").Log(ctx, logger)
 	}
 
-	templatesRepo := templates.New(db)
-	prompt, err := templatesRepo.GetTemplateByName(ctx, templates.GetTemplateByNameParams{
+	tr := templatesRepo.New(db)
+	prompt, err := tr.GetTemplateByName(ctx, templatesRepo.GetTemplateByNameParams{
 		ProjectID: payload.projectID,
 		Name:      params.Name,
 	})
@@ -65,7 +45,7 @@ func handlePromptsGet(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		return nil, oops.E(oops.CodeNotFound, err, "prompt not found").Log(ctx, logger)
 	}
 
-	promptData, err := executePrompt(prompt.Engine.String, prompt.Prompt, params.Arguments)
+	promptData, err := templates.RenderTemplate(ctx, logger, prompt.Prompt, prompt.Kind.String, prompt.Engine.String, params.Arguments)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "failed to execute prompt").Log(ctx, logger)
 	}

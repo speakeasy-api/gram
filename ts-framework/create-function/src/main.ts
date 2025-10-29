@@ -1,10 +1,10 @@
+import { parse } from "@bomb.sh/args";
+import { isCancel, log, taskLog } from "@clack/prompts";
 import { existsSync } from "node:fs";
 import fs from "node:fs/promises";
 import { join, resolve } from "node:path";
 import process from "node:process";
 import { $ } from "zx";
-import { isCancel, log, taskLog } from "@clack/prompts";
-import { parse } from "@bomb.sh/args";
 import pkg from "../package.json" with { type: "json" };
 
 import {
@@ -24,12 +24,13 @@ Usage:
   ${packageManager} create @gram-ai/function [options]
 
 Options:
-  --template <name>     Template to use (gram, mcp)
-  --name <name>         Project name
-  --dir <path>          Directory to create project in
-  --git <yes|no>        Initialize git repository
-  --install <yes|no>    Install dependencies
-  -y, --yes             Skip all prompts and use defaults
+  --template <name>      Template to use (gram, mcp)
+  --name <name>          Project name
+  --dir <path>           Directory to create project in
+  --git <yes|no>         Initialize git repository
+  --install <yes|no>     Install dependencies
+  --install-cli <yes|no> Install the Gram CLI 
+  -y, --yes              Skip all prompts and use defaults
 
 Examples:
   ${packageManager} create @gram-ai/function
@@ -47,7 +48,7 @@ async function init(argv: string[]): Promise<void> {
 
   const args = parse(argv, {
     alias: { y: "yes", h: "help" },
-    string: ["template", "name", "dir", "git", "install"],
+    string: ["template", "name", "dir", "git", "install", "installCli"],
     boolean: ["yes", "help"],
   });
 
@@ -138,6 +139,14 @@ async function init(argv: string[]): Promise<void> {
     return;
   }
 
+  const installCli = await confirmOrClack({
+    message: "Install the Gram CLI? Required to deploy tools to Gram.",
+  })(args.yes || yn(args.installCli ?? false));
+  if (isCancel(installCli)) {
+    log.info("Operation cancelled.");
+    return;
+  }
+
   const tlog = taskLog({
     title: "Setting up project",
   });
@@ -215,6 +224,11 @@ async function init(argv: string[]): Promise<void> {
   if (installDeps) {
     tlog.message(`Installing dependencies with ${packageManager}`);
     await $`cd ${dir} && ${packageManager} install`;
+  }
+
+  if (installCli) {
+    tlog.message("Installing Gram CLI");
+    await $`which gram || (curl -fsSL https://go.getgram.ai/cli.sh | bash; gram auth)`;
   }
 
   let successMessage = `All done! Run \`cd ${dir} && ${packageManager} run build\` to build your first Gram Function.`;

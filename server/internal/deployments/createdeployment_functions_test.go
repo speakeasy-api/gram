@@ -1068,7 +1068,7 @@ func TestDeploymentsService_CreateDeployment_WithResources(t *testing.T) {
 		require.JSONEq(t, `{"DATA_API_KEY": {"description": "API key for data source"}, "DATA_REGION": {"description": "Region for data access"}}`, string(resource.Variables))
 		require.NotNil(t, resource.Meta, "should have meta")
 
-		var meta map[string]string
+		var meta map[string]any
 		err = json.Unmarshal(resource.Meta, &meta)
 		require.NoError(t, err, "meta should unmarshal to map[string]string")
 	})

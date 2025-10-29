@@ -35,7 +35,7 @@ export type FunctionResourceDefinition = {
   /**
    * Meta tags for the tool
    */
-  meta?: { [k: string]: string } | undefined;
+  meta?: { [k: string]: any } | undefined;
   /**
    * Optional MIME type of the resource
    */
@@ -85,7 +85,7 @@ export const FunctionResourceDefinition$inboundSchema: z.ZodType<
   description: z.string(),
   function_id: z.string(),
   id: z.string(),
-  meta: z.record(z.string()).optional(),
+  meta: z.record(z.any()).optional(),
   mime_type: z.string().optional(),
   name: z.string(),
   project_id: z.string(),
@@ -114,7 +114,7 @@ export type FunctionResourceDefinition$Outbound = {
   description: string;
   function_id: string;
   id: string;
-  meta?: { [k: string]: string } | undefined;
+  meta?: { [k: string]: any } | undefined;
   mime_type?: string | undefined;
   name: string;
   project_id: string;
@@ -137,7 +137,7 @@ export const FunctionResourceDefinition$outboundSchema: z.ZodType<
   description: z.string(),
   functionId: z.string(),
   id: z.string(),
-  meta: z.record(z.string()).optional(),
+  meta: z.record(z.any()).optional(),
   mimeType: z.string().optional(),
   name: z.string(),
   projectId: z.string(),

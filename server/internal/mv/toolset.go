@@ -617,7 +617,7 @@ func readToolsetTools(
 		}
 
 		for _, def := range functionDefinitions {
-			var meta map[string]string
+			var meta map[string]any
 			if def.FunctionToolDefinition.Meta != nil {
 				err = json.Unmarshal(def.FunctionToolDefinition.Meta, &meta)
 				if err != nil {
@@ -636,7 +636,6 @@ func readToolsetTools(
 				CanonicalName: def.FunctionToolDefinition.Name,
 				Description:   def.FunctionToolDefinition.Description,
 				Variables:     def.FunctionToolDefinition.Variables,
-				Meta:          meta,
 				SchemaVersion: nil,
 				Schema:        string(def.FunctionToolDefinition.InputSchema),
 				Confirm:       nil,
@@ -646,6 +645,7 @@ func readToolsetTools(
 				UpdatedAt:     def.FunctionToolDefinition.UpdatedAt.Time.Format(time.RFC3339),
 				Canonical:     nil,
 				Variation:     nil,
+				Meta:          meta,
 			}
 			if functionTool.Schema == "" {
 				functionTool.Schema = constants.DefaultEmptyToolSchema
@@ -681,7 +681,7 @@ func readToolsetTools(
 		}
 
 		for _, def := range functionResourceDefinitions {
-			var meta map[string]string
+			var meta map[string]any
 			if def.FunctionResourceDefinition.Meta != nil {
 				err = json.Unmarshal(def.FunctionResourceDefinition.Meta, &meta)
 				if err != nil {

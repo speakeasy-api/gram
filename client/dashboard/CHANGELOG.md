@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.17.3
+
+### Patch Changes
+
+- 69e766a: Adds a page for viewing tool call logs from ClickHouse with a searchable table interface displaying tool call history and infinite scroll pagination with cursor-based navigation for efficient data loading.
+
 ## 0.17.2
 
 ### Patch Changes

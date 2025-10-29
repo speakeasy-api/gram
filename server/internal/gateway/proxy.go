@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/templates"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
@@ -184,6 +185,8 @@ func (tp *ToolProxy) Do(
 		return tp.doFunction(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function)
 	case ToolKindHTTP:
 		return tp.doHTTP(ctx, logger, w, requestBody, env, plan.Descriptor, plan.HTTP)
+	case ToolKindPrompt:
+		return tp.doPrompt(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Prompt)
 	default:
 		return fmt.Errorf("tool type not supported: %s", plan.Kind)
 	}
@@ -557,6 +560,30 @@ func (tp *ToolProxy) doHTTP(
 		OrganizationID:            descriptor.OrganizationID,
 		OrganizationSlug:          descriptor.OrganizationSlug,
 	})
+}
+
+type promptGetParams struct {
+	Arguments map[string]any `json:"arguments"`
+}
+
+func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.ResponseWriter, requestBody io.Reader, env *CaseInsensitiveEnv, descriptor *ToolDescriptor, plan *PromptToolCallPlan) error {
+	var params promptGetParams
+	if err := json.NewDecoder(requestBody).Decode(&params); err != nil {
+		return oops.E(oops.CodeBadRequest, err, "failed to parse get prompt request").Log(ctx, logger)
+	}
+
+	promptData, err := templates.RenderTemplate(ctx, logger, plan.Prompt, plan.Kind, plan.Engine, params.Arguments)
+	if err != nil {
+		return oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte(promptData)); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to write prompt data").Log(ctx, logger)
+	}
+
+	return nil
 }
 
 type retryConfig struct {

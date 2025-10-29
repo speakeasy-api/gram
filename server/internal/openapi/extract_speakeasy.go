@@ -817,6 +817,10 @@ func generateSchemaKey(js *oas3.JSONSchema[oas3.Referenceable]) string {
 }
 
 func extractJSONSchemaSpeakeasy(ctx context.Context, doc *openapi.OpenAPI, schemaCache *concurrentSchemaCache, name string, js *oas3.JSONSchema[oas3.Referenceable]) (*oas3.JSONSchema[oas3.Referenceable], Defs, error) {
+	if js == nil {
+		return nil, nil, nil // TODO should this be an error?
+	}
+
 	line, col := js.GetRootNodeLine(), js.GetRootNodeColumn()
 
 	cacheKey := generateSchemaKey(js)

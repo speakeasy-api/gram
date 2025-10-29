@@ -384,26 +384,9 @@ func (s *Service) RenderTemplateByID(ctx context.Context, payload *gen.RenderTem
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get template").Log(ctx, logger)
 	}
 
-	prompt := pt.Prompt
-	renderedPrompt := prompt
-	if pt.Kind.Valid && pt.Kind.String == "higher_order_tool" {
-		renderedPrompt, err = s.RenderTemplateJSON(ctx, prompt)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
-		}
-	}
-
-	var data string
-	switch pt.Engine.String {
-	case "":
-		data = pt.Prompt
-	case "mustache":
-		data, err = mustache.Render(renderedPrompt, payload.Arguments)
-		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
-		}
-	default:
-		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported template engine").Log(ctx, logger)
+	data, err := RenderTemplate(ctx, logger, pt.Prompt, pt.Kind.String, pt.Engine.String, payload.Arguments)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
 	}
 
 	return &gen.RenderTemplateResult{Prompt: data}, nil
@@ -418,31 +401,38 @@ func (s *Service) RenderTemplate(ctx context.Context, payload *gen.RenderTemplat
 	projectID := *authCtx.ProjectID
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 
-	prompt := payload.Prompt
-	renderedPrompt := prompt
-	if payload.Kind == "higher_order_tool" {
-		var err error
-		renderedPrompt, err = s.RenderTemplateJSON(ctx, prompt)
+	data, err := RenderTemplate(ctx, logger, payload.Prompt, payload.Kind, payload.Engine, payload.Arguments)
+	if err != nil {
+		return nil, err
+	}
+
+	return &gen.RenderTemplateResult{Prompt: data}, nil
+}
+
+func RenderTemplate(ctx context.Context, logger *slog.Logger, template string, kind string, engine string, arguments map[string]any) (string, error) {
+	var err error
+	renderedPrompt := template
+	if kind == "higher_order_tool" {
+		renderedPrompt, err = RenderTemplateJSON(ctx, logger, template)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
+			return "", oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
 		}
 	}
 
 	var data string
-	switch payload.Engine {
+	switch engine {
 	case "":
-		data = payload.Prompt
+		data = template
 	case "mustache":
-		var err error
-		data, err = mustache.Render(renderedPrompt, payload.Arguments)
+		data, err = mustache.Render(renderedPrompt, arguments)
 		if err != nil {
-			return nil, oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
+			return "", oops.E(oops.CodeBadRequest, err, "failed to render template").Log(ctx, logger)
 		}
 	default:
-		return nil, oops.E(oops.CodeBadRequest, nil, "unsupported template engine").Log(ctx, logger)
+		return "", oops.E(oops.CodeBadRequest, nil, "unsupported template engine").Log(ctx, logger)
 	}
 
-	return &gen.RenderTemplateResult{Prompt: data}, nil
+	return data, nil
 }
 
 type CustomToolJSONV1 struct {
@@ -466,10 +456,10 @@ type Step struct {
 	Inputs        []string `json:"inputs"`
 }
 
-func (s *Service) RenderTemplateJSON(ctx context.Context, promptJSON string) (string, error) {
+func RenderTemplateJSON(ctx context.Context, logger *slog.Logger, promptJSON string) (string, error) {
 	var prompt CustomToolJSONV1
 	if err := json.Unmarshal([]byte(promptJSON), &prompt); err != nil {
-		return "", oops.E(oops.CodeBadRequest, err, "failed to unmarshal prompt").Log(ctx, s.logger)
+		return "", oops.E(oops.CodeBadRequest, err, "failed to unmarshal prompt").Log(ctx, logger)
 	}
 
 	inputsPortion := ""
