@@ -213,15 +213,18 @@ async function importToolCallHandler(codePath) {
       throw new FunctionsError(
         ERROR_CODES.IMPORT_FAILURE,
         "Unable to import user code",
-        `Failed to import ${filename}: ${
-          e instanceof Error ? e.message : String(e)
+        `Failed to import ${filename}: ${e instanceof Error ? e.message : String(e)
         }`,
       );
     });
 
-    const f = [mod["handleToolCall"], mod["default"]?.handleToolCall].find(
-      (sym) => typeof sym === "function",
-    );
+    let f = mod["handleToolCall"];
+    if (typeof f !== "function") {
+      const def = mod["default"];
+      // Bind `f` to `def` so if `f` contains references to `this`, they will
+      // continue to work correctly.
+      f = typeof def?.handleToolCall === "function" ? def.handleToolCall.bind(def) : undefined;
+    }
 
     if (typeof f !== "function") {
       const filename = path.basename(codePath);
@@ -261,8 +264,7 @@ async function importResourceHandler(codePath) {
       throw new FunctionsError(
         ERROR_CODES.IMPORT_FAILURE,
         "Unable to import user code",
-        `Failed to import ${filename}: ${
-          e instanceof Error ? e.message : String(e)
+        `Failed to import ${filename}: ${e instanceof Error ? e.message : String(e)
         }`,
       );
     });
@@ -369,14 +371,14 @@ export async function main(args = process.argv, codePath = USER_CODE_PATH) {
       case "tool":
         await handleToolCall(
           pipeFile,
-          /** @type {{name: string, input: unknown}} */ (request),
+          /** @type {{name: string, input: unknown}} */(request),
           codePath,
         );
         break;
       case "resource":
         await handleResources(
           pipeFile,
-          /** @type {{uri: string, input: unknown}} */ (request),
+          /** @type {{uri: string, input: unknown}} */(request),
           codePath,
         );
         break;
