@@ -9,6 +9,6 @@ async function build() {
   });
 }
 
-if (import.meta.main) {
-  await build();
+if (import.meta.url === `file://${process.argv[1]}`) {
+  build();
 }
