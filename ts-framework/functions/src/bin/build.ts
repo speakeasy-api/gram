@@ -133,6 +133,6 @@ async function main(argv: string[]) {
   });
 }
 
-if (import.meta.main) {
-  await main(process.argv);
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main(process.argv);
 }
