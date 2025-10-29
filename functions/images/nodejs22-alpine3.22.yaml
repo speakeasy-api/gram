@@ -4,7 +4,7 @@ contents:
     - https://dl-cdn.alpinelinux.org/alpine/v3.22/main
   packages:
     - alpine-baselayout-data
-    - ca-certificates
+    - ca-certificates-bundle
     - su-exec
     - nodejs=22.16.0-r2
     - gram-runner
