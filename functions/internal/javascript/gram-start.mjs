@@ -269,9 +269,13 @@ async function importResourceHandler(codePath) {
       );
     });
 
-    const f = [mod["handleResources"], mod["default"]?.handleResources].find(
-      (sym) => typeof sym === "function",
-    );
+    let f = mod["handleResources"];
+    if (typeof f !== "function") {
+      const def = mod["default"];
+      // Bind `f` to `def` so if `f` contains references to `this`, they will
+      // continue to work correctly.
+      f = typeof def?.handleResources === "function" ? def.handleResources.bind(def) : undefined;
+    }
 
     if (typeof f !== "function") {
       const filename = path.basename(codePath);
