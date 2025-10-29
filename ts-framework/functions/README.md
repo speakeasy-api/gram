@@ -1,11 +1,13 @@
-# Gram Functions for TypeScript
+# TypeScript MCP server Framework
+
+This library provides a lightweight framework for building MCP servers in
+TypeScript using Gram Functions.
 
 Gram Functions are small pieces of code that represent LLM tools. They are
-deployed to [Gram](https://getgram.ai) and are then exposed to LLMs via MCP
+deployed to [Gram](https://getgram.ai) where they can be combined with other tools to create MCP
 servers.
 
-This library provides a small framework for authoring Gram Functions in
-TypeScript. The "Hello, World!" example is:
+"Hello, World!" example:
 
 ```typescript
 import { Gram } from "@gram-ai/functions";
