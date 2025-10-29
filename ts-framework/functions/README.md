@@ -1,6 +1,6 @@
 # TypeScript MCP server Framework
 
-This library provides a lightweight framework for building MCP servers in
+This library provides a lightweight framework for building MCP compliant agentic tools in
 TypeScript using Gram Functions.
 
 Gram Functions are small pieces of code that represent LLM tools. They are
