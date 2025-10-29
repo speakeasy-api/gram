@@ -194,10 +194,7 @@ async function writeHTTPResponse(pipeFile, response) {
     return;
   }
 
-  const dest = pipeFile.createWriteStream({
-    autoClose: true,
-    emitClose: true,
-  });
+  const dest = pipeFile.createWriteStream();
 
   await response.body.pipeTo(Writable.toWeb(dest));
 }
