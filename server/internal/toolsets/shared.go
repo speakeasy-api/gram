@@ -338,11 +338,11 @@ func (t *Toolsets) extractFunctionResourceCallPlan(ctx context.Context, resource
 }
 
 // trimFragment removes the fragment from a URL by trimming everything after '#'.
-// https://datatracker.ietf.org/doc/html/rfc3986#section-3.5 a fragment should always end the URL and there should only be one
 // Fragments are client-side only and should not be sent to servers.
-func trimFragment(pathOrURL string) string {
-	if idx := strings.Index(pathOrURL, "#"); idx != -1 {
-		return pathOrURL[:idx]
+// https://datatracker.ietf.org/doc/html/rfc3986#section-3.5 a fragment should always end the URL and there should only be one included.
+func trimFragment(path string) string {
+	if idx := strings.Index(path, "#"); idx != -1 {
+		return path[:idx]
 	}
-	return pathOrURL
+	return path
 }
