@@ -9000,8 +9000,7 @@ components:
         meta:
           type: object
           description: Meta tags for the tool
-          additionalProperties:
-            type: string
+          additionalProperties: true
         mime_type:
           type: string
           description: Optional MIME type of the resource
@@ -9078,8 +9077,7 @@ components:
         meta:
           type: object
           description: Meta tags for the tool
-          additionalProperties:
-            type: string
+          additionalProperties: true
         name:
           type: string
           description: The name of the tool
@@ -9863,6 +9861,9 @@ components:
     ListToolLogResponse:
       type: object
       properties:
+        enabled:
+          type: boolean
+          description: Whether tool metrics are enabled for the organization
         logs:
           type: array
           items:
@@ -9872,6 +9873,7 @@ components:
       required:
         - logs
         - pagination
+        - enabled
     ListToolLogsRequest:
       type: object
       properties:

@@ -620,6 +620,10 @@ func captureRequestBodyLibOpenAPI(op *v3.Operation) (capturedRequestBodyLibOpenA
 }
 
 func extractJSONSchemaFromYamlLibOpenAPI(name string, schemaProxy *base.SchemaProxy) ([]byte, error) {
+	if schemaProxy == nil {
+		return nil, nil // TODO should this be an error?
+	}
+
 	keyNode := schemaProxy.GoLow().GetKeyNode()
 	line, col := keyNode.Line, keyNode.Column
 	schema, err := schemaProxy.MarshalYAMLInline()

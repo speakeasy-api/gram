@@ -1,3 +1,5 @@
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+
 import {
   configure,
   getConsoleSink,
@@ -7,9 +9,8 @@ import {
   type LogLevel,
 } from "@logtape/logtape";
 import { getPrettyFormatter } from "@logtape/pretty";
-import util from "node:util";
-
 import { existsSync } from "node:fs";
+import util from "node:util";
 import * as z from "zod";
 import pkg from "../../package.json" with { type: "json" };
 import { loadConfig } from "../build/config.ts";
@@ -131,6 +132,4 @@ async function main(argv: string[]) {
   });
 }
 
-if (import.meta.main) {
-  await main(process.argv);
-}
+main(process.argv);

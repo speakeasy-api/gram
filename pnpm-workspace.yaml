@@ -2,13 +2,11 @@ packages:
   - client/*
   - sdks/*
   - ts-framework/*
+  - ts-framework/create-function/*
   - server
   - cli
   - functions
   - docs
-  # These templates fail to build because they are templates and not actual projects, so we exclude them from the workspace.
-  - "!ts-framework/create-function/gram-template-gram"
-  - "!ts-framework/create-function/gram-template-mcp"
 
 catalog:
   "@ai-sdk/openai": ^1.3.4

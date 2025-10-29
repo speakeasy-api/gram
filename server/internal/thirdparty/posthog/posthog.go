@@ -20,7 +20,7 @@ type Posthog struct {
 	logger   *slog.Logger
 }
 
-func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthogEndpoint string) *Posthog {
+func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthogEndpoint string, posthogPersonalAPIKey string) *Posthog {
 	if posthogAPIKey == "" {
 		logger.InfoContext(ctx, "posthog API key not found, disabling posthog")
 		return &Posthog{
@@ -39,11 +39,19 @@ func New(ctx context.Context, logger *slog.Logger, posthogAPIKey string, posthog
 		}
 	}
 
+	phConfig := posthog.Config{
+		Endpoint: posthogEndpoint,
+	}
+
+	// Having a personal (private) API key allow posthog to maintain its own state of feature flags via polling
+	if posthogPersonalAPIKey != "" {
+		phConfig.PersonalApiKey = posthogPersonalAPIKey
+		phConfig.DefaultFeatureFlagsPollingInterval = 1 * time.Minute
+	}
+
 	client, err := posthog.NewWithConfig(
 		posthogAPIKey,
-		posthog.Config{
-			Endpoint: posthogEndpoint,
-		},
+		phConfig,
 	)
 	if err != nil {
 		logger.ErrorContext(ctx, "failed to instantiate posthog client", attr.SlogError(err))

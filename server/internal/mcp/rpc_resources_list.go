@@ -18,11 +18,11 @@ type resourcesListResult struct {
 }
 
 type resourceListEntry struct {
-	URI         string            `json:"uri"`
-	Name        string            `json:"name"`
-	Description *string           `json:"description,omitempty"`
-	MimeType    *string           `json:"mimeType,omitempty"`
-	Meta        map[string]string `json:"_meta,omitempty"`
+	URI         string         `json:"uri"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description,omitempty"`
+	MimeType    *string        `json:"mimeType,omitempty"`
+	Meta        map[string]any `json:"_meta,omitempty"`
 }
 
 func handleResourcesList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, payload *mcpInputs, req *rawRequest, toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents]) (json.RawMessage, error) {

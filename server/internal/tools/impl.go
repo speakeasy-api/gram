@@ -185,7 +185,7 @@ func (s *Service) ListTools(ctx context.Context, payload *gen.ListToolsPayload) 
 	}
 
 	for _, tool := range functionTools {
-		var meta map[string]string
+		var meta map[string]any
 		if tool.Meta != nil {
 			err = json.Unmarshal(tool.Meta, &meta)
 			if err != nil {

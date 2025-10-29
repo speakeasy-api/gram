@@ -68,6 +68,20 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 
 	projectID := authCtx.ProjectID
 
+	logsEnabled, err := s.tcm.ShouldLog(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "error checking if tool metrics logging is enabled").
+			Log(ctx, s.logger, attr.SlogProjectID(projectID.String()))
+	}
+
+	if !logsEnabled {
+		return &gen.ListToolLogResponse{Logs: make([]*gen.HTTPToolLog, 0), Pagination: &gen.PaginationResponse{
+			PerPage:        conv.Ptr(0),
+			HasNextPage:    conv.Ptr(false),
+			NextPageCursor: conv.Ptr(""),
+		}, Enabled: logsEnabled}, nil
+	}
+
 	// Parse time parameters with defaults
 	tsStart := parseTimeOrDefault(payload.TsStart, time.Now().Add(-744*time.Hour).UTC())
 	tsEnd := parseTimeOrDefault(payload.TsEnd, time.Now().UTC())
@@ -106,7 +120,7 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 			PerPage:        conv.Ptr(0),
 			HasNextPage:    conv.Ptr(false),
 			NextPageCursor: conv.Ptr(""),
-		}}, nil
+		}, Enabled: logsEnabled}, nil
 	}
 
 	// Convert results to gen.HTTPToolLog
@@ -127,7 +141,7 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 		NextPageCursor: nextPageCursor,
 	}
 
-	return &gen.ListToolLogResponse{Logs: logs, Pagination: pp}, nil
+	return &gen.ListToolLogResponse{Logs: logs, Pagination: pp, Enabled: logsEnabled}, nil
 }
 
 func parseTimeOrDefault(s *string, defaultTime time.Time) time.Time {

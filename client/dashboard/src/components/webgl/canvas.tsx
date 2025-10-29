@@ -7,6 +7,7 @@ import { useScrollUpdate } from "./hooks/use-scroll-update";
 import { useWebGLStore } from "./store";
 import { WebGLOut } from "./tunnel";
 import { AsciiStars } from "./ascii-stars";
+import { WindowTrail } from "./window-trail";
 import { cn } from "@/lib/utils";
 import { Canvas as R3FCanvas, useThree } from "@react-three/fiber";
 import { EffectComposer } from "@react-three/postprocessing";
@@ -87,7 +88,12 @@ const Scene = memo(() => {
           customUniforms={customUniforms}
         />
       ))}
-      {showAsciiStars && <AsciiStars count={150} opacity={0.6} />}
+      {showAsciiStars && (
+        <>
+          <AsciiStars count={150} opacity={0.6} />
+          <WindowTrail />
+        </>
+      )}
     </>
   );
 });

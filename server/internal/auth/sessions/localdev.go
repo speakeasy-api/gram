@@ -78,7 +78,7 @@ func NewUnsafeManager(logger *slog.Logger, db *pgxpool.Pool, redisClient *redis.
 		return nil, fmt.Errorf("failed to create fake pylon: %w", err)
 	}
 
-	fakePosthog := posthog.New(context.Background(), logger, "test-posthog-key", "test-posthog-host")
+	fakePosthog := posthog.New(context.Background(), logger, "test-posthog-key", "test-posthog-host", "")
 
 	return &Manager{
 		logger:                 logger.With(attr.SlogComponent("sessions")),

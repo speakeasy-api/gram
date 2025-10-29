@@ -211,8 +211,8 @@ export function useUploadOpenAPISteps(checkDocumentSlugUnique = true) {
           setApiName(slugify(file?.name.split(".")[0] ?? "My API"));
         }
       });
-    } catch (error) {
-      console.error("Upload failed:", error);
+    } catch (_error) {
+      // Error will be shown to user via toast notifications
     }
   };
 

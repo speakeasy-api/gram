@@ -287,7 +287,7 @@ func newTestAuthService(t *testing.T, userInfo *MockUserInfo) (context.Context, 
 	pylon, err := pylon.NewPylon(logger, "")
 	require.NoError(t, err)
 
-	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host")
+	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 

@@ -109,6 +109,8 @@ type ListLogsPayload struct {
 type ListToolLogResponse struct {
 	Logs       []*HTTPToolLog
 	Pagination *PaginationResponse
+	// Whether tool metrics are enabled for the organization
+	Enabled bool
 }
 
 // Pagination metadata for list responses

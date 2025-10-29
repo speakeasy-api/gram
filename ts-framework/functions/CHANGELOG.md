@@ -1,5 +1,32 @@
 # @gram-ai/functions
 
+## 0.5.3
+
+### Patch Changes
+
+- 2155915: Removed `import.meta.url` check for bin scripts. The value for that meta
+  property is not resolving to be equal to process.argv[1] when running the
+  compiled JavaScript files as bin scripts.
+
+## 0.5.2
+
+### Patch Changes
+
+- abcbfd9: Switched away from `import.meta.main` to `import.meta.url`. The former approach
+  is supported primarily by Deno and Bun and only gained experimental support in
+  Node.js 22.18.0. To ensure broader compatibility across different Node.js
+  versions, we replace these checks with a more traditional method that compares
+  `import.meta.url` to the script's file URL derived from `process.argv[1]`.
+
+## 0.5.1
+
+### Patch Changes
+
+- 5ea5fcd: Reverted the Gram Functions TS framework template to export the instance of
+  `Gram` as the default export in `src/gram.ts`. This makes the boilerplate code
+  work again when deployed.
+- 15cbf7e: Allows for creating functions with variables in gram functions built with mcp passthrough
+
 ## 0.5.0
 
 ## 0.4.0

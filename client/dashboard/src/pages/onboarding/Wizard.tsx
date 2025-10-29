@@ -44,7 +44,7 @@ import {
   X,
 } from "lucide-react";
 import { AnimatePresence, motion, useMotionValue } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
@@ -176,6 +176,28 @@ const LHS = ({
 }) => {
   const [createdToolset, setCreatedToolset] = useState<Toolset>();
   const { organization } = useSession();
+  const [showTopBlur, setShowTopBlur] = useState(false);
+  const [showBottomBlur, setShowBottomBlur] = useState(false);
+  const contentScrollRef = useRef<HTMLDivElement>(null);
+
+  // Check scroll position to show/hide blur gradients
+  const handleScroll = () => {
+    const element = contentScrollRef.current;
+    if (!element) return;
+
+    const { scrollTop, scrollHeight, clientHeight } = element;
+
+    // Show top blur if scrolled down from top
+    setShowTopBlur(scrollTop > 10);
+
+    // Show bottom blur if not at bottom
+    setShowBottomBlur(scrollTop + clientHeight < scrollHeight - 10);
+  };
+
+  // Update blur visibility on content changes
+  useEffect(() => {
+    handleScroll();
+  }, [currentStep]);
 
   const lowerLeft =
     organization?.projects.length > 1 ? (
@@ -231,40 +253,60 @@ const LHS = ({
       </Stack>
 
       {/* Content - absolutely positioned within left container */}
-      <div className="absolute inset-x-0 top-0 bottom-0 flex items-center justify-center px-16 pointer-events-none">
-        <Stack className="w-full max-w-3xl gap-8 pointer-events-auto z-10">
-          {currentStep === "choice" && (
-            <ChoiceStep
-              setCurrentStep={setCurrentStep}
-              setSelectedPath={setSelectedPath}
-              isFunctionsEnabled={isFunctionsEnabled}
-            />
-          )}
-          {currentStep === "upload" && (
-            <UploadStep
-              setCurrentStep={setCurrentStep}
-              setToolsetName={setToolsetName}
-            />
-          )}
-          {currentStep === "cli-setup" && (
-            <CliSetupStep setCurrentStep={setCurrentStep} />
-          )}
-          {currentStep === "toolset" && (
-            <ToolsetStep
-              toolsetName={toolsetName}
-              setToolsetName={setToolsetName}
-              setCreatedToolset={setCreatedToolset}
-              setCurrentStep={setCurrentStep}
-            />
-          )}
-          {currentStep === "mcp" && (
-            <McpStep
-              createdToolset={createdToolset}
-              mcpSlug={mcpSlug}
-              setMcpSlug={setMcpSlug}
-            />
-          )}
-        </Stack>
+      <div
+        className="absolute inset-x-0 bottom-16 pointer-events-none"
+        style={{ top: currentStep !== "choice" ? "160px" : "64px" }}
+      >
+        {/* Blur gradient at top (when scrolled) */}
+        {showTopBlur && (
+          <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-card to-transparent pointer-events-none z-20" />
+        )}
+
+        {/* Scrollable content */}
+        <div
+          ref={contentScrollRef}
+          onScroll={handleScroll}
+          className="h-full overflow-y-auto px-16 flex items-center justify-center"
+        >
+          <Stack className="w-full max-w-3xl gap-8 pointer-events-auto z-10 my-auto">
+            {currentStep === "choice" && (
+              <ChoiceStep
+                setCurrentStep={setCurrentStep}
+                setSelectedPath={setSelectedPath}
+                isFunctionsEnabled={isFunctionsEnabled}
+              />
+            )}
+            {currentStep === "upload" && (
+              <UploadStep
+                setCurrentStep={setCurrentStep}
+                setToolsetName={setToolsetName}
+              />
+            )}
+            {currentStep === "cli-setup" && (
+              <CliSetupStep setCurrentStep={setCurrentStep} />
+            )}
+            {currentStep === "toolset" && (
+              <ToolsetStep
+                toolsetName={toolsetName}
+                setToolsetName={setToolsetName}
+                setCreatedToolset={setCreatedToolset}
+                setCurrentStep={setCurrentStep}
+              />
+            )}
+            {currentStep === "mcp" && (
+              <McpStep
+                createdToolset={createdToolset}
+                mcpSlug={mcpSlug}
+                setMcpSlug={setMcpSlug}
+              />
+            )}
+          </Stack>
+        </div>
+
+        {/* Blur gradient at bottom (when not at bottom) */}
+        {showBottomBlur && (
+          <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-card to-transparent pointer-events-none z-20" />
+        )}
       </div>
 
       {/* Footer - pinned to bottom */}
@@ -351,19 +393,31 @@ type LogEntry = {
 };
 
 const DEMO_LOGS: LogEntry[] = [
-  { id: "1", message: "$ gram auth", type: "info" },
-  { id: "2", message: "✓ Authentication successful", type: "success" },
-  { id: "3", message: "$ npm run build", type: "info" },
-  { id: "4", message: "✓ dist/functions.zip", type: "success" },
+  { id: "1", message: "$ npm create @gram-ai/function@latest", type: "info" },
+  { id: "2", message: "✓ Project created in ./my-functions", type: "success" },
+  { id: "3", message: "$ cd my-functions", type: "info" },
   {
-    id: "5",
-    message:
-      '$ gram upload --type function --location dist/functions.zip --name "My Functions" --slug my-functions',
+    id: "4",
+    message: "$ brew install speakeasy-api/homebrew-tap/gram",
     type: "info",
   },
+  { id: "5", message: "✓ CLI installed", type: "success" },
+  { id: "6", message: "$ gram auth", type: "info" },
+  { id: "7", message: "✓ Authentication successful", type: "success" },
+  { id: "8", message: "$ open .", type: "info" },
+  { id: "9", message: "$ npm run build", type: "info" },
+  { id: "10", message: "✓ dist/functions.zip", type: "success" },
   {
-    id: "6",
-    message: "⏳ Uploading functions...",
+    id: "11",
+    message:
+      '$ gram stage function --location dist/functions.zip --name "My Functions" --slug my-functions',
+    type: "info",
+  },
+  { id: "12", message: "✓ Functions staged", type: "success" },
+  { id: "13", message: "$ gram push", type: "info" },
+  {
+    id: "14",
+    message: "⏳ Pushing functions...",
     type: "info",
     loading: true,
   },
@@ -377,6 +431,7 @@ const CliSetupStep = ({
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [installMethod, setInstallMethod] = useState<"npm" | "pnpm">("npm");
   const client = useSdkClient();
+  const { data: tools } = useListTools();
 
   // We explicitly don't poll to advance this step because the expected flow is that the CLI opens a new window with the next step.
 
@@ -454,7 +509,7 @@ const CliSetupStep = ({
                 variant="tertiary"
                 size="sm"
                 onClick={() => handleCopy(item.command, index)}
-                className="absolute top-2 right-2"
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-background"
               >
                 {copiedIndex === index ? (
                   <Check className="w-4 h-4" />
@@ -866,9 +921,8 @@ const ContinueButton = ({
         setIsLoading(true);
         try {
           await onClick();
-        } catch (error) {
+        } catch (_error) {
           // Error is already handled by the individual step components
-          console.error("Button click error:", error);
         } finally {
           setIsLoading(false);
         }
@@ -941,15 +995,13 @@ const AnimatedRightSide = ({
 
 const DefaultLogo = () => (
   <motion.div
-    layoutId="main-container"
     className="w-32 h-32 bg-card rounded-lg border flex items-center justify-center"
-    transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
+    exit={{
+      y: [0, -20, -8],
+      transition: { duration: 0.5, times: [0, 0.4, 1], ease: "easeInOut" },
+    }}
   >
-    <motion.span
-      layoutId="main-icon"
-      className="font-thin text-foreground text-6xl select-none"
-      transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
-    >
+    <motion.span className="font-thin text-foreground text-6xl select-none">
       <GramLogo className="w-18" variant="icon" />
     </motion.span>
   </motion.div>
@@ -970,32 +1022,137 @@ const TerminalSpinner = () => {
 };
 
 const TerminalAnimationWithLogs = () => {
-  const [isDragging, setIsDragging] = useState(false);
   const [hasMoved, setHasMoved] = useState(false);
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
+  const terminalX = useMotionValue(-75);
+  const terminalY = useMotionValue(75);
+  const editorX = useMotionValue(75);
+  const editorY = useMotionValue(-75);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [deploymentStatus, setDeploymentStatus] = useState<
     "none" | "processing" | "complete"
   >("none");
+  const [focusedWindow, setFocusedWindow] = useState<"terminal" | "editor">(
+    "terminal",
+  );
+  const [hasChangedFocus, setHasChangedFocus] = useState(false);
+  const [animationComplete, setAnimationComplete] = useState(false);
+  const terminalContentRef = useRef<HTMLDivElement>(null);
+  const [animationKey, setAnimationKey] = useState(0);
+  const [editorFilename, setEditorFilename] = useState("src/mcp.ts");
+  const [editorCode, setEditorCode] = useState("");
 
   const { data: tools } = useListTools(undefined, undefined, {
     refetchInterval: deploymentStatus !== "complete" ? 2000 : false,
   });
 
+  // Easter egg: MCP TypeScript SDK code sample
+  const mcpCode = `import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { z } from "zod";
+
+export const server = new McpServer({
+  name: "demo-server",
+  version: "1.0.0",
+});
+
+server.registerTool(
+  "add",
+  {
+    title: "Addition Tool",
+    description: "Add two numbers",
+    inputSchema: { a: z.number(), b: z.number() },
+  },
+  async ({ a, b }) => {
+    const output = { result: a + b };
+    return {
+      content: [{ type: "text", text: JSON.stringify(output) }],
+    };
+  },
+);`;
+
+  const greetCode = `import { Gram } from "@gram-ai/functions";
+import * as z from "zod/mini";
+
+const gram = new Gram().tool({
+  name: "greet",
+  description: "Greet someone special",
+  inputSchema: { name: z.string() },
+  async execute(ctx, input) {
+    return ctx.json({
+      message: \`Hello, \${input.name}!\`
+    });
+  },
+});
+
+export default gram;`;
+
+  // Initialize editor with MCP code
+  useEffect(() => {
+    setEditorCode(mcpCode);
+  }, []);
+
   // Animate logs appearing one by one
   useEffect(() => {
+    // Pause animation if user has dragged windows
+    if (hasMoved) {
+      return;
+    }
+
     const timers: NodeJS.Timeout[] = [];
+    let cumulativeDelay = 0;
 
     DEMO_LOGS.forEach((log, index) => {
       const timer = setTimeout(() => {
         setLogs((prev) => [...prev, log]);
-      }, index * 800);
+
+        // At "open ." command (index 7, id "8"), switch to functions.ts and type code
+        if (index === 7) {
+          const editorTimeout = setTimeout(() => {
+            setFocusedWindow("editor");
+            // Clear editor and change filename
+            setEditorCode("");
+            setEditorFilename("src/functions.ts");
+
+            // Type out the greet function code
+            let charIndex = 0;
+            const typeInterval = setInterval(() => {
+              if (charIndex < greetCode.length) {
+                setEditorCode(greetCode.slice(0, charIndex + 1));
+                charIndex++;
+              } else {
+                clearInterval(typeInterval);
+                // After typing completes, refocus terminal
+                const refocusTimeout = setTimeout(() => {
+                  setFocusedWindow("terminal");
+                }, 800);
+                timers.push(refocusTimeout);
+              }
+            }, 20);
+            timers.push(typeInterval as unknown as NodeJS.Timeout);
+          }, 300);
+          timers.push(editorTimeout);
+        }
+
+        // Mark animation complete when last log appears
+        if (index === DEMO_LOGS.length - 1) {
+          const completeTimeout = setTimeout(() => {
+            setAnimationComplete(true);
+          }, 1000);
+          timers.push(completeTimeout);
+        }
+      }, cumulativeDelay);
       timers.push(timer);
+
+      // Calculate next delay
+      if (index === 7) {
+        // After "open ." wait for editor focus + typing + pause before continuing terminal
+        cumulativeDelay += 800 + 300 + greetCode.length * 20 + 800;
+      } else {
+        cumulativeDelay += 800;
+      }
     });
 
     return () => timers.forEach(clearTimeout);
-  }, []);
+  }, [animationKey, hasMoved]);
 
   // Check for actual tools deployment
   useEffect(() => {
@@ -1008,10 +1165,10 @@ const TerminalAnimationWithLogs = () => {
         setDeploymentStatus("complete");
         setLogs((prev) =>
           prev.map((log) =>
-            log.id === "6"
+            log.id === "14"
               ? {
                   id: log.id,
-                  message: "✓ Upload successful",
+                  message: "✓ Push successful",
                   type: "success" as const,
                 }
               : log,
@@ -1021,81 +1178,176 @@ const TerminalAnimationWithLogs = () => {
     }
   }, [tools, deploymentStatus]);
 
+  // Auto-scroll terminal to bottom when logs change
   useEffect(() => {
-    const unsubscribeX = x.on("change", (latest) => {
-      if (!hasMoved && Math.abs(latest) > 5) {
+    if (terminalContentRef.current) {
+      terminalContentRef.current.scrollTop =
+        terminalContentRef.current.scrollHeight;
+    }
+  }, [logs]);
+
+  useEffect(() => {
+    const unsubscribeTerminalX = terminalX.on("change", (latest) => {
+      if (!hasMoved && Math.abs(latest - -75) > 5) {
         setHasMoved(true);
       }
     });
-    const unsubscribeY = y.on("change", (latest) => {
-      if (!hasMoved && Math.abs(latest) > 5) {
+    const unsubscribeTerminalY = terminalY.on("change", (latest) => {
+      if (!hasMoved && Math.abs(latest - 75) > 5) {
+        setHasMoved(true);
+      }
+    });
+    const unsubscribeEditorX = editorX.on("change", (latest) => {
+      if (!hasMoved && Math.abs(latest - 75) > 5) {
+        setHasMoved(true);
+      }
+    });
+    const unsubscribeEditorY = editorY.on("change", (latest) => {
+      if (!hasMoved && Math.abs(latest - -75) > 5) {
         setHasMoved(true);
       }
     });
 
     return () => {
-      unsubscribeX();
-      unsubscribeY();
+      unsubscribeTerminalX();
+      unsubscribeTerminalY();
+      unsubscribeEditorX();
+      unsubscribeEditorY();
     };
-  }, [hasMoved, x, y]);
+  }, [hasMoved, terminalX, terminalY, editorX, editorY]);
+
+  // Sync window positions to WebGL store for shader effects
+  const setDraggableWindowPosition = useWebGLStore(
+    (state) => state.setDraggableWindowPosition,
+  );
+  const setIsDraggingWindow = useWebGLStore(
+    (state) => state.setIsDraggingWindow,
+  );
+
+  useEffect(() => {
+    const updateTerminalPosition = () => {
+      setDraggableWindowPosition("terminal", {
+        x: terminalX.get(),
+        y: terminalY.get(),
+        width: 550,
+        height: 350,
+      });
+    };
+
+    const updateEditorPosition = () => {
+      setDraggableWindowPosition("editor", {
+        x: editorX.get(),
+        y: editorY.get(),
+        width: 550,
+        height: 350,
+      });
+    };
+
+    const unsubscribeTerminalX = terminalX.on("change", updateTerminalPosition);
+    const unsubscribeTerminalY = terminalY.on("change", updateTerminalPosition);
+    const unsubscribeEditorX = editorX.on("change", updateEditorPosition);
+    const unsubscribeEditorY = editorY.on("change", updateEditorPosition);
+
+    // Initialize positions
+    updateTerminalPosition();
+    updateEditorPosition();
+
+    return () => {
+      unsubscribeTerminalX();
+      unsubscribeTerminalY();
+      unsubscribeEditorX();
+      unsubscribeEditorY();
+    };
+  }, [terminalX, terminalY, editorX, editorY, setDraggableWindowPosition]);
 
   const handleReset = () => {
-    x.set(0);
-    y.set(0);
+    terminalX.set(-75);
+    terminalY.set(75);
+    editorX.set(75);
+    editorY.set(-75);
     setHasMoved(false);
+    setHasChangedFocus(false);
+    setAnimationComplete(false);
+    setFocusedWindow("terminal");
+    // Restart animation
+    setLogs([]);
+    setEditorCode(mcpCode);
+    setEditorFilename("src/mcp.ts");
+    setAnimationKey((prev) => prev + 1);
+  };
+
+  const handleWindowClick = (window: "terminal" | "editor") => {
+    setFocusedWindow(window);
+    setHasChangedFocus(true);
   };
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center">
+    <div className="relative w-full h-full flex items-center justify-center scale-[0.65] lg:scale-75 xl:scale-90">
+      {/* Terminal Window - positioned bottom-left */}
       <motion.div
-        layoutId="main-container"
         drag
         dragMomentum={false}
         dragElastic={0}
         dragConstraints={{
-          top: -200,
-          bottom: 200,
-          left: -200,
-          right: 200,
+          left: -400,
+          right: 1000,
+          top: -1000,
+          bottom: 1000,
         }}
-        dragListener={false}
-        style={{ x, y }}
-        onDragStart={() => setIsDragging(true)}
-        onDragEnd={() => setIsDragging(false)}
-        transition={{ type: "spring", duration: 0.6, bounce: 0.1 }}
+        onDragStart={() => {
+          handleWindowClick("terminal");
+          setIsDraggingWindow(true);
+        }}
+        onDragEnd={() => setIsDraggingWindow(false)}
         className={cn(
-          "w-[600px] bg-card border rounded-lg overflow-hidden",
-          isDragging && "cursor-grabbing",
+          "absolute w-[550px] bg-card border rounded-lg overflow-hidden cursor-pointer",
+          focusedWindow === "terminal" ? "z-20 shadow-xl" : "z-10 shadow-sm",
         )}
+        style={{ x: terminalX, y: terminalY }}
+        onClick={() => handleWindowClick("terminal")}
       >
-        {/* Terminal header - draggable handle */}
-        <motion.div
-          drag
-          dragListener={false}
-          dragControls={undefined}
-          onPointerDown={(e) =>
-            e.currentTarget.parentElement?.dispatchEvent(
-              new PointerEvent("pointerdown", e.nativeEvent),
-            )
-          }
-          className="bg-muted border-b px-4 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing"
-        >
+        {/* Terminal header */}
+        <div className="bg-muted border-b px-4 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing">
           <div className="flex gap-1.5">
-            <div className="w-3 h-3 rounded-full border border-muted-foreground/30" />
-            <div className="w-3 h-3 rounded-full border border-muted-foreground/30" />
-            <div className="w-3 h-3 rounded-full border border-muted-foreground/30" />
+            <div
+              className={cn(
+                "w-3 h-3 rounded-full",
+                focusedWindow === "terminal"
+                  ? "bg-red-500/80"
+                  : "bg-muted-foreground/30",
+              )}
+            />
+            <div
+              className={cn(
+                "w-3 h-3 rounded-full",
+                focusedWindow === "terminal"
+                  ? "bg-yellow-500/80"
+                  : "bg-muted-foreground/30",
+              )}
+            />
+            <div
+              className={cn(
+                "w-3 h-3 rounded-full",
+                focusedWindow === "terminal"
+                  ? "bg-green-500/80"
+                  : "bg-muted-foreground/30",
+              )}
+            />
           </div>
           <Type
             small
             className="text-muted-foreground absolute left-1/2 -translate-x-1/2"
           >
-            gram-cli {deploymentStatus !== "none" && "• connected"}
+            gram-cli {deploymentStatus !== "none" ? "• connected" : ""}
           </Type>
-          <div className="w-[42px]" /> {/* Spacer to balance the dots */}
-        </motion.div>
+          <div className="w-[42px]" />
+        </div>
 
-        {/* Terminal content with real logs */}
-        <div className="p-4 font-mono text-sm space-y-1 min-h-[300px] max-h-[400px] overflow-y-auto">
+        {/* Terminal content */}
+        <div
+          ref={terminalContentRef}
+          className="p-4 font-mono text-sm space-y-1 h-[350px] overflow-y-auto"
+        >
           {logs.map((log) => {
             const shouldShowLoading = log.loading;
 
@@ -1117,30 +1369,84 @@ const TerminalAnimationWithLogs = () => {
               </div>
             );
           })}
-          {logs.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{
-                duration: 0.5,
-                repeat: Infinity,
-                repeatType: "reverse",
-              }}
-              className="inline-block w-2 h-4 bg-primary ml-1"
-            />
-          )}
         </div>
       </motion.div>
 
-      {/* Reset button - only show when moved */}
+      {/* Editor Window - positioned top-right, always visible with MCP SDK code */}
+      <motion.div
+        drag
+        dragMomentum={false}
+        dragElastic={0}
+        dragConstraints={{
+          left: -400,
+          right: 1000,
+          top: -1000,
+          bottom: 1000,
+        }}
+        onDragStart={() => {
+          handleWindowClick("editor");
+          setIsDraggingWindow(true);
+        }}
+        onDragEnd={() => setIsDraggingWindow(false)}
+        style={{ x: editorX, y: editorY }}
+        className={cn(
+          "absolute w-[550px] bg-card border rounded-lg overflow-hidden cursor-pointer",
+          focusedWindow === "editor" ? "z-30 shadow-xl" : "z-10 shadow-sm",
+        )}
+        onClick={() => handleWindowClick("editor")}
+      >
+        {/* Editor header */}
+        <div className="bg-muted border-b px-4 py-2 flex items-center justify-between cursor-grab active:cursor-grabbing">
+          <div className="flex gap-1.5">
+            <div
+              className={cn(
+                "w-3 h-3 rounded-full",
+                focusedWindow === "editor"
+                  ? "bg-red-500/80"
+                  : "bg-muted-foreground/30",
+              )}
+            />
+            <div
+              className={cn(
+                "w-3 h-3 rounded-full",
+                focusedWindow === "editor"
+                  ? "bg-yellow-500/80"
+                  : "bg-muted-foreground/30",
+              )}
+            />
+            <div
+              className={cn(
+                "w-3 h-3 rounded-full",
+                focusedWindow === "editor"
+                  ? "bg-green-500/80"
+                  : "bg-muted-foreground/30",
+              )}
+            />
+          </div>
+          <Type
+            small
+            className="text-muted-foreground absolute left-1/2 -translate-x-1/2"
+          >
+            {editorFilename}
+          </Type>
+          <div className="w-[42px]" />
+        </div>
+
+        {/* Editor content - starts with MCP SDK easter egg, switches to greet function */}
+        <div className="p-4 font-mono text-sm h-[350px] overflow-y-auto">
+          <pre className="whitespace-pre-wrap">{editorCode}</pre>
+        </div>
+      </motion.div>
+
+      {/* Reset button - show when animation complete or position/focus changed */}
       <AnimatePresence>
-        {hasMoved && (
+        {(animationComplete || hasMoved || hasChangedFocus) && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             transition={{ duration: 0.2 }}
-            className="absolute bottom-8 right-8"
+            className="absolute bottom-8 right-8 z-50"
           >
             <Button
               variant="secondary"
@@ -1149,7 +1455,7 @@ const TerminalAnimationWithLogs = () => {
               className="gap-2"
             >
               <RefreshCcw className="w-4 h-4" />
-              Reset Position
+              Reset
             </Button>
           </motion.div>
         )}

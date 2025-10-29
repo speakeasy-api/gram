@@ -3067,7 +3067,7 @@ func toolsListToolsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tools list-tools --cursor \"Qui voluptas at consectetur neque voluptatem dolores.\" --limit 138846164 --deployment-id \"Magnam eos enim et quo laudantium natus.\" --session-token \"Saepe dolore ut reprehenderit veniam alias non.\" --project-slug-input \"Quo rerum sunt.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tools list-tools --cursor \"Voluptas at consectetur neque voluptatem.\" --limit 1399167228 --deployment-id \"Optio magnam eos enim.\" --session-token \"Quo laudantium natus.\" --project-slug-input \"Saepe dolore ut reprehenderit veniam alias non.\"")
 }
 
 // toolsetsUsage displays the usage of the toolsets command and its subcommands.
@@ -3107,7 +3107,7 @@ func toolsetsCreateToolsetUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets create-toolset --body '{\n      \"default_environment_slug\": \"8b1\",\n      \"description\": \"Laboriosam doloremque non et.\",\n      \"name\": \"Dolor officia quia dolorum ut quo voluptates.\",\n      \"resource_urns\": [\n         \"Temporibus cumque.\",\n         \"Ullam sed sit est nesciunt tenetur.\",\n         \"Officia animi.\",\n         \"Repellat cumque.\"\n      ],\n      \"tool_urns\": [\n         \"Voluptas ut.\",\n         \"Quisquam provident modi facere ipsa.\",\n         \"Veritatis ut quia quas.\"\n      ]\n   }' --session-token \"Adipisci veniam non.\" --project-slug-input \"Reprehenderit mollitia nostrum et voluptas beatae veniam.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "toolsets create-toolset --body '{\n      \"default_environment_slug\": \"j3g\",\n      \"description\": \"Quia dolorum ut quo voluptates sint laboriosam.\",\n      \"name\": \"Deleniti sapiente rerum facere dolorem sequi dolor.\",\n      \"resource_urns\": [\n         \"Quas voluptate eius temporibus cumque dolore ullam.\",\n         \"Sit est nesciunt.\"\n      ],\n      \"tool_urns\": [\n         \"Et nihil reiciendis.\",\n         \"Ut laboriosam quisquam.\",\n         \"Modi facere ipsa repellat veritatis.\"\n      ]\n   }' --session-token \"Repellat cumque.\" --project-slug-input \"Ipsa similique asperiores.\"")
 }
 
 func toolsetsListToolsetsUsage() {

@@ -18,21 +18,19 @@ import {
 } from "@speakeasy-api/moonshine";
 import {
   Tool as AiSdkTool,
-  generateObject,
   jsonSchema,
   smoothStream,
   streamText,
   ToolCall,
 } from "ai";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
-import { z } from "zod";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { ChatComposerWrapper } from "./ChatComposerWrapper";
 import { useChatContext } from "./ChatContext";
 import { useChatHistory } from "./ChatHistory";
 import { MessageHistoryIndicator } from "./MessageHistoryIndicator";
-import { useMiniModel, useModel } from "./Openrouter";
+import { useModel } from "./Openrouter";
 import { Tool as MentionTool, parseMentionedTools } from "./ToolMentions";
 import { useMessageHistoryNavigation } from "./useMessageHistoryNavigation";
 
@@ -66,14 +64,12 @@ const MAX_TOOL_RESPONSE_LENGTH = 50_000; // Characters
 
 export function ChatWindow({
   configRef,
-  dynamicToolset = false,
   additionalActions,
   initialMessages,
   initialPrompt,
   hideTemperatureSlider = false,
 }: {
   configRef: ChatConfig;
-  dynamicToolset?: boolean;
   additionalActions?: React.ReactNode;
   initialMessages?: Message[];
   initialPrompt?: string | null;
@@ -90,7 +86,6 @@ export function ChatWindow({
       model={model}
       setModel={setModel}
       configRef={configRef}
-      dynamicToolset={dynamicToolset}
       initialMessages={initialMessages}
       additionalActions={additionalActions}
       initialPrompt={initialPrompt}
@@ -110,7 +105,6 @@ function ChatInner({
   temperature,
   setTemperature,
   configRef,
-  dynamicToolset,
   initialMessages,
   additionalActions,
   initialPrompt,
@@ -120,7 +114,6 @@ function ChatInner({
   temperature?: number;
   setTemperature?: (temperature: number) => void;
   configRef: ChatConfig;
-  dynamicToolset: boolean;
   initialMessages?: Message[];
   additionalActions?: React.ReactNode;
   initialPrompt?: string | null;
@@ -136,7 +129,6 @@ function ChatInner({
   );
 
   const [displayOnlyMessages, setDisplayOnlyMessages] = useState<Message[]>([]);
-  const selectedTools = useRef<string[]>([]);
   const [_mentionedToolIds, setMentionedToolIds] = useState<string[]>([]);
   const [_inputText, setInputText] = useState("");
 
@@ -252,64 +244,6 @@ function ChatInner({
     "Gram-Chat-ID": chat.id,
   });
 
-  const openrouterBasic = useMiniModel();
-
-  const updateToolsTool: AiSdkTool & { name: string } = {
-    name: "refresh_tools",
-    description: `If you are unable to fulfill the user's request with the current set of tools, use this tool to get a new set of tools.
-    The request is a description of the task you are trying to complete based on the conversation history. 
-    Try to incorporate not just the most recent messages, but also the overall task the user has been trying to accomplish over the course of the chat.`,
-    parameters: z.object({
-      priorConversationSummary: z.string(),
-      previouslyUsedTools: z.array(z.string()),
-      newRequest: z.string(),
-    }),
-    execute: async (args) => {
-      const parsedArgs = updateToolsTool.parameters.parse(args);
-      await updateSelectedTools(JSON.stringify(parsedArgs));
-      return `Updated tool list: ${selectedTools.current.join(", ")}`;
-    },
-  };
-
-  const updateSelectedTools = async (task: string) => {
-    if (!dynamicToolset || Object.keys(allTools).length === 0) return;
-
-    const toolsString = Object.entries(allTools)
-      .map(([tool, toolInfo]) => `${tool}: ${toolInfo.description}`)
-      .join("\n");
-
-    const result = await generateObject({
-      model: openrouterBasic,
-      mode: "json",
-      prompt: `Below is a list of tools and a description of the task I want to complete. Please return a list of tool names that you think are relevant to the task.
-      Include any tools that you think might be useful for answering follow-up questions, taking into account the conversation history.
-      Try to return between 5 and 25 tools.
-      Try to include tools that were used in the past if they fit.
-      Tools: ${toolsString}
-      Task: ${task}`,
-      temperature: 0.5,
-      schema: z.object({
-        tools: z.array(z.string()),
-      }),
-    });
-
-    selectedTools.current = [
-      ...(result.object as { tools: string[] }).tools,
-      updateToolsTool.name,
-    ];
-
-    appendDisplayOnlyMessage(
-      `**Updated tool list:** *${(
-        result.object as { tools: string[] }
-      ).tools.join(", ")}*`,
-    );
-  };
-
-  const updateSelectedToolsFromMessages = async (messages: Message[]) => {
-    const task = messages.map((m) => `${m.role}: ${m.content}`).join("\n");
-    await updateSelectedTools(task);
-  };
-
   const openaiFetch: typeof globalThis.fetch = async (_, init) => {
     const messages = JSON.parse(init?.body as string).messages;
 
@@ -344,22 +278,6 @@ function ChatInner({
       }
     }
 
-    // Only use dynamic toolset if no mentions were found
-    if (!hasMentions) {
-      // On the first message, get the initial set of tools if we're using a dynamic toolset
-      if (dynamicToolset && selectedTools.current.length === 0) {
-        await updateSelectedToolsFromMessages(messages);
-      }
-
-      if (dynamicToolset) {
-        tools = Object.fromEntries(
-          Object.entries(allTools).filter(([tool]) =>
-            selectedTools.current.includes(tool),
-          ),
-        );
-      }
-    }
-
     let systemPrompt = `You are a helpful assistant that can answer questions and help with tasks.
         When using tools, ensure that the arguments match the provided schema. Note that the schema may update as the conversation progresses.
         The current date is ${new Date().toISOString()}`;
@@ -369,9 +287,6 @@ function ChatInner({
       systemPrompt += `
         The user has specifically selected the following tools for this request: ${toolNames}.
         Please use only these tools to fulfill the request.`;
-    } else if (dynamicToolset) {
-      systemPrompt += `
-        If you are unable to fulfill the user's request with the current set of tools, use the refresh_tools tool to get a new set of tools before saying you can't do it.`;
     }
 
     const result = streamText({
@@ -426,11 +341,6 @@ function ChatInner({
   const toolCallApproval = useToolCallApproval({
     // Disclaimer: this is a bit weird, because the tool's execute function actually seems to be called by the useChat hook
     executeToolCall: async (toolCall) => {
-      if (toolCall.toolName === updateToolsTool.name) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return updateToolsTool.execute!(toolCall.args, {} as any);
-      }
-
       const tool = allTools[toolCall.toolName];
       if (!tool) {
         throw new Error(`Tool ${toolCall.toolName} not found`);
@@ -444,7 +354,7 @@ function ChatInner({
       if (tool?.method === "GET") {
         return false;
       }
-      return toolCall.toolName !== updateToolsTool.name;
+      return true;
     },
   });
 

@@ -1,5 +1,17 @@
 # cli
 
+## 0.11.5
+
+### Patch Changes
+
+- 1275e02: Attempt to mitigate race condition in CLI release process in GitHub Actions.
+
+## 0.11.4
+
+### Patch Changes
+
+- bab05ce: Adds support to the Playground for any tool type, notably enabling function tools to be used there
+
 ## 0.11.3
 
 ### Patch Changes
