@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.17.4
+
+### Patch Changes
+
+- bab05ce: Adds support to the Playground for any tool type, notably enabling function tools to be used there
+- Updated dependencies [7afda6e]
+  - @gram/client@0.16.3
+
 ## 0.17.3
 
 ### Patch Changes

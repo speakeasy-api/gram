@@ -1,5 +1,14 @@
 # @gram-ai/functions
 
+## 0.5.1
+
+### Patch Changes
+
+- 5ea5fcd: Reverted the Gram Functions TS framework template to export the instance of
+  `Gram` as the default export in `src/gram.ts`. This makes the boilerplate code
+  work again when deployed.
+- 15cbf7e: Allows for creating functions with variables in gram functions built with mcp passthrough
+
 ## 0.5.0
 
 ## 0.4.0
