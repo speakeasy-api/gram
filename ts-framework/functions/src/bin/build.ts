@@ -1,3 +1,5 @@
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+
 import util from "node:util";
 import {
   configure,

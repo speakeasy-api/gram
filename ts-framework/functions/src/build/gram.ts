@@ -13,11 +13,10 @@ export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
   const cwd = cfg.cwd ?? process.cwd();
   const entrypoint = resolve(cwd, cfg.entrypoint);
   const gram = await import(entrypoint).then((mod) => {
-    const exportsym = cfg.export;
-    const gramExport = mod[exportsym];
+    const gramExport = mod.default;
     if (!(gramExport instanceof Gram)) {
       throw new Error(
-        `Export "${exportsym}" does not appear to be an instance of Gram`,
+        `${cfg.entrypoint}: default export does not appear to be an instance of Gram`,
       );
     }
 
