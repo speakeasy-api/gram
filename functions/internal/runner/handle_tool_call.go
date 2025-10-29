@@ -144,9 +144,12 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 		}
 	}
 
+	// The following two headers must be removed to prevent conflicts with
+	// chunked encoding and trailers.
+	w.Header().Del("Content-Length")
+	w.Header().Del("Content-Encoding")
 	// Announce trailers for resource usage metrics
 	// We currently have to write these after WriteHeader
-	w.Header().Del("Content-Length")
 	w.Header().Set("Trailer", cpuHeader+", "+memoryHeader+", "+executionTimeHeader)
 
 	w.WriteHeader(response.StatusCode)
