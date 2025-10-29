@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.17.5
+
+### Patch Changes
+
+- 8df9e59: Polish onboarding wizard with improved animations and code quality. Fixed memory leaks in WebGL particle effects, improved window trail particle density during fast movement, added scrollable content with blur gradients, and removed dead code.
+
 ## 0.17.4
 
 ### Patch Changes

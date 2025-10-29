@@ -1,5 +1,11 @@
 # cli
 
+## 0.11.5
+
+### Patch Changes
+
+- 1275e02: Attempt to mitigate race condition in CLI release process in GitHub Actions.
+
 ## 0.11.4
 
 ### Patch Changes
