@@ -1,5 +1,11 @@
 # @gram-ai/create-function
 
+## 0.5.1
+
+### Patch Changes
+
+- cfc187f: We now install the CLI and run gram auth automatically (if yes is chosen) during pnpm create
+
 ## 0.5.0
 
 ### Minor Changes
