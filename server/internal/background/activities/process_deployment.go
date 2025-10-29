@@ -88,9 +88,6 @@ func (p *ProcessDeployment) Do(ctx context.Context, projectID uuid.UUID, deploym
 	}
 
 	workers := pool.New().WithErrors().WithMaxGoroutines(max(2, runtime.GOMAXPROCS(0)))
-	if workers == nil {
-		return oops.E(oops.CodeUnexpected, nil, "failed to create worker pool").Log(ctx, p.logger)
-	}
 
 	if err := p.doFunctions(ctx, workers, orgData.ID, projectID, deploymentID, orgData.Slug, orgData.ProjectSlug, deployment); err != nil {
 		return err

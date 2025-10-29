@@ -23,7 +23,7 @@ import {
   streamText,
   ToolCall,
 } from "ai";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { v7 as uuidv7 } from "uuid";
 import { onboardingStepStorageKeys } from "../home/Home";
 import { ChatComposerWrapper } from "./ChatComposerWrapper";
@@ -129,7 +129,6 @@ function ChatInner({
   );
 
   const [displayOnlyMessages, setDisplayOnlyMessages] = useState<Message[]>([]);
-  const selectedTools = useRef<string[]>([]);
   const [_mentionedToolIds, setMentionedToolIds] = useState<string[]>([]);
   const [_inputText, setInputText] = useState("");
 

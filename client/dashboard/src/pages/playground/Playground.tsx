@@ -2,7 +2,6 @@ import { Page } from "@/components/page-layout";
 import { Button } from "@/components/ui/button";
 import { Combobox, DropdownItem } from "@/components/ui/combobox";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin } from "@/contexts/Auth";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
@@ -170,7 +169,6 @@ export function ToolsetPanel({
   setSelectedEnvironment: (environment: string) => void;
 }) {
   const { data: toolsetsData } = useListToolsets();
-  const isAdmin = useIsAdmin();
   const routes = useRoutes();
 
   const toolsets = toolsetsData?.toolsets;
