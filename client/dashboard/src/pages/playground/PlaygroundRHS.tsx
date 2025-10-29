@@ -6,12 +6,10 @@ import { PanelHeader } from "./Playground";
 
 export function PlaygroundRHS({
   configRef,
-  dynamicToolset,
   setSelectedEnvironment,
   initialPrompt,
 }: {
   configRef: ChatConfig;
-  dynamicToolset: boolean;
   setSelectedEnvironment: (environment: string) => void;
   initialPrompt?: string | null;
 }) {
@@ -43,7 +41,6 @@ export function PlaygroundRHS({
       <div className="h-[calc(100%-61px)] pl-8 pr-4 pt-4">
         <ChatWindow
           configRef={configRef}
-          dynamicToolset={dynamicToolset}
           initialMessages={initialMessages}
           initialPrompt={initialPrompt}
         />

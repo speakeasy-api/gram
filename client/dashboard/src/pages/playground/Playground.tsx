@@ -1,9 +1,7 @@
 import { Page } from "@/components/page-layout";
-import { Button as MoonshineButton, Icon } from "@speakeasy-api/moonshine";
 import { Button } from "@/components/ui/button";
 import { Combobox, DropdownItem } from "@/components/ui/combobox";
 import { Type } from "@/components/ui/type";
-import { useIsAdmin } from "@/contexts/Auth";
 import {
   useRegisterEnvironmentTelemetry,
   useRegisterToolsetTelemetry,
@@ -16,7 +14,7 @@ import {
   useListChats,
   useListToolsets,
 } from "@gram/client/react-query/index.js";
-import { ResizablePanel, Stack } from "@speakeasy-api/moonshine";
+import { Icon, ResizablePanel, Stack } from "@speakeasy-api/moonshine";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -48,7 +46,6 @@ function PlaygroundInner() {
   const [selectedEnvironment, setSelectedEnvironment] = useState<string | null>(
     searchParams.get("environment") ?? null,
   );
-  const [dynamicToolset, setDynamicToolset] = useState(false);
 
   // Get prompt from URL params if available
   const initialPrompt = searchParams.get("prompt");
@@ -147,14 +144,11 @@ function PlaygroundInner() {
               configRef={chatConfigRef}
               setSelectedToolset={setSelectedToolset}
               setSelectedEnvironment={setSelectedEnvironment}
-              dynamicToolset={dynamicToolset}
-              setDynamicToolset={setDynamicToolset}
             />
           </ResizablePanel.Pane>
           <ResizablePanel.Pane minSize={35} order={0}>
             <PlaygroundRHS
               configRef={chatConfigRef}
-              dynamicToolset={dynamicToolset}
               setSelectedEnvironment={setSelectedEnvironment}
               initialPrompt={initialPrompt}
             />
@@ -169,17 +163,12 @@ export function ToolsetPanel({
   configRef,
   setSelectedToolset,
   setSelectedEnvironment,
-  dynamicToolset,
-  setDynamicToolset,
 }: {
   configRef: ChatConfig;
   setSelectedToolset: (toolset: string) => void;
   setSelectedEnvironment: (environment: string) => void;
-  dynamicToolset: boolean;
-  setDynamicToolset: (dynamicToolset: boolean) => void;
 }) {
   const { data: toolsetsData } = useListToolsets();
-  const isAdmin = useIsAdmin();
   const routes = useRoutes();
 
   const toolsets = toolsetsData?.toolsets;
@@ -206,13 +195,6 @@ export function ToolsetPanel({
       setSelectedEnvironment(toolset.defaultEnvironmentSlug);
     }
   }, [configRef, setSelectedEnvironment, toolset]);
-
-  // Don't automatically set dynamic toolset. The generate object API is not working consistently
-  // useEffect(() => {
-  //   const isDynamic =
-  //     toolset?.httpTools?.length && toolset.httpTools.length > 40 && isAdmin;
-  //   setDynamicToolset(!!isDynamic);
-  // }, [toolset, isAdmin, setDynamicToolset]);
 
   let content = (
     <ToolsetView
@@ -246,24 +228,6 @@ export function ToolsetPanel({
               selectedToolset={toolset}
               setSelectedToolset={(toolset) => setSelectedToolset(toolset.slug)}
             />
-            {isAdmin && (
-              <Stack direction="horizontal" align="center">
-                <MoonshineButton
-                  variant="tertiary"
-                  onClick={() => setDynamicToolset(!dynamicToolset)}
-                >
-                  <MoonshineButton.LeftIcon>
-                    <Icon
-                      name={dynamicToolset ? "sparkles" : "lock"}
-                      className="h-4 w-4"
-                    />
-                  </MoonshineButton.LeftIcon>
-                  <MoonshineButton.Text>
-                    {dynamicToolset ? "Dynamic" : "Static"}
-                  </MoonshineButton.Text>
-                </MoonshineButton>
-              </Stack>
-            )}
           </Stack>
         </Stack>
       </PanelHeader>
