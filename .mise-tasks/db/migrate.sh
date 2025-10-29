@@ -12,7 +12,12 @@ if [ "${usage_dry:-false}" = "true" ]; then
   args+=("--dry-run")
 fi
 
+# run clickhouse migrations
+echo "Running ClickHouse migrations..."
+mise run clickhouse:migrate
+
 exec atlas migrate apply \
   --config file://atlas.hcl \
   -u "${GRAM_DATABASE_URL}" \
   "${args[@]}"
+
