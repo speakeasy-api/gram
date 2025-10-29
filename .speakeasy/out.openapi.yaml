@@ -9905,6 +9905,9 @@ components:
     ListToolLogResponse:
       type: object
       properties:
+        enabled:
+          type: boolean
+          description: Whether tool metrics are enabled for the organization
         logs:
           type: array
           items:
@@ -9914,6 +9917,7 @@ components:
       required:
         - logs
         - pagination
+        - enabled
     ListToolLogsRequest:
       type: object
       properties:

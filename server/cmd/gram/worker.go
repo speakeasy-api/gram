@@ -161,6 +161,12 @@ func newWorkerCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
+			Name:     "posthog-personal-api-key",
+			Usage:    "The posthog personal API key for local feature flag evaluation",
+			EnvVars:  []string{"POSTHOG_PERSONAL_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
 			Name:     "local-feature-flags-csv",
 			Usage:    "Path to a CSV file containing local feature flags. Format: distinct_id,flag,enabled (with header row).",
 			EnvVars:  []string{"GRAM_LOCAL_FEATURE_FLAGS_CSV"},
@@ -300,7 +306,7 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"))
+			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 			var features feature.Provider = posthogClient
 			if c.String("environment") == "local" {
 				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))

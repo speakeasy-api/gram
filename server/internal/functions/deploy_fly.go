@@ -370,11 +370,11 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		attr.SlogFunctionsRunnerImage(image),
 		attr.SlogFunctionsRunnerVersion(runnerVersion),
 	)
-	logger.InfoContext(ctx, "deploying functions runner to fly.io")
+	logger.InfoContext(ctx, "deploying functions runner app")
 
 	org, err := f.client.GetOrganizationBySlug(ctx, orgSlug)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve fly.io organization id").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to resolve runner target organization id").Log(ctx, logger)
 	}
 
 	appFull, err := f.client.CreateApp(ctx, fly.CreateAppInput{
@@ -384,7 +384,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		Network:         &networkName,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to create fly.io app").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to create app").Log(ctx, logger)
 	}
 
 	appName := appFull.Name
@@ -416,7 +416,7 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		PrimaryRegion: region,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to record fly.io app in db").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to save app details").Log(ctx, logger)
 	}
 
 	logger = logger.With(
@@ -482,10 +482,10 @@ func (f *FlyRunner) Deploy(ctx context.Context, req RunnerDeployRequest) (res *R
 		ReapedAt:     pgtype.Timestamptz{Valid: false, Time: time.Time{}, InfinityModifier: 0},
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to mark fly.io app as ready").Log(ctx, logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to mark app as ready").Log(ctx, logger)
 	}
 
-	msg := fmt.Sprintf("created fly.io function runner app (app=%s, org=%s, scale=%d)", appName, orgSlug, len(ms))
+	msg := fmt.Sprintf("deployed function runner app (app=%s, scale=%d)", appName, len(ms))
 	logger.InfoContext(ctx, msg, attr.SlogFlyMachineIDs(machineIDs))
 
 	return &RunnerDeployResult{
@@ -699,7 +699,7 @@ func (f *FlyRunner) tryMarkDeployFailed(
 		if err := f.client.DeleteApp(ctx, state.appName); err != nil {
 			logger.ErrorContext(
 				ctx,
-				"failed to delete fly.io app after deployment failure",
+				"failed to delete app after deployment failure",
 				attr.SlogError(err),
 				attr.SlogFlyAppName(state.appName),
 				attr.SlogFlyOrgSlug(state.orgSlug),

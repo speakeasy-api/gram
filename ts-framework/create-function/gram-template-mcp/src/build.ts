@@ -9,6 +9,4 @@ async function build() {
   });
 }
 
-if (import.meta.main) {
-  await build();
-}
+build();

@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.16.3
+
+### Patch Changes
+
+- 7afda6e: Allows the MCP metadata map to accept arbitrary value types as supported by the server
+
 ## 0.15.3
 
 ### Patch Changes

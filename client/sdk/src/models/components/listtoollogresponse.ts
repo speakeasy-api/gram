@@ -20,6 +20,10 @@ import {
 } from "./paginationresponse.js";
 
 export type ListToolLogResponse = {
+  /**
+   * Whether tool metrics are enabled for the organization
+   */
+  enabled: boolean;
   logs: Array<HTTPToolLog>;
   /**
    * Pagination metadata for list responses
@@ -33,12 +37,14 @@ export const ListToolLogResponse$inboundSchema: z.ZodType<
   z.ZodTypeDef,
   unknown
 > = z.object({
+  enabled: z.boolean(),
   logs: z.array(HTTPToolLog$inboundSchema),
   pagination: PaginationResponse$inboundSchema,
 });
 
 /** @internal */
 export type ListToolLogResponse$Outbound = {
+  enabled: boolean;
   logs: Array<HTTPToolLog$Outbound>;
   pagination: PaginationResponse$Outbound;
 };
@@ -49,6 +55,7 @@ export const ListToolLogResponse$outboundSchema: z.ZodType<
   z.ZodTypeDef,
   ListToolLogResponse
 > = z.object({
+  enabled: z.boolean(),
   logs: z.array(HTTPToolLog$outboundSchema),
   pagination: PaginationResponse$outboundSchema,
 });

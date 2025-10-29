@@ -252,6 +252,12 @@ func newStartCommand() *cli.Command {
 			Required: false,
 		},
 		&cli.StringFlag{
+			Name:     "posthog-personal-api-key",
+			Usage:    "The posthog personal API key for local feature flag evaluation",
+			EnvVars:  []string{"POSTHOG_PERSONAL_API_KEY"},
+			Required: false,
+		},
+		&cli.StringFlag{
 			Name:     "polar-api-key",
 			Usage:    "The polar API key",
 			EnvVars:  []string{"POLAR_API_KEY"},
@@ -387,7 +393,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("failed to create pylon client: %w", err)
 			}
 
-			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"))
+			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
 			var features feature.Provider = posthogClient
 			if c.String("environment") == "local" {
 				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))

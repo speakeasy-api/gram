@@ -3072,6 +3072,7 @@ paths:
                         required:
                             - logs
                             - pagination
+                            - enabled
                 "400":
                     description: Bad Request response.
                     schema:
@@ -20784,37 +20785,37 @@ definitions:
             created_at:
                 type: string
                 description: When the external OAuth server was created.
-                example: "1997-08-11T19:37:37Z"
+                example: "1996-05-20T17:32:05Z"
                 format: date-time
             id:
                 type: string
                 description: The ID of the external OAuth server
-                example: Aut perferendis omnis et.
+                example: Totam eveniet mollitia consequuntur quia labore recusandae.
             metadata:
                 description: The metadata for the external OAuth server
-                example: Totam eveniet mollitia consequuntur quia labore recusandae.
+                example: Labore aut nemo est neque consequatur.
             project_id:
                 type: string
                 description: The project ID this external OAuth server belongs to
-                example: Dolor et.
+                example: Incidunt reiciendis laborum consequatur.
             slug:
                 type: string
                 description: The slug of the external OAuth server
-                example: u73
+                example: rrg
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             updated_at:
                 type: string
                 description: When the external OAuth server was last updated.
-                example: "1998-10-07T18:24:15Z"
+                example: "2008-06-02T10:00:20Z"
                 format: date-time
         example:
-            created_at: "2005-11-16T02:03:54Z"
-            id: Est quam.
-            metadata: Est fugiat commodi et.
-            project_id: Officiis voluptatem.
-            slug: gwo
-            updated_at: "1981-05-16T14:41:07Z"
+            created_at: "1982-03-10T02:51:07Z"
+            id: Et soluta.
+            metadata: Labore ipsam.
+            project_id: Temporibus sunt dolor velit.
+            slug: 0s6
+            updated_at: "1991-05-24T08:02:52Z"
         required:
             - id
             - project_id
@@ -28042,6 +28043,10 @@ definitions:
         title: ListToolLogResponse
         type: object
         properties:
+            enabled:
+                type: boolean
+                description: Whether tool metrics are enabled for the organization
+                example: false
             logs:
                 type: array
                 items:
@@ -28122,6 +28127,7 @@ definitions:
             pagination:
                 $ref: '#/definitions/PaginationResponse'
         example:
+            enabled: false
             logs:
                 - deployment_id: e8655464-a7ae-49e3-8a3a-90fc54d33519
                   duration_ms: 0.2996754186315568
@@ -28178,6 +28184,7 @@ definitions:
         required:
             - logs
             - pagination
+            - enabled
     ListToolsResult:
         title: ListToolsResult
         type: object
@@ -28185,7 +28192,7 @@ definitions:
             next_cursor:
                 type: string
                 description: The cursor to fetch results from
-                example: Blanditiis perferendis unde ea ab.
+                example: Unde ea ab nesciunt qui.
             tools:
                 type: array
                 items:
@@ -28777,7 +28784,7 @@ definitions:
                             summarizer: Minima voluptas corporis nihil.
                             updated_at: Explicabo sed.
         example:
-            next_cursor: Rerum doloribus unde.
+            next_cursor: Unde reiciendis eum tempora assumenda.
             tools:
                 - function_tool_definition:
                     asset_id: Sit laboriosam.
@@ -30685,15 +30692,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request is invalid (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -30735,8 +30742,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -30774,12 +30781,12 @@ definitions:
                 example: false
         description: permission denied (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -30794,7 +30801,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -30810,11 +30817,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
             fault: true
@@ -30822,7 +30829,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -30857,15 +30864,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: request contains one or more invalidation fields (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: true
+            temporary: false
+            timeout: false
         required:
             - name
             - id
@@ -30896,19 +30903,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: false
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -30939,18 +30946,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource not found (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: false
         required:
             - name
@@ -30966,7 +30973,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -30982,18 +30989,18 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: unauthorized access (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: true
         required:
             - name
@@ -31029,15 +31036,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -31068,11 +31075,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: unsupported media type (default view)
         example:
             fault: false
@@ -31080,7 +31087,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -32039,79 +32046,78 @@ definitions:
             authorization_endpoint:
                 type: string
                 description: The authorization endpoint URL
-                example: Quis explicabo ipsa porro.
+                example: Et at.
             created_at:
                 type: string
                 description: When the OAuth proxy provider was created.
-                example: "2014-02-12T15:59:26Z"
+                example: "1997-08-02T07:02:04Z"
                 format: date-time
             grant_types_supported:
                 type: array
                 items:
                     type: string
-                    example: Blanditiis vero.
+                    example: Qui atque.
                 description: The grant types supported by this provider
                 example:
-                    - Sint corrupti sed praesentium debitis libero et.
-                    - Ut aut quos vitae.
+                    - Reprehenderit omnis.
+                    - Accusamus ad rerum blanditiis quis.
+                    - Non nemo magni quae voluptatibus nihil dicta.
             id:
                 type: string
                 description: The ID of the OAuth proxy provider
-                example: Impedit est reprehenderit.
+                example: Molestias hic.
             scopes_supported:
                 type: array
                 items:
                     type: string
-                    example: Et facere rem.
+                    example: Voluptatem animi.
                 description: The OAuth scopes supported by this provider
                 example:
-                    - At eius.
-                    - Molestiae laboriosam.
+                    - Sed praesentium debitis libero et assumenda.
+                    - Aut quos vitae architecto.
+                    - Veniam assumenda temporibus molestias.
             slug:
                 type: string
                 description: The slug of the OAuth proxy provider
-                example: i5r
+                example: ng7
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             token_endpoint:
                 type: string
                 description: The token endpoint URL
-                example: Molestias hic.
+                example: Minima molestiae laboriosam reiciendis blanditiis.
             token_endpoint_auth_methods_supported:
                 type: array
                 items:
                     type: string
-                    example: Voluptate veniam.
+                    example: At sunt similique.
                 description: The token endpoint auth methods supported by this provider
                 example:
-                    - Molestias iusto qui.
-                    - Mollitia et.
-                    - Omnis minima accusamus ad rerum blanditiis.
+                    - Cupiditate quae aut.
+                    - Vel est est.
+                    - Ex sunt provident quia voluptatem.
             updated_at:
                 type: string
                 description: When the OAuth proxy provider was last updated.
-                example: "1987-10-29T08:28:01Z"
+                example: "2004-12-08T18:08:50Z"
                 format: date-time
         example:
-            authorization_endpoint: Quos rerum odit recusandae.
-            created_at: "1974-11-09T00:03:03Z"
+            authorization_endpoint: Quasi aliquid consectetur dolores.
+            created_at: "2011-07-14T00:54:04Z"
             grant_types_supported:
-                - Consectetur dolores.
-                - Qui ab quia voluptatem doloremque.
-                - Non blanditiis.
-                - Ad nostrum voluptate molestiae quia nemo dolores.
-            id: Dolore eligendi modi optio veniam quasi molestiae.
-            scopes_supported:
-                - Quia doloremque qui rerum.
-                - Sed quod sit voluptates mollitia dignissimos.
-            slug: spa
-            token_endpoint: Voluptas autem cupiditate.
-            token_endpoint_auth_methods_supported:
-                - Assumenda eos voluptatem natus sint.
                 - Inventore qui facilis est.
                 - Nulla exercitationem.
-                - Similique et.
-            updated_at: "1997-12-24T13:18:38Z"
+            id: Rerum quod sed.
+            scopes_supported:
+                - Blanditiis autem ad nostrum.
+                - Molestiae quia nemo dolores.
+                - Fugiat assumenda eos voluptatem natus.
+            slug: u8a
+            token_endpoint: Qui ab quia voluptatem doloremque.
+            token_endpoint_auth_methods_supported:
+                - Et aut.
+                - Odit sed asperiores beatae qui a perferendis.
+            updated_at: "1988-06-17T07:47:43Z"
         required:
             - id
             - slug
@@ -32126,12 +32132,12 @@ definitions:
             created_at:
                 type: string
                 description: When the OAuth proxy server was created.
-                example: "1994-05-15T19:34:20Z"
+                example: "1994-12-24T13:12:57Z"
                 format: date-time
             id:
                 type: string
                 description: The ID of the OAuth proxy server
-                example: Quia fugiat expedita consequuntur quis amet molestias.
+                example: Voluptas ut quis eligendi.
             oauth_proxy_providers:
                 type: array
                 items:
@@ -32174,42 +32180,24 @@ definitions:
                         - Quaerat explicabo consequatur consequatur reprehenderit.
                         - Autem asperiores est nam facere et ut.
                       updated_at: "2010-11-18T00:54:46Z"
-                    - authorization_endpoint: Voluptatem ut.
-                      created_at: "2000-06-14T22:54:55Z"
-                      grant_types_supported:
-                        - Esse placeat voluptatem ut placeat.
-                        - Nam quo.
-                      id: Ut ratione est a animi praesentium fugiat.
-                      scopes_supported:
-                        - Odit nesciunt beatae blanditiis nostrum.
-                        - Non eos ea asperiores perferendis dolorem et.
-                        - Sit quam sunt.
-                      slug: v2g
-                      token_endpoint: Dicta ullam architecto.
-                      token_endpoint_auth_methods_supported:
-                        - Rerum natus incidunt et aut occaecati quia.
-                        - Sunt quos ad eos qui eligendi.
-                        - Quaerat explicabo consequatur consequatur reprehenderit.
-                        - Autem asperiores est nam facere et ut.
-                      updated_at: "2010-11-18T00:54:46Z"
             project_id:
                 type: string
                 description: The project ID this OAuth proxy server belongs to
-                example: A iusto voluptatem ipsum.
+                example: Est reprehenderit nobis impedit harum magni consectetur.
             slug:
                 type: string
                 description: The slug of the OAuth proxy server
-                example: 6ku
+                example: pmr
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             updated_at:
                 type: string
                 description: When the OAuth proxy server was last updated.
-                example: "2015-10-18T13:47:28Z"
+                example: "1974-05-13T01:38:59Z"
                 format: date-time
         example:
-            created_at: "1988-11-24T15:59:41Z"
-            id: Soluta voluptatem saepe sint aut sed consequatur.
+            created_at: "1997-01-16T08:46:34Z"
+            id: Consequatur voluptatum officiis.
             oauth_proxy_providers:
                 - authorization_endpoint: Voluptatem ut.
                   created_at: "2000-06-14T22:54:55Z"
@@ -32247,9 +32235,9 @@ definitions:
                     - Quaerat explicabo consequatur consequatur reprehenderit.
                     - Autem asperiores est nam facere et ut.
                   updated_at: "2010-11-18T00:54:46Z"
-            project_id: Officiis non non rerum sed omnis.
-            slug: gxx
-            updated_at: "1971-02-23T11:42:08Z"
+            project_id: Non rerum sed omnis pariatur reiciendis.
+            slug: xoa
+            updated_at: "1983-02-09T01:10:11Z"
         required:
             - id
             - project_id
@@ -36447,21 +36435,21 @@ definitions:
             id:
                 type: string
                 description: The ID of the prompt template
-                example: Quod nemo est consequatur animi saepe.
+                example: Quae aut.
             kind:
                 type: string
                 description: The kind of the prompt template
-                example: Recusandae quisquam nisi et similique eos totam.
+                example: Eos totam quis dignissimos repellat.
             name:
                 type: string
                 description: The name of the prompt template
-                example: 6fm
+                example: pka
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
         example:
-            id: Dignissimos repellat corporis ut eveniet magni possimus.
-            kind: Illo est optio consequatur.
-            name: jh8
+            id: Ut eveniet magni possimus fuga.
+            kind: Est optio consequatur.
+            name: h8i
         required:
             - id
             - name
@@ -36554,15 +36542,15 @@ definitions:
             id:
                 type: string
                 description: The ID of the resource
-                example: Soluta debitis architecto aut modi perferendis veniam.
+                example: Officiis commodi sit voluptate explicabo assumenda.
             name:
                 type: string
                 description: The name of the resource
-                example: Inventore ut.
+                example: Ut voluptatibus libero omnis sit enim molestias.
             resource_urn:
                 type: string
                 description: The URN of the resource
-                example: Dolorem iste ut dolor.
+                example: Est modi molestiae.
             type:
                 type: string
                 example: function
@@ -36571,13 +36559,13 @@ definitions:
             uri:
                 type: string
                 description: The uri of the resource
-                example: Vel officiis commodi sit voluptate explicabo.
+                example: Et quia quos.
         example:
-            id: Est modi molestiae.
-            name: Et quia quos.
-            resource_urn: Ut voluptatibus libero omnis sit enim molestias.
+            id: Labore aliquam itaque occaecati dolor.
+            name: Nostrum maxime harum ut iste sunt.
+            resource_urn: Minus explicabo debitis placeat.
             type: function
-            uri: Ratione labore aliquam itaque occaecati dolor illum.
+            uri: Voluptatum omnis.
         required:
             - type
             - id
@@ -42882,27 +42870,27 @@ definitions:
             id:
                 type: string
                 description: The ID of the tool
-                example: Dolores optio enim.
+                example: Expedita aspernatur distinctio provident dolorum qui.
             name:
                 type: string
                 description: The name of the tool
-                example: Molestiae consequatur illum aut.
+                example: Nihil eaque dicta.
             tool_urn:
                 type: string
                 description: The URN of the tool
-                example: Dolore sit molestiae qui temporibus et earum.
+                example: Similique veniam quia voluptatem qui.
             type:
                 type: string
-                example: function
+                example: http
                 enum:
                     - http
                     - prompt
                     - function
         example:
-            id: Aspernatur distinctio provident dolorum qui nostrum.
-            name: Qui fugit nihil.
-            tool_urn: Veniam quia.
-            type: http
+            id: Nostrum explicabo.
+            name: Nulla beatae totam alias ea.
+            tool_urn: Ut optio sit voluptatem.
+            type: function
         required:
             - type
             - id
@@ -42982,7 +42970,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -42998,11 +42986,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: request is invalid (default view)
         example:
             fault: false
@@ -43010,7 +42998,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -43025,7 +43013,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: false
+                example: true
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -43053,7 +43041,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -43084,7 +43072,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -43095,7 +43083,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: true
         required:
             - name
@@ -43111,7 +43099,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -43127,11 +43115,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
             fault: false
@@ -43139,7 +43127,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -43174,15 +43162,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: request contains one or more invalidation fields (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -43197,7 +43185,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -43220,12 +43208,12 @@ definitions:
                 example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: false
-            timeout: true
+            timeout: false
         required:
             - name
             - id
@@ -43256,19 +43244,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: resource not found (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: true
+            temporary: true
+            timeout: false
         required:
             - name
             - id
@@ -43283,7 +43271,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -43306,11 +43294,11 @@ definitions:
                 example: true
         description: unauthorized access (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: true
         required:
             - name
@@ -43353,8 +43341,8 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -43392,11 +43380,11 @@ definitions:
                 example: false
         description: unsupported media type (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
+            temporary: false
             timeout: true
         required:
             - name
@@ -43412,26 +43400,26 @@ definitions:
             account_type:
                 type: string
                 description: The account type of the organization
-                example: Officia delectus.
+                example: Repellat expedita eos nobis vitae.
             created_at:
                 type: string
                 description: When the toolset was created.
-                example: "1977-07-19T03:29:27Z"
+                example: "2004-03-04T00:35:14Z"
                 format: date-time
             custom_domain_id:
                 type: string
                 description: The ID of the custom domain to use for the toolset
-                example: Dolores error est hic officia.
+                example: Aut molestiae nobis.
             default_environment_slug:
                 type: string
                 description: The slug of the environment to use as the default for the toolset
-                example: jwo
+                example: fli
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             description:
                 type: string
                 description: Description of the toolset
-                example: Velit cupiditate corporis aut commodi fugiat minus.
+                example: Fugiat minus voluptatum consectetur qui.
             external_oauth_server:
                 $ref: '#/definitions/ExternalOAuthServer'
             function_environment_variables:
@@ -43444,10 +43432,12 @@ definitions:
                       name: Ad ea quibusdam repudiandae quas unde et.
                     - description: Tempore exercitationem.
                       name: Ad ea quibusdam repudiandae quas unde et.
+                    - description: Tempore exercitationem.
+                      name: Ad ea quibusdam repudiandae quas unde et.
             id:
                 type: string
                 description: The ID of the toolset
-                example: Hic asperiores quos excepturi tempore.
+                example: Tempore molestias laudantium.
             mcp_enabled:
                 type: boolean
                 description: Whether the toolset is enabled for MCP
@@ -43455,27 +43445,27 @@ definitions:
             mcp_is_public:
                 type: boolean
                 description: Whether the toolset is public in MCP
-                example: true
+                example: false
             mcp_slug:
                 type: string
                 description: The slug of the MCP to use for the toolset
-                example: 52v
+                example: vfa
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             name:
                 type: string
                 description: The name of the toolset
-                example: Repellat expedita eos nobis vitae.
+                example: Provident aperiam voluptas ullam.
             oauth_proxy_server:
                 $ref: '#/definitions/OAuthProxyServer'
             organization_id:
                 type: string
                 description: The organization ID this toolset belongs to
-                example: Nisi ut eaque et repellat ut.
+                example: Repellat ut nulla officia delectus.
             project_id:
                 type: string
                 description: The project ID this toolset belongs to
-                example: Laudantium quidem.
+                example: Temporibus nisi ut eaque.
             prompt_templates:
                 type: array
                 items:
@@ -43572,68 +43562,39 @@ definitions:
                         src_tool_urn: Distinctio maiores et eum laboriosam.
                         summarizer: Minima voluptas corporis nihil.
                         updated_at: Explicabo sed.
-                    - canonical:
-                        confirm: Odit consequatur commodi quae unde.
-                        confirm_prompt: Quam doloribus iste maxime.
-                        description: In fuga suscipit rerum ipsa dolor dolorem.
-                        name: Sed aut voluptas.
-                        summarizer: Dolor dicta fuga optio perferendis inventore.
-                        variation_id: Vitae quia nemo.
-                      canonical_name: Deserunt atque ut esse quia aut.
-                      confirm: Occaecati amet consectetur nulla autem et dolore.
-                      confirm_prompt: Numquam et sint maxime ut molestiae.
-                      created_at: "1999-06-11T08:51:23Z"
-                      description: Illo consequatur.
-                      engine: mustache
-                      history_id: Earum non temporibus autem.
-                      id: Culpa modi ut voluptatem.
-                      kind: prompt
-                      name: Commodi aliquid amet aspernatur placeat excepturi.
-                      predecessor_id: Voluptas voluptas.
-                      project_id: Accusamus reiciendis.
-                      prompt: Ab esse.
-                      schema: Dolores fugiat.
-                      schema_version: Corporis doloremque.
-                      summarizer: Iste sapiente omnis.
-                      tool_urn: Iste in voluptatem dolor aliquid accusamus.
-                      tool_urns_hint:
-                        - Deserunt et vel ut quisquam neque et.
-                        - Ratione eaque debitis eum ad qui.
-                        - Rerum sed architecto et temporibus in officia.
-                      tools_hint:
-                        - Quos molestiae accusantium.
-                        - Enim magni dolore esse eaque ut velit.
-                        - Accusamus quia corporis.
-                      updated_at: "1984-09-05T14:54:10Z"
-                      variation:
-                        confirm: Mollitia neque facilis.
-                        confirm_prompt: Consectetur deserunt distinctio saepe voluptatem.
-                        created_at: Ut dolorem perferendis optio autem cupiditate.
-                        description: Aut libero magni dolorem cupiditate ipsam consectetur.
-                        group_id: Expedita quis dolore.
-                        id: Et aut porro doloribus voluptate.
-                        name: Consequatur odio velit qui.
-                        src_tool_name: Magnam eius perferendis veniam.
-                        src_tool_urn: Distinctio maiores et eum laboriosam.
-                        summarizer: Minima voluptas corporis nihil.
-                        updated_at: Explicabo sed.
             resource_urns:
                 type: array
                 items:
                     type: string
-                    example: Eos et omnis exercitationem.
+                    example: Suscipit velit exercitationem.
                 description: The resource URNs in this toolset
                 example:
-                    - Et aliquam voluptatibus.
-                    - Reprehenderit maxime similique distinctio sit omnis aut.
-                    - Dolorem suscipit velit exercitationem fugit.
                     - Nobis id voluptas incidunt provident minus.
+                    - Rem nemo doloremque qui voluptatem unde tenetur.
+                    - Error est hic officia enim.
             resources:
                 type: array
                 items:
                     $ref: '#/definitions/Resource'
                 description: The resources in this toolset
                 example:
+                    - function_resource_definition:
+                        created_at: "1990-05-29T17:08:13Z"
+                        deployment_id: Voluptatem omnis commodi quasi.
+                        description: Autem atque omnis enim autem ea.
+                        function_id: Sapiente architecto quaerat eaque et consequatur pariatur.
+                        id: Aut sint adipisci.
+                        meta:
+                            Quis animi nobis enim sapiente quae modi.: Minima necessitatibus dolor consequuntur in animi a.
+                        mime_type: Enim a debitis.
+                        name: Adipisci earum et.
+                        project_id: Consequatur quam esse et aut.
+                        resource_urn: Quo laborum laudantium similique perferendis.
+                        runtime: Quod atque sed fugiat et et.
+                        title: Veniam itaque totam repudiandae praesentium.
+                        updated_at: "1990-10-29T17:27:33Z"
+                        uri: Omnis ex eos est dolorem.
+                        variables: Enim non ut numquam at.
                     - function_resource_definition:
                         created_at: "1990-05-29T17:08:13Z"
                         deployment_id: Voluptatem omnis commodi quasi.
@@ -43813,21 +43774,35 @@ definitions:
                         - Sunt cum unde excepturi voluptatibus omnis.
                         - Id dolorem eos accusantium.
                         - Error est aut et non adipisci.
+                    - description: In maxime repudiandae laborum.
+                      env_variables:
+                        - Saepe explicabo voluptas sed iste quae.
+                        - Sunt cum unde excepturi voluptatibus omnis.
+                        - Id dolorem eos accusantium.
+                        - Error est aut et non adipisci.
+                    - description: In maxime repudiandae laborum.
+                      env_variables:
+                        - Saepe explicabo voluptas sed iste quae.
+                        - Sunt cum unde excepturi voluptatibus omnis.
+                        - Id dolorem eos accusantium.
+                        - Error est aut et non adipisci.
             slug:
                 type: string
                 description: The slug of the toolset
-                example: fcr
+                example: "9e0"
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             tool_urns:
                 type: array
                 items:
                     type: string
-                    example: Voluptatem tempore et inventore fugiat qui et.
+                    example: Inventore fugiat qui et provident.
                 description: The tool URNs in this toolset
                 example:
-                    - Facilis est omnis officia maxime veniam.
-                    - Dolores est.
+                    - Est omnis officia maxime veniam eaque.
+                    - Est sunt dignissimos eos et.
+                    - Exercitationem distinctio porro et aliquam voluptatibus.
+                    - Reprehenderit maxime similique distinctio sit omnis aut.
             tools:
                 type: array
                 items:
@@ -44129,14 +44104,14 @@ definitions:
             updated_at:
                 type: string
                 description: When the toolset was last updated.
-                example: "2010-01-06T13:01:53Z"
+                example: "1985-06-16T05:56:06Z"
                 format: date-time
         example:
-            account_type: Omnis atque eveniet blanditiis velit rerum.
-            created_at: "1995-05-21T14:13:52Z"
-            custom_domain_id: Ut est nulla.
-            default_environment_slug: rm6
-            description: Doloribus mollitia maiores doloribus quidem quam.
+            account_type: Accusantium voluptatem nemo at ut doloribus.
+            created_at: "2010-09-13T17:11:31Z"
+            custom_domain_id: Quis voluptatem omnis suscipit asperiores velit.
+            default_environment_slug: epq
+            description: Et enim.
             external_oauth_server:
                 created_at: "2008-03-24T00:13:32Z"
                 id: Amet non ipsam.
@@ -44149,11 +44124,15 @@ definitions:
                   name: Ad ea quibusdam repudiandae quas unde et.
                 - description: Tempore exercitationem.
                   name: Ad ea quibusdam repudiandae quas unde et.
-            id: Impedit amet illo.
+                - description: Tempore exercitationem.
+                  name: Ad ea quibusdam repudiandae quas unde et.
+                - description: Tempore exercitationem.
+                  name: Ad ea quibusdam repudiandae quas unde et.
+            id: A tenetur voluptatem in et aut.
             mcp_enabled: false
-            mcp_is_public: false
-            mcp_slug: 4th
-            name: Maxime facilis et culpa esse.
+            mcp_is_public: true
+            mcp_slug: jq0
+            name: Maiores doloribus quidem quam unde quidem.
             oauth_proxy_server:
                 created_at: "2008-12-01T09:22:43Z"
                 id: Sunt est eius similique doloribus ea.
@@ -44197,8 +44176,8 @@ definitions:
                 project_id: Et nemo quis earum facere quia.
                 slug: y70
                 updated_at: "1971-01-02T09:03:06Z"
-            organization_id: Aut totam vel natus officiis.
-            project_id: Tenetur voluptatem in.
+            organization_id: Velit rerum ducimus maxime facilis et culpa.
+            project_id: Vel natus officiis dolore omnis atque eveniet.
             prompt_templates:
                 - canonical:
                     confirm: Odit consequatur commodi quae unde.
@@ -44336,8 +44315,8 @@ definitions:
                     summarizer: Minima voluptas corporis nihil.
                     updated_at: Explicabo sed.
             resource_urns:
-                - Eligendi porro.
-                - Repudiandae sed sunt totam.
+                - Sunt totam aut.
+                - Ut ut cum.
             resources:
                 - function_resource_definition:
                     created_at: "1990-05-29T17:08:13Z"
@@ -44478,6 +44457,110 @@ definitions:
                     - Ipsam impedit.
                   scheme: Atque voluptas nulla et et et quo.
                   type: Omnis soluta odit veritatis.
+                - bearer_format: Repellendus eum perferendis aperiam.
+                  env_variables:
+                    - Aut sed nesciunt iste odit.
+                    - Velit minima inventore sit optio ipsam.
+                    - Dolor illo delectus.
+                  in_placement: Molestiae soluta aut harum.
+                  name: Quos nam possimus.
+                  oauth_flows:
+                    - 65
+                    - 115
+                    - 112
+                    - 101
+                    - 114
+                    - 105
+                    - 111
+                    - 114
+                    - 101
+                    - 115
+                    - 32
+                    - 112
+                    - 111
+                    - 114
+                    - 114
+                    - 111
+                    - 32
+                    - 117
+                    - 108
+                    - 108
+                    - 97
+                    - 109
+                    - 32
+                    - 115
+                    - 105
+                    - 116
+                    - 32
+                    - 110
+                    - 117
+                    - 108
+                    - 108
+                    - 97
+                    - 32
+                    - 113
+                    - 117
+                    - 105
+                    - 115
+                    - 46
+                  oauth_types:
+                    - Voluptas quo.
+                    - Quia officiis officiis nihil.
+                    - Ipsam impedit.
+                  scheme: Atque voluptas nulla et et et quo.
+                  type: Omnis soluta odit veritatis.
+                - bearer_format: Repellendus eum perferendis aperiam.
+                  env_variables:
+                    - Aut sed nesciunt iste odit.
+                    - Velit minima inventore sit optio ipsam.
+                    - Dolor illo delectus.
+                  in_placement: Molestiae soluta aut harum.
+                  name: Quos nam possimus.
+                  oauth_flows:
+                    - 65
+                    - 115
+                    - 112
+                    - 101
+                    - 114
+                    - 105
+                    - 111
+                    - 114
+                    - 101
+                    - 115
+                    - 32
+                    - 112
+                    - 111
+                    - 114
+                    - 114
+                    - 111
+                    - 32
+                    - 117
+                    - 108
+                    - 108
+                    - 97
+                    - 109
+                    - 32
+                    - 115
+                    - 105
+                    - 116
+                    - 32
+                    - 110
+                    - 117
+                    - 108
+                    - 108
+                    - 97
+                    - 32
+                    - 113
+                    - 117
+                    - 105
+                    - 115
+                    - 46
+                  oauth_types:
+                    - Voluptas quo.
+                    - Quia officiis officiis nihil.
+                    - Ipsam impedit.
+                  scheme: Atque voluptas nulla et et et quo.
+                  type: Omnis soluta odit veritatis.
             server_variables:
                 - description: In maxime repudiandae laborum.
                   env_variables:
@@ -44491,12 +44574,17 @@ definitions:
                     - Sunt cum unde excepturi voluptatibus omnis.
                     - Id dolorem eos accusantium.
                     - Error est aut et non adipisci.
-            slug: 36y
+                - description: In maxime repudiandae laborum.
+                  env_variables:
+                    - Saepe explicabo voluptas sed iste quae.
+                    - Sunt cum unde excepturi voluptatibus omnis.
+                    - Id dolorem eos accusantium.
+                    - Error est aut et non adipisci.
+            slug: 60x
             tool_urns:
-                - Eius quia.
-                - Est ipsam.
-                - Odit laborum ut animi fuga.
-                - Pariatur laborum dicta quos quasi unde.
+                - Animi fuga doloremque pariatur.
+                - Dicta quos quasi unde.
+                - Molestias saepe eligendi porro.
             tools:
                 - function_tool_definition:
                     asset_id: Sit laboriosam.
@@ -44790,7 +44878,153 @@ definitions:
                         src_tool_urn: Distinctio maiores et eum laboriosam.
                         summarizer: Minima voluptas corporis nihil.
                         updated_at: Explicabo sed.
-            updated_at: "1999-10-20T10:55:09Z"
+                - function_tool_definition:
+                    asset_id: Sit laboriosam.
+                    canonical:
+                        confirm: Odit consequatur commodi quae unde.
+                        confirm_prompt: Quam doloribus iste maxime.
+                        description: In fuga suscipit rerum ipsa dolor dolorem.
+                        name: Sed aut voluptas.
+                        summarizer: Dolor dicta fuga optio perferendis inventore.
+                        variation_id: Vitae quia nemo.
+                    canonical_name: Modi fugiat eligendi.
+                    confirm: Voluptatum aut minima debitis quisquam similique.
+                    confirm_prompt: Fuga sed nisi ipsum molestiae.
+                    created_at: "2013-12-06T11:18:04Z"
+                    deployment_id: Facilis maiores temporibus sequi iure ut.
+                    description: Ut debitis quis cumque possimus aut optio.
+                    function_id: Sed et et.
+                    id: Est velit delectus qui et est.
+                    meta:
+                        Eaque eum nulla modi nihil.: Accusantium modi dolorem voluptas.
+                        Omnis explicabo sed ea.: Laudantium commodi inventore a nobis impedit.
+                    name: Placeat facilis sunt id qui voluptates.
+                    project_id: Quis hic.
+                    runtime: Similique non enim dicta est sit.
+                    schema: Dignissimos dolores delectus ea tempore.
+                    schema_version: Voluptatibus laborum voluptates nulla non qui veritatis.
+                    summarizer: Quidem sunt sunt aliquam illum sed.
+                    tool_urn: Ducimus fugiat et odio.
+                    updated_at: "2000-01-11T05:05:42Z"
+                    variables: Suscipit ipsum eos aut ut.
+                    variation:
+                        confirm: Mollitia neque facilis.
+                        confirm_prompt: Consectetur deserunt distinctio saepe voluptatem.
+                        created_at: Ut dolorem perferendis optio autem cupiditate.
+                        description: Aut libero magni dolorem cupiditate ipsam consectetur.
+                        group_id: Expedita quis dolore.
+                        id: Et aut porro doloribus voluptate.
+                        name: Consequatur odio velit qui.
+                        src_tool_name: Magnam eius perferendis veniam.
+                        src_tool_urn: Distinctio maiores et eum laboriosam.
+                        summarizer: Minima voluptas corporis nihil.
+                        updated_at: Explicabo sed.
+                  http_tool_definition:
+                    asset_id: Est maxime vel placeat ab.
+                    canonical:
+                        confirm: Odit consequatur commodi quae unde.
+                        confirm_prompt: Quam doloribus iste maxime.
+                        description: In fuga suscipit rerum ipsa dolor dolorem.
+                        name: Sed aut voluptas.
+                        summarizer: Dolor dicta fuga optio perferendis inventore.
+                        variation_id: Vitae quia nemo.
+                    canonical_name: Voluptate error pariatur.
+                    confirm: Et occaecati atque rerum vel dolor corporis.
+                    confirm_prompt: Illo nulla ut necessitatibus.
+                    created_at: "2008-10-18T10:11:25Z"
+                    default_server_url: Natus illo rerum voluptatum ducimus aliquid ad.
+                    deployment_id: Quod corrupti provident sed.
+                    description: Libero hic et libero necessitatibus ex.
+                    http_method: Ad voluptatibus consequatur reiciendis voluptatum eveniet.
+                    id: Adipisci consequatur provident deleniti consectetur.
+                    name: Animi doloremque officia.
+                    openapiv3_document_id: Et sapiente temporibus possimus.
+                    openapiv3_operation: Omnis ut itaque alias.
+                    package_name: Quod soluta voluptatibus cum.
+                    path: Et enim deserunt et.
+                    project_id: Ut facere soluta aperiam qui quidem.
+                    response_filter:
+                        content_types:
+                            - Molestiae veniam esse soluta beatae qui esse.
+                            - Officiis quis aut minus sapiente.
+                            - Et nihil enim molestiae consequuntur officiis sed.
+                            - Sit quis.
+                        status_codes:
+                            - Voluptates et delectus eius.
+                            - Repellendus quam quas tenetur sapiente.
+                            - Ut perferendis nihil distinctio.
+                            - Occaecati blanditiis eaque in expedita autem non.
+                        type: Quae saepe quaerat.
+                    schema: Earum est dolorem veritatis.
+                    schema_version: Itaque fugiat nihil deserunt.
+                    security: Facilis officiis eius suscipit magni voluptatem.
+                    summarizer: Ratione fugit.
+                    summary: Voluptatem aut similique qui est consectetur.
+                    tags:
+                        - Aperiam reprehenderit asperiores culpa voluptate qui molestiae.
+                        - Est quia esse quos voluptas dolores sit.
+                        - Enim corrupti.
+                    tool_urn: Omnis aut veniam non quod voluptatem.
+                    updated_at: "2013-07-31T21:43:52Z"
+                    variation:
+                        confirm: Mollitia neque facilis.
+                        confirm_prompt: Consectetur deserunt distinctio saepe voluptatem.
+                        created_at: Ut dolorem perferendis optio autem cupiditate.
+                        description: Aut libero magni dolorem cupiditate ipsam consectetur.
+                        group_id: Expedita quis dolore.
+                        id: Et aut porro doloribus voluptate.
+                        name: Consequatur odio velit qui.
+                        src_tool_name: Magnam eius perferendis veniam.
+                        src_tool_urn: Distinctio maiores et eum laboriosam.
+                        summarizer: Minima voluptas corporis nihil.
+                        updated_at: Explicabo sed.
+                  prompt_template:
+                    canonical:
+                        confirm: Odit consequatur commodi quae unde.
+                        confirm_prompt: Quam doloribus iste maxime.
+                        description: In fuga suscipit rerum ipsa dolor dolorem.
+                        name: Sed aut voluptas.
+                        summarizer: Dolor dicta fuga optio perferendis inventore.
+                        variation_id: Vitae quia nemo.
+                    canonical_name: Deserunt atque ut esse quia aut.
+                    confirm: Occaecati amet consectetur nulla autem et dolore.
+                    confirm_prompt: Numquam et sint maxime ut molestiae.
+                    created_at: "1999-06-11T08:51:23Z"
+                    description: Illo consequatur.
+                    engine: mustache
+                    history_id: Earum non temporibus autem.
+                    id: Culpa modi ut voluptatem.
+                    kind: prompt
+                    name: Commodi aliquid amet aspernatur placeat excepturi.
+                    predecessor_id: Voluptas voluptas.
+                    project_id: Accusamus reiciendis.
+                    prompt: Ab esse.
+                    schema: Dolores fugiat.
+                    schema_version: Corporis doloremque.
+                    summarizer: Iste sapiente omnis.
+                    tool_urn: Iste in voluptatem dolor aliquid accusamus.
+                    tool_urns_hint:
+                        - Deserunt et vel ut quisquam neque et.
+                        - Ratione eaque debitis eum ad qui.
+                        - Rerum sed architecto et temporibus in officia.
+                    tools_hint:
+                        - Quos molestiae accusantium.
+                        - Enim magni dolore esse eaque ut velit.
+                        - Accusamus quia corporis.
+                    updated_at: "1984-09-05T14:54:10Z"
+                    variation:
+                        confirm: Mollitia neque facilis.
+                        confirm_prompt: Consectetur deserunt distinctio saepe voluptatem.
+                        created_at: Ut dolorem perferendis optio autem cupiditate.
+                        description: Aut libero magni dolorem cupiditate ipsam consectetur.
+                        group_id: Expedita quis dolore.
+                        id: Et aut porro doloribus voluptate.
+                        name: Consequatur odio velit qui.
+                        src_tool_name: Magnam eius perferendis veniam.
+                        src_tool_urn: Distinctio maiores et eum laboriosam.
+                        summarizer: Minima voluptas corporis nihil.
+                        updated_at: Explicabo sed.
+            updated_at: "1988-07-27T08:38:58Z"
         required:
             - id
             - project_id
@@ -44821,13 +45055,13 @@ definitions:
             default_environment_slug:
                 type: string
                 description: The slug of the environment to use as the default for the toolset
-                example: anj
+                example: p09
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             description:
                 type: string
                 description: Description of the toolset
-                example: Eum voluptatum iure voluptatem.
+                example: Sit molestiae qui.
             function_environment_variables:
                 type: array
                 items:
@@ -44840,10 +45074,12 @@ definitions:
                       name: Ad ea quibusdam repudiandae quas unde et.
                     - description: Tempore exercitationem.
                       name: Ad ea quibusdam repudiandae quas unde et.
+                    - description: Tempore exercitationem.
+                      name: Ad ea quibusdam repudiandae quas unde et.
             id:
                 type: string
                 description: The ID of the toolset
-                example: Facere deleniti neque voluptatem ut.
+                example: Ut voluptas nobis qui itaque.
             mcp_enabled:
                 type: boolean
                 description: Whether the toolset is enabled for MCP
@@ -44861,15 +45097,15 @@ definitions:
             name:
                 type: string
                 description: The name of the toolset
-                example: Ut voluptas nobis qui itaque.
+                example: Tenetur repudiandae voluptatem beatae.
             organization_id:
                 type: string
                 description: The organization ID this toolset belongs to
-                example: Praesentium impedit ea sed voluptatem velit non.
+                example: Amet numquam reiciendis ex.
             project_id:
                 type: string
                 description: The project ID this toolset belongs to
-                example: Adipisci rem voluptatibus eos eum quis.
+                example: Est recusandae doloremque eum eum voluptatum iure.
             prompt_templates:
                 type: array
                 items:
@@ -44892,19 +45128,23 @@ definitions:
                 type: array
                 items:
                     type: string
-                    example: Debitis placeat consequuntur nostrum maxime harum ut.
+                    example: Laborum beatae repellat magnam sit impedit delectus.
                 description: The resource URNs in this toolset
                 example:
-                    - Dolores voluptatum omnis.
-                    - Quae laborum beatae.
-                    - Magnam sit impedit delectus dignissimos dolores distinctio.
-                    - Dolores ipsum et dolorum.
+                    - Distinctio suscipit dolores ipsum et.
+                    - Reprehenderit quod nemo est consequatur animi.
+                    - Id temporibus.
             resources:
                 type: array
                 items:
                     $ref: '#/definitions/ResourceEntry'
                 description: The resources in this toolset
                 example:
+                    - id: Nihil qui.
+                      name: Aperiam modi dolorum omnis non alias.
+                      resource_urn: Et quis facilis est a.
+                      type: function
+                      uri: Quam sed suscipit adipisci blanditiis et.
                     - id: Nihil qui.
                       name: Aperiam modi dolorum omnis non alias.
                       resource_urn: Et quis facilis est a.
@@ -45095,28 +45335,49 @@ definitions:
                         - Sunt cum unde excepturi voluptatibus omnis.
                         - Id dolorem eos accusantium.
                         - Error est aut et non adipisci.
+                    - description: In maxime repudiandae laborum.
+                      env_variables:
+                        - Saepe explicabo voluptas sed iste quae.
+                        - Sunt cum unde excepturi voluptatibus omnis.
+                        - Id dolorem eos accusantium.
+                        - Error est aut et non adipisci.
+                    - description: In maxime repudiandae laborum.
+                      env_variables:
+                        - Saepe explicabo voluptas sed iste quae.
+                        - Sunt cum unde excepturi voluptatibus omnis.
+                        - Id dolorem eos accusantium.
+                        - Error est aut et non adipisci.
             slug:
                 type: string
                 description: The slug of the toolset
-                example: z9k
+                example: 4u0
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             tool_urns:
                 type: array
                 items:
                     type: string
-                    example: Illum alias nostrum explicabo tempora.
+                    example: Quo perspiciatis excepturi rerum aut.
                 description: The tool URNs in this toolset
                 example:
-                    - Sit voluptatem et nulla.
-                    - Totam alias ea.
-                    - Aut quo perspiciatis excepturi rerum aut vitae.
+                    - Labore soluta.
+                    - Architecto aut modi perferendis veniam hic dolorem.
+                    - Ut dolor.
+                    - Inventore ut.
             tools:
                 type: array
                 items:
                     $ref: '#/definitions/ToolEntry'
                 description: The tools in this toolset
                 example:
+                    - id: Dolore nisi.
+                      name: Enim dolorum sunt et magnam.
+                      tool_urn: Rerum ea aut incidunt delectus iusto.
+                      type: function
+                    - id: Dolore nisi.
+                      name: Enim dolorum sunt et magnam.
+                      tool_urn: Rerum ea aut incidunt delectus iusto.
+                      type: function
                     - id: Dolore nisi.
                       name: Enim dolorum sunt et magnam.
                       tool_urn: Rerum ea aut incidunt delectus iusto.
@@ -46773,15 +47034,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: request is invalid (default view)
         example:
             fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -46796,7 +47057,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -46812,7 +47073,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -46839,7 +47100,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -46855,7 +47116,7 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -46882,49 +47143,6 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
-            id:
-                type: string
-                description: ID is a unique identifier for this particular occurrence of the problem.
-                example: 123abc
-            message:
-                type: string
-                description: Message is a human-readable explanation specific to this occurrence of the problem.
-                example: parameter 'p' must be an integer
-            name:
-                type: string
-                description: Name is the name of this class of errors.
-                example: bad_request
-            temporary:
-                type: boolean
-                description: Is the error temporary?
-                example: true
-            timeout:
-                type: boolean
-                description: Is the error a timeout?
-                example: true
-        description: an unexpected error occurred (default view)
-        example:
-            fault: false
-            id: 123abc
-            message: parameter 'p' must be an integer
-            name: bad_request
-            temporary: true
-            timeout: true
-        required:
-            - name
-            - id
-            - message
-            - temporary
-            - timeout
-            - fault
-    ToolsetsCreateToolsetInvalidResponseBody:
-        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
-        type: object
-        properties:
-            fault:
-                type: boolean
-                description: Is the error a server-side fault?
                 example: false
             id:
                 type: string
@@ -46941,7 +47159,50 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
+                example: false
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: false
+        description: an unexpected error occurred (default view)
+        example:
+            fault: false
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: false
+            timeout: false
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    ToolsetsCreateToolsetInvalidResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
                 example: true
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
@@ -46952,7 +47213,7 @@ definitions:
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
+            temporary: true
             timeout: true
         required:
             - name
@@ -46984,11 +47245,11 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: true
+                example: false
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: an unexpected error occurred (default view)
         example:
             fault: false
@@ -47011,7 +47272,7 @@ definitions:
             fault:
                 type: boolean
                 description: Is the error a server-side fault?
-                example: true
+                example: false
             id:
                 type: string
                 description: ID is a unique identifier for this particular occurrence of the problem.
@@ -47031,7 +47292,7 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: true
+                example: false
         description: resource not found (default view)
         example:
             fault: true
@@ -47039,7 +47300,7 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -47054,48 +47315,49 @@ definitions:
             default_environment_slug:
                 type: string
                 description: The slug of the environment to use as the default for the toolset
-                example: hvx
+                example: wg5
                 pattern: ^[a-z0-9_-]{1,128}$
                 maxLength: 40
             description:
                 type: string
                 description: Description of the toolset
-                example: Ut assumenda quidem illo et nisi.
+                example: Soluta et et amet quis.
             name:
                 type: string
                 description: The name of the toolset
-                example: Quos ullam officiis quod.
+                example: Ut assumenda quidem illo et nisi.
             resource_urns:
                 type: array
                 items:
                     type: string
-                    example: Dolores sint omnis.
+                    example: Et eius nulla architecto.
                 description: List of resource URNs to include in the toolset
                 example:
-                    - Eius nulla architecto aliquid corrupti.
-                    - Nihil non quibusdam commodi porro voluptas eligendi.
+                    - In nihil non quibusdam commodi porro.
+                    - Eligendi ea magnam id fugiat magni magni.
+                    - Maxime saepe ratione et.
+                    - Ut inventore impedit quam.
             tool_urns:
                 type: array
                 items:
                     type: string
-                    example: Soluta et et amet quis.
+                    example: Rerum vel mollitia officiis qui repudiandae.
                 description: List of tool URNs to include in the toolset
                 example:
-                    - Vel mollitia officiis.
-                    - Repudiandae est quia quod.
-                    - Dolorum in velit voluptatum deleniti.
-                    - Aliquid quis.
+                    - Quod occaecati dolorum in velit voluptatum.
+                    - Aspernatur aliquid quis eos.
+                    - Sint omnis.
         example:
-            default_environment_slug: dmz
-            description: Et voluptatem ut inventore impedit.
-            name: Magni impedit maxime saepe.
+            default_environment_slug: ot6
+            description: Sed quaerat eius iure.
+            name: Quia voluptatum optio molestiae omnis repellat enim.
             resource_urns:
-                - Eius iure minus.
+                - Quia et voluptas facere deleniti neque voluptatem.
+                - Facere adipisci rem voluptatibus.
+                - Eum quis enim praesentium impedit ea.
+            tool_urns:
                 - Tempore ut eaque et quo.
                 - Fuga ipsam perspiciatis.
-            tool_urns:
-                - Adipisci quo vitae maiores quia.
-                - Optio molestiae omnis repellat enim voluptatem.
         required:
             - name
     ToolsetsCreateToolsetUnauthorizedResponseBody:
@@ -47121,19 +47383,19 @@ definitions:
             temporary:
                 type: boolean
                 description: Is the error temporary?
-                example: false
+                example: true
             timeout:
                 type: boolean
                 description: Is the error a timeout?
                 example: true
         description: unauthorized access (default view)
         example:
-            fault: true
+            fault: false
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
-            timeout: false
+            timeout: true
         required:
             - name
             - id
@@ -47171,12 +47433,12 @@ definitions:
                 example: true
         description: an unexpected error occurred (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: false
-            timeout: false
+            temporary: true
+            timeout: true
         required:
             - name
             - id
@@ -47211,15 +47473,15 @@ definitions:
             timeout:
                 type: boolean
                 description: Is the error a timeout?
-                example: false
+                example: true
         description: unsupported media type (default view)
         example:
-            fault: false
+            fault: true
             id: 123abc
             message: parameter 'p' must be an integer
             name: bad_request
-            temporary: true
-            timeout: true
+            temporary: false
+            timeout: false
         required:
             - name
             - id

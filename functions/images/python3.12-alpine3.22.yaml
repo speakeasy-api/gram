@@ -4,7 +4,7 @@ contents:
     - https://dl-cdn.alpinelinux.org/alpine/v3.22/main
   packages:
     - alpine-baselayout-data
-    - ca-certificates
+    - ca-certificates-bundle
     - su-exec
     - python3=3.12.11-r0
     - gram-runner

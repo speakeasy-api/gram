@@ -23,7 +23,6 @@ import (
 	polargo "github.com/polarsource/polar-go"
 	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/superfly/fly-go/tokens"
@@ -114,7 +113,14 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 	}
 
 	cc := tm.New(logger, tracerProvider, conn, func(ctx context.Context, orgId string) (bool, error) {
-		f := conv.Default[feature.Provider](features, &feature.InMemory{})
+		// Use features directly if not nil, otherwise fallback to in-memory provider
+		var f feature.Provider
+		if features != nil {
+			f = features
+		} else {
+			f = &feature.InMemory{}
+		}
+
 		isEnabled, err := f.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, orgId)
 		if err != nil {
 			logger.ErrorContext(

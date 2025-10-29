@@ -98,7 +98,8 @@ var ListToolLogsRequest = Type("ListToolLogsRequest", func() {
 var ListToolLogResponse = Type("ListToolLogResponse", func() {
 	Attribute("logs", ArrayOf(HTTPToolLog))
 	Attribute("pagination", PaginationResponse)
-	Required("logs", "pagination")
+	Attribute("enabled", Boolean, "Whether tool metrics are enabled for the organization")
+	Required("logs", "pagination", "enabled")
 })
 
 var PaginationResponse = Type("PaginationResponse", func() {

@@ -1,3 +1,5 @@
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+
 import util from "node:util";
 import {
   configure,
@@ -131,6 +133,4 @@ async function main(argv: string[]) {
   });
 }
 
-if (import.meta.main) {
-  await main(process.argv);
-}
+main(process.argv);

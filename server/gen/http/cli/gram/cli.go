@@ -3082,7 +3082,7 @@ func toolsListToolsUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tools list-tools --cursor \"Quis dolores sed molestias fugit sunt.\" --limit 205789862 --deployment-id \"Architecto enim cupiditate omnis sit dolor magni.\" --session-token \"Sunt quidem est omnis quisquam.\" --project-slug-input \"Rem eum fugit.\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "tools list-tools --cursor \"Dolores sed molestias fugit sunt enim quia.\" --limit 1343776326 --deployment-id \"Cupiditate omnis sit.\" --session-token \"Magni laboriosam sunt quidem est omnis quisquam.\" --project-slug-input \"Rem eum fugit.\"")
 }
 
 // toolsetsUsage displays the usage of the toolsets command and its subcommands.

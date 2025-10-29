@@ -10,7 +10,6 @@ import {LogDetailSheet} from "./LogDetailSheet";
 import {formatTimestamp, getSourceFromUrn, getToolIcon, getToolNameFromUrn, isSuccessfulCall,} from "./utils";
 import {formatDuration} from "@/lib/dates";
 import {CheckIcon, XIcon} from "lucide-react";
-import {useTelemetry} from "@/contexts/Telemetry.tsx";
 
 function StatusIcon({isSuccess}: { isSuccess: boolean }) {
     if (isSuccess) {
@@ -32,8 +31,6 @@ export default function LogsPage() {
         statusFilter: null,
     });
     const [selectedLog, setSelectedLog] = useState<HTTPToolLog | null>(null);
-    const telemetry = useTelemetry();
-    const isLogsEnabled = telemetry.isFeatureEnabled("clickhouse-tool-metrics") ?? false;
 
     // Fetch toolsets for server name dropdown
     const {data: toolsetsData} = useListToolsets();
@@ -274,7 +271,7 @@ export default function LogsPage() {
                                                 <TableRow>
                                                     <TableCell colSpan={6}
                                                                className="text-center py-8 text-muted-foreground">
-                                                        {isLogsEnabled ?
+                                                        {data?.enabled ?
                                                             "No logs found" :
                                                             "Logs are opt-in feature. Please reach out to gram@speakeasy.com if you would like this enabled for your account"
                                                         }

@@ -17,6 +17,8 @@ import (
 type ListLogsResponseBody struct {
 	Logs       []*HTTPToolLogResponseBody      `form:"logs" json:"logs" xml:"logs"`
 	Pagination *PaginationResponseResponseBody `form:"pagination" json:"pagination" xml:"pagination"`
+	// Whether tool metrics are enabled for the organization
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
 }
 
 // ListLogsUnauthorizedResponseBody is the type of the "logs" service
@@ -255,7 +257,9 @@ type PaginationResponseResponseBody struct {
 // NewListLogsResponseBody builds the HTTP response body from the result of the
 // "listLogs" endpoint of the "logs" service.
 func NewListLogsResponseBody(res *logs.ListToolLogResponse) *ListLogsResponseBody {
-	body := &ListLogsResponseBody{}
+	body := &ListLogsResponseBody{
+		Enabled: res.Enabled,
+	}
 	if res.Logs != nil {
 		body.Logs = make([]*HTTPToolLogResponseBody, len(res.Logs))
 		for i, val := range res.Logs {

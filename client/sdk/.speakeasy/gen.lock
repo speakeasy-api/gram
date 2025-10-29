@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: e10fad8ecad004de6072538c3efbcbd2
+  docChecksum: 677a127aea801cbb59392bfe94152bae
   docVersion: 0.0.1
   speakeasyVersion: 1.639.2
   generationVersion: 2.730.5
-  releaseVersion: 0.16.5
-  configChecksum: 8df4495f1d7069dd25e7785923484eda
+  releaseVersion: 0.16.6
+  configChecksum: 9c1dce2fdf361c28cf494bd5d86051b2
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -1679,7 +1679,7 @@ examples:
           tool_type: "http"
       responses:
         "200":
-          application/json: {"logs": [{"deployment_id": "2a25e446-d87e-49c8-ab8c-b3bb267aae46", "duration_ms": 689.89, "http_method": "<value>", "http_route": "<value>", "organization_id": "51b32f4a-389b-4b2b-939b-ee326b00dc01", "span_id": "<id>", "status_code": 43822, "tool_id": "190ecf68-271f-42fa-8e69-a905b9b63ad1", "tool_type": "function", "tool_urn": "<value>", "trace_id": "<id>", "ts": "2024-07-05T07:17:29.939Z", "user_agent": "<value>"}], "pagination": {}}
+          application/json: {"enabled": false, "logs": [{"deployment_id": "2a25e446-d87e-49c8-ab8c-b3bb267aae46", "duration_ms": 689.89, "http_method": "<value>", "http_route": "<value>", "organization_id": "51b32f4a-389b-4b2b-939b-ee326b00dc01", "span_id": "<id>", "status_code": 43822, "tool_id": "190ecf68-271f-42fa-8e69-a905b9b63ad1", "tool_type": "function", "tool_urn": "<value>", "trace_id": "<id>", "ts": "2024-07-05T07:17:29.939Z", "user_agent": "<value>"}], "pagination": {}}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

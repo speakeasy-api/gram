@@ -1,5 +1,12 @@
 # server
 
+## 0.9.7
+
+### Patch Changes
+
+- bab05ce: Adds support to the Playground for any tool type, notably enabling function tools to be used there
+- 7afda6e: Allows the MCP metadata map to accept arbitrary value types as supported by the server
+
 ## 0.9.6
 
 ### Patch Changes

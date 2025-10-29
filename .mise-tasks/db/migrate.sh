@@ -16,3 +16,4 @@ exec atlas migrate apply \
   --config file://atlas.hcl \
   -u "${GRAM_DATABASE_URL}" \
   "${args[@]}"
+
