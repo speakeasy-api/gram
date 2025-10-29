@@ -77,6 +77,7 @@ mise infra:start
 
 echo -e "\n⏳ Running migrations"
 mise db:migrate
+mise clickhouse:migrate
 
 mise zero:summary
 
