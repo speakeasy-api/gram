@@ -89,7 +89,7 @@ func newTestMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	enc := testenv.NewEncryptionClient(t)
 	env := environments.NewEnvironmentEntries(logger, conn, enc)
-	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host")
+	posthog := posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", "")
 	cacheAdapter := cache.NewRedisCacheAdapter(redisClient)
 	guardianPolicy := guardian.NewDefaultPolicy()
 	oauthService := oauth.NewService(logger, tracerProvider, meterProvider, conn, serverURL, cacheAdapter, enc, env)
