@@ -74,6 +74,14 @@ func (s *Service) ListLogs(ctx context.Context, payload *gen.ListLogsPayload) (r
 			Log(ctx, s.logger, attr.SlogProjectID(projectID.String()))
 	}
 
+	if !logsEnabled {
+		return &gen.ListToolLogResponse{Logs: make([]*gen.HTTPToolLog, 0), Pagination: &gen.PaginationResponse{
+			PerPage:        conv.Ptr(0),
+			HasNextPage:    conv.Ptr(false),
+			NextPageCursor: conv.Ptr(""),
+		}, Enabled: logsEnabled}, nil
+	}
+
 	// Parse time parameters with defaults
 	tsStart := parseTimeOrDefault(payload.TsStart, time.Now().Add(-744*time.Hour).UTC())
 	tsEnd := parseTimeOrDefault(payload.TsEnd, time.Now().UTC())
