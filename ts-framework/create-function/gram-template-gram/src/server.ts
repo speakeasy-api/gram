@@ -120,6 +120,4 @@ async function run() {
   process.once("SIGTERM", quit);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  run();
-}
+run();

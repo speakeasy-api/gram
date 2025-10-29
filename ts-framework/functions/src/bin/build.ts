@@ -133,6 +133,4 @@ async function main(argv: string[]) {
   });
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main(process.argv);
-}
+main(process.argv);
