@@ -10,18 +10,6 @@ const userConfigSchema = z.object({
    */
   entrypoint: z.string().default(path.join("src", "gram.ts")),
   /**
-   * If the Gram Functions interface is exported as a single value from the
-   * entrypoint file, then this option specifies the name of that export. For
-   * example, if entrypoint looks like this:
-   *
-   * ```ts
-   * export const gram = new Gram({ ... });
-   * ```
-   *
-   * Then export should be set to "gram".
-   */
-  export: z.string().default("gram"),
-  /**
    * The output directory where build artifacts should be written.
    */
   outDir: z.string().default("dist"),

@@ -8,7 +8,7 @@ import {
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import pkg from "../package.json" with { type: "json" };
-import { gram } from "./gram.ts";
+import gram from "./gram.ts";
 
 const structuredLike = /\b(yaml|yml|json|toml|xml|xhtml)\b/i;
 const textLike = /^text\//i;
