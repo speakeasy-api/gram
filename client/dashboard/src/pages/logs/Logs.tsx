@@ -2,10 +2,10 @@ import {Page} from "@/components/page-layout";
 import {SearchBar} from "@/components/ui/search-bar";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@/components/ui/select";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow,} from "@/components/ui/table";
-import {useListToolLogs} from "@gram/client/react-query";
+import {useListToolLogs, useListToolsets} from "@gram/client/react-query";
 import {HTTPToolLog} from "@gram/client/models/components";
 import {Icon} from "@speakeasy-api/moonshine";
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {LogDetailSheet} from "./LogDetailSheet";
 import {formatTimestamp, getSourceFromUrn, getToolIcon, getToolNameFromUrn, isSuccessfulCall,} from "./utils";
 import {formatDuration} from "@/lib/dates";
@@ -32,6 +32,23 @@ export default function LogsPage() {
     });
     const [selectedLog, setSelectedLog] = useState<HTTPToolLog | null>(null);
 
+    // Fetch toolsets for server name dropdown
+    const {data: toolsetsData} = useListToolsets();
+    const serverNames = useMemo(() => {
+        return toolsetsData?.toolsets?.map(t =>
+            ({slug: t.slug, id: t.id, toolUrns: t.toolUrns}))
+            .filter(Boolean) || [];
+    }, [toolsetsData]);
+
+    // Get tool URNs for selected server
+    const selectedToolUrns = useMemo(() => {
+        if (!filters.serverNameFilter) return undefined;
+        const selectedToolset = serverNames.find(s => s.slug === filters.serverNameFilter);
+        return selectedToolset?.toolUrns && selectedToolset.toolUrns.length > 0
+            ? selectedToolset.toolUrns
+            : undefined;
+    }, [filters.serverNameFilter, serverNames]);
+
     // Infinite scroll state
     const [allLogs, setAllLogs] = useState<HTTPToolLog[]>([]);
     const [currentCursor, setCurrentCursor] = useState<string | undefined>(undefined);
@@ -44,10 +61,13 @@ export default function LogsPage() {
         {
             perPage,
             cursor: currentCursor,
+            toolType: (filters.toolTypeFilter as "http" | "function" | "prompt" | undefined) || undefined,
+            toolUrns: selectedToolUrns,
+            status: (filters.statusFilter as "success" | "failure" | undefined) || undefined,
         },
         undefined,
         {
-            staleTime: 30000, // Cache for 30 seconds
+            staleTime: 0, // Don't cache to ensure fresh data on filter changes
             refetchOnWindowFocus: false,
         },
     );
@@ -80,6 +100,14 @@ export default function LogsPage() {
 
     const pagination = data?.pagination;
     const hasNextPage = pagination?.hasNextPage ?? false;
+
+    // Reset logs when filters change
+    useEffect(() => {
+        setAllLogs([]);
+        setCurrentCursor(undefined);
+        lastProcessedCursorRef.current = undefined;
+        setIsFetchingMore(false);
+    }, [filters.toolTypeFilter, filters.serverNameFilter, filters.statusFilter]);
 
     // Auto-load more if container isn't scrollable after initial load
     useEffect(() => {
@@ -145,10 +173,10 @@ export default function LogsPage() {
                                 {/* Filters */}
                                 <div className="flex items-center gap-2">
                                     <Select
-                                        value={filters.toolTypeFilter ?? ""}
+                                        value={filters.toolTypeFilter ?? "all"}
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
-                                            toolTypeFilter: value || null
+                                            toolTypeFilter: value === "all" ? null : value
                                         }))}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Tool Type"/>
@@ -160,25 +188,29 @@ export default function LogsPage() {
                                     </Select>
 
                                     <Select
-                                        value={filters.serverNameFilter ?? ""}
+                                        value={filters.serverNameFilter ?? "all"}
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
-                                            serverNameFilter: value || null
+                                            serverNameFilter: value === "all" ? null : value
                                         }))}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Server Name"/>
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">All Servers</SelectItem>
-                                            {/* Add more server name options here */}
+                                            {serverNames.map((serverName) => (
+                                                <SelectItem key={serverName.id} value={serverName.slug}>
+                                                    {serverName.slug}
+                                                </SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
 
                                     <Select
-                                        value={filters.statusFilter ?? ""}
+                                        value={filters.statusFilter ?? "all"}
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
-                                            statusFilter: value || null
+                                            statusFilter: value === "all" ? null : value
                                         }))}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Status"/>

@@ -25,6 +25,31 @@ export type ListToolLogsSecurity = {
 };
 
 /**
+ * Status filter
+ */
+export const Status = {
+  Success: "success",
+  Failure: "failure",
+} as const;
+/**
+ * Status filter
+ */
+export type Status = ClosedEnum<typeof Status>;
+
+/**
+ * Tool type filter
+ */
+export const ToolType = {
+  Http: "http",
+  Function: "function",
+  Prompt: "prompt",
+} as const;
+/**
+ * Tool type filter
+ */
+export type ToolType = ClosedEnum<typeof ToolType>;
+
+/**
  * Pagination direction
  */
 export const Direction = {
@@ -65,6 +90,26 @@ export type ListToolLogsRequest = {
    * Cursor for pagination
    */
   cursor?: string | undefined;
+  /**
+   * Status filter
+   */
+  status?: Status | undefined;
+  /**
+   * Server name filter
+   */
+  serverName?: string | undefined;
+  /**
+   * Tool name filter
+   */
+  toolName?: string | undefined;
+  /**
+   * Tool type filter
+   */
+  toolType?: ToolType | undefined;
+  /**
+   * Tool URNs filter
+   */
+  toolUrns?: Array<string> | undefined;
   /**
    * Number of items per page (1-100)
    */
@@ -297,6 +342,44 @@ export function listToolLogsSecurityFromJSON(
 }
 
 /** @internal */
+export const Status$inboundSchema: z.ZodNativeEnum<typeof Status> = z
+  .nativeEnum(Status);
+
+/** @internal */
+export const Status$outboundSchema: z.ZodNativeEnum<typeof Status> =
+  Status$inboundSchema;
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace Status$ {
+  /** @deprecated use `Status$inboundSchema` instead. */
+  export const inboundSchema = Status$inboundSchema;
+  /** @deprecated use `Status$outboundSchema` instead. */
+  export const outboundSchema = Status$outboundSchema;
+}
+
+/** @internal */
+export const ToolType$inboundSchema: z.ZodNativeEnum<typeof ToolType> = z
+  .nativeEnum(ToolType);
+
+/** @internal */
+export const ToolType$outboundSchema: z.ZodNativeEnum<typeof ToolType> =
+  ToolType$inboundSchema;
+
+/**
+ * @internal
+ * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
+ */
+export namespace ToolType$ {
+  /** @deprecated use `ToolType$inboundSchema` instead. */
+  export const inboundSchema = ToolType$inboundSchema;
+  /** @deprecated use `ToolType$outboundSchema` instead. */
+  export const outboundSchema = ToolType$outboundSchema;
+}
+
+/** @internal */
 export const Direction$inboundSchema: z.ZodNativeEnum<typeof Direction> = z
   .nativeEnum(Direction);
 
@@ -347,6 +430,11 @@ export const ListToolLogsRequest$inboundSchema: z.ZodType<
   ts_end: z.string().datetime({ offset: true }).transform(v => new Date(v))
     .optional(),
   cursor: z.string().optional(),
+  status: Status$inboundSchema.optional(),
+  server_name: z.string().optional(),
+  tool_name: z.string().optional(),
+  tool_type: ToolType$inboundSchema.optional(),
+  tool_urns: z.array(z.string()).optional(),
   per_page: z.number().int().default(20),
   direction: Direction$inboundSchema.default("next"),
   sort: Sort$inboundSchema.default("DESC"),
@@ -358,6 +446,10 @@ export const ListToolLogsRequest$inboundSchema: z.ZodType<
     "tool_id": "toolId",
     "ts_start": "tsStart",
     "ts_end": "tsEnd",
+    "server_name": "serverName",
+    "tool_name": "toolName",
+    "tool_type": "toolType",
+    "tool_urns": "toolUrns",
     "per_page": "perPage",
     "Gram-Key": "gramKey",
     "Gram-Session": "gramSession",
@@ -371,6 +463,11 @@ export type ListToolLogsRequest$Outbound = {
   ts_start?: string | undefined;
   ts_end?: string | undefined;
   cursor?: string | undefined;
+  status?: string | undefined;
+  server_name?: string | undefined;
+  tool_name?: string | undefined;
+  tool_type?: string | undefined;
+  tool_urns?: Array<string> | undefined;
   per_page: number;
   direction: string;
   sort: string;
@@ -389,6 +486,11 @@ export const ListToolLogsRequest$outboundSchema: z.ZodType<
   tsStart: z.date().transform(v => v.toISOString()).optional(),
   tsEnd: z.date().transform(v => v.toISOString()).optional(),
   cursor: z.string().optional(),
+  status: Status$outboundSchema.optional(),
+  serverName: z.string().optional(),
+  toolName: z.string().optional(),
+  toolType: ToolType$outboundSchema.optional(),
+  toolUrns: z.array(z.string()).optional(),
   perPage: z.number().int().default(20),
   direction: Direction$outboundSchema.default("next"),
   sort: Sort$outboundSchema.default("DESC"),
@@ -400,6 +502,10 @@ export const ListToolLogsRequest$outboundSchema: z.ZodType<
     toolId: "tool_id",
     tsStart: "ts_start",
     tsEnd: "ts_end",
+    serverName: "server_name",
+    toolName: "tool_name",
+    toolType: "tool_type",
+    toolUrns: "tool_urns",
     perPage: "per_page",
     gramKey: "Gram-Key",
     gramSession: "Gram-Session",

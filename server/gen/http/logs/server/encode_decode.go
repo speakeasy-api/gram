@@ -40,6 +40,11 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 			tsStart          *string
 			tsEnd            *string
 			cursor           *string
+			status           *string
+			serverName       *string
+			toolName         *string
+			toolType         *string
+			toolUrns         []string
 			perPage          int
 			direction        string
 			sort             string
@@ -77,6 +82,33 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if cursor != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
 		}
+		statusRaw := qp.Get("status")
+		if statusRaw != "" {
+			status = &statusRaw
+		}
+		if status != nil {
+			if !(*status == "success" || *status == "failure") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"success", "failure"}))
+			}
+		}
+		serverNameRaw := qp.Get("server_name")
+		if serverNameRaw != "" {
+			serverName = &serverNameRaw
+		}
+		toolNameRaw := qp.Get("tool_name")
+		if toolNameRaw != "" {
+			toolName = &toolNameRaw
+		}
+		toolTypeRaw := qp.Get("tool_type")
+		if toolTypeRaw != "" {
+			toolType = &toolTypeRaw
+		}
+		if toolType != nil {
+			if !(*toolType == "http" || *toolType == "function" || *toolType == "prompt") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("tool_type", *toolType, []any{"http", "function", "prompt"}))
+			}
+		}
+		toolUrns = qp["tool_urns"]
 		{
 			perPageRaw := qp.Get("per_page")
 			if perPageRaw == "" {
@@ -128,7 +160,7 @@ func DecodeListLogsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahtt
 		if err != nil {
 			return nil, err
 		}
-		payload := NewListLogsPayload(toolID, tsStart, tsEnd, cursor, perPage, direction, sort, apikeyToken, sessionToken, projectSlugInput)
+		payload := NewListLogsPayload(toolID, tsStart, tsEnd, cursor, status, serverName, toolName, toolType, toolUrns, perPage, direction, sort, apikeyToken, sessionToken, projectSlugInput)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
