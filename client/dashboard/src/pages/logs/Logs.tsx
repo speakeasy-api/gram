@@ -115,9 +115,8 @@ export default function LogsPage() {
     const pagination = data?.pagination;
     const hasNextPage = pagination?.hasNextPage ?? false;
 
-    // Reset logs when filters change
+    // Reset the cursor when filters change (but keep existing logs visible until new data arrives)
     useEffect(() => {
-        setAllLogs([]);
         setCurrentCursor(undefined);
         lastProcessedCursorRef.current = undefined;
         setIsFetchingMore(false);
@@ -237,7 +236,13 @@ export default function LogsPage() {
 
                             {/* Table */}
                             <div
-                                className="border border-neutral-softest rounded-lg overflow-hidden w-full flex flex-col">
+                                className="border border-neutral-softest rounded-lg overflow-hidden w-full flex flex-col relative">
+                                {/* Loading indicator when filtering with existing data */}
+                                {isLoading && allLogs.length > 0 && (
+                                    <div className="absolute top-0 left-0 right-0 h-1 bg-primary-default/20 z-20">
+                                        <div className="h-full bg-primary-default animate-pulse"/>
+                                    </div>
+                                )}
                                 <div
                                     ref={tableContainerRef}
                                     className="overflow-y-auto"
