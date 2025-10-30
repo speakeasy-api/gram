@@ -19,6 +19,7 @@
     "node": ">=22.18.0"
   },
   "scripts": {
+    "dev": "mcp-inspector node ./src/server.ts",
     "_:build": "gram-build",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build"
@@ -29,7 +30,8 @@
     "zod": "^3"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "@types/node": "22.x"
+    "@modelcontextprotocol/inspector": "^0.17.1",
+    "@types/node": "22.x",
+    "typescript": "^5"
   }
 }
