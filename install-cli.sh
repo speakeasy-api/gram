@@ -69,26 +69,37 @@ detect_arch() {
     esac
 }
 
-# Get the latest CLI release tag from GitHub
+# Get the latest CLI tag from package.json (name@version)
 get_latest_tag() {
-    info "Fetching latest release..."
+    info "Fetching latest version..."
 
-    local tags_url="https://api.github.com/repos/speakeasy-api/gram/tags?per_page=100"
-    local latest_tag
+    local package_url="https://raw.githubusercontent.com/speakeasy-api/gram/refs/heads/main/cli/package.json"
+    local response
 
     if command_exists curl; then
-        latest_tag=$(curl -sf "$tags_url" | grep -o '"name": *"cli/[^"]*"' | head -n1 | sed 's/"name": "cli\/\([^"]*\)"/\1/')
+        response=$(curl -sf "$package_url")
     elif command_exists wget; then
-        latest_tag=$(wget -qO- "$tags_url" | grep -o '"name": *"cli/[^"]*"' | head -n1 | sed 's/"name": "cli\/\([^"]*\)"/\1/')
+        response=$(wget -qO- "$package_url")
     else
         error "curl or wget is required"
     fi
 
-    if [ -z "$latest_tag" ]; then
-        error "Failed to fetch latest release tag"
+    if [ -z "$response" ]; then
+        error "Failed to fetch package.json from GitHub"
     fi
 
-    echo "$latest_tag"
+    # Extract name and version from package.json
+    local name
+    local version
+    name=$(echo "$response" | grep -oE '"name": *"[^"]*"' | sed -E 's/"name": "([^"]*)"/\1/')
+    version=$(echo "$response" | grep -oE '"version": *"[^"]*"' | sed -E 's/"version": "([^"]*)"/\1/')
+
+    if [ -z "$name" ] || [ -z "$version" ]; then
+        error "Failed to extract name or version from package.json"
+    fi
+
+    # Construct and return tag as name@version
+    echo "${name}@${version}"
 }
 
 # Download file
@@ -182,16 +193,15 @@ main() {
     info "Detected OS: $os"
     info "Detected architecture: $arch"
 
-    # Get latest version
-    local version
-    version=$(get_latest_tag)
-    info "Latest version: $version"
+    # Get latest tag (name@version)
+    local tag_name
+    tag_name=$(get_latest_tag)
+    info "Latest version: $tag_name"
 
     # Construct download URLs
-    local encoded_tag="cli@${version}"
     local filename="gram_${os}_${arch}.zip"
-    local download_url="https://github.com/speakeasy-api/gram/releases/download/${encoded_tag}/${filename}"
-    local checksums_url="https://github.com/speakeasy-api/gram/releases/download/${encoded_tag}/checksums.txt"
+    local download_url="https://github.com/speakeasy-api/gram/releases/download/${tag_name}/${filename}"
+    local checksums_url="https://github.com/speakeasy-api/gram/releases/download/${tag_name}/checksums.txt"
 
     # Create temporary directory
     tmp_dir=$(mktemp -d)
