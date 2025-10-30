@@ -1,3 +1,5 @@
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+
 import { parse } from "@bomb.sh/args";
 import { isCancel, log, taskLog } from "@clack/prompts";
 import { existsSync } from "node:fs";
