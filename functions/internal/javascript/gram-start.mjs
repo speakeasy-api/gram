@@ -29,10 +29,27 @@ class FunctionsError extends Error {
   }
 
   toJSON() {
+    /** @type {unknown} */
+    let cause = undefined;
+    if (this.cause instanceof Error) {
+      cause = {
+        name: this.cause.name,
+        message: this.cause.message,
+        stack: this.cause.stack,
+      };
+    } else if (this.cause != null) {
+      cause = {
+        message: String(this.cause),
+      };
+    } else {
+      cause = undefined;
+    }
+
+
     return {
       name: this.name,
       message: this.message,
-      cause: this.cause,
+      cause,
     };
   }
 }
@@ -117,9 +134,7 @@ async function callTool(func, name, input) {
     if (e instanceof FunctionsError) {
       throw e;
     } else {
-      let msg = e instanceof Error ? e.message : "";
-      msg = msg || "Tool call failed";
-      throw new FunctionsError(ERROR_CODES.TOOL_CALL_FAILED, msg, e);
+      throw new FunctionsError(ERROR_CODES.TOOL_CALL_FAILED, "Tool call failed", e);
     }
   }
 }
@@ -145,9 +160,7 @@ async function callResource(func, uri, input) {
     if (e instanceof FunctionsError) {
       throw e;
     } else {
-      let msg = e instanceof Error ? e.message : "";
-      msg = msg || "Resource request failed";
-      throw new FunctionsError(ERROR_CODES.RESOURCE_REQUEST_FAILED, msg, e);
+      throw new FunctionsError(ERROR_CODES.RESOURCE_REQUEST_FAILED, "Resource request failed", e);
     }
   }
 }
