@@ -77,7 +77,7 @@ func (c *DeploymentsClient) CreateDeployment(
 	}
 	result, err := c.client.CreateDeployment(ctx, payload)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create deployment: %w", err)
+		return nil, fmt.Errorf("api error: %w", err)
 	}
 
 	return result, nil
@@ -98,7 +98,7 @@ func (c *DeploymentsClient) GetDeployment(
 		SessionToken:     nil,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get deployment: %w", err)
+		return nil, fmt.Errorf("api error: %w", err)
 	}
 
 	return &types.Deployment{
@@ -139,7 +139,7 @@ func (c *DeploymentsClient) GetLatestDeployment(
 		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get latest deployment: %w", err)
+		return nil, fmt.Errorf("api error: %w", err)
 	}
 
 	return result.Deployment, nil
@@ -161,7 +161,7 @@ func (c *DeploymentsClient) GetActiveDeployment(
 		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get active deployment: %w", err)
+		return nil, fmt.Errorf("api error: %w", err)
 	}
 
 	return result.Deployment, nil
@@ -195,7 +195,7 @@ func (c *DeploymentsClient) Evolve(
 		SessionToken:           nil,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to evolve deployment: %w", err)
+		return nil, fmt.Errorf("api error: %w", err)
 	}
 
 	return result, nil
