@@ -31,7 +31,7 @@ Options:
   --dir <path>           Directory to create project in
   --git <yes|no>         Initialize git repository
   --install <yes|no>     Install dependencies
-  --install-cli <yes|no> Install the Gram CLI 
+  --install-cli <yes|no> Install the Gram CLI
   -y, --yes              Skip all prompts and use defaults
 
 Examples:
@@ -65,12 +65,12 @@ async function init(argv: string[]): Promise<void> {
       {
         value: "gram",
         label: "Gram",
-        hint: "Simple framework focused on getting you up and runnning with minimal code.",
+        hint: "(default) simplest path to start building your own tools",
       },
       {
         value: "mcp",
         label: "MCP",
-        hint: "Use the official @modelcontextprotocol/sdk package to build an MCP server and deploy it to Gram.",
+        hint: "For usages where you need advanced control over MCP responses",
       },
     ],
   })(args.template);
