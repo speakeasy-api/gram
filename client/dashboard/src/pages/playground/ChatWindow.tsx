@@ -278,7 +278,10 @@ function ChatInner({
       }
     }
 
-    let systemPrompt = `You are a helpful assistant that can answer questions and help with tasks.
+    let systemPrompt = `You are operating in the context of a product that helps developers create tools for their own MCP servers. When
+        choosing how to respond, keep in mind that the user is almost certainly intending to test or interact with one of the available tools.
+        Prefer to use one of those tools wherever possible to resolve the prompt.
+
         When using tools, ensure that the arguments match the provided schema. Note that the schema may update as the conversation progresses.
         The current date is ${new Date().toISOString()}`;
 
