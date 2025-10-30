@@ -143,7 +143,7 @@ NOTE: Names and slugs must be unique across all sources.`[1:],
 			slogID := slog.String("deployment_id", result.Deployment.ID)
 			status := result.Deployment.Status
 
-			deploymentLogsURL := fmt.Sprintf("https://localhost:5173/%s/%s/deployments/%s", workflowParams.OrgSlug, workflowParams.ProjectSlug, result.Deployment.ID)
+			deploymentLogsURL := fmt.Sprintf("%s://%s/%s/%s/deployments/%s", workflowParams.APIURL.Scheme, workflowParams.APIURL.Host, workflowParams.OrgSlug, workflowParams.ProjectSlug, result.Deployment.ID)
 
 			switch status {
 			case "completed":
