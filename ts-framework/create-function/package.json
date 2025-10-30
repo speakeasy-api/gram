@@ -38,7 +38,7 @@
     "zx": "8.8.4-lite"
   },
   "devDependencies": {
-    "@gram-ai/functions": "workspace:",
+    "@gram-ai/functions": "workspace:^",
     "@modelcontextprotocol/sdk": "catalog:",
     "@types/node": "22.x",
     "prettier": "^3.6.2",
