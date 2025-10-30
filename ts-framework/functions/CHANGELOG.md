@@ -1,5 +1,11 @@
 # @gram-ai/functions
 
+## 0.6.2
+
+### Patch Changes
+
+- f79fd52: Open dashboard from gram-build, better completing the flow starting from pnpm create
+
 ## 0.6.1
 
 ## 0.6.0

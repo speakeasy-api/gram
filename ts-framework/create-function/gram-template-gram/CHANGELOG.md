@@ -1,5 +1,13 @@
 # gram-template-gram
 
+## 0.0.2
+
+### Patch Changes
+
+- e02e7d1: fix: pnpm build error for gram framework around tools being possibly undefined
+- Updated dependencies [f79fd52]
+  - @gram-ai/functions@0.6.2
+
 ## 0.0.1
 
 ### Patch Changes

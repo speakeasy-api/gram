@@ -1,5 +1,11 @@
 # @gram-ai/create-function
 
+## 0.6.2
+
+### Patch Changes
+
+- 5f0f33b: Increase prescriptiveness of the hints for framework selection
+
 ## 0.6.1
 
 ### Patch Changes
