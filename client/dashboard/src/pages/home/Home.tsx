@@ -31,10 +31,13 @@ import {
   useMotionValue,
 } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { useMcpUrl } from "../mcp/MCPDetails";
 import { MCPEmptyState } from "../mcp/MCPEmptyState";
+import { START_PATH_PARAM, START_STEP_PARAM } from "../onboarding/Wizard";
 import { useCloneToolset } from "../toolsets/Toolset";
+
+export const LINKED_FROM_PARAM = "from";
 
 // Component for toolset dropdown items
 function ToolsetSelectItem({ toolset }: { toolset: ToolsetEntry }) {
@@ -159,6 +162,19 @@ function HomeContent() {
   const controls = useAnimationControls();
   const [selectedToolset, setSelectedToolset] = useState<string>("");
   const [hasStarted, setHasStarted] = useState(false);
+
+  const [searchParams] = useSearchParams();
+  const linkedFrom = searchParams.get(LINKED_FROM_PARAM);
+
+  // If we arrived here from the CLI, redirect to the onboarding page if the user has no toolsets, otherwise do nothing.
+  if (linkedFrom === "cli") {
+    if (toolsets?.toolsets?.length === 0) {
+      const params = new URLSearchParams();
+      params.set(START_PATH_PARAM, "cli");
+      params.set(START_STEP_PARAM, "toolset");
+      navigate(`${routes.onboarding.href()}?${params.toString()}`);
+    }
+  }
 
   useEffect(() => {
     if (toolsets?.toolsets?.length && !selectedToolset) {

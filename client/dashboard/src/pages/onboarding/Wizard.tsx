@@ -1,4 +1,5 @@
 import { Expandable } from "@/components/expandable";
+import { GramLogo } from "@/components/gram-logo";
 import { AnyField } from "@/components/moon/any-field";
 import { InputField } from "@/components/moon/input-field";
 import { ProjectSelector } from "@/components/project-menu";
@@ -13,6 +14,8 @@ import { FullWidthUpload } from "@/components/upload";
 import { AsciiVideo, useWebGLStore } from "@/components/webgl";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
+import { useTelemetry } from "@/contexts/Telemetry";
+import { useListTools } from "@/hooks/toolTypes";
 import { useApiError } from "@/hooks/useApiError";
 import { slugify } from "@/lib/constants";
 import { filterHttpTools, useGroupedHttpTools } from "@/lib/toolTypes";
@@ -42,20 +45,21 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion, useMotionValue } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
-import { useListTools } from "@/hooks/toolTypes";
-import { GramLogo } from "@/components/gram-logo";
-import { useTelemetry } from "@/contexts/Telemetry";
 
 type OnboardingPath = "openapi" | "cli";
 type OnboardingStep = "choice" | "upload" | "cli-setup" | "toolset" | "mcp";
 
+export const START_PATH_PARAM = "start-path";
+export const START_STEP_PARAM = "start-step";
+
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
   const telemetry = useTelemetry();
+  const [searchParams] = useSearchParams();
 
   // Feature flag for Gram functions flow
   const isFunctionsEnabled =
@@ -67,6 +71,17 @@ export function OnboardingWizard() {
   );
   const [toolsetName, setToolsetName] = useState<string>();
   const [mcpSlug, setMcpSlug] = useState<string>();
+
+  const startStep = searchParams.get(START_STEP_PARAM);
+  const startPath = searchParams.get(START_PATH_PARAM);
+
+  // If we have a start path and step, set the selected path and step
+  useEffect(() => {
+    if (startPath && startStep) {
+      setSelectedPath(startPath as OnboardingPath);
+      setCurrentStep(startStep as OnboardingStep);
+    }
+  }, [startPath, startStep]);
 
   // Auto-select OpenAPI path if functions are disabled
   useEffect(() => {
@@ -414,43 +429,20 @@ const CliSetupStep = ({
   setCurrentStep: (step: OnboardingStep) => void;
 }) => {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-  const { data: tools } = useListTools();
+  const [installMethod, setInstallMethod] = useState<"npm" | "pnpm">("npm");
+  const client = useSdkClient();
 
-  // Auto-advance when tools are detected
-  useEffect(() => {
-    const hasTools = tools?.tools && tools.tools.length > 0;
-    if (hasTools) {
-      setTimeout(() => {
-        setCurrentStep("toolset");
-      }, 2000);
-    }
-  }, [tools, setCurrentStep]);
+  // We explicitly don't poll to advance this step because the expected flow is that the CLI opens a new window with the next step.
 
   const commands = [
     {
-      label: "Create a new function",
-      command: "npm create @gram-ai/function@latest",
-    },
-    {
-      label: "Install the Gram CLI",
-      command: "brew install speakeasy-api/homebrew-tap/gram",
-    },
-    {
-      label: "Authenticate with Gram",
-      command: "gram auth",
+      label: "Create a new project",
+      command: `${installMethod} create @gram-ai/function`,
+      showToggle: true,
     },
     {
       label: "Build your functions",
-      command: "npm run build",
-    },
-    {
-      label: "Stage functions",
-      command:
-        'gram stage function --location dist/functions.zip --name "My Functions" --slug my-functions',
-    },
-    {
-      label: "Push to Gram",
-      command: "gram push",
+      command: `${installMethod} run build`,
     },
   ];
 
@@ -458,6 +450,15 @@ const CliSetupStep = ({
     navigator.clipboard.writeText(command);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const handleContinue = async () => {
+    const tools = await client.tools.list();
+    if (tools.tools.length > 0) {
+      setCurrentStep("toolset");
+    } else {
+      toast.error("No tools found. Please retry the build command.");
+    }
   };
 
   return (
@@ -472,9 +473,33 @@ const CliSetupStep = ({
       <Stack gap={4}>
         {commands.map((item, index) => (
           <Stack key={index} gap={2}>
-            <Type small className="font-medium">
-              {index + 1}. {item.label}
-            </Type>
+            <Stack
+              direction="horizontal"
+              justify="space-between"
+              align="center"
+            >
+              <Type small className="font-medium">
+                {index + 1}. {item.label}
+              </Type>
+              {item.showToggle && (
+                <Stack direction="horizontal" gap={1}>
+                  <Button
+                    variant={installMethod === "npm" ? "primary" : "tertiary"}
+                    size="sm"
+                    onClick={() => setInstallMethod("npm")}
+                  >
+                    npm
+                  </Button>
+                  <Button
+                    variant={installMethod === "pnpm" ? "primary" : "tertiary"}
+                    size="sm"
+                    onClick={() => setInstallMethod("pnpm")}
+                  >
+                    pnpm
+                  </Button>
+                </Stack>
+              )}
+            </Stack>
             <div className="relative group">
               <pre className="p-4 rounded-md font-mono text-sm overflow-x-auto border">
                 {item.command}
@@ -495,6 +520,18 @@ const CliSetupStep = ({
           </Stack>
         ))}
       </Stack>
+
+      <span className="text-body-sm">
+        The build command should open a new window with the next step. If it
+        doesn't, click{" "}
+        <span
+          onClick={handleContinue}
+          className="text-primary underline cursor-pointer"
+        >
+          here
+        </span>{" "}
+        to continue.
+      </span>
     </>
   );
 };

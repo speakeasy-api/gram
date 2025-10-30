@@ -1,4 +1,5 @@
 import { getServerURL } from "@/lib/utils";
+import { LINKED_FROM_PARAM } from "@/pages/home/Home";
 import {
   InfoResponseBody,
   OrganizationEntry,
@@ -231,7 +232,19 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
       preferredProject = session.organization.projects[0]!.slug;
     }
 
-    navigate(`/${session.organization.slug}/${preferredProject}`);
+    const paramsToForward = [LINKED_FROM_PARAM];
+    const forwardParams = new URLSearchParams();
+    paramsToForward.forEach((param) => {
+      const value = searchParams.get(param);
+      if (value !== null) {
+        forwardParams.set(param, value);
+      }
+    });
+    const paramsToForwardString = forwardParams.toString();
+
+    navigate(
+      `/${session.organization.slug}/${preferredProject}?${paramsToForwardString}`,
+    );
   } else if (session.organization.slug !== orgSlug) {
     // make sure we don't direct to an org we aren't authenticated with
     navigate(`/${session.organization.slug}/${projectSlug}`);

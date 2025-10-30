@@ -1,6 +1,7 @@
 import { CreateThingCard } from "@/components/create-thing-card";
 import { Cards } from "@/components/ui/card";
 import { Type } from "@/components/ui/type";
+import { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { PromptTemplate } from "@gram/client/models/components";
 import { useUpdateToolsetMutation } from "@gram/client/react-query";
@@ -8,7 +9,6 @@ import { Stack } from "@speakeasy-api/moonshine";
 import { useState } from "react";
 import { PromptTemplateCard, usePrompts } from "../prompts/Prompts";
 import { PromptSelectPopover } from "../prompts/PromptSelectPopover";
-import { filterPromptTools, Toolset } from "@/lib/toolTypes";
 
 export function PromptsTabContent({
   toolset,
@@ -18,7 +18,7 @@ export function PromptsTabContent({
   updateToolsetMutation: ReturnType<typeof useUpdateToolsetMutation>;
 }) {
   const { prompts: allPrompts } = usePrompts();
-  const toolsetPrompts = filterPromptTools(toolset.tools);
+  const toolsetPrompts = toolset.promptTemplates;
   const [promptSelectPopoverOpen, setPromptSelectPopoverOpen] = useState(false);
   const routes = useRoutes();
 

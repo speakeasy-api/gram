@@ -1,12 +1,11 @@
+import { getLogger, type Logger } from "@logtape/logtape";
+import archiver from "archiver";
+import esbuild from "esbuild";
 import { mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import esbuild from "esbuild";
-import archiver from "archiver";
-import { $, ProcessPromise } from "zx";
-import { getLogger, type Logger } from "@logtape/logtape";
-
-import type { ParsedUserConfig } from "./config.ts";
 import { createInterface } from "node:readline";
+import { $, ProcessPromise } from "zx";
+import type { ParsedUserConfig } from "./config.ts";
 
 export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
   const cwd = cfg.cwd ?? process.cwd();
@@ -49,6 +48,8 @@ export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
       slug,
       zipPath,
     });
+
+    await handleOpenBrowser(logger, cwd, cfg);
   }
 
   const zipstats = await stat(zipPath);
@@ -306,4 +307,124 @@ function logCLIOutput(logger: Logger, line: string) {
   } else {
     logger.info(msg, rest);
   }
+}
+
+async function handleOpenBrowser(
+  logger: Logger,
+  cwd: string,
+  cfg: ParsedUserConfig,
+) {
+  if (cfg.openBrowserAfterDeploy === false) {
+    return;
+  }
+
+  // Always prompt unless explicitly disabled
+  const shouldOpen = await promptYesNo(
+    "Would you like to open the Gram dashboard to create an MCP server?",
+  );
+
+  if (shouldOpen) {
+    await openBrowser(logger, "https://app.getgram.ai?from=cli");
+  } else {
+    // Only persist when user says no
+    await updateConfigFile(cwd, false);
+  }
+}
+
+async function promptYesNo(question: string): Promise<boolean> {
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  // Prettify the prompt
+  const cyan = "\x1b[36m";
+  const bold = "\x1b[1m";
+  const grey = "\x1b[90m";
+  const reset = "\x1b[0m";
+  const icon = "●";
+
+  process.stdout.write(`${cyan}${icon}${reset} ${bold}${question}${reset}\n`);
+
+  return new Promise((resolve) => {
+    rl.question(`${grey}(y/n):${reset} `, (answer) => {
+      rl.close();
+      const normalized = answer.trim().toLowerCase();
+      resolve(normalized === "y" || normalized === "yes");
+    });
+  });
+}
+
+async function openBrowser(logger: Logger, url: string) {
+  try {
+    if (process.platform === "darwin") {
+      await $`open ${url}`;
+    } else if (process.platform === "win32") {
+      await $`start ${url}`;
+    } else {
+      await $`xdg-open ${url}`;
+    }
+    logger.info(`Opened ${url} in browser`);
+  } catch (e) {
+    logger.warn("Failed to open browser", {
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+}
+
+async function updateConfigFile(cwd: string, shouldOpen: boolean) {
+  const configFiles = [
+    "gram.config.ts",
+    "gram.config.mts",
+    "gram.config.js",
+    "gram.config.mjs",
+  ];
+
+  for (const configFile of configFiles) {
+    const configPath = join(cwd, configFile);
+    try {
+      await stat(configPath);
+      const content = await readFile(configPath, "utf-8");
+
+      // Add openBrowserAfterDeploy to the config
+      const updatedContent = addOpenBrowserConfig(content, shouldOpen);
+      await writeFile(configPath, updatedContent, "utf-8");
+      return;
+    } catch (e) {
+      // File doesn't exist, try next
+      continue;
+    }
+  }
+
+  // No config file exists, create one
+  const newConfigPath = join(cwd, "gram.config.ts");
+  const newConfig = `import { defineConfig } from "@speakeasy-api/gram-functions/config";
+
+export default defineConfig({
+  openBrowserAfterDeploy: ${shouldOpen},
+});
+`;
+  await writeFile(newConfigPath, newConfig, "utf-8");
+}
+
+function addOpenBrowserConfig(content: string, shouldOpen: boolean): string {
+  // Check if openBrowserAfterDeploy already exists
+  if (content.includes("openBrowserAfterDeploy")) {
+    return content;
+  }
+
+  // Try to add it to existing config object
+  const configObjectMatch = content.match(/defineConfig\s*\(\s*\{([^}]*)\}/s);
+  if (configObjectMatch) {
+    const [fullMatch, innerContent] = configObjectMatch;
+    const hasTrailingComma = innerContent?.trim().endsWith(",");
+    const insertion = `${hasTrailingComma ? "" : ","}\n  openBrowserAfterDeploy: ${shouldOpen},`;
+    return content.replace(
+      fullMatch,
+      fullMatch.replace(/\}$/, `${insertion}\n}`),
+    );
+  }
+
+  // Fallback: just append at the end
+  return content;
 }

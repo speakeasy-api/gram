@@ -1,6 +1,5 @@
 #!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
 
-import util from "node:util";
 import {
   configure,
   getConsoleSink,
@@ -10,12 +9,12 @@ import {
   type LogLevel,
 } from "@logtape/logtape";
 import { getPrettyFormatter } from "@logtape/pretty";
-
-import { buildFunctions } from "../build/gram.ts";
+import { existsSync } from "node:fs";
+import util from "node:util";
+import * as z from "zod";
 import pkg from "../../package.json" with { type: "json" };
 import { loadConfig } from "../build/config.ts";
-import * as z from "zod";
-import { existsSync } from "node:fs";
+import { buildFunctions } from "../build/gram.ts";
 
 const usage = `
 ${pkg.name}/${pkg.version}
