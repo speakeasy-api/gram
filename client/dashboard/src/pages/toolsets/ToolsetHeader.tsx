@@ -73,7 +73,7 @@ export const ToolsetHeader = ({
             {toolset?.description}
           </Type>
         </EditableText>
-        <Stack direction="horizontal" gap={2}>
+        <Stack direction="horizontal" gap={2} align="center">
           <ToolCollectionBadge
             toolNames={toolset?.tools.map((t) => t.name) ?? []}
             variant="neutral"

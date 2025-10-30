@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@gram-ai/create-function",
-  "version": "0.5.3",
+  "version": "0.6.1",
   "description": "Build AI tools and deploy them to getgram.ai",
   "keywords": [],
   "homepage": "https://github.com/speakeasy-api/gram",
@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@gram-ai/functions": "workspace:^",
-    "@modelcontextprotocol/sdk": "^1.19.1",
+    "@modelcontextprotocol/sdk": "catalog:",
     "@types/node": "22.x",
     "prettier": "^3.6.2",
     "typescript": "catalog:",

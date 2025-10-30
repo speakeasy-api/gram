@@ -7,58 +7,40 @@ content-type: text/plain;charset=UTF-8
 {"response":"pong"}"
 `;
 
-exports[`catches resource requests that throw 1`] = `
-"HTTP/1.1 500 
-content-length: 75
-content-type: application/json
-gram-functions-error: gram_err_006
-
-{"name":"FunctionsError","message":"Resource access failed (gram_err_006)"}"
-`;
-
-exports[`catches tool calls that throw 1`] = `
-"HTTP/1.1 500 
-content-length: 72
-content-type: application/json
-gram-functions-error: gram_err_002
-
-{"name":"FunctionsError","message":"Intentional failure (gram_err_002)"}"
-`;
-
 exports[`fails when functions file does not export handleResources 1`] = `
 "HTTP/1.1 500 
-content-length: 136
+content-length: 148
 content-type: application/json
 gram-functions-error: gram_err_007
 
-{"name":"FunctionsError","message":"Unable to handle resources (gram_err_007)","cause":"handleResources function not found in empty.js"}"
+{"name":"FunctionsError","message":"Unable to handle resources (gram_err_007)","cause":{"message":"handleResources function not found in empty.js"}}"
 `;
 
 exports[`fails when functions file does not export handleToolCall 1`] = `
 "HTTP/1.1 500 
-content-length: 128
+content-length: 140
 content-type: application/json
 gram-functions-error: gram_err_004
 
-{"name":"FunctionsError","message":"Unable to call tool (gram_err_004)","cause":"handleToolCall function not found in empty.js"}"
+{"name":"FunctionsError","message":"Unable to call tool (gram_err_004)","cause":{"message":"handleToolCall function not found in empty.js"}}"
 `;
 
 exports[`fails when resource request does not return Response 1`] = `
 "HTTP/1.1 500 
-content-length: 160
+content-length: 172
 content-type: application/json
 gram-functions-error: gram_err_005
 
-{"name":"FunctionsError","message":"Resource request did not return a valid response (gram_err_005)","cause":"Expected instance of \`Response\` but got \`object\`"}"
+{"name":"FunctionsError","message":"Resource request did not return a valid response (gram_err_005)","cause":{"message":"Expected instance of \`Response\` but got \`object\`"}}"
 `;
 
 exports[`fails when tool call does not return Response 1`] = `
 "HTTP/1.1 500 
-content-length: 153
+content-length: 165
 content-type: application/json
 gram-functions-error: gram_err_001
 
-{"name":"FunctionsError","message":"Tool call did not return a valid response (gram_err_001)","cause":"Expected instance of \`Response\` but got \`object\`"}"
+{"name":"FunctionsError","message":"Tool call did not return a valid response (gram_err_001)","cause":{"message":"Expected instance of \`Response\` but got \`object\`"}}"
 `;
 
 exports[`proxy good downstream fetch calls 1`] = `

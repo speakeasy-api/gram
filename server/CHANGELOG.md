@@ -1,5 +1,12 @@
 # server
 
+## 0.9.8
+
+### Patch Changes
+
+- d0cd8ba: fixes trimming fragments in plan execution
+- 2db3a23: Add filtering support to the tool call logs table
+
 ## 0.9.7
 
 ### Patch Changes

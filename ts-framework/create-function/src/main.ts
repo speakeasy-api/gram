@@ -1,3 +1,5 @@
+#!/usr/bin/env -S node --disable-warning=ExperimentalWarning --experimental-strip-types
+
 import { parse } from "@bomb.sh/args";
 import { isCancel, log, taskLog } from "@clack/prompts";
 import { existsSync } from "node:fs";
@@ -29,7 +31,7 @@ Options:
   --dir <path>           Directory to create project in
   --git <yes|no>         Initialize git repository
   --install <yes|no>     Install dependencies
-  --install-cli <yes|no> Install the Gram CLI 
+  --install-cli <yes|no> Install the Gram CLI
   -y, --yes              Skip all prompts and use defaults
 
 Examples:
@@ -63,12 +65,12 @@ async function init(argv: string[]): Promise<void> {
       {
         value: "gram",
         label: "Gram",
-        hint: "Simple framework focused on getting you up and runnning with minimal code.",
+        hint: "(default) simplest path to start building your own tools",
       },
       {
         value: "mcp",
         label: "MCP",
-        hint: "Use the official @modelcontextprotocol/sdk package to build an MCP server and deploy it to Gram.",
+        hint: "For usages where you need advanced control over MCP responses",
       },
     ],
   })(args.template);
@@ -181,6 +183,11 @@ async function init(argv: string[]): Promise<void> {
     tlog.message(`Using local @gram-ai/functions from ${localPkgPath}`);
   }
 
+  let mcpSDKVersion = pkg.devDependencies["@modelcontextprotocol/sdk"];
+  if (mcpSDKVersion == null || mcpSDKVersion.startsWith("catalog:")) {
+    mcpSDKVersion = `^1.20.1`;
+  }
+
   tlog.message("Updating package.json");
   const pkgPath = await fs.readFile(join(dir, "package.json"), "utf-8");
   const dstPkg = JSON.parse(pkgPath);
@@ -189,12 +196,16 @@ async function init(argv: string[]): Promise<void> {
   if (deps?.["@gram-ai/functions"] != null) {
     deps["@gram-ai/functions"] = gramFuncsVersion;
   }
+  if (deps?.["@modelcontextprotocol/sdk"] != null) {
+    deps["@modelcontextprotocol/sdk"] = mcpSDKVersion;
+  }
 
   const scripts = { ...dstPkg.scripts };
   for (const [scriptName, scriptCmd] of Object.entries(dstPkg.scripts || {})) {
-    if (scriptName.startsWith("_:")) {
-      delete scripts[scriptName];
+    if (!scriptName.startsWith("_:")) {
+      continue;
     }
+    delete scripts[scriptName];
     scripts[scriptName.slice(2)] = scriptCmd;
   }
   dstPkg.scripts = scripts;

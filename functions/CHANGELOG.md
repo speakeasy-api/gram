@@ -1,5 +1,14 @@
 # function-runners
 
+## 0.1.3
+
+### Patch Changes
+
+- eccc1bb: Fixed an issue where certain allowed headers in Gram Functions response were interfering with the Trailers that were being set containing resource usage metrics. By removing the Content-Length header from the response, we ensure that the Trailers can be set and read correctly by the client. Previously, setting both headers would prevent response body bytes from being sent back to the server.
+- 36f36cb: Updated the runner to detect if the default export from customer TS/JS code is a
+  `Promise` to an object containing `handleToolCall` / `handleResources` and
+  awaits it before proceeding with a tool/resource request.
+
 ## 0.1.2
 
 ### Patch Changes

@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@gram-ai/functions",
-  "version": "0.5.3",
+  "version": "0.6.1",
   "description": "",
   "author": "Georges Haidar <georges@speakeasyapi.dev>",
   "main": "dist/index.js",
@@ -37,13 +37,17 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./mcp": {
+      "import": "./dist/mcp.js",
+      "types": "./dist/mcp.d.ts"
+    },
     "./build": {
       "import": "./dist/build/index.js",
       "types": "./dist/build/index.d.ts"
     }
   },
   "peerDependencies": {
-    "@modelcontextprotocol/sdk": "^1.19.1"
+    "@modelcontextprotocol/sdk": "catalog:"
   },
   "peerDependenciesMeta": {
     "@modelcontextprotocol/sdk": {

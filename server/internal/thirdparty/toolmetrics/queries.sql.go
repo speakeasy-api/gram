@@ -60,13 +60,19 @@ func buildListLogsQuery(opts ListToolLogsOptions) (string, []any) {
 	}
 
 	if len(opts.ToolURNs) > 0 {
+		// Limit to 1000 items to prevent query string from growing too large
+		toolURNs := opts.ToolURNs
+		if len(toolURNs) > 1000 {
+			toolURNs = toolURNs[:1000]
+		}
+
 		placeholders := ""
-		for i := range opts.ToolURNs {
+		for i := range toolURNs {
 			if i > 0 {
 				placeholders += ", "
 			}
 			placeholders += fmt.Sprintf("$%d", paramIndex)
-			args = append(args, opts.ToolURNs[i])
+			args = append(args, toolURNs[i])
 			paramIndex++
 		}
 		baseQuery += fmt.Sprintf(" and tool_urn IN (%s)", placeholders)
