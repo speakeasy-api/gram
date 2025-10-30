@@ -1,0 +1,11 @@
+All done! Jump in with `cd $DIR`.
+
+Some next steps:
+
+- Start a local development MCP server with `$PACKAGE_MANAGER run dev`
+
+- Build your function with `$PACKAGE_MANAGER run build`
+
+- Create MCP servers from your tools in the Gram dashboard: https://app.getgram.ai
+
+Have fun 🚀

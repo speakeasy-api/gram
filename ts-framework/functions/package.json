@@ -37,13 +37,17 @@
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
+    "./mcp": {
+      "import": "./dist/mcp.js",
+      "types": "./dist/mcp.d.ts"
+    },
     "./build": {
       "import": "./dist/build/index.js",
       "types": "./dist/build/index.d.ts"
     }
   },
   "peerDependencies": {
-    "@modelcontextprotocol/sdk": "^1.19.1"
+    "@modelcontextprotocol/sdk": "catalog:"
   },
   "peerDependenciesMeta": {
     "@modelcontextprotocol/sdk": {

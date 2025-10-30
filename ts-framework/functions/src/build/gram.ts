@@ -5,29 +5,31 @@ import archiver from "archiver";
 import { $, ProcessPromise } from "zx";
 import { getLogger, type Logger } from "@logtape/logtape";
 
-import { Gram } from "../framework.ts";
 import type { ParsedUserConfig } from "./config.ts";
 import { createInterface } from "node:readline";
 
 export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
   const cwd = cfg.cwd ?? process.cwd();
   const entrypoint = resolve(cwd, cfg.entrypoint);
-  const gram = await import(entrypoint).then((mod) => {
-    const gramExport = mod.default;
-    if (!(gramExport instanceof Gram)) {
-      throw new Error(
-        `${cfg.entrypoint}: default export does not appear to be an instance of Gram`,
-      );
-    }
-
-    return gramExport;
+  const exp = await import(entrypoint).then((mod) => {
+    return mod.default; // If this is a Promise (then-able) then it will be resolved
   });
+
+  const manifestFunc =
+    "manifest" in exp && typeof exp.manifest === "function"
+      ? exp.manifest.bind(exp)
+      : null;
+  if (!manifestFunc) {
+    throw new Error(
+      `The function entrypoint ${cfg.entrypoint} does not export an object with a manifest() function.`,
+    );
+  }
 
   const slug = cfg.slug || (await inferSlug(cwd));
 
   logger.info(`Building Gram Function: ${slug}`);
 
-  const manifest = gram.manifest();
+  const manifest = await manifestFunc();
 
   await mkdir(cfg.outDir, { recursive: true });
   const outFile = resolve(cfg.outDir, "manifest.json");

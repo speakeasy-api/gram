@@ -5,8 +5,6 @@ type Prettify<T> = {
   [K in keyof T]: T[K];
 } & {};
 
-type VarDef = { description?: string | undefined };
-
 export class ResponseError extends Error {
   constructor(message?: string, options?: ErrorOptions) {
     super(message, options);
@@ -43,14 +41,33 @@ type InferInput<T> = ToolSignature<T>[1];
 
 type InferResult<T> = ToolSignature<T>[3];
 
+export type ManifestVariables = Record<
+  string,
+  { description?: string | undefined }
+>;
+
+export type ManifestTool = {
+  name: string;
+  description?: string;
+  inputSchema: unknown;
+  variables?: ManifestVariables;
+  meta?: unknown;
+};
+
+export type ManifestResource = {
+  name: string;
+  title?: string | undefined;
+  description?: string | undefined;
+  uri: string;
+  mimeType?: string | undefined;
+  variables?: ManifestVariables;
+  meta?: unknown;
+};
+
 export type Manifest = {
   version: string;
-  tools: Array<{
-    name: string;
-    description?: string;
-    inputSchema: unknown;
-    variables?: Record<string, VarDef>;
-  }>;
+  tools?: ManifestTool[];
+  resources?: ManifestResource[];
 };
 
 export function assert<V extends { error: string; stack?: never }>(
@@ -231,7 +248,7 @@ export class Gram<
         name: string;
         description?: string;
         inputSchema: unknown;
-        variables?: Record<string, VarDef>;
+        variables?: ManifestVariables;
       } = {
         name: tool.name,
         inputSchema: inputSchema,
@@ -254,7 +271,7 @@ export class Gram<
   }
 }
 
-function envMapFromJSONSchema(jsonSchema: unknown): Record<string, VarDef> {
+function envMapFromJSONSchema(jsonSchema: unknown): ManifestVariables {
   const parsed = zm
     .object({
       properties: zm.record(
@@ -266,7 +283,7 @@ function envMapFromJSONSchema(jsonSchema: unknown): Record<string, VarDef> {
     })
     .parse(jsonSchema);
 
-  const out: Record<string, VarDef> = {};
+  const out: ManifestVariables = {};
   for (const [key, value] of Object.entries(parsed.properties)) {
     out[key] = {
       ...(value.description != null ? { description: value.description } : {}),
