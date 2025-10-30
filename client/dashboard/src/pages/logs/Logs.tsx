@@ -31,6 +31,19 @@ export default function LogsPage() {
         statusFilter: null,
     });
     const [selectedLog, setSelectedLog] = useState<HTTPToolLog | null>(null);
+    const [searchInput, setSearchInput] = useState<string>("");
+
+    // Debounce search input - update filter 500ms after user stops typing
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            setFilters(prev => ({
+                ...prev,
+                searchQuery: searchInput || null
+            }));
+        }, 500);
+
+        return () => clearTimeout(timeoutId);
+    }, [searchInput]);
 
     // Fetch toolsets for server name dropdown
     const {data: toolsetsData} = useListToolsets();
@@ -64,6 +77,7 @@ export default function LogsPage() {
             toolType: (filters.toolTypeFilter as "http" | "function" | "prompt" | undefined) || undefined,
             toolUrns: selectedToolUrns,
             status: (filters.statusFilter as "success" | "failure" | undefined) || undefined,
+            toolName: filters.searchQuery || undefined,
         },
         undefined,
         {
@@ -76,7 +90,7 @@ export default function LogsPage() {
     useEffect(() => {
         if (data?.logs && !isLoading) {
             // Check if we've already processed this cursor to avoid duplicates
-            // Skip check for initial load (both undefined is OK for first load)
+            // Skip check for an initial load (both undefined is OK for the first load)
             if (currentCursor !== undefined && lastProcessedCursorRef.current === currentCursor) {
                 return;
             }
@@ -107,7 +121,7 @@ export default function LogsPage() {
         setCurrentCursor(undefined);
         lastProcessedCursorRef.current = undefined;
         setIsFetchingMore(false);
-    }, [filters.toolTypeFilter, filters.serverNameFilter, filters.statusFilter]);
+    }, [filters.toolTypeFilter, filters.serverNameFilter, filters.statusFilter, filters.searchQuery]);
 
     // Auto-load more if container isn't scrollable after initial load
     useEffect(() => {
@@ -162,11 +176,8 @@ export default function LogsPage() {
                             {/* Search and Filters Row */}
                             <div className="flex items-center justify-between gap-4">{/* Search Input */}
                                 <SearchBar
-                                    value={filters.searchQuery ?? ""}
-                                    onChange={(value) => setFilters(prev => ({
-                                        ...prev,
-                                        searchQuery: value || null
-                                    }))}
+                                    value={searchInput}
+                                    onChange={setSearchInput}
                                     placeholder="Search"
                                     className="w-1/3"/>
 
