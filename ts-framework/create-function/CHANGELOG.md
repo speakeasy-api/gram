@@ -1,5 +1,12 @@
 # @gram-ai/create-function
 
+## 0.6.1
+
+### Patch Changes
+
+- efe0388: Added a shebang line to the `create-function/src/main.ts` file, enabling it to
+  be executed directly as a script.
+
 ## 0.6.0
 
 ### Minor Changes
