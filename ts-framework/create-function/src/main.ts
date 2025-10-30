@@ -146,7 +146,7 @@ async function init(argv: string[]): Promise<void> {
   // check exit code and decide if we should prompt
   if (proc.exitCode !== 0) {
     const res = await confirmOrClack({
-      message: "Install the Gram CLI???? Required to deploy tools to Gram.",
+      message: "Install the Gram CLI? Required to deploy tools to Gram.",
     })(args.yes || yn(args.installCli ?? false));
     if (isCancel(res)) {
       log.info("Operation cancelled.");
