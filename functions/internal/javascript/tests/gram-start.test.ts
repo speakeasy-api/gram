@@ -185,9 +185,7 @@ test("proxy good downstream that returns binary data", async () => {
 
 test("catches tool calls that throw", async () => {
   const pipePath = await fakepipe();
-  const args = JSON.stringify({
-    name: "fail-tool",
-  });
+  const args = JSON.stringify({ name: "fail-tool" });
 
   await main(
     ["node", "./gram-start.mjs", pipePath, args, "tool"],
@@ -196,12 +194,16 @@ test("catches tool calls that throw", async () => {
 
   const content = await readFile(pipePath, "utf-8");
   expect(content).toContain(ERROR_CODES.TOOL_CALL_FAILED);
-  expect(content).toMatchSnapshot();
 
   const res = JSON.parse(content.trim().split("\n").at(-1) ?? "");
   expect(res).toEqual({
     name: "FunctionsError",
-    message: expect.stringMatching(/Intentional failure/),
+    message: "Tool call failed (gram_err_002)",
+    cause: {
+      name: "Error",
+      message: "Intentional failure",
+      stack: expect.any(String),
+    },
   });
 });
 
@@ -236,10 +238,12 @@ test("fails when functions file does not exist", async () => {
   const res = JSON.parse(content.trim().split("\n").at(-1) ?? "");
   expect(res).toEqual({
     name: "FunctionsError",
-    message: expect.stringMatching(
-      /Unable to import user code \(gram_err_003\)/,
-    ),
-    cause: expect.stringMatching(/^Failed to import nonexistent\.js/),
+    message: "Unable to import user code: nonexistent.js (gram_err_003)",
+    cause: {
+      name: "Error",
+      message: expect.stringMatching(/Cannot find module.*nonexistent\.js/),
+      stack: expect.any(String),
+    },
   });
 });
 
@@ -346,12 +350,16 @@ test("catches resource requests that throw", async () => {
 
   const content = await readFile(pipePath, "utf-8");
   expect(content).toContain(ERROR_CODES.RESOURCE_REQUEST_FAILED);
-  expect(content).toMatchSnapshot();
 
   const res = JSON.parse(content.trim().split("\n").at(-1) ?? "");
   expect(res).toEqual({
     name: "FunctionsError",
-    message: expect.stringMatching(/Resource access failed/),
+    message: "Resource request failed (gram_err_006)",
+    cause: {
+      name: "Error",
+      message: "Resource access failed",
+      stack: expect.any(String),
+    },
   });
 });
 
