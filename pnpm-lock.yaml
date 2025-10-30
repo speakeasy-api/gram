@@ -352,7 +352,7 @@ importers:
         version: 8.8.4-lite
     devDependencies:
       '@gram-ai/functions':
-        specifier: 'workspace:'
+        specifier: workspace:^
         version: link:../functions
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
