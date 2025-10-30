@@ -169,10 +169,10 @@ function HomeContent() {
   // If we arrived here from the CLI, redirect to the onboarding page if the user has no toolsets, otherwise do nothing.
   if (linkedFrom === "cli") {
     if (toolsets?.toolsets?.length === 0) {
-      navigate(
-        routes.onboarding.href() +
-          `?${START_PATH_PARAM}=cli&${START_STEP_PARAM}=toolset`,
-      );
+      const params = new URLSearchParams();
+      params.set(START_PATH_PARAM, "cli");
+      params.set(START_STEP_PARAM, "toolset");
+      navigate(`${routes.onboarding.href()}?${params.toString()}`);
     }
   }
 

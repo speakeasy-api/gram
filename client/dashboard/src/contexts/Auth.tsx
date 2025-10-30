@@ -233,9 +233,14 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
     }
 
     const paramsToForward = [LINKED_FROM_PARAM];
-    const paramsToForwardString = paramsToForward
-      .map((p) => `${p}=${searchParams.get(p)}`)
-      .join("&");
+    const forwardParams = new URLSearchParams();
+    paramsToForward.forEach((param) => {
+      const value = searchParams.get(param);
+      if (value !== null) {
+        forwardParams.set(param, value);
+      }
+    });
+    const paramsToForwardString = forwardParams.toString();
 
     navigate(
       `/${session.organization.slug}/${preferredProject}?${paramsToForwardString}`,

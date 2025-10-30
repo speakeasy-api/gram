@@ -1,15 +1,11 @@
 import { getLogger, type Logger } from "@logtape/logtape";
 import archiver from "archiver";
 import esbuild from "esbuild";
-import { exec } from "node:child_process";
 import { mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { promisify } from "node:util";
 import { $, ProcessPromise } from "zx";
 import type { ParsedUserConfig } from "./config.ts";
-
-const execAsync = promisify(exec);
 
 export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
   const cwd = cfg.cwd ?? process.cwd();
@@ -361,14 +357,13 @@ async function promptYesNo(question: string): Promise<boolean> {
 
 async function openBrowser(logger: Logger, url: string) {
   try {
-    const command =
-      process.platform === "darwin"
-        ? `open "${url}"`
-        : process.platform === "win32"
-          ? `start "${url}"`
-          : `xdg-open "${url}"`;
-
-    await execAsync(command);
+    if (process.platform === "darwin") {
+      await $`open ${url}`;
+    } else if (process.platform === "win32") {
+      await $`start ${url}`;
+    } else {
+      await $`xdg-open ${url}`;
+    }
     logger.info(`Opened ${url} in browser`);
   } catch (e) {
     logger.warn("Failed to open browser", {
