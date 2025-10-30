@@ -167,7 +167,7 @@ function HomeContent() {
   const linkedFrom = searchParams.get(LINKED_FROM_PARAM);
 
   // If we arrived here from the CLI, redirect to the onboarding page if the user has no toolsets, otherwise do nothing.
-  if (linkedFrom == "cli") {
+  if (linkedFrom === "cli") {
     if (toolsets?.toolsets?.length === 0) {
       navigate(
         routes.onboarding.href() +
