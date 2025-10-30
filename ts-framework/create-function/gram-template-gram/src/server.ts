@@ -30,7 +30,7 @@ export const server = new Server(
 server.setRequestHandler(
   ListToolsRequestSchema,
   async (): Promise<ListToolsResult> => {
-    const tools = gram.manifest().tools.map((t) => {
+    const tools = (gram.manifest().tools || []).map((t) => {
       return {
         name: t.name,
         description: t.description,
