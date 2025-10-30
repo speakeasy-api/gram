@@ -20,20 +20,36 @@ class FunctionsError extends Error {
   /**
    * @param {typeof ERROR_CODES[keyof typeof ERROR_CODES]} code
    * @param {string} message
-   * @param {string | undefined} [cause]
+   * @param {unknown} [cause]
    */
   constructor(code, message, cause) {
-    super(`${message} (${code})`);
+    super(`${message} (${code})`, { cause });
     this.name = "FunctionsError";
-    this.cause = cause;
     this.code = code;
   }
 
   toJSON() {
+    /** @type {unknown} */
+    let cause = undefined;
+    if (this.cause instanceof Error) {
+      cause = {
+        name: this.cause.name,
+        message: this.cause.message,
+        stack: this.cause.stack,
+      };
+    } else if (this.cause != null) {
+      cause = {
+        message: String(this.cause),
+      };
+    } else {
+      cause = undefined;
+    }
+
+
     return {
       name: this.name,
       message: this.message,
-      cause: this.cause,
+      cause,
     };
   }
 }
@@ -118,9 +134,7 @@ async function callTool(func, name, input) {
     if (e instanceof FunctionsError) {
       throw e;
     } else {
-      let msg = e instanceof Error ? e.message : String(e);
-      msg = msg || "Tool call failed";
-      throw new FunctionsError(ERROR_CODES.TOOL_CALL_FAILED, msg);
+      throw new FunctionsError(ERROR_CODES.TOOL_CALL_FAILED, "Tool call failed", e);
     }
   }
 }
@@ -146,9 +160,7 @@ async function callResource(func, uri, input) {
     if (e instanceof FunctionsError) {
       throw e;
     } else {
-      let msg = e instanceof Error ? e.message : String(e);
-      msg = msg || "Resource request failed";
-      throw new FunctionsError(ERROR_CODES.RESOURCE_REQUEST_FAILED, msg);
+      throw new FunctionsError(ERROR_CODES.RESOURCE_REQUEST_FAILED, "Resource request failed", e);
     }
   }
 }
@@ -194,10 +206,7 @@ async function writeHTTPResponse(pipeFile, response) {
     return;
   }
 
-  const dest = pipeFile.createWriteStream({
-    autoClose: true,
-    emitClose: true,
-  });
+  const dest = pipeFile.createWriteStream();
 
   await response.body.pipeTo(Writable.toWeb(dest));
 }
@@ -210,17 +219,12 @@ async function importToolCallHandler(codePath) {
   try {
     const mod = await import(codePath).catch((e) => {
       const filename = path.basename(codePath);
-      throw new FunctionsError(
-        ERROR_CODES.IMPORT_FAILURE,
-        "Unable to import user code",
-        `Failed to import ${filename}: ${e instanceof Error ? e.message : String(e)
-        }`,
-      );
+      throw new FunctionsError(ERROR_CODES.IMPORT_FAILURE, `Unable to import user code: ${filename}`, e);
     });
 
     let f = mod["handleToolCall"];
     if (typeof f !== "function") {
-      const def = mod["default"];
+      const def = await mod["default"];
       // Bind `f` to `def` so if `f` contains references to `this`, they will
       // continue to work correctly.
       f = typeof def?.handleToolCall === "function" ? def.handleToolCall.bind(def) : undefined;
@@ -243,11 +247,7 @@ async function importToolCallHandler(codePath) {
     } else {
       return {
         ok: false,
-        error: new FunctionsError(
-          ERROR_CODES.UNEXPECTED,
-          "Unexpected error occurred",
-          e instanceof Error ? e.message : String(e),
-        ),
+        error: new FunctionsError(ERROR_CODES.UNEXPECTED, "Unexpected error occurred", e),
       };
     }
   }
@@ -261,17 +261,12 @@ async function importResourceHandler(codePath) {
   try {
     const mod = await import(codePath).catch((e) => {
       const filename = path.basename(codePath);
-      throw new FunctionsError(
-        ERROR_CODES.IMPORT_FAILURE,
-        "Unable to import user code",
-        `Failed to import ${filename}: ${e instanceof Error ? e.message : String(e)
-        }`,
-      );
+      throw new FunctionsError(ERROR_CODES.IMPORT_FAILURE, `Unable to import user code: ${filename}`, e);
     });
 
     let f = mod["handleResources"];
     if (typeof f !== "function") {
-      const def = mod["default"];
+      const def = await mod["default"];
       // Bind `f` to `def` so if `f` contains references to `this`, they will
       // continue to work correctly.
       f = typeof def?.handleResources === "function" ? def.handleResources.bind(def) : undefined;
@@ -294,11 +289,7 @@ async function importResourceHandler(codePath) {
     } else {
       return {
         ok: false,
-        error: new FunctionsError(
-          ERROR_CODES.UNEXPECTED,
-          "Unexpected error occurred",
-          e instanceof Error ? e.message : String(e),
-        ),
+        error: new FunctionsError(ERROR_CODES.UNEXPECTED, "Unexpected error occurred", e),
       };
     }
   }

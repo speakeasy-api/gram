@@ -25,7 +25,7 @@ func BuildCreateTemplatePayload(templatesCreateTemplateBody string, templatesCre
 	{
 		err = json.Unmarshal([]byte(templatesCreateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Necessitatibus sunt necessitatibus a nostrum similique itaque.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"name\": \"n4y\",\n      \"prompt\": \"Beatae aspernatur necessitatibus debitis quos.\",\n      \"tool_urns_hint\": [\n         \"Expedita eaque.\",\n         \"Nemo deserunt illo doloribus et.\",\n         \"Aut suscipit doloribus eaque voluptatem quis fugiat.\"\n      ],\n      \"tools_hint\": [\n         \"Error et et consequuntur id.\",\n         \"Quia eaque deserunt et.\",\n         \"Quia sunt dolores dicta.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Doloribus eaque voluptatem quis fugiat voluptatum quo.\",\n      \"engine\": \"mustache\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"7ir\",\n      \"prompt\": \"Deserunt illo doloribus et voluptate aut.\",\n      \"tool_urns_hint\": [\n         \"Veniam hic magnam quo blanditiis qui.\",\n         \"Ipsum corrupti et error et.\",\n         \"Molestiae cupiditate provident fugit voluptatem.\"\n      ],\n      \"tools_hint\": [\n         \"Blanditiis illo in voluptatibus.\",\n         \"Ratione quibusdam ut.\",\n         \"Nemo dolor.\"\n      ]\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.name", body.Name, "^[a-z0-9_-]{1,128}$"))
 		if utf8.RuneCountInString(body.Name) > 40 {
@@ -103,7 +103,7 @@ func BuildUpdateTemplatePayload(templatesUpdateTemplateBody string, templatesUpd
 	{
 		err = json.Unmarshal([]byte(templatesUpdateTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Tempore voluptas quia aut dolorem sit vitae.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Sit quia ullam.\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"Sunt porro.\",\n      \"prompt\": \"Minima odit placeat.\",\n      \"tool_urns_hint\": [\n         \"Cupiditate dolorem qui.\",\n         \"Dolores laudantium aliquam adipisci rem.\",\n         \"Earum quam animi accusamus.\"\n      ],\n      \"tools_hint\": [\n         \"Et et debitis.\",\n         \"Quia quia fugiat assumenda dolorem.\",\n         \"Id necessitatibus doloribus qui.\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": \"{\\\"name\\\":\\\"example\\\",\\\"email\\\":\\\"mail@example.com\\\"}\",\n      \"description\": \"Ea qui omnis voluptatem ut aut provident.\",\n      \"engine\": \"mustache\",\n      \"id\": \"Dolores laudantium aliquam adipisci rem.\",\n      \"kind\": \"higher_order_tool\",\n      \"name\": \"Earum quam animi accusamus.\",\n      \"prompt\": \"Nihil veritatis ipsum.\",\n      \"tool_urns_hint\": [\n         \"Animi dolorum est.\",\n         \"Quibusdam optio est ut dolores.\",\n         \"Non nam impedit aut.\"\n      ],\n      \"tools_hint\": [\n         \"Soluta veritatis aliquam aut ut omnis.\",\n         \"Delectus quos.\",\n         \"Sit quia eos et id atque omnis.\"\n      ]\n   }'")
 		}
 		if body.Arguments != nil {
 			err = goa.MergeErrors(err, goa.ValidateFormat("body.arguments", *body.Arguments, goa.FormatJSON))
@@ -297,7 +297,7 @@ func BuildRenderTemplateByIDPayload(templatesRenderTemplateByIDBody string, temp
 	{
 		err = json.Unmarshal([]byte(templatesRenderTemplateByIDBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": {\n         \"Doloremque nobis pariatur quaerat nulla vel qui.\": \"Sequi in sit atque.\"\n      }\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": {\n         \"Facilis enim eos praesentium ut.\": \"Ducimus dolor et laboriosam consequatur rem.\",\n         \"Magni commodi qui in.\": \"Accusantium est beatae corrupti dolorum aut.\",\n         \"Pariatur nulla reprehenderit nesciunt ea accusamus.\": \"Sunt suscipit nemo autem.\"\n      }\n   }'")
 		}
 		if body.Arguments == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("arguments", "body"))
@@ -353,7 +353,7 @@ func BuildRenderTemplatePayload(templatesRenderTemplateBody string, templatesRen
 	{
 		err = json.Unmarshal([]byte(templatesRenderTemplateBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": {\n         \"In quaerat.\": \"Tempore labore magnam neque iusto cupiditate.\",\n         \"Soluta dicta sint.\": \"Animi saepe quo facilis enim eos.\"\n      },\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"prompt\": \"Vel sint voluptas est.\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"arguments\": {\n         \"Dolore consequatur et.\": \"Voluptates ut ipsa aut sed dolore.\",\n         \"Pariatur blanditiis tempora molestiae.\": \"Laboriosam et aut.\",\n         \"Voluptatum aperiam.\": \"Eum harum voluptatibus assumenda voluptas.\"\n      },\n      \"engine\": \"mustache\",\n      \"kind\": \"prompt\",\n      \"prompt\": \"Debitis qui culpa laborum assumenda dolor.\"\n   }'")
 		}
 		if body.Arguments == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("arguments", "body"))

@@ -29,19 +29,8 @@ const (
 )
 
 var allowedHeaders = map[string]struct{}{
-	"cache-control":           {},
-	"content-disposition":     {},
-	"content-encoding":        {},
-	"content-language":        {},
-	"content-length":          {},
-	"content-location":        {},
-	"content-md5":             {},
 	"content-type":            {},
-	"etag":                    {},
-	"expires":                 {},
-	"last-modified":           {},
 	"retry-after":             {},
-	"vary":                    {},
 	"x-ratelimit-limit":       {},
 	"x-ratelimit-remaining":   {},
 	"x-ratelimit-reset-after": {},
@@ -155,6 +144,10 @@ func (s *Service) executeRequest(ctx context.Context, req callRequest, w http.Re
 		}
 	}
 
+	// The following two headers must be removed to prevent conflicts with
+	// chunked encoding and trailers.
+	w.Header().Del("Content-Length")
+	w.Header().Del("Content-Encoding")
 	// Announce trailers for resource usage metrics
 	// We currently have to write these after WriteHeader
 	w.Header().Set("Trailer", cpuHeader+", "+memoryHeader+", "+executionTimeHeader)

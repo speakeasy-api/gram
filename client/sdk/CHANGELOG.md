@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.16.7
+
+### Patch Changes
+
+- 2db3a23: Add filtering support to the tool call logs table
+
 ## 0.16.3
 
 ### Patch Changes

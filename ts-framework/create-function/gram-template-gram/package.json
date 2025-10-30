@@ -21,14 +21,13 @@
   "scripts": {
     "dev": "mcp-inspector node ./src/server.ts",
     "lint": "tsc --noEmit",
-    "build": "node -e \"console.log('Stubbed out')\"",
     "_:build": "gram-build",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "@gram-ai/functions": "workspace:",
-    "@modelcontextprotocol/sdk": "^1.20.1",
+    "@modelcontextprotocol/sdk": "catalog:",
     "zod": "^4"
   },
   "devDependencies": {

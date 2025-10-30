@@ -67,6 +67,21 @@ func EncodeListLogsRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 		if p.Cursor != nil {
 			values.Add("cursor", *p.Cursor)
 		}
+		if p.Status != nil {
+			values.Add("status", *p.Status)
+		}
+		if p.ServerName != nil {
+			values.Add("server_name", *p.ServerName)
+		}
+		if p.ToolName != nil {
+			values.Add("tool_name", *p.ToolName)
+		}
+		if p.ToolType != nil {
+			values.Add("tool_type", *p.ToolType)
+		}
+		for _, value := range p.ToolUrns {
+			values.Add("tool_urns", value)
+		}
 		values.Add("per_page", fmt.Sprintf("%v", p.PerPage))
 		values.Add("direction", p.Direction)
 		values.Add("sort", p.Sort)

@@ -2,10 +2,10 @@ import {Page} from "@/components/page-layout";
 import {SearchBar} from "@/components/ui/search-bar";
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue,} from "@/components/ui/select";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow,} from "@/components/ui/table";
-import {useListToolLogs} from "@gram/client/react-query";
+import {useListToolLogs, useListToolsets} from "@gram/client/react-query";
 import {HTTPToolLog} from "@gram/client/models/components";
 import {Icon} from "@speakeasy-api/moonshine";
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {LogDetailSheet} from "./LogDetailSheet";
 import {formatTimestamp, getSourceFromUrn, getToolIcon, getToolNameFromUrn, isSuccessfulCall,} from "./utils";
 import {formatDuration} from "@/lib/dates";
@@ -31,6 +31,36 @@ export default function LogsPage() {
         statusFilter: null,
     });
     const [selectedLog, setSelectedLog] = useState<HTTPToolLog | null>(null);
+    const [searchInput, setSearchInput] = useState<string>("");
+
+    // Debounce search input - update filter 500ms after user stops typing
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            setFilters(prev => ({
+                ...prev,
+                searchQuery: searchInput || null
+            }));
+        }, 500);
+
+        return () => clearTimeout(timeoutId);
+    }, [searchInput]);
+
+    // Fetch toolsets for server name dropdown
+    const {data: toolsetsData} = useListToolsets();
+    const serverNames = useMemo(() => {
+        return toolsetsData?.toolsets?.map(t =>
+            ({slug: t.slug, id: t.id, toolUrns: t.toolUrns}))
+            .filter(Boolean) || [];
+    }, [toolsetsData]);
+
+    // Get tool URNs for selected server
+    const selectedToolUrns = useMemo(() => {
+        if (!filters.serverNameFilter) return undefined;
+        const selectedToolset = serverNames.find(s => s.slug === filters.serverNameFilter);
+        return selectedToolset?.toolUrns && selectedToolset.toolUrns.length > 0
+            ? selectedToolset.toolUrns
+            : undefined;
+    }, [filters.serverNameFilter, serverNames]);
 
     // Infinite scroll state
     const [allLogs, setAllLogs] = useState<HTTPToolLog[]>([]);
@@ -44,10 +74,14 @@ export default function LogsPage() {
         {
             perPage,
             cursor: currentCursor,
+            toolType: (filters.toolTypeFilter as "http" | "function" | "prompt" | undefined) || undefined,
+            toolUrns: selectedToolUrns,
+            status: (filters.statusFilter as "success" | "failure" | undefined) || undefined,
+            toolName: filters.searchQuery || undefined,
         },
         undefined,
         {
-            staleTime: 30000, // Cache for 30 seconds
+            staleTime: 0, // Don't cache to ensure fresh data on filter changes
             refetchOnWindowFocus: false,
         },
     );
@@ -56,7 +90,7 @@ export default function LogsPage() {
     useEffect(() => {
         if (data?.logs && !isLoading) {
             // Check if we've already processed this cursor to avoid duplicates
-            // Skip check for initial load (both undefined is OK for first load)
+            // Skip check for an initial load (both undefined is OK for the first load)
             if (currentCursor !== undefined && lastProcessedCursorRef.current === currentCursor) {
                 return;
             }
@@ -80,6 +114,13 @@ export default function LogsPage() {
 
     const pagination = data?.pagination;
     const hasNextPage = pagination?.hasNextPage ?? false;
+
+    // Reset the cursor when filters change (but keep existing logs visible until new data arrives)
+    useEffect(() => {
+        setCurrentCursor(undefined);
+        lastProcessedCursorRef.current = undefined;
+        setIsFetchingMore(false);
+    }, [filters.toolTypeFilter, filters.serverNameFilter, filters.statusFilter, filters.searchQuery]);
 
     // Auto-load more if container isn't scrollable after initial load
     useEffect(() => {
@@ -134,21 +175,18 @@ export default function LogsPage() {
                             {/* Search and Filters Row */}
                             <div className="flex items-center justify-between gap-4">{/* Search Input */}
                                 <SearchBar
-                                    value={filters.searchQuery ?? ""}
-                                    onChange={(value) => setFilters(prev => ({
-                                        ...prev,
-                                        searchQuery: value || null
-                                    }))}
+                                    value={searchInput}
+                                    onChange={setSearchInput}
                                     placeholder="Search"
                                     className="w-1/3"/>
 
                                 {/* Filters */}
                                 <div className="flex items-center gap-2">
                                     <Select
-                                        value={filters.toolTypeFilter ?? ""}
+                                        value={filters.toolTypeFilter ?? "all"}
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
-                                            toolTypeFilter: value || null
+                                            toolTypeFilter: value === "all" ? null : value
                                         }))}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Tool Type"/>
@@ -160,25 +198,29 @@ export default function LogsPage() {
                                     </Select>
 
                                     <Select
-                                        value={filters.serverNameFilter ?? ""}
+                                        value={filters.serverNameFilter ?? "all"}
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
-                                            serverNameFilter: value || null
+                                            serverNameFilter: value === "all" ? null : value
                                         }))}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Server Name"/>
                                         </SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="all">All Servers</SelectItem>
-                                            {/* Add more server name options here */}
+                                            {serverNames.map((serverName) => (
+                                                <SelectItem key={serverName.id} value={serverName.slug}>
+                                                    {serverName.slug}
+                                                </SelectItem>
+                                            ))}
                                         </SelectContent>
                                     </Select>
 
                                     <Select
-                                        value={filters.statusFilter ?? ""}
+                                        value={filters.statusFilter ?? "all"}
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
-                                            statusFilter: value || null
+                                            statusFilter: value === "all" ? null : value
                                         }))}>
                                         <SelectTrigger className="w-[180px]">
                                             <SelectValue placeholder="Status"/>
@@ -194,7 +236,13 @@ export default function LogsPage() {
 
                             {/* Table */}
                             <div
-                                className="border border-neutral-softest rounded-lg overflow-hidden w-full flex flex-col">
+                                className="border border-neutral-softest rounded-lg overflow-hidden w-full flex flex-col relative">
+                                {/* Loading indicator when filtering with existing data */}
+                                {isLoading && allLogs.length > 0 && (
+                                    <div className="absolute top-0 left-0 right-0 h-1 bg-primary-default/20 z-20">
+                                        <div className="h-full bg-primary-default animate-pulse"/>
+                                    </div>
+                                )}
                                 <div
                                     ref={tableContainerRef}
                                     className="overflow-y-auto"

@@ -9,6 +9,9 @@ catalogs:
     '@ai-sdk/openai':
       specifier: ^1.3.4
       version: 1.3.24
+    '@modelcontextprotocol/sdk':
+      specifier: ^1.20.1
+      version: 1.20.1
     '@tanstack/react-query':
       specifier: ^5.89.0
       version: 5.89.0
@@ -352,8 +355,8 @@ importers:
         specifier: workspace:^
         version: link:../functions
       '@modelcontextprotocol/sdk':
-        specifier: ^1.19.1
-        version: 1.19.1
+        specifier: 'catalog:'
+        version: 1.20.1
       '@types/node':
         specifier: 22.x
         version: 22.18.6
@@ -373,7 +376,7 @@ importers:
         specifier: 'workspace:'
         version: link:../../functions
       '@modelcontextprotocol/sdk':
-        specifier: ^1.20.1
+        specifier: 'catalog:'
         version: 1.20.1
       zod:
         specifier: ^4
@@ -395,12 +398,15 @@ importers:
         specifier: 'workspace:'
         version: link:../../functions
       '@modelcontextprotocol/sdk':
-        specifier: ^1.19.1
+        specifier: 'catalog:'
         version: 1.20.1
       zod:
         specifier: ^3
         version: 3.25.76
     devDependencies:
+      '@modelcontextprotocol/inspector':
+        specifier: ^0.17.1
+        version: 0.17.1(@types/node@22.18.6)(@types/react-dom@19.1.9(@types/react@19.1.13))(@types/react@19.1.13)(typescript@5.8.3)
       '@types/node':
         specifier: 22.x
         version: 22.18.6
@@ -417,8 +423,8 @@ importers:
         specifier: ^1.1.1
         version: 1.1.1(@logtape/logtape@1.1.1)
       '@modelcontextprotocol/sdk':
-        specifier: ^1.19.1
-        version: 1.19.1
+        specifier: 'catalog:'
+        version: 1.20.1
       archiver:
         specifier: ^7.0.1
         version: 7.0.1
@@ -1288,10 +1294,6 @@ packages:
     resolution: {integrity: sha512-AW9QsFrkbqpEjAZcCAgvQA7+emnF22DLYef5DxvTjgv9gFwlKq8d7/HrAFFln8k+SUQ2Zn/AT1LGzgH59qbZ1A==}
     engines: {node: '>=22.7.5'}
     hasBin: true
-
-  '@modelcontextprotocol/sdk@1.19.1':
-    resolution: {integrity: sha512-3Y2h3MZKjec1eAqSTBclATlX+AbC6n1LgfVzRMJLt3v6w0RCYgwLrjbxPDbhsYHt6Wdqc/aCceNJYgj448ELQQ==}
-    engines: {node: '>=18'}
 
   '@modelcontextprotocol/sdk@1.20.1':
     resolution: {integrity: sha512-j/P+yuxXfgxb+mW7OEoRCM3G47zCTDqUPivJo/VzpjbG8I9csTXtOprCf5FfOfHK4whOJny0aHuBEON+kS7CCA==}
@@ -7668,23 +7670,6 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
-
-  '@modelcontextprotocol/sdk@1.19.1':
-    dependencies:
-      ajv: 6.12.6
-      content-type: 1.0.5
-      cors: 2.8.5
-      cross-spawn: 7.0.6
-      eventsource: 3.0.7
-      eventsource-parser: 3.0.6
-      express: 5.1.0
-      express-rate-limit: 7.5.1(express@5.1.0)
-      pkce-challenge: 5.0.0
-      raw-body: 3.0.1
-      zod: 3.25.76
-      zod-to-json-schema: 3.24.6(zod@3.25.76)
-    transitivePeerDependencies:
-      - supports-color
 
   '@modelcontextprotocol/sdk@1.20.1':
     dependencies:

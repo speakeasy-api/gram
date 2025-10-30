@@ -1,5 +1,20 @@
 # @gram-ai/create-function
 
+## 0.6.1
+
+### Patch Changes
+
+- efe0388: Added a shebang line to the `create-function/src/main.ts` file, enabling it to
+  be executed directly as a script.
+
+## 0.6.0
+
+### Minor Changes
+
+- 5a3f14c: Updated the MCP template and Gram Functions SDK to support building and
+  deploying MCP servers directly through Gram. It removes extraneous build scripts
+  and dependencies, simplifying the process for developers.
+
 ## 0.5.3
 
 ## 0.5.2

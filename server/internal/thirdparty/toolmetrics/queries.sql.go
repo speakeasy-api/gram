@@ -17,25 +17,82 @@ const insertHttpRaw = `insert into http_requests_raw
      http_route, status_code, duration_ms, user_agent, request_headers, request_body_bytes, response_headers, response_body_bytes)
 	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`
 
-const listLogsQueryDesc = `
-select * from http_requests_raw
-where project_id = $1
-and ts >= $2
-and ts <= $3
-and ts < UUIDv7ToDateTime(toUUID($4))
-order by ts desc
-limit $5
-`
+func buildListLogsQuery(opts ListToolLogsOptions) (string, []any) {
+	var args []any
+	paramIndex := 4 // Start after project_id, ts_start, ts_end
 
-const listLogsQueryAsc = `
-select * from http_requests_raw
-where project_id = $1
-and ts >= $2
-and ts <= $3
-and ts > UUIDv7ToDateTime(toUUID($4))
-order by ts
-limit $5
-`
+	baseQuery := "select * from http_requests_raw where project_id = $%d and ts >= $%d and ts <= $%d"
+	args = append(args, opts.ProjectID, opts.TsStart, opts.TsEnd)
+
+	// Add cursor condition based on sort order
+	if opts.SortOrder() == "ASC" {
+		baseQuery += fmt.Sprintf(" and ts > UUIDv7ToDateTime(toUUID($%d))", paramIndex)
+	} else {
+		baseQuery += fmt.Sprintf(" and ts < UUIDv7ToDateTime(toUUID($%d))", paramIndex)
+	}
+	args = append(args, opts.Cursor)
+	paramIndex++
+
+	// Add optional filters
+	switch opts.Status {
+	case "success":
+		baseQuery += " and status_code <= 399"
+	case "failure":
+		baseQuery += " and status_code >= 400"
+	}
+
+	if opts.ServerName != "" {
+		baseQuery += fmt.Sprintf(" and tool_urn LIKE $%d", paramIndex)
+		args = append(args, "%"+opts.ServerName+"%")
+		paramIndex++
+	}
+
+	if opts.ToolName != "" {
+		baseQuery += fmt.Sprintf(" and tool_urn LIKE $%d", paramIndex)
+		args = append(args, "%"+opts.ToolName+"%")
+		paramIndex++
+	}
+
+	if opts.ToolType != "" {
+		baseQuery += fmt.Sprintf(" and tool_type = $%d", paramIndex)
+		args = append(args, opts.ToolType)
+		paramIndex++
+	}
+
+	if len(opts.ToolURNs) > 0 {
+		// Limit to 1000 items to prevent query string from growing too large
+		toolURNs := opts.ToolURNs
+		if len(toolURNs) > 1000 {
+			toolURNs = toolURNs[:1000]
+		}
+
+		placeholders := ""
+		for i := range toolURNs {
+			if i > 0 {
+				placeholders += ", "
+			}
+			placeholders += fmt.Sprintf("$%d", paramIndex)
+			args = append(args, toolURNs[i])
+			paramIndex++
+		}
+		baseQuery += fmt.Sprintf(" and tool_urn IN (%s)", placeholders)
+	}
+
+	// Add ordering and limit
+	if opts.SortOrder() == "ASC" {
+		baseQuery += " order by ts"
+	} else {
+		baseQuery += " order by ts desc"
+	}
+
+	baseQuery += fmt.Sprintf(" limit $%d", paramIndex)
+	args = append(args, opts.Limit())
+
+	// Format the query with parameter indices
+	query := fmt.Sprintf(baseQuery, 1, 2, 3)
+
+	return query, args
+}
 
 func (q *Queries) ShouldLog(ctx context.Context, orgId string) (bool, error) {
 	return q.ShouldFlag(ctx, orgId)
@@ -71,18 +128,11 @@ func (q *Queries) List(ctx context.Context, opts ListToolLogsOptions) (res *List
 
 	startTime := time.Now()
 
-	query := listLogsQueryDesc
-	if pagination.SortOrder() == "ASC" {
-		query = listLogsQueryAsc
-	}
+	// Build query with filters
+	query, args := buildListLogsQuery(opts)
 
 	perPage := pagination.Limit() - 1 // Remove the +1 for actual page size
-	rows, err := q.conn.Query(ctx, query,
-		projectID,
-		tsStart,
-		tsEnd,
-		cursor,
-		pagination.Limit())
+	rows, err := q.conn.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("query logs: %w", err)
 	}
