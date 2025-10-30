@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.17.6
+
+### Patch Changes
+
+- 2db3a23: Add filtering support to the tool call logs table
+- Updated dependencies [2db3a23]
+  - @gram/client@0.16.7
+
 ## 0.17.5
 
 ### Patch Changes
