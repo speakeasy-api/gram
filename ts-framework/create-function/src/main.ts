@@ -65,7 +65,7 @@ async function init(argv: string[]): Promise<void> {
       {
         value: "gram",
         label: "Gram",
-        hint: "(default) simplest path to start building your own tools",
+        hint: "Default. Simplest path to start building your own tools",
       },
       {
         value: "mcp",
@@ -141,12 +141,18 @@ async function init(argv: string[]): Promise<void> {
     return;
   }
 
-  const installCli = await confirmOrClack({
-    message: "Install the Gram CLI? Required to deploy tools to Gram.",
-  })(args.yes || yn(args.installCli ?? false));
-  if (isCancel(installCli)) {
-    log.info("Operation cancelled.");
-    return;
+  let installCli = false;
+  const proc = await $`which gram`.quiet().nothrow();
+  // check exit code and decide if we should prompt
+  if (proc.exitCode !== 0) {
+    const res = await confirmOrClack({
+      message: "Install the Gram CLI???? Required to deploy tools to Gram.",
+    })(args.yes || yn(args.installCli ?? false));
+    if (isCancel(res)) {
+      log.info("Operation cancelled.");
+      return;
+    }
+    installCli = res;
   }
 
   const tlog = taskLog({
