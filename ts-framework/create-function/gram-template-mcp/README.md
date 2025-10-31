@@ -20,7 +20,7 @@ To get started, install dependencies and run the development server:
 
 ```bash
 pnpm install
-```
+pnpm run dev
 
 To build a zip file that can be deployed to Gram, run:
 
