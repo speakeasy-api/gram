@@ -251,5 +251,9 @@ func (d *DeployFunctionRunners) resolveRunnerVersion(
 		return d.defaultVersion
 	}
 
-	return conv.Default(functions.RunnerVersion(pinned), d.defaultVersion)
+	if !pinned.Valid {
+		return d.defaultVersion
+	}
+
+	return conv.Default(functions.RunnerVersion(pinned.String), d.defaultVersion)
 }
