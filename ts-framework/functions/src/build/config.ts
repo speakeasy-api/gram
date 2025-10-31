@@ -2,49 +2,59 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import * as z from "zod";
 
-const userConfigSchema = z.object({
+export type UserConfig = {
   /**
    * The path to the entrypoint file for the application. This must export
    * functions that confirm to the Gram Functions interface or a single value
    * that provides these.
    */
-  entrypoint: z.string().default(path.join("src", "gram.ts")),
+  entrypoint?: string | undefined;
   /**
    * The output directory where build artifacts should be written.
    */
-  outDir: z.string().default("dist"),
+  outDir?: string | undefined;
   /**
    * The current working directory to use when resolving paths.
    */
-  cwd: z.string().default("."),
+  cwd?: string | undefined;
   /**
    * Deploy a Gram Function with the Gram CLI after building it.
    */
-  deploy: z.boolean().default(true),
+  deploy?: boolean | undefined;
   /**
    * The Gram project to deploy to. If this is not set, then the Gram CLI will
    * use the project that was chosen when `gram auth` was run.
    */
-  deployProject: z.string().optional(),
+  deployProject?: string | undefined;
   /**
    * The deployment configuration file to stage the function to and submit to
    * the Gram CLI.
    */
-  deployStagingFile: z.string().default("gram.deploy.json"),
+  deployStagingFile?: string | undefined;
   /**
    * The slug to use for the function when deploying to Gram. If this option is
    * not set then the slug will be inferred from the nearest `package.json` file
    * using the `name` field.
    */
-  slug: z.string().optional(),
+  slug?: string | undefined;
   /**
    * Whether to open the browser after deploying. If not set, the user will be
    * prompted once and their choice will be remembered.
    */
+  openBrowserAfterDeploy?: boolean | undefined;
+};
+
+const userConfigSchema = z.object({
+  entrypoint: z.string().default(path.join("src", "gram.ts")),
+  outDir: z.string().default("dist"),
+  cwd: z.string().default("."),
+  deploy: z.boolean().default(true),
+  deployProject: z.string().optional(),
+  deployStagingFile: z.string().default("gram.deploy.json"),
+  slug: z.string().optional(),
   openBrowserAfterDeploy: z.boolean().optional(),
 });
 
-export type UserConfig = z.input<typeof userConfigSchema>;
 export type ParsedUserConfig = z.output<typeof userConfigSchema>;
 
 export function defineConfig(config: UserConfig): UserConfig {

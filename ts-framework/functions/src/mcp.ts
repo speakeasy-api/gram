@@ -29,9 +29,17 @@ export interface WrappedMCPServer {
 /**
  * Wraps an MCP server and exposes it as a Gram Function.
  */
-export async function wrap(
+export async function withGram(
   server: McpServer | Server,
-  options?: { variables?: ManifestVariables },
+  options?: {
+    /**
+     * Lists the environment variables that can be be passed by Gram when
+     * calling tools and resources from the provided server. These will be
+     * presented on the dashboard to be filled in by users and presented in the
+     * generated MCP bundles and installation instructions.
+     */
+    variables?: ManifestVariables;
+  },
 ): Promise<WrappedMCPServer> {
   const [serverTransport, clientTransport] =
     InMemoryTransport.createLinkedPair();
