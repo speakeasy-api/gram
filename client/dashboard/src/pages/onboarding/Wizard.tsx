@@ -29,6 +29,7 @@ import {
 } from "@gram/client/react-query";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+
 import {
   Check,
   ChevronRight,
@@ -43,6 +44,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import { codeToHtml } from "shiki";
 import { AnimatePresence, motion, useMotionValue } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
@@ -55,6 +57,25 @@ type OnboardingStep = "choice" | "upload" | "cli-setup" | "toolset" | "mcp";
 
 export const START_PATH_PARAM = "start-path";
 export const START_STEP_PARAM = "start-step";
+
+async function highlightCode(
+  code: string,
+  language: "bash" | "javascript",
+): Promise<string> {
+  const html = await codeToHtml(code, {
+    lang: language,
+    theme: "github-light-default",
+    transformers: [
+      {
+        pre(node) {
+          node.properties.class =
+            (node.properties.class || "") + " whitespace-pre-wrap";
+        },
+      },
+    ],
+  });
+  return html;
+}
 
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
@@ -1054,7 +1075,7 @@ const TerminalAnimationWithLogs = () => {
   const terminalContentRef = useRef<HTMLDivElement>(null);
   const [animationKey, setAnimationKey] = useState(0);
   const [editorFilename, setEditorFilename] = useState("src/mcp.ts");
-  const [editorCode, setEditorCode] = useState("");
+  const [editorCode, setEditorCode] = useState<string | null>(null);
 
   const { data: tools } = useListTools(undefined, undefined, {
     refetchInterval: deploymentStatus !== "complete" ? 2000 : false,
@@ -1102,7 +1123,9 @@ export default gram;`;
 
   // Initialize editor with MCP code
   useEffect(() => {
-    setEditorCode(mcpCode);
+    highlightCode(mcpCode, "javascript").then((html) => {
+      setEditorCode(html);
+    });
   }, []);
 
   // Animate logs appearing one by one
@@ -1124,14 +1147,21 @@ export default gram;`;
           const editorTimeout = setTimeout(() => {
             setFocusedWindow("editor");
             // Clear editor and change filename
-            setEditorCode("");
+            highlightCode(greetCode, "javascript").then((html) => {
+              setEditorCode(html);
+            });
             setEditorFilename("src/functions.ts");
 
             // Type out the greet function code
             let charIndex = 0;
             const typeInterval = setInterval(() => {
               if (charIndex < greetCode.length) {
-                setEditorCode(greetCode.slice(0, charIndex + 1));
+                highlightCode(
+                  greetCode.slice(0, charIndex + 1),
+                  "javascript",
+                ).then((html) => {
+                  setEditorCode(html);
+                });
                 charIndex++;
               } else {
                 clearInterval(typeInterval);
@@ -1286,7 +1316,9 @@ export default gram;`;
     setFocusedWindow("terminal");
     // Restart animation
     setLogs([]);
-    setEditorCode(mcpCode);
+    highlightCode(mcpCode, "javascript").then((html) => {
+      setEditorCode(html);
+    });
     setEditorFilename("src/mcp.ts");
     setAnimationKey((prev) => prev + 1);
   };
@@ -1295,6 +1327,10 @@ export default gram;`;
     setFocusedWindow(window);
     setHasChangedFocus(true);
   };
+
+  if (!editorCode) {
+    return null;
+  }
 
   return (
     <div className="relative w-full h-full flex items-center justify-center scale-[0.65] lg:scale-75 xl:scale-90">
@@ -1448,9 +1484,10 @@ export default gram;`;
         </div>
 
         {/* Editor content - starts with MCP SDK easter egg, switches to greet function */}
-        <div className="p-4 font-mono text-sm h-[350px] overflow-y-auto">
-          <pre className="whitespace-pre-wrap">{editorCode}</pre>
-        </div>
+        <div
+          className="p-4 font-mono text-sm h-[350px] overflow-y-auto"
+          dangerouslySetInnerHTML={{ __html: editorCode }}
+        />
       </motion.div>
 
       {/* Reset button - show when animation complete or position/focus changed */}
