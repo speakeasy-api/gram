@@ -436,13 +436,24 @@ const CliSetupStep = ({
 
   const commands = [
     {
-      label: "Create a new function project (requires node >=22.18.0)",
+      label: (
+        <>
+          Create a new function project{" "}
+          <span className="text-muted-foreground">
+            {"(requires node >=22.18.0)"}
+          </span>
+        </>
+      ),
       command: `${installMethod} create @gram-ai/function@latest`,
       showToggle: true,
     },
     {
       label: "Build your functions",
-      command: `${installMethod} run build`,
+      command: `${installMethod} build`,
+    },
+    {
+      label: "Push your functions to Gram",
+      command: `${installMethod} push`,
     },
   ];
 
@@ -464,7 +475,7 @@ const CliSetupStep = ({
   return (
     <>
       <Stack gap={1}>
-        <span className="text-heading-md">Setup Gram CLI</span>
+        <span className="text-heading-md">Get Started with Gram Functions</span>
         <span className="text-body-sm">
           Run these commands in your terminal
         </span>
