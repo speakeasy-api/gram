@@ -53,7 +53,7 @@ const userConfigSchema = z.object({
   deployStagingFile: z.string().default("gram.deploy.json"),
   slug: z.string().optional(),
   openBrowserAfterDeploy: z.boolean().optional(),
-});
+}) satisfies z.ZodType<UserConfig>;
 
 export type ParsedUserConfig = z.output<typeof userConfigSchema>;
 
