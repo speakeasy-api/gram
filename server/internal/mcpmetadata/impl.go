@@ -62,6 +62,9 @@ type Service struct {
 //go:embed config_snippet.json.tmpl
 var configSnippetTmplData string
 
+//go:embed cursor_snippet.json.tmpl
+var cursorSnippetTmplData string
+
 //go:embed hosted_page.html.tmpl
 var hostedPageTmplData string
 
@@ -341,10 +344,20 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 		return oops.E(oops.CodeUnexpected, err, "failed to execute config snippet template").Log(ctx, s.logger)
 	}
 
+	cursorSnippetTmpl, err := template.New("cursor_snippet").Funcs(templatefuncs.FuncMap()).Parse(cursorSnippetTmplData)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to parse cursor snippet template").Log(ctx, s.logger)
+	}
+
+	var cursorSnippet bytes.Buffer
+	if err := cursorSnippetTmpl.Execute(&cursorSnippet, configSnippetData); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "failed to execute cursor snippet template").Log(ctx, s.logger)
+	}
+
 	data := hostedPageData{
 		jsonSnippetData:     configSnippetData,
 		MCPConfig:           configSnippet.String(),
-		MCPConfigURIEncoded: url.QueryEscape(base64.StdEncoding.EncodeToString(configSnippet.Bytes())),
+		MCPConfigURIEncoded: url.QueryEscape(base64.StdEncoding.EncodeToString(cursorSnippet.Bytes())),
 		OrganizationName:    organization.Name,
 		SiteURL:             s.siteURL.String(),
 		LogoAssetURL:        logoAssetURL,
