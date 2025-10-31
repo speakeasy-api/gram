@@ -20,7 +20,8 @@
   },
   "scripts": {
     "dev": "mcp-inspector node ./src/server.ts",
-    "_:build": "gram-build",
+    "_:build": "gf build",
+    "push": "gf push",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build"
   },

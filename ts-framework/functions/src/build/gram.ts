@@ -4,13 +4,27 @@ import esbuild from "esbuild";
 import { mkdir, open, readFile, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { $, ProcessPromise } from "zx";
-import type { ParsedUserConfig } from "./config.ts";
+import { $, ProcessPromise, chalk } from "zx";
+import { isCI, type ParsedUserConfig } from "./config.ts";
+
+type Artifacts = {
+  funcFilename: string;
+  manifestFilename: string;
+  zipFilename: string;
+};
+
+async function resolveArtifacts(cfg: ParsedUserConfig): Promise<Artifacts> {
+  return {
+    funcFilename: join(cfg.outDir, "functions.js"),
+    manifestFilename: join(cfg.outDir, "manifest.json"),
+    zipFilename: join(cfg.outDir, "gram.zip"),
+  };
+}
 
 export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
   const cwd = cfg.cwd ?? process.cwd();
-  const entrypoint = resolve(cwd, cfg.entrypoint);
-  const exp = await import(entrypoint).then((mod) => {
+  const entrypoint = join(cwd, cfg.entrypoint);
+  const exp = await import(resolve(entrypoint)).then((mod) => {
     return mod.default; // If this is a Promise (then-able) then it will be resolved
   });
 
@@ -24,37 +38,33 @@ export async function buildFunctions(logger: Logger, cfg: ParsedUserConfig) {
     );
   }
 
-  const slug = cfg.slug || (await inferSlug(cwd));
-
-  logger.info(`Building Gram Function: ${slug}`);
+  logger.info("Building Gram Function");
 
   const manifest = await manifestFunc();
 
+  const artifacts = await resolveArtifacts(cfg);
+
   await mkdir(cfg.outDir, { recursive: true });
-  const outFile = resolve(cfg.outDir, "manifest.json");
-  await writeFile(outFile, JSON.stringify(manifest, null, 2));
+  await writeFile(
+    artifacts.manifestFilename,
+    JSON.stringify(manifest, null, 2),
+  );
 
   await bundleFunction(logger, {
     entrypoint,
-    outFile: resolve(cfg.outDir, "functions.js"),
+    outFile: artifacts.funcFilename,
   });
 
-  const zipPath = await createZipArchive(logger, { outDir: cfg.outDir });
+  await createZipArchive(logger, artifacts);
 
-  if (cfg.deploy) {
-    await deployFunction(logger, {
-      project: cfg.deployProject,
-      stagingFile: cfg.deployStagingFile,
-      slug,
-      zipPath,
-    });
+  const zipstats = await stat(artifacts.zipFilename);
 
-    await handleOpenBrowser(logger, cwd, cfg);
-  }
+  logger.info(
+    `Built Gram Function ZIP: ${artifacts.zipFilename} (${(zipstats.size / 1024).toFixed(2)} KiB)`,
+  );
 
-  const zipstats = await stat(zipPath);
   return {
-    files: [{ path: zipPath, size: zipstats.size }],
+    files: [{ path: artifacts.zipFilename, size: zipstats.size }],
   };
 }
 
@@ -107,38 +117,29 @@ async function bundleFunction(
 
 async function createZipArchive(
   logger: Logger,
-  cfg: { outDir: string },
-): Promise<string> {
-  const zipPath = resolve(cfg.outDir, "gram.zip");
-  logger.info(`Creating ZIP archive of function in ${zipPath}`);
+  artifacts: Artifacts,
+): Promise<void> {
+  const { zipFilename, funcFilename, manifestFilename } = artifacts;
+  logger.info(`Creating ZIP archive of function in ${zipFilename}`);
 
   const archive = archiver("zip", { zlib: { level: 9 } });
   const { promise, resolve: res, reject: rej } = Promise.withResolvers<void>();
   archive.on("error", rej);
   archive.on("close", res);
 
-  const output = await open(zipPath, "w");
+  const output = await open(zipFilename, "w");
   archive.pipe(output.createWriteStream());
-  archive.file(join(cfg.outDir, "manifest.json"), {
-    name: "manifest.json",
-  });
-  archive.file(join(cfg.outDir, "functions.js"), { name: "functions.js" });
+  archive.file(manifestFilename, { name: "manifest.json" });
+  archive.file(funcFilename, { name: "functions.js" });
   await archive.finalize();
   await promise;
   await output.close();
-
-  return zipPath;
 }
 
-async function deployFunction(
-  logger: Logger,
-  options: {
-    project?: string | undefined;
-    slug: string;
-    stagingFile: string;
-    zipPath: string;
-  },
-) {
+export async function deployFunction(logger: Logger, config: ParsedUserConfig) {
+  const cwd = config.cwd ?? process.cwd();
+  const slug = config.slug || (await inferSlug(cwd));
+
   const cmd = process.platform === "win32" ? ["where"] : ["command", "-v"];
   const program = "gram";
   const gramPath = await $`${cmd} ${program}`.nothrow();
@@ -149,18 +150,19 @@ async function deployFunction(
     );
   }
 
-  const { slug, zipPath } = options;
+  const artifacts = await resolveArtifacts(config);
+  const { zipFilename } = artifacts;
 
   const stageArgs = [
     "--config",
-    options.stagingFile,
+    config.deployStagingFile,
     "function",
     "--slug",
     slug,
     "--location",
-    relative(dirname(options.stagingFile), zipPath),
+    relative(dirname(config.deployStagingFile), zipFilename),
   ];
-  logger.info(`Staging ${zipPath} with slug: ${slug}`);
+  logger.info(`Staging ${zipFilename} with slug: ${slug}`);
   await $`gram stage ${stageArgs}`;
 
   const pushArgs = [
@@ -169,10 +171,10 @@ async function deployFunction(
     "http://localhost:8080",
     "push",
     "--config",
-    options.stagingFile,
+    config.deployStagingFile,
   ];
-  if (options.project) {
-    pushArgs.push("--project", options.project);
+  if (config.deployProject) {
+    pushArgs.push("--project", config.deployProject);
   }
 
   logger.info("Deploying function with Gram CLI");
@@ -193,6 +195,8 @@ async function deployFunction(
   }
 
   logger.info("Gram Function deployed successfully");
+
+  await handleOpenBrowser(logger, cwd, config);
 }
 
 async function resolvePackageJson(
@@ -309,12 +313,12 @@ function logCLIOutput(logger: Logger, line: string) {
   }
 }
 
-async function handleOpenBrowser(
+export async function handleOpenBrowser(
   logger: Logger,
   cwd: string,
   cfg: ParsedUserConfig,
 ) {
-  if (cfg.openBrowserAfterDeploy === false) {
+  if (cfg.openBrowserAfterDeploy === false || isCI) {
     return;
   }
 
@@ -337,17 +341,14 @@ async function promptYesNo(question: string): Promise<boolean> {
     output: process.stdout,
   });
 
-  // Prettify the prompt
-  const cyan = "\x1b[36m";
-  const bold = "\x1b[1m";
-  const grey = "\x1b[90m";
-  const reset = "\x1b[0m";
-  const icon = "●";
+  const icon = chalk.cyan("●");
+  const q = chalk.bold(question);
+  const choices = chalk.grey("(y/n)");
 
-  process.stdout.write(`${cyan}${icon}${reset} ${bold}${question}${reset}\n`);
+  process.stdout.write(`${icon} ${q}\n`);
 
   return new Promise((resolve) => {
-    rl.question(`${grey}(y/n):${reset} `, (answer) => {
+    rl.question(`${choices} `, (answer) => {
       rl.close();
       const normalized = answer.trim().toLowerCase();
       resolve(normalized === "y" || normalized === "yes");
@@ -398,7 +399,7 @@ async function updateConfigFile(cwd: string, shouldOpen: boolean) {
 
   // No config file exists, create one
   const newConfigPath = join(cwd, "gram.config.ts");
-  const newConfig = `import { defineConfig } from "@speakeasy-api/gram-functions/config";
+  const newConfig = `import { defineConfig } from "@gram-ai/functions/build";
 
 export default defineConfig({
   openBrowserAfterDeploy: ${shouldOpen},

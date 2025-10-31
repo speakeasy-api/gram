@@ -425,6 +425,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.20.1
+      '@stricli/core':
+        specifier: ^1.2.4
+        version: 1.2.4
       archiver:
         specifier: ^7.0.1
         version: 7.0.1
@@ -2342,6 +2345,9 @@ packages:
 
   '@stablelib/base64@1.0.1':
     resolution: {integrity: sha512-1bnPQqSxSuc3Ii6MhBysoWCg58j97aUjuCSZrGSmDxNqtytIi0k8utUenAwTZN4V5mXXYGsVUI9zeBqy+jBOSQ==}
+
+  '@stricli/core@1.2.4':
+    resolution: {integrity: sha512-ujvJDQpC2FINWvlTjkFz+Qzw/vsB8p/LyZEW18idisqIyjXR6yb+sF3WTUPksl+5ZON5r4fHQnCqQWnJxeqSzg==}
 
   '@stripe/react-stripe-js@3.9.1':
     resolution: {integrity: sha512-t5KZiu7jkUTHOx0adGSlSj4xPpFSvW6BsgIRQHNXqhHeYBH0mpddVUZsO33WM1m6Vyd1Wl96JoBhwEsw8jMHTQ==}
@@ -9292,6 +9298,8 @@ snapshots:
       - zod
 
   '@stablelib/base64@1.0.1': {}
+
+  '@stricli/core@1.2.4': {}
 
   '@stripe/react-stripe-js@3.9.1(@stripe/stripe-js@7.8.0)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:

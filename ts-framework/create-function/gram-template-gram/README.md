@@ -23,7 +23,7 @@ Gram Functions are tools for LLMs and MCP servers that can do arbitrary tasks
 such as fetching data from APIs, performing calculations, or interacting with
 hosted databases.
 
-## Getting Started
+## Quick start
 
 To get started, install dependencies and run the development server:
 
@@ -35,6 +35,12 @@ To build a zip file that can be deployed to Gram, run:
 
 ```bash
 pnpm build
+```
+
+After building, push your function to Gram with:
+
+```bash
+pnpm push
 ```
 
 ## Testing Locally

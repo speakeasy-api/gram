@@ -2,6 +2,8 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import * as z from "zod";
 
+export const isCI = z.stringbool().catch(false).parse(process.env["CI"]);
+
 export type UserConfig = {
   /**
    * The path to the entrypoint file for the application. This must export
@@ -17,10 +19,6 @@ export type UserConfig = {
    * The current working directory to use when resolving paths.
    */
   cwd?: string | undefined;
-  /**
-   * Deploy a Gram Function with the Gram CLI after building it.
-   */
-  deploy?: boolean | undefined;
   /**
    * The Gram project to deploy to. If this is not set, then the Gram CLI will
    * use the project that was chosen when `gram auth` was run.
@@ -48,7 +46,6 @@ const userConfigSchema = z.object({
   entrypoint: z.string().default(path.join("src", "gram.ts")),
   outDir: z.string().default("dist"),
   cwd: z.string().default("."),
-  deploy: z.boolean().default(true),
   deployProject: z.string().optional(),
   deployStagingFile: z.string().default("gram.deploy.json"),
   slug: z.string().optional(),
