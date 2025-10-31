@@ -1,5 +1,13 @@
 # dashboard
 
+## 0.17.8
+
+### Patch Changes
+
+- 192d6cb: temporarily clarify node version for functions
+- 145295a: Changes default install method for Cursor MCPs to HTTP streaming
+- 9963bbd: fix: multiple react versions in dev causes rules of hooks error
+
 ## 0.17.7
 
 ### Patch Changes

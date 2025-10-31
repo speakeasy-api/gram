@@ -1,5 +1,11 @@
 # server
 
+## 0.9.9
+
+### Patch Changes
+
+- 145295a: Changes default install method for Cursor MCPs to HTTP streaming
+
 ## 0.9.8
 
 ### Patch Changes

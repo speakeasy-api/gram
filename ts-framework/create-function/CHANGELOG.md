@@ -1,5 +1,13 @@
 # @gram-ai/create-function
 
+## 0.7.0
+
+### Minor Changes
+
+- a0853fe: Updated the Gram Functions SDK to separate the build and push commands. The
+  `gram-build` has also been renamed to `gf` which now results in the commands
+  `pnpm gf build` and `pnpm gf push`.
+
 ## 0.6.2
 
 ### Patch Changes

@@ -1,5 +1,12 @@
 # function-runners
 
+## 0.2.0
+
+### Minor Changes
+
+- 73e9c42: Renamed the MCP wrapper utility from `wrap` to `withGram` and adds TypeScript
+  docs to various APIs in the Gram Functions SDK.
+
 ## 0.1.3
 
 ### Patch Changes
