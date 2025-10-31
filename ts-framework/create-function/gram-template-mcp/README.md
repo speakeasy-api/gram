@@ -5,7 +5,7 @@ build and deploy [Gram Functions](https://getgram.ai).
 
 [mcp-ts]: https://github.com/modelcontextprotocol/typescript-sdk
 
-Gram Functions are tools and resources for LLMs and MCP servers that can do
+Use Gram Functions to build tools and resources for MCP servers. They can do
 arbitrary tasks such as fetching data from APIs, performing calculations, or
 interacting with hosted databases.
 
