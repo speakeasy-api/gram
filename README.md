@@ -36,7 +36,7 @@ Gram is a platform for creating, curating, and hosting MCP servers. Create agent
 With Gram you can:  
 └ Host one or more remote MCP servers at `mcp.{your-company}.com`.  
 └ Power agentic workflows or chat in your product by exposing context from your internal APIs to LLMs.
-└ Manage and secure MCP servers for your entire organization through a unified control plane.  
+└ Manage and secure MCP servers for your entire organization through a unified control plane.
 
 If you are looking to get started on the hosted platform you can do that [here](https://app.getgram.ai/) or check out the [quickstart guide](https://docs.getgram.ai/gram-quickstart).
 
@@ -66,7 +66,7 @@ All AI coding guidelines are written out in [CLAUDE.md](./CLAUDE.md). Please mak
 
 ### Putting up pull requests
 
-Please have a good title and description for your PR. Go nuts with streams of commits but invest in a reviewable PR with good context.  
+Please have a good title and description for your PR. Go nuts with streams of commits but invest in a reviewable PR with good context.
 
 ## Techstack
 
@@ -76,7 +76,7 @@ Please have a good title and description for your PR. Go nuts with streams of co
 └ [Temporal](https://temporal.io/) - workflow engine.  
 └ [Polar](https://polar.sh/) - usage based billing.  
 └ [OpenRouter](https://openrouter.ai/) - LLM gateway.  
-└ [Speakeasy](https://www.speakeasy.com/) - Generated SDKs. Spec hosted [here](http://app.getgram.ai/openapi.yaml).  
+└ [Speakeasy](https://www.speakeasy.com/) - Generated SDKs. Spec hosted [here](http://app.getgram.ai/openapi.yaml).
 
 ## `gram` CLI
 
@@ -94,7 +94,7 @@ go run . --help
 ### Releases
 
 > [!NOTE]  
-> All CLI updates must follow the [changeset process](./docs/runbooks/version-management-with-changesets.md).
+> All CLI updates must follow the [changeset process](./runbooks/version-management-with-changesets.md).
 
 New versions of the CLI are released automatically with [GoReleaser](./.goreleaser.yaml).
 
