@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.17.7
+
+### Patch Changes
+
+- f79fd52: Open dashboard from gram-build, better completing the flow starting from pnpm create
+
 ## 0.17.6
 
 ### Patch Changes

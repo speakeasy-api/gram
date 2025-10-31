@@ -1,5 +1,13 @@
 # cli
 
+## 0.11.6
+
+### Patch Changes
+
+- bee7eae: Updated error wrapping messages in the CLI API client to avoid redundant phrases
+  when printed to user.
+- 87151f0: fix: cli deployment logs incorrectly mapping to localhost
+
 ## 0.11.5
 
 ### Patch Changes
