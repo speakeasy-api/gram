@@ -11,7 +11,7 @@ TypeScript. The "Hello, World!" example is:
 import { Gram } from "@gram-ai/functions";
 import * as z from "zod/mini";
 
-const g = new Gram().tool({
+const gram = new Gram().tool({
   name: "greet",
   description: "Greet someone special",
   inputSchema: { name: z.string() },
@@ -20,7 +20,7 @@ const g = new Gram().tool({
   },
 });
 
-export const handleToolCall = g.handleToolCall;
+export default gram;
 ```
 
 ## Quickstart
@@ -57,7 +57,7 @@ The `Gram` class is the main entry point for defining tools. You create an insta
 import { Gram } from "@gram-ai/functions";
 import * as z from "zod/mini";
 
-const g = new Gram()
+const gram = new Gram()
   .tool({
     name: "add",
     description: "Add two numbers",
@@ -75,7 +75,7 @@ const g = new Gram()
     },
   });
 
-export const handleToolCall = g.handleToolCall;
+export default gram;
 ```
 
 ### Tool Definition
@@ -85,7 +85,6 @@ Each tool requires:
 - **name**: A unique identifier for the tool
 - **description** (optional): Human-readable description of what the tool does
 - **inputSchema**: A Zod schema object defining the expected input parameters
-- **variables** (optional): Environment variables the tool needs
 - **execute**: An async function that implements the tool logic
 
 ### Tool Context
@@ -146,22 +145,23 @@ async execute(ctx, input) {
 }
 ```
 
-#### `ctx.vars`
+#### `ctx.env`
 
-Access to environment variables defined in the tool's `variables` property:
+Access to parsed environment variables defined by the `Gram` instance:
 
 ```typescript
-.tool({
+const gram = new Gram({
+  envSchema: {
+    BASE_URL: z.string().transform((url) => new URL(url)),
+  },
+}).tool({
   name: "api_call",
   inputSchema: { endpoint: z.string() },
-  variables: {
-    API_KEY: { description: "API key for authentication" }
-  },
   async execute(ctx, input) {
-    const apiKey = ctx.vars.API_KEY;
-    // Use apiKey...
+    const baseURL = ctx.env.BASE_URL;
+    // Use baseURL...
   },
-})
+});
 ```
 
 ## Input Validation
@@ -169,9 +169,10 @@ Access to environment variables defined in the tool's `variables` property:
 Input schemas are defined using [Zod](https://zod.dev/):
 
 ```typescript
+import { Gram } from "@gram-ai/functions";
 import * as z from "zod/mini";
 
-.tool({
+const gram = new Gram().tool({
   name: "create_user",
   inputSchema: {
     email: z.string().check(z.email()),
@@ -182,7 +183,7 @@ import * as z from "zod/mini";
     // input is fully typed based on the schema
     return ctx.json({ userId: "123" });
   },
-})
+});
 ```
 
 ### Lax Mode
@@ -190,45 +191,56 @@ import * as z from "zod/mini";
 By default, the framework strictly validates input. You can enable lax mode to allow unvalidated input to pass through:
 
 ```typescript
-const g = new Gram({ lax: true });
+const gram = new Gram({ lax: true });
 ```
 
 ## Environment Variables
 
-### Runtime Environment
+### Defining Variables
 
-Pass environment variables are read from `process.env` by default, but you can override them when creating the `Gram` instance:
+Environment variables that are used by tools must be defined when instantiating
+the `Gram` class. This is done using a Zod v4 object schema:
 
 ```typescript
-const g = new Gram({
+import { Gram } from "@gram-ai/functions";
+import * as z from "zod/mini";
+
+const gram = new Gram({
+  envSchema: {
+    API_KEY: z.string().describe("API key for external service"),
+    BASE_URL: z.string().check(z.url()).describe("Base URL for API requests"),
+  },
+});
+```
+
+Whenever a tool wants to access a new environment variable, a definition must be
+added to the `envSchema` if one does not exist. When this Gram Function is
+deployed, end users will then be able to provide values for these variables when
+installing the corresponding MCP servers.
+
+### Runtime Environment
+
+Environment variables are read from `process.env` by default, but you can
+override them when creating the `Gram` instance. This can be useful for testing
+or local development. Example:
+
+```typescript
+import { Gram } from "@gram-ai/functions";
+import * as z from "zod/mini";
+
+const gram = new Gram({
   env: {
     API_KEY: "secret-key",
     BASE_URL: "https://api.example.com",
+  },
+  envSchema: {
+    API_KEY: z.string().describe("API key for external service"),
+    BASE_URL: z.string().check(z.url()).describe("Base URL for API requests"),
   },
 });
 ```
 
 If not provided, the framework falls back to `process.env`.
-
-### Tool Variables
-
-Declare which environment variables a tool needs:
-
-```typescript
-.tool({
-  name: "weather",
-  inputSchema: { city: z.string() },
-  variables: {
-    WEATHER_API_KEY: {
-      description: "API key for weather service"
-    }
-  },
-  async execute(ctx, input) {
-    const apiKey = ctx.vars.WEATHER_API_KEY;
-    // Make API call...
-  },
-})
-```
 
 ## Response Types
 
@@ -323,6 +335,7 @@ async execute(ctx, input) {
 The `assert` function throws a `Response` object when the condition is false. The framework catches all thrown values, and if any happen to be a `Response` instance, they will be returned to the client.
 
 Key points about `assert`:
+
 - First parameter is the condition to check
 - Second parameter is the error data (must include an `error` field)
 - Third parameter is optional and can specify the status code (defaults to 500)
@@ -334,7 +347,9 @@ Key points about `assert`:
 Generate a manifest of all registered tools:
 
 ```typescript
-const g = new Gram()
+import { Gram } from "@gram-ai/functions";
+
+const gram = new Gram()
   .tool({
     /* ... */
   })
@@ -359,10 +374,13 @@ const manifest = g.manifest();
 
 ## Handling Tool Calls
 
-Export the `handleToolCall` method to process incoming requests:
+Exporting the Gram instance from your module as the default export will allow
+Gram to handle tool calls automatically when deployed:
 
 ```typescript
-const g = new Gram()
+import { Gram } from "@gram-ai/functions";
+
+const gram = new Gram()
   .tool({
     /* ... */
   })
@@ -370,13 +388,13 @@ const g = new Gram()
     /* ... */
   });
 
-export const handleToolCall = g.handleToolCall;
+export default gram;
 ```
 
 You can also call tools programmatically:
 
 ```typescript
-const response = await g.handleToolCall({
+const response = await gram.handleToolCall({
   name: "add",
   input: { a: 5, b: 3 },
 });
@@ -388,15 +406,12 @@ console.log(data); // { sum: 8 }
 With abort signal support:
 
 ```typescript
-const controller = new AbortController();
+const signal = AbortSignal.timeout(5000);
 
-const responsePromise = g.handleToolCall(
+const response = await gram.handleToolCall(
   { name: "longRunning", input: {} },
-  { signal: controller.signal },
+  { signal },
 );
-
-// Cancel after 5 seconds
-setTimeout(() => controller.abort(), 5000);
 ```
 
 ## Type Safety
@@ -404,7 +419,10 @@ setTimeout(() => controller.abort(), 5000);
 The framework provides full TypeScript type inference:
 
 ```typescript
-const g = new Gram().tool({
+import { Gram } from "@gram-ai/functions";
+import * as z from "zod/mini";
+
+const gram = new Gram().tool({
   name: "greet",
   inputSchema: { name: z.string() },
   async execute(ctx, input) {

@@ -118,19 +118,23 @@ async execute(ctx, input) {
 }
 ```
 
-#### `ctx.vars`
+#### `ctx.env`
 
-Access to environment variables defined in the tool's `variables` property:
+Access to parsed environment variables defined by the `Gram` instance:
 
 ```typescript
-.tool({
+const gram = new Gram({
+  envSchema: {
+    BASE_URL: z.string().transform((url) => new URL(url)),
+  },
+}).tool({
   name: "api_call",
   inputSchema: { endpoint: z.string() },
   async execute(ctx, input) {
-    const apiKey = ctx.vars.API_KEY;
-    // Use apiKey...
+    const baseURL = ctx.env.BASE_URL;
+    // Use baseURL...
   },
-})
+});
 ```
 
 ## Input Validation

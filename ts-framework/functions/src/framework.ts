@@ -18,9 +18,21 @@ export type ToolDefinition<
   Env,
   Result extends Response,
 > = {
+  /**
+   * The name of the tool.
+   */
   name: TName;
+  /**
+   * A useful description of the tool that is presented to LLMs.
+   */
   description?: string;
+  /**
+   * The input schema for the tool.
+   */
   inputSchema: TInputSchema;
+  /**
+   * The function that implements the tool call.
+   */
   execute: (
     ctx: ToolContext<Env>,
     input: z.infer<z.ZodObject<TInputSchema>>,
@@ -89,13 +101,24 @@ export function assert<V extends { error: string; stack?: never }>(
 }
 
 class ToolContext<Env> {
+  /**
+   * The parsed environment variables available to the tool.
+   */
   readonly env: Env;
+  /**
+   * The abort signal for the tool execution. This can be passed down to fetch
+   * calls and other async operations to propagate cancellation.
+   */
   readonly signal: AbortSignal;
   constructor(signal: AbortSignal, env: Env) {
     this.signal = signal;
     this.env = env;
   }
 
+  /**
+   * Cause a function execution to fail with the given error message packaged
+   * as a HTTP Response.
+   */
   fail<V extends { error: string; stack?: never }>(
     data: V,
     options?: { status?: number },
@@ -103,6 +126,9 @@ class ToolContext<Env> {
     assert(false, data, options);
   }
 
+  /**
+   * Constructs a response with data serialized to JSON
+   */
   json<V>(data: V): JSONResponse<V> {
     return new Response(JSON.stringify(data), {
       status: 200,
@@ -111,6 +137,10 @@ class ToolContext<Env> {
       },
     }) as JSONResponse<V>;
   }
+
+  /**
+   * Constructs a plain text response
+   */
   text<V extends string>(data: V): TextResponse<V> {
     return new Response(data, {
       status: 200,
@@ -119,6 +149,10 @@ class ToolContext<Env> {
       },
     }) as TextResponse<V>;
   }
+
+  /**
+   * Constructs an HTML response
+   */
   html(data: string): TextResponse<string> {
     return new Response(data, {
       status: 200,
@@ -157,8 +191,21 @@ export class Gram<
   #envMemo!: InferEnv<EnvSchema>;
 
   constructor(opts?: {
+    /**
+     * When set to true, runtime validation is disabled and tool input schemas
+     * are only used to generate JSON Schema for tool listing.
+     */
     lax?: boolean;
+    /**
+     * The environment variables to use when executing tools. If not provided,
+     * `process.env` will be used. This is useful for testing and local
+     * development.
+     */
     env?: Record<string, string>;
+    /**
+     * The schema for environment variables that will be made available to
+     * tools.
+     */
     envSchema?: EnvSchema;
   }) {
     this.#tools = new Map();
@@ -177,6 +224,9 @@ export class Gram<
     return this.#envMemo;
   }
 
+  /**
+   * Registers a tool with the Gram instance.
+   */
   tool<
     TName extends string,
     TInputSchema extends z.core.$ZodShape,
@@ -200,6 +250,9 @@ export class Gram<
     return this as any;
   }
 
+  /**
+   * Invokes a registered tool with a given input.
+   */
   async handleToolCall<TName extends keyof TTools & string>(
     request: {
       name: TName;
