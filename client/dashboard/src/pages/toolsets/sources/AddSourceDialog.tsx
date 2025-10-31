@@ -239,21 +239,12 @@ export function FunctionsInstructions() {
 
   const commands = [
     {
-      label: "Install the Gram CLI",
-      command: "npm install -g @gram-ai/cli",
-    },
-    {
-      label: "Authenticate with Gram",
-      command: "gram auth",
+      label: "Create a new function project (requires node >=22.18.0)",
+      command: "npm create @gram-ai/function@latest",
     },
     {
       label: "Build your functions",
       command: "npm run build",
-    },
-    {
-      label: "Upload to Gram",
-      command:
-        'gram upload --type function --location dist/functions.zip --name "My Functions" --slug my-functions',
     },
   ];
 

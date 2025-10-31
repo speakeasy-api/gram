@@ -436,8 +436,8 @@ const CliSetupStep = ({
 
   const commands = [
     {
-      label: "Create a new project",
-      command: `${installMethod} create @gram-ai/function`,
+      label: "Create a new function project (requires node >=22.18.0)",
+      command: `${installMethod} create @gram-ai/function@latest`,
       showToggle: true,
     },
     {
