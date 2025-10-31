@@ -14,18 +14,24 @@ interacting with hosted databases.
 - [Node.js](https://nodejs.org) version 22.18.0 or later
 - [Gram CLI](https://www.speakeasy.com/docs/gram/command-line/use)
 
-## Getting Started
+## Quick start
 
 To get started, install dependencies and run the development server:
 
 ```bash
 pnpm install
-pnpm run dev
+```
 
 To build a zip file that can be deployed to Gram, run:
 
 ```bash
 pnpm build
+```
+
+After building, push your function to Gram with:
+
+```bash
+pnpm push
 ```
 
 ## Testing Locally
