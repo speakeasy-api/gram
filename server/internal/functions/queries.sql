@@ -40,7 +40,8 @@ function_preference AS (
 )
 SELECT COALESCE(
     (SELECT v FROM function_preference),
-    (SELECT v FROM project_preference)
+    (SELECT v FROM project_preference),
+    ''
 )::text as runner_version;
 
 -- name: InitFlyApp :one
