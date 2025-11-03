@@ -167,7 +167,10 @@ async function init(argv: string[]): Promise<void> {
   await fs.cp(templateDir, dir, {
     recursive: true,
     filter: (src) => {
-      let banned = src.includes(".git") || src.includes("NEXT_STEPS.txt");
+      let banned =
+        src.includes(".git") ||
+        src.includes("CHANGELOG.md") ||
+        src.includes("NEXT_STEPS.txt");
       if (isLocalDev) {
         banned ||= src.includes("node_modules") || src.includes("dist");
       }
@@ -197,6 +200,7 @@ async function init(argv: string[]): Promise<void> {
   tlog.message("Updating package.json");
   const pkgPath = await fs.readFile(join(dir, "package.json"), "utf-8");
   const dstPkg = JSON.parse(pkgPath);
+  dstPkg.version = "0.0.0";
   dstPkg.name = name;
   const deps = dstPkg.dependencies;
   if (deps?.["@gram-ai/functions"] != null) {
