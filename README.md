@@ -98,16 +98,6 @@ const gram = new Gram().tool({
 export default gram;
 ```
 
-### Local development
-
-Quickstart:
-
-```bash
-cd cli
-go run . --help
-```
-
-
 ## `gram` CLI
 
 The `gram` CLI a tool for programmatic access to Gram. Get started with documentation [here](https://docs.getgram.ai/command-line/installation).
