@@ -15,7 +15,7 @@
     "src",
     "dist"
   ],
-  "engine": {
+  "engines": {
     "node": ">=22.18.0"
   },
   "scripts": {
