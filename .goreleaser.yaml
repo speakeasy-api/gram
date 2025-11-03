@@ -19,6 +19,20 @@ archives:
     format: zip
 checksum:
   name_template: "checksums.txt"
+
+signs:
+  - cmd: cosign
+    signature: '${artifact}.keyless.sig'
+    certificate: '${artifact}.pem'
+    output: true
+    artifacts: checksum
+    args:
+      - sign-blob
+      - '--output-certificate=${certificate}'
+      - '--output-signature=${signature}'
+      - '${artifact}'
+      - --yes
+
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
