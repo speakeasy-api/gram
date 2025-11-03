@@ -197,6 +197,7 @@ async function init(argv: string[]): Promise<void> {
   tlog.message("Updating package.json");
   const pkgPath = await fs.readFile(join(dir, "package.json"), "utf-8");
   const dstPkg = JSON.parse(pkgPath);
+  dstPkg.version = "0.0.0";
   dstPkg.name = name;
   const deps = dstPkg.dependencies;
   if (deps?.["@gram-ai/functions"] != null) {
