@@ -19,6 +19,9 @@ catalog:
 
 minimumReleaseAge: 10080
 
+minimumReleaseAgeExclude:
+- "@speakeasy-api/moonshine"
+
 onlyBuiltDependencies:
   - bun
   - esbuild

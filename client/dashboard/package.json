@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "prettier --check . && eslint . && tsc -b --noEmit",
     "preview": "vite preview",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "analyze-bundle": "pnpm dlx vite-bundle-visualizer"
   },
   "dependencies": {
     "@ai-sdk/openai": "catalog:",
@@ -40,7 +41,7 @@
     "@react-three/drei": "^10.0.7",
     "@react-three/fiber": "^9.1.2",
     "@react-three/postprocessing": "^3.0.4",
-    "@speakeasy-api/moonshine": "1.31.0",
+    "@speakeasy-api/moonshine": "1.32.5",
     "@tailwindcss/typography": "^0.5.16",
     "@tailwindcss/vite": "^4.1.13",
     "@tanstack/react-query": "catalog:",
