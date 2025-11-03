@@ -8,8 +8,8 @@ import {
 } from "@clack/prompts";
 
 const y = new Set(["y", "yes", "true", "t", "1"]);
-export function yn(value: boolean | string | undefined): boolean {
-  if (value == null) return false;
+export function yn(value: boolean | string | undefined): boolean | undefined {
+  if (value == null) return value;
   if (typeof value === "boolean") return value;
   return y.has(value.toLowerCase());
 }
@@ -29,5 +29,11 @@ export function selectOrClack<T>(
 export function confirmOrClack(
   options: ConfirmOptions,
 ): (value: boolean | undefined) => Promise<boolean | symbol> {
-  return async (value: boolean | undefined) => value || confirm(options);
+  return async (value: boolean | undefined) => {
+    if (value != null) {
+      return value;
+    }
+
+    return confirm(options);
+  };
 }

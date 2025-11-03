@@ -127,7 +127,7 @@ async function init(argv: string[]): Promise<void> {
 
   const initGit = await confirmOrClack({
     message: "Initialize a git repository?",
-  })(args.yes || yn(args.git ?? false));
+  })(args.yes || yn(args.git));
   if (isCancel(initGit)) {
     log.info("Operation cancelled.");
     return;
@@ -135,7 +135,7 @@ async function init(argv: string[]): Promise<void> {
 
   const installDeps = await confirmOrClack({
     message: `Install dependencies with ${packageManager}?`,
-  })(args.yes || yn(args.install ?? false));
+  })(args.yes || yn(args.install));
   if (isCancel(installDeps)) {
     log.info("Operation cancelled.");
     return;
@@ -147,7 +147,7 @@ async function init(argv: string[]): Promise<void> {
   if (proc.exitCode !== 0) {
     const res = await confirmOrClack({
       message: "Install the Gram CLI? Required to deploy tools to Gram.",
-    })(args.yes || yn(args.installCli ?? false));
+    })(args.yes || yn(args.installCli));
     if (isCancel(res)) {
       log.info("Operation cancelled.");
       return;
