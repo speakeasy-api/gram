@@ -2,13 +2,21 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
+  Gram,
   Manifest,
   ManifestResource,
   ManifestTool,
   ManifestVariables,
 } from "./framework.ts";
-import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
-import type { Server } from "@modelcontextprotocol/sdk/server";
+import {
+  McpError,
+  ErrorCode,
+  ListToolsRequestSchema,
+  type ListToolsResult,
+  CallToolRequestSchema,
+  type CallToolResult,
+} from "@modelcontextprotocol/sdk/types.js";
+import { Server } from "@modelcontextprotocol/sdk/server";
 
 export interface WrappedMCPServer {
   handleToolCall(call: {
@@ -162,4 +170,109 @@ async function collectResources(
   }
 
   return [];
+}
+
+/**
+ * Creates a low-level MCP server from a Gram instance.
+ */
+export function fromGram(
+  g: Gram,
+  options: { name: string; version: string },
+): Server {
+  const { name, version } = options;
+
+  const structuredLike = /\b(yaml|yml|json|toml|xml|xhtml)\b/i;
+  const textLike = /^text\//i;
+  const imageLike = /^image\//i;
+  const audioLike = /^audio\//i;
+
+  const server = new Server(
+    { name, version },
+    {
+      capabilities: {
+        tools: {},
+      },
+    },
+  );
+
+  server.setRequestHandler(
+    ListToolsRequestSchema,
+    async (): Promise<ListToolsResult> => {
+      const tools = (g.manifest().tools || []).map((t) => {
+        return {
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema,
+        };
+      }) as ListToolsResult["tools"];
+
+      return {
+        tools,
+      };
+    },
+  );
+
+  server.setRequestHandler(
+    CallToolRequestSchema,
+    async (req, extra): Promise<CallToolResult> => {
+      const { name, arguments: args } = req.params;
+
+      const resp = (await g.handleToolCall({ name, input: args } as any, {
+        signal: extra.signal,
+      })) as Response;
+
+      let ctype = resp.headers.get("Content-Type") || "";
+      ctype = ctype.split(";")[0]?.trim() || "";
+
+      switch (true) {
+        case textLike.test(ctype) || structuredLike.test(ctype): {
+          const text = await resp.text();
+          return {
+            content: [{ type: "text", text }],
+          };
+        }
+        case imageLike.test(ctype): {
+          return {
+            content: [
+              {
+                type: "image",
+                mimeType: ctype,
+                data: await responseToBase64(resp),
+              },
+            ],
+          };
+        }
+        case audioLike.test(ctype): {
+          return {
+            content: [
+              {
+                type: "audio",
+                mimeType: ctype,
+                data: await responseToBase64(resp),
+              },
+            ],
+          };
+        }
+        default: {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: `Unhandled content type: ${ctype}. Create a handler for this type in the MCP server.`,
+              },
+            ],
+          };
+        }
+      }
+    },
+  );
+
+  return server;
+}
+
+async function responseToBase64(resp: Response): Promise<string> {
+  const blob = await resp.arrayBuffer();
+  const buffer = Buffer.from(blob);
+  return buffer.toString("base64");
 }
