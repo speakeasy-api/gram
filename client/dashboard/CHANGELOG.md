@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.18.0
+
+### Minor Changes
+
+- 613f10e: Upgrade @speakeasy-api/moonshine to integrate bundle size reduction changes
+
 ## 0.17.8
 
 ### Patch Changes
