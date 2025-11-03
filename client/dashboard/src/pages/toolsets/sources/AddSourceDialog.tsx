@@ -239,12 +239,28 @@ export function FunctionsInstructions() {
 
   const commands = [
     {
-      label: "Create a new function project (requires node >=22.18.0)",
+      label: (
+        <>
+          Create a new function project. See gram functions{" "}
+          <a
+            href="https://www.speakeasy.com/docs/gram/getting-started/typescript"
+            target="_blank"
+            className="text-primary underline cursor-pointer"
+          >
+            docs
+          </a>{" "}
+          for more info
+        </>
+      ),
       command: "npm create @gram-ai/function@latest",
     },
     {
       label: "Build your functions",
-      command: "npm run build",
+      command: "npm build",
+    },
+    {
+      label: "Deploy your functions",
+      command: "npm push",
     },
   ];
 

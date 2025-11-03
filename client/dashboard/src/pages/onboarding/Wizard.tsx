@@ -438,10 +438,15 @@ const CliSetupStep = ({
     {
       label: (
         <>
-          Create a new function project{" "}
-          <span className="text-muted-foreground">
-            {"(requires node >=22.18.0)"}
-          </span>
+          Create a new function project. See gram functions{" "}
+          <a
+            href="https://www.speakeasy.com/docs/gram/getting-started/typescript"
+            target="_blank"
+            className="text-primary underline cursor-pointer"
+          >
+            docs
+          </a>{" "}
+          for more info
         </>
       ),
       command: `${installMethod} create @gram-ai/function@latest`,

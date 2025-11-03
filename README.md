@@ -78,6 +78,36 @@ Please have a good title and description for your PR. Go nuts with streams of co
 └ [OpenRouter](https://openrouter.ai/) - LLM gateway.  
 └ [Speakeasy](https://www.speakeasy.com/) - Generated SDKs. Spec hosted [here](http://app.getgram.ai/openapi.yaml).
 
+## `gram` Functions
+
+Create tools from simple TypeScript code. See Gram Functions [docs](https://www.speakeasy.com/docs/gram/getting-started/typescript) to learn more.
+
+```typescript
+import { Gram } from "@gram-ai/functions";
+import * as z from "zod/mini";
+ 
+const gram = new Gram().tool({
+  name: "add",
+  description: "Add two numbers together",
+  inputSchema: { a: z.number(), b: z.number() },
+  async execute(ctx, input) {
+    return ctx.json({sum: input.a + input.b});
+  },
+});
+ 
+export default gram;
+```
+
+### Local development
+
+Quickstart:
+
+```bash
+cd cli
+go run . --help
+```
+
+
 ## `gram` CLI
 
 The `gram` CLI a tool for programmatic access to Gram. Get started with documentation [here](https://docs.getgram.ai/command-line/installation).
