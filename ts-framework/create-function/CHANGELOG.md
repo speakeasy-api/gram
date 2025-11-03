@@ -1,5 +1,16 @@
 # @gram-ai/create-function
 
+## 0.8.1
+
+### Patch Changes
+
+- 8be35aa: Updated the scaffolding of Gram Functions projects to exclude the CHANGELOG.md file.
+- 8be35aa: Fixed an issue where Gram Functions templates were not enforcing a minimum
+  Node.js version due to a typo in the generated package.json files. The field was
+  incorrectly named "engine" instead of "engines".
+- 8be35aa: Ensured that templated Gram Function TS projects start at version "0.0.0" in
+  their package.json instead of inheriting the version from the template
+
 ## 0.8.0
 
 ### Minor Changes
