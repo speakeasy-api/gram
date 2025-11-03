@@ -1,5 +1,14 @@
 # @gram-ai/create-function
 
+## 0.8.0
+
+### Minor Changes
+
+- f725a4c: Added a `fromGram` utility to the Gram Functions TypeScript SDK that converts an
+  instance of the `Gram` mini-framework into an MCP server. This reduces the
+  amount of boilerplate we emit in new projects that use the `gram-template-gram`
+  template.
+
 ## 0.7.0
 
 ### Minor Changes
