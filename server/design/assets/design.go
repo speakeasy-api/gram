@@ -141,6 +141,36 @@ var _ = Service("assets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "serveOpenAPIv3"}`)
 	})
 
+	Method("serveFunction", func() {
+		Description("Serve a Gram Functions asset from Gram.")
+
+		Payload(ServeFunctionForm)
+		Result(ServeFunctionResult)
+
+		Security(security.ByKey)
+		Security(security.Session)
+
+		HTTP(func() {
+			GET("/rpc/assets.serveFunction")
+			Param("id")
+			Param("project_id")
+
+			Response(StatusOK, func() {
+				Header("content_type:Content-Type")
+				Header("content_length:Content-Length")
+				Header("last_modified:Last-Modified")
+			})
+
+			security.ByKeyHeader()
+			security.SessionHeader()
+			SkipResponseBodyEncodeDecode()
+		})
+
+		Meta("openapi:operationId", "serveFunction")
+		Meta("openapi:extension:x-speakeasy-name-override", "serveFunction")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "serveFunction"}`)
+	})
+
 	Method("listAssets", func() {
 		Description("List all assets for a project.")
 
@@ -245,6 +275,24 @@ var ServeOpenAPIv3Form = Type("ServeOpenAPIv3Form", func() {
 })
 
 var ServeOpenAPIv3Result = Type("ServeOpenAPIv3Result", func() {
+	Required("content_type", "content_length", "last_modified")
+
+	Attribute("content_type", String)
+	Attribute("content_length", Int64)
+	Attribute("last_modified", String)
+})
+
+var ServeFunctionForm = Type("ServeFunctionForm", func() {
+	Required("id", "project_id")
+
+	security.ByKeyPayload()
+	security.SessionPayload()
+
+	Attribute("id", String, "The ID of the asset to serve")
+	Attribute("project_id", String, "The procect ID that the asset belongs to")
+})
+
+var ServeFunctionResult = Type("ServeFunctionResult", func() {
 	Required("content_type", "content_length", "last_modified")
 
 	Attribute("content_type", String)

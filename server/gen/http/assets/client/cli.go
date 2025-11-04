@@ -188,6 +188,38 @@ func BuildServeOpenAPIv3Payload(assetsServeOpenAPIv3ID string, assetsServeOpenAP
 	return v, nil
 }
 
+// BuildServeFunctionPayload builds the payload for the assets serveFunction
+// endpoint from CLI flags.
+func BuildServeFunctionPayload(assetsServeFunctionID string, assetsServeFunctionProjectID string, assetsServeFunctionApikeyToken string, assetsServeFunctionSessionToken string) (*assets.ServeFunctionForm, error) {
+	var id string
+	{
+		id = assetsServeFunctionID
+	}
+	var projectID string
+	{
+		projectID = assetsServeFunctionProjectID
+	}
+	var apikeyToken *string
+	{
+		if assetsServeFunctionApikeyToken != "" {
+			apikeyToken = &assetsServeFunctionApikeyToken
+		}
+	}
+	var sessionToken *string
+	{
+		if assetsServeFunctionSessionToken != "" {
+			sessionToken = &assetsServeFunctionSessionToken
+		}
+	}
+	v := &assets.ServeFunctionForm{}
+	v.ID = id
+	v.ProjectID = projectID
+	v.ApikeyToken = apikeyToken
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListAssetsPayload builds the payload for the assets listAssets endpoint
 // from CLI flags.
 func BuildListAssetsPayload(assetsListAssetsSessionToken string, assetsListAssetsProjectSlugInput string, assetsListAssetsApikeyToken string) (*assets.ListAssetsPayload, error) {
