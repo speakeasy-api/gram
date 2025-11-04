@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.18.1
+
+### Patch Changes
+
+- 9dd1b7a: Unify code block components
+
 ## 0.18.0
 
 ### Minor Changes

@@ -1,5 +1,11 @@
 # cli
 
+## 0.12.0
+
+### Minor Changes
+
+- 0e8fb8f: feat: sign CLI binary with cosign to allow distribution for `aqua` and `mise`
+
 ## 0.11.6
 
 ### Patch Changes
