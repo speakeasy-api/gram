@@ -34,7 +34,6 @@ import {
   Check,
   ChevronRight,
   CircleCheckIcon,
-  Copy,
   FileCode,
   FileJson2,
   RefreshCcw,
@@ -44,38 +43,19 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { codeToHtml } from "shiki";
 import { AnimatePresence, motion, useMotionValue } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
+import { CodeBlock } from "@/components/code";
 
 type OnboardingPath = "openapi" | "cli";
 type OnboardingStep = "choice" | "upload" | "cli-setup" | "toolset" | "mcp";
 
 export const START_PATH_PARAM = "start-path";
 export const START_STEP_PARAM = "start-step";
-
-async function highlightCode(
-  code: string,
-  language: "bash" | "javascript",
-): Promise<string> {
-  const html = await codeToHtml(code, {
-    lang: language,
-    theme: "github-light-default",
-    transformers: [
-      {
-        pre(node) {
-          node.properties.class =
-            (node.properties.class || "") + " whitespace-pre-wrap";
-        },
-      },
-    ],
-  });
-  return html;
-}
 
 export function OnboardingWizard() {
   const { orgSlug } = useParams();
@@ -449,7 +429,6 @@ const CliSetupStep = ({
 }: {
   setCurrentStep: (step: OnboardingStep) => void;
 }) => {
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [installMethod, setInstallMethod] = useState<"npm" | "pnpm">("npm");
   const client = useSdkClient();
 
@@ -482,12 +461,6 @@ const CliSetupStep = ({
       command: `${installMethod} push`,
     },
   ];
-
-  const handleCopy = (command: string, index: number) => {
-    navigator.clipboard.writeText(command);
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
-  };
 
   const handleContinue = async () => {
     const tools = await client.tools.list();
@@ -537,23 +510,7 @@ const CliSetupStep = ({
                 </Stack>
               )}
             </Stack>
-            <div className="relative group">
-              <pre className="p-4 rounded-md font-mono text-sm overflow-x-auto border">
-                {item.command}
-              </pre>
-              <Button
-                variant="tertiary"
-                size="sm"
-                onClick={() => handleCopy(item.command, index)}
-                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-background"
-              >
-                {copiedIndex === index ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </Button>
-            </div>
+            <CodeBlock children={item.command} language="bash" />
           </Stack>
         ))}
       </Stack>
@@ -1123,9 +1080,7 @@ export default gram;`;
 
   // Initialize editor with MCP code
   useEffect(() => {
-    highlightCode(mcpCode, "javascript").then((html) => {
-      setEditorCode(html);
-    });
+    setEditorCode(mcpCode);
   }, []);
 
   // Animate logs appearing one by one
@@ -1147,21 +1102,14 @@ export default gram;`;
           const editorTimeout = setTimeout(() => {
             setFocusedWindow("editor");
             // Clear editor and change filename
-            highlightCode(greetCode, "javascript").then((html) => {
-              setEditorCode(html);
-            });
+            setEditorCode(greetCode);
             setEditorFilename("src/functions.ts");
 
             // Type out the greet function code
             let charIndex = 0;
             const typeInterval = setInterval(() => {
               if (charIndex < greetCode.length) {
-                highlightCode(
-                  greetCode.slice(0, charIndex + 1),
-                  "javascript",
-                ).then((html) => {
-                  setEditorCode(html);
-                });
+                setEditorCode(greetCode.slice(0, charIndex + 1));
                 charIndex++;
               } else {
                 clearInterval(typeInterval);
@@ -1316,9 +1264,7 @@ export default gram;`;
     setFocusedWindow("terminal");
     // Restart animation
     setLogs([]);
-    highlightCode(mcpCode, "javascript").then((html) => {
-      setEditorCode(html);
-    });
+    setEditorCode(mcpCode);
     setEditorFilename("src/mcp.ts");
     setAnimationKey((prev) => prev + 1);
   };
@@ -1484,10 +1430,14 @@ export default gram;`;
         </div>
 
         {/* Editor content - starts with MCP SDK easter egg, switches to greet function */}
-        <div
-          className="p-4 font-mono text-sm h-[350px] overflow-y-auto"
-          dangerouslySetInnerHTML={{ __html: editorCode }}
-        />
+        <CodeBlock
+          language="typescript"
+          copyable={false}
+          className="!pr-0"
+          preClassName="!bg-transparent h-[350px] overflow-y-auto p-4 whitespace-pre-wrap"
+        >
+          {editorCode}
+        </CodeBlock>
       </motion.div>
 
       {/* Reset button - show when animation complete or position/focus changed */}

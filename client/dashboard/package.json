@@ -9,7 +9,8 @@
     "lint": "prettier --check . && eslint . && tsc -b --noEmit",
     "preview": "vite preview",
     "format": "prettier --write .",
-    "analyze-bundle": "pnpm dlx vite-bundle-visualizer"
+    "analyze-bundle": "pnpm dlx vite-bundle-visualizer",
+    "type-check": "tsc -b --noEmit"
   },
   "dependencies": {
     "@ai-sdk/openai": "catalog:",

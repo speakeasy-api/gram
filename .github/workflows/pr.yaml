@@ -530,7 +530,7 @@ jobs:
       - name: Type check functions entrypoint
         working-directory: functions
         if: ${{ needs.changes.outputs.functions == 'true' }}
-        run: pnpm check
+        run: pnpm type-check
 
       - name: Lint Go server
         if: ${{ needs.changes.outputs.functions == 'true' }}
@@ -762,11 +762,11 @@ jobs:
             ${{ env.GH_CACHE_PNPM_KEY_PARTIAL }}
           path: |
             ${{ env.PNPM_STORE_PATH }}
-      
+
       - name: Install dependencies
         if: ${{ needs.changes.outputs.tsframework == 'true' }}
         run: pnpm install --frozen-lockfile
-      
+
       - name: Test TypeScript framework
         if: ${{ needs.changes.outputs.tsframework == 'true' }}
         run: pnpm --filter "./ts-framework/**" test

@@ -9,7 +9,8 @@
     "dev": "pnpm --filter ./client/dashboard dev",
     "dev:docs": "pnpm --filter ./client/docs dev",
     "lint": "tsc --noEmit && pnpm -r lint",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "type-check": "pnpm -r type-check"
   },
   "keywords": [],
   "author": "",

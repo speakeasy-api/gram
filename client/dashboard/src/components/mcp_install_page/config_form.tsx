@@ -239,7 +239,7 @@ export function ConfigForm({ toolset }: ConfigFormProps) {
         <Stack direction="horizontal" align="center" gap={2}>
           <CodeBlock
             className="flex-grow overflow-hidden pr-10"
-            preClassname="whitespace-nowrap overflow-auto"
+            preClassName="whitespace-nowrap overflow-auto"
             copyable={true}
           >
             {installPageUrl}

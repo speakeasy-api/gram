@@ -52,7 +52,8 @@
   "scripts": {
     "lint": "eslint --cache --max-warnings=0 src",
     "build": "tsc",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "type-check": "tsc --noEmit"
   },
   "peerDependencies": {
     "@tanstack/react-query": "^5",
