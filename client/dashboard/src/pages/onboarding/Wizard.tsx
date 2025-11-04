@@ -1433,7 +1433,7 @@ export default gram;`;
         <CodeBlock
           language="typescript"
           copyable={false}
-          className="!pr-0"
+          className="!pr-0 !rounded-none !border-none"
           preClassName="!bg-transparent h-[350px] overflow-y-auto p-4 whitespace-pre-wrap"
         >
           {editorCode}

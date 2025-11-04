@@ -8,7 +8,6 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { MoreActions } from "@/components/ui/more-actions";
 import { SkeletonCode } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
@@ -430,16 +429,15 @@ const RemoveSourceDialog = forwardRef<
           </Dialog.Description>
         </Dialog.Header>
         <div className="grid gap-2">
-          <Label>
-            <span>
-              To confirm, type "<strong>{sourceSlug}</strong>"
-            </span>
-          </Label>
+          <span className="text-sm">
+            To confirm, type "<strong>{sourceSlug}</strong>"
+          </span>
+
           <Input onChange={(v) => setInputMatches(v === sourceSlug)} />
         </div>
 
         <Alert variant="error" dismissible={false}>
-          Deleting {asset.name} cannot be undone.
+          Deleting {sourceSlug} cannot be undone.
         </Alert>
 
         <Dialog.Footer>
