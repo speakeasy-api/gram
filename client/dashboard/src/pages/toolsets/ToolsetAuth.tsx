@@ -1,16 +1,16 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Plus } from "lucide-react";
-import { Button } from "@speakeasy-api/moonshine";
 import { Input } from "@/components/ui/input";
 import { useTelemetry } from "@/contexts/Telemetry";
+import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { EnvironmentEntryInput } from "@gram/client/models/components";
 import {
   invalidateAllListEnvironments,
   useUpdateEnvironmentMutation,
 } from "@gram/client/react-query";
-import { isHttpTool, Toolset } from "@/lib/toolTypes";
+import { Button } from "@speakeasy-api/moonshine";
+import { useQueryClient } from "@tanstack/react-query";
+import { AlertCircle, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useEnvironments } from "../environments/Environments";
 import { EnvironmentSelector } from "./EnvironmentSelector";
 
@@ -214,37 +214,24 @@ export function ToolsetAuth({
     setSaveError(null);
   }, [environment?.slug]);
 
+  // Note: We currently don't support removing environment variables (on the UI side--the API does support it).
+  // If a user sets a value to empty, no change will be made to the environment.
   const handleSave = useCallback(() => {
     if (!environment) return;
 
-    const { entries: environmentEntries, slug: environmentSlug } = environment;
+    const { slug: environmentSlug } = environment;
     const isEmpty = (value: string) => !value || value.trim() === "";
 
     const entriesToUpdate: EnvironmentEntryInput[] = Object.entries(envValues)
       .filter(([, value]) => !isEmpty(value))
       .map(([name, value]) => ({ name, value }));
 
-    const entriesToRemove: string[] = [];
-
-    if (environmentEntries) {
-      relevantEnvVars.forEach((varName) => {
-        const currentValue = environmentEntries.find(
-          (e) => e.name === varName,
-        )?.value;
-        const newValue = envValues[varName] ?? "";
-
-        if (currentValue && isEmpty(newValue)) {
-          entriesToRemove.push(varName);
-        }
-      });
-    }
-
     updateEnvironment({
       request: {
         slug: environmentSlug,
         updateEnvironmentRequestBody: {
           entriesToUpdate,
-          entriesToRemove,
+          entriesToRemove: [],
         },
       },
     });
