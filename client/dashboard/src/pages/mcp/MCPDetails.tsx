@@ -686,7 +686,8 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
         ),
       ) ?? []),
       // Function environment variables
-      ...(toolset.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? []),
+      ...(toolset.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ??
+        []),
       // Server variables (filter server_url unless required)
       ...(toolset.serverVariables?.flatMap((serverVar) =>
         serverVar.envVariables.filter(
