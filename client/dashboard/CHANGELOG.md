@@ -1,5 +1,11 @@
 # dashboard
 
+## 0.18.2
+
+### Patch Changes
+
+- 403a2c8: Fixes delete asset confirmation modal visual discrepancy and css fixes
+
 ## 0.18.1
 
 ### Patch Changes
