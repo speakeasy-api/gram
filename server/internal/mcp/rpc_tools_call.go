@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -23,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -117,7 +119,32 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").Log(ctx, logger)
 	}
 
+	toolURN, err := conv.GetToolURN(*tool)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
+	}
+
 	ciEnv := gateway.NewCaseInsensitiveEnv()
+
+	envRepo := repo.New(db)
+	sourceEnv, err := envRepo.GetEnvironmentForSource(ctx, repo.GetEnvironmentForSourceParams{
+		SourceKind: string(toolURN.Kind),
+		SourceSlug: toolURN.Source,
+	})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get environment from source").Log(ctx, logger)
+	}
+
+	if err == nil {
+		sourceEnvVars, err := env.Load(ctx, payload.projectID, gateway.ID(sourceEnv.ID))
+		if err != nil && !errors.Is(err, gateway.ErrNotFound) {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to load source environment variables").Log(ctx, logger)
+		}
+
+		for k, v := range sourceEnvVars {
+			ciEnv.Set(k, v)
+		}
+	}
 
 	// IMPORTANT: MCP servers accessed in a public manner or not gram authenticated, there is no concept of using stored environments for them
 	if envSlug != "" && payload.authenticated {
@@ -137,11 +164,6 @@ func handleToolsCall(
 	// user supplied variables comes after stored environment variables to allow overrides in the case of conflicts
 	for k, v := range payload.mcpEnvVariables {
 		ciEnv.Set(k, v)
-	}
-
-	toolURN, err := conv.GetToolURN(*tool)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").Log(ctx, logger)
 	}
 
 	plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, *toolURN, uuid.UUID(projectID))
