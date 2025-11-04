@@ -1,42 +1,85 @@
+import React, { useEffect } from "react";
+import { codeToHtml, BuiltinTheme } from "shiki";
+import { Check, Copy } from "lucide-react";
+import { Button } from "@speakeasy-api/moonshine";
 import { cn } from "@/lib/utils";
-import { CopyButton } from "./ui/copy-button";
+
+const DEFAULT_THEME: BuiltinTheme = "github-light-default";
 
 export function CodeBlock({
+  children: code,
+  language,
   className,
-  preClassname,
   copyable = true,
   onCopy,
-  children,
+  preClassName,
 }: {
-  className?: string;
-  preClassname?: string;
-  copyable?: boolean;
-  onCopy?: () => void; // Extra actions to take when the code is copied
   children: string;
+  language?: string;
+  className?: string;
+  copyable?: boolean;
+  onCopy?: () => void;
+  preClassName?: string;
 }) {
-  let singleLine = false;
-  if (!children.includes("\n")) {
-    singleLine = true;
-  }
+  const [highlightedCode, setHighlightedCode] = React.useState<string | null>(
+    null,
+  );
+  const [copied, setCopied] = React.useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    onCopy?.();
+  };
+
+  useEffect(() => {
+    if (!language) return;
+
+    codeToHtml(code, {
+      lang: language,
+      theme: DEFAULT_THEME,
+      transformers: [
+        {
+          pre(node) {
+            node.properties.class = preClassName;
+          },
+        },
+      ],
+    }).then(setHighlightedCode);
+  }, [code, language, preClassName]);
+
   return (
-    <div className={cn("relative bg-muted p-3 rounded-md", className)}>
-      {copyable && (
-        <CopyButton
-          text={children}
-          absolute
-          size={singleLine ? "icon-sm" : "icon"}
-          className={cn(singleLine && "right-1 top-1")}
-          onCopy={onCopy}
+    <div className="relative group">
+      {highlightedCode ? (
+        <div
+          className={cn(
+            "p-4 rounded-md font-mono text-sm text-wrap overflow-x-auto border whitespace-pre-wrap break-all pr-12",
+            className,
+          )}
+          dangerouslySetInnerHTML={{ __html: highlightedCode ?? "" }}
         />
+      ) : (
+        <div className="p-4 rounded-md font-mono text-sm text-wrap overflow-x-auto border break-all whitespace-pre-wrap truncate pr-12">
+          {code}
+        </div>
       )}
-      <pre
-        className={cn(
-          "break-all whitespace-pre-wrap text-xs pr-10",
-          preClassname,
-        )}
-      >
-        {children}
-      </pre>
+      {copyable && (
+        <Button
+          variant="tertiary"
+          size="sm"
+          onClick={handleCopy}
+          className="absolute top-1/2 -translate-y-1/2 right-2 p-2"
+        >
+          <Button.LeftIcon>
+            {copied ? (
+              <Check className="w-4 h-4" />
+            ) : (
+              <Copy className="w-4 h-4" />
+            )}
+          </Button.LeftIcon>
+        </Button>
+      )}
     </div>
   );
 }

@@ -29,11 +29,11 @@ import {
 } from "@gram/client/react-query";
 import { Button, Stack } from "@speakeasy-api/moonshine";
 import { useQueryClient } from "@tanstack/react-query";
+
 import {
   Check,
   ChevronRight,
   CircleCheckIcon,
-  Copy,
   FileCode,
   FileJson2,
   RefreshCcw,
@@ -49,6 +49,7 @@ import { useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useMcpSlugValidation } from "../mcp/MCPDetails";
 import { DeploymentLogs, useUploadOpenAPISteps } from "./UploadOpenAPI";
+import { CodeBlock } from "@/components/code";
 
 type OnboardingPath = "openapi" | "cli";
 type OnboardingStep = "choice" | "upload" | "cli-setup" | "toolset" | "mcp";
@@ -428,7 +429,6 @@ const CliSetupStep = ({
 }: {
   setCurrentStep: (step: OnboardingStep) => void;
 }) => {
-  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [installMethod, setInstallMethod] = useState<"npm" | "pnpm">("npm");
   const client = useSdkClient();
 
@@ -461,12 +461,6 @@ const CliSetupStep = ({
       command: `${installMethod} push`,
     },
   ];
-
-  const handleCopy = (command: string, index: number) => {
-    navigator.clipboard.writeText(command);
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
-  };
 
   const handleContinue = async () => {
     const tools = await client.tools.list();
@@ -516,23 +510,7 @@ const CliSetupStep = ({
                 </Stack>
               )}
             </Stack>
-            <div className="relative group">
-              <pre className="p-4 rounded-md font-mono text-sm overflow-x-auto border">
-                {item.command}
-              </pre>
-              <Button
-                variant="tertiary"
-                size="sm"
-                onClick={() => handleCopy(item.command, index)}
-                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity bg-background"
-              >
-                {copiedIndex === index ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </Button>
-            </div>
+            <CodeBlock children={item.command} language="bash" />
           </Stack>
         ))}
       </Stack>
@@ -1054,7 +1032,7 @@ const TerminalAnimationWithLogs = () => {
   const terminalContentRef = useRef<HTMLDivElement>(null);
   const [animationKey, setAnimationKey] = useState(0);
   const [editorFilename, setEditorFilename] = useState("src/mcp.ts");
-  const [editorCode, setEditorCode] = useState("");
+  const [editorCode, setEditorCode] = useState<string | null>(null);
 
   const { data: tools } = useListTools(undefined, undefined, {
     refetchInterval: deploymentStatus !== "complete" ? 2000 : false,
@@ -1124,7 +1102,7 @@ export default gram;`;
           const editorTimeout = setTimeout(() => {
             setFocusedWindow("editor");
             // Clear editor and change filename
-            setEditorCode("");
+            setEditorCode(greetCode);
             setEditorFilename("src/functions.ts");
 
             // Type out the greet function code
@@ -1296,6 +1274,10 @@ export default gram;`;
     setHasChangedFocus(true);
   };
 
+  if (!editorCode) {
+    return null;
+  }
+
   return (
     <div className="relative w-full h-full flex items-center justify-center scale-[0.65] lg:scale-75 xl:scale-90">
       {/* Terminal Window - positioned bottom-left */}
@@ -1448,9 +1430,14 @@ export default gram;`;
         </div>
 
         {/* Editor content - starts with MCP SDK easter egg, switches to greet function */}
-        <div className="p-4 font-mono text-sm h-[350px] overflow-y-auto">
-          <pre className="whitespace-pre-wrap">{editorCode}</pre>
-        </div>
+        <CodeBlock
+          language="typescript"
+          copyable={false}
+          className="!pr-0"
+          preClassName="!bg-transparent h-[350px] overflow-y-auto p-4 whitespace-pre-wrap"
+        >
+          {editorCode}
+        </CodeBlock>
       </motion.div>
 
       {/* Reset button - show when animation complete or position/focus changed */}

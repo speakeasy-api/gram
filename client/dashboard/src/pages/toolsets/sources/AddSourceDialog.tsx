@@ -1,3 +1,4 @@
+import { CodeBlock } from "@/components/code";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Type } from "@/components/ui/type";
 import DeployStep from "@/components/upload-asset/deploy-step";
@@ -11,7 +12,7 @@ import { useTelemetry } from "@/contexts/Telemetry";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment, useListAssets } from "@gram/client/react-query";
 import { Button, Dialog, Stack } from "@speakeasy-api/moonshine";
-import { ArrowRightIcon, Check, Copy, RefreshCcwIcon } from "lucide-react";
+import { ArrowRightIcon, RefreshCcwIcon } from "lucide-react";
 import React from "react";
 
 export interface AddSourceDialogRef {
@@ -235,8 +236,6 @@ function FooterActions({ onClose }: { onClose?: () => void }) {
 }
 
 export function FunctionsInstructions() {
-  const [copiedIndex, setCopiedIndex] = React.useState<number | null>(null);
-
   const commands = [
     {
       label: (
@@ -264,12 +263,6 @@ export function FunctionsInstructions() {
     },
   ];
 
-  const handleCopy = (command: string, index: number) => {
-    navigator.clipboard.writeText(command);
-    setCopiedIndex(index);
-    setTimeout(() => setCopiedIndex(null), 2000);
-  };
-
   return (
     <div className="p-8">
       <Stack gap={4}>
@@ -278,23 +271,9 @@ export function FunctionsInstructions() {
             <Type small className="font-medium">
               {index + 1}. {item.label}
             </Type>
-            <div className="relative group">
-              <pre className="p-4 rounded-md font-mono text-sm text-wrap overflow-x-auto border">
-                {item.command}
-              </pre>
-              <Button
-                variant="tertiary"
-                size="sm"
-                onClick={() => handleCopy(item.command, index)}
-                className="absolute top-2 right-2"
-              >
-                {copiedIndex === index ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </Button>
-            </div>
+            <CodeBlock language="bash" preClassName="!bg-transparent">
+              {item.command}
+            </CodeBlock>
           </Stack>
         ))}
       </Stack>

@@ -6,8 +6,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "check": "tsc --noEmit",
-    "test": "vitest --run"
+    "test": "vitest --run",
+    "type-check": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
