@@ -1,12 +1,12 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 677a127aea801cbb59392bfe94152bae
+  docChecksum: 71970dcb2c0ee9d44fccf9e80e8240d5
   docVersion: 0.0.1
-  speakeasyVersion: 1.639.2
+  speakeasyVersion: 1.641.1
   generationVersion: 2.730.5
-  releaseVersion: 0.16.6
-  configChecksum: 9c1dce2fdf361c28cf494bd5d86051b2
+  releaseVersion: 0.16.7
+  configChecksum: 0f4b4b9d74332282ac41d0324be3e009
 features:
   typescript:
     additionalDependencies: 0.1.0
@@ -344,6 +344,9 @@ generatedFiles:
   - docs/models/operations/rendertemplatesecurityoption3.md
   - docs/models/operations/revokeapikeyrequest.md
   - docs/models/operations/revokeapikeysecurity.md
+  - docs/models/operations/servefunctionrequest.md
+  - docs/models/operations/servefunctionresponse.md
+  - docs/models/operations/servefunctionsecurity.md
   - docs/models/operations/serveimagerequest.md
   - docs/models/operations/serveimageresponse.md
   - docs/models/operations/serveopenapiv3request.md
@@ -431,6 +434,7 @@ generatedFiles:
   - package.json
   - src/core.ts
   - src/funcs/assetsListAssets.ts
+  - src/funcs/assetsServeFunction.ts
   - src/funcs/assetsServeImage.ts
   - src/funcs/assetsServeOpenAPIv3.ts
   - src/funcs/assetsUploadFunctions.ts
@@ -719,6 +723,7 @@ generatedFiles:
   - src/models/operations/rendertemplate.ts
   - src/models/operations/rendertemplatebyid.ts
   - src/models/operations/revokeapikey.ts
+  - src/models/operations/servefunction.ts
   - src/models/operations/serveimage.ts
   - src/models/operations/serveopenapiv3.ts
   - src/models/operations/sessioninfo.ts
@@ -796,6 +801,7 @@ generatedFiles:
   - src/react-query/renderTemplate.ts
   - src/react-query/renderTemplateByID.ts
   - src/react-query/revokeAPIKey.ts
+  - src/react-query/serveFunction.ts
   - src/react-query/serveImage.ts
   - src/react-query/serveOpenAPIv3.ts
   - src/react-query/sessionInfo.ts
@@ -1693,5 +1699,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  serveFunction:
+    speakeasy-default-serve-function:
+      parameters:
+        query:
+          id: "<id>"
+          project_id: "<id>"
+      responses:
+        "200":
+          application/json: "x-file: example.file"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
 examplesVersion: 1.0.2
 generatedTests: {}

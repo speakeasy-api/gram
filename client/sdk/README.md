@@ -125,6 +125,7 @@ run();
 ### [assets](docs/sdks/assets/README.md)
 
 * [listAssets](docs/sdks/assets/README.md#listassets) - listAssets assets
+* [serveFunction](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 * [serveImage](docs/sdks/assets/README.md#serveimage) - serveImage assets
 * [serveOpenAPIv3](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 * [uploadFunctions](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
@@ -279,6 +280,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 <summary>Available standalone functions</summary>
 
 - [`assetsListAssets`](docs/sdks/assets/README.md#listassets) - listAssets assets
+- [`assetsServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`assetsServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`assetsServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 - [`assetsUploadFunctions`](docs/sdks/assets/README.md#uploadfunctions) - uploadFunctions assets
@@ -438,6 +440,7 @@ To learn about this feature and how to get started, check
 - [`useRenderTemplate`](docs/sdks/templates/README.md#render) - renderTemplate templates
 - [`useRenderTemplateByID`](docs/sdks/templates/README.md#renderbyid) - renderTemplateByID templates
 - [`useRevokeAPIKeyMutation`](docs/sdks/keys/README.md#revokebyid) - revokeKey keys
+- [`useServeFunction`](docs/sdks/assets/README.md#servefunction) - serveFunction assets
 - [`useServeImage`](docs/sdks/assets/README.md#serveimage) - serveImage assets
 - [`useServeOpenAPIv3`](docs/sdks/assets/README.md#serveopenapiv3) - serveOpenAPIv3 assets
 - [`useSessionInfo`](docs/sdks/auth/README.md#info) - info auth
