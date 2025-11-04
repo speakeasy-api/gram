@@ -743,8 +743,11 @@ const ToolsetStep = ({
   return (
     <>
       <Stack gap={1}>
-        <span className="text-heading-md">Create Toolset</span>
-        <span className="text-body-sm">Give this toolset a name</span>
+        <span className="text-heading-md">Name Your Toolset</span>
+        <span className="text-body-sm">
+          This toolset will hold the tools you've added to Gram. We'll make the
+          tools it contains available in an MCP Server in the next step.
+        </span>
       </Stack>
       <InputField
         placeholder="my-toolset"
