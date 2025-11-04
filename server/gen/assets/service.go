@@ -35,6 +35,12 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	ServeOpenAPIv3(context.Context, *ServeOpenAPIv3Form) (res *ServeOpenAPIv3Result, body io.ReadCloser, err error)
+	// Serve a Gram Functions asset from Gram.
+
+	// If body implements [io.WriterTo], that implementation will be used instead.
+	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
+	// implementations.
+	ServeFunction(context.Context, *ServeFunctionForm) (res *ServeFunctionResult, body io.ReadCloser, err error)
 	// List all assets for a project.
 	ListAssets(context.Context, *ListAssetsPayload) (res *ListAssetsResult, err error)
 }
@@ -59,7 +65,7 @@ const ServiceName = "assets"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "serveOpenAPIv3", "listAssets"}
+var MethodNames = [7]string{"serveImage", "uploadImage", "uploadFunctions", "uploadOpenAPIv3", "serveOpenAPIv3", "serveFunction", "listAssets"}
 
 type Asset struct {
 	// The ID of the asset
@@ -89,6 +95,25 @@ type ListAssetsPayload struct {
 type ListAssetsResult struct {
 	// The list of assets
 	Assets []*Asset
+}
+
+// ServeFunctionForm is the payload type of the assets service serveFunction
+// method.
+type ServeFunctionForm struct {
+	ApikeyToken  *string
+	SessionToken *string
+	// The ID of the asset to serve
+	ID string
+	// The procect ID that the asset belongs to
+	ProjectID string
+}
+
+// ServeFunctionResult is the result type of the assets service serveFunction
+// method.
+type ServeFunctionResult struct {
+	ContentType   string
+	ContentLength int64
+	LastModified  string
 }
 
 // ServeImageForm is the payload type of the assets service serveImage method.

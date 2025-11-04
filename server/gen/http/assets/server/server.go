@@ -27,6 +27,7 @@ type Server struct {
 	UploadFunctions http.Handler
 	UploadOpenAPIv3 http.Handler
 	ServeOpenAPIv3  http.Handler
+	ServeFunction   http.Handler
 	ListAssets      http.Handler
 }
 
@@ -62,6 +63,7 @@ func New(
 			{"UploadFunctions", "POST", "/rpc/assets.uploadFunctions"},
 			{"UploadOpenAPIv3", "POST", "/rpc/assets.uploadOpenAPIv3"},
 			{"ServeOpenAPIv3", "GET", "/rpc/assets.serveOpenAPIv3"},
+			{"ServeFunction", "GET", "/rpc/assets.serveFunction"},
 			{"ListAssets", "GET", "/rpc/assets.list"},
 		},
 		ServeImage:      NewServeImageHandler(e.ServeImage, mux, decoder, encoder, errhandler, formatter),
@@ -69,6 +71,7 @@ func New(
 		UploadFunctions: NewUploadFunctionsHandler(e.UploadFunctions, mux, decoder, encoder, errhandler, formatter),
 		UploadOpenAPIv3: NewUploadOpenAPIv3Handler(e.UploadOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
 		ServeOpenAPIv3:  NewServeOpenAPIv3Handler(e.ServeOpenAPIv3, mux, decoder, encoder, errhandler, formatter),
+		ServeFunction:   NewServeFunctionHandler(e.ServeFunction, mux, decoder, encoder, errhandler, formatter),
 		ListAssets:      NewListAssetsHandler(e.ListAssets, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -83,6 +86,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UploadFunctions = m(s.UploadFunctions)
 	s.UploadOpenAPIv3 = m(s.UploadOpenAPIv3)
 	s.ServeOpenAPIv3 = m(s.ServeOpenAPIv3)
+	s.ServeFunction = m(s.ServeFunction)
 	s.ListAssets = m(s.ListAssets)
 }
 
@@ -96,6 +100,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUploadFunctionsHandler(mux, h.UploadFunctions)
 	MountUploadOpenAPIv3Handler(mux, h.UploadOpenAPIv3)
 	MountServeOpenAPIv3Handler(mux, h.ServeOpenAPIv3)
+	MountServeFunctionHandler(mux, h.ServeFunction)
 	MountListAssetsHandler(mux, h.ListAssets)
 }
 
@@ -400,6 +405,94 @@ func NewServeOpenAPIv3Handler(
 			return
 		}
 		o := res.(*assets.ServeOpenAPIv3ResponseData)
+		defer o.Body.Close()
+		if wt, ok := o.Body.(io.WriterTo); ok {
+			if err := encodeResponse(ctx, w, o.Result); err != nil {
+				if errhandler != nil {
+					errhandler(ctx, w, err)
+				}
+				return
+			}
+			n, err := wt.WriteTo(w)
+			if err != nil {
+				if n == 0 {
+					if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+						errhandler(ctx, w, err)
+					}
+				} else {
+					http.NewResponseController(w).Flush()
+					panic(http.ErrAbortHandler) // too late to write an error
+				}
+			}
+			return
+		}
+		// handle immediate read error like a returned error
+		buf := bufio.NewReader(o.Body)
+		if _, err := buf.Peek(1); err != nil && err != io.EOF {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, o.Result); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if _, err := io.Copy(w, buf); err != nil {
+			http.NewResponseController(w).Flush()
+			panic(http.ErrAbortHandler) // too late to write an error
+		}
+	})
+}
+
+// MountServeFunctionHandler configures the mux to serve the "assets" service
+// "serveFunction" endpoint.
+func MountServeFunctionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/assets.serveFunction", otelhttp.WithRouteTag("/rpc/assets.serveFunction", f).ServeHTTP)
+}
+
+// NewServeFunctionHandler creates a HTTP handler which loads the HTTP request
+// and calls the "assets" service "serveFunction" endpoint.
+func NewServeFunctionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeServeFunctionRequest(mux, decoder)
+		encodeResponse = EncodeServeFunctionResponse(encoder)
+		encodeError    = EncodeServeFunctionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "serveFunction")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assets")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		o := res.(*assets.ServeFunctionResponseData)
 		defer o.Body.Close()
 		if wt, ok := o.Body.(io.WriterTo); ok {
 			if err := encodeResponse(ctx, w, o.Result); err != nil {

@@ -203,6 +203,124 @@ paths:
       x-speakeasy-name-override: listAssets
       x-speakeasy-react-hook:
         name: ListAssets
+  /rpc/assets.serveFunction:
+    get:
+      description: Serve a Gram Functions asset from Gram.
+      operationId: serveFunction
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the asset to serve
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the asset to serve
+            type: string
+        - allowEmptyValue: true
+          description: The procect ID that the asset belongs to
+          in: query
+          name: project_id
+          required: true
+          schema:
+            description: The procect ID that the asset belongs to
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                format: binary
+                type: string
+          description: OK response.
+          headers:
+            Content-Length:
+              schema:
+                format: int64
+                type: integer
+            Content-Type:
+              schema:
+                type: string
+            Last-Modified:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: serveFunction assets
+      tags:
+        - assets
+      x-speakeasy-name-override: serveFunction
+      x-speakeasy-react-hook:
+        name: serveFunction
   /rpc/assets.serveImage:
     get:
       description: Serve an image from Gram.
@@ -10685,6 +10803,36 @@ components:
         - in_placement
         - scheme
         - env_variables
+    ServeFunctionForm:
+      type: object
+      properties:
+        apikey_token:
+          type: string
+        id:
+          type: string
+          description: The ID of the asset to serve
+        project_id:
+          type: string
+          description: The procect ID that the asset belongs to
+        session_token:
+          type: string
+      required:
+        - id
+        - project_id
+    ServeFunctionResult:
+      type: object
+      properties:
+        content_length:
+          type: integer
+          format: int64
+        content_type:
+          type: string
+        last_modified:
+          type: string
+      required:
+        - content_type
+        - content_length
+        - last_modified
     ServeImageForm:
       type: object
       properties:

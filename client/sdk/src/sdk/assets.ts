@@ -3,6 +3,7 @@
  */
 
 import { assetsListAssets } from "../funcs/assetsListAssets.js";
+import { assetsServeFunction } from "../funcs/assetsServeFunction.js";
 import { assetsServeImage } from "../funcs/assetsServeImage.js";
 import { assetsServeOpenAPIv3 } from "../funcs/assetsServeOpenAPIv3.js";
 import { assetsUploadFunctions } from "../funcs/assetsUploadFunctions.js";
@@ -26,6 +27,25 @@ export class Assets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<components.ListAssetsResult> {
     return unwrapAsync(assetsListAssets(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * serveFunction assets
+   *
+   * @remarks
+   * Serve a Gram Functions asset from Gram.
+   */
+  async serveFunction(
+    request: operations.ServeFunctionRequest,
+    security?: operations.ServeFunctionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<operations.ServeFunctionResponse> {
+    return unwrapAsync(assetsServeFunction(
       this,
       request,
       security,

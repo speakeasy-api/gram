@@ -114,6 +114,38 @@ func (q *Queries) GetAssetURLs(ctx context.Context, arg GetAssetURLsParams) ([]G
 	return items, nil
 }
 
+const getFunctionAssetURL = `-- name: GetFunctionAssetURL :one
+SELECT url, content_type, content_length, updated_at
+FROM assets
+WHERE
+  id = $1 AND kind = 'functions'
+  AND project_id = $2
+`
+
+type GetFunctionAssetURLParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetFunctionAssetURLRow struct {
+	Url           string
+	ContentType   string
+	ContentLength int64
+	UpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) GetFunctionAssetURL(ctx context.Context, arg GetFunctionAssetURLParams) (GetFunctionAssetURLRow, error) {
+	row := q.db.QueryRow(ctx, getFunctionAssetURL, arg.ID, arg.ProjectID)
+	var i GetFunctionAssetURLRow
+	err := row.Scan(
+		&i.Url,
+		&i.ContentType,
+		&i.ContentLength,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getImageAssetURL = `-- name: GetImageAssetURL :one
 SELECT url, content_type, content_length, updated_at FROM assets WHERE id = $1 AND kind = 'image'
 `

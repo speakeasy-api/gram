@@ -130,7 +130,7 @@ type AssetItemProps = {
 };
 
 const AssetItem = ({ asset }: AssetItemProps) => {
-  const handleDownload = useDownloadAsset();
+  const handleDownload = useDownloadAsset(asset.type);
   let icon = <FileCodeIcon strokeWidth={1} className="size-12 min-w-12" />;
   if (asset.type === "function") {
     icon = <SquareFunctionIcon strokeWidth={1} className="size-12 min-w-12" />;
@@ -191,11 +191,15 @@ const AssetErrorBadge = () => {
   );
 };
 
-const useDownloadAsset = () => {
+const useDownloadAsset = (assetType: string) => {
   const { id: projectId } = useProject();
+  const path =
+    assetType === "openapiv3"
+      ? "/rpc/assets.serveOpenAPIv3"
+      : "/rpc/assets.serveFunction";
 
   return (assetId: string, assetName: string) => {
-    const downloadURL = new URL("/rpc/assets.serveOpenAPIv3", getServerURL());
+    const downloadURL = new URL(path, getServerURL());
     downloadURL.searchParams.set("id", assetId);
     downloadURL.searchParams.set("project_id", projectId);
 

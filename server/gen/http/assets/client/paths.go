@@ -32,6 +32,11 @@ func ServeOpenAPIv3AssetsPath() string {
 	return "/rpc/assets.serveOpenAPIv3"
 }
 
+// ServeFunctionAssetsPath returns the URL path to the assets service serveFunction HTTP endpoint.
+func ServeFunctionAssetsPath() string {
+	return "/rpc/assets.serveFunction"
+}
+
 // ListAssetsAssetsPath returns the URL path to the assets service listAssets HTTP endpoint.
 func ListAssetsAssetsPath() string {
 	return "/rpc/assets.list"

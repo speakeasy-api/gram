@@ -38,6 +38,10 @@ type Client struct {
 	// serveOpenAPIv3 endpoint.
 	ServeOpenAPIv3Doer goahttp.Doer
 
+	// ServeFunction Doer is the HTTP client used to make requests to the
+	// serveFunction endpoint.
+	ServeFunctionDoer goahttp.Doer
+
 	// ListAssets Doer is the HTTP client used to make requests to the listAssets
 	// endpoint.
 	ListAssetsDoer goahttp.Doer
@@ -67,6 +71,7 @@ func NewClient(
 		UploadFunctionsDoer: doer,
 		UploadOpenAPIv3Doer: doer,
 		ServeOpenAPIv3Doer:  doer,
+		ServeFunctionDoer:   doer,
 		ListAssetsDoer:      doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -203,6 +208,35 @@ func (c *Client) ServeOpenAPIv3() goa.Endpoint {
 			return nil, err
 		}
 		return &assets.ServeOpenAPIv3ResponseData{Result: res.(*assets.ServeOpenAPIv3Result), Body: resp.Body}, nil
+	}
+}
+
+// ServeFunction returns an endpoint that makes HTTP requests to the assets
+// service serveFunction server.
+func (c *Client) ServeFunction() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeServeFunctionRequest(c.encoder)
+		decodeResponse = DecodeServeFunctionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildServeFunctionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ServeFunctionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("assets", "serveFunction", err)
+		}
+		res, err := decodeResponse(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return &assets.ServeFunctionResponseData{Result: res.(*assets.ServeFunctionResult), Body: resp.Body}, nil
 	}
 }
 

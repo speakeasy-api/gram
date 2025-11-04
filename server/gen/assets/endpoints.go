@@ -22,6 +22,7 @@ type Endpoints struct {
 	UploadFunctions goa.Endpoint
 	UploadOpenAPIv3 goa.Endpoint
 	ServeOpenAPIv3  goa.Endpoint
+	ServeFunction   goa.Endpoint
 	ListAssets      goa.Endpoint
 }
 
@@ -70,6 +71,15 @@ type ServeOpenAPIv3ResponseData struct {
 	Body io.ReadCloser
 }
 
+// ServeFunctionResponseData holds both the result and the HTTP response body
+// reader of the "serveFunction" method.
+type ServeFunctionResponseData struct {
+	// Result is the method result.
+	Result *ServeFunctionResult
+	// Body streams the HTTP response body.
+	Body io.ReadCloser
+}
+
 // NewEndpoints wraps the methods of the "assets" service with endpoints.
 func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
@@ -80,6 +90,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UploadFunctions: NewUploadFunctionsEndpoint(s, a.APIKeyAuth),
 		UploadOpenAPIv3: NewUploadOpenAPIv3Endpoint(s, a.APIKeyAuth),
 		ServeOpenAPIv3:  NewServeOpenAPIv3Endpoint(s, a.APIKeyAuth),
+		ServeFunction:   NewServeFunctionEndpoint(s, a.APIKeyAuth),
 		ListAssets:      NewListAssetsEndpoint(s, a.APIKeyAuth),
 	}
 }
@@ -91,6 +102,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UploadFunctions = m(e.UploadFunctions)
 	e.UploadOpenAPIv3 = m(e.UploadOpenAPIv3)
 	e.ServeOpenAPIv3 = m(e.ServeOpenAPIv3)
+	e.ServeFunction = m(e.ServeFunction)
 	e.ListAssets = m(e.ListAssets)
 }
 
@@ -320,6 +332,45 @@ func NewServeOpenAPIv3Endpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 			return nil, err
 		}
 		return &ServeOpenAPIv3ResponseData{Result: res, Body: body}, nil
+	}
+}
+
+// NewServeFunctionEndpoint returns an endpoint function that calls the method
+// "serveFunction" of service "assets".
+func NewServeFunctionEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ServeFunctionForm)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "apikey",
+			Scopes:         []string{"consumer", "producer"},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.ApikeyToken != nil {
+			key = *p.ApikeyToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "session",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.SessionToken != nil {
+				key = *p.SessionToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			return nil, err
+		}
+		res, body, err := s.ServeFunction(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		return &ServeFunctionResponseData{Result: res, Body: body}, nil
 	}
 }
 
