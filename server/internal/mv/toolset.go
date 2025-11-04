@@ -87,6 +87,7 @@ func DescribeToolsetEntry(
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
 	var functionEnvVars []*types.FunctionEnvironmentVariable
+	seenEnvVars := make(map[string]bool)
 	if len(toolUrns) > 0 {
 		definitions, err := toolsRepo.FindHttpToolEntriesByUrn(ctx, tr.FindHttpToolEntriesByUrnParams{
 			ProjectID: pid,
@@ -160,7 +161,12 @@ func DescribeToolsetEntry(
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
 			}
-			functionEnvVars = append(functionEnvVars, envVars...)
+			for _, envVar := range envVars {
+				if !seenEnvVars[envVar.Name] {
+					seenEnvVars[envVar.Name] = true
+					functionEnvVars = append(functionEnvVars, envVar)
+				}
+			}
 		}
 
 		promptTools, err := templatesRepo.PeekTemplatesByUrns(ctx, templatesR.PeekTemplatesByUrnsParams{
@@ -211,7 +217,12 @@ func DescribeToolsetEntry(
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").Log(ctx, logger)
 			}
-			functionEnvVars = append(functionEnvVars, envVars...)
+			for _, envVar := range envVars {
+				if !seenEnvVars[envVar.Name] {
+					seenEnvVars[envVar.Name] = true
+					functionEnvVars = append(functionEnvVars, envVar)
+				}
+			}
 		}
 	}
 
@@ -485,6 +496,7 @@ func readToolsetTools(
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
 	var functionEnvVars []*types.FunctionEnvironmentVariable
+	seenEnvVars := make(map[string]bool)
 
 	// NOTE: A slight shortcoming here is that the cache is keyed by the active deployment id, but the queries below don't strictly depend on
 	// the deployment ID fetched above. Technically the deployment could change at just the right time to mess up the cache.
@@ -655,7 +667,12 @@ func readToolsetTools(
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
 			}
-			functionEnvVars = append(functionEnvVars, envVars...)
+			for _, envVar := range envVars {
+				if !seenEnvVars[envVar.Name] {
+					seenEnvVars[envVar.Name] = true
+					functionEnvVars = append(functionEnvVars, envVar)
+				}
+			}
 
 			tools = append(tools, &types.Tool{
 				FunctionToolDefinition: functionTool,
@@ -710,7 +727,12 @@ func readToolsetTools(
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").Log(ctx, logger)
 			}
-			functionEnvVars = append(functionEnvVars, envVars...)
+			for _, envVar := range envVars {
+				if !seenEnvVars[envVar.Name] {
+					seenEnvVars[envVar.Name] = true
+					functionEnvVars = append(functionEnvVars, envVar)
+				}
+			}
 
 			resources = append(resources, &types.Resource{
 				FunctionResourceDefinition: functionResource,

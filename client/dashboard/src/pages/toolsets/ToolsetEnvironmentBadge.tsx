@@ -57,17 +57,19 @@ export const ToolsetEnvironmentBadge = ({
   );
 
   const relevantEnvVars: string[] = [
-    // Security variables (no filtering)
-    ...(toolset.securityVariables?.flatMap((secVar) => secVar.envVariables) ??
-      []),
-    // Function environment variables
-    ...(toolset.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? []),
-    // Server variables (filter server_url unless required)
-    ...(toolset.serverVariables?.flatMap((serverVar) =>
-      serverVar.envVariables.filter(
-        (v) => !v.toLowerCase().includes("server_url") || requiresServerURL,
-      ),
-    ) ?? []),
+    ...new Set([
+      // Security variables (no filtering)
+      ...(toolset.securityVariables?.flatMap((secVar) => secVar.envVariables) ??
+        []),
+      // Function environment variables
+      ...(toolset.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? []),
+      // Server variables (filter server_url unless required)
+      ...(toolset.serverVariables?.flatMap((serverVar) =>
+        serverVar.envVariables.filter(
+          (v) => !v.toLowerCase().includes("server_url") || requiresServerURL,
+        ),
+      ) ?? []),
+    ]),
   ];
 
   const missingEnvVars =

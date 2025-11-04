@@ -160,7 +160,7 @@ export function ToolsetAuth({
     const functionEnvVars =
       toolset?.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? [];
 
-    return [...securityVars, ...serverVars, ...functionEnvVars];
+    return [...new Set([...securityVars, ...serverVars, ...functionEnvVars])];
   }, [
     toolset?.securityVariables,
     toolset?.serverVariables,

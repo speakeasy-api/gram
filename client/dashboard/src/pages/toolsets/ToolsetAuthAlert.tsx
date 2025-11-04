@@ -21,7 +21,7 @@ function useRelevantEnvVars(toolset: Toolset) {
         ),
       ) ?? [];
 
-    return [...securityVars, ...serverVars, ...functionEnvironmentVariables];
+    return [...new Set([...securityVars, ...serverVars, ...functionEnvironmentVariables])];
   }, [toolset]);
 }
 
