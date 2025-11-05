@@ -33,6 +33,7 @@ func newApp() *cli.App {
 			newStatusCommand(),
 			newWhoAmICommand(),
 			newStageCommand(),
+			newInstallCommand(),
 		},
 		Flags: []cli.Flag{
 			flags.APIKey(),
