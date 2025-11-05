@@ -6,28 +6,16 @@ import (
 	"net/url"
 
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
-	"github.com/speakeasy-api/gram/cli/internal/claudecode"
 	"github.com/speakeasy-api/gram/cli/internal/mcp"
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
 	"github.com/urfave/cli/v2"
 )
 
-func newInstallCommand() *cli.Command {
+func newInstallCursorCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "install",
-		Usage: "Install Gram toolsets as MCP servers in various clients",
-		Subcommands: []*cli.Command{
-			newInstallCursorCommand(),
-			newInstallClaudeCodeCommand(),
-		},
-	}
-}
-
-func newInstallClaudeCodeCommand() *cli.Command {
-	return &cli.Command{
-		Name:  "claude-code",
-		Usage: "Install a Gram toolset as an MCP server in Claude Code",
+		Name:  "cursor",
+		Usage: "Install a Gram toolset as an MCP server in Cursor",
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:  "toolset",
@@ -39,7 +27,7 @@ func newInstallClaudeCodeCommand() *cli.Command {
 			},
 			&cli.StringFlag{
 				Name:  "name",
-				Usage: "The name to use for this MCP server in Claude Code (defaults to toolset name or derived from URL)",
+				Usage: "The name to use for this MCP server in Cursor (defaults to toolset name or derived from URL)",
 			},
 			&cli.StringFlag{
 				Name:  "api-key",
@@ -54,23 +42,18 @@ func newInstallClaudeCodeCommand() *cli.Command {
 				Name:  "env-var",
 				Usage: "Environment variable name to use for API key substitution (e.g., MCP_API_KEY). If provided, uses ${VAR} syntax instead of hardcoding the key",
 			},
-			&cli.StringFlag{
-				Name:  "config-path",
-				Usage: "Path to the Claude Code config file (defaults to project-local .mcp.json)",
-			},
 		},
-		Action: doInstallClaudeCode,
+		Action: doInstallCursor,
 	}
 }
 
-func doInstallClaudeCode(c *cli.Context) error {
+func doInstallCursor(c *cli.Context) error {
 	ctx := c.Context
 	logger := logging.PullLogger(ctx)
 	prof := profile.FromContext(ctx)
 
 	toolsetSlug := c.String("toolset")
 	toolsetURL := c.String("toolset-url")
-	configPath := c.String("config-path")
 
 	// Validate that either toolset or toolset-url is provided
 	if toolsetSlug == "" && toolsetURL == "" {
@@ -90,7 +73,7 @@ func doInstallClaudeCode(c *cli.Context) error {
 		}
 	}
 
-	// Resolve toolset information using shared logic
+	// Resolve toolset information
 	info, err := mcp.ResolveToolsetInfo(ctx, &mcp.ResolverOptions{
 		ToolsetSlug:     toolsetSlug,
 		ToolsetURL:      toolsetURL,
@@ -108,32 +91,7 @@ func doInstallClaudeCode(c *cli.Context) error {
 		return fmt.Errorf("failed to resolve toolset info: %w", err)
 	}
 
-	// Determine config path
-	if configPath == "" {
-		locations, err := claudecode.GetConfigLocations()
-		if err != nil {
-			return fmt.Errorf("failed to get config locations: %w", err)
-		}
-		// Default to project-local .mcp.json
-		configPath = locations[0].Path
-		logger.InfoContext(ctx, "using config location",
-			slog.String("path", configPath),
-			slog.String("type", locations[0].Description))
-	}
-
-	// Read existing config
-	config, err := claudecode.ReadConfig(configPath)
-	if err != nil {
-		return fmt.Errorf("failed to read config: %w", err)
-	}
-
-	// Check if server already exists
-	if _, exists := config.MCPServers[info.Name]; exists {
-		logger.WarnContext(ctx, "server with this name already exists, will be overwritten",
-			slog.String("name", info.Name))
-	}
-
-	// Build MCP config using shared logic
+	// Build MCP config
 	useEnvVar := info.EnvVarName != ""
 	if useEnvVar {
 		logger.InfoContext(ctx, "using environment variable substitution",
@@ -143,36 +101,38 @@ func doInstallClaudeCode(c *cli.Context) error {
 
 	mcpConfig := mcp.BuildMCPConfig(info, useEnvVar)
 
-	// Convert shared config to claudecode format
-	serverConfig := claudecode.MCPServerConfig{
-		Command: mcpConfig.Command,
-		Args:    mcpConfig.Args,
-		Env:     mcpConfig.Env,
+	// Marshal config to JSON for URI encoding
+	configJSON, err := mcp.MarshalConfigJSON(info.Name, mcpConfig)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	// Add or update the server
-	config.AddOrUpdateServer(info.Name, serverConfig)
+	// URL encode the config
+	configEncoded := url.QueryEscape(configJSON)
 
-	// Write the config back
-	if err := claudecode.WriteConfig(configPath, config); err != nil {
-		return fmt.Errorf("failed to write config: %w", err)
+	// Construct Cursor deep link
+	deepLink := fmt.Sprintf(
+		"cursor://anysphere.cursor-deeplink/mcp/install?name=%s&config=%s",
+		url.QueryEscape(info.Name),
+		configEncoded,
+	)
+
+	logger.InfoContext(ctx, "opening Cursor deep link", slog.String("name", info.Name))
+
+	// Open the deep link
+	if err := mcp.OpenURL(deepLink); err != nil {
+		return fmt.Errorf("failed to open Cursor deep link: %w", err)
 	}
 
-	logger.InfoContext(ctx, "successfully installed Gram MCP server",
-		slog.String("name", info.Name),
-		slog.String("url", info.URL),
-		slog.String("config", configPath))
-
-	fmt.Printf("\n✓ Successfully installed MCP server '%s'\n", info.Name)
+	fmt.Printf("\n✓ Opening Cursor to install MCP server '%s'\n", info.Name)
 	fmt.Printf("  URL: %s\n", info.URL)
-	fmt.Printf("  Config: %s\n", configPath)
 
 	if useEnvVar {
 		fmt.Printf("\n⚠ Remember to set the environment variable before using:\n")
 		fmt.Printf("  export %s='your-api-key-value'\n", info.EnvVarName)
 	}
 
-	fmt.Printf("\nRestart Claude Code to load the new MCP server.\n")
+	fmt.Printf("\nCursor should open and prompt you to install the MCP server.\n")
 
 	return nil
 }
