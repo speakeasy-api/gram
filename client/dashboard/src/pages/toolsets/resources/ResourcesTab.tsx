@@ -20,7 +20,7 @@ import { useUpdateToolsetMutation } from "@gram/client/react-query";
 import { Dialog, Stack } from "@speakeasy-api/moonshine";
 import { Newspaper } from "lucide-react";
 import { useMemo, useState } from "react";
-import { FunctionsInstructions } from "../sources/AddSourceDialog";
+import { FunctionsInstructions } from "@/components/sources/AddSourceDialog";
 import { ResourcesEmptyState } from "./ResourcesEmptyState";
 
 export function ResourcesTabContent({
