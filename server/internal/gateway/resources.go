@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -144,6 +145,41 @@ func (tp *ToolProxy) doFunctionResource(
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
 
+	var logEntry *tm.ToolHTTPRequest
+	if tp.toolMetrics != nil {
+		if shouldLog, _ := tp.toolMetrics.ShouldLog(ctx, descriptor.OrganizationID); shouldLog {
+			entry, err := tm.NewToolLog(ctx, tm.ToolInfo{
+				ID:             descriptor.ID,
+				Urn:            descriptor.URN.String(),
+				Name:           descriptor.Name,
+				ProjectID:      descriptor.ProjectID,
+				DeploymentID:   descriptor.DeploymentID,
+				OrganizationID: descriptor.OrganizationID,
+			}, tm.ToolTypeHTTP)
+			if err != nil {
+				logger.ErrorContext(ctx,
+					"failed to create tool HTTP request log entry",
+					attr.SlogError(err),
+					attr.SlogToolName(descriptor.Name),
+					attr.SlogToolURN(descriptor.URN.String()),
+				)
+			} else {
+				logEntry = entry.
+					WithHTTPMethod(req.Method).
+					WithHTTPRoute(req.URL.Path)
+				defer func() {
+					if logEntry == nil || logEntry.ID == "" {
+						return
+					}
+
+					logEntry.StatusCode = int64(responseStatusCode)
+
+					tm.EmitHTTPRequestLog(ctx, logger, tp.toolMetrics, descriptor.Name, *logEntry)
+				}()
+			}
+		}
+	}
+
 	return reverseProxyRequest(ctx, ReverseProxyOptions{
 		Logger:                    logger,
 		Tracer:                    tp.tracer,
@@ -154,7 +190,7 @@ func (tp *ToolProxy) doFunctionResource(
 		FilterConfig:              DisableResponseFiltering,
 		Policy:                    tp.policy,
 		ResponseStatusCodeCapture: &responseStatusCode,
-		ToolMetricsProvider:       tp.toolMetrics,
+		ToolCallLogEntry:          logEntry,
 		VerifyResponse: func(resp *http.Response) error {
 			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
 				return fmt.Errorf("failed to verify function invocation ID")

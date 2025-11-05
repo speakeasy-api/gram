@@ -1,14 +1,12 @@
 package toolmetrics
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"go.opentelemetry.io/otel/codes"
@@ -87,26 +85,26 @@ func filterAllowedHeaders(headers map[string]string) map[string]string {
 	return filtered
 }
 
-// HTTPLoggingRoundTripper wraps an http.RoundTripper and logs HTTP requests to ClickHouse
-type HTTPLoggingRoundTripper struct {
-	rt     http.RoundTripper
-	tcm    ToolMetricsProvider
-	logger *slog.Logger
-	tracer trace.Tracer
+// ToolCallLogRoundTripper wraps an http.RoundTripper and logs HTTP requests to ClickHouse
+type ToolCallLogRoundTripper struct {
+	rt       http.RoundTripper
+	logger   *slog.Logger
+	tracer   trace.Tracer
+	logEntry *ToolHTTPRequest
 }
 
-// NewHTTPLoggingRoundTripper creates a new RoundTripper that logs HTTP requests to ClickHouse
-func NewHTTPLoggingRoundTripper(rt http.RoundTripper, tcm ToolMetricsProvider, logger *slog.Logger, tracer trace.Tracer) *HTTPLoggingRoundTripper {
-	return &HTTPLoggingRoundTripper{
-		rt:     rt,
-		tcm:    tcm,
-		logger: logger,
-		tracer: tracer,
+// NewToolCallLogRoundTripper creates a new RoundTripper that logs HTTP requests to ClickHouse
+func NewToolCallLogRoundTripper(rt http.RoundTripper, logger *slog.Logger, tracer trace.Tracer, logEntry *ToolHTTPRequest) *ToolCallLogRoundTripper {
+	return &ToolCallLogRoundTripper{
+		rt:       rt,
+		logger:   logger,
+		tracer:   tracer,
+		logEntry: logEntry,
 	}
 }
 
 // RoundTrip implements http.RoundTripper interface
-func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 
 	// Start a span for the HTTP logging round trip
@@ -132,6 +130,22 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	requestBodyBytesPtr, ok := ctx.Value(RequestBodyContextKey).(*int)
 	if !ok {
 		requestBodyBytesPtr = nil
+	}
+
+	// Capture request headers up front so we have them even if the round trip fails.
+	requestHeaders := make(map[string]string)
+	for key, values := range req.Header {
+		for _, value := range values {
+			requestHeaders[key] = value
+		}
+	}
+	requestHeaders = filterAllowedHeaders(requestHeaders)
+
+	if h.logEntry != nil {
+		h.logEntry.HTTPMethod = req.Method
+		h.logEntry.HTTPRoute = req.URL.Path
+		h.logEntry.UserAgent = req.UserAgent()
+		h.logEntry.RequestHeaders = requestHeaders
 	}
 
 	resp, err := base.RoundTrip(req)
@@ -166,6 +180,11 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		attr.HTTPRoute(req.URL.Path),
 	)
 
+	if h.logEntry != nil {
+		h.logEntry.DurationMs = duration * 1000
+		h.logEntry.RequestBodyBytes = int64(conv.PtrValOr(requestBodyBytesPtr, 0))
+	}
+
 	// If the request failed, wrap and return the error; E.g., request timeout, etc.
 	if err != nil {
 		span.RecordError(err)
@@ -177,17 +196,14 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			attr.SlogToolURN(tool.Urn),
 			attr.SlogHTTPClientRequestDuration(duration),
 		)
-		return resp, fmt.Errorf("roundtrip: %w", err)
-	}
 
-	// Extract trace information
-	spanCtx := trace.SpanContextFromContext(ctx)
-	var traceID, spanID string
-	if spanCtx.HasTraceID() {
-		traceID = spanCtx.TraceID().String()
-	}
-	if spanCtx.HasSpanID() {
-		spanID = spanCtx.SpanID().String()
+		if h.logEntry != nil {
+			h.logEntry.StatusCode = 0
+			h.logEntry.ResponseHeaders = nil
+			h.logEntry.ResponseBodyBytes = 0
+		}
+
+		return resp, fmt.Errorf("roundtrip: %w", err)
 	}
 
 	statusCode := 0
@@ -214,15 +230,6 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		)
 	}
 
-	// Get request headers and keep only allowed ones
-	requestHeaders := make(map[string]string)
-	for key, values := range req.Header {
-		for _, value := range values {
-			requestHeaders[key] = value
-		}
-	}
-	requestHeaders = filterAllowedHeaders(requestHeaders)
-
 	// Get response headers and keep only allowed ones
 	responseHeaders := make(map[string]string)
 	if resp != nil {
@@ -234,91 +241,25 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		responseHeaders = filterAllowedHeaders(responseHeaders)
 	}
 
-	method := req.Method
-	url := req.URL.String()
+	if h.logEntry != nil {
+		h.logEntry.StatusCode = int64(statusCode)
+		h.logEntry.ResponseHeaders = responseHeaders
 
-	logHTTPRequest := func(respBodyBytes int) {
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					h.logger.ErrorContext(ctx, "panic in HTTP request logging goroutine",
-						attr.SlogErrorMessage(fmt.Sprintf("%v", r)),
-						attr.SlogURLOriginal(url),
-						attr.SlogToolURN(tool.Urn),
-						attr.SlogHTTPRequestMethod(method),
-					)
-				}
-			}()
-
-			logCtx := context.WithoutCancel(ctx)
-
-			// Get final request body size now that request body has been read and closed
-			var requestBodyBytes = conv.PtrValOr(requestBodyBytesPtr, 0)
-
-			id, err := uuid.NewV7()
-			if err != nil {
-				h.logger.ErrorContext(logCtx, "failed to generate UUID for HTTP request logging",
-					attr.SlogURLOriginal(url),
-					attr.SlogToolURN(tool.Urn),
-					attr.SlogHTTPRequestMethod(method),
-				)
-				return
-			}
-
-			// We are not logging the request or response bodies for a number of reasons:
-			// - They may be too large and will inflate our ClickHouse table, making it slower to query and hard to estimate the size
-			// - They might contain sensitive information such as PII or API keys, then we'd have to redact them
-			httpRequest := ToolHTTPRequest{
-				ID:                id.String(),
-				Ts:                time.Unix(id.Time().UnixTime()),
-				OrganizationID:    tool.OrganizationID,
-				ProjectID:         tool.ProjectID,
-				DeploymentID:      tool.DeploymentID,
-				ToolID:            tool.ID,
-				ToolURN:           tool.Urn,
-				ToolType:          ToolTypeHTTP,
-				TraceID:           traceID,
-				SpanID:            spanID,
-				HTTPMethod:        req.Method,
-				HTTPRoute:         req.URL.Path,
-				StatusCode:        int64(statusCode),
-				DurationMs:        duration * 1000,
-				UserAgent:         req.UserAgent(),
-				RequestHeaders:    requestHeaders,
-				RequestBodyBytes:  int64(requestBodyBytes),
-				ResponseHeaders:   responseHeaders,
-				ResponseBodyBytes: int64(respBodyBytes),
-			}
-
-			logErr := h.tcm.Log(logCtx, httpRequest)
-			if logErr != nil {
-				h.logger.ErrorContext(logCtx, "failed to log HTTP attempt to ClickHouse",
-					attr.SlogError(logErr),
-					attr.SlogURLOriginal(url),
-					attr.SlogToolURN(tool.Urn),
-					attr.SlogToolName(tool.Name),
-					attr.SlogHTTPRequestMethod(method),
-				)
-			} else {
-				h.logger.DebugContext(logCtx, "successfully logged HTTP request to ClickHouse",
-					attr.SlogURLOriginal(url),
-					attr.SlogToolURN(tool.Urn),
-					attr.SlogHTTPRequestMethod(method),
-					attr.SlogHTTPRequestBodyBytes(requestBodyBytes),
-					attr.SlogHTTPResponseBodyBytes(respBodyBytes),
-				)
-			}
-		}()
+		if resp == nil || resp.Body == nil {
+			h.logEntry.ResponseBodyBytes = 0
+		}
 	}
 
 	if resp == nil || resp.Body == nil {
-		// No response body (e.g., 204 No Content), log immediately
-		logHTTPRequest(0)
 		return resp, nil
 	}
 
-	// Wraps the response body to count bytes and log when the body is closed
-	resp.Body = NewCountingReadCloser(resp.Body, logHTTPRequest)
+	if h.logEntry != nil {
+		// Wraps the response body to count bytes and update log entry when the body is closed
+		resp.Body = NewCountingReadCloser(resp.Body, func(respBodyBytes int) {
+			h.logEntry.ResponseBodyBytes = int64(respBodyBytes)
+		})
+	}
 
 	return resp, nil
 }

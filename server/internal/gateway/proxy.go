@@ -276,6 +276,39 @@ func (tp *ToolProxy) doFunction(
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
 
+	var logEntry *tm.ToolHTTPRequest
+	if tp.toolMetrics != nil {
+		if shouldLog, _ := tp.toolMetrics.ShouldLog(ctx, descriptor.OrganizationID); shouldLog {
+			entry, err := tm.NewToolLog(ctx, tm.ToolInfo{
+				ID:             descriptor.ID,
+				Urn:            descriptor.URN.String(),
+				Name:           descriptor.Name,
+				ProjectID:      descriptor.ProjectID,
+				DeploymentID:   descriptor.DeploymentID,
+				OrganizationID: descriptor.OrganizationID,
+			}, tm.ToolTypeHTTP)
+			if err != nil {
+				logger.ErrorContext(ctx,
+					"failed to create tool HTTP request log entry",
+					attr.SlogError(err),
+					attr.SlogToolName(descriptor.Name),
+					attr.SlogToolURN(descriptor.URN.String()),
+				)
+			} else {
+				logEntry = entry.
+					WithHTTPMethod(req.Method).
+					WithHTTPRoute(req.URL.Path)
+				defer func() {
+					if logEntry == nil || logEntry.ID == "" {
+						return
+					}
+
+					tm.EmitHTTPRequestLog(ctx, logger, tp.toolMetrics, descriptor.Name, *logEntry)
+				}()
+			}
+		}
+	}
+
 	return reverseProxyRequest(ctx, ReverseProxyOptions{
 		Logger:                    logger,
 		Tracer:                    tp.tracer,
@@ -286,7 +319,7 @@ func (tp *ToolProxy) doFunction(
 		FilterConfig:              DisableResponseFiltering,
 		Policy:                    tp.policy,
 		ResponseStatusCodeCapture: &responseStatusCode,
-		ToolMetricsProvider:       tp.toolMetrics,
+		ToolCallLogEntry:          logEntry,
 		VerifyResponse: func(resp *http.Response) error {
 			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
 				return fmt.Errorf("failed to verify function invocation ID")
@@ -333,6 +366,40 @@ func (tp *ToolProxy) doHTTP(
 
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
+
+	var logEntry *tm.ToolHTTPRequest
+	if tp.toolMetrics != nil {
+		if shouldLog, _ := tp.toolMetrics.ShouldLog(ctx, descriptor.OrganizationID); shouldLog {
+			entry, err := tm.NewToolLog(ctx, tm.ToolInfo{
+				ID:             descriptor.ID,
+				Urn:            descriptor.URN.String(),
+				Name:           descriptor.Name,
+				ProjectID:      descriptor.ProjectID,
+				DeploymentID:   descriptor.DeploymentID,
+				OrganizationID: descriptor.OrganizationID,
+			}, tm.ToolTypeHTTP)
+			if err != nil {
+				logger.ErrorContext(ctx,
+					"failed to create tool HTTP request log entry",
+					attr.SlogError(err),
+					attr.SlogToolName(descriptor.Name),
+					attr.SlogToolURN(descriptor.URN.String()),
+				)
+			} else {
+				logEntry = entry.
+					WithHTTPMethod(plan.Method).
+					WithHTTPRoute(plan.Path)
+				defer func() {
+					if logEntry == nil || logEntry.ID == "" {
+						return
+					}
+
+					logEntry = logEntry.WithStatusCode(int64(responseStatusCode))
+					tm.EmitHTTPRequestLog(ctx, logger, tp.toolMetrics, descriptor.Name, *logEntry)
+				}()
+			}
+		}
+	}
 
 	bodyBytes, err := io.ReadAll(requestBody)
 	if err != nil {
@@ -550,7 +617,7 @@ func (tp *ToolProxy) doHTTP(
 		FilterConfig:              plan.ResponseFilter,
 		Policy:                    tp.policy,
 		ResponseStatusCodeCapture: &responseStatusCode,
-		ToolMetricsProvider:       tp.toolMetrics,
+		ToolCallLogEntry:          logEntry,
 		VerifyResponse:            func(resp *http.Response) error { return nil },
 		ID:                        descriptor.ID,
 		Name:                      descriptor.Name,
@@ -651,8 +718,8 @@ type ReverseProxyOptions struct {
 	FilterConfig              *ResponseFilter
 	Policy                    *guardian.Policy
 	ResponseStatusCodeCapture *int
-	ToolMetricsProvider       tm.ToolMetricsProvider
 	VerifyResponse            func(*http.Response) error
+	ToolCallLogEntry          *tm.ToolHTTPRequest
 	// Descriptor fields
 	ID               string
 	Name             string
@@ -678,30 +745,15 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 
-	isAllowed, err := opts.ToolMetricsProvider.ShouldLog(ctx, opts.OrganizationID)
-	if err != nil {
-		// If we can't determine if the tool is allowed to log, we won't log the request.
-		isAllowed = false
-		opts.Logger.ErrorContext(ctx,
-			"failed to determine if organization is allowed to request log",
-			attr.SlogOrganizationID(opts.OrganizationID),
-			attr.SlogError(err))
+	baseTransport := http.RoundTripper(transport)
+	if opts.ToolCallLogEntry != nil {
+		baseTransport = tm.NewToolCallLogRoundTripper(baseTransport, opts.Logger, opts.Tracer, opts.ToolCallLogEntry)
 	}
 
-	var otelTransport *otelhttp.Transport
-	if isAllowed {
-		// Wrap with HTTP logging round tripper
-		loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, opts.ToolMetricsProvider, opts.Logger, opts.Tracer)
-		otelTransport = otelhttp.NewTransport(
-			loggingTransport,
-			otelhttp.WithPropagators(propagation.TraceContext{}),
-		)
-	} else {
-		otelTransport = otelhttp.NewTransport(
-			transport,
-			otelhttp.WithPropagators(propagation.TraceContext{}),
-		)
-	}
+	otelTransport := otelhttp.NewTransport(
+		baseTransport,
+		otelhttp.WithPropagators(propagation.TraceContext{}),
+	)
 
 	client := &http.Client{
 		Timeout:   60 * time.Second,
