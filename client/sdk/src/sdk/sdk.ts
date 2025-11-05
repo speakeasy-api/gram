@@ -9,6 +9,7 @@ import { Chat } from "./chat.js";
 import { Deployments } from "./deployments.js";
 import { Domains } from "./domains.js";
 import { Environments } from "./environments.js";
+import { Features } from "./features.js";
 import { Instances } from "./instances.js";
 import { Integrations } from "./integrations.js";
 import { Keys } from "./keys.js";
@@ -88,6 +89,11 @@ export class Gram extends ClientSDK {
   private _packages?: Packages;
   get packages(): Packages {
     return (this._packages ??= new Packages(this._options));
+  }
+
+  private _features?: Features;
+  get features(): Features {
+    return (this._features ??= new Features(this._options));
   }
 
   private _projects?: Projects;

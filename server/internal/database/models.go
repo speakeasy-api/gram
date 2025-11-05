@@ -379,6 +379,16 @@ type OpenrouterApiKey struct {
 	Deleted        bool
 }
 
+type OrganizationFeature struct {
+	Seq            int64
+	OrganizationID string
+	FeatureName    string
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
 type OrganizationMetadatum struct {
 	ID              string
 	Name            string

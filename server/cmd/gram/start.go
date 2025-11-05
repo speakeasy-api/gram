@@ -17,6 +17,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/speakeasy-api/gram/server/internal/logs"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/urfave/cli/v2"
 	"github.com/urfave/cli/v2/altsrc"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -394,16 +395,10 @@ func newStartCommand() *cli.Command {
 			}
 
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
-			var features feature.Provider = posthogClient
+			var featureFlags feature.Provider = posthogClient
 			if c.String("environment") == "local" {
-				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
-
-			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c, tracerProvider, features)
-			if err != nil {
-				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
-			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
 			if err != nil {
@@ -511,6 +506,15 @@ func newStartCommand() *cli.Command {
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
+
+			productFeatures := productfeatures.NewClient(logger, db, redisClient)
+
+			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c, tracerProvider, productFeatures)
+			if err != nil {
+				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
+			}
+			shutdownFuncs = append(shutdownFuncs, shutdown)
+
 			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, tcm)
 			mux := goahttp.NewMuxer()
 
@@ -531,6 +535,7 @@ func newStartCommand() *cli.Command {
 			}))
 			projects.Attach(mux, projects.NewService(logger, db, sessionManager))
 			packages.Attach(mux, packages.NewService(logger, db, sessionManager))
+			productfeatures.Attach(mux, productfeatures.NewService(logger, db, sessionManager, redisClient))
 			toolsets.Attach(mux, toolsetsSvc)
 			integrations.Attach(mux, integrations.NewService(logger, db, sessionManager))
 			templates.Attach(mux, templates.NewService(logger, db, sessionManager, toolsetsSvc))
@@ -584,7 +589,7 @@ func newStartCommand() *cli.Command {
 					temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						DB:                  db,
 						EncryptionClient:    encryptionClient,
-						FeatureProvider:     features,
+						FeatureProvider:     featureFlags,
 						AssetStorage:        assetStorage,
 						SlackClient:         slackClient,
 						ChatClient:          chatClient,

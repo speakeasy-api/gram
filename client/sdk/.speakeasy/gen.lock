@@ -1,24 +1,24 @@
 lockVersion: 2.0.0
 id: 0e7a6274-2092-40cd-9586-9415c6655c64
 management:
-  docChecksum: 71970dcb2c0ee9d44fccf9e80e8240d5
+  docChecksum: d5d771145b31d5e07cbc0d803050e861
   docVersion: 0.0.1
-  speakeasyVersion: 1.641.1
-  generationVersion: 2.730.5
-  releaseVersion: 0.16.7
-  configChecksum: 0f4b4b9d74332282ac41d0324be3e009
+  speakeasyVersion: 1.648.1
+  generationVersion: 2.739.1
+  releaseVersion: 0.17.1
+  configChecksum: f02c74f73f2f803a93139bf3e077430e
 features:
   typescript:
     additionalDependencies: 0.1.0
     constsAndDefaults: 0.1.12
-    core: 3.24.1
+    core: 3.26.0
     defaultEnabledRetries: 0.1.0
     devContainers: 2.90.1
     downloadStreams: 0.1.1
     enumUnions: 0.1.0
     envVarSecurityUsage: 0.1.2
     globalSecurityCallbacks: 0.1.0
-    globalServerURLs: 2.82.5
+    globalServerURLs: 2.83.0
     methodArguments: 0.1.2
     methodSecurity: 2.82.6
     nameOverrides: 2.81.2
@@ -78,6 +78,7 @@ generatedFiles:
   - docs/models/components/evolveresult.md
   - docs/models/components/externaloauthserver.md
   - docs/models/components/externaloauthserverform.md
+  - docs/models/components/featurename.md
   - docs/models/components/functionenvironmentvariable.md
   - docs/models/components/functionresourcedefinition.md
   - docs/models/components/functiontooldefinition.md
@@ -144,6 +145,7 @@ generatedFiles:
   - docs/models/components/securityvariable.md
   - docs/models/components/servervariable.md
   - docs/models/components/setmcpmetadatarequestbody.md
+  - docs/models/components/setproductfeaturerequestbody.md
   - docs/models/components/setprojectlogoform.md
   - docs/models/components/setprojectlogoresult.md
   - docs/models/components/tierlimits.md
@@ -357,6 +359,8 @@ generatedFiles:
   - docs/models/operations/sessioninfosecurity.md
   - docs/models/operations/setmcpmetadatarequest.md
   - docs/models/operations/setmcpmetadatasecurity.md
+  - docs/models/operations/setproductfeaturerequest.md
+  - docs/models/operations/setproductfeaturesecurity.md
   - docs/models/operations/setprojectlogorequest.md
   - docs/models/operations/setprojectlogosecurity.md
   - docs/models/operations/setprojectlogosecurityoption1.md
@@ -411,6 +415,7 @@ generatedFiles:
   - docs/sdks/deployments/README.md
   - docs/sdks/domains/README.md
   - docs/sdks/environments/README.md
+  - docs/sdks/features/README.md
   - docs/sdks/instances/README.md
   - docs/sdks/integrations/README.md
   - docs/sdks/keys/README.md
@@ -464,6 +469,7 @@ generatedFiles:
   - src/funcs/environmentsDeleteBySlug.ts
   - src/funcs/environmentsList.ts
   - src/funcs/environmentsUpdateBySlug.ts
+  - src/funcs/featuresSet.ts
   - src/funcs/instancesGetBySlug.ts
   - src/funcs/integrationsIntegrationsNumberGet.ts
   - src/funcs/integrationsList.ts
@@ -632,6 +638,7 @@ generatedFiles:
   - src/models/components/securityvariable.ts
   - src/models/components/servervariable.ts
   - src/models/components/setmcpmetadatarequestbody.ts
+  - src/models/components/setproductfeaturerequestbody.ts
   - src/models/components/setprojectlogoform.ts
   - src/models/components/setprojectlogoresult.ts
   - src/models/components/tierlimits.ts
@@ -728,6 +735,7 @@ generatedFiles:
   - src/models/operations/serveopenapiv3.ts
   - src/models/operations/sessioninfo.ts
   - src/models/operations/setmcpmetadata.ts
+  - src/models/operations/setproductfeature.ts
   - src/models/operations/setprojectlogo.ts
   - src/models/operations/slackcallback.ts
   - src/models/operations/slacklogin.ts
@@ -766,6 +774,7 @@ generatedFiles:
   - src/react-query/deployment.ts
   - src/react-query/deploymentLogs.ts
   - src/react-query/evolveDeployment.ts
+  - src/react-query/featuresSet.ts
   - src/react-query/getCreditUsage.ts
   - src/react-query/getDomain.ts
   - src/react-query/getMcpMetadata.ts
@@ -826,6 +835,7 @@ generatedFiles:
   - src/sdk/deployments.ts
   - src/sdk/domains.ts
   - src/sdk/environments.ts
+  - src/sdk/features.ts
   - src/sdk/index.ts
   - src/sdk/instances.ts
   - src/sdk/integrations.ts
@@ -1708,6 +1718,24 @@ examples:
       responses:
         "200":
           application/json: "x-file: example.file"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  setFeatureFlag:
+    speakeasy-default-set-feature-flag:
+      requestBody:
+        application/json: {"enabled": true, "feature_name": "logs"}
+      responses:
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  setProductFeature:
+    speakeasy-default-set-product-feature:
+      requestBody:
+        application/json: {"enabled": true, "feature_name": "logs"}
+      responses:
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":

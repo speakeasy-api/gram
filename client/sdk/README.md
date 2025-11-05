@@ -171,6 +171,10 @@ run();
 * [list](docs/sdks/environments/README.md#list) - listEnvironments environments
 * [updateBySlug](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
 
+### [features](docs/sdks/features/README.md)
+
+* [set](docs/sdks/features/README.md#set) - setProductFeature features
+
 ### [instances](docs/sdks/instances/README.md)
 
 * [getBySlug](docs/sdks/instances/README.md#getbyslug) - getInstance instances
@@ -310,6 +314,7 @@ To read more about standalone functions, check [FUNCTIONS.md](./FUNCTIONS.md).
 - [`environmentsDeleteBySlug`](docs/sdks/environments/README.md#deletebyslug) - deleteEnvironment environments
 - [`environmentsList`](docs/sdks/environments/README.md#list) - listEnvironments environments
 - [`environmentsUpdateBySlug`](docs/sdks/environments/README.md#updatebyslug) - updateEnvironment environments
+- [`featuresSet`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`instancesGetBySlug`](docs/sdks/instances/README.md#getbyslug) - getInstance instances
 - [`integrationsIntegrationsNumberGet`](docs/sdks/integrations/README.md#integrationsnumberget) - get integrations
 - [`integrationsList`](docs/sdks/integrations/README.md#list) - list integrations
@@ -406,6 +411,7 @@ To learn about this feature and how to get started, check
 - [`useDeployment`](docs/sdks/deployments/README.md#getbyid) - getDeployment deployments
 - [`useDeploymentLogs`](docs/sdks/deployments/README.md#logs) - getDeploymentLogs deployments
 - [`useEvolveDeploymentMutation`](docs/sdks/deployments/README.md#evolvedeployment) - evolve deployments
+- [`useFeaturesSetMutation`](docs/sdks/features/README.md#set) - setProductFeature features
 - [`useGetCreditUsage`](docs/sdks/chat/README.md#creditusage) - creditUsage chat
 - [`useGetDomain`](docs/sdks/domains/README.md#getdomain) - getDomain domains
 - [`useGetMcpMetadata`](docs/sdks/mcpmetadata/README.md#get) - getMcpMetadata mcpMetadata
