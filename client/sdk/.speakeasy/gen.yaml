@@ -28,7 +28,7 @@ generation:
     generateNewTests: false
     skipResponseBodyAssertions: false
 typescript:
-  version: 0.16.7
+  version: 0.17.1
   acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}
@@ -39,6 +39,7 @@ typescript:
     peerDependencies: {}
   additionalPackageJSON:
     private: true
+  additionalScripts: {}
   author: Speakeasy
   baseErrorName: GramError
   clientServerStatusCodesAsErrors: true

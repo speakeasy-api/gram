@@ -101,6 +101,7 @@ export * from "./responsefilter.js";
 export * from "./securityvariable.js";
 export * from "./servervariable.js";
 export * from "./setmcpmetadatarequestbody.js";
+export * from "./setproductfeaturerequestbody.js";
 export * from "./setprojectlogoform.js";
 export * from "./setprojectlogoresult.js";
 export * from "./tierlimits.js";

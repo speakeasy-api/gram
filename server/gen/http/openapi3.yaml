@@ -4740,6 +4740,95 @@ paths:
             x-speakeasy-name-override: update
             x-speakeasy-react-hook:
                 name: UpdatePackage
+    /rpc/productFeatures.set:
+        post:
+            description: Enable or disable an organization feature flag.
+            operationId: setProductFeature
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetProductFeatureRequestBody'
+                required: true
+            responses:
+                "200":
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: setProductFeature features
+            tags:
+                - features
+            x-speakeasy-name-override: set
     /rpc/projects.create:
         post:
             description: Create a new project.
@@ -10842,6 +10931,21 @@ components:
                     maxLength: 40
             required:
                 - toolset_slug
+        SetProductFeatureRequestBody:
+            type: object
+            properties:
+                enabled:
+                    type: boolean
+                    description: Whether the feature should be enabled
+                feature_name:
+                    type: string
+                    description: Name of the feature to update
+                    enum:
+                        - logs
+                    maxLength: 60
+            required:
+                - feature_name
+                - enabled
         SetProjectLogoForm:
             type: object
             properties:
@@ -11676,6 +11780,8 @@ tags:
       description: Manages metadata for the MCP install page shown to users.
     - name: packages
       description: Manages packages in Gram.
+    - name: features
+      description: Manage product level feature controls.
     - name: projects
       description: Manages projects in Gram.
     - name: resources
