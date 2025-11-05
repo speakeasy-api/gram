@@ -16,7 +16,7 @@ SET deleted_at = clock_timestamp(),
 WHERE organization_id = $1
   AND feature_name = $2
   AND deleted IS FALSE
-RETURNING seq, organization_id, feature_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, feature_name, created_at, updated_at, deleted_at, deleted
 `
 
 type DeleteFeatureParams struct {
@@ -28,7 +28,7 @@ func (q *Queries) DeleteFeature(ctx context.Context, arg DeleteFeatureParams) (O
 	row := q.db.QueryRow(ctx, deleteFeature, arg.OrganizationID, arg.FeatureName)
 	var i OrganizationFeature
 	err := row.Scan(
-		&i.Seq,
+		&i.ID,
 		&i.OrganizationID,
 		&i.FeatureName,
 		&i.CreatedAt,
@@ -47,7 +47,7 @@ INSERT INTO organization_features (
     $1,
     $2
 )
-RETURNING seq, organization_id, feature_name, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, feature_name, created_at, updated_at, deleted_at, deleted
 `
 
 type EnableFeatureParams struct {
@@ -59,7 +59,7 @@ func (q *Queries) EnableFeature(ctx context.Context, arg EnableFeatureParams) (O
 	row := q.db.QueryRow(ctx, enableFeature, arg.OrganizationID, arg.FeatureName)
 	var i OrganizationFeature
 	err := row.Scan(
-		&i.Seq,
+		&i.ID,
 		&i.OrganizationID,
 		&i.FeatureName,
 		&i.CreatedAt,

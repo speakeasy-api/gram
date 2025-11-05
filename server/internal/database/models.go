@@ -380,7 +380,7 @@ type OpenrouterApiKey struct {
 }
 
 type OrganizationFeature struct {
-	Seq            int64
+	ID             int64
 	OrganizationID string
 	FeatureName    string
 	CreatedAt      pgtype.Timestamptz
