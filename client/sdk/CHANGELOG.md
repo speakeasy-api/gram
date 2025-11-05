@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.17.2
+
+### Patch Changes
+
+- bb37fed: creates the concept of user controllable product features, opens up logs to self-service enable/disable control
+
 ## 0.16.7
 
 ### Patch Changes

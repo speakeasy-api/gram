@@ -1,5 +1,15 @@
 # server
 
+## 0.9.10
+
+### Patch Changes
+
+- ff7615f: Added an endpoint to download Gram Functions assets at `GET /rpc/assets.serveFunction`.
+- bb37fed: creates the concept of user controllable product features, opens up logs to self-service enable/disable control
+- 6f5ddb8: Updated the Gram Functions Fly.io orchestrator to deploy runner apps in multiple
+  regions instead of a single region _by default_. Previously, all machines
+  resided in `sjc` which created an availability risk.
+
 ## 0.9.9
 
 ### Patch Changes
