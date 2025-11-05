@@ -1,36 +1,56 @@
 import { Page } from "@/components/page-layout";
 import { MiniCards } from "@/components/ui/card-mini";
 import { Dialog } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
 import { SimpleTooltip } from "@/components/ui/tooltip";
-import { FullWidthUpload } from "@/components/upload";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
-import { slugify } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useDeploymentLogsSummary } from "@/pages/deployments/deployment/Deployment";
-import { useUploadOpenAPISteps } from "@/pages/onboarding/UploadOpenAPI";
-import { UploadedDocument } from "@/pages/onboarding/Wizard";
 import { useRoutes } from "@/routes";
 import {
   useLatestDeployment,
   useListAssets,
   useListTools,
 } from "@gram/client/react-query/index.js";
-import { Alert, Button, Icon } from "@speakeasy-api/moonshine";
-import { Loader2Icon, Plus } from "lucide-react";
-import {
-  forwardRef,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { Button, Icon } from "@speakeasy-api/moonshine";
+import { Plus } from "lucide-react";
+import { useMemo, useReducer } from "react";
 import { toast } from "sonner";
-import AddSourceDialog, { AddSourceDialogRef } from "./AddSourceDialog";
+import AddSourceDialogContent from "./AddSourceDialogContent";
+import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
 import { NamedAsset, SourceCard } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
+import { UploadOpenApiDialogContent } from "./UploadOpenApiDialogContent";
+
+type DialogState =
+  | { type: "closed" }
+  | { type: "add-source" }
+  | { type: "remove-source"; asset: NamedAsset }
+  | { type: "upload-openapi"; documentSlug: string };
+
+type DialogAction =
+  | { type: "dialog/open-add-source" }
+  | { type: "dialog/open-remove-source"; payload: { asset: NamedAsset } }
+  | { type: "dialog/open-upload-openapi"; payload: { documentSlug: string } }
+  | { type: "dialog/close" };
+
+function dialogReducer(state: DialogState, action: DialogAction): DialogState {
+  switch (action.type) {
+    case "dialog/open-add-source":
+      return { type: "add-source" };
+    case "dialog/open-remove-source":
+      return { type: "remove-source", asset: action.payload.asset };
+    case "dialog/open-upload-openapi":
+      return {
+        type: "upload-openapi",
+        documentSlug: action.payload.documentSlug,
+      };
+    case "dialog/close":
+      return { type: "closed" };
+    default:
+      return state;
+  }
+}
 
 export function useDeploymentIsEmpty() {
   const { data: deploymentResult, isLoading } = useLatestDeployment();
@@ -50,7 +70,6 @@ export function useDeploymentIsEmpty() {
 
 export default function Sources() {
   const client = useSdkClient();
-  const routes = useRoutes();
   const telemetry = useTelemetry();
   const isFunctionsEnabled =
     telemetry.isFeatureEnabled("gram-functions") ?? false;
@@ -60,70 +79,10 @@ export default function Sources() {
   const deployment = deploymentResult?.deployment;
 
   const assetsCausingFailure = useUnusedAssetIds();
-
-  const [isDeploying, setIsDeploying] = useState(false);
-  const [changeDocumentTargetSlug, setChangeDocumentTargetSlug] = useState<
-    string | null
-  >(null);
-
-  const addOpenAPIDialogRef = useRef<AddSourceDialogRef>(null);
-  const removeSourceDialogRef = useRef<RemoveSourceDialogRef>(null);
-
-  const finishUpload = () => {
-    addOpenAPIDialogRef.current?.setOpen(false);
-    setChangeDocumentTargetSlug(null);
-    undoSpecUpload(); // Reset the file state
-    refetch();
-    refetchAssets();
-  };
-
-  const { handleSpecUpload, createDeployment, file, undoSpecUpload } =
-    useUploadOpenAPISteps();
-
+  const [dialogState, dispatch] = useReducer(dialogReducer, {
+    type: "closed",
+  });
   const deploymentIsEmpty = useDeploymentIsEmpty();
-  const deploymentLogsSummary = useDeploymentLogsSummary(deployment?.id);
-
-  const logsCta = useMemo(() => {
-    if (!deployment || !deploymentLogsSummary) {
-      return null;
-    }
-
-    const hasErrors = deploymentLogsSummary.errors > 0;
-
-    const icon = hasErrors ? (
-      <Icon name="triangle-alert" className="text-yellow-500" />
-    ) : (
-      <Icon name="history" className="text-muted-foreground" />
-    );
-
-    const deploymentFailed = deployment.status === "failed";
-    let tooltip = deploymentFailed
-      ? "Latest deployment failed"
-      : "Latest deployment succeeded";
-
-    if (deploymentLogsSummary.skipped > 0) {
-      tooltip += ` (${deploymentLogsSummary.skipped} operations skipped)`;
-    }
-
-    return (
-      <Page.Section.CTA>
-        <SimpleTooltip tooltip={tooltip}>
-          <a href={routes.deployments.deployment.href(deployment.id)}>
-            <Button
-              variant="tertiary"
-              className={cn(
-                hasErrors &&
-                  "text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/20!",
-              )}
-            >
-              <Button.LeftIcon>{icon}</Button.LeftIcon>
-              HISTORY
-            </Button>
-          </a>
-        </SimpleTooltip>
-      </Page.Section.CTA>
-    );
-  }, [deployment, deploymentLogsSummary]);
 
   const allSources: NamedAsset[] = useMemo(() => {
     if (!deployment || !assets) {
@@ -169,12 +128,25 @@ export default function Sources() {
     return (
       <>
         <SourcesEmptyState
-          onNewUpload={() => addOpenAPIDialogRef.current?.setOpen(true)}
+          onNewUpload={() => dispatch({ type: "dialog/open-add-source" })}
         />
-        <AddSourceDialog ref={addOpenAPIDialogRef} />
+        <Dialog
+          open={dialogState.type !== "closed"}
+          onOpenChange={(open) => !open && dispatch({ type: "dialog/close" })}
+        >
+          <Dialog.Content className="max-w-2xl!">
+            {dialogState.type === "add-source" && <AddSourceDialogContent />}
+          </Dialog.Content>
+        </Dialog>
       </>
     );
   }
+
+  const handleDialogSuccess = () => {
+    dispatch({ type: "dialog/close" });
+    refetch();
+    refetchAssets();
+  };
 
   const removeSource = async (
     assetId: string,
@@ -203,14 +175,6 @@ export default function Sources() {
     }
   };
 
-  const deploySpecUpdate = async (documentSlug: string) => {
-    setIsDeploying(true);
-    await createDeployment(documentSlug); // Make sure we overwrite the current document by slug
-    finishUpload();
-    toast.success("OpenAPI document deployed");
-    setIsDeploying(false);
-  };
-
   return (
     <>
       <Page.Section>
@@ -220,10 +184,10 @@ export default function Sources() {
             ? "OpenAPI documents and Gram Functions providing tools for your toolsets"
             : "OpenAPI documents providing tools for your toolsets"}
         </Page.Section.Description>
-        {logsCta}
+        <DeploymentHistoryCTA deploymentId={deployment?.id} />
         <Page.Section.CTA>
           <Button
-            onClick={() => addOpenAPIDialogRef.current?.setOpen(true)}
+            onClick={() => dispatch({ type: "dialog/open-add-source" })}
             variant="secondary"
           >
             <Button.LeftIcon>
@@ -241,192 +205,51 @@ export default function Sources() {
                 causingFailure={assetsCausingFailure.has(
                   asset.deploymentAssetId,
                 )}
-                handleRemove={() => {
-                  removeSourceDialogRef.current?.open(asset);
+                handleRemove={() =>
+                  dispatch({
+                    type: "dialog/open-remove-source",
+                    payload: { asset },
+                  })
+                }
+                handleApplyEnvironment={(assetId) => {
+                  // TODO: Implement apply environment functionality
+                  console.log("Apply environment for asset:", assetId);
                 }}
-                setChangeDocumentTargetSlug={setChangeDocumentTargetSlug}
+                setChangeDocumentTargetSlug={(documentSlug) =>
+                  dispatch({
+                    type: "dialog/open-upload-openapi",
+                    payload: { documentSlug },
+                  })
+                }
               />
             ))}
           </MiniCards>
           <Dialog
-            open={changeDocumentTargetSlug !== null}
-            onOpenChange={(open) => {
-              if (!open) {
-                setChangeDocumentTargetSlug(null);
-                undoSpecUpload(); // Reset the file state when dialog closes
-              }
-            }}
+            open={dialogState.type !== "closed"}
+            onOpenChange={(open) => !open && dispatch({ type: "dialog/close" })}
           >
             <Dialog.Content className="max-w-2xl!">
-              <Dialog.Header>
-                <Dialog.Title>New OpenAPI Version</Dialog.Title>
-                <Dialog.Description>
-                  You are creating a new version of document{" "}
-                  {changeDocumentTargetSlug}
-                </Dialog.Description>
-              </Dialog.Header>
-              {!file ? (
-                <FullWidthUpload
-                  onUpload={handleSpecUpload}
-                  allowedExtensions={["yaml", "yml", "json"]}
-                />
-              ) : (
-                <UploadedDocument
-                  file={file}
-                  onReset={undoSpecUpload}
-                  defaultExpanded
+              {dialogState.type === "add-source" && <AddSourceDialogContent />}
+              {dialogState.type === "remove-source" && (
+                <RemoveSourceDialogContent
+                  asset={dialogState.asset}
+                  onConfirmRemoval={removeSource}
                 />
               )}
-              <Dialog.Footer>
-                <Button
-                  variant="tertiary"
-                  onClick={() => {
-                    setChangeDocumentTargetSlug(null);
-                    undoSpecUpload(); // Reset the file state when dialog closes
-                  }}
-                >
-                  Back
-                </Button>
-                <Button
-                  onClick={() => deploySpecUpdate(changeDocumentTargetSlug!)}
-                  disabled={!file || isDeploying || !changeDocumentTargetSlug}
-                >
-                  {isDeploying && <Spinner />}
-                  {isDeploying ? "Deploying..." : "Deploy"}
-                </Button>
-              </Dialog.Footer>
+              {dialogState.type === "upload-openapi" && (
+                <UploadOpenApiDialogContent
+                  documentSlug={dialogState.documentSlug}
+                  onClose={() => dispatch({ type: "dialog/close" })}
+                  onSuccess={handleDialogSuccess}
+                />
+              )}
             </Dialog.Content>
           </Dialog>
-          <RemoveSourceDialog
-            ref={removeSourceDialogRef}
-            onConfirmRemoval={removeSource}
-          />
-          <AddSourceDialog ref={addOpenAPIDialogRef} />
         </Page.Section.Body>
       </Page.Section>
     </>
   );
 }
-
-interface RemoveSourceDialogRef {
-  open: (asset: NamedAsset) => void;
-  close: () => void;
-}
-
-interface RemoveSourceDialogProps {
-  onConfirmRemoval: (
-    assetId: string,
-    type: "openapi" | "function",
-  ) => Promise<void>;
-}
-
-const RemoveSourceDialog = forwardRef<
-  RemoveSourceDialogRef,
-  RemoveSourceDialogProps
->(({ onConfirmRemoval }, ref) => {
-  const [open, setOpen] = useState(false);
-  const [asset, setAsset] = useState<NamedAsset>({} as NamedAsset);
-  const [pending, setPending] = useState(false);
-  const [inputMatches, setInputMatches] = useState(false);
-
-  const sourceSlug = slugify(asset.name);
-  const sourceLabel =
-    asset.type === "openapi" ? "API Source" : "Function Source";
-
-  const resetState = () => {
-    setAsset({} as NamedAsset);
-    setInputMatches(false);
-    setPending(false);
-  };
-
-  useImperativeHandle(ref, () => ({
-    open: (assetToDelete: NamedAsset) => {
-      setAsset(assetToDelete);
-      setOpen(true);
-      setInputMatches(false);
-      setPending(false);
-    },
-    close: () => {
-      resetState();
-    },
-  }));
-
-  const handleOpenChange = (newOpen: boolean) => {
-    setOpen(newOpen);
-    if (!newOpen) {
-      resetState();
-    }
-  };
-
-  const handleConfirm = async () => {
-    setPending(true);
-    await onConfirmRemoval(asset.id, asset.type);
-    setPending(false);
-
-    setOpen(false);
-    setInputMatches(false);
-  };
-
-  const DeleteButton = () => {
-    if (pending) {
-      return (
-        <Button disabled variant="destructive-primary">
-          <Button.LeftIcon>
-            <Loader2Icon className="size-4 animate-spin" />
-          </Button.LeftIcon>
-          <Button.Text>Deleting {sourceLabel}</Button.Text>
-        </Button>
-      );
-    }
-
-    return (
-      <Button
-        disabled={!inputMatches}
-        variant="destructive-primary"
-        onClick={handleConfirm}
-      >
-        Delete {sourceLabel}
-      </Button>
-    );
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <Dialog.Content>
-        <Dialog.Header>
-          <Dialog.Title>Delete {sourceLabel}</Dialog.Title>
-          <Dialog.Description>
-            This will permanently delete the{" "}
-            {asset.type === "openapi" ? "API" : "gram function"} source and
-            related resources such as tools within toolsets.
-          </Dialog.Description>
-        </Dialog.Header>
-        <div className="grid gap-2">
-          <span className="text-sm">
-            To confirm, type "<strong>{sourceSlug}</strong>"
-          </span>
-
-          <Input onChange={(v) => setInputMatches(v === sourceSlug)} />
-        </div>
-
-        <Alert variant="error" dismissible={false}>
-          Deleting {sourceSlug} cannot be undone.
-        </Alert>
-
-        <Dialog.Footer>
-          <Button
-            hidden={pending}
-            onClick={() => handleOpenChange(false)}
-            variant="tertiary"
-          >
-            Cancel
-          </Button>
-          <DeleteButton />
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
-  );
-});
 
 /**
  * Hook to identify asset IDs not referenced by any tools in the latest
@@ -468,3 +291,50 @@ const useUnusedAssetIds = () => {
 
   return unusedAssetIds;
 };
+
+function DeploymentHistoryCTA({ deploymentId }: { deploymentId?: string }) {
+  const routes = useRoutes();
+  const { data: deploymentResult } = useLatestDeployment();
+  const deployment = deploymentResult?.deployment;
+  const deploymentLogsSummary = useDeploymentLogsSummary(deploymentId);
+
+  if (!deployment || !deploymentLogsSummary) {
+    return null;
+  }
+
+  const hasErrors = deploymentLogsSummary.errors > 0;
+
+  const icon = hasErrors ? (
+    <Icon name="triangle-alert" className="text-yellow-500" />
+  ) : (
+    <Icon name="history" className="text-muted-foreground" />
+  );
+
+  const deploymentFailed = deployment.status === "failed";
+  let tooltip = deploymentFailed
+    ? "Latest deployment failed"
+    : "Latest deployment succeeded";
+
+  if (deploymentLogsSummary.skipped > 0) {
+    tooltip += ` (${deploymentLogsSummary.skipped} operations skipped)`;
+  }
+
+  return (
+    <Page.Section.CTA>
+      <SimpleTooltip tooltip={tooltip}>
+        <a href={routes.deployments.deployment.href(deployment.id)}>
+          <Button
+            variant="tertiary"
+            className={cn(
+              hasErrors &&
+                "text-yellow-600 dark:text-yellow-500 hover:bg-yellow-500/20!",
+            )}
+          >
+            <Button.LeftIcon>{icon}</Button.LeftIcon>
+            HISTORY
+          </Button>
+        </a>
+      </SimpleTooltip>
+    </Page.Section.CTA>
+  );
+}
