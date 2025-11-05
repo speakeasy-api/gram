@@ -1,5 +1,14 @@
 # dashboard
 
+## 0.18.3
+
+### Patch Changes
+
+- ff7615f: Fixed a bug where the download link for function assets was incorrect on the Deployment page's Assets tab.
+- bb37fed: creates the concept of user controllable product features, opens up logs to self-service enable/disable control
+- Updated dependencies [bb37fed]
+  - @gram/client@0.17.2
+
 ## 0.18.2
 
 ### Patch Changes
