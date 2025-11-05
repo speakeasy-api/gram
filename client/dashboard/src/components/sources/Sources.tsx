@@ -14,43 +14,43 @@ import {
 } from "@gram/client/react-query/index.js";
 import { Button, Icon } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
-import { useMemo, useReducer } from "react";
+import { useMemo } from "react";
 import { toast } from "sonner";
+import { create } from "zustand";
 import AddSourceDialogContent from "./AddSourceDialogContent";
 import { RemoveSourceDialogContent } from "./RemoveSourceDialogContent";
 import { NamedAsset, SourceCard } from "./SourceCard";
 import { SourcesEmptyState } from "./SourcesEmptyState";
 import { UploadOpenApiDialogContent } from "./UploadOpenApiDialogContent";
+import { ApplyEnvironmentDialogContent } from "./ApplyEnvironmentDialogContent";
 
 type DialogState =
   | { type: "closed" }
   | { type: "add-source" }
   | { type: "remove-source"; asset: NamedAsset }
-  | { type: "upload-openapi"; documentSlug: string };
+  | { type: "upload-openapi"; documentSlug: string }
+  | { type: "apply-environment"; asset: NamedAsset };
 
-type DialogAction =
-  | { type: "dialog/open-add-source" }
-  | { type: "dialog/open-remove-source"; payload: { asset: NamedAsset } }
-  | { type: "dialog/open-upload-openapi"; payload: { documentSlug: string } }
-  | { type: "dialog/close" };
-
-function dialogReducer(state: DialogState, action: DialogAction): DialogState {
-  switch (action.type) {
-    case "dialog/open-add-source":
-      return { type: "add-source" };
-    case "dialog/open-remove-source":
-      return { type: "remove-source", asset: action.payload.asset };
-    case "dialog/open-upload-openapi":
-      return {
-        type: "upload-openapi",
-        documentSlug: action.payload.documentSlug,
-      };
-    case "dialog/close":
-      return { type: "closed" };
-    default:
-      return state;
-  }
+interface DialogStore {
+  dialogState: DialogState;
+  openAddSource: () => void;
+  openRemoveSource: (asset: NamedAsset) => void;
+  openUploadOpenApi: (documentSlug: string) => void;
+  openApplyEnvironment: (asset: NamedAsset) => void;
+  closeDialog: () => void;
 }
+
+const useDialogStore = create<DialogStore>((set) => ({
+  dialogState: { type: "closed" },
+  openAddSource: () => set({ dialogState: { type: "add-source" } }),
+  openRemoveSource: (asset) =>
+    set({ dialogState: { type: "remove-source", asset } }),
+  openUploadOpenApi: (documentSlug) =>
+    set({ dialogState: { type: "upload-openapi", documentSlug } }),
+  openApplyEnvironment: (asset) =>
+    set({ dialogState: { type: "apply-environment", asset } }),
+  closeDialog: () => set({ dialogState: { type: "closed" } }),
+}));
 
 export function useDeploymentIsEmpty() {
   const { data: deploymentResult, isLoading } = useLatestDeployment();
@@ -79,9 +79,14 @@ export default function Sources() {
   const deployment = deploymentResult?.deployment;
 
   const assetsCausingFailure = useUnusedAssetIds();
-  const [dialogState, dispatch] = useReducer(dialogReducer, {
-    type: "closed",
-  });
+  const {
+    dialogState,
+    openAddSource,
+    openRemoveSource,
+    openUploadOpenApi,
+    openApplyEnvironment,
+    closeDialog,
+  } = useDialogStore();
   const deploymentIsEmpty = useDeploymentIsEmpty();
 
   const allSources: NamedAsset[] = useMemo(() => {
@@ -127,12 +132,10 @@ export default function Sources() {
   if (!isLoading && deploymentIsEmpty) {
     return (
       <>
-        <SourcesEmptyState
-          onNewUpload={() => dispatch({ type: "dialog/open-add-source" })}
-        />
+        <SourcesEmptyState onNewUpload={openAddSource} />
         <Dialog
           open={dialogState.type !== "closed"}
-          onOpenChange={(open) => !open && dispatch({ type: "dialog/close" })}
+          onOpenChange={(open) => !open && closeDialog()}
         >
           <Dialog.Content className="max-w-2xl!">
             {dialogState.type === "add-source" && <AddSourceDialogContent />}
@@ -143,7 +146,7 @@ export default function Sources() {
   }
 
   const handleDialogSuccess = () => {
-    dispatch({ type: "dialog/close" });
+    closeDialog();
     refetch();
     refetchAssets();
   };
@@ -186,10 +189,7 @@ export default function Sources() {
         </Page.Section.Description>
         <DeploymentHistoryCTA deploymentId={deployment?.id} />
         <Page.Section.CTA>
-          <Button
-            onClick={() => dispatch({ type: "dialog/open-add-source" })}
-            variant="secondary"
-          >
+          <Button onClick={openAddSource} variant="secondary">
             <Button.LeftIcon>
               <Plus className="w-4 h-4" />
             </Button.LeftIcon>
@@ -205,28 +205,15 @@ export default function Sources() {
                 causingFailure={assetsCausingFailure.has(
                   asset.deploymentAssetId,
                 )}
-                handleRemove={() =>
-                  dispatch({
-                    type: "dialog/open-remove-source",
-                    payload: { asset },
-                  })
-                }
-                handleApplyEnvironment={(assetId) => {
-                  // TODO: Implement apply environment functionality
-                  console.log("Apply environment for asset:", assetId);
-                }}
-                setChangeDocumentTargetSlug={(documentSlug) =>
-                  dispatch({
-                    type: "dialog/open-upload-openapi",
-                    payload: { documentSlug },
-                  })
-                }
+                handleRemove={() => openRemoveSource(asset)}
+                handleApplyEnvironment={() => openApplyEnvironment(asset)}
+                setChangeDocumentTargetSlug={openUploadOpenApi}
               />
             ))}
           </MiniCards>
           <Dialog
             open={dialogState.type !== "closed"}
-            onOpenChange={(open) => !open && dispatch({ type: "dialog/close" })}
+            onOpenChange={(open) => !open && closeDialog()}
           >
             <Dialog.Content className="max-w-2xl!">
               {dialogState.type === "add-source" && <AddSourceDialogContent />}
@@ -239,8 +226,18 @@ export default function Sources() {
               {dialogState.type === "upload-openapi" && (
                 <UploadOpenApiDialogContent
                   documentSlug={dialogState.documentSlug}
-                  onClose={() => dispatch({ type: "dialog/close" })}
+                  onClose={closeDialog}
                   onSuccess={handleDialogSuccess}
+                />
+              )}
+              {dialogState.type === "apply-environment" && (
+                <ApplyEnvironmentDialogContent
+                  asset={dialogState.asset}
+                  onConfirm={(assetId) => {
+                    // TODO: Implement apply environment functionality
+                    console.log("Apply environment for asset:", assetId);
+                    closeDialog();
+                  }}
                 />
               )}
             </Dialog.Content>
