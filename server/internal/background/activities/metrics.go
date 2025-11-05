@@ -26,6 +26,8 @@ const (
 	meterFunctionsToolsSkipped      = "functions.tools.skipped"
 	meterFunctionsToolsCounter      = "functions.tools.count"
 	meterFunctionsProcessedDuration = "functions.processed.duration"
+
+	meterFlyAppReaperReapCount = "flyapp_reaper.reap.count"
 )
 
 type metrics struct {
@@ -40,6 +42,8 @@ type metrics struct {
 	functionsToolsSkipped      metric.Int64Counter
 	functionsToolsCounter      metric.Int64Counter
 	functionsProcessedDuration metric.Float64Histogram
+
+	flyAppReaperReapCount metric.Int64Counter
 }
 
 func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
@@ -120,6 +124,15 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterFunctionsProcessedDuration), attr.SlogError(err))
 	}
 
+	flyAppReaperReapCount, err := meter.Int64Counter(
+		meterFlyAppReaperReapCount,
+		metric.WithDescription("Number of fly apps reaped by the reaper workflow"),
+		metric.WithUnit("{app}"),
+	)
+	if err != nil {
+		logger.ErrorContext(ctx, "failed to create metric", attr.SlogMetricName(meterFlyAppReaperReapCount), attr.SlogError(err))
+	}
+
 	return &metrics{
 		opSkipped:                  opSkipped,
 		openAPIUpgradeCounter:      openAPIUpgradeCounter,
@@ -129,6 +142,7 @@ func newMetrics(meter metric.Meter, logger *slog.Logger) *metrics {
 		functionsToolsSkipped:      functionsToolsSkipped,
 		functionsToolsCounter:      functionsToolsCounter,
 		functionsProcessedDuration: functionsProcessedDuration,
+		flyAppReaperReapCount:      flyAppReaperReapCount,
 	}
 }
 
@@ -211,6 +225,17 @@ func (m *metrics) RecordFunctionsProcessed(
 			attr.Outcome(outcome),
 			attr.FunctionsManifestVersion(manifestVersion),
 			attr.FunctionsRuntime(runtime),
+		))
+	}
+}
+
+func (m *metrics) RecordFlyAppReaperReapCount(ctx context.Context, success int64, fail int64) {
+	if counter := m.flyAppReaperReapCount; counter != nil {
+		counter.Add(ctx, success, metric.WithAttributes(
+			attr.Outcome(o11y.OutcomeSuccess),
+		))
+		counter.Add(ctx, fail, metric.WithAttributes(
+			attr.Outcome(o11y.OutcomeFailure),
 		))
 	}
 }
