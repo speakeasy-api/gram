@@ -37,7 +37,7 @@ var functionsFlags = []cli.Flag{
 		Name:     "functions-flyio-region",
 		Usage:    "The default fly.io region to deploy Gram Functions runner apps to.",
 		EnvVars:  []string{"GRAM_FUNCTIONS_FLYIO_REGION"},
-		Value:    "sjc",
+		Value:    "us",
 		Required: false,
 	},
 	&cli.StringFlag{
