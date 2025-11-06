@@ -9,8 +9,10 @@ func newInstallCommand() *cli.Command {
 		Name:  "install",
 		Usage: "Install Gram toolsets as MCP servers in various clients",
 		Subcommands: []*cli.Command{
-			newInstallCursorCommand(),
 			newInstallClaudeCodeCommand(),
+			newInstallClaudeDesktopCommand(),
+			newInstallCursorCommand(),
+			newInstallGeminiCLICommand(),
 		},
 	}
 }
