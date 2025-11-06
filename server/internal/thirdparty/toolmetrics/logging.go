@@ -50,6 +50,30 @@ func NewToolLog(ctx context.Context, tool ToolInfo, toolType ToolType) (*ToolHTT
 	}, nil
 }
 
+// PrepareToolLog determines whether logging is enabled for the given organization and,
+// if so, initializes a ToolHTTPRequest populated with the provided metadata.
+func PrepareToolLog(
+	ctx context.Context,
+	provider ToolMetricsProvider,
+	organizationID string,
+	info ToolInfo,
+	toolType ToolType,
+) (*ToolHTTPRequest, error) {
+	if provider == nil {
+		return nil, nil
+	}
+
+	shouldLog, err := provider.ShouldLog(ctx, organizationID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine if organization is allowed to request log: %w", err)
+	}
+	if !shouldLog {
+		return nil, nil
+	}
+
+	return NewToolLog(ctx, info, toolType)
+}
+
 // WithStatusCode sets the HTTP status code on the log entry.
 func (t *ToolHTTPRequest) WithStatusCode(code int64) *ToolHTTPRequest {
 	t.StatusCode = code

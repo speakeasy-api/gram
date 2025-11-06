@@ -56,6 +56,7 @@ type Service struct {
 	toolProxy        *gateway.ToolProxy
 	tracking         billing.Tracker
 	toolsetCache     cache.TypedCacheObject[mv.ToolsetBaseContents]
+	tcm              tm.ToolMetricsProvider
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -96,9 +97,9 @@ func NewService(
 			cacheImpl,
 			guardianPolicy,
 			funcCaller,
-			tcm,
 		),
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
+		tcm:          tcm,
 	}
 }
 
@@ -291,6 +292,33 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	}
 
 	descriptor := plan.Descriptor
+	var toolType tm.ToolType
+	switch plan.Kind {
+	case gateway.ToolKindHTTP:
+		toolType = tm.ToolTypeHTTP
+	case gateway.ToolKindFunction:
+		toolType = tm.ToolTypeFunction
+	case gateway.ToolKindPrompt:
+		toolType = tm.ToolTypePrompt
+	}
+
+	toolCallLogEntry, logErr := tm.PrepareToolLog(ctx, s.tcm, descriptor.OrganizationID, tm.ToolInfo{
+		ID:             descriptor.ID,
+		Urn:            descriptor.URN.String(),
+		Name:           descriptor.Name,
+		ProjectID:      descriptor.ProjectID,
+		DeploymentID:   descriptor.DeploymentID,
+		OrganizationID: descriptor.OrganizationID,
+	}, toolType)
+	if logErr != nil {
+		logger.ErrorContext(ctx,
+			"failed to prepare tool call log entry",
+			attr.SlogError(logErr),
+			attr.SlogToolName(descriptor.Name),
+			attr.SlogToolURN(descriptor.URN.String()),
+		)
+	}
+
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	var toolset *types.Toolset
@@ -314,9 +342,13 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	interceptor := newResponseInterceptor(w)
 
-	err = s.toolProxy.Do(ctx, interceptor, requestBody, ciEnv, plan)
+	err = s.toolProxy.Do(ctx, interceptor, requestBody, ciEnv, plan, toolCallLogEntry)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
+	}
+
+	if toolCallLogEntry != nil && toolCallLogEntry.RequestBodyBytes > 0 {
+		requestNumBytes = toolCallLogEntry.RequestBodyBytes
 	}
 
 	// Write the modified response to the original response writer
@@ -342,6 +374,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
+	if toolCallLogEntry != nil && toolCallLogEntry.ResponseBodyBytes > 0 {
+		outputNumBytes = toolCallLogEntry.ResponseBodyBytes
+	}
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	var functionCPU *float64
@@ -373,26 +408,35 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		toolsetID = &toolset.ID
 	}
 	toolName := descriptor.Name
-	go s.tracking.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
-		OrganizationID:        organizationID,
-		RequestBytes:          requestNumBytes,
-		OutputBytes:           outputNumBytes,
-		ToolURN:               toolURN.String(),
-		ToolName:              toolName,
-		ProjectID:             authCtx.ProjectID.String(),
-		ProjectSlug:           authCtx.ProjectSlug,
-		Type:                  plan.BillingType,
-		OrganizationSlug:      &descriptor.OrganizationSlug,
-		ToolsetSlug:           &toolsetSlug,
-		ChatID:                &chatID,
-		ToolsetID:             toolsetID,
-		MCPURL:                nil, // Not applicable for direct tool calls
-		MCPSessionID:          nil, // Not applicable for direct tool calls
-		ResourceURI:           "",
-		FunctionCPUUsage:      functionCPU,
-		FunctionMemUsage:      functionMem,
-		FunctionExecutionTime: functionsExecutionTime,
-	})
+
+	// emit logs to tool metrics system, will only do so if enabled
+	defer func() {
+		go s.tracking.TrackToolCallUsage(context.WithoutCancel(ctx), billing.ToolCallUsageEvent{
+			OrganizationID:        organizationID,
+			RequestBytes:          requestNumBytes,
+			OutputBytes:           outputNumBytes,
+			ToolURN:               toolURN.String(),
+			ToolName:              toolName,
+			ProjectID:             authCtx.ProjectID.String(),
+			ProjectSlug:           authCtx.ProjectSlug,
+			Type:                  plan.BillingType,
+			OrganizationSlug:      &descriptor.OrganizationSlug,
+			ToolsetSlug:           &toolsetSlug,
+			ChatID:                &chatID,
+			ToolsetID:             toolsetID,
+			MCPURL:                nil, // Not applicable for direct tool calls
+			MCPSessionID:          nil, // Not applicable for direct tool calls
+			ResourceURI:           "",
+			FunctionCPUUsage:      functionCPU,
+			FunctionMemUsage:      functionMem,
+			FunctionExecutionTime: functionsExecutionTime,
+		})
+
+		if toolCallLogEntry != nil {
+			toolCallLogEntry = toolCallLogEntry.WithStatusCode(int64(interceptor.statusCode))
+			tm.EmitHTTPRequestLog(context.WithoutCancel(ctx), logger, s.tcm, descriptor.Name, *toolCallLogEntry)
+		}
+	}()
 
 	return nil
 }

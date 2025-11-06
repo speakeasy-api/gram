@@ -107,15 +107,14 @@ type InstanceToolProxyConfig struct {
 }
 
 type ToolProxy struct {
-	source      ToolCallSource
-	logger      *slog.Logger
-	tracer      trace.Tracer
-	metrics     *metrics
-	encryption  *encryption.Client
-	cache       cache.Cache
-	policy      *guardian.Policy
-	functions   functions.ToolCaller
-	toolMetrics tm.ToolMetricsProvider
+	source     ToolCallSource
+	logger     *slog.Logger
+	tracer     trace.Tracer
+	metrics    *metrics
+	encryption *encryption.Client
+	cache      cache.Cache
+	policy     *guardian.Policy
+	functions  functions.ToolCaller
 }
 
 func NewToolProxy(
@@ -127,21 +126,19 @@ func NewToolProxy(
 	cache cache.Cache,
 	policy *guardian.Policy,
 	funcCaller functions.ToolCaller,
-	toolMetrics tm.ToolMetricsProvider,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
 
 	return &ToolProxy{
-		source:      source,
-		logger:      logger,
-		tracer:      tracer,
-		metrics:     newMetrics(meter, logger),
-		encryption:  enc,
-		cache:       cache,
-		policy:      policy,
-		functions:   funcCaller,
-		toolMetrics: toolMetrics,
+		source:     source,
+		logger:     logger,
+		tracer:     tracer,
+		metrics:    newMetrics(meter, logger),
+		encryption: enc,
+		cache:      cache,
+		policy:     policy,
+		functions:  funcCaller,
 	}
 }
 
@@ -151,6 +148,7 @@ func (tp *ToolProxy) Do(
 	requestBody io.Reader,
 	env *CaseInsensitiveEnv,
 	plan *ToolCallPlan,
+	toolCallLogEntry *tm.ToolHTTPRequest,
 ) (err error) {
 	ctx, span := tp.tracer.Start(ctx, "gateway.toolCall", trace.WithAttributes(
 		attr.ToolName(plan.Descriptor.Name),
@@ -182,9 +180,9 @@ func (tp *ToolProxy) Do(
 	case "":
 		return oops.E(oops.CodeInvariantViolation, nil, "tool kind is not set").Log(ctx, tp.logger)
 	case ToolKindFunction:
-		return tp.doFunction(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function)
+		return tp.doFunction(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function, toolCallLogEntry)
 	case ToolKindHTTP:
-		return tp.doHTTP(ctx, logger, w, requestBody, env, plan.Descriptor, plan.HTTP)
+		return tp.doHTTP(ctx, logger, w, requestBody, env, plan.Descriptor, plan.HTTP, toolCallLogEntry)
 	case ToolKindPrompt:
 		return tp.doPrompt(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Prompt)
 	default:
@@ -200,6 +198,7 @@ func (tp *ToolProxy) doFunction(
 	env *CaseInsensitiveEnv,
 	descriptor *ToolDescriptor,
 	plan *FunctionToolCallPlan,
+	toolCallLogEntry *tm.ToolHTTPRequest,
 ) error {
 	span := trace.SpanFromContext(ctx)
 	invocationID, err := uuid.NewV7()
@@ -276,39 +275,6 @@ func (tp *ToolProxy) doFunction(
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
 
-	var logEntry *tm.ToolHTTPRequest
-	if tp.toolMetrics != nil {
-		if shouldLog, _ := tp.toolMetrics.ShouldLog(ctx, descriptor.OrganizationID); shouldLog {
-			entry, err := tm.NewToolLog(ctx, tm.ToolInfo{
-				ID:             descriptor.ID,
-				Urn:            descriptor.URN.String(),
-				Name:           descriptor.Name,
-				ProjectID:      descriptor.ProjectID,
-				DeploymentID:   descriptor.DeploymentID,
-				OrganizationID: descriptor.OrganizationID,
-			}, tm.ToolTypeHTTP)
-			if err != nil {
-				logger.ErrorContext(ctx,
-					"failed to create tool HTTP request log entry",
-					attr.SlogError(err),
-					attr.SlogToolName(descriptor.Name),
-					attr.SlogToolURN(descriptor.URN.String()),
-				)
-			} else {
-				logEntry = entry.
-					WithHTTPMethod(req.Method).
-					WithHTTPRoute(req.URL.Path)
-				defer func() {
-					if logEntry == nil || logEntry.ID == "" {
-						return
-					}
-
-					tm.EmitHTTPRequestLog(ctx, logger, tp.toolMetrics, descriptor.Name, *logEntry)
-				}()
-			}
-		}
-	}
-
 	return reverseProxyRequest(ctx, ReverseProxyOptions{
 		Logger:                    logger,
 		Tracer:                    tp.tracer,
@@ -319,7 +285,7 @@ func (tp *ToolProxy) doFunction(
 		FilterConfig:              DisableResponseFiltering,
 		Policy:                    tp.policy,
 		ResponseStatusCodeCapture: &responseStatusCode,
-		ToolCallLogEntry:          logEntry,
+		ToolCallLogEntry:          toolCallLogEntry,
 		VerifyResponse: func(resp *http.Response) error {
 			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
 				return fmt.Errorf("failed to verify function invocation ID")
@@ -344,6 +310,7 @@ func (tp *ToolProxy) doHTTP(
 	env *CaseInsensitiveEnv,
 	descriptor *ToolDescriptor,
 	plan *HTTPToolCallPlan,
+	toolCallLogEntry *tm.ToolHTTPRequest,
 ) error {
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
@@ -352,6 +319,11 @@ func (tp *ToolProxy) doHTTP(
 	logger = logger.With(
 		attr.SlogHTTPRoute(plan.Path), // this is just from the raw OpenAPI spec. It is not a path with any parameters filled in, so not identifiable.
 	)
+
+	// set these values in case we hit an early validation error
+	if toolCallLogEntry != nil {
+		toolCallLogEntry = toolCallLogEntry.WithHTTPMethod(plan.Method).WithHTTPRoute(plan.Path)
+	}
 
 	// Variable to capture status code for metrics
 	var responseStatusCode int
@@ -366,40 +338,6 @@ func (tp *ToolProxy) doHTTP(
 
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
-
-	var logEntry *tm.ToolHTTPRequest
-	if tp.toolMetrics != nil {
-		if shouldLog, _ := tp.toolMetrics.ShouldLog(ctx, descriptor.OrganizationID); shouldLog {
-			entry, err := tm.NewToolLog(ctx, tm.ToolInfo{
-				ID:             descriptor.ID,
-				Urn:            descriptor.URN.String(),
-				Name:           descriptor.Name,
-				ProjectID:      descriptor.ProjectID,
-				DeploymentID:   descriptor.DeploymentID,
-				OrganizationID: descriptor.OrganizationID,
-			}, tm.ToolTypeHTTP)
-			if err != nil {
-				logger.ErrorContext(ctx,
-					"failed to create tool HTTP request log entry",
-					attr.SlogError(err),
-					attr.SlogToolName(descriptor.Name),
-					attr.SlogToolURN(descriptor.URN.String()),
-				)
-			} else {
-				logEntry = entry.
-					WithHTTPMethod(plan.Method).
-					WithHTTPRoute(plan.Path)
-				defer func() {
-					if logEntry == nil || logEntry.ID == "" {
-						return
-					}
-
-					logEntry = logEntry.WithStatusCode(int64(responseStatusCode))
-					tm.EmitHTTPRequestLog(ctx, logger, tp.toolMetrics, descriptor.Name, *logEntry)
-				}()
-			}
-		}
-	}
 
 	bodyBytes, err := io.ReadAll(requestBody)
 	if err != nil {
@@ -617,7 +555,7 @@ func (tp *ToolProxy) doHTTP(
 		FilterConfig:              plan.ResponseFilter,
 		Policy:                    tp.policy,
 		ResponseStatusCodeCapture: &responseStatusCode,
-		ToolCallLogEntry:          logEntry,
+		ToolCallLogEntry:          toolCallLogEntry,
 		VerifyResponse:            func(resp *http.Response) error { return nil },
 		ID:                        descriptor.ID,
 		Name:                      descriptor.Name,

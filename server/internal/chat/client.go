@@ -15,7 +15,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
-	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -56,7 +55,6 @@ func NewChatClient(logger *slog.Logger,
 	cacheImpl cache.Cache,
 	guardianPolicy *guardian.Policy,
 	funcCaller functions.ToolCaller,
-	tcm tm.ToolMetricsProvider,
 ) *ChatClient {
 	return &ChatClient{
 		logger:     logger,
@@ -74,7 +72,6 @@ func NewChatClient(logger *slog.Logger,
 			cacheImpl,
 			guardianPolicy,
 			funcCaller,
-			tcm,
 		),
 		toolsetCache: cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 	}
@@ -272,7 +269,7 @@ func (c *ChatClient) LoadToolsetTools(
 				ciEnv.Set(key, value)
 			}
 
-			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), ciEnv, plan)
+			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), ciEnv, plan, nil)
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

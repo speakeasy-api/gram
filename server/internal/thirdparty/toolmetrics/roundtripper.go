@@ -244,10 +244,6 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	if h.logEntry != nil {
 		h.logEntry.StatusCode = int64(statusCode)
 		h.logEntry.ResponseHeaders = responseHeaders
-
-		if resp == nil || resp.Body == nil {
-			h.logEntry.ResponseBodyBytes = 0
-		}
 	}
 
 	if resp == nil || resp.Body == nil {
