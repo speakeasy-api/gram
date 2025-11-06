@@ -24,7 +24,6 @@ create table if not exists http_requests_raw
     response_headers    Map(String, String) CODEC (ZSTD),
     response_body_bytes Int64
 ) engine = MergeTree
-      PARTITION BY toDate(ts)
       ORDER BY (toUInt128(project_id), ts)
       TTL ts + toIntervalDay(60)
       SETTINGS index_granularity = 8192
