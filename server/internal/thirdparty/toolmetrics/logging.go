@@ -216,6 +216,7 @@ func newToolLog(ctx context.Context, tool ToolInfo, toolType ToolType) (*ToolHTT
 		StatusCode:        0,
 		DurationMs:        0,
 		UserAgent:         "",
+		HTTPServerURL:     "",
 		HTTPMethod:        "",
 		HTTPRoute:         "",
 		RequestHeaders:    map[string]string{},

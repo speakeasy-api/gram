@@ -13,6 +13,7 @@ create table if not exists http_requests_raw
     span_id             FixedString(16),
 
     http_method         LowCardinality(String),
+    http_server_url     String,
     http_route          String,
     status_code         Int64,
     duration_ms         Float64,
