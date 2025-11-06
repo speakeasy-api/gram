@@ -25,7 +25,7 @@ create table if not exists http_requests_raw
     response_body_bytes Int64
 ) engine = MergeTree
       ORDER BY (toUInt128(project_id), ts)
-      TTL ts + toIntervalDay(60)
+      TTL ts + toIntervalDay(30)
       SETTINGS index_granularity = 8192
       COMMENT 'Stores raw HTTP tool call requests and responses';
 
