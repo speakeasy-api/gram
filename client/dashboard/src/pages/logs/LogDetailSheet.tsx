@@ -29,7 +29,7 @@ interface LogDetailSheetProps {
 export function LogDetailSheet({log, open, onOpenChange}: LogDetailSheetProps) {
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-[1040px] max-w-[1040px]">
+            <SheetContent className="w-[1040px] max-w-[1040px] h-full max-h-screen overflow-y-auto">
                 {log && (
                     <div className="flex flex-col gap-8 pt-8 px-6 pb-6">
                         {/* Header */}
@@ -159,7 +159,7 @@ export function LogDetailSheet({log, open, onOpenChange}: LogDetailSheetProps) {
                                 </div>
                                 <div className="flex flex-col gap-1.5">
                                     <div className="text-xs font-mono uppercase text-muted-foreground">
-                                        Server
+                                        Source
                                     </div>
                                     <div className="text-sm">{getSourceFromUrn(log.toolUrn)}</div>
                                 </div>
