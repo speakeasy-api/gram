@@ -4,11 +4,18 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"maps"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"go.opentelemetry.io/otel/trace"
+)
+
+const (
+	redactRevealPrefixLen = 5
+	redactMinTokenLen     = 10
 )
 
 // ToolCallLogger represents a logging strategy for tool HTTP requests.
@@ -22,7 +29,7 @@ type ToolCallLogger interface {
 	RecordHTTPRoute(route string)
 	RecordStatusCode(code int)
 	RecordUserAgent(agent string)
-	RecordRequestHeaders(headers map[string]string)
+	RecordRequestHeaders(headers map[string]string, isSensitive bool)
 	RecordResponseHeaders(headers map[string]string)
 	RecordRequestBodyBytes(bytes int64)
 	RecordResponseBodyBytes(bytes int64)
@@ -132,18 +139,35 @@ func (l *toolCallLogger) RecordUserAgent(agent string) {
 	l.entry.UserAgent = agent
 }
 
-func (l *toolCallLogger) RecordRequestHeaders(headers map[string]string) {
+func (l *toolCallLogger) RecordRequestHeaders(headers map[string]string, isSensitive bool) {
 	if l.entry == nil {
 		return
 	}
-	l.entry.RequestHeaders = headers
+	if len(headers) == 0 {
+		return
+	}
+	if l.entry.RequestHeaders == nil {
+		l.entry.RequestHeaders = make(map[string]string, len(headers))
+	}
+	for header, value := range headers {
+		if isSensitive {
+			value = redactToken(value)
+		}
+		l.entry.RequestHeaders[header] = value
+	}
 }
 
 func (l *toolCallLogger) RecordResponseHeaders(headers map[string]string) {
 	if l.entry == nil {
 		return
 	}
-	l.entry.ResponseHeaders = headers
+	if len(headers) == 0 {
+		return
+	}
+	if l.entry.ResponseHeaders == nil {
+		l.entry.ResponseHeaders = make(map[string]string, len(headers))
+	}
+	maps.Copy(l.entry.ResponseHeaders, headers)
 }
 
 func (l *toolCallLogger) RecordRequestBodyBytes(bytes int64) {
@@ -172,17 +196,17 @@ var _ ToolCallLogger = (*noopToolCallLogger)(nil)
 
 func (l *noopToolCallLogger) Emit(context.Context, *slog.Logger) {}
 
-func (l *noopToolCallLogger) RecordDurationMs(float64)                {}
-func (l *noopToolCallLogger) RecordHTTPServerURL(string)              {}
-func (l *noopToolCallLogger) RecordHTTPMethod(string)                 {}
-func (l *noopToolCallLogger) RecordHTTPRoute(string)                  {}
-func (l *noopToolCallLogger) RecordStatusCode(int)                    {}
-func (l *noopToolCallLogger) RecordUserAgent(string)                  {}
-func (l *noopToolCallLogger) RecordRequestHeaders(map[string]string)  {}
-func (l *noopToolCallLogger) RecordResponseHeaders(map[string]string) {}
-func (l *noopToolCallLogger) RecordRequestBodyBytes(int64)            {}
-func (l *noopToolCallLogger) RecordResponseBodyBytes(int64)           {}
-func (l *noopToolCallLogger) Enabled() bool                           { return false }
+func (l *noopToolCallLogger) RecordDurationMs(float64)                     {}
+func (l *noopToolCallLogger) RecordHTTPServerURL(string)                   {}
+func (l *noopToolCallLogger) RecordHTTPMethod(string)                      {}
+func (l *noopToolCallLogger) RecordHTTPRoute(string)                       {}
+func (l *noopToolCallLogger) RecordStatusCode(int)                         {}
+func (l *noopToolCallLogger) RecordUserAgent(string)                       {}
+func (l *noopToolCallLogger) RecordRequestHeaders(map[string]string, bool) {}
+func (l *noopToolCallLogger) RecordResponseHeaders(map[string]string)      {}
+func (l *noopToolCallLogger) RecordRequestBodyBytes(int64)                 {}
+func (l *noopToolCallLogger) RecordResponseBodyBytes(int64)                {}
+func (l *noopToolCallLogger) Enabled() bool                                { return false }
 
 // newToolLog initializes a ToolHTTPRequest with common metadata before the HTTP round tripper executes.
 func newToolLog(ctx context.Context, tool ToolInfo, toolType ToolType) (*ToolHTTPRequest, error) {
@@ -278,4 +302,30 @@ func EmitHTTPRequestLog(
 			attr.SlogHTTPResponseStatusCode(int(request.StatusCode)),
 		)
 	}()
+}
+
+// reasonable redaction of tokens function for tool call logs
+func redactToken(token string) string {
+	trimmed := strings.TrimSpace(token)
+	if trimmed == "" {
+		return trimmed
+	}
+
+	lower := strings.ToLower(trimmed)
+	for _, prefix := range []string{"bearer ", "basic "} {
+		if strings.HasPrefix(lower, prefix) {
+			actualPrefix := trimmed[:len(prefix)]
+			remainder := strings.TrimSpace(trimmed[len(prefix):])
+			if len(remainder) < redactMinTokenLen {
+				return actualPrefix + "***"
+			}
+			return actualPrefix + remainder[:redactRevealPrefixLen] + "***"
+		}
+	}
+
+	if len(trimmed) < redactMinTokenLen {
+		return "***"
+	}
+
+	return trimmed[:redactRevealPrefixLen] + "***"
 }

@@ -142,7 +142,7 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	h.toolLogger.RecordHTTPMethod(req.Method)
 	h.toolLogger.RecordHTTPRoute(req.URL.Path)
 	h.toolLogger.RecordUserAgent(req.UserAgent())
-	h.toolLogger.RecordRequestHeaders(requestHeaders)
+	h.toolLogger.RecordRequestHeaders(requestHeaders, false)
 
 	resp, err := base.RoundTrip(req)
 
