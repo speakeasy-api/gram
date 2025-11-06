@@ -344,7 +344,7 @@ export default function LogsPage() {
                                                         ) : (
                                                             <div className="flex flex-col items-center gap-3">
                                                                 <span>
-                                                                    Logs are disabled for your organization.
+                                                                    Logs are currently disabled for your organization.
                                                                 </span>
                                                                 <Button
                                                                     onClick={() => handleSetLogs(true)}
