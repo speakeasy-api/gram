@@ -4,7 +4,7 @@ create table if not exists http_requests_raw
     ts                  DateTime64(3, 'UTC'),
     organization_id     UUID,
     project_id          UUID,
-    deployment_id       UUID,
+    deployment_id       Nullable(UUID),
     tool_id             UUID,
     tool_urn            String,
     tool_type           LowCardinality(String),
