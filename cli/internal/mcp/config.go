@@ -6,39 +6,35 @@ import (
 )
 
 // MCPServerConfig represents the standard MCP server configuration
+// Supports both command-based (legacy) and HTTP transport (native) configurations
 type MCPServerConfig struct {
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
+	// Command-based configuration (legacy, for compatibility)
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
+
+	// HTTP transport configuration (native)
+	Type    string            `json:"type,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
-// BuildMCPConfig constructs the standard MCP server configuration
+// BuildMCPConfig constructs the native HTTP transport MCP server configuration
 func BuildMCPConfig(info *ToolsetInfo, useEnvVar bool) MCPServerConfig {
-	var headerValue string
-	var envConfig map[string]string
+	headers := make(map[string]string)
 
 	if useEnvVar {
 		// Use environment variable substitution
-		headerValue = fmt.Sprintf("%s:${%s}", info.HeaderName, info.EnvVarName)
-		envConfig = map[string]string{
-			info.EnvVarName: "<your-value-here>",
-		}
+		headers[info.HeaderName] = fmt.Sprintf("${%s}", info.EnvVarName)
 	} else {
 		// Use API key directly
-		headerValue = fmt.Sprintf("%s:%s", info.HeaderName, info.APIKey)
-		envConfig = map[string]string{}
+		headers[info.HeaderName] = info.APIKey
 	}
 
 	return MCPServerConfig{
-		Command: "npx",
-		Args: []string{
-			"-y",
-			"mcp-remote",
-			info.URL,
-			"--header",
-			headerValue,
-		},
-		Env: envConfig,
+		Type:    "http",
+		URL:     info.URL,
+		Headers: headers,
 	}
 }
 

@@ -8,10 +8,17 @@ import (
 )
 
 // MCPServerConfig represents the configuration for a single MCP server
+// Supports both command-based (legacy) and HTTP transport (native) configurations
 type MCPServerConfig struct {
-	Command string            `json:"command"`
-	Args    []string          `json:"args"`
-	Env     map[string]string `json:"env,omitempty"` // omitempty will exclude empty env maps
+	// Command-based configuration (legacy, for compatibility)
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+
+	// HTTP transport configuration (native)
+	Type    string            `json:"type,omitempty"`
+	URL     string            `json:"url,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // MCPConfig represents the structure of .mcp.json or settings.local.json

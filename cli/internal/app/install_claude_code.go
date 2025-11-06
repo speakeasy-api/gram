@@ -149,9 +149,9 @@ func doInstallClaudeCode(c *cli.Context) error {
 
 	mcpConfig := mcp.BuildMCPConfig(info, useEnvVar)
 	serverConfig := claudecode.MCPServerConfig{
-		Command: mcpConfig.Command,
-		Args:    mcpConfig.Args,
-		Env:     mcpConfig.Env,
+		Type:    mcpConfig.Type,
+		URL:     mcpConfig.URL,
+		Headers: mcpConfig.Headers,
 	}
 
 	config.AddOrUpdateServer(info.Name, serverConfig)
