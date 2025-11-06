@@ -302,14 +302,14 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		toolType = tm.ToolTypePrompt
 	}
 
-	toolCallLogEntry, logErr := tm.PrepareToolLog(ctx, s.tcm, descriptor.OrganizationID, tm.ToolInfo{
+	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, s.tcm, descriptor.OrganizationID, tm.ToolInfo{
 		ID:             descriptor.ID,
 		Urn:            descriptor.URN.String(),
 		Name:           descriptor.Name,
 		ProjectID:      descriptor.ProjectID,
 		DeploymentID:   descriptor.DeploymentID,
 		OrganizationID: descriptor.OrganizationID,
-	}, toolType)
+	}, descriptor.Name, toolType)
 	if logErr != nil {
 		logger.ErrorContext(ctx,
 			"failed to prepare tool call log entry",
@@ -318,7 +318,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			attr.SlogToolURN(descriptor.URN.String()),
 		)
 	}
-
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 
 	var toolset *types.Toolset
@@ -342,13 +341,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	interceptor := newResponseInterceptor(w)
 
-	err = s.toolProxy.Do(ctx, interceptor, requestBody, ciEnv, plan, toolCallLogEntry)
+	err = s.toolProxy.Do(ctx, interceptor, requestBody, ciEnv, plan, toolCallLogger)
 	if err != nil {
 		return fmt.Errorf("failed to proxy tool call: %w", err)
-	}
-
-	if toolCallLogEntry != nil && toolCallLogEntry.RequestBodyBytes > 0 {
-		requestNumBytes = toolCallLogEntry.RequestBodyBytes
 	}
 
 	// Write the modified response to the original response writer
@@ -374,9 +369,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
-	if toolCallLogEntry != nil && toolCallLogEntry.ResponseBodyBytes > 0 {
-		outputNumBytes = toolCallLogEntry.ResponseBodyBytes
-	}
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	var functionCPU *float64
@@ -432,10 +424,10 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 			FunctionExecutionTime: functionsExecutionTime,
 		})
 
-		if toolCallLogEntry != nil {
-			toolCallLogEntry = toolCallLogEntry.WithStatusCode(int64(interceptor.statusCode))
-			tm.EmitHTTPRequestLog(context.WithoutCancel(ctx), logger, s.tcm, descriptor.Name, *toolCallLogEntry)
-		}
+		toolCallLogger.RecordStatusCode(interceptor.statusCode)
+		toolCallLogger.RecordRequestBodyBytes(requestNumBytes)
+		toolCallLogger.RecordResponseBodyBytes(outputNumBytes)
+		toolCallLogger.Emit(context.WithoutCancel(ctx), logger)
 	}()
 
 	return nil

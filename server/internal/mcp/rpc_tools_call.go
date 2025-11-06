@@ -122,7 +122,6 @@ func handleToolsCall(
 	}
 
 	descriptor := plan.Descriptor
-	var toolCallLogEntry *tm.ToolHTTPRequest
 	var toolType tm.ToolType
 	switch plan.Kind {
 	case gateway.ToolKindHTTP:
@@ -133,26 +132,21 @@ func handleToolsCall(
 		toolType = tm.ToolTypePrompt
 	}
 
-	if toolType != "" {
-		info := tm.ToolInfo{
-			ID:             descriptor.ID,
-			Urn:            descriptor.URN.String(),
-			Name:           descriptor.Name,
-			ProjectID:      descriptor.ProjectID,
-			DeploymentID:   descriptor.DeploymentID,
-			OrganizationID: descriptor.OrganizationID,
-		}
-		entry, logErr := tm.PrepareToolLog(ctx, tcm, descriptor.OrganizationID, info, toolType)
-		if logErr != nil {
-			logger.ErrorContext(ctx,
-				"failed to prepare tool call log entry",
-				attr.SlogError(logErr),
-				attr.SlogToolName(descriptor.Name),
-				attr.SlogToolURN(descriptor.URN.String()),
-			)
-		} else {
-			toolCallLogEntry = entry
-		}
+	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, descriptor.OrganizationID, tm.ToolInfo{
+		ID:             descriptor.ID,
+		Urn:            descriptor.URN.String(),
+		Name:           descriptor.Name,
+		ProjectID:      descriptor.ProjectID,
+		DeploymentID:   descriptor.DeploymentID,
+		OrganizationID: descriptor.OrganizationID,
+	}, descriptor.Name, toolType)
+	if logErr != nil {
+		logger.ErrorContext(ctx,
+			"failed to prepare tool call log entry",
+			attr.SlogError(logErr),
+			attr.SlogToolName(descriptor.Name),
+			attr.SlogToolURN(descriptor.URN.String()),
+		)
 	}
 
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
@@ -210,14 +204,13 @@ func handleToolsCall(
 			FunctionExecutionTime: functionsExecutionTime,
 		})
 
-		// emit logs to tool metrics system, will only do so if enabled
-		if toolCallLogEntry != nil {
-			toolCallLogEntry = toolCallLogEntry.WithStatusCode(int64(rw.statusCode))
-			tm.EmitHTTPRequestLog(context.WithoutCancel(ctx), logger, tcm, descriptor.Name, *toolCallLogEntry)
-		}
+		toolCallLogger.RecordStatusCode(rw.statusCode)
+		toolCallLogger.RecordRequestBodyBytes(requestBytes)
+		toolCallLogger.RecordResponseBodyBytes(outputBytes)
+		toolCallLogger.Emit(context.WithoutCancel(ctx), logger)
 	}()
 
-	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), ciEnv, plan, toolCallLogEntry)
+	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), ciEnv, plan, toolCallLogger)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}

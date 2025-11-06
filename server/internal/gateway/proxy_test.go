@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -274,7 +275,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPToolCallPlan(tool, plan), nil)
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -400,7 +401,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPToolCallPlan(tool, plan), nil)
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -747,7 +748,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPToolCallPlan(tool, plan), nil)
+			err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -964,7 +965,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), ciEnv, NewHTTPToolCallPlan(tool, plan), nil)
+			err = proxy.Do(ctx, recorder, bytes.NewReader(toolCallBodyBytes), ciEnv, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
 			require.NoError(t, err)
 			require.NotNil(t, capturedRequest)
 
@@ -1301,7 +1302,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 
 			// Execute the proxy call
 			ciEnv := NewCaseInsensitiveEnv()
-			err = proxy.Do(ctx, recorder, bytes.NewReader([]byte(tt.toolCallBody)), ciEnv, NewHTTPToolCallPlan(tool, plan), nil)
+			err = proxy.Do(ctx, recorder, bytes.NewReader([]byte(tt.toolCallBody)), ciEnv, NewHTTPToolCallPlan(tool, plan), tm.NewNoopToolCallLogger())
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -1399,7 +1400,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 
 	// Execute the resource read
 	ciEnv := NewCaseInsensitiveEnv()
-	err = proxy.ReadResource(ctx, recorder, bytes.NewReader([]byte("{}")), ciEnv, resourcePlan, nil)
+	err = proxy.ReadResource(ctx, recorder, bytes.NewReader([]byte("{}")), ciEnv, resourcePlan, tm.NewNoopToolCallLogger())
 
 	require.NoError(t, err)
 	require.NotNil(t, capturedRequest)
@@ -1523,7 +1524,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 
 	// Execute the proxy call
 	ciEnv := NewCaseInsensitiveEnv()
-	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, toolCallPlan, nil)
+	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), ciEnv, toolCallPlan, tm.NewNoopToolCallLogger())
 
 	require.NoError(t, err)
 

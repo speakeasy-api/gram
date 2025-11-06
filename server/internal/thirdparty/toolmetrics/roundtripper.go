@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -87,19 +86,21 @@ func filterAllowedHeaders(headers map[string]string) map[string]string {
 
 // ToolCallLogRoundTripper wraps an http.RoundTripper and logs HTTP requests to ClickHouse
 type ToolCallLogRoundTripper struct {
-	rt       http.RoundTripper
-	logger   *slog.Logger
-	tracer   trace.Tracer
-	logEntry *ToolHTTPRequest
+	rt         http.RoundTripper
+	logger     *slog.Logger
+	tracer     trace.Tracer
+	toolLogger ToolCallLogger
+	toolInfo   *ToolInfo
 }
 
 // NewToolCallLogRoundTripper creates a new RoundTripper that logs HTTP requests to ClickHouse
-func NewToolCallLogRoundTripper(rt http.RoundTripper, logger *slog.Logger, tracer trace.Tracer, logEntry *ToolHTTPRequest) *ToolCallLogRoundTripper {
+func NewToolCallLogRoundTripper(rt http.RoundTripper, logger *slog.Logger, tracer trace.Tracer, toolInfo *ToolInfo, toolLogger ToolCallLogger) *ToolCallLogRoundTripper {
 	return &ToolCallLogRoundTripper{
-		rt:       rt,
-		logger:   logger,
-		tracer:   tracer,
-		logEntry: logEntry,
+		rt:         rt,
+		logger:     logger,
+		tracer:     tracer,
+		toolLogger: toolLogger,
+		toolInfo:   toolInfo,
 	}
 }
 
@@ -127,11 +128,6 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		base = http.DefaultTransport
 	}
 
-	requestBodyBytesPtr, ok := ctx.Value(RequestBodyContextKey).(*int)
-	if !ok {
-		requestBodyBytesPtr = nil
-	}
-
 	// Capture request headers up front so we have them even if the round trip fails.
 	requestHeaders := make(map[string]string)
 	for key, values := range req.Header {
@@ -141,22 +137,19 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 	}
 	requestHeaders = filterAllowedHeaders(requestHeaders)
 
-	if h.logEntry != nil {
-		h.logEntry.HTTPMethod = req.Method
-		h.logEntry.HTTPRoute = req.URL.Path
-		h.logEntry.UserAgent = req.UserAgent()
-		h.logEntry.RequestHeaders = requestHeaders
-	}
+	h.toolLogger.RecordHTTPMethod(req.Method)
+	h.toolLogger.RecordHTTPRoute(req.URL.Path)
+	h.toolLogger.RecordUserAgent(req.UserAgent())
+	h.toolLogger.RecordRequestHeaders(requestHeaders)
 
 	resp, err := base.RoundTrip(req)
 
 	duration := time.Since(startTime).Seconds()
+	h.toolLogger.RecordDurationMs(duration * 1000)
 
-	// Extract tool information from context
-	tool, ok := ctx.Value(ToolInfoContextKey).(*ToolInfo)
-	if !ok {
-		// If no tool context, we can't log this request
-		noToolCtxErr := fmt.Errorf("no tool context")
+	tool := h.toolInfo
+	if tool == nil {
+		noToolCtxErr := fmt.Errorf("no tool info")
 		span.RecordError(noToolCtxErr)
 		span.SetStatus(codes.Error, "missing tool context")
 		h.logger.WarnContext(ctx, "HTTP request missing tool context",
@@ -180,11 +173,6 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		attr.HTTPRoute(req.URL.Path),
 	)
 
-	if h.logEntry != nil {
-		h.logEntry.DurationMs = duration * 1000
-		h.logEntry.RequestBodyBytes = int64(conv.PtrValOr(requestBodyBytesPtr, 0))
-	}
-
 	// If the request failed, wrap and return the error; E.g., request timeout, etc.
 	if err != nil {
 		span.RecordError(err)
@@ -197,11 +185,7 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			attr.SlogHTTPClientRequestDuration(duration),
 		)
 
-		if h.logEntry != nil {
-			h.logEntry.StatusCode = 0
-			h.logEntry.ResponseHeaders = nil
-			h.logEntry.ResponseBodyBytes = 0
-		}
+		h.toolLogger.RecordStatusCode(0)
 
 		return resp, fmt.Errorf("roundtrip: %w", err)
 	}
@@ -241,29 +225,15 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		responseHeaders = filterAllowedHeaders(responseHeaders)
 	}
 
-	if h.logEntry != nil {
-		h.logEntry.StatusCode = int64(statusCode)
-		h.logEntry.ResponseHeaders = responseHeaders
-	}
+	h.toolLogger.RecordStatusCode(statusCode)
+	h.toolLogger.RecordResponseHeaders(responseHeaders)
 
 	if resp == nil || resp.Body == nil {
 		return resp, nil
 	}
 
-	if h.logEntry != nil {
-		// Wraps the response body to count bytes and update log entry when the body is closed
-		resp.Body = NewCountingReadCloser(resp.Body, func(respBodyBytes int) {
-			h.logEntry.ResponseBodyBytes = int64(respBodyBytes)
-		})
-	}
-
 	return resp, nil
 }
-
-type contextKey string
-
-const ToolInfoContextKey contextKey = "tool_info_context_key"
-const RequestBodyContextKey contextKey = "request_body_context_key"
 
 // ToolInfo represents the minimal tool information needed for logging
 type ToolInfo struct {

@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -269,7 +270,7 @@ func (c *ChatClient) LoadToolsetTools(
 				ciEnv.Set(key, value)
 			}
 
-			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), ciEnv, plan, nil)
+			err = c.toolProxy.Do(ctx, rw, bytes.NewBufferString(rawArgs), ciEnv, plan, tm.NewNoopToolCallLogger())
 			if err != nil {
 				return "", fmt.Errorf("tool proxy error: %w", err)
 			}

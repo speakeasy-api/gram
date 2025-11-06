@@ -87,14 +87,14 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 	}
 
 	descriptor := plan.Descriptor
-	toolCallLogEntry, logErr := tm.PrepareToolLog(ctx, tcm, descriptor.OrganizationID, tm.ToolInfo{
+	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, descriptor.OrganizationID, tm.ToolInfo{
 		ID:             descriptor.ID,
 		Urn:            descriptor.URN.String(),
 		Name:           descriptor.Name,
 		ProjectID:      descriptor.ProjectID,
 		DeploymentID:   descriptor.DeploymentID,
 		OrganizationID: descriptor.OrganizationID,
-	}, tm.ToolTypeFunction)
+	}, descriptor.Name, tm.ToolTypeFunction)
 	if logErr != nil {
 		logger.ErrorContext(ctx,
 			"failed to prepare resource call log entry",
@@ -162,14 +162,13 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 			FunctionExecutionTime: functionsExecutionTime,
 		})
 
-		// emit logs to tool metrics system, will only do so if enabled
-		if toolCallLogEntry != nil {
-			toolCallLogEntry = toolCallLogEntry.WithStatusCode(int64(rw.statusCode))
-			tm.EmitHTTPRequestLog(context.WithoutCancel(ctx), logger, tcm, descriptor.Name, *toolCallLogEntry)
-		}
+		toolCallLogger.RecordStatusCode(rw.statusCode)
+		toolCallLogger.RecordRequestBodyBytes(requestBytes)
+		toolCallLogger.RecordResponseBodyBytes(outputBytes)
+		toolCallLogger.Emit(context.WithoutCancel(ctx), logger)
 	}()
 
-	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), ciEnv, plan, toolCallLogEntry)
+	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), ciEnv, plan, toolCallLogger)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").Log(ctx, logger)
 	}
