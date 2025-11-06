@@ -43,10 +43,6 @@ func newInstallClaudeCodeCommand() *cli.Command {
 				Name:  "env-var",
 				Usage: "Environment variable name to use for API key substitution (e.g., MCP_API_KEY). If provided, uses ${VAR} syntax instead of hardcoding the key",
 			},
-			&cli.StringFlag{
-				Name:  "config-path",
-				Usage: "Path to the Claude Code config file (defaults to project-local .mcp.json)",
-			},
 		},
 		Action: doInstallClaudeCode,
 	}
@@ -59,7 +55,6 @@ func doInstallClaudeCode(c *cli.Context) error {
 
 	toolsetSlug := c.String("toolset")
 	toolsetURL := c.String("toolset-url")
-	configPath := c.String("config-path")
 
 	// Validate that either toolset or toolset-url is provided
 	if toolsetSlug == "" && toolsetURL == "" {
@@ -97,32 +92,6 @@ func doInstallClaudeCode(c *cli.Context) error {
 		return fmt.Errorf("failed to resolve toolset info: %w", err)
 	}
 
-	// Determine config path
-	if configPath == "" {
-		locations, err := claudecode.GetConfigLocations()
-		if err != nil {
-			return fmt.Errorf("failed to get config locations: %w", err)
-		}
-		// Default to project-local .mcp.json
-		configPath = locations[0].Path
-		logger.InfoContext(ctx, "using config location",
-			slog.String("path", configPath),
-			slog.String("type", locations[0].Description))
-	}
-
-	// Read existing config
-	config, err := claudecode.ReadConfig(configPath)
-	if err != nil {
-		return fmt.Errorf("failed to read config: %w", err)
-	}
-
-	// Check if server already exists
-	if _, exists := config.MCPServers[info.Name]; exists {
-		logger.WarnContext(ctx, "server with this name already exists, will be overwritten",
-			slog.String("name", info.Name))
-	}
-
-	// Build MCP config using shared logic
 	useEnvVar := info.EnvVarName != ""
 	if useEnvVar {
 		logger.InfoContext(ctx, "using environment variable substitution",
@@ -130,24 +99,68 @@ func doInstallClaudeCode(c *cli.Context) error {
 			slog.String("header", info.HeaderName))
 	}
 
-	mcpConfig := mcp.BuildMCPConfig(info, useEnvVar)
+	// Try to use native claude CLI with HTTP transport first
+	if mcp.IsClaudeCLIAvailable() {
+		logger.InfoContext(ctx, "using claude CLI with native HTTP transport")
 
-	// Convert shared config to claudecode format
+		if err := mcp.InstallViaClaudeCLI(info, useEnvVar); err != nil {
+			logger.WarnContext(ctx, "claude CLI installation failed, falling back to config file",
+				slog.String("error", err.Error()))
+		} else {
+			// Success with claude CLI
+			logger.InfoContext(ctx, "successfully installed via claude CLI",
+				slog.String("name", info.Name),
+				slog.String("url", info.URL))
+
+			fmt.Printf("\n✓ Successfully installed MCP server '%s' via claude CLI\n", info.Name)
+			fmt.Printf("  URL: %s\n", info.URL)
+			fmt.Printf("  Transport: HTTP (native)\n")
+
+			if useEnvVar {
+				fmt.Printf("\n⚠ Remember to set the environment variable:\n")
+				fmt.Printf("  export %s='your-api-key-value'\n", info.EnvVarName)
+			}
+
+			return nil
+		}
+	} else {
+		logger.InfoContext(ctx, "claude CLI not available, using .mcp.json config file")
+	}
+
+	// Fallback: Write to .mcp.json config file
+	locations, err := claudecode.GetConfigLocations()
+	if err != nil {
+		return fmt.Errorf("failed to get config locations: %w", err)
+	}
+	configPath := locations[0].Path
+	logger.InfoContext(ctx, "using config location",
+		slog.String("path", configPath),
+		slog.String("type", locations[0].Description))
+
+	config, err := claudecode.ReadConfig(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config: %w", err)
+	}
+
+	if _, exists := config.MCPServers[info.Name]; exists {
+		logger.WarnContext(ctx, "server with this name already exists, will be overwritten",
+			slog.String("name", info.Name))
+	}
+
+	mcpConfig := mcp.BuildMCPConfig(info, useEnvVar)
 	serverConfig := claudecode.MCPServerConfig{
 		Command: mcpConfig.Command,
 		Args:    mcpConfig.Args,
 		Env:     mcpConfig.Env,
 	}
 
-	// Add or update the server
 	config.AddOrUpdateServer(info.Name, serverConfig)
 
-	// Write the config back
 	if err := claudecode.WriteConfig(configPath, config); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
-	logger.InfoContext(ctx, "successfully installed Gram MCP server",
+	logger.InfoContext(ctx, "successfully wrote MCP config",
 		slog.String("name", info.Name),
 		slog.String("url", info.URL),
 		slog.String("config", configPath))
@@ -155,9 +168,10 @@ func doInstallClaudeCode(c *cli.Context) error {
 	fmt.Printf("\n✓ Successfully installed MCP server '%s'\n", info.Name)
 	fmt.Printf("  URL: %s\n", info.URL)
 	fmt.Printf("  Config: %s\n", configPath)
+	fmt.Printf("  Method: Config file (claude CLI not detected)\n")
 
 	if useEnvVar {
-		fmt.Printf("\n⚠ Remember to set the environment variable before using:\n")
+		fmt.Printf("\n⚠ Remember to set the environment variable:\n")
 		fmt.Printf("  export %s='your-api-key-value'\n", info.EnvVarName)
 	}
 
