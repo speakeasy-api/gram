@@ -23,8 +23,8 @@ func newInstallClaudeCodeCommand() *cli.Command {
 				Usage: "The slug of the Gram toolset to install (e.g., speakeasy-admin). Will automatically look up MCP configuration.",
 			},
 			&cli.StringFlag{
-				Name:  "toolset-url",
-				Usage: "The full MCP URL of the toolset (e.g., https://mcp.getgram.ai/org/project/environment). Use this for manual configuration.",
+				Name:  "mcp-url",
+				Usage: "The MCP server URL (e.g., https://mcp.getgram.ai/org/project/environment). Use this for manual configuration.",
 			},
 			&cli.StringFlag{
 				Name:  "name",
@@ -54,14 +54,14 @@ func doInstallClaudeCode(c *cli.Context) error {
 	prof := profile.FromContext(ctx)
 
 	toolsetSlug := c.String("toolset")
-	toolsetURL := c.String("toolset-url")
+	mcpURL := c.String("mcp-url")
 
-	// Validate that either toolset or toolset-url is provided
-	if toolsetSlug == "" && toolsetURL == "" {
-		return fmt.Errorf("either --toolset or --toolset-url must be provided")
+	// Validate that either toolset or mcp-url is provided
+	if toolsetSlug == "" && mcpURL == "" {
+		return fmt.Errorf("either --toolset or --mcp-url must be provided")
 	}
-	if toolsetSlug != "" && toolsetURL != "" {
-		return fmt.Errorf("cannot provide both --toolset and --toolset-url")
+	if toolsetSlug != "" && mcpURL != "" {
+		return fmt.Errorf("cannot provide both --toolset and --mcp-url")
 	}
 
 	// Get API URL if needed
@@ -77,7 +77,7 @@ func doInstallClaudeCode(c *cli.Context) error {
 	// Resolve toolset information using shared logic
 	info, err := mcp.ResolveToolsetInfo(ctx, &mcp.ResolverOptions{
 		ToolsetSlug:     toolsetSlug,
-		ToolsetURL:      toolsetURL,
+		MCPURL:          mcpURL,
 		ServerName:      c.String("name"),
 		APIKey:          c.String("api-key"),
 		HeaderName:      c.String("header-name"),

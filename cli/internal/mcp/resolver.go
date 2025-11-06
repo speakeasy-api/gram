@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
@@ -24,7 +25,7 @@ type ToolsetInfo struct {
 // ResolverOptions contains options for resolving toolset information
 type ResolverOptions struct {
 	ToolsetSlug     string
-	ToolsetURL      string
+	MCPURL          string
 	ServerName      string
 	APIKey          string
 	HeaderName      string
@@ -90,8 +91,8 @@ func ResolveToolsetInfo(ctx context.Context, opts *ResolverOptions) (*ToolsetInf
 			info.Name = opts.ServerName
 		}
 	} else {
-		// Using direct URL
-		info.URL = opts.ToolsetURL
+		// Using direct MCP URL
+		info.URL = opts.MCPURL
 
 		// Derive server name from URL if not provided
 		if opts.ServerName == "" {
@@ -112,9 +113,24 @@ func ResolveToolsetInfo(ctx context.Context, opts *ResolverOptions) (*ToolsetInf
 	}
 
 	// Determine authentication
-	if info.EnvVarName == "" {
-		// Use API key directly
-		if info.APIKey == "" && opts.Profile != nil && opts.Profile.Secret != "" {
+	if info.EnvVarName != "" {
+		// Check if the environment variable is already set locally
+		if envValue := os.Getenv(info.EnvVarName); envValue != "" {
+			info.APIKey = envValue
+			opts.Logger.InfoContext(ctx, "using API key from local environment variable",
+				slog.String("var", info.EnvVarName))
+			// Clear EnvVarName so we use the actual value, not substitution
+			info.EnvVarName = ""
+		} else {
+			opts.Logger.InfoContext(ctx, "environment variable not set locally, will use substitution",
+				slog.String("var", info.EnvVarName))
+		}
+	}
+
+	// If still no API key, try to get from other sources
+	if info.APIKey == "" && info.EnvVarName == "" {
+		// Use profile API key
+		if opts.Profile != nil && opts.Profile.Secret != "" {
 			info.APIKey = opts.Profile.Secret
 			opts.Logger.InfoContext(ctx, "using API key from profile")
 		}
