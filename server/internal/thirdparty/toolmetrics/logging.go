@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	redactRevealPrefixLen = 5
+	redactRevealPrefixLen = 3
 	redactMinTokenLen     = 10
 )
 
