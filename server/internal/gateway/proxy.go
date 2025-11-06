@@ -275,9 +275,6 @@ func (tp *ToolProxy) doFunction(
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
 
-	toolCallLogger.RecordHTTPMethod(req.Method)
-	toolCallLogger.RecordHTTPRoute(req.URL.Path)
-
 	return reverseProxyRequest(ctx, ReverseProxyOptions{
 		Logger:                    logger,
 		Tracer:                    tp.tracer,
@@ -547,9 +544,6 @@ func (tp *ToolProxy) doHTTP(
 
 	req.Header.Set("X-Gram-Proxy", "1")
 
-	toolCallLogger.RecordHTTPMethod(req.Method)
-	toolCallLogger.RecordHTTPRoute(req.URL.Path)
-
 	return reverseProxyRequest(ctx, ReverseProxyOptions{
 		Logger:                    logger,
 		Tracer:                    tp.tracer,
@@ -699,13 +693,16 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 
-	baseTransport := tm.NewToolCallLogRoundTripper(
-		http.RoundTripper(transport),
-		opts.Logger,
-		opts.Tracer,
-		toolInfo,
-		toolCallLogger,
-	)
+	var baseTransport http.RoundTripper = transport
+	if toolCallLogger.Enabled() {
+		baseTransport = tm.NewToolCallLogRoundTripper(
+			baseTransport,
+			opts.Logger,
+			opts.Tracer,
+			toolInfo,
+			toolCallLogger,
+		)
+	}
 
 	otelTransport := otelhttp.NewTransport(
 		baseTransport,

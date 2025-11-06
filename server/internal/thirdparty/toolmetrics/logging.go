@@ -16,9 +16,8 @@ import (
 type ToolCallLogger interface {
 	Enabled() bool
 	Emit(ctx context.Context, logger *slog.Logger)
-	RequestBodyBytes() int64
-	ResponseBodyBytes() int64
 	RecordDurationMs(durationMs float64)
+	RecordHTTPServerURL(url string)
 	RecordHTTPMethod(method string)
 	RecordHTTPRoute(route string)
 	RecordStatusCode(code int)
@@ -33,6 +32,7 @@ type toolCallLogger struct {
 	entry    *ToolHTTPRequest
 	provider ToolMetricsProvider
 	toolName string
+	toolType ToolType
 }
 
 var _ ToolCallLogger = (*toolCallLogger)(nil)
@@ -70,6 +70,7 @@ func NewToolCallLogger(
 		entry:    entry,
 		provider: provider,
 		toolName: toolName,
+		toolType: toolType,
 	}, nil
 }
 
@@ -84,25 +85,23 @@ func (l *toolCallLogger) Emit(ctx context.Context, logger *slog.Logger) {
 	EmitHTTPRequestLog(ctx, logger, l.provider, l.toolName, *l.entry)
 }
 
-func (l *toolCallLogger) RequestBodyBytes() int64 {
-	if l.entry == nil {
-		return 0
-	}
-	return l.entry.RequestBodyBytes
-}
-
-func (l *toolCallLogger) ResponseBodyBytes() int64 {
-	if l.entry == nil {
-		return 0
-	}
-	return l.entry.ResponseBodyBytes
-}
-
 func (l *toolCallLogger) RecordHTTPMethod(method string) {
 	if l.entry == nil {
 		return
 	}
 	l.entry.WithHTTPMethod(method)
+}
+
+func (l *toolCallLogger) RecordHTTPServerURL(url string) {
+	// currently we onyl want to record this server URL for HTTP tool types
+	// Not exposing fly function details unnecessarily
+	if l.toolType != ToolTypeHTTP {
+		return
+	}
+	if l.entry == nil {
+		return
+	}
+	l.entry.HTTPServerURL = url
 }
 
 func (l *toolCallLogger) RecordHTTPRoute(route string) {
@@ -173,9 +172,8 @@ var _ ToolCallLogger = (*noopToolCallLogger)(nil)
 
 func (l *noopToolCallLogger) Emit(context.Context, *slog.Logger) {}
 
-func (l *noopToolCallLogger) RequestBodyBytes() int64                 { return 0 }
-func (l *noopToolCallLogger) ResponseBodyBytes() int64                { return 0 }
 func (l *noopToolCallLogger) RecordDurationMs(float64)                {}
+func (l *noopToolCallLogger) RecordHTTPServerURL(string)              {}
 func (l *noopToolCallLogger) RecordHTTPMethod(string)                 {}
 func (l *noopToolCallLogger) RecordHTTPRoute(string)                  {}
 func (l *noopToolCallLogger) RecordStatusCode(int)                    {}

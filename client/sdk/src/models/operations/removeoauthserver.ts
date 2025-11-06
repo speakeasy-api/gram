@@ -4,9 +4,6 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { safeParse } from "../../lib/schemas.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
-import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type RemoveOAuthServerSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -29,21 +26,6 @@ export type RemoveOAuthServerRequest = {
 };
 
 /** @internal */
-export const RemoveOAuthServerSecurity$inboundSchema: z.ZodType<
-  RemoveOAuthServerSecurity,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  "project_slug_header_Gram-Project": z.string().optional(),
-  "session_header_Gram-Session": z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
-    "session_header_Gram-Session": "sessionHeaderGramSession",
-  });
-});
-
-/** @internal */
 export type RemoveOAuthServerSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
@@ -64,19 +46,6 @@ export const RemoveOAuthServerSecurity$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace RemoveOAuthServerSecurity$ {
-  /** @deprecated use `RemoveOAuthServerSecurity$inboundSchema` instead. */
-  export const inboundSchema = RemoveOAuthServerSecurity$inboundSchema;
-  /** @deprecated use `RemoveOAuthServerSecurity$outboundSchema` instead. */
-  export const outboundSchema = RemoveOAuthServerSecurity$outboundSchema;
-  /** @deprecated use `RemoveOAuthServerSecurity$Outbound` instead. */
-  export type Outbound = RemoveOAuthServerSecurity$Outbound;
-}
-
 export function removeOAuthServerSecurityToJSON(
   removeOAuthServerSecurity: RemoveOAuthServerSecurity,
 ): string {
@@ -84,32 +53,6 @@ export function removeOAuthServerSecurityToJSON(
     RemoveOAuthServerSecurity$outboundSchema.parse(removeOAuthServerSecurity),
   );
 }
-
-export function removeOAuthServerSecurityFromJSON(
-  jsonString: string,
-): SafeParseResult<RemoveOAuthServerSecurity, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => RemoveOAuthServerSecurity$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'RemoveOAuthServerSecurity' from JSON`,
-  );
-}
-
-/** @internal */
-export const RemoveOAuthServerRequest$inboundSchema: z.ZodType<
-  RemoveOAuthServerRequest,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  slug: z.string(),
-  "Gram-Session": z.string().optional(),
-  "Gram-Project": z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "Gram-Session": "gramSession",
-    "Gram-Project": "gramProject",
-  });
-});
 
 /** @internal */
 export type RemoveOAuthServerRequest$Outbound = {
@@ -134,33 +77,10 @@ export const RemoveOAuthServerRequest$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace RemoveOAuthServerRequest$ {
-  /** @deprecated use `RemoveOAuthServerRequest$inboundSchema` instead. */
-  export const inboundSchema = RemoveOAuthServerRequest$inboundSchema;
-  /** @deprecated use `RemoveOAuthServerRequest$outboundSchema` instead. */
-  export const outboundSchema = RemoveOAuthServerRequest$outboundSchema;
-  /** @deprecated use `RemoveOAuthServerRequest$Outbound` instead. */
-  export type Outbound = RemoveOAuthServerRequest$Outbound;
-}
-
 export function removeOAuthServerRequestToJSON(
   removeOAuthServerRequest: RemoveOAuthServerRequest,
 ): string {
   return JSON.stringify(
     RemoveOAuthServerRequest$outboundSchema.parse(removeOAuthServerRequest),
-  );
-}
-
-export function removeOAuthServerRequestFromJSON(
-  jsonString: string,
-): SafeParseResult<RemoveOAuthServerRequest, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => RemoveOAuthServerRequest$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'RemoveOAuthServerRequest' from JSON`,
   );
 }

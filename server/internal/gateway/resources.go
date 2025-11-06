@@ -147,9 +147,6 @@ func (tp *ToolProxy) doFunctionResource(
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
 
-	toolCallLogger.RecordHTTPMethod(req.Method)
-	toolCallLogger.RecordHTTPRoute(req.URL.Path)
-
 	return reverseProxyRequest(ctx, ReverseProxyOptions{
 		Logger:                    logger,
 		Tracer:                    tp.tracer,
