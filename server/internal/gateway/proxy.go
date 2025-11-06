@@ -275,9 +275,6 @@ func (tp *ToolProxy) doFunction(
 		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
 	}()
 
-	toolCallLogger.RecordHTTPMethod(req.Method)
-	toolCallLogger.RecordHTTPRoute(req.URL.Path)
-
 	return reverseProxyRequest(ctx, ReverseProxyOptions{
 		Logger:                    logger,
 		Tracer:                    tp.tracer,
@@ -546,9 +543,6 @@ func (tp *ToolProxy) doHTTP(
 	}
 
 	req.Header.Set("X-Gram-Proxy", "1")
-
-	toolCallLogger.RecordHTTPMethod(req.Method)
-	toolCallLogger.RecordHTTPRoute(req.URL.Path)
 
 	return reverseProxyRequest(ctx, ReverseProxyOptions{
 		Logger:                    logger,
