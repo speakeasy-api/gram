@@ -7,14 +7,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+  Icon,
+} from "@speakeasy-api/moonshine";
 import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Icon } from "@speakeasy-api/moonshine";
 
 export function NavUser({
   user,

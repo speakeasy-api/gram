@@ -1,19 +1,24 @@
-import { Dialog } from "@/components/ui/dialog";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button, Combobox, Dialog, Icon } from "@speakeasy-api/moonshine";
+// import { Dialog } from "@/components/ui/dialog";
 import { NamedAsset } from "./SourceCard";
+import {
+  useCreateEnvironmentMutation,
+  useListEnvironments,
+} from "@gram/client/react-query";
+import { useState } from "react";
 
 interface ApplyEnvironmentDialogContentProps {
   asset: NamedAsset;
-  onConfirm: (assetId: string) => void;
 }
 
 export function ApplyEnvironmentDialogContent({
   asset,
-  onConfirm,
 }: ApplyEnvironmentDialogContentProps) {
-  const handleConfirm = () => {
-    onConfirm(asset.id);
-  };
+  const result = useListEnvironments();
+  const mutation = useCreateEnvironmentMutation();
+
+  const [envQuery, setEnvQuery] = useState<string | undefined>(undefined);
+  const handleConfirm = () => {};
 
   return (
     <>
@@ -25,9 +30,28 @@ export function ApplyEnvironmentDialogContent({
       </Dialog.Header>
 
       <div className="py-4">
-        <p className="text-sm text-muted-foreground">
-          This will apply the environment configuration to the selected source.
-        </p>
+        <Combobox
+          value={envQuery ?? ""}
+          placeholder="select or create"
+          options={(result.data?.environments ?? []).map((env) => ({
+            value: env.id,
+            label: env.name,
+          }))}
+          onValueChange={setEnvQuery}
+          createOptions={{
+            renderCreatePrompt: (query) => (
+              <div
+                className="flex items-center gap-2"
+                onClick={() => alert("")}
+              >
+                <Icon name="plus" /> Create "{query}"
+              </div>
+            ),
+            handleCreate: (query) => {
+              alert(`Creating environment "${query}"`);
+            },
+          }}
+        />
       </div>
 
       <Dialog.Footer>

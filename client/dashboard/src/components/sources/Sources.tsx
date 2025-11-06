@@ -1,6 +1,5 @@
 import { Page } from "@/components/page-layout";
 import { MiniCards } from "@/components/ui/card-mini";
-import { Dialog } from "@/components/ui/dialog";
 import { SimpleTooltip } from "@/components/ui/tooltip";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
@@ -12,7 +11,8 @@ import {
   useListAssets,
   useListTools,
 } from "@gram/client/react-query/index.js";
-import { Button, Icon } from "@speakeasy-api/moonshine";
+// import { Dialog } from "@/components/ui/dialog";
+import { Button, Icon, Dialog } from "@speakeasy-api/moonshine";
 import { Plus } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
@@ -231,14 +231,7 @@ export default function Sources() {
                 />
               )}
               {dialogState.type === "apply-environment" && (
-                <ApplyEnvironmentDialogContent
-                  asset={dialogState.asset}
-                  onConfirm={(assetId) => {
-                    // TODO: Implement apply environment functionality
-                    console.log("Apply environment for asset:", assetId);
-                    closeDialog();
-                  }}
-                />
+                <ApplyEnvironmentDialogContent asset={dialogState.asset} />
               )}
             </Dialog.Content>
           </Dialog>

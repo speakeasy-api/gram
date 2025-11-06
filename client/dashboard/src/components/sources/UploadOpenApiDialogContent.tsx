@@ -1,9 +1,8 @@
-import { Dialog } from "@/components/ui/dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { FullWidthUpload } from "@/components/upload";
 import { useUploadOpenAPISteps } from "@/pages/onboarding/UploadOpenAPI";
 import { UploadedDocument } from "@/pages/onboarding/Wizard";
-import { Button } from "@speakeasy-api/moonshine";
+import { Button, Dialog } from "@speakeasy-api/moonshine";
 import React from "react";
 import { toast } from "sonner";
 

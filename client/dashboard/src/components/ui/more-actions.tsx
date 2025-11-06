@@ -7,7 +7,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "./dropdown-menu";
+} from "@speakeasy-api/moonshine";
 
 export type Action = {
   icon?: IconName;
@@ -48,7 +48,12 @@ export function MoreActions({
           </Button>
         )}
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(e) => {
+          e.preventDefault();
+        }}
+      >
         {actions.map((action, index) => (
           <DropdownMenuItem
             key={index}

@@ -1,5 +1,6 @@
 import { CodeBlock } from "@/components/code";
-import { Dialog } from "@/components/ui/dialog";
+// import { Dialog } from "@/components/ui/dialog";
+import { Dialog } from "@speakeasy-api/moonshine";
 import {
   HoverCard,
   HoverCardContent,
@@ -59,12 +60,16 @@ export function SourceCard({
       : []),
     {
       label: "Apply Environment",
-      onClick: () => handleApplyEnvironment(asset.id),
+      onClick: () => {
+        requestAnimationFrame(() => handleApplyEnvironment(asset.id));
+      },
       icon: "globe" as const,
     },
     {
       label: "Delete",
-      onClick: () => handleRemove(asset.id),
+      onClick: () => {
+        requestAnimationFrame(() => handleRemove(asset.id));
+      },
       icon: "trash" as const,
       destructive: true,
     },
