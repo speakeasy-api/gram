@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/slack"
@@ -353,18 +352,11 @@ func newWorkerCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			productFeatures := productfeatures.NewClient(logger, db, redisClient)
-
-			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c, tracerProvider, productFeatures)
-			if err != nil {
-				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
-			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, tcm)
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
 			if err != nil {

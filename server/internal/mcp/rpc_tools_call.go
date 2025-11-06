@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
 )
 
@@ -48,6 +49,7 @@ func handleToolsCall(
 	billingTracker billing.Tracker,
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
+	tcm tm.ToolMetricsProvider,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -120,6 +122,33 @@ func handleToolsCall(
 	}
 
 	descriptor := plan.Descriptor
+	var toolType tm.ToolType
+	switch plan.Kind {
+	case gateway.ToolKindHTTP:
+		toolType = tm.ToolTypeHTTP
+	case gateway.ToolKindFunction:
+		toolType = tm.ToolTypeFunction
+	case gateway.ToolKindPrompt:
+		toolType = tm.ToolTypePrompt
+	}
+
+	toolCallLogger, logErr := tm.NewToolCallLogger(ctx, tcm, descriptor.OrganizationID, tm.ToolInfo{
+		ID:             descriptor.ID,
+		Urn:            descriptor.URN.String(),
+		Name:           descriptor.Name,
+		ProjectID:      descriptor.ProjectID,
+		DeploymentID:   descriptor.DeploymentID,
+		OrganizationID: descriptor.OrganizationID,
+	}, descriptor.Name, toolType)
+	if logErr != nil {
+		logger.ErrorContext(ctx,
+			"failed to prepare tool call log entry",
+			attr.SlogError(logErr),
+			attr.SlogToolName(descriptor.Name),
+			attr.SlogToolURN(descriptor.URN.String()),
+		)
+	}
+
 	ctx, logger = o11y.EnrichToolCallContext(ctx, logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)
 	if plan.Kind == gateway.ToolKindHTTP {
 		for _, security := range plan.HTTP.Security {
@@ -174,14 +203,18 @@ func handleToolsCall(
 			FunctionMemUsage:      functionMem,
 			FunctionExecutionTime: functionsExecutionTime,
 		})
+
+		toolCallLogger.RecordStatusCode(rw.statusCode)
+		toolCallLogger.RecordRequestBodyBytes(requestBytes)
+		toolCallLogger.RecordResponseBodyBytes(outputBytes)
+		toolCallLogger.Emit(context.WithoutCancel(ctx), logger)
 	}()
 
-	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), ciEnv, plan)
+	err = toolProxy.Do(ctx, rw, bytes.NewBuffer(params.Arguments), ciEnv, plan, toolCallLogger)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}
 
-	// Track tool call usage
 	outputBytes = int64(rw.body.Len())
 
 	// Extract function metrics from headers (originally trailers from functions runner)

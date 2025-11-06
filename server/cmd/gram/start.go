@@ -515,7 +515,7 @@ func newStartCommand() *cli.Command {
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, tcm)
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
 			mux := goahttp.NewMuxer()
 
 			mux.Use(middleware.CORSMiddleware(c.String("environment"), c.String("server-url")))
