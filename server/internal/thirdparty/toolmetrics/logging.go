@@ -11,8 +11,8 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// NewToolLog initializes a ToolHTTPRequest with common metadata before the HTTP round tripper executes.
-func NewToolLog(ctx context.Context, tool ToolInfo, toolType ToolType) (*ToolHTTPRequest, error) {
+// newToolLog initializes a ToolHTTPRequest with common metadata before the HTTP round tripper executes.
+func newToolLog(ctx context.Context, tool ToolInfo, toolType ToolType) (*ToolHTTPRequest, error) {
 	id, err := uuid.NewV7()
 	if err != nil {
 		return nil, fmt.Errorf("generate tool http request id: %w", err)
@@ -71,7 +71,7 @@ func PrepareToolLog(
 		return nil, nil
 	}
 
-	return NewToolLog(ctx, info, toolType)
+	return newToolLog(ctx, info, toolType)
 }
 
 // WithStatusCode sets the HTTP status code on the log entry.

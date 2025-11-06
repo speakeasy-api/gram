@@ -222,18 +222,7 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed execute tool call").Log(ctx, logger)
 	}
 
-	// Track tool call usage
-	if toolCallLogEntry != nil {
-		if toolCallLogEntry.RequestBodyBytes != 0 {
-			requestBytes = toolCallLogEntry.RequestBodyBytes
-		}
-		if toolCallLogEntry.ResponseBodyBytes != 0 {
-			outputBytes = toolCallLogEntry.ResponseBodyBytes
-		}
-	}
-	if outputBytes == 0 {
-		outputBytes = int64(rw.body.Len())
-	}
+	outputBytes = int64(rw.body.Len())
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	if cpuStr := rw.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {

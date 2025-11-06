@@ -174,9 +174,7 @@ func handleResourcesRead(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to execute resource call").Log(ctx, logger)
 	}
 
-	if outputBytes == 0 {
-		outputBytes = int64(rw.body.Len())
-	}
+	outputBytes = int64(rw.body.Len())
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	if cpuStr := rw.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
