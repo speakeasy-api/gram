@@ -28,12 +28,12 @@ export default function LogsPage() {
     const [filters, setFilters] = useState<{
         searchQuery: string | null;
         toolTypeFilter: string | null;
-        serverNameFilter: string | null;
+        sourceFilter: string | null;
         statusFilter: string | null;
     }>({
         searchQuery: null,
         toolTypeFilter: null,
-        serverNameFilter: null,
+        sourceFilter: null,
         statusFilter: null,
     });
     const [selectedLog, setSelectedLog] = useState<HTTPToolLog | null>(null);
@@ -51,22 +51,22 @@ export default function LogsPage() {
         return () => clearTimeout(timeoutId);
     }, [searchInput]);
 
-    // Fetch toolsets for server name dropdown
+    // Fetch toolsets for source dropdown
     const {data: toolsetsData} = useListToolsets();
-    const serverNames = useMemo(() => {
+    const sources = useMemo(() => {
         return toolsetsData?.toolsets?.map(t =>
             ({slug: t.slug, id: t.id, toolUrns: t.toolUrns}))
             .filter(Boolean) || [];
     }, [toolsetsData]);
 
-    // Get tool URNs for selected server
+    // Get tool URNs for selected source
     const selectedToolUrns = useMemo(() => {
-        if (!filters.serverNameFilter) return undefined;
-        const selectedToolset = serverNames.find(s => s.slug === filters.serverNameFilter);
+        if (!filters.sourceFilter) return undefined;
+        const selectedToolset = sources.find(s => s.slug === filters.sourceFilter);
         return selectedToolset?.toolUrns && selectedToolset.toolUrns.length > 0
             ? selectedToolset.toolUrns
             : undefined;
-    }, [filters.serverNameFilter, serverNames]);
+    }, [filters.sourceFilter, sources]);
 
     // Infinite scroll state
     const [allLogs, setAllLogs] = useState<HTTPToolLog[]>([]);
@@ -163,7 +163,7 @@ export default function LogsPage() {
         setCurrentCursor(undefined);
         lastProcessedCursorRef.current = undefined;
         setIsFetchingMore(false);
-    }, [filters.toolTypeFilter, filters.serverNameFilter, filters.statusFilter, filters.searchQuery]);
+    }, [filters.toolTypeFilter, filters.sourceFilter, filters.statusFilter, filters.searchQuery]);
 
     // Auto-load more if container isn't scrollable after initial load
     useEffect(() => {
@@ -237,23 +237,25 @@ export default function LogsPage() {
                                         <SelectContent>
                                             <SelectItem value="all">All Types</SelectItem>
                                             <SelectItem value="http">HTTP</SelectItem>
+                                            <SelectItem value="function">Function</SelectItem>
+                                            <SelectItem value="prompt">Custom</SelectItem>
                                         </SelectContent>
                                     </Select>
 
                                     <Select
-                                        value={filters.serverNameFilter ?? "all"}
+                                        value={filters.sourceFilter ?? "all"}
                                         onValueChange={(value) => setFilters(prev => ({
                                             ...prev,
-                                            serverNameFilter: value === "all" ? null : value
+                                            sourceFilter: value === "all" ? null : value
                                         }))}>
                                         <SelectTrigger className="w-[180px]">
-                                            <SelectValue placeholder="Server Name"/>
+                                            <SelectValue placeholder="Source"/>
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="all">All Servers</SelectItem>
-                                            {serverNames.map((serverName) => (
-                                                <SelectItem key={serverName.id} value={serverName.slug}>
-                                                    {serverName.slug}
+                                            <SelectItem value="all">All Sources</SelectItem>
+                                            {sources.map((source) => (
+                                                <SelectItem key={source.id} value={source.slug}>
+                                                    {source.slug}
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -303,7 +305,7 @@ export default function LogsPage() {
                                             <TableRow
                                                 className="bg-surface-secondary-default border-b border-neutral-softest">
                                                 <TableHead className="font-mono">TIMESTAMP</TableHead>
-                                                <TableHead className="font-mono">SERVER NAME</TableHead>
+                                                <TableHead className="font-mono">SOURCE NAME</TableHead>
                                                 <TableHead className="font-mono">TOOL NAME</TableHead>
                                                 <TableHead className="font-mono">STATUS</TableHead>
                                                 <TableHead className="font-mono">CLIENT</TableHead>
