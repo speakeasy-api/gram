@@ -9661,6 +9661,9 @@ components:
                 http_route:
                     type: string
                     description: HTTP route
+                http_server_url:
+                    type: string
+                    description: HTTP Server URL
                 id:
                     type: string
                     description: Id of the request
@@ -9732,6 +9735,7 @@ components:
                 - tool_type
                 - trace_id
                 - span_id
+                - http_server_url
                 - http_method
                 - http_route
                 - status_code

@@ -172,6 +172,7 @@ func toHTTPToolLog(r tm.ToolHTTPRequest, projectId string) *gen.HTTPToolLog {
 		ToolType:          gen.ToolType(r.ToolType),
 		TraceID:           r.TraceID,
 		SpanID:            r.SpanID,
+		HTTPServerURL:     r.HTTPServerURL,
 		HTTPMethod:        r.HTTPMethod,
 		HTTPRoute:         r.HTTPRoute,
 		StatusCode:        r.StatusCode,

@@ -304,6 +304,7 @@ func unmarshalHTTPToolLogResponseBodyToLogsHTTPToolLog(v *HTTPToolLogResponseBod
 		TraceID:           *v.TraceID,
 		SpanID:            *v.SpanID,
 		HTTPMethod:        *v.HTTPMethod,
+		HTTPServerURL:     *v.HTTPServerURL,
 		HTTPRoute:         *v.HTTPRoute,
 		StatusCode:        *v.StatusCode,
 		DurationMs:        *v.DurationMs,

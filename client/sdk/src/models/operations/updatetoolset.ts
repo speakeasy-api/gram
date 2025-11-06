@@ -4,10 +4,7 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { safeParse } from "../../lib/schemas.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
 import * as components from "../components/index.js";
-import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type UpdateToolsetSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -31,21 +28,6 @@ export type UpdateToolsetRequest = {
 };
 
 /** @internal */
-export const UpdateToolsetSecurity$inboundSchema: z.ZodType<
-  UpdateToolsetSecurity,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  "project_slug_header_Gram-Project": z.string().optional(),
-  "session_header_Gram-Session": z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
-    "session_header_Gram-Session": "sessionHeaderGramSession",
-  });
-});
-
-/** @internal */
 export type UpdateToolsetSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
@@ -66,19 +48,6 @@ export const UpdateToolsetSecurity$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace UpdateToolsetSecurity$ {
-  /** @deprecated use `UpdateToolsetSecurity$inboundSchema` instead. */
-  export const inboundSchema = UpdateToolsetSecurity$inboundSchema;
-  /** @deprecated use `UpdateToolsetSecurity$outboundSchema` instead. */
-  export const outboundSchema = UpdateToolsetSecurity$outboundSchema;
-  /** @deprecated use `UpdateToolsetSecurity$Outbound` instead. */
-  export type Outbound = UpdateToolsetSecurity$Outbound;
-}
-
 export function updateToolsetSecurityToJSON(
   updateToolsetSecurity: UpdateToolsetSecurity,
 ): string {
@@ -86,34 +55,6 @@ export function updateToolsetSecurityToJSON(
     UpdateToolsetSecurity$outboundSchema.parse(updateToolsetSecurity),
   );
 }
-
-export function updateToolsetSecurityFromJSON(
-  jsonString: string,
-): SafeParseResult<UpdateToolsetSecurity, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => UpdateToolsetSecurity$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'UpdateToolsetSecurity' from JSON`,
-  );
-}
-
-/** @internal */
-export const UpdateToolsetRequest$inboundSchema: z.ZodType<
-  UpdateToolsetRequest,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  slug: z.string(),
-  "Gram-Session": z.string().optional(),
-  "Gram-Project": z.string().optional(),
-  UpdateToolsetRequestBody: components.UpdateToolsetRequestBody$inboundSchema,
-}).transform((v) => {
-  return remap$(v, {
-    "Gram-Session": "gramSession",
-    "Gram-Project": "gramProject",
-    "UpdateToolsetRequestBody": "updateToolsetRequestBody",
-  });
-});
 
 /** @internal */
 export type UpdateToolsetRequest$Outbound = {
@@ -141,33 +82,10 @@ export const UpdateToolsetRequest$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace UpdateToolsetRequest$ {
-  /** @deprecated use `UpdateToolsetRequest$inboundSchema` instead. */
-  export const inboundSchema = UpdateToolsetRequest$inboundSchema;
-  /** @deprecated use `UpdateToolsetRequest$outboundSchema` instead. */
-  export const outboundSchema = UpdateToolsetRequest$outboundSchema;
-  /** @deprecated use `UpdateToolsetRequest$Outbound` instead. */
-  export type Outbound = UpdateToolsetRequest$Outbound;
-}
-
 export function updateToolsetRequestToJSON(
   updateToolsetRequest: UpdateToolsetRequest,
 ): string {
   return JSON.stringify(
     UpdateToolsetRequest$outboundSchema.parse(updateToolsetRequest),
-  );
-}
-
-export function updateToolsetRequestFromJSON(
-  jsonString: string,
-): SafeParseResult<UpdateToolsetRequest, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => UpdateToolsetRequest$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'UpdateToolsetRequest' from JSON`,
   );
 }

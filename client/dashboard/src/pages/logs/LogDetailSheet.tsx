@@ -58,17 +58,27 @@ export function LogDetailSheet({log, open, onOpenChange}: LogDetailSheetProps) {
                                     </TabsTrigger>
                                 </TabsList>
                                 <TabsContent value="request" className="flex flex-col gap-6 mt-6">
-                                    {/* Endpoint */}
-                                    <div className="flex flex-col gap-3">
-                                        <h3 className="text-sm">Endpoint</h3>
-                                        <div
-                                            className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 flex items-center gap-3 max-h-[100px] overflow-y-auto border-hidden">
-                                            <Badge variant={getHttpMethodVariant(log.httpMethod)}>
-                                                {log.httpMethod}
-                                            </Badge>
-                                            <span className="font-mono text-xs">{log.httpRoute}</span>
+                                    {log.toolType === "http" && (
+                                        <div className="flex flex-col gap-3">
+                                            <h3 className="text-sm">Server URL</h3>
+                                            <div className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 font-mono text-xs break-all">
+                                                {log.httpServerUrl}
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
+                                    {/* Endpoint */}
+                                    {log.httpRoute && (
+                                        <div className="flex flex-col gap-3">
+                                            <h3 className="text-sm">Endpoint</h3>
+                                            <div
+                                                className="bg-surface-secondary-default border border-neutral-softest rounded-lg p-4 flex items-center gap-3 max-h-[100px] overflow-y-auto border-hidden">
+                                                <Badge variant={getHttpMethodVariant(log.httpMethod)}>
+                                                    {log.httpMethod}
+                                                </Badge>
+                                                <span className="font-mono text-xs">{log.httpRoute}</span>
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Request Headers */}
                                     <div className="flex flex-col gap-3">

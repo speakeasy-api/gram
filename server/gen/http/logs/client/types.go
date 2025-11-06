@@ -225,6 +225,8 @@ type HTTPToolLogResponseBody struct {
 	SpanID *string `form:"span_id,omitempty" json:"span_id,omitempty" xml:"span_id,omitempty"`
 	// HTTP method
 	HTTPMethod *string `form:"http_method,omitempty" json:"http_method,omitempty" xml:"http_method,omitempty"`
+	// HTTP Server URL
+	HTTPServerURL *string `form:"http_server_url,omitempty" json:"http_server_url,omitempty" xml:"http_server_url,omitempty"`
 	// HTTP route
 	HTTPRoute *string `form:"http_route,omitempty" json:"http_route,omitempty" xml:"http_route,omitempty"`
 	// HTTP status code
@@ -708,6 +710,9 @@ func ValidateHTTPToolLogResponseBody(body *HTTPToolLogResponseBody) (err error) 
 	}
 	if body.SpanID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("span_id", "body"))
+	}
+	if body.HTTPServerURL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("http_server_url", "body"))
 	}
 	if body.HTTPMethod == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("http_method", "body"))

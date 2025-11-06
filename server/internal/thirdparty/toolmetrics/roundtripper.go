@@ -136,7 +136,9 @@ func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		}
 	}
 	requestHeaders = filterAllowedHeaders(requestHeaders)
-
+	// Construct full server URL with scheme
+	serverURL := req.URL.Scheme + "://" + req.URL.Host
+	h.toolLogger.RecordHTTPServerURL(serverURL)
 	h.toolLogger.RecordHTTPMethod(req.Method)
 	h.toolLogger.RecordHTTPRoute(req.URL.Path)
 	h.toolLogger.RecordUserAgent(req.UserAgent())

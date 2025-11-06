@@ -4,10 +4,7 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { safeParse } from "../../lib/schemas.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
 import * as components from "../components/index.js";
-import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type AddExternalOAuthServerSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -32,21 +29,6 @@ export type AddExternalOAuthServerRequest = {
 };
 
 /** @internal */
-export const AddExternalOAuthServerSecurity$inboundSchema: z.ZodType<
-  AddExternalOAuthServerSecurity,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  "project_slug_header_Gram-Project": z.string().optional(),
-  "session_header_Gram-Session": z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
-    "session_header_Gram-Session": "sessionHeaderGramSession",
-  });
-});
-
-/** @internal */
 export type AddExternalOAuthServerSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
@@ -67,19 +49,6 @@ export const AddExternalOAuthServerSecurity$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace AddExternalOAuthServerSecurity$ {
-  /** @deprecated use `AddExternalOAuthServerSecurity$inboundSchema` instead. */
-  export const inboundSchema = AddExternalOAuthServerSecurity$inboundSchema;
-  /** @deprecated use `AddExternalOAuthServerSecurity$outboundSchema` instead. */
-  export const outboundSchema = AddExternalOAuthServerSecurity$outboundSchema;
-  /** @deprecated use `AddExternalOAuthServerSecurity$Outbound` instead. */
-  export type Outbound = AddExternalOAuthServerSecurity$Outbound;
-}
-
 export function addExternalOAuthServerSecurityToJSON(
   addExternalOAuthServerSecurity: AddExternalOAuthServerSecurity,
 ): string {
@@ -89,35 +58,6 @@ export function addExternalOAuthServerSecurityToJSON(
     ),
   );
 }
-
-export function addExternalOAuthServerSecurityFromJSON(
-  jsonString: string,
-): SafeParseResult<AddExternalOAuthServerSecurity, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => AddExternalOAuthServerSecurity$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AddExternalOAuthServerSecurity' from JSON`,
-  );
-}
-
-/** @internal */
-export const AddExternalOAuthServerRequest$inboundSchema: z.ZodType<
-  AddExternalOAuthServerRequest,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  slug: z.string(),
-  "Gram-Session": z.string().optional(),
-  "Gram-Project": z.string().optional(),
-  AddExternalOAuthServerRequestBody:
-    components.AddExternalOAuthServerRequestBody$inboundSchema,
-}).transform((v) => {
-  return remap$(v, {
-    "Gram-Session": "gramSession",
-    "Gram-Project": "gramProject",
-    "AddExternalOAuthServerRequestBody": "addExternalOAuthServerRequestBody",
-  });
-});
 
 /** @internal */
 export type AddExternalOAuthServerRequest$Outbound = {
@@ -147,19 +87,6 @@ export const AddExternalOAuthServerRequest$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace AddExternalOAuthServerRequest$ {
-  /** @deprecated use `AddExternalOAuthServerRequest$inboundSchema` instead. */
-  export const inboundSchema = AddExternalOAuthServerRequest$inboundSchema;
-  /** @deprecated use `AddExternalOAuthServerRequest$outboundSchema` instead. */
-  export const outboundSchema = AddExternalOAuthServerRequest$outboundSchema;
-  /** @deprecated use `AddExternalOAuthServerRequest$Outbound` instead. */
-  export type Outbound = AddExternalOAuthServerRequest$Outbound;
-}
-
 export function addExternalOAuthServerRequestToJSON(
   addExternalOAuthServerRequest: AddExternalOAuthServerRequest,
 ): string {
@@ -167,15 +94,5 @@ export function addExternalOAuthServerRequestToJSON(
     AddExternalOAuthServerRequest$outboundSchema.parse(
       addExternalOAuthServerRequest,
     ),
-  );
-}
-
-export function addExternalOAuthServerRequestFromJSON(
-  jsonString: string,
-): SafeParseResult<AddExternalOAuthServerRequest, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => AddExternalOAuthServerRequest$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'AddExternalOAuthServerRequest' from JSON`,
   );
 }

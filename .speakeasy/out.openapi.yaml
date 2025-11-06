@@ -9737,6 +9737,9 @@ components:
         http_route:
           type: string
           description: HTTP route
+        http_server_url:
+          type: string
+          description: HTTP Server URL
         id:
           type: string
           description: Id of the request
@@ -9808,6 +9811,7 @@ components:
         - tool_type
         - trace_id
         - span_id
+        - http_server_url
         - http_method
         - http_route
         - status_code
@@ -10408,38 +10412,6 @@ components:
         - name
         - slug
         - projects
-    OrganizationFeature:
-      type: object
-      properties:
-        created_at:
-          type: string
-          description: Timestamp when the flag was first created
-          format: date-time
-        deleted_at:
-          type: string
-          description: Timestamp when the feature was disabled
-          format: date-time
-        enabled:
-          type: boolean
-          description: Indicates if the feature is enabled for the organization
-        feature_name:
-          type: string
-          description: The feature name
-          maxLength: 60
-        organization_id:
-          type: string
-          description: The organization that owns the feature flag
-        updated_at:
-          type: string
-          description: Timestamp of the most recent update
-          format: date-time
-      description: Organization-level feature flag configuration
-      required:
-        - organization_id
-        - feature_name
-        - enabled
-        - created_at
-        - updated_at
     Package:
       type: object
       properties:

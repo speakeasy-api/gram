@@ -13,9 +13,9 @@ import (
 )
 
 const insertHttpRaw = `insert into http_requests_raw
-    (id, ts, organization_id, project_id, deployment_id, tool_id, tool_urn, tool_type, trace_id, span_id, http_method,
-     http_route, status_code, duration_ms, user_agent, request_headers, request_body_bytes, response_headers, response_body_bytes)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`
+	(id, ts, organization_id, project_id, deployment_id, tool_id, tool_urn, tool_type, trace_id, span_id, http_method,
+	 http_server_url, http_route, status_code, duration_ms, user_agent, request_headers, request_body_bytes, response_headers, response_body_bytes)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)`
 
 func buildListLogsQuery(opts ListToolLogsOptions) (string, []any) {
 	var args []any
@@ -221,6 +221,7 @@ func (q *Queries) Log(ctx context.Context, log ToolHTTPRequest) (err error) {
 
 	startTime := time.Now()
 
+	// order matters here
 	args := []any{
 		log.ID,
 		log.Ts,
@@ -233,6 +234,7 @@ func (q *Queries) Log(ctx context.Context, log ToolHTTPRequest) (err error) {
 		log.TraceID,
 		log.SpanID,
 		log.HTTPMethod,
+		log.HTTPServerURL,
 		log.HTTPRoute,
 		log.StatusCode,
 		log.DurationMs,
