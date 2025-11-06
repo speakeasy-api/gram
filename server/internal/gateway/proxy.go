@@ -693,13 +693,16 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 
-	baseTransport := tm.NewToolCallLogRoundTripper(
-		http.RoundTripper(transport),
-		opts.Logger,
-		opts.Tracer,
-		toolInfo,
-		toolCallLogger,
-	)
+	var baseTransport http.RoundTripper = transport
+	if toolCallLogger.Enabled() {
+		baseTransport = tm.NewToolCallLogRoundTripper(
+			baseTransport,
+			opts.Logger,
+			opts.Tracer,
+			toolInfo,
+			toolCallLogger,
+		)
+	}
 
 	otelTransport := otelhttp.NewTransport(
 		baseTransport,
