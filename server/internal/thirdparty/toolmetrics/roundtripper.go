@@ -12,12 +12,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// allowedHeaders is a list of standard HTTP header names that are safe to log.
+// allowedNonSensitiveHeaders is a list of standard HTTP header names that are safe to log.
 // We use an allowlist approach since we're a proxy and don't want to accidentally
 // log custom headers from upstream services that might contain PII or sensitive data.
-var allowedHeaders = map[string]bool{
+// redacted security headers we add are including separately from this location
+var allowedNonSensitiveHeaders = map[string]bool{
 	// Content negotiation
-	"accept":           true,
 	"accept-encoding":  true,
 	"accept-language":  true,
 	"content-type":     true,
@@ -25,36 +25,17 @@ var allowedHeaders = map[string]bool{
 	"content-encoding": true,
 
 	// Caching
-	"cache-control":       true,
-	"etag":                true,
-	"if-match":            true,
-	"if-none-match":       true,
-	"if-modified-since":   true,
-	"if-unmodified-since": true,
-	"last-modified":       true,
-	"age":                 true,
-	"expires":             true,
-	"pragma":              true,
-	"vary":                true,
-
-	// CORS
-	"access-control-allow-origin":      true,
-	"access-control-allow-methods":     true,
-	"access-control-allow-headers":     true,
-	"access-control-expose-headers":    true,
-	"access-control-max-age":           true,
-	"access-control-allow-credentials": true,
-	"origin":                           true,
+	"cache-control": true,
+	"etag":          true,
+	"last-modified": true,
+	"age":           true,
+	"expires":       true,
+	"pragma":        true,
+	"vary":          true,
 
 	// Connection and transfer
-	"connection":        true,
-	"host":              true,
-	"user-agent":        true,
-	"referer":           true,
-	"te":                true,
-	"trailer":           true,
-	"transfer-encoding": true,
-	"upgrade":           true,
+	"user-agent": true,
+	"referer":    true,
 
 	// Content location
 	"location":         true,
@@ -66,7 +47,6 @@ var allowedHeaders = map[string]bool{
 	"content-range": true,
 
 	// Others
-	"date":        true,
 	"server":      true,
 	"allow":       true,
 	"retry-after": true,
@@ -77,7 +57,7 @@ var allowedHeaders = map[string]bool{
 func filterAllowedHeaders(headers map[string]string) map[string]string {
 	filtered := make(map[string]string)
 	for key, value := range headers {
-		if allowedHeaders[strings.ToLower(key)] {
+		if allowedNonSensitiveHeaders[strings.ToLower(key)] {
 			filtered[key] = value
 		}
 	}
