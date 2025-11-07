@@ -115,7 +115,7 @@ function ToolsetPageAuthAlert({
   onConfigureClick,
 }: ToolsetPageAuthAlertProps) {
   const environments = useEnvironments();
-    const requiresServerURL =
+  const requiresServerURL =
     toolset.tools?.some(
       (tool) => tool.type === "http" && !tool.defaultServerUrl,
     ) ?? false;

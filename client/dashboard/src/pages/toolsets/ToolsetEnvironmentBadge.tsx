@@ -37,8 +37,9 @@ export const ToolsetEnvironmentBadge = ({
   const [envVars, setEnvVars] = useState<Record<string, string>>({});
 
   const requiresServerURL =
-    toolset?.tools?.some((tool) => isHttpTool(tool) && !tool.defaultServerUrl) ??
-    false;
+    toolset?.tools?.some(
+      (tool) => isHttpTool(tool) && !tool.defaultServerUrl,
+    ) ?? false;
 
   const relevantEnvVars = useToolsetEnvVars(toolset, requiresServerURL);
 

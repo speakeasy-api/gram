@@ -670,15 +670,12 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
   const { data: tools } = useListTools();
 
   const toolsetTools = toolset
-    ? tools?.tools.filter((tool) =>
-        toolset.tools.some((t) => t.id === tool.id),
-      )
+    ? tools?.tools.filter((tool) => toolset.tools.some((t) => t.id === tool.id))
     : undefined;
 
   const requiresServerURL =
-    toolsetTools?.some(
-      (tool) => isHttpTool(tool) && !tool.defaultServerUrl,
-    ) ?? false;
+    toolsetTools?.some((tool) => isHttpTool(tool) && !tool.defaultServerUrl) ??
+    false;
 
   const envHeaders = useToolsetEnvVars(toolset, requiresServerURL).filter(
     (header) => !header.toLowerCase().includes("token_url"),
