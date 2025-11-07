@@ -25,6 +25,7 @@ type toolVectorStore struct {
 	db *chromem.DB
 }
 
+// in memory vector DB dependency
 func newToolVectorStore() *toolVectorStore {
 	return &toolVectorStore{
 		db: chromem.NewDB(),
