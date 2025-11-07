@@ -1,5 +1,13 @@
 # server
 
+## 0.9.11
+
+### Patch Changes
+
+- 3d46253: implements adding redacted http security headers to the opt in tool call log view
+- db29a12: adds http server url to clickhouse data model
+- 77446ee: fully connects server url tracking feature in opt in tool call logs
+
 ## 0.9.10
 
 ### Patch Changes
