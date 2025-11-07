@@ -4,9 +4,6 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { safeParse } from "../../lib/schemas.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
-import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type SetProjectLogoForm = {
   /**
@@ -14,19 +11,6 @@ export type SetProjectLogoForm = {
    */
   assetId: string;
 };
-
-/** @internal */
-export const SetProjectLogoForm$inboundSchema: z.ZodType<
-  SetProjectLogoForm,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  asset_id: z.string(),
-}).transform((v) => {
-  return remap$(v, {
-    "asset_id": "assetId",
-  });
-});
 
 /** @internal */
 export type SetProjectLogoForm$Outbound = {
@@ -46,33 +30,10 @@ export const SetProjectLogoForm$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace SetProjectLogoForm$ {
-  /** @deprecated use `SetProjectLogoForm$inboundSchema` instead. */
-  export const inboundSchema = SetProjectLogoForm$inboundSchema;
-  /** @deprecated use `SetProjectLogoForm$outboundSchema` instead. */
-  export const outboundSchema = SetProjectLogoForm$outboundSchema;
-  /** @deprecated use `SetProjectLogoForm$Outbound` instead. */
-  export type Outbound = SetProjectLogoForm$Outbound;
-}
-
 export function setProjectLogoFormToJSON(
   setProjectLogoForm: SetProjectLogoForm,
 ): string {
   return JSON.stringify(
     SetProjectLogoForm$outboundSchema.parse(setProjectLogoForm),
-  );
-}
-
-export function setProjectLogoFormFromJSON(
-  jsonString: string,
-): SafeParseResult<SetProjectLogoForm, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => SetProjectLogoForm$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'SetProjectLogoForm' from JSON`,
   );
 }

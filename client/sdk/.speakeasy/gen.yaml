@@ -23,12 +23,13 @@ generation:
   sdkHooksConfigAccess: true
   schemas:
     allOfMergeStrategy: shallowMerge
+  requestBodyFieldName: ""
   tests:
     generateTests: true
     generateNewTests: false
     skipResponseBodyAssertions: false
 typescript:
-  version: 0.16.7
+  version: 0.17.2
   acceptHeaderEnum: true
   additionalDependencies:
     dependencies: {}
@@ -39,6 +40,8 @@ typescript:
     peerDependencies: {}
   additionalPackageJSON:
     private: true
+  additionalScripts: {}
+  alwaysIncludeInboundAndOutbound: false
   author: Speakeasy
   baseErrorName: GramError
   clientServerStatusCodesAsErrors: true
@@ -51,6 +54,7 @@ typescript:
   enableReactQuery: true
   enumFormat: union
   envVarPrefix: GRAM
+  exportZodModelNamespace: false
   flattenGlobalSecurity: true
   flatteningOrder: parameters-first
   generateExamples: true

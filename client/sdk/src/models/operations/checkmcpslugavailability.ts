@@ -4,9 +4,6 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { safeParse } from "../../lib/schemas.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
-import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type CheckMCPSlugAvailabilitySecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -29,21 +26,6 @@ export type CheckMCPSlugAvailabilityRequest = {
 };
 
 /** @internal */
-export const CheckMCPSlugAvailabilitySecurity$inboundSchema: z.ZodType<
-  CheckMCPSlugAvailabilitySecurity,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  "project_slug_header_Gram-Project": z.string().optional(),
-  "session_header_Gram-Session": z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
-    "session_header_Gram-Session": "sessionHeaderGramSession",
-  });
-});
-
-/** @internal */
 export type CheckMCPSlugAvailabilitySecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
@@ -64,19 +46,6 @@ export const CheckMCPSlugAvailabilitySecurity$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace CheckMCPSlugAvailabilitySecurity$ {
-  /** @deprecated use `CheckMCPSlugAvailabilitySecurity$inboundSchema` instead. */
-  export const inboundSchema = CheckMCPSlugAvailabilitySecurity$inboundSchema;
-  /** @deprecated use `CheckMCPSlugAvailabilitySecurity$outboundSchema` instead. */
-  export const outboundSchema = CheckMCPSlugAvailabilitySecurity$outboundSchema;
-  /** @deprecated use `CheckMCPSlugAvailabilitySecurity$Outbound` instead. */
-  export type Outbound = CheckMCPSlugAvailabilitySecurity$Outbound;
-}
-
 export function checkMCPSlugAvailabilitySecurityToJSON(
   checkMCPSlugAvailabilitySecurity: CheckMCPSlugAvailabilitySecurity,
 ): string {
@@ -86,32 +55,6 @@ export function checkMCPSlugAvailabilitySecurityToJSON(
     ),
   );
 }
-
-export function checkMCPSlugAvailabilitySecurityFromJSON(
-  jsonString: string,
-): SafeParseResult<CheckMCPSlugAvailabilitySecurity, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => CheckMCPSlugAvailabilitySecurity$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'CheckMCPSlugAvailabilitySecurity' from JSON`,
-  );
-}
-
-/** @internal */
-export const CheckMCPSlugAvailabilityRequest$inboundSchema: z.ZodType<
-  CheckMCPSlugAvailabilityRequest,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  slug: z.string(),
-  "Gram-Session": z.string().optional(),
-  "Gram-Project": z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "Gram-Session": "gramSession",
-    "Gram-Project": "gramProject",
-  });
-});
 
 /** @internal */
 export type CheckMCPSlugAvailabilityRequest$Outbound = {
@@ -136,19 +79,6 @@ export const CheckMCPSlugAvailabilityRequest$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace CheckMCPSlugAvailabilityRequest$ {
-  /** @deprecated use `CheckMCPSlugAvailabilityRequest$inboundSchema` instead. */
-  export const inboundSchema = CheckMCPSlugAvailabilityRequest$inboundSchema;
-  /** @deprecated use `CheckMCPSlugAvailabilityRequest$outboundSchema` instead. */
-  export const outboundSchema = CheckMCPSlugAvailabilityRequest$outboundSchema;
-  /** @deprecated use `CheckMCPSlugAvailabilityRequest$Outbound` instead. */
-  export type Outbound = CheckMCPSlugAvailabilityRequest$Outbound;
-}
-
 export function checkMCPSlugAvailabilityRequestToJSON(
   checkMCPSlugAvailabilityRequest: CheckMCPSlugAvailabilityRequest,
 ): string {
@@ -156,15 +86,5 @@ export function checkMCPSlugAvailabilityRequestToJSON(
     CheckMCPSlugAvailabilityRequest$outboundSchema.parse(
       checkMCPSlugAvailabilityRequest,
     ),
-  );
-}
-
-export function checkMCPSlugAvailabilityRequestFromJSON(
-  jsonString: string,
-): SafeParseResult<CheckMCPSlugAvailabilityRequest, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => CheckMCPSlugAvailabilityRequest$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'CheckMCPSlugAvailabilityRequest' from JSON`,
   );
 }

@@ -1,26 +1,23 @@
 package toolmetrics
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
-// allowedHeaders is a list of standard HTTP header names that are safe to log.
+// allowedNonSensitiveHeaders is a list of standard HTTP header names that are safe to log.
 // We use an allowlist approach since we're a proxy and don't want to accidentally
 // log custom headers from upstream services that might contain PII or sensitive data.
-var allowedHeaders = map[string]bool{
+// sensitive headers added by the security proxy are redacted for logging at a different level
+var allowedNonSensitiveHeaders = map[string]bool{
 	// Content negotiation
-	"accept":           true,
 	"accept-encoding":  true,
 	"accept-language":  true,
 	"content-type":     true,
@@ -28,36 +25,17 @@ var allowedHeaders = map[string]bool{
 	"content-encoding": true,
 
 	// Caching
-	"cache-control":       true,
-	"etag":                true,
-	"if-match":            true,
-	"if-none-match":       true,
-	"if-modified-since":   true,
-	"if-unmodified-since": true,
-	"last-modified":       true,
-	"age":                 true,
-	"expires":             true,
-	"pragma":              true,
-	"vary":                true,
-
-	// CORS
-	"access-control-allow-origin":      true,
-	"access-control-allow-methods":     true,
-	"access-control-allow-headers":     true,
-	"access-control-expose-headers":    true,
-	"access-control-max-age":           true,
-	"access-control-allow-credentials": true,
-	"origin":                           true,
+	"cache-control": true,
+	"etag":          true,
+	"last-modified": true,
+	"age":           true,
+	"expires":       true,
+	"pragma":        true,
+	"vary":          true,
 
 	// Connection and transfer
-	"connection":        true,
-	"host":              true,
-	"user-agent":        true,
-	"referer":           true,
-	"te":                true,
-	"trailer":           true,
-	"transfer-encoding": true,
-	"upgrade":           true,
+	"user-agent": true,
+	"referer":    true,
 
 	// Content location
 	"location":         true,
@@ -69,10 +47,12 @@ var allowedHeaders = map[string]bool{
 	"content-range": true,
 
 	// Others
-	"date":        true,
 	"server":      true,
 	"allow":       true,
 	"retry-after": true,
+
+	// Gram specific headers
+	"x-gram-proxy": true,
 }
 
 // filterAllowedHeaders keeps only headers from the allowlist and filters out unknown headers.
@@ -80,33 +60,35 @@ var allowedHeaders = map[string]bool{
 func filterAllowedHeaders(headers map[string]string) map[string]string {
 	filtered := make(map[string]string)
 	for key, value := range headers {
-		if allowedHeaders[strings.ToLower(key)] {
+		if allowedNonSensitiveHeaders[strings.ToLower(key)] {
 			filtered[key] = value
 		}
 	}
 	return filtered
 }
 
-// HTTPLoggingRoundTripper wraps an http.RoundTripper and logs HTTP requests to ClickHouse
-type HTTPLoggingRoundTripper struct {
-	rt     http.RoundTripper
-	tcm    ToolMetricsProvider
-	logger *slog.Logger
-	tracer trace.Tracer
+// ToolCallLogRoundTripper wraps an http.RoundTripper and logs HTTP requests to ClickHouse
+type ToolCallLogRoundTripper struct {
+	rt         http.RoundTripper
+	logger     *slog.Logger
+	tracer     trace.Tracer
+	toolLogger ToolCallLogger
+	toolInfo   *ToolInfo
 }
 
-// NewHTTPLoggingRoundTripper creates a new RoundTripper that logs HTTP requests to ClickHouse
-func NewHTTPLoggingRoundTripper(rt http.RoundTripper, tcm ToolMetricsProvider, logger *slog.Logger, tracer trace.Tracer) *HTTPLoggingRoundTripper {
-	return &HTTPLoggingRoundTripper{
-		rt:     rt,
-		tcm:    tcm,
-		logger: logger,
-		tracer: tracer,
+// NewToolCallLogRoundTripper creates a new RoundTripper that logs HTTP requests to ClickHouse
+func NewToolCallLogRoundTripper(rt http.RoundTripper, logger *slog.Logger, tracer trace.Tracer, toolInfo *ToolInfo, toolLogger ToolCallLogger) *ToolCallLogRoundTripper {
+	return &ToolCallLogRoundTripper{
+		rt:         rt,
+		logger:     logger,
+		tracer:     tracer,
+		toolLogger: toolLogger,
+		toolInfo:   toolInfo,
 	}
 }
 
 // RoundTrip implements http.RoundTripper interface
-func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+func (h *ToolCallLogRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	ctx := req.Context()
 
 	// Start a span for the HTTP logging round trip
@@ -129,20 +111,30 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		base = http.DefaultTransport
 	}
 
-	requestBodyBytesPtr, ok := ctx.Value(RequestBodyContextKey).(*int)
-	if !ok {
-		requestBodyBytesPtr = nil
+	// Capture request headers up front so we have them even if the round trip fails.
+	requestHeaders := make(map[string]string)
+	for key, values := range req.Header {
+		for _, value := range values {
+			requestHeaders[key] = value
+		}
 	}
+	requestHeaders = filterAllowedHeaders(requestHeaders)
+	// Construct full server URL with scheme
+	serverURL := req.URL.Scheme + "://" + req.URL.Host
+	h.toolLogger.RecordHTTPServerURL(serverURL)
+	h.toolLogger.RecordHTTPMethod(req.Method)
+	h.toolLogger.RecordHTTPRoute(req.URL.Path)
+	h.toolLogger.RecordUserAgent(req.UserAgent())
+	h.toolLogger.RecordRequestHeaders(requestHeaders, false)
 
 	resp, err := base.RoundTrip(req)
 
 	duration := time.Since(startTime).Seconds()
+	h.toolLogger.RecordDurationMs(duration * 1000)
 
-	// Extract tool information from context
-	tool, ok := ctx.Value(ToolInfoContextKey).(*ToolInfo)
-	if !ok {
-		// If no tool context, we can't log this request
-		noToolCtxErr := fmt.Errorf("no tool context")
+	tool := h.toolInfo
+	if tool == nil {
+		noToolCtxErr := fmt.Errorf("no tool info")
 		span.RecordError(noToolCtxErr)
 		span.SetStatus(codes.Error, "missing tool context")
 		h.logger.WarnContext(ctx, "HTTP request missing tool context",
@@ -177,17 +169,10 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 			attr.SlogToolURN(tool.Urn),
 			attr.SlogHTTPClientRequestDuration(duration),
 		)
-		return resp, fmt.Errorf("roundtrip: %w", err)
-	}
 
-	// Extract trace information
-	spanCtx := trace.SpanContextFromContext(ctx)
-	var traceID, spanID string
-	if spanCtx.HasTraceID() {
-		traceID = spanCtx.TraceID().String()
-	}
-	if spanCtx.HasSpanID() {
-		spanID = spanCtx.SpanID().String()
+		h.toolLogger.RecordStatusCode(0)
+
+		return resp, fmt.Errorf("roundtrip: %w", err)
 	}
 
 	statusCode := 0
@@ -214,15 +199,6 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		)
 	}
 
-	// Get request headers and keep only allowed ones
-	requestHeaders := make(map[string]string)
-	for key, values := range req.Header {
-		for _, value := range values {
-			requestHeaders[key] = value
-		}
-	}
-	requestHeaders = filterAllowedHeaders(requestHeaders)
-
 	// Get response headers and keep only allowed ones
 	responseHeaders := make(map[string]string)
 	if resp != nil {
@@ -234,99 +210,15 @@ func (h *HTTPLoggingRoundTripper) RoundTrip(req *http.Request) (*http.Response, 
 		responseHeaders = filterAllowedHeaders(responseHeaders)
 	}
 
-	method := req.Method
-	url := req.URL.String()
-
-	logHTTPRequest := func(respBodyBytes int) {
-		go func() {
-			defer func() {
-				if r := recover(); r != nil {
-					h.logger.ErrorContext(ctx, "panic in HTTP request logging goroutine",
-						attr.SlogErrorMessage(fmt.Sprintf("%v", r)),
-						attr.SlogURLOriginal(url),
-						attr.SlogToolURN(tool.Urn),
-						attr.SlogHTTPRequestMethod(method),
-					)
-				}
-			}()
-
-			logCtx := context.WithoutCancel(ctx)
-
-			// Get final request body size now that request body has been read and closed
-			var requestBodyBytes = conv.PtrValOr(requestBodyBytesPtr, 0)
-
-			id, err := uuid.NewV7()
-			if err != nil {
-				h.logger.ErrorContext(logCtx, "failed to generate UUID for HTTP request logging",
-					attr.SlogURLOriginal(url),
-					attr.SlogToolURN(tool.Urn),
-					attr.SlogHTTPRequestMethod(method),
-				)
-				return
-			}
-
-			// We are not logging the request or response bodies for a number of reasons:
-			// - They may be too large and will inflate our ClickHouse table, making it slower to query and hard to estimate the size
-			// - They might contain sensitive information such as PII or API keys, then we'd have to redact them
-			httpRequest := ToolHTTPRequest{
-				ID:                id.String(),
-				Ts:                time.Unix(id.Time().UnixTime()),
-				OrganizationID:    tool.OrganizationID,
-				ProjectID:         tool.ProjectID,
-				DeploymentID:      tool.DeploymentID,
-				ToolID:            tool.ID,
-				ToolURN:           tool.Urn,
-				ToolType:          ToolTypeHTTP,
-				TraceID:           traceID,
-				SpanID:            spanID,
-				HTTPMethod:        req.Method,
-				HTTPRoute:         req.URL.Path,
-				StatusCode:        int64(statusCode),
-				DurationMs:        duration * 1000,
-				UserAgent:         req.UserAgent(),
-				RequestHeaders:    requestHeaders,
-				RequestBodyBytes:  int64(requestBodyBytes),
-				ResponseHeaders:   responseHeaders,
-				ResponseBodyBytes: int64(respBodyBytes),
-			}
-
-			logErr := h.tcm.Log(logCtx, httpRequest)
-			if logErr != nil {
-				h.logger.ErrorContext(logCtx, "failed to log HTTP attempt to ClickHouse",
-					attr.SlogError(logErr),
-					attr.SlogURLOriginal(url),
-					attr.SlogToolURN(tool.Urn),
-					attr.SlogToolName(tool.Name),
-					attr.SlogHTTPRequestMethod(method),
-				)
-			} else {
-				h.logger.DebugContext(logCtx, "successfully logged HTTP request to ClickHouse",
-					attr.SlogURLOriginal(url),
-					attr.SlogToolURN(tool.Urn),
-					attr.SlogHTTPRequestMethod(method),
-					attr.SlogHTTPRequestBodyBytes(requestBodyBytes),
-					attr.SlogHTTPResponseBodyBytes(respBodyBytes),
-				)
-			}
-		}()
-	}
+	h.toolLogger.RecordStatusCode(statusCode)
+	h.toolLogger.RecordResponseHeaders(responseHeaders)
 
 	if resp == nil || resp.Body == nil {
-		// No response body (e.g., 204 No Content), log immediately
-		logHTTPRequest(0)
 		return resp, nil
 	}
 
-	// Wraps the response body to count bytes and log when the body is closed
-	resp.Body = NewCountingReadCloser(resp.Body, logHTTPRequest)
-
 	return resp, nil
 }
-
-type contextKey string
-
-const ToolInfoContextKey contextKey = "tool_info_context_key"
-const RequestBodyContextKey contextKey = "request_body_context_key"
 
 // ToolInfo represents the minimal tool information needed for logging
 type ToolInfo struct {

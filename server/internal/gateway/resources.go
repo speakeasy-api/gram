@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	tm "github.com/speakeasy-api/gram/server/internal/thirdparty/toolmetrics"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -23,6 +24,7 @@ func (tp *ToolProxy) ReadResource(
 	requestBody io.Reader,
 	env *CaseInsensitiveEnv,
 	plan *ResourceCallPlan,
+	toolCallLogger tm.ToolCallLogger,
 ) (err error) {
 	ctx, span := tp.tracer.Start(ctx, "gateway.readResource", trace.WithAttributes(
 		attr.ResourceName(plan.Descriptor.Name),
@@ -54,7 +56,7 @@ func (tp *ToolProxy) ReadResource(
 	case "":
 		return oops.E(oops.CodeInvariantViolation, nil, "resource kind is not set").Log(ctx, tp.logger)
 	case ResourceKindFunction:
-		return tp.doFunctionResource(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function)
+		return tp.doFunctionResource(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function, toolCallLogger)
 	default:
 		return fmt.Errorf("resource type not supported: %s", plan.Kind)
 	}
@@ -68,6 +70,7 @@ func (tp *ToolProxy) doFunctionResource(
 	env *CaseInsensitiveEnv,
 	descriptor *ResourceDescriptor,
 	plan *ResourceFunctionCallPlan,
+	toolCallLogger tm.ToolCallLogger,
 ) error {
 	span := trace.SpanFromContext(ctx)
 	invocationID, err := uuid.NewV7()
@@ -154,7 +157,7 @@ func (tp *ToolProxy) doFunctionResource(
 		FilterConfig:              DisableResponseFiltering,
 		Policy:                    tp.policy,
 		ResponseStatusCodeCapture: &responseStatusCode,
-		ToolMetricsProvider:       tp.toolMetrics,
+		ToolCallLogger:            toolCallLogger,
 		VerifyResponse: func(resp *http.Response) error {
 			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
 				return fmt.Errorf("failed to verify function invocation ID")

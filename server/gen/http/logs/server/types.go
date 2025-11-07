@@ -225,6 +225,8 @@ type HTTPToolLogResponseBody struct {
 	SpanID string `form:"span_id" json:"span_id" xml:"span_id"`
 	// HTTP method
 	HTTPMethod string `form:"http_method" json:"http_method" xml:"http_method"`
+	// HTTP Server URL
+	HTTPServerURL string `form:"http_server_url" json:"http_server_url" xml:"http_server_url"`
 	// HTTP route
 	HTTPRoute string `form:"http_route" json:"http_route" xml:"http_route"`
 	// HTTP status code

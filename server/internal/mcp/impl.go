@@ -69,6 +69,7 @@ type Service struct {
 	billingTracker    billing.Tracker
 	billingRepository billing.Repository
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
+	tcm               tm.ToolMetricsProvider
 }
 
 type oauthTokenInputs struct {
@@ -130,13 +131,13 @@ func NewService(
 			cacheImpl,
 			guardianPolicy,
 			funcCaller,
-			tcm,
 		),
 		oauthService:      oauthService,
 		oauthRepo:         oauth_repo.New(db),
 		billingTracker:    billingTracker,
 		billingRepository: billingRepository,
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
+		tcm:               tcm,
 	}
 }
 
@@ -644,7 +645,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "tools/list":
 		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
@@ -652,7 +653,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "resources/list":
 		return handleResourcesList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "resources/read":
-		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository)
+		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.tcm)
 	default:
 		return nil, &rpcError{
 			ID:      req.ID,

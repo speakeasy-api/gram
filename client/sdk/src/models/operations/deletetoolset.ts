@@ -4,9 +4,6 @@
 
 import * as z from "zod/v3";
 import { remap as remap$ } from "../../lib/primitives.js";
-import { safeParse } from "../../lib/schemas.js";
-import { Result as SafeParseResult } from "../../types/fp.js";
-import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 export type DeleteToolsetSecurity = {
   projectSlugHeaderGramProject?: string | undefined;
@@ -29,21 +26,6 @@ export type DeleteToolsetRequest = {
 };
 
 /** @internal */
-export const DeleteToolsetSecurity$inboundSchema: z.ZodType<
-  DeleteToolsetSecurity,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  "project_slug_header_Gram-Project": z.string().optional(),
-  "session_header_Gram-Session": z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "project_slug_header_Gram-Project": "projectSlugHeaderGramProject",
-    "session_header_Gram-Session": "sessionHeaderGramSession",
-  });
-});
-
-/** @internal */
 export type DeleteToolsetSecurity$Outbound = {
   "project_slug_header_Gram-Project"?: string | undefined;
   "session_header_Gram-Session"?: string | undefined;
@@ -64,19 +46,6 @@ export const DeleteToolsetSecurity$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace DeleteToolsetSecurity$ {
-  /** @deprecated use `DeleteToolsetSecurity$inboundSchema` instead. */
-  export const inboundSchema = DeleteToolsetSecurity$inboundSchema;
-  /** @deprecated use `DeleteToolsetSecurity$outboundSchema` instead. */
-  export const outboundSchema = DeleteToolsetSecurity$outboundSchema;
-  /** @deprecated use `DeleteToolsetSecurity$Outbound` instead. */
-  export type Outbound = DeleteToolsetSecurity$Outbound;
-}
-
 export function deleteToolsetSecurityToJSON(
   deleteToolsetSecurity: DeleteToolsetSecurity,
 ): string {
@@ -84,32 +53,6 @@ export function deleteToolsetSecurityToJSON(
     DeleteToolsetSecurity$outboundSchema.parse(deleteToolsetSecurity),
   );
 }
-
-export function deleteToolsetSecurityFromJSON(
-  jsonString: string,
-): SafeParseResult<DeleteToolsetSecurity, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => DeleteToolsetSecurity$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'DeleteToolsetSecurity' from JSON`,
-  );
-}
-
-/** @internal */
-export const DeleteToolsetRequest$inboundSchema: z.ZodType<
-  DeleteToolsetRequest,
-  z.ZodTypeDef,
-  unknown
-> = z.object({
-  slug: z.string(),
-  "Gram-Session": z.string().optional(),
-  "Gram-Project": z.string().optional(),
-}).transform((v) => {
-  return remap$(v, {
-    "Gram-Session": "gramSession",
-    "Gram-Project": "gramProject",
-  });
-});
 
 /** @internal */
 export type DeleteToolsetRequest$Outbound = {
@@ -134,33 +77,10 @@ export const DeleteToolsetRequest$outboundSchema: z.ZodType<
   });
 });
 
-/**
- * @internal
- * @deprecated This namespace will be removed in future versions. Use schemas and types that are exported directly from this module.
- */
-export namespace DeleteToolsetRequest$ {
-  /** @deprecated use `DeleteToolsetRequest$inboundSchema` instead. */
-  export const inboundSchema = DeleteToolsetRequest$inboundSchema;
-  /** @deprecated use `DeleteToolsetRequest$outboundSchema` instead. */
-  export const outboundSchema = DeleteToolsetRequest$outboundSchema;
-  /** @deprecated use `DeleteToolsetRequest$Outbound` instead. */
-  export type Outbound = DeleteToolsetRequest$Outbound;
-}
-
 export function deleteToolsetRequestToJSON(
   deleteToolsetRequest: DeleteToolsetRequest,
 ): string {
   return JSON.stringify(
     DeleteToolsetRequest$outboundSchema.parse(deleteToolsetRequest),
-  );
-}
-
-export function deleteToolsetRequestFromJSON(
-  jsonString: string,
-): SafeParseResult<DeleteToolsetRequest, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => DeleteToolsetRequest$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'DeleteToolsetRequest' from JSON`,
   );
 }

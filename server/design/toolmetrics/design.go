@@ -152,6 +152,7 @@ var HTTPToolLog = Type("HTTPToolLog", func() {
 
 	// Request metadata
 	Attribute("http_method", String, "HTTP method")
+	Attribute("http_server_url", String, "HTTP Server URL")
 	Attribute("http_route", String, "HTTP route")
 	Attribute("status_code", Int64, "HTTP status code")
 	Attribute("duration_ms", Float64, "Duration in milliseconds")
@@ -174,6 +175,7 @@ var HTTPToolLog = Type("HTTPToolLog", func() {
 		"tool_type",
 		"trace_id",
 		"span_id",
+		"http_server_url",
 		"http_method",
 		"http_route",
 		"status_code",

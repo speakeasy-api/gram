@@ -12,14 +12,15 @@ let value: HTTPToolLog = {
   durationMs: 5054.62,
   httpMethod: "<value>",
   httpRoute: "<value>",
-  organizationId: "0923092c-52f8-4c1b-aea0-cfcbd19b476d",
+  httpServerUrl: "https://oblong-contrail.biz/",
+  organizationId: "092c52f8-c1be-4a0c-bfcb-d19b476d8873",
   spanId: "<id>",
-  statusCode: 518158,
-  toolId: "73f0840e-0040-4786-864c-e7e89950e406",
+  statusCode: 28790,
+  toolId: "840e0040-7866-44ce-97e8-9950e4063310",
   toolType: "http",
   toolUrn: "<value>",
   traceId: "<id>",
-  ts: new Date("2023-05-16T13:59:48.901Z"),
+  ts: new Date("2023-08-13T03:36:10.953Z"),
   userAgent: "<value>",
 };
 ```
@@ -32,6 +33,7 @@ let value: HTTPToolLog = {
 | `durationMs`                                                                                  | *number*                                                                                      | :heavy_check_mark:                                                                            | Duration in milliseconds                                                                      |
 | `httpMethod`                                                                                  | *string*                                                                                      | :heavy_check_mark:                                                                            | HTTP method                                                                                   |
 | `httpRoute`                                                                                   | *string*                                                                                      | :heavy_check_mark:                                                                            | HTTP route                                                                                    |
+| `httpServerUrl`                                                                               | *string*                                                                                      | :heavy_check_mark:                                                                            | HTTP Server URL                                                                               |
 | `id`                                                                                          | *string*                                                                                      | :heavy_minus_sign:                                                                            | Id of the request                                                                             |
 | `organizationId`                                                                              | *string*                                                                                      | :heavy_check_mark:                                                                            | Organization UUID                                                                             |
 | `projectId`                                                                                   | *string*                                                                                      | :heavy_minus_sign:                                                                            | Project UUID                                                                                  |

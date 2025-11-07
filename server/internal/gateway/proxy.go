@@ -107,15 +107,14 @@ type InstanceToolProxyConfig struct {
 }
 
 type ToolProxy struct {
-	source      ToolCallSource
-	logger      *slog.Logger
-	tracer      trace.Tracer
-	metrics     *metrics
-	encryption  *encryption.Client
-	cache       cache.Cache
-	policy      *guardian.Policy
-	functions   functions.ToolCaller
-	toolMetrics tm.ToolMetricsProvider
+	source     ToolCallSource
+	logger     *slog.Logger
+	tracer     trace.Tracer
+	metrics    *metrics
+	encryption *encryption.Client
+	cache      cache.Cache
+	policy     *guardian.Policy
+	functions  functions.ToolCaller
 }
 
 func NewToolProxy(
@@ -127,21 +126,19 @@ func NewToolProxy(
 	cache cache.Cache,
 	policy *guardian.Policy,
 	funcCaller functions.ToolCaller,
-	toolMetrics tm.ToolMetricsProvider,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
 
 	return &ToolProxy{
-		source:      source,
-		logger:      logger,
-		tracer:      tracer,
-		metrics:     newMetrics(meter, logger),
-		encryption:  enc,
-		cache:       cache,
-		policy:      policy,
-		functions:   funcCaller,
-		toolMetrics: toolMetrics,
+		source:     source,
+		logger:     logger,
+		tracer:     tracer,
+		metrics:    newMetrics(meter, logger),
+		encryption: enc,
+		cache:      cache,
+		policy:     policy,
+		functions:  funcCaller,
 	}
 }
 
@@ -151,6 +148,7 @@ func (tp *ToolProxy) Do(
 	requestBody io.Reader,
 	env *CaseInsensitiveEnv,
 	plan *ToolCallPlan,
+	toolCallLogger tm.ToolCallLogger,
 ) (err error) {
 	ctx, span := tp.tracer.Start(ctx, "gateway.toolCall", trace.WithAttributes(
 		attr.ToolName(plan.Descriptor.Name),
@@ -182,9 +180,9 @@ func (tp *ToolProxy) Do(
 	case "":
 		return oops.E(oops.CodeInvariantViolation, nil, "tool kind is not set").Log(ctx, tp.logger)
 	case ToolKindFunction:
-		return tp.doFunction(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function)
+		return tp.doFunction(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Function, toolCallLogger)
 	case ToolKindHTTP:
-		return tp.doHTTP(ctx, logger, w, requestBody, env, plan.Descriptor, plan.HTTP)
+		return tp.doHTTP(ctx, logger, w, requestBody, env, plan.Descriptor, plan.HTTP, toolCallLogger)
 	case ToolKindPrompt:
 		return tp.doPrompt(ctx, logger, w, requestBody, env, plan.Descriptor, plan.Prompt)
 	default:
@@ -200,6 +198,7 @@ func (tp *ToolProxy) doFunction(
 	env *CaseInsensitiveEnv,
 	descriptor *ToolDescriptor,
 	plan *FunctionToolCallPlan,
+	toolCallLogger tm.ToolCallLogger,
 ) error {
 	span := trace.SpanFromContext(ctx)
 	invocationID, err := uuid.NewV7()
@@ -286,7 +285,7 @@ func (tp *ToolProxy) doFunction(
 		FilterConfig:              DisableResponseFiltering,
 		Policy:                    tp.policy,
 		ResponseStatusCodeCapture: &responseStatusCode,
-		ToolMetricsProvider:       tp.toolMetrics,
+		ToolCallLogger:            toolCallLogger,
 		VerifyResponse: func(resp *http.Response) error {
 			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
 				return fmt.Errorf("failed to verify function invocation ID")
@@ -311,6 +310,7 @@ func (tp *ToolProxy) doHTTP(
 	env *CaseInsensitiveEnv,
 	descriptor *ToolDescriptor,
 	plan *HTTPToolCallPlan,
+	toolCallLogger tm.ToolCallLogger,
 ) error {
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(
@@ -319,6 +319,10 @@ func (tp *ToolProxy) doHTTP(
 	logger = logger.With(
 		attr.SlogHTTPRoute(plan.Path), // this is just from the raw OpenAPI spec. It is not a path with any parameters filled in, so not identifiable.
 	)
+
+	// set these values in case we hit an early validation error
+	toolCallLogger.RecordHTTPMethod(plan.Method)
+	toolCallLogger.RecordHTTPRoute(plan.Path)
 
 	// Variable to capture status code for metrics
 	var responseStatusCode int
@@ -533,7 +537,7 @@ func (tp *ToolProxy) doHTTP(
 		}
 	}
 
-	shouldContinue := processSecurity(ctx, logger, req, w, &responseStatusCode, descriptor, plan, tp.cache, env, serverURL)
+	shouldContinue := processSecurity(ctx, logger, req, w, &responseStatusCode, descriptor, plan, tp.cache, env, serverURL, toolCallLogger)
 	if !shouldContinue {
 		return nil
 	}
@@ -550,7 +554,7 @@ func (tp *ToolProxy) doHTTP(
 		FilterConfig:              plan.ResponseFilter,
 		Policy:                    tp.policy,
 		ResponseStatusCodeCapture: &responseStatusCode,
-		ToolMetricsProvider:       tp.toolMetrics,
+		ToolCallLogger:            toolCallLogger,
 		VerifyResponse:            func(resp *http.Response) error { return nil },
 		ID:                        descriptor.ID,
 		Name:                      descriptor.Name,
@@ -651,8 +655,8 @@ type ReverseProxyOptions struct {
 	FilterConfig              *ResponseFilter
 	Policy                    *guardian.Policy
 	ResponseStatusCodeCapture *int
-	ToolMetricsProvider       tm.ToolMetricsProvider
 	VerifyResponse            func(*http.Response) error
+	ToolCallLogger            tm.ToolCallLogger
 	// Descriptor fields
 	ID               string
 	Name             string
@@ -667,6 +671,17 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 	ctx, span := opts.Tracer.Start(ctx, fmt.Sprintf("gateway_proxy.%s", opts.Name))
 	defer span.End()
 
+	toolCallLogger := opts.ToolCallLogger
+
+	toolInfo := &tm.ToolInfo{
+		ID:             opts.ID,
+		Urn:            opts.URN,
+		Name:           opts.Name,
+		ProjectID:      opts.ProjectID,
+		DeploymentID:   opts.DeploymentID,
+		OrganizationID: opts.OrganizationID,
+	}
+
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		DialContext:           opts.Policy.Dialer().DialContext,
@@ -678,50 +693,26 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		MaxIdleConnsPerHost:   runtime.GOMAXPROCS(0) + 1,
 	}
 
-	isAllowed, err := opts.ToolMetricsProvider.ShouldLog(ctx, opts.OrganizationID)
-	if err != nil {
-		// If we can't determine if the tool is allowed to log, we won't log the request.
-		isAllowed = false
-		opts.Logger.ErrorContext(ctx,
-			"failed to determine if organization is allowed to request log",
-			attr.SlogOrganizationID(opts.OrganizationID),
-			attr.SlogError(err))
+	var baseTransport http.RoundTripper = transport
+	if toolCallLogger.Enabled() {
+		baseTransport = tm.NewToolCallLogRoundTripper(
+			baseTransport,
+			opts.Logger,
+			opts.Tracer,
+			toolInfo,
+			toolCallLogger,
+		)
 	}
 
-	var otelTransport *otelhttp.Transport
-	if isAllowed {
-		// Wrap with HTTP logging round tripper
-		loggingTransport := tm.NewHTTPLoggingRoundTripper(transport, opts.ToolMetricsProvider, opts.Logger, opts.Tracer)
-		otelTransport = otelhttp.NewTransport(
-			loggingTransport,
-			otelhttp.WithPropagators(propagation.TraceContext{}),
-		)
-	} else {
-		otelTransport = otelhttp.NewTransport(
-			transport,
-			otelhttp.WithPropagators(propagation.TraceContext{}),
-		)
-	}
+	otelTransport := otelhttp.NewTransport(
+		baseTransport,
+		otelhttp.WithPropagators(propagation.TraceContext{}),
+	)
 
 	client := &http.Client{
 		Timeout:   60 * time.Second,
 		Transport: otelTransport,
 	}
-
-	// Add tool to context for the round tripper
-	toolInfo := &tm.ToolInfo{
-		ID:             opts.ID,
-		Urn:            opts.URN,
-		Name:           opts.Name,
-		ProjectID:      opts.ProjectID,
-		DeploymentID:   opts.DeploymentID,
-		OrganizationID: opts.OrganizationID,
-	}
-
-	ctx = context.WithValue(ctx, tm.ToolInfoContextKey, toolInfo)
-
-	// Track request body size
-	var requestBodySize int
 
 	executeRequest := func() (*http.Response, error) {
 		// Clone the request for each retry attempt
@@ -734,14 +725,8 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 				return nil, fmt.Errorf("retry: clone request body: %w", err)
 			}
 
-			// Wrap body to count bytes as they're sent
-			retryReq.Body = tm.NewCountingReadCloser(freshBody, func(count int) {
-				requestBodySize = count
-			})
+			retryReq.Body = freshBody
 		}
-
-		retryCtx := context.WithValue(retryReq.Context(), tm.RequestBodyContextKey, &requestBodySize)
-		retryReq = retryReq.WithContext(retryCtx)
 
 		return client.Do(retryReq)
 	}
@@ -771,6 +756,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		span.SetStatus(codes.Error, err.Error())
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").Log(ctx, opts.Logger)
 	}
+
 	defer o11y.LogDefer(ctx, opts.Logger, func() error {
 		return resp.Body.Close()
 	})
@@ -814,10 +800,12 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 
 		buf := make([]byte, 32*1024)
 		flusher, canFlush := opts.Writer.(http.Flusher)
+		var streamedBytes int64
 
 		for {
 			n, err := resp.Body.Read(buf)
 			if n > 0 {
+				streamedBytes += int64(n)
 				if _, writeErr := opts.Writer.Write(buf[:n]); writeErr != nil {
 					opts.Logger.ErrorContext(ctx, "client write failed", attr.SlogError(writeErr))
 					break
@@ -834,6 +822,8 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 				break
 			}
 		}
+
+		toolCallLogger.RecordResponseBodyBytes(streamedBytes)
 	} else {
 		var body io.Reader = resp.Body
 
@@ -847,7 +837,9 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		}
 
 		opts.Writer.WriteHeader(finalStatusCode)
-		if _, err := io.Copy(opts.Writer, body); err != nil {
+		written, err := io.Copy(opts.Writer, body)
+		toolCallLogger.RecordResponseBodyBytes(written)
+		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
 			opts.Logger.ErrorContext(ctx, "failed to copy response body", attr.SlogError(err))
 		}

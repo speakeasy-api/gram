@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/polar"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tracking"
@@ -62,7 +63,7 @@ func loadConfigFromFile(c *cli.Context, flags []cli.Flag) error {
 	return cfgLoader(c)
 }
 
-func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context, tracerProvider trace.TracerProvider, features feature.Provider) (tm.ToolMetricsProvider, func(context.Context) error, error) {
+func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Context, tracerProvider trace.TracerProvider, featureClient *productfeatures.Client) (tm.ToolMetricsProvider, func(context.Context) error, error) {
 	nilFunc := func(context.Context) error { return nil }
 
 	host := c.String("clickhouse-host")
@@ -113,22 +114,14 @@ func newToolMetricsClient(ctx context.Context, logger *slog.Logger, c *cli.Conte
 	}
 
 	cc := tm.New(logger, tracerProvider, conn, func(ctx context.Context, orgId string) (bool, error) {
-		// Use features directly if not nil, otherwise fallback to in-memory provider
-		var f feature.Provider
-		if features != nil {
-			f = features
-		} else {
-			f = &feature.InMemory{}
-		}
-
-		isEnabled, err := f.IsFlagEnabled(ctx, feature.FlagClickhouseToolMetrics, orgId)
+		isEnabled, err := featureClient.IsFeatureEnabled(ctx, orgId, productfeatures.FeatureLogs)
 		if err != nil {
 			logger.ErrorContext(
-				ctx, "error checking clickhouse feature flag",
+				ctx, "error checking if logs are enabled",
 				attr.SlogError(err),
 				attr.SlogOrganizationSlug(orgId),
 			)
-			return false, fmt.Errorf("check clickhouse feature flag: %w", err)
+			return false, fmt.Errorf("error checking if logs are enabled: %w", err)
 		}
 
 		return isEnabled, nil

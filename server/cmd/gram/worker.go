@@ -307,16 +307,10 @@ func newWorkerCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			posthogClient := posthog.New(ctx, logger, c.String("posthog-api-key"), c.String("posthog-endpoint"), c.String("posthog-personal-api-key"))
-			var features feature.Provider = posthogClient
+			var featureFlags feature.Provider = posthogClient
 			if c.String("environment") == "local" {
-				features = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
+				featureFlags = newLocalFeatureFlags(ctx, logger, c.String("local-feature-flags-csv"))
 			}
-
-			tcm, shutdown, err := newToolMetricsClient(ctx, logger, c, tracerProvider, features)
-			if err != nil {
-				return fmt.Errorf("failed to connect to tool metrics client: %w", err)
-			}
-			shutdownFuncs = append(shutdownFuncs, shutdown)
 
 			{
 				controlServer := control.Server{
@@ -357,11 +351,12 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to create functions orchestrator: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, shutdown)
+
 			runnerVersion := functions.RunnerVersion(conv.Default(strings.TrimPrefix(c.String("functions-runner-version"), "sha-"), GitSHA))
 
 			slackClient := slack_client.NewSlackClient(slack.SlackClientID(c.String("environment")), c.String("slack-client-secret"), db, encryptionClient)
 			baseChatClient := openrouter.NewChatClient(logger, openRouter)
-			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, tcm)
+			chatClient := chat.NewChatClient(logger, tracerProvider, meterProvider, db, openRouter, baseChatClient, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator)
 
 			billingRepo, billingTracker, err := newBillingProvider(ctx, logger, tracerProvider, redisClient, posthogClient, c)
 			if err != nil {
@@ -371,7 +366,7 @@ func newWorkerCommand() *cli.Command {
 			temporalWorker := background.NewTemporalWorker(temporalClient, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 				DB:                  db,
 				EncryptionClient:    encryptionClient,
-				FeatureProvider:     features,
+				FeatureProvider:     featureFlags,
 				AssetStorage:        assetStorage,
 				SlackClient:         slackClient,
 				ChatClient:          chatClient,
