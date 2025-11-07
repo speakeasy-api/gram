@@ -1,6 +1,7 @@
+import { useRoutes } from "@/routes";
 import { UIMessage } from "ai";
-import { ChatConfig, ChatWindow } from "./ChatWindow";
 import { AlertCircle } from "lucide-react";
+import { ChatConfig, ChatWindow } from "./ChatWindow";
 
 export function PlaygroundRHS({
   configRef,
@@ -17,6 +18,8 @@ export function PlaygroundRHS({
   maxTokens: number;
   authWarning?: { missingCount: number; toolsetSlug: string } | null;
 }) {
+  const routes = useRoutes();
+
   const initialMessages: UIMessage[] = [
     {
       id: "1",
@@ -49,12 +52,12 @@ export function PlaygroundRHS({
                   {authWarning.missingCount} authentication{" "}
                   {authWarning.missingCount === 1 ? "variable" : "variables"}{" "}
                   not configured.{" "}
-                  <a
-                    href={`/toolsets/${authWarning.toolsetSlug}`}
+                  <routes.toolsets.toolset.Link
+                    params={[authWarning.toolsetSlug]}
                     className="underline hover:text-foreground font-medium"
                   >
                     Configure now
-                  </a>
+                  </routes.toolsets.toolset.Link>
                 </span>
               </div>
             ) : undefined
