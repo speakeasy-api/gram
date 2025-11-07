@@ -37,6 +37,11 @@ type toolsCallParams struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
+const (
+	findToolsToolName   = "find_tools"
+	executeToolToolName = "execute_tool"
+)
+
 func handleToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -50,6 +55,7 @@ func handleToolsCall(
 	billingRepository billing.Repository,
 	toolsetCache *cache.TypedCacheObject[mv.ToolsetBaseContents],
 	tcm tm.ToolMetricsProvider,
+	vectorStore *toolVectorStore,
 ) (json.RawMessage, error) {
 	var params toolsCallParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -65,6 +71,23 @@ func handleToolsCall(
 	toolset, err := mv.DescribeToolset(ctx, logger, db, projectID, mv.ToolsetSlug(conv.ToLower(payload.toolset)), toolsetCache)
 	if err != nil {
 		return nil, err
+	}
+
+	if payload.isDynamicMCPSession {
+		if params.Name == findToolsToolName {
+			return handleFindToolsCall(ctx, logger, req.ID, params.Arguments, toolset, vectorStore)
+		}
+
+		if params.Name == executeToolToolName {
+			proxyName, proxyArgs, err := processExecuteToolCall(ctx, logger, params.Arguments)
+			if err != nil {
+				return nil, err
+			}
+
+			// TODO: we would want some way in metrics/logging/billing to track this is a dynamic tool call
+			params.Name = proxyName
+			params.Arguments = proxyArgs
+		}
 	}
 
 	var mcpURL string
@@ -269,6 +292,121 @@ func handleToolsCall(
 	}
 
 	return bs, nil
+}
+
+type findToolsArguments struct {
+	Query      string `json:"query"`
+	NumResults int    `json:"num_results"`
+}
+
+func (a findToolsArguments) resolvedLimit() int {
+	if a.NumResults > 0 {
+		return a.NumResults
+	}
+	return defaultFindToolsResultSize
+}
+
+func handleFindToolsCall(
+	ctx context.Context,
+	logger *slog.Logger,
+	reqID msgID,
+	argsRaw json.RawMessage,
+	toolset *types.Toolset,
+	vectorStore *toolVectorStore,
+) (json.RawMessage, error) {
+	if vectorStore == nil {
+		return nil, oops.E(oops.CodeUnexpected, errors.New("vector store unavailable"), "vector search is not enabled").Log(ctx, logger)
+	}
+
+	var args findToolsArguments
+	if len(argsRaw) > 0 {
+		if err := json.Unmarshal(argsRaw, &args); err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "failed to parse find_tools arguments").Log(ctx, logger)
+		}
+	}
+
+	query := strings.TrimSpace(args.Query)
+	if query == "" {
+		return nil, oops.E(oops.CodeInvalid, errors.New("missing query"), "query is required").Log(ctx, logger)
+	}
+
+	limit := args.resolvedLimit()
+	results, err := vectorStore.SearchToolset(ctx, toolset.ID, query, limit)
+	if errors.Is(err, errToolVectorCollectionNotFound) {
+		entries := buildToolListEntries(toolset.Tools)
+		if indexErr := vectorStore.IndexToolset(ctx, toolset.ID, entries); indexErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, indexErr, "failed to prepare tool search index").Log(ctx, logger)
+		}
+		results, err = vectorStore.SearchToolset(ctx, toolset.ID, query, limit)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to search tools").Log(ctx, logger)
+	}
+
+	payload, err := json.Marshal(toolsListResult{Tools: results})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool search result").Log(ctx, logger)
+	}
+
+	chunk, err := json.Marshal(contentChunk[string, json.RawMessage]{
+		Type:     "text",
+		Text:     string(payload),
+		MimeType: nil,
+		Data:     nil,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tool search chunk").Log(ctx, logger)
+	}
+
+	response, err := json.Marshal(result[toolCallResult]{
+		ID: reqID,
+		Result: toolCallResult{
+			Content: []json.RawMessage{chunk},
+			IsError: false,
+		},
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize find_tools response").Log(ctx, logger)
+	}
+
+	return response, nil
+}
+
+type executeToolArguments struct {
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+}
+
+func processExecuteToolCall(ctx context.Context, logger *slog.Logger, argsRaw json.RawMessage) (string, json.RawMessage, error) {
+	var args executeToolArguments
+	if len(argsRaw) == 0 {
+		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing execute arguments"), "execute_tool arguments are required").Log(ctx, logger)
+	}
+	if err := json.Unmarshal(argsRaw, &args); err != nil {
+		return "", nil, oops.E(oops.CodeBadRequest, err, "failed to parse execute_tool arguments").Log(ctx, logger)
+	}
+
+	name := strings.TrimSpace(args.Name)
+	if name == "" {
+		return "", nil, oops.E(oops.CodeInvalid, errors.New("missing tool name"), "name is required for execute_tool").Log(ctx, logger)
+	}
+
+	payload := args.Arguments
+	if len(payload) != 0 {
+		trimmed := bytes.TrimSpace(payload)
+		if len(trimmed) > 0 && trimmed[0] == '"' {
+			var payloadString string
+			if err := json.Unmarshal(payload, &payloadString); err != nil {
+				return "", nil, oops.E(oops.CodeBadRequest, err, "failed to parse execute_tool payload").Log(ctx, logger)
+			}
+			payload = json.RawMessage(payloadString)
+		}
+		if !json.Valid(payload) {
+			return "", nil, oops.E(oops.CodeBadRequest, errors.New("invalid payload"), "arguments must be valid JSON").Log(ctx, logger)
+		}
+	}
+
+	return name, payload, nil
 }
 
 func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingRepository billing.Repository) error {

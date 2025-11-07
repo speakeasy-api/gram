@@ -70,6 +70,7 @@ type Service struct {
 	billingRepository billing.Repository
 	toolsetCache      cache.TypedCacheObject[mv.ToolsetBaseContents]
 	tcm               tm.ToolMetricsProvider
+	toolVectorStore   *toolVectorStore
 }
 
 type oauthTokenInputs struct {
@@ -78,13 +79,14 @@ type oauthTokenInputs struct {
 }
 
 type mcpInputs struct {
-	projectID        uuid.UUID
-	toolset          string
-	environment      string
-	mcpEnvVariables  map[string]string
-	oauthTokenInputs []oauthTokenInputs
-	authenticated    bool
-	sessionID        string
+	projectID           uuid.UUID
+	toolset             string
+	environment         string
+	mcpEnvVariables     map[string]string
+	oauthTokenInputs    []oauthTokenInputs
+	authenticated       bool
+	sessionID           string
+	isDynamicMCPSession bool
 }
 
 func NewService(
@@ -138,6 +140,7 @@ func NewService(
 		billingRepository: billingRepository,
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
 		tcm:               tcm,
+		toolVectorStore:   newToolVectorStore(),
 	}
 }
 
@@ -432,15 +435,19 @@ func (s *Service) ServePublic(w http.ResponseWriter, r *http.Request) error {
 
 	sessionID := parseMcpSessionID(r.Header)
 	w.Header().Set("Mcp-Session-Id", sessionID)
+	// TODO: this is for demo. There probably needs to still be annotation per toolset on if it allows dynamic tool calling
+	// Realistically you would need to embed and vectorize ahead of time
+	isDynamicMCP := r.Header.Get("Gram-Dynamic-MCP") == "true"
 
 	mcpInputs := &mcpInputs{
-		projectID:        toolset.ProjectID,
-		toolset:          toolset.Slug,
-		environment:      selectedEnvironment,
-		mcpEnvVariables:  parseMcpEnvVariables(r),
-		authenticated:    authenticated,
-		oauthTokenInputs: tokenInputs,
-		sessionID:        sessionID,
+		projectID:           toolset.ProjectID,
+		toolset:             toolset.Slug,
+		environment:         selectedEnvironment,
+		mcpEnvVariables:     parseMcpEnvVariables(r),
+		authenticated:       authenticated,
+		oauthTokenInputs:    tokenInputs,
+		sessionID:           sessionID,
+		isDynamicMCPSession: isDynamicMCP,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -551,14 +558,17 @@ func (s *Service) ServeAuthenticated(w http.ResponseWriter, r *http.Request) err
 	sessionID := parseMcpSessionID(r.Header)
 	w.Header().Set("Mcp-Session-Id", sessionID)
 
+	isDynamicMCP := r.Header.Get("Gram-Dynamic-MCP") == "true"
+
 	mcpInputs := &mcpInputs{
-		projectID:        *authCtx.ProjectID,
-		toolset:          toolsetSlug,
-		environment:      environmentSlug,
-		mcpEnvVariables:  parseMcpEnvVariables(r),
-		authenticated:    true,
-		oauthTokenInputs: []oauthTokenInputs{},
-		sessionID:        sessionID,
+		projectID:           *authCtx.ProjectID,
+		toolset:             toolsetSlug,
+		environment:         environmentSlug,
+		mcpEnvVariables:     parseMcpEnvVariables(r),
+		authenticated:       true,
+		oauthTokenInputs:    []oauthTokenInputs{},
+		sessionID:           sessionID,
+		isDynamicMCPSession: isDynamicMCP,
 	}
 
 	body, err := s.handleBatch(ctx, mcpInputs, batch)
@@ -643,9 +653,9 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case "notifications/initialized", "notifications/cancelled":
 		return nil, nil
 	case "tools/list":
-		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache)
+		return handleToolsList(ctx, s.logger, s.db, payload, req, s.posthog, &s.toolsetCache, s.toolVectorStore)
 	case "tools/call":
-		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm)
+		return handleToolsCall(ctx, s.logger, s.metrics, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.tcm, s.toolVectorStore)
 	case "prompts/list":
 		return handlePromptsList(ctx, s.logger, s.db, payload, req, &s.toolsetCache)
 	case "prompts/get":
