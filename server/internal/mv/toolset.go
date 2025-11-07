@@ -87,7 +87,6 @@ func DescribeToolsetEntry(
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
 	var functionEnvVars []*types.FunctionEnvironmentVariable
-	seenEnvVars := make(map[string]bool)
 	if len(toolUrns) > 0 {
 		definitions, err := toolsRepo.FindHttpToolEntriesByUrn(ctx, tr.FindHttpToolEntriesByUrnParams{
 			ProjectID: pid,
@@ -161,12 +160,7 @@ func DescribeToolsetEntry(
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
 			}
-			for _, envVar := range envVars {
-				if !seenEnvVars[envVar.Name] {
-					seenEnvVars[envVar.Name] = true
-					functionEnvVars = append(functionEnvVars, envVar)
-				}
-			}
+			functionEnvVars = append(functionEnvVars, envVars...)
 		}
 
 		promptTools, err := templatesRepo.PeekTemplatesByUrns(ctx, templatesR.PeekTemplatesByUrnsParams{
@@ -217,12 +211,7 @@ func DescribeToolsetEntry(
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").Log(ctx, logger)
 			}
-			for _, envVar := range envVars {
-				if !seenEnvVars[envVar.Name] {
-					seenEnvVars[envVar.Name] = true
-					functionEnvVars = append(functionEnvVars, envVar)
-				}
-			}
+			functionEnvVars = append(functionEnvVars, envVars...)
 		}
 	}
 
@@ -252,7 +241,7 @@ func DescribeToolsetEntry(
 		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
 		SecurityVariables:            securityVars,
 		ServerVariables:              serverVars,
-		FunctionEnvironmentVariables: functionEnvVars,
+		FunctionEnvironmentVariables: dedupeFunctionEnvVars(functionEnvVars),
 		Description:                  conv.FromPGText[string](toolset.Description),
 		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
 		McpEnabled:                   &toolset.McpEnabled,
@@ -457,7 +446,7 @@ func DescribeToolset(
 		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
 		SecurityVariables:            toolsetTools.SecurityVars,
 		ServerVariables:              toolsetTools.ServerVars,
-		FunctionEnvironmentVariables: toolsetTools.FunctionEnvVars,
+		FunctionEnvironmentVariables: dedupeFunctionEnvVars(toolsetTools.FunctionEnvVars),
 		Description:                  conv.FromPGText[string](toolset.Description),
 		Tools:                        toolsetTools.Tools,
 		Resources:                    toolsetTools.Resources,
@@ -496,7 +485,6 @@ func readToolsetTools(
 	var securityVars []*types.SecurityVariable
 	var serverVars []*types.ServerVariable
 	var functionEnvVars []*types.FunctionEnvironmentVariable
-	seenEnvVars := make(map[string]bool)
 
 	// NOTE: A slight shortcoming here is that the cache is keyed by the active deployment id, but the queries below don't strictly depend on
 	// the deployment ID fetched above. Technically the deployment could change at just the right time to mess up the cache.
@@ -667,12 +655,7 @@ func readToolsetTools(
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables").Log(ctx, logger)
 			}
-			for _, envVar := range envVars {
-				if !seenEnvVars[envVar.Name] {
-					seenEnvVars[envVar.Name] = true
-					functionEnvVars = append(functionEnvVars, envVar)
-				}
-			}
+			functionEnvVars = append(functionEnvVars, envVars...)
 
 			tools = append(tools, &types.Tool{
 				FunctionToolDefinition: functionTool,
@@ -727,12 +710,7 @@ func readToolsetTools(
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "failed to extract function environment variables from resource").Log(ctx, logger)
 			}
-			for _, envVar := range envVars {
-				if !seenEnvVars[envVar.Name] {
-					seenEnvVars[envVar.Name] = true
-					functionEnvVars = append(functionEnvVars, envVar)
-				}
-			}
+			functionEnvVars = append(functionEnvVars, envVars...)
 
 			resources = append(resources, &types.Resource{
 				FunctionResourceDefinition: functionResource,
@@ -918,6 +896,28 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []toolEnvL
 	}
 
 	return slices.Collect(maps.Values(securityVarsMap)), serverVars, nil
+}
+
+// dedupeFunctionEnvVars returns function environment variables deduplicated by name.
+func dedupeFunctionEnvVars(vars []*types.FunctionEnvironmentVariable) []*types.FunctionEnvironmentVariable {
+	if len(vars) == 0 {
+		return vars
+	}
+
+	seen := make(map[string]bool, len(vars))
+	var deduped []*types.FunctionEnvironmentVariable
+	for _, envVar := range vars {
+		if envVar == nil {
+			continue
+		}
+		if _, exists := seen[envVar.Name]; exists {
+			continue
+		}
+		seen[envVar.Name] = true
+		deduped = append(deduped, envVar)
+	}
+
+	return deduped
 }
 
 const defaultPromptTemplateKind = "prompt"
