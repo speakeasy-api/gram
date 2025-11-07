@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
-	"github.com/speakeasy-api/gram/cli/internal/profile"
 	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
@@ -25,13 +24,13 @@ type ToolsetInfo struct {
 
 // ResolverOptions contains options for resolving toolset information
 type ResolverOptions struct {
+	ProjectSlug     string
 	ToolsetSlug     string
 	MCPURL          string
 	ServerName      string
-	APIKey          string
+	APIKey          secret.Secret
 	HeaderName      string
 	EnvVar          string
-	Profile         *profile.Profile
 	APIURL          *url.URL
 	Logger          *slog.Logger
 	IsHeaderNameSet bool
@@ -45,15 +44,11 @@ func ResolveToolsetInfo(ctx context.Context, opts *ResolverOptions) (*ToolsetInf
 		URL:        "",
 		HeaderName: opts.HeaderName,
 		EnvVarName: opts.EnvVar,
-		APIKey:     opts.APIKey,
+		APIKey:     opts.APIKey.Reveal(),
 	}
 
 	// If toolset slug is provided, fetch from API
 	if opts.ToolsetSlug != "" {
-		if opts.Profile == nil || opts.Profile.Secret == "" {
-			return nil, fmt.Errorf("profile not configured; run 'gram auth' first to use --toolset")
-		}
-
 		// Create toolsets client
 		toolsetsClient := api.NewToolsetsClient(&api.ToolsetsClientOptions{
 			Scheme: opts.APIURL.Scheme,
@@ -62,7 +57,7 @@ func ResolveToolsetInfo(ctx context.Context, opts *ResolverOptions) (*ToolsetInf
 
 		// Fetch toolset
 		opts.Logger.InfoContext(ctx, "fetching toolset information", slog.String("slug", opts.ToolsetSlug))
-		toolset, err := toolsetsClient.GetToolset(ctx, secret.Secret(opts.Profile.Secret), opts.Profile.DefaultProjectSlug, opts.ToolsetSlug)
+		toolset, err := toolsetsClient.GetToolset(ctx, opts.APIKey, opts.ProjectSlug, opts.ToolsetSlug)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch toolset: %w", err)
 		}
@@ -125,19 +120,6 @@ func ResolveToolsetInfo(ctx context.Context, opts *ResolverOptions) (*ToolsetInf
 		} else {
 			opts.Logger.InfoContext(ctx, "environment variable not set locally, will use substitution",
 				slog.String("var", info.EnvVarName))
-		}
-	}
-
-	// If still no API key, try to get from other sources
-	if info.APIKey == "" && info.EnvVarName == "" {
-		// Use profile API key
-		if opts.Profile != nil && opts.Profile.Secret != "" {
-			info.APIKey = opts.Profile.Secret
-			opts.Logger.InfoContext(ctx, "using API key from profile")
-		}
-
-		if info.APIKey == "" {
-			return nil, fmt.Errorf("no API key provided and no profile configured (run 'gram auth' first or provide --api-key or --env-var)")
 		}
 	}
 

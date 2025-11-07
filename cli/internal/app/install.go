@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	"github.com/speakeasy-api/gram/cli/internal/app/logging"
+	"github.com/speakeasy-api/gram/cli/internal/flags"
 	"github.com/speakeasy-api/gram/cli/internal/mcp"
 	"github.com/speakeasy-api/gram/cli/internal/profile"
 	"github.com/speakeasy-api/gram/cli/internal/workflow"
@@ -12,6 +13,8 @@ import (
 )
 
 var installFlags = []cli.Flag{
+	flags.APIKey(),
+	flags.Project(),
 	&cli.StringFlag{
 		Name:  "toolset",
 		Usage: "The slug of the Gram toolset to install (e.g., speakeasy-admin). Will automatically look up MCP configuration.",
@@ -23,10 +26,6 @@ var installFlags = []cli.Flag{
 	&cli.StringFlag{
 		Name:  "name",
 		Usage: "The name to use for this MCP server in Cursor (defaults to toolset name or derived from URL)",
-	},
-	&cli.StringFlag{
-		Name:  "api-key",
-		Usage: "The API key to use for authentication (falls back to profile API key if not provided)",
 	},
 	&cli.StringFlag{
 		Name:  "header-name",
@@ -78,15 +77,18 @@ func resolveToolsetInfo(c *cli.Context) (*mcp.ToolsetInfo, error) {
 		}
 	}
 
+	projectSlug := workflow.ResolveProject(c, prof)
+	apiKey := workflow.ResolveKey(c, prof)
+
 	// Resolve toolset information using shared logic
 	return mcp.ResolveToolsetInfo(ctx, &mcp.ResolverOptions{
+		ProjectSlug:     projectSlug,
 		ToolsetSlug:     toolsetSlug,
 		MCPURL:          mcpURL,
 		ServerName:      c.String("name"),
-		APIKey:          c.String("api-key"), // Will fall back to profile API key if not provided
+		APIKey:          apiKey,
 		HeaderName:      c.String("header-name"),
 		EnvVar:          c.String("env-var"),
-		Profile:         prof,
 		APIURL:          apiURL,
 		Logger:          logger,
 		IsHeaderNameSet: c.IsSet("header-name"),
