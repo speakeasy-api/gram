@@ -308,13 +308,14 @@ export default function LogsPage() {
                                                 <TableHead className="font-mono">SOURCE NAME</TableHead>
                                                 <TableHead className="font-mono">TOOL NAME</TableHead>
                                                 <TableHead className="font-mono">STATUS</TableHead>
+                                                <TableHead className="font-mono">CLIENT</TableHead>
                                                 <TableHead className="font-mono">DURATION</TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
                                             {error ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={5}
+                                                    <TableCell colSpan={6}
                                                                className="text-center py-8">
                                                         <div className="flex flex-col items-center gap-2">
                                                             <XIcon className="size-6 stroke-destructive-default"/>
@@ -329,21 +330,21 @@ export default function LogsPage() {
                                                 </TableRow>
                                             ) : isLoading &&allLogs.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={5}
+                                                    <TableCell colSpan={6}
                                                                className="text-center py-8 text-muted-foreground">
                                                         Loading logs...
                                                     </TableCell>
                                                 </TableRow>
                                             ) : allLogs.length === 0 ? (
                                                 <TableRow>
-                                                    <TableCell colSpan={5}
+                                                    <TableCell colSpan={6}
                                                                className="text-center py-8 text-muted-foreground">
                                                         {logsEnabled ? (
                                                             "No logs found"
                                                         ) : (
                                                             <div className="flex flex-col items-center gap-3">
                                                                 <span>
-                                                                    Logs are currently disabled for your organization.
+                                                                    Logs are disabled for your organization.
                                                                 </span>
                                                                 <Button
                                                                     onClick={() => handleSetLogs(true)}
@@ -395,6 +396,10 @@ export default function LogsPage() {
                                                                 <StatusIcon isSuccess={isSuccessfulCall(log)}/>
                                                             </div>
                                                         </TableCell>
+                                                        <TableCell
+                                                            className="text-muted-foreground flex text-sm py-4">
+                                                            {log.userAgent || "-"}
+                                                        </TableCell>
                                                         <TableCell className="text-muted-foreground font-mono py-4">
                                                             {formatDuration(log.durationMs)}
                                                         </TableCell>
@@ -405,7 +410,7 @@ export default function LogsPage() {
                                             {/* Loading indicator at bottom when fetching more */}
                                             {isFetchingMore && (
                                                 <TableRow>
-                                                    <TableCell colSpan={5}
+                                                    <TableCell colSpan={6}
                                                                className="text-center py-4 text-muted-foreground">
                                                         <div className="flex items-center justify-center gap-2">
                                                             <Icon name="loader-circle" className="size-4 animate-spin"/>
