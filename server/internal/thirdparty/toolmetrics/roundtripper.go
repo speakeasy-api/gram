@@ -50,6 +50,9 @@ var allowedNonSensitiveHeaders = map[string]bool{
 	"server":      true,
 	"allow":       true,
 	"retry-after": true,
+
+	// Gram specific headers
+	"x-gram-proxy": true,
 }
 
 // filterAllowedHeaders keeps only headers from the allowlist and filters out unknown headers.
