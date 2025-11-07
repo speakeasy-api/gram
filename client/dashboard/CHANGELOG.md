@@ -1,5 +1,14 @@
 # dashboard
 
+## 0.18.4
+
+### Patch Changes
+
+- 10140df: Makes tool type filterable on more than just http tools (functions, custom)
+- 77446ee: fully connects server url tracking feature in opt in tool call logs
+- Updated dependencies [77446ee]
+  - @gram/client@0.17.3
+
 ## 0.18.3
 
 ### Patch Changes

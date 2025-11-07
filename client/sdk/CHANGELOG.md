@@ -1,5 +1,11 @@
 # @gram/client
 
+## 0.17.3
+
+### Patch Changes
+
+- 77446ee: fully connects server url tracking feature in opt in tool call logs
+
 ## 0.17.2
 
 ### Patch Changes
