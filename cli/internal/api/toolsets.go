@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/speakeasy-api/gram/server/gen/toolsets"
+	"github.com/speakeasy-api/gram/cli/internal/secret"
 	toolsets_client "github.com/speakeasy-api/gram/server/gen/http/toolsets/client"
+	"github.com/speakeasy-api/gram/server/gen/toolsets"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
 )
@@ -45,13 +46,14 @@ func NewToolsetsClient(options *ToolsetsClientOptions) *ToolsetsClient {
 
 func (c *ToolsetsClient) GetToolset(
 	ctx context.Context,
-	sessionToken string,
+	apiKey secret.Secret,
 	projectSlug string,
 	toolsetSlug string,
 ) (*types.Toolset, error) {
 	slug := types.Slug(toolsetSlug)
+	key := apiKey.Reveal()
 	payload := &toolsets.GetToolsetPayload{
-		SessionToken:     &sessionToken,
+		ApikeyToken:      &key,
 		ProjectSlugInput: &projectSlug,
 		Slug:             slug,
 	}
@@ -62,4 +64,19 @@ func (c *ToolsetsClient) GetToolset(
 	}
 
 	return result, nil
+}
+
+func (c *ToolsetsClient) ListToolsets(ctx context.Context, apiKey secret.Secret, projectSlug string) ([]*types.ToolsetEntry, error) {
+	key := apiKey.Reveal()
+	payload := &toolsets.ListToolsetsPayload{
+		ApikeyToken:      &key,
+		ProjectSlugInput: &projectSlug,
+	}
+
+	result, err := c.client.ListToolsets(ctx, payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list toolsets: %w", err)
+	}
+
+	return result.Toolsets, nil
 }

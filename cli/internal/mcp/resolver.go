@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/cli/internal/api"
 	"github.com/speakeasy-api/gram/cli/internal/profile"
+	"github.com/speakeasy-api/gram/cli/internal/secret"
 	"github.com/speakeasy-api/gram/server/gen/types"
 )
 
@@ -61,7 +62,7 @@ func ResolveToolsetInfo(ctx context.Context, opts *ResolverOptions) (*ToolsetInf
 
 		// Fetch toolset
 		opts.Logger.InfoContext(ctx, "fetching toolset information", slog.String("slug", opts.ToolsetSlug))
-		toolset, err := toolsetsClient.GetToolset(ctx, opts.Profile.Secret, opts.Profile.DefaultProjectSlug, opts.ToolsetSlug)
+		toolset, err := toolsetsClient.GetToolset(ctx, secret.Secret(opts.Profile.Secret), opts.Profile.DefaultProjectSlug, opts.ToolsetSlug)
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch toolset: %w", err)
 		}

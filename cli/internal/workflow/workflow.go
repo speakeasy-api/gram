@@ -42,9 +42,11 @@ type Workflow struct {
 	Params            Params
 	AssetsClient      *api.AssetsClient
 	DeploymentsClient *api.DeploymentsClient
+	ToolsetsClient    *api.ToolsetsClient
 	NewOpenAPIAssets  []*deployments.AddOpenAPIv3DeploymentAssetForm
 	NewFunctionAssets []*deployments.AddFunctionsForm
 	Deployment        *types.Deployment
+	Toolsets          []*types.ToolsetEntry
 	Err               error
 }
 
@@ -69,6 +71,7 @@ func New(
 		Params:            params,
 		AssetsClient:      nil,
 		DeploymentsClient: nil,
+		ToolsetsClient:    nil,
 		NewOpenAPIAssets:  nil,
 		NewFunctionAssets: nil,
 		Deployment:        nil,
@@ -83,12 +86,14 @@ func New(
 		Scheme: params.APIURL.Scheme,
 		Host:   params.APIURL.Host,
 	})
-	state.DeploymentsClient = api.NewDeploymentsClient(
-		&api.DeploymentsClientOptions{
-			Scheme: params.APIURL.Scheme,
-			Host:   params.APIURL.Host,
-		},
-	)
+	state.DeploymentsClient = api.NewDeploymentsClient(&api.DeploymentsClientOptions{
+		Scheme: params.APIURL.Scheme,
+		Host:   params.APIURL.Host,
+	})
+	state.ToolsetsClient = api.NewToolsetsClient(&api.ToolsetsClientOptions{
+		Scheme: params.APIURL.Scheme,
+		Host:   params.APIURL.Host,
+	})
 
 	return state
 }
@@ -276,6 +281,20 @@ func (s *Workflow) LoadActiveDeployment(
 	}
 
 	s.Deployment = result
+	return s
+}
+
+func (s *Workflow) ListToolsets(ctx context.Context) *Workflow {
+	if s.Failed() {
+		return s
+	}
+
+	result, err := s.ToolsetsClient.ListToolsets(ctx, s.Params.APIKey, s.Params.ProjectSlug)
+	if err != nil {
+		return s.Fail(err)
+	}
+
+	s.Toolsets = result
 	return s
 }
 

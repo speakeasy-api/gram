@@ -6390,6 +6390,13 @@ paths:
                     description: Session header
                     type: string
                 - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
                   description: project header
                   in: header
                   name: Gram-Project
@@ -6466,6 +6473,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: addExternalOAuthServer toolsets
             tags:
                 - toolsets
@@ -6493,6 +6502,13 @@ paths:
                   name: Gram-Session
                   schema:
                     description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: project header
@@ -6565,6 +6581,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: checkMCPSlugAvailability toolsets
             tags:
                 - toolsets
@@ -6664,6 +6682,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Authorization: []
+                  project_slug_header_Gram-Project: []
             summary: cloneToolset toolsets
             tags:
                 - toolsets
@@ -6681,6 +6701,13 @@ paths:
                   name: Gram-Session
                   schema:
                     description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: project header
@@ -6759,6 +6786,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: createToolset toolsets
             tags:
                 - toolsets
@@ -6786,6 +6815,13 @@ paths:
                   name: Gram-Session
                   schema:
                     description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: project header
@@ -6854,6 +6890,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: deleteToolset toolsets
             tags:
                 - toolsets
@@ -6881,6 +6919,13 @@ paths:
                   name: Gram-Session
                   schema:
                     description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: project header
@@ -6953,6 +6998,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: getToolset toolsets
             tags:
                 - toolsets
@@ -6970,6 +7017,13 @@ paths:
                   name: Gram-Session
                   schema:
                     description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: project header
@@ -7042,6 +7096,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: listToolsets toolsets
             tags:
                 - toolsets
@@ -7069,6 +7125,13 @@ paths:
                   name: Gram-Session
                   schema:
                     description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: project header
@@ -7141,6 +7204,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: removeOAuthServer toolsets
             tags:
                 - toolsets
@@ -7168,6 +7233,13 @@ paths:
                   name: Gram-Session
                   schema:
                     description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
                     type: string
                 - allowEmptyValue: true
                   description: project header
@@ -7246,6 +7318,8 @@ paths:
             security:
                 - project_slug_header_Gram-Project: []
                   session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
             summary: updateToolset toolsets
             tags:
                 - toolsets
@@ -11633,6 +11707,11 @@ components:
                 - projects
                 - scopes
     securitySchemes:
+        apikey_header_Authorization:
+            type: apiKey
+            description: key based auth.
+            name: Authorization
+            in: header
         apikey_header_Gram-Key:
             type: apiKey
             description: key based auth.

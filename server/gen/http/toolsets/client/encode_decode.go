@@ -46,6 +46,10 @@ func EncodeCreateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
@@ -284,6 +288,10 @@ func EncodeListToolsetsRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
@@ -517,6 +525,10 @@ func EncodeUpdateToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput
@@ -759,6 +771,10 @@ func EncodeDeleteToolsetRequest(encoder func(*http.Request) goahttp.Encoder) fun
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
@@ -982,6 +998,10 @@ func EncodeGetToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func(*
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput
@@ -1221,6 +1241,10 @@ func EncodeCheckMCPSlugAvailabilityRequest(encoder func(*http.Request) goahttp.E
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
@@ -1457,6 +1481,10 @@ func EncodeCloneToolsetRequest(encoder func(*http.Request) goahttp.Encoder) func
 			head := *p.ProjectSlugInput
 			req.Header.Set("Gram-Project", head)
 		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Authorization", head)
+		}
 		values := req.URL.Query()
 		values.Add("slug", string(p.Slug))
 		req.URL.RawQuery = values.Encode()
@@ -1690,6 +1718,10 @@ func EncodeAddExternalOAuthServerRequest(encoder func(*http.Request) goahttp.Enc
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput
@@ -1931,6 +1963,10 @@ func EncodeRemoveOAuthServerRequest(encoder func(*http.Request) goahttp.Encoder)
 		if p.SessionToken != nil {
 			head := *p.SessionToken
 			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
 		}
 		if p.ProjectSlugInput != nil {
 			head := *p.ProjectSlugInput
