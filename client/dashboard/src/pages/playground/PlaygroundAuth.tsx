@@ -1,8 +1,9 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Toolset } from "@/lib/toolTypes";
-import { useMemo } from "react";
 import { Type } from "@/components/ui/type";
+import { Toolset } from "@/lib/toolTypes";
+import { useRoutes } from "@/routes";
+import { useMemo } from "react";
 
 interface PlaygroundAuthProps {
   toolset: Toolset;
@@ -44,6 +45,8 @@ export function getAuthStatus(
 }
 
 export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
+  const routes = useRoutes();
+
   const relevantEnvVars = useMemo(() => {
     const securityVars =
       toolset?.securityVariables?.flatMap((secVar) => secVar.envVariables) ??
@@ -110,12 +113,12 @@ export function PlaygroundAuth({ toolset, environment }: PlaygroundAuthProps) {
       })}
       <Type variant="small" className="text-muted-foreground pt-2">
         Configure auth in the{" "}
-        <a
-          href={`/toolsets/${toolset.slug}`}
+        <routes.toolsets.toolset.Link
+          params={[toolset.slug]}
           className="underline hover:text-foreground"
         >
           toolset settings
-        </a>
+        </routes.toolsets.toolset.Link>
       </Type>
     </div>
   );
