@@ -2,34 +2,7 @@ import { useMemo } from "react";
 import { Alert } from "@speakeasy-api/moonshine";
 import { useEnvironments } from "../environments/Environments";
 import { Toolset } from "@/lib/toolTypes";
-
-function useRelevantEnvVars(toolset: Toolset) {
-  return useMemo(() => {
-    const requiresServerURL = toolset.tools?.some(
-      (tool) => tool.type === "http" && !tool.defaultServerUrl,
-    );
-
-    const securityVars =
-      toolset?.securityVariables?.flatMap((secVar) => secVar.envVariables) ??
-      [];
-    const functionEnvironmentVariables =
-      toolset?.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? [];
-    const serverVars =
-      toolset?.serverVariables?.flatMap((serverVar) =>
-        serverVar.envVariables.filter(
-          (v) => !v.toLowerCase().includes("server_url") || requiresServerURL,
-        ),
-      ) ?? [];
-
-    return [
-      ...new Set([
-        ...securityVars,
-        ...serverVars,
-        ...functionEnvironmentVariables,
-      ]),
-    ];
-  }, [toolset]);
-}
+import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 
 // Types
 interface EnvironmentEntry {
@@ -95,7 +68,12 @@ function PlaygroundAuthAlert({
   onConfigureClick,
 }: PlaygroundAuthAlertProps) {
   const environments = useEnvironments();
-  const relevantEnvVars = useRelevantEnvVars(toolset);
+  const requiresServerURL =
+    toolset.tools?.some(
+      (tool) => tool.type === "http" && !tool.defaultServerUrl,
+    ) ?? false;
+
+  const relevantEnvVars = useToolsetEnvVars(toolset, requiresServerURL);
 
   const envSlug = environmentSlug ?? toolset.defaultEnvironmentSlug;
   const environment = environments.find((env) => env.slug === envSlug);
@@ -137,7 +115,12 @@ function ToolsetPageAuthAlert({
   onConfigureClick,
 }: ToolsetPageAuthAlertProps) {
   const environments = useEnvironments();
-  const relevantEnvVars = useRelevantEnvVars(toolset);
+    const requiresServerURL =
+    toolset.tools?.some(
+      (tool) => tool.type === "http" && !tool.defaultServerUrl,
+    ) ?? false;
+
+  const relevantEnvVars = useToolsetEnvVars(toolset, requiresServerURL);
 
   const hasAllRequiredVars = useMemo(() => {
     if (relevantEnvVars.length === 0) return true;

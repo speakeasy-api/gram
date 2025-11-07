@@ -13,6 +13,7 @@ import { AlertCircle, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useEnvironments } from "../environments/Environments";
 import { EnvironmentSelector } from "./EnvironmentSelector";
+import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 
 const PASSWORD_MASK = "••••••••";
 const SECRET_FIELD_INDICATORS = ["SECRET", "KEY"] as const;
@@ -143,30 +144,11 @@ export function ToolsetAuth({
     setSaveError(null);
   }, []);
 
-  const requiresServerURL = toolset.tools?.some(
-    (tool) => isHttpTool(tool) && !tool.defaultServerUrl,
-  );
+  const requiresServerURL =
+    toolset.tools?.some((tool) => isHttpTool(tool) && !tool.defaultServerUrl) ??
+    false;
 
-  const relevantEnvVars = useMemo(() => {
-    const securityVars =
-      toolset?.securityVariables?.flatMap((secVar) => secVar.envVariables) ??
-      [];
-    const serverVars =
-      toolset?.serverVariables?.flatMap((serverVar) =>
-        serverVar.envVariables.filter(
-          (v) => !v.toLowerCase().includes("server_url") || requiresServerURL,
-        ),
-      ) ?? [];
-    const functionEnvVars =
-      toolset?.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? [];
-
-    return [...new Set([...securityVars, ...serverVars, ...functionEnvVars])];
-  }, [
-    toolset?.securityVariables,
-    toolset?.serverVariables,
-    toolset.functionEnvironmentVariables,
-    requiresServerURL,
-  ]);
+  const relevantEnvVars = useToolsetEnvVars(toolset, requiresServerURL);
 
   const environmentVariableInputs = useMemo(() => {
     return relevantEnvVars.map((varName) => {

@@ -19,6 +19,7 @@ import { useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools, useToolset } from "@/hooks/toolTypes";
+import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 import { isHttpTool, Toolset } from "@/lib/toolTypes";
 import { cn, getServerURL } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -668,34 +669,22 @@ export const useMcpConfigs = (toolset: ToolsetEntry | undefined) => {
   const { url: mcpUrl } = useMcpUrl(toolset);
   const { data: tools } = useListTools();
 
+  const toolsetTools = toolset
+    ? tools?.tools.filter((tool) =>
+        toolset.tools.some((t) => t.id === tool.id),
+      )
+    : undefined;
+
+  const requiresServerURL =
+    toolsetTools?.some(
+      (tool) => isHttpTool(tool) && !tool.defaultServerUrl,
+    ) ?? false;
+
+  const envHeaders = useToolsetEnvVars(toolset, requiresServerURL).filter(
+    (header) => !header.toLowerCase().includes("token_url"),
+  );
+
   if (!toolset) return { public: "", internal: "" };
-
-  const toolsetTools = tools?.tools.filter((tool) =>
-    toolset.tools.some((t) => t.id === tool.id),
-  );
-  const requiresServerURL = toolsetTools?.some(
-    (tool) => isHttpTool(tool) && !tool.defaultServerUrl,
-  );
-
-  const envHeaders: string[] = [
-    ...new Set([
-      // Security variables (exclude token_url)
-      ...(toolset.securityVariables?.flatMap((secVar) =>
-        secVar.envVariables.filter(
-          (v) => !v.toLowerCase().includes("token_url"), // direct token url is always a hidden option right now
-        ),
-      ) ?? []),
-      // Function environment variables
-      ...(toolset.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ??
-        []),
-      // Server variables (filter server_url unless required)
-      ...(toolset.serverVariables?.flatMap((serverVar) =>
-        serverVar.envVariables.filter(
-          (v) => !v.toLowerCase().includes("server_url") || requiresServerURL,
-        ),
-      ) ?? []),
-    ]),
-  ];
 
   // Build the args array for public MCP config
   const mcpJsonPublicArgs = [
