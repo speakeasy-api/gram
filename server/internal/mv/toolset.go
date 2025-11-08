@@ -241,7 +241,7 @@ func DescribeToolsetEntry(
 		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
 		SecurityVariables:            securityVars,
 		ServerVariables:              serverVars,
-		FunctionEnvironmentVariables: functionEnvVars,
+		FunctionEnvironmentVariables: dedupeFunctionEnvVars(functionEnvVars),
 		Description:                  conv.FromPGText[string](toolset.Description),
 		McpSlug:                      conv.FromPGText[types.Slug](toolset.McpSlug),
 		McpEnabled:                   &toolset.McpEnabled,
@@ -446,7 +446,7 @@ func DescribeToolset(
 		DefaultEnvironmentSlug:       conv.FromPGText[types.Slug](toolset.DefaultEnvironmentSlug),
 		SecurityVariables:            toolsetTools.SecurityVars,
 		ServerVariables:              toolsetTools.ServerVars,
-		FunctionEnvironmentVariables: toolsetTools.FunctionEnvVars,
+		FunctionEnvironmentVariables: dedupeFunctionEnvVars(toolsetTools.FunctionEnvVars),
 		Description:                  conv.FromPGText[string](toolset.Description),
 		Tools:                        toolsetTools.Tools,
 		Resources:                    toolsetTools.Resources,
@@ -896,6 +896,28 @@ func environmentVariablesForTools(ctx context.Context, tx DBTX, tools []toolEnvL
 	}
 
 	return slices.Collect(maps.Values(securityVarsMap)), serverVars, nil
+}
+
+// dedupeFunctionEnvVars returns function environment variables deduplicated by name.
+func dedupeFunctionEnvVars(vars []*types.FunctionEnvironmentVariable) []*types.FunctionEnvironmentVariable {
+	if len(vars) == 0 {
+		return vars
+	}
+
+	seen := make(map[string]bool, len(vars))
+	var deduped []*types.FunctionEnvironmentVariable
+	for _, envVar := range vars {
+		if envVar == nil {
+			continue
+		}
+		if _, exists := seen[envVar.Name]; exists {
+			continue
+		}
+		seen[envVar.Name] = true
+		deduped = append(deduped, envVar)
+	}
+
+	return deduped
 }
 
 const defaultPromptTemplateKind = "prompt"

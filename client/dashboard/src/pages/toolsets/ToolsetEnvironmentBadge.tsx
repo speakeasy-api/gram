@@ -15,6 +15,7 @@ import { Check } from "lucide-react";
 import { useEnvironments } from "../environments/Environments";
 import { useState } from "react";
 import { isHttpTool, Toolset } from "@/lib/toolTypes";
+import { useToolsetEnvVars } from "@/hooks/useToolsetEnvVars";
 
 export const ToolsetEnvironmentBadge = ({
   toolset,
@@ -35,6 +36,13 @@ export const ToolsetEnvironmentBadge = ({
   const [envVarsDialogOpen, setEnvVarsDialogOpen] = useState(false);
   const [envVars, setEnvVars] = useState<Record<string, string>>({});
 
+  const requiresServerURL =
+    toolset?.tools?.some(
+      (tool) => isHttpTool(tool) && !tool.defaultServerUrl,
+    ) ?? false;
+
+  const relevantEnvVars = useToolsetEnvVars(toolset, requiresServerURL);
+
   const updateEnvironmentMutation = useUpdateEnvironmentMutation({
     onSuccess: () => {
       telemetry.capture("environment_event", { action: "environment_updated" });
@@ -51,24 +59,6 @@ export const ToolsetEnvironmentBadge = ({
     : toolset.defaultEnvironmentSlug;
 
   const environment = environments.find((env) => env.slug === envSlug);
-
-  const requiresServerURL = toolset.tools?.some(
-    (tool) => isHttpTool(tool) && !tool.defaultServerUrl,
-  );
-
-  const relevantEnvVars: string[] = [
-    // Security variables (no filtering)
-    ...(toolset.securityVariables?.flatMap((secVar) => secVar.envVariables) ??
-      []),
-    // Function environment variables
-    ...(toolset.functionEnvironmentVariables?.map((fnVar) => fnVar.name) ?? []),
-    // Server variables (filter server_url unless required)
-    ...(toolset.serverVariables?.flatMap((serverVar) =>
-      serverVar.envVariables.filter(
-        (v) => !v.toLowerCase().includes("server_url") || requiresServerURL,
-      ),
-    ) ?? []),
-  ];
 
   const missingEnvVars =
     relevantEnvVars?.filter(

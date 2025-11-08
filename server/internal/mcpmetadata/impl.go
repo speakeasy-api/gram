@@ -483,6 +483,7 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 	case securityModePublic, securityModeOAuth:
 		var inputs []securityInput
 		isOAuthEnabled := mode == securityModeOAuth
+		seen := make(map[string]bool)
 
 		for _, secVar := range toolsetDetails.SecurityVariables {
 			for _, envVar := range secVar.EnvVariables {
@@ -495,20 +496,26 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 					continue
 				}
 
-				inputs = append(inputs, securityInput{
-					SystemName:  fmt.Sprintf("MCP-%s", envVar),
-					DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")),
-					Sensitive:   true,
-				})
+				if !seen[envVar] {
+					seen[envVar] = true
+					inputs = append(inputs, securityInput{
+						SystemName:  fmt.Sprintf("MCP-%s", envVar),
+						DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(envVar, "_", "-")),
+						Sensitive:   true,
+					})
+				}
 			}
 		}
 
 		for _, functionEnvVar := range toolsetDetails.FunctionEnvironmentVariables {
-			inputs = append(inputs, securityInput{
-				SystemName:  fmt.Sprintf("MCP-%s", functionEnvVar.Name),
-				DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(functionEnvVar.Name, "_", "-")),
-				Sensitive:   true,
-			})
+			if !seen[functionEnvVar.Name] {
+				seen[functionEnvVar.Name] = true
+				inputs = append(inputs, securityInput{
+					SystemName:  fmt.Sprintf("MCP-%s", functionEnvVar.Name),
+					DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(functionEnvVar.Name, "_", "-")),
+					Sensitive:   true,
+				})
+			}
 		}
 
 		return inputs
