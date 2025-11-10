@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -62,9 +61,9 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 	case ToolModeProgressive:
 		tools = buildProgressiveSessionTools(toolset)
 	case ToolModeStatic:
-		tools = buildToolListEntries(toolset.Tools)
+		fallthrough
 	default:
-		return nil, oops.E(oops.CodeInvalid, errors.New("invalid tool mode"), "invalid tool mode").Log(ctx, logger)
+		tools = buildToolListEntries(toolset.Tools)
 	}
 
 	result := &result[toolsListResult]{
@@ -279,23 +278,6 @@ func buildListToolsTool(tools []*types.Tool) (*toolListEntry, error) {
 }
 
 var (
-	dynamicFindToolsSchema = json.RawMessage(`{
-		"type": "object",
-		"properties": {
-			"query": {
-				"type": "string",
-				"description": "Natural language description of the capability or tool you need."
-			},
-			"num_results": {
-				"type": "integer",
-				"minimum": 1,
-				"maximum": 20,
-				"description": "Maximum number of tools to return."
-			}
-		},
-		"required": ["query"],
-		"additionalProperties": false
-	}`)
 	dynamicExecuteToolSchema = json.RawMessage(`{
 		"type": "object",
 		"properties": {
