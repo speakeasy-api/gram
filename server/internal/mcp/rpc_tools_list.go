@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -56,14 +57,16 @@ func handleToolsList(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool,
 		}
 	}
 
-	tools := buildToolListEntries(toolset.Tools)
-
-	if true { // payload.isDynamicMCPSession
-		// if err := vectorStore.IndexToolset(ctx, toolset.ID, tools); err != nil {
-		// 	logger.ErrorContext(ctx, "failed to index toolset for vector search", attr.SlogError(err))
-		// }
-
-		tools = buildDynamicSessionTools(toolset)
+	var tools []*toolListEntry
+	switch payload.mode {
+	case ToolModeEmbeddings:
+		tools = buildEmbeddingsSessionTools(toolset)
+	case ToolModeProgressive:
+		tools = buildProgressiveSessionTools(toolset)
+	case ToolModeStatic:
+		tools = buildToolListEntries(toolset.Tools)
+	default:
+		return nil, oops.E(oops.CodeInvalid, errors.New("invalid tool mode"), "invalid tool mode").Log(ctx, logger)
 	}
 
 	result := &result[toolsListResult]{
@@ -111,7 +114,43 @@ func toolToListEntry(tool *types.Tool) *toolListEntry {
 	}
 }
 
-func buildDynamicSessionTools(toolset *types.Toolset) []*toolListEntry {
+func buildEmbeddingsSessionTools(toolset *types.Toolset) []*toolListEntry {
+	toolsetName := ""
+	toolsetDescription := ""
+	if toolset != nil {
+		toolsetName = toolset.Name
+		toolsetDescription = conv.PtrValOrEmpty(toolset.Description, "")
+	}
+	contextDescription := toolsetName
+	if contextDescription != "" && toolsetDescription != "" {
+		contextDescription = fmt.Sprintf("%s (%s)", toolsetName, toolsetDescription)
+	}
+	if contextDescription == "" && toolsetDescription != "" {
+		contextDescription = toolsetDescription
+	}
+
+	findDescription := "Search the available tools in this MCP server using a search query."
+	executeDescription := "Execute a specific tool by name, passing through the correct arguments for that tool's schema."
+	if contextDescription != "" {
+		findDescription = fmt.Sprintf("Search the available tools in %s using a search query.", contextDescription)
+		executeDescription = fmt.Sprintf("Execute a specific tool from %s by name, passing through the correct arguments for that tool's schema.", contextDescription)
+	}
+
+	return []*toolListEntry{
+		{
+			Name:        findToolsToolName,
+			Description: findDescription,
+			InputSchema: dynamicFindToolsSchema,
+		},
+		{
+			Name:        executeToolToolName,
+			Description: executeDescription,
+			InputSchema: dynamicExecuteToolSchema,
+		},
+	}
+}
+
+func buildProgressiveSessionTools(toolset *types.Toolset) []*toolListEntry {
 	listToolRequired := len(toolset.Tools) > 50
 
 	listTools, err := buildListToolsTool(toolset.Tools)
@@ -278,6 +317,23 @@ func buildListToolsTool(tools []*types.Tool) (*toolListEntry, error) {
 }
 
 var (
+	dynamicFindToolsSchema = json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"query": {
+				"type": "string",
+				"description": "Natural language description of the capability or tool you need."
+			},
+			"num_results": {
+				"type": "integer",
+				"minimum": 1,
+				"maximum": 20,
+				"description": "Maximum number of tools to return."
+			}
+		},
+		"required": ["query"],
+		"additionalProperties": false
+	}`)
 	dynamicExecuteToolSchema = json.RawMessage(`{
 		"type": "object",
 		"properties": {

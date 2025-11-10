@@ -75,7 +75,7 @@ func handleToolsCall(
 		return nil, err
 	}
 
-	if true { //  payload.isDynamicMCPSession {
+	if payload.mode != ToolModeStatic {
 		switch params.Name {
 		case findToolsToolName:
 			return handleFindToolsCallVector(ctx, logger, req.ID, params.Arguments, toolset, vectorStore)
