@@ -1,5 +1,12 @@
 # dashboard
 
+## 0.18.5
+
+### Patch Changes
+
+- faef164: opens up logs to free tier
+- 29aee79: fixes potentially duplicate env vars from functions in the UX and MCP config
+
 ## 0.18.4
 
 ### Patch Changes
